@@ -40,9 +40,8 @@ htmlcov/
 .coverage.*
 .cache
 nosetests.xml
-test-results.xml
-test-run-meta.json
 coverage.xml
+.results/
 *.cover
 *.py,cover
 .hypothesis/
@@ -65,6 +64,7 @@ venv.bak/
 .idea/
 .vscode/
 *.swp
+.superpowers/
 *.swo
 *~
 
@@ -85,6 +85,9 @@ traceability_matrix.html
 
 # Developer-local config overrides
 .elspais.local.toml
+
+# Daemon state directory
+.elspais/
 
 # Ephemeral planning/workflow docs
 MASTER_PLAN*.md

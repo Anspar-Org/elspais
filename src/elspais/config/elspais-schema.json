@@ -233,6 +233,98 @@
       "title": "ComponentConfig",
       "type": "object"
     },
+    "CoverageConfig": {
+      "additionalProperties": false,
+      "description": "Coverage severity configuration for all 5 dimensions.",
+      "properties": {
+        "implemented": {
+          "$ref": "#/$defs/CoverageSeverityConfig"
+        },
+        "tested": {
+          "$ref": "#/$defs/CoverageSeverityConfig"
+        },
+        "verified": {
+          "$ref": "#/$defs/CoverageSeverityConfig"
+        },
+        "uat_coverage": {
+          "$ref": "#/$defs/CoverageSeverityConfig"
+        },
+        "uat_verified": {
+          "$ref": "#/$defs/CoverageSeverityConfig"
+        }
+      },
+      "title": "CoverageConfig",
+      "type": "object"
+    },
+    "CoverageScanningConfig": {
+      "additionalProperties": false,
+      "description": "Configuration for code coverage report scanning.",
+      "properties": {
+        "directories": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Directories",
+          "type": "array"
+        },
+        "file_patterns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "File Patterns",
+          "type": "array"
+        },
+        "skip_files": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Skip Files",
+          "type": "array"
+        },
+        "skip_dirs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Skip Dirs",
+          "type": "array"
+        }
+      },
+      "title": "CoverageScanningConfig",
+      "type": "object"
+    },
+    "CoverageSeverityConfig": {
+      "additionalProperties": false,
+      "description": "Severity mapping for a single coverage dimension's tier states.\n\nEach tier maps to a severity: 'ok', 'info', 'warning', or 'error'.",
+      "properties": {
+        "full_direct": {
+          "default": "ok",
+          "title": "Full Direct",
+          "type": "string"
+        },
+        "full_indirect": {
+          "default": "info",
+          "title": "Full Indirect",
+          "type": "string"
+        },
+        "partial": {
+          "default": "warning",
+          "title": "Partial",
+          "type": "string"
+        },
+        "none": {
+          "default": "error",
+          "title": "None",
+          "type": "string"
+        },
+        "failing": {
+          "default": "error",
+          "title": "Failing",
+          "type": "string"
+        }
+      },
+      "title": "CoverageSeverityConfig",
+      "type": "object"
+    },
     "DocsScanningConfig": {
       "additionalProperties": false,
       "properties": {
@@ -358,6 +450,18 @@
           ],
           "default": null,
           "title": "Status Roles"
+        },
+        "no_assertions_severity": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "No Assertions Severity"
         }
       },
       "title": "FormatConfig",
@@ -633,6 +737,9 @@
         "format": {
           "$ref": "#/$defs/FormatConfig"
         },
+        "coverage": {
+          "$ref": "#/$defs/CoverageConfig"
+        },
         "content_rules": {
           "anyOf": [
             {
@@ -673,6 +780,9 @@
         },
         "result": {
           "$ref": "#/$defs/ResultScanningConfig"
+        },
+        "coverage": {
+          "$ref": "#/$defs/CoverageScanningConfig"
         },
         "journey": {
           "$ref": "#/$defs/JourneyScanningConfig"
@@ -887,6 +997,25 @@
       },
       "title": "Associates",
       "type": "object"
+    },
+    "stats": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "File path for MCP tool usage statistics",
+      "title": "Stats"
+    },
+    "cli_ttl": {
+      "default": 30,
+      "description": "CLI daemon TTL in minutes (>0=auto-start, 0=disabled, <0=no timeout)",
+      "title": "Cli Ttl",
+      "type": "integer"
     }
   },
   "title": "ElspaisConfig",

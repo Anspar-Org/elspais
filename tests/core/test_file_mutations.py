@@ -119,6 +119,7 @@ class TestMoveNodeToFile:
         assert len(contains_edges) == 1
         assert contains_edges[0].metadata["render_order"] == 0.0
 
+    # Implements: REQ-o00063-A
     def test_move_to_non_file_raises(self):
         """ValueError if target is not a FILE node."""
         graph = build_two_file_graph()
@@ -127,6 +128,7 @@ class TestMoveNodeToFile:
         with pytest.raises(ValueError):
             graph.move_node_to_file("REQ-p00001", "REQ-p00001")
 
+    # Implements: REQ-o00063-A
     def test_move_orphan_raises(self):
         """ValueError if node has no current FILE parent."""
         builder = GraphBuilder()
@@ -141,6 +143,7 @@ class TestMoveNodeToFile:
         with pytest.raises(ValueError):
             graph.move_node_to_file("REQ-p00001", "file:spec/other.md")
 
+    # Implements: REQ-o00062-E
     def test_move_logs_mutation(self):
         """Verify mutation log entry has correct operation and states."""
         graph = build_two_file_graph()
@@ -154,6 +157,7 @@ class TestMoveNodeToFile:
         assert entry.before_state["file_id"] == "file:spec/main.md"
         assert entry.after_state["file_id"] == "file:spec/other.md"
 
+    # Implements: REQ-d00128-E
     def test_move_assigns_render_order_at_end(self):
         """After moving, the moved node has render_order after existing children."""
         graph = build_two_file_graph()
@@ -220,6 +224,7 @@ class TestRenameFile:
         # Path field restored
         assert node.get_field("relative_path") == "spec/main.md"
 
+    # Implements: REQ-o00063-A
     def test_rename_non_file_raises(self):
         """ValueError if node is not a FILE node."""
         graph = build_two_file_graph()
@@ -227,6 +232,7 @@ class TestRenameFile:
         with pytest.raises(ValueError):
             graph.rename_file("REQ-p00001", "spec/renamed.md")
 
+    # Implements: REQ-o00062-E
     def test_rename_file_logs_mutation(self):
         """Verify mutation log entry has correct operation and states."""
         graph = build_two_file_graph()
@@ -242,6 +248,7 @@ class TestRenameFile:
         assert entry.after_state["id"] == "file:spec/renamed.md"
         assert entry.after_state["relative_path"] == "spec/renamed.md"
 
+    # Implements: REQ-o00063-A
     def test_rename_file_updates_absolute_path(self):
         """When repo_root is provided, absolute_path is updated."""
         graph = build_two_file_graph()
@@ -256,6 +263,7 @@ class TestRenameFile:
         assert node is not None
         assert node.get_field("absolute_path") == str(Path("/repo") / "spec/renamed.md")
 
+    # Implements: REQ-o00063-A
     def test_rename_file_not_found(self):
         """KeyError if file_id doesn't exist."""
         graph = build_two_file_graph()

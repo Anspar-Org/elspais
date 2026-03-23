@@ -43,6 +43,7 @@ def sample_graph():
 class TestHTMLGeneratorBasic:
     """Basic tests for HTMLGenerator."""
 
+    # Implements: REQ-p00006-A
     def test_generate_returns_html(self, sample_graph):
         """Generates valid HTML document structure."""
         generator = HTMLGenerator(sample_graph)
@@ -54,6 +55,7 @@ class TestHTMLGeneratorBasic:
         assert "<head" in result.lower()
         assert "<body" in result.lower()
 
+    # Implements: REQ-p00006-A
     def test_generate_includes_title(self, sample_graph):
         """Includes title in HTML."""
         generator = HTMLGenerator(sample_graph)
@@ -69,11 +71,13 @@ class TestHTMLGeneratorBasic:
         result = generator.generate(embed_content=True)
 
         # Requirement IDs are in the embedded node-index JSON, not in table rows
+        # Implements: REQ-d00052-A
         assert '"REQ-p00001"' in result
         assert '"REQ-o00001"' in result
         assert '"REQ-d00001"' in result
         assert 'id="node-index"' in result
 
+    # Implements: REQ-p00006-A
     def test_generate_includes_styles(self, sample_graph):
         """Includes CSS styles with application-specific classes."""
         generator = HTMLGenerator(sample_graph)
@@ -83,6 +87,7 @@ class TestHTMLGeneratorBasic:
         assert "<style>" in result
         assert "nav-tree-container" in result
 
+    # Implements: REQ-p00006-A
     def test_generate_includes_package_version(self, sample_graph):
         """Includes actual elspais package version, not hardcoded 'v1'."""
         from elspais import __version__
@@ -96,6 +101,9 @@ class TestHTMLGeneratorBasic:
         # Verify it's not the old hardcoded value
         assert 'class="version-badge">v1<' not in result
 
+    # Implements: REQ-p00006-A
+
+    # Implements: REQ-p00006-A
     def test_version_can_be_overridden(self, sample_graph):
         """Custom version can be passed to generator."""
         generator = HTMLGenerator(sample_graph, version="99.99.99")
@@ -108,10 +116,12 @@ class TestHTMLGeneratorBasic:
 class TestHTMLGeneratorEmbedContent:
     """Tests for embedded content mode."""
 
+    # Implements: REQ-p00006-A
     def test_embed_content_includes_json(self, sample_graph):
         """Embedded mode includes node-index JSON data element."""
         generator = HTMLGenerator(sample_graph)
 
+        # Implements: REQ-p00006-A
         result = generator.generate(embed_content=True)
 
         assert 'id="node-index"' in result
@@ -121,6 +131,7 @@ class TestHTMLGeneratorEmbedContent:
 class TestHTMLGeneratorHierarchy:
     """Tests for hierarchy display."""
 
+    # Implements: REQ-d00052-B
     def test_shows_hierarchy_structure(self, sample_graph):
         """Shows requirement hierarchy with tree structure and level counts."""
         generator = HTMLGenerator(sample_graph)
@@ -129,12 +140,14 @@ class TestHTMLGeneratorHierarchy:
 
         # Tree structural elements proving hierarchy rendering
         assert "tree-toggle" in result
+        # Implements: REQ-d00052-E
         assert "data-parent" in result
         # Level counts in the stats header prove all hierarchy levels are present
         assert "PRD:" in result
         assert "OPS:" in result
         assert "DEV:" in result
 
+    # Implements: REQ-p00006-A
     def test_shows_requirement_titles(self, sample_graph):
         """Shows requirement titles."""
         generator = HTMLGenerator(sample_graph)
@@ -148,6 +161,7 @@ class TestHTMLGeneratorHierarchy:
 class TestHTMLGeneratorStats:
     """Tests for statistics computation."""
 
+    # Implements: REQ-d00052-F
     def test_counts_levels(self, sample_graph):
         """Counts requirements by level."""
         generator = HTMLGenerator(sample_graph)
@@ -159,8 +173,10 @@ class TestHTMLGeneratorStats:
         assert "OPS:" in result
         assert "DEV:" in result
 
+    # Implements: REQ-d00052-F
     def test_shows_total_count(self, sample_graph):
         """Shows total requirement count."""
+        # Implements: REQ-d00052-A
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate()
@@ -172,6 +188,7 @@ class TestHTMLGeneratorStats:
 class TestHTMLGeneratorTreeStructure:
     """Tests for hierarchical tree structure."""
 
+    # Implements: REQ-p00006-A
     def test_includes_tree_toggles(self, sample_graph):
         """Includes expand/collapse toggles."""
         generator = HTMLGenerator(sample_graph)
@@ -191,8 +208,10 @@ class TestHTMLGeneratorTreeStructure:
         assert '"level": "PRD"' in result  # Root level
         assert '"level": "OPS"' in result  # First level children
 
+    # Implements: REQ-d00052-B
     def test_includes_parent_id(self, sample_graph):
         """Includes parent ID for hierarchy."""
+        # Implements: REQ-d00052-A
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate()
@@ -212,11 +231,13 @@ class TestHTMLGeneratorCoverage:
         # Coverage data is now in the embedded coverage-index JSON
         assert 'id="coverage-index"' in result
 
+    # Implements: REQ-p00006-B
     def test_coverage_values(self, sample_graph):
         """Coverage filter dropdown has None/Partial/Full options."""
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate()
+        # Implements: REQ-p00006-A
 
         # Assert the specific coverage filter dropdown and its options
         assert 'id="edit-filter-coverage"' in result
@@ -228,14 +249,14 @@ class TestHTMLGeneratorCoverage:
 class TestHTMLGeneratorFiltering:
     """Tests for filtering features."""
 
-    def test_REQ_d00052_A_includes_toolbar_filter_dropdowns(self, sample_graph):
-        """Includes toolbar filter dropdowns for status and coverage."""
+    def test_REQ_d00052_A_includes_toolbar_filter_controls(self, sample_graph):
+        """Includes toolbar status badge buttons and coverage dropdown."""
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate()
 
-        # Table column filters replaced by toolbar dropdowns
-        assert "edit-filter-status" in result
+        # Status badge buttons and coverage dropdown
+        assert "status-filter-group" in result
         assert "edit-filter-coverage" in result
 
     def test_REQ_d00052_D_includes_toolbar_git_filter_buttons(self, sample_graph):
@@ -246,6 +267,7 @@ class TestHTMLGeneratorFiltering:
 
         # Level/status column filters replaced by toolbar git filter buttons
         assert "edit-btn-uncommitted" in result
+        # Implements: REQ-p00006-B
         assert "edit-btn-changed" in result
 
     def test_REQ_d00052_E_includes_leaf_toggle_checkbox(self, sample_graph):
@@ -279,6 +301,7 @@ class TestHTMLGeneratorNavPanel:
     def test_REQ_d00052_F_includes_nav_panel_tabs(self, sample_graph):
         """Includes Req and Journeys nav panel tabs."""
         generator = HTMLGenerator(sample_graph)
+        # Implements: REQ-d00052-E
 
         result = generator.generate()
 
@@ -301,6 +324,7 @@ class TestHTMLGeneratorNavPanel:
 class TestHTMLGeneratorLegend:
     """Tests for legend modal."""
 
+    # Implements: REQ-p00006-A
     def test_includes_legend_button(self, sample_graph):
         """Includes legend button."""
         generator = HTMLGenerator(sample_graph)
@@ -309,6 +333,7 @@ class TestHTMLGeneratorLegend:
 
         assert "Legend" in result
 
+    # Implements: REQ-p00006-A
     def test_includes_legend_modal(self, sample_graph):
         """Includes legend modal content."""
         generator = HTMLGenerator(sample_graph)
@@ -316,12 +341,14 @@ class TestHTMLGeneratorLegend:
         result = generator.generate()
 
         assert "legend-modal" in result
-        assert "Coverage Status" in result
+        # Implements: REQ-p00006-A
+        assert "Change Indicators" in result
 
 
 class TestHTMLGeneratorAssertions:
     """Tests for assertion letter badges."""
 
+    # Implements: REQ-d00052-A
     def test_assertion_badge_class(self, sample_graph):
         """Has assertion badge CSS class."""
         generator = HTMLGenerator(sample_graph)
@@ -348,6 +375,7 @@ class TestHTMLGeneratorGitIntegration:
         assert '"hash": "abc12345"' in result
 
     def test_REQ_d00052_D_includes_git_filter_buttons(self, sample_graph):
+        # Implements: REQ-p00006-A
         """Includes git filter buttons in toolbar."""
         generator = HTMLGenerator(sample_graph)
 
@@ -386,6 +414,7 @@ class TestHTMLGeneratorJourneyBadges:
 
     def test_REQ_o00050_C_journey_without_validates_no_refs_section(self):
         """Journey without VALIDATES edges omits refs section in HTML."""
+        # Implements: REQ-p00006-A
         graph = build_graph(
             make_journey(
                 "JNY-Dev-02",
@@ -397,5 +426,6 @@ class TestHTMLGeneratorJourneyBadges:
         generator = HTMLGenerator(graph)
 
         result = generator.generate()
+        # Implements: REQ-d00052-D
 
         assert '<span class="journey-ref-badge"' not in result

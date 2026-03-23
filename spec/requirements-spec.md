@@ -209,22 +209,6 @@ Composition is inferred, never declared.
 
 ---
 
-## REQ-p00061: Requirement Decomposition Rules
-
-**Level**: PRD | **Status**: Draft | **Implements**: -
-
-A child requirement refines a parent when it adds specificity, constraints, or commits to mechanisms or guarantees.
-
-## Assertions
-
-A. A child requirement that adds specificity, constraints, or commits to mechanisms or guarantees SHALL declare its parent requirement using `Implements:` or `Refines:` in its metadata block.
-
-B. `Implements:` and `Refines:` declarations apply to requirements only; code references and test nodes use their own linkage mechanisms.
-
-C. Multiple requirements MAY exist at the same Level each declaring a relationship to the same parent requirement.
-
-*End* *Requirement Decomposition Rules* | **Hash**: fc1e85fe
-
 ---
 
 ## Leaf Requirements

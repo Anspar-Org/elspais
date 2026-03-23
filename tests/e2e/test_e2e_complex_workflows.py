@@ -69,7 +69,7 @@ class TestFullProjectLifecycle:
         assert fix.returncode == 0
 
         # 5. Health should pass
-        health = run_elspais("health", "--lenient", cwd=tmp_path)
+        health = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert health.returncode == 0
 
         # 6. Summary should show 1 PRD requirement
@@ -161,7 +161,7 @@ class TestConfigSetAffectsHealth:
         build_project(tmp_path, cfg, spec_files={"spec/prd.md": [prd]})
 
         # Health should fail because "InReview" is not an allowed status
-        run_elspais("health", cwd=tmp_path)
+        run_elspais("checks", cwd=tmp_path)
         # May fail or warn
 
         # Add InReview to allowed statuses
@@ -175,7 +175,7 @@ class TestConfigSetAffectsHealth:
         assert set_result.returncode == 0
 
         # Health should now pass
-        health2 = run_elspais("health", "--lenient", cwd=tmp_path)
+        health2 = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert health2.returncode == 0
 
 
@@ -358,7 +358,7 @@ class TestHealthTextOutput:
         )
         build_project(tmp_path, cfg, spec_files={"spec/prd.md": [prd]})
 
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
         # Text output should contain section headers
         assert "CONFIG" in result.stdout or "SPEC" in result.stdout
@@ -373,7 +373,7 @@ class TestHealthTextOutput:
         )
         build_project(tmp_path, cfg, spec_files={"spec/prd.md": [prd]})
 
-        result = run_elspais("health", "--format", "json", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--format", "json", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
         data = json.loads(result.stdout)
         assert isinstance(data, (dict, list))
@@ -412,9 +412,7 @@ class TestMCPNumericAssertions:
         try:
             req = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00001"})
             assert req["id"] == "REQ-p00001"
-            children = req.get("children", [])
-            assertion_children = [c for c in children if c.get("kind") == "assertion"]
-            labels = [c.get("label", "") for c in assertion_children]
+            labels = [a.get("label", "") for a in req.get("assertions", [])]
             assert "0" in labels
             assert "1" in labels
             assert "2" in labels
@@ -432,8 +430,7 @@ class TestMCPNumericAssertions:
 
             # Verify it was added
             req2 = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00001"})
-            children2 = [c for c in req2.get("children", []) if c.get("kind") == "assertion"]
-            labels2 = [c.get("label", "") for c in children2]
+            labels2 = [a.get("label", "") for a in req2.get("assertions", [])]
             assert "3" in labels2
         finally:
             stop_mcp(proc)
@@ -505,7 +502,7 @@ class TestHealthSARIF:
         )
         build_project(tmp_path, cfg, spec_files={"spec/prd.md": [prd]})
 
-        result = run_elspais("health", "--format", "sarif", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--format", "sarif", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
         data = json.loads(result.stdout)
         assert isinstance(data, dict)
@@ -531,7 +528,7 @@ class TestHealthJUnit:
         )
         build_project(tmp_path, cfg, spec_files={"spec/prd.md": [prd]})
 
-        result = run_elspais("health", "--format", "junit", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--format", "junit", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
         # JUnit is XML
         assert "<?xml" in result.stdout or "<testsuites" in result.stdout
@@ -580,7 +577,7 @@ class TestHealthMarkdown:
         )
         build_project(tmp_path, cfg, spec_files={"spec/prd.md": [prd]})
 
-        result = run_elspais("health", "--format", "markdown", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--format", "markdown", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
         assert len(result.stdout.strip()) > 0
 

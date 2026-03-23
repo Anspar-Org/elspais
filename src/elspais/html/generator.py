@@ -40,6 +40,7 @@ class TreeRow:
     is_leaf: bool
     is_changed: bool
     is_uncommitted: bool
+    is_unsaved: bool
     is_roadmap: bool
     is_code: bool
     is_test: bool  # TEST node for traceability
@@ -64,8 +65,13 @@ class JourneyItem:
     description: str
     actor: str | None = None
     goal: str | None = None
+    context: str | None = None
     descriptor: str = ""  # Extracted from ID: JNY-{descriptor}-{number}
     file: str = ""  # Source file path
+    file_id: str = ""  # FILE node ID for mutations
+    file_line: int | None = None  # parse_line for source link
+    preamble: str = ""  # body_lines joined
+    sections: list[dict[str, str]] = field(default_factory=list)  # [{name, content}]
     referenced_reqs: list[str] = field(default_factory=list)  # REQs via VALIDATES edges
 
 
@@ -99,62 +105,172 @@ def _val_tier(key: str) -> tuple[str, str]:
     return (entry.color_key, entry.description)
 
 
-# Implements: REQ-p00006-A
-def compute_validation_color(node: GraphNode) -> tuple[str, str]:
-    """Compute a validation quality color for a requirement's Active status badge.
+# ── Severity-driven coverage tiers ──
 
-    Inspects the node's pre-computed RollupMetrics to classify its
-    coverage/validation quality into a color tier. Descriptions are sourced
-    from the LegendCatalog validation_tiers entries.
+SEVERITY_PRIORITY: dict[str, int] = {"error": 0, "warning": 1, "info": 2, "ok": 3}
+SEVERITY_TO_COLOR: dict[str, str] = {
+    "error": "red",
+    "warning": "yellow",
+    "info": "yellow-green",
+    "ok": "green",
+}
+
+# Human-readable descriptions for each dimension
+_DIMENSION_LABELS: dict[str, str] = {
+    "implemented": "Implemented",
+    "tested": "Tested",
+    "verified": "Verified",
+    "uat_coverage": "Validated",
+    "uat_verified": "Accepted",
+}
+
+# Tooltip definitions for card-view badges
+DIMENSION_TIPS: dict[str, str] = {
+    "implemented": "Assertions with Implements references in CODE",
+    "tested": "Assertions referenced by TEST nodes",
+    "verified": "Assertions with passing test results",
+    "uat_coverage": "Assertions referenced by Journey Validates",
+    "uat_verified": "Assertions with passing Journey results",
+}
+
+# Tier descriptions for tooltip text
+_TIER_DESCRIPTIONS: dict[str, str] = {
+    "failing": "test failures detected",
+    "full-direct": "all assertions directly covered",
+    "full-indirect": "all assertions covered (including indirect)",
+    "partial": "some assertions covered",
+    "none": "no coverage",
+}
+
+# Ordered list of dimension keys (matches CoverageDimension attrs on RollupMetrics)
+DIMENSION_KEYS = ("implemented", "tested", "verified", "uat_coverage", "uat_verified")
+
+
+def _tier_to_severity(tier: str, severity_config: Any) -> str:
+    """Map a CoverageDimension tier to a severity string using config."""
+    # tier keys use hyphens; config field names use underscores
+    field_name = tier.replace("-", "_")
+    return getattr(severity_config, field_name, "error")
+
+
+def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None) -> dict[str, str]:
+    """Compute per-dimension severity colors and combined worst-of-all.
+
+    Uses each CoverageDimension's tier property, maps through config
+    severity to determine badge color.
 
     Args:
         node: A GraphNode with pre-computed rollup_metrics.
+        config: Project config dict (from load_config()). If None, uses defaults.
+
+    Returns:
+        Dict with keys: impl_color, impl_tip, tested_color, tested_tip,
+        verified_color, verified_tip, uat_cov_color, uat_cov_tip,
+        uat_ver_color, uat_ver_tip, combined_color, combined_tip.
+        All empty strings if node is not ACTIVE or has no assertions.
+    """
+    from elspais.config.schema import CoverageConfig, CoverageSeverityConfig
+
+    empty: dict[str, str] = {
+        "impl_color": "",
+        "impl_tip": "",
+        "tested_color": "",
+        "tested_tip": "",
+        "verified_color": "",
+        "verified_tip": "",
+        "uat_cov_color": "",
+        "uat_cov_tip": "",
+        "uat_ver_color": "",
+        "uat_ver_tip": "",
+        "combined_color": "",
+        "combined_tip": "",
+    }
+
+    status = (node.status or "").upper()
+    if status != "ACTIVE":
+        return empty
+
+    from elspais.graph.metrics import RollupMetrics
+
+    rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
+    if not rollup or rollup.total_assertions == 0:
+        return empty
+
+    # Get coverage severity config
+    cov_config = CoverageConfig()
+    if config:
+        rules = config.get("rules", {})
+        if isinstance(rules, dict):
+            cov_raw = rules.get("coverage", {})
+            if isinstance(cov_raw, dict):
+                cov_config = CoverageConfig(
+                    **{
+                        k: CoverageSeverityConfig(**v) if isinstance(v, dict) else v
+                        for k, v in cov_raw.items()
+                    }
+                )
+            elif hasattr(cov_raw, "implemented"):
+                cov_config = cov_raw
+        elif hasattr(rules, "coverage"):
+            cov_config = rules.coverage
+
+    # Map dimension key → (CoverageDimension, CoverageSeverityConfig, output_prefix)
+    dim_map = [
+        ("implemented", rollup.implemented, cov_config.implemented, "impl"),
+        ("tested", rollup.tested, cov_config.tested, "tested"),
+        ("verified", rollup.verified, cov_config.verified, "verified"),
+        ("uat_coverage", rollup.uat_coverage, cov_config.uat_coverage, "uat_cov"),
+        ("uat_verified", rollup.uat_verified, cov_config.uat_verified, "uat_ver"),
+    ]
+
+    result: dict[str, str] = {}
+    worst_severity_priority = 999
+    worst_color = ""
+    tip_parts: list[str] = []
+
+    for dim_key, dim, sev_cfg, prefix in dim_map:
+        tier = dim.tier
+        severity = _tier_to_severity(tier, sev_cfg)
+        color = SEVERITY_TO_COLOR.get(severity, "")
+        label = _DIMENSION_LABELS[dim_key]
+        desc = _TIER_DESCRIPTIONS.get(tier, tier)
+        tip = f"{label}: {desc}"
+
+        result[f"{prefix}_color"] = color
+        result[f"{prefix}_tip"] = tip
+
+        # Track worst severity for combined
+        sev_pri = SEVERITY_PRIORITY.get(severity, 999)
+        if sev_pri < worst_severity_priority:
+            worst_severity_priority = sev_pri
+            worst_color = color
+
+        tip_parts.append(tip)
+
+    result["combined_color"] = worst_color
+    result["combined_tip"] = " | ".join(tip_parts)
+
+    return result
+
+
+# Implements: REQ-p00006-A
+def compute_validation_color(
+    node: GraphNode, config: dict[str, Any] | None = None
+) -> tuple[str, str]:
+    """Compute a validation quality color for a requirement's Active status badge.
+
+    Backward-compatible wrapper around compute_coverage_tiers().
+    Returns the combined (worst-of-all) color and tooltip.
+
+    Args:
+        node: A GraphNode with pre-computed rollup_metrics.
+        config: Optional project config dict.
 
     Returns:
         Tuple of (css_class_suffix, reason_text). Both empty if no color applies.
     """
-    from elspais.graph.metrics import RollupMetrics
-
-    status = (node.status or "").upper()
-    if status != "ACTIVE":
-        return ("", "")
-
-    rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
-    if not rollup or rollup.total_assertions == 0:
-        return ("", "")
-
-    n = rollup.total_assertions
-
-    # Red: any test failures take priority
-    if rollup.has_failures:
-        return _val_tier("validation_tiers.failing")
-
-    # Green: full direct coverage AND all assertions validated
-    if rollup.coverage_pct == 100 and rollup.validated >= n:
-        return _val_tier("validation_tiers.full-direct")
-
-    # Yellow-green: full coverage with indirect AND all validated with indirect
-    if rollup.indirect_coverage_pct == 100 and rollup.validated_with_indirect >= n:
-        return _val_tier("validation_tiers.full-indirect")
-
-    # Orange: anomalous test/code gaps
-    if rollup.direct_tested > 0:
-        from elspais.graph import NodeKind
-
-        has_code = any(c.kind == NodeKind.CODE for c in node.iter_children())
-        # Tests exist but zero results (tests never run)
-        if rollup.validated == 0 and rollup.validated_with_indirect == 0:
-            return _val_tier("validation_tiers.anomalous")
-        # Tests exist but no code implementation
-        if not has_code:
-            return _val_tier("validation_tiers.anomalous")
-
-    # Yellow: some coverage exists, no failures
-    if rollup.coverage_pct > 0 or rollup.indirect_coverage_pct > 0:
-        return _val_tier("validation_tiers.partial")
-
-    # Orange: assertions exist but zero coverage (anomalous)
-    return _val_tier("validation_tiers.anomalous")
+    tiers = compute_coverage_tiers(node, config)
+    return (tiers["combined_color"], tiers["combined_tip"])
 
 
 class HTMLGenerator:
@@ -356,9 +472,9 @@ class HTMLGenerator:
             rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
             if rollup:
                 stats.assertion_count += rollup.total_assertions
-                stats.assertions_implemented += rollup.covered_assertions
-                stats.assertions_tested += rollup.direct_tested
-                stats.assertions_validated += rollup.validated
+                stats.assertions_implemented += rollup.implemented.indirect
+                stats.assertions_tested += rollup.tested.direct
+                stats.assertions_validated += rollup.verified.direct
 
         # Count CODE nodes
         for _ in self.graph.nodes_by_kind(NodeKind.CODE):
@@ -438,22 +554,22 @@ class HTMLGenerator:
                 return (cov, cov, False)
 
             # Strict coverage (excludes INDIRECT)
-            if rollup.coverage_pct == 0:
+            if rollup.implemented.direct_pct == 0:
                 strict = "none"
-            elif rollup.coverage_pct < 100:
+            elif rollup.implemented.direct_pct < 100:
                 strict = "partial"
             else:
                 strict = "full"
 
             # Indirect coverage (includes INDIRECT)
-            if rollup.indirect_coverage_pct == 0:
+            if rollup.implemented.indirect_pct == 0:
                 indirect = "none"
-            elif rollup.indirect_coverage_pct < 100:
+            elif rollup.implemented.indirect_pct < 100:
                 indirect = "partial"
             else:
                 indirect = "full"
 
-            return (strict, indirect, rollup.has_failures)
+            return (strict, indirect, rollup.verified.has_failures)
 
         def get_assertion_letters(node: GraphNode, parent_id: str | None) -> list[str]:
             """Get assertion letters that this node implements from a specific parent."""
@@ -581,6 +697,7 @@ class HTMLGenerator:
                 is_changed=node.get_metric("is_branch_changed", False),
                 is_uncommitted=node.get_metric("is_uncommitted", False)
                 or node.get_metric("is_untracked", False),
+                is_unsaved=False,
                 is_roadmap=is_roadmap(node),
                 is_code=is_code,
                 is_test=is_test,
@@ -689,6 +806,7 @@ class HTMLGenerator:
                 is_leaf=False,
                 is_changed=False,
                 is_uncommitted=False,
+                is_unsaved=False,
                 is_roadmap=False,
                 is_code=False,
                 is_test=True,
@@ -777,6 +895,7 @@ class HTMLGenerator:
                 is_leaf=True,
                 is_changed=False,
                 is_uncommitted=False,
+                is_unsaved=False,
                 is_roadmap=False,
                 is_code=False,
                 is_test=False,
@@ -989,6 +1108,14 @@ class HTMLGenerator:
                 e.source.id for e in node.iter_incoming_edges() if e.kind == EdgeKind.VALIDATES
             )
 
+            # Structured fields for edit mode
+            context = node.get_field("context")
+            body_lines = node.get_field("body_lines", [])
+            preamble = "\n".join(body_lines) if body_lines else ""
+            sections = node.get_field("sections", [])
+            file_id = _fn.id if _fn else ""
+            file_line = node.get_field("parse_line")
+
             journeys.append(
                 JourneyItem(
                     id=node.id,
@@ -996,8 +1123,13 @@ class HTMLGenerator:
                     description=description,
                     actor=actor,
                     goal=goal,
+                    context=context,
                     descriptor=descriptor,
                     file=file,
+                    file_id=file_id,
+                    file_line=file_line,
+                    preamble=preamble,
+                    sections=sections,
                     referenced_reqs=referenced_reqs,
                 )
             )

@@ -93,6 +93,40 @@
     color: var(--secondary-text);
 }
 
+/* Status filter badge buttons (filled=on/showing, outline=off/hidden) */
+.status-filter-group {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.status-filter-btn {
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    user-select: none;
+    border: 1px solid transparent;
+    background: transparent;
+}
+
+/* Outline (off/hidden) — status-specific border+text colors */
+.status-filter-btn[data-status="draft"]       { border-color: var(--status-draft-text);      color: var(--status-draft-text); }
+.status-filter-btn[data-status="active"]      { border-color: var(--status-active-text);     color: var(--status-active-text); }
+.status-filter-btn[data-status="deprecated"]  { border-color: var(--status-deprecated-text); color: var(--status-deprecated-text); }
+.status-filter-btn[data-status="proposed"]    { border-color: var(--status-proposed-text);   color: var(--status-proposed-text); }
+
+/* Filled (on/showing) — use status badge bg+text colors */
+.status-filter-btn.on[data-status="draft"]       { background: var(--status-draft-bg);      border-color: var(--status-draft-bg); }
+.status-filter-btn.on[data-status="active"]      { background: var(--status-active-bg);     border-color: var(--status-active-bg); }
+.status-filter-btn.on[data-status="deprecated"]  { background: var(--status-deprecated-bg); border-color: var(--status-deprecated-bg); }
+.status-filter-btn.on[data-status="proposed"]    { background: var(--status-proposed-bg);   border-color: var(--status-proposed-bg); }
+
+.status-filter-btn:hover { opacity: 0.85; }
+
 /* Filter dropdown (shared by toolbar) */
 .filter-select {
     padding: 6px 8px;

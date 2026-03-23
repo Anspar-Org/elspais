@@ -53,7 +53,7 @@ A. The system SHALL do something.
 
 def _mock_render_section(name, graph, config, args):
     """A deterministic mock for _render_section."""
-    if name == "health":
+    if name == "checks":
         return "=== Health Report ===\nAll checks passed.", 0
     elif name == "summary":
         return "=== Coverage Report ===\nPRD: 100%", 0
@@ -65,8 +65,8 @@ def _mock_render_section(name, graph, config, args):
 
 
 def _mock_render_section_with_warning(name, graph, config, args):
-    """Mock that returns exit=1 for health (warnings) and 0 for others."""
-    if name == "health":
+    """Mock that returns exit=1 for checks (warnings) and 0 for others."""
+    if name == "checks":
         return "=== Health Report ===\n1 warning found.", 1
     return _mock_render_section(name, graph, config, args)
 
@@ -94,7 +94,7 @@ class TestMultipleSectionsConcatenated:
             for p in _patch_graph_build():
                 p.start()
             try:
-                run(["health", "summary"], ["--format", "text"])
+                run(["checks", "summary"], ["--format", "text"])
             finally:
                 patch.stopall()
 
@@ -111,7 +111,7 @@ class TestMultipleSectionsConcatenated:
             for p in _patch_graph_build():
                 p.start()
             try:
-                run(["trace", "health", "summary"], ["--format", "text"])
+                run(["trace", "checks", "summary"], ["--format", "text"])
             finally:
                 patch.stopall()
 
@@ -127,7 +127,7 @@ class TestMultipleSectionsConcatenated:
             for p in _patch_graph_build():
                 p.start()
             try:
-                run(["health", "summary"], ["--format", "text"])
+                run(["checks", "summary"], ["--format", "text"])
             finally:
                 patch.stopall()
 
@@ -177,7 +177,7 @@ class TestSharedFlagsApplyGlobally:
             for p in _patch_graph_build():
                 p.start()
             try:
-                run(["health", "summary"], ["--format", "markdown"])
+                run(["checks", "summary"], ["--format", "markdown"])
             finally:
                 patch.stopall()
 
@@ -202,19 +202,19 @@ class TestWorstExitCode:
             for p in _patch_graph_build():
                 p.start()
             try:
-                exit_code = run(["health", "summary"], ["--format", "text"])
+                exit_code = run(["checks", "summary"], ["--format", "text"])
             finally:
                 patch.stopall()
 
         assert exit_code == 0
 
     def test_REQ_d00085_C_one_failure_propagates(self):
-        """If health returns 1, overall exit is 1 even if coverage returns 0."""
+        """If checks returns 1, overall exit is 1 even if coverage returns 0."""
         with patch.object(report, "_render_section", side_effect=_mock_render_section_with_warning):
             for p in _patch_graph_build():
                 p.start()
             try:
-                exit_code = run(["health", "summary"], ["--format", "text"])
+                exit_code = run(["checks", "summary"], ["--format", "text"])
             finally:
                 patch.stopall()
 
@@ -227,7 +227,7 @@ class TestWorstExitCode:
             for p in _patch_graph_build():
                 p.start()
             try:
-                exit_code = run(["health", "summary"], ["--format", "text"])
+                exit_code = run(["checks", "summary"], ["--format", "text"])
             finally:
                 patch.stopall()
 
@@ -263,7 +263,7 @@ class TestSingleSectionIdentical:
             for p in _patch_graph_build():
                 p.start()
             try:
-                exit_code = run(["health"], ["--format", "text"])
+                exit_code = run(["checks"], ["--format", "text"])
             finally:
                 patch.stopall()
 
@@ -308,15 +308,15 @@ class TestFormatSupportValidation:
             for p in _patch_graph_build():
                 p.start()
             try:
-                exit_code = run(["health", "summary"], ["--format", "text"])
+                exit_code = run(["checks", "summary"], ["--format", "text"])
             finally:
                 patch.stopall()
 
         assert exit_code == 0
 
-    def test_REQ_d00085_E_health_supports_text_markdown_json_junit_sarif(self):
-        """Health section supports text, markdown, json, junit, sarif."""
-        assert FORMAT_SUPPORT["health"] == {"text", "markdown", "json", "junit", "sarif"}
+    def test_REQ_d00085_E_checks_supports_text_markdown_json_junit_sarif(self):
+        """Checks section supports text, markdown, json, junit, sarif."""
+        assert FORMAT_SUPPORT["checks"] == {"text", "markdown", "json", "junit", "sarif"}
 
     def test_REQ_d00085_E_changed_supports_text_json_only(self):
         """Changed section supports only text and json."""
@@ -339,7 +339,7 @@ class TestQuietMode:
                 p.start()
             try:
                 exit_code = run(
-                    ["health"],
+                    ["checks"],
                     ["--format", "text", "-q", "-o", str(output_file)],
                 )
             finally:
@@ -357,7 +357,7 @@ class TestQuietMode:
                 p.start()
             try:
                 run(
-                    ["health"],
+                    ["checks"],
                     ["--format", "text", "-o", str(output_file)],
                 )
             finally:
@@ -376,7 +376,7 @@ class TestLenientMode:
     """Validates REQ-d00085-G: --lenient allows warnings to pass."""
 
     def test_REQ_d00085_G_without_lenient_warnings_fail(self):
-        """Without --lenient, health warning exit code 1 propagates."""
+        """Without --lenient, checks warning exit code 1 propagates."""
         with patch.object(
             report,
             "_render_section",
@@ -385,7 +385,7 @@ class TestLenientMode:
             for p in _patch_graph_build():
                 p.start()
             try:
-                exit_code = run(["health", "summary"], ["--format", "text"])
+                exit_code = run(["checks", "summary"], ["--format", "text"])
             finally:
                 patch.stopall()
 
@@ -398,7 +398,7 @@ class TestLenientMode:
             for p in _patch_graph_build():
                 p.start()
             try:
-                run(["health"], ["--format", "text", "--lenient"])
+                run(["checks"], ["--format", "text", "--lenient"])
             finally:
                 patch.stopall()
 
@@ -422,7 +422,7 @@ class TestOutputFile:
                 p.start()
             try:
                 exit_code = run(
-                    ["health", "summary"],
+                    ["checks", "summary"],
                     ["--format", "text", "-o", str(output_file)],
                 )
             finally:
@@ -450,12 +450,12 @@ class TestCLIDispatch:
                 with patch("elspais.config.find_canonical_root", return_value=None):
                     from elspais.cli import main
 
-                    exit_code = main(["health", "summary", "--format", "text"])
+                    exit_code = main(["checks", "summary", "--format", "text"])
 
         assert exit_code == 0
         mock_run.assert_called_once()
         call_args = mock_run.call_args
-        assert call_args[0][0] == ["health", "summary"]
+        assert call_args[0][0] == ["checks", "summary"]
         assert "--format" in call_args[0][1]
         assert "text" in call_args[0][1]
 
@@ -484,7 +484,7 @@ class TestComposableSections:
 
     def test_REQ_d00085_A_composable_sections_has_minimum_set(self):
         """COMPOSABLE_SECTIONS includes the core composable section names."""
-        for name in ("health", "summary", "trace", "changed"):
+        for name in ("checks", "summary", "trace", "changed"):
             assert name in COMPOSABLE_SECTIONS
             assert name in FORMAT_SUPPORT
             assert isinstance(FORMAT_SUPPORT[name], set)
@@ -517,7 +517,7 @@ class TestIntegrationWithSpecDir:
 
         output_file = tmp_path / "combined.txt"
         run(
-            ["summary", "health"],
+            ["summary", "checks"],
             [
                 "--format",
                 "text",

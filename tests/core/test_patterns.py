@@ -619,29 +619,35 @@ class TestIdResolverCanonicalRegex:
 class TestSplitAssertionRef:
     """Tests for IdResolver.split_assertion_ref()."""
 
+    # Implements: REQ-p00002-A
     def test_assertion_ref(self, resolver):
         result = resolver.split_assertion_ref("REQ-p00044-E")
         assert result == ("REQ-p00044", "E")
 
+    # Implements: REQ-p00002-A
     def test_plain_requirement_ref(self, resolver):
         result = resolver.split_assertion_ref("REQ-p00044")
         assert result is None
 
+    # Implements: REQ-p00002-A
     def test_invalid_ref(self, resolver):
         result = resolver.split_assertion_ref("not-a-valid-id")
         assert result is None
 
+    # Implements: REQ-d00081-E
     def test_multi_assertion_ref(self, resolver):
         result = resolver.split_assertion_ref("REQ-p00044-A+B")
         assert result == ("REQ-p00044", "A+B")
 
 
 class TestAllTypeAliasValues:
+    # Implements: REQ-p00002-A
     def test_returns_alias_values(self, resolver):
         values = resolver.all_type_alias_values()
         assert isinstance(values, list)
         assert len(values) > 0
 
+    # Implements: REQ-p00002-A
     def test_types_without_aliases_return_code(self):
         config = IdPatternConfig.from_dict(
             {
@@ -659,21 +665,27 @@ class TestAllTypeAliasValues:
 
 
 class TestNormalizeRef:
+    # Implements: REQ-d00082-D
     def test_lowercase_prefix_normalized(self, resolver):
         assert resolver.normalize_ref("req-p00001") == "REQ-p00001"
 
+    # Implements: REQ-d00082-E
     def test_underscore_to_dash(self, resolver):
         assert resolver.normalize_ref("REQ_p00001") == "REQ-p00001"
 
+    # Implements: REQ-d00082-E
     def test_mixed_case_underscore(self, resolver):
         assert resolver.normalize_ref("req_p00001") == "REQ-p00001"
 
+    # Implements: REQ-d00082-D
     def test_already_canonical(self, resolver):
         assert resolver.normalize_ref("REQ-p00001") == "REQ-p00001"
 
+    # Implements: REQ-d00082-E
     def test_with_assertion(self, resolver):
         assert resolver.normalize_ref("req_p00001_A") == "REQ-p00001-A"
 
+    # Implements: REQ-p00002-A
     def test_invalid_ref_returns_as_is(self, resolver):
         assert resolver.normalize_ref("not-valid") == "not-valid"
 
@@ -681,27 +693,33 @@ class TestNormalizeRef:
 class TestInstanceId:
     """Tests for IdResolver INSTANCE ID methods."""
 
+    # Implements: REQ-p00014-B
     def test_build_instance_id(self, resolver):
         result = resolver.build_instance_id("REQ-d00050", "REQ-p00044")
         assert result == "REQ-d00050::REQ-p00044"
 
+    # Implements: REQ-p00014-B
     def test_get_template_id(self, resolver):
         result = resolver.get_template_id("REQ-d00050::REQ-p00044")
         assert result == "REQ-p00044"
 
+    # Implements: REQ-p00014-C
     def test_get_template_id_not_instance(self, resolver):
         result = resolver.get_template_id("REQ-p00044")
         assert result is None
 
+    # Implements: REQ-p00014-B
     def test_get_template_id_with_assertion(self, resolver):
         """Template ID preserves assertion suffix."""
         result = resolver.get_template_id("REQ-d00050::REQ-p00044-A")
         assert result == "REQ-p00044-A"
 
+    # Implements: REQ-p00014-C
     def test_is_instance_id(self, resolver):
         assert resolver.is_instance_id("REQ-d00050::REQ-p00044") is True
         assert resolver.is_instance_id("REQ-p00044") is False
 
+    # Implements: REQ-p00014-B
     def test_template_id_is_parseable(self, resolver):
         """The template_id part should be parseable by parse()."""
         template_id = resolver.get_template_id("REQ-d00050::REQ-p00044")
@@ -709,11 +727,13 @@ class TestInstanceId:
         assert parsed is not None
         assert parsed.fqn == "REQ-p00044"
 
+    # Implements: REQ-p00014-B
     def test_get_instance_prefix(self, resolver):
         """Can retrieve the prefix (for display or debugging)."""
         result = resolver.get_instance_prefix("REQ-d00050::REQ-p00044")
         assert result == "REQ-d00050"
 
+    # Implements: REQ-p00014-C
     def test_get_instance_prefix_not_instance(self, resolver):
         result = resolver.get_instance_prefix("REQ-p00044")
         assert result is None

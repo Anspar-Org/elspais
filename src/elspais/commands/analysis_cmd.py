@@ -6,10 +6,54 @@ from __future__ import annotations
 import argparse
 import json
 from dataclasses import asdict
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from elspais.graph.analysis import FoundationReport
+
+
+def compute_analysis(graph: Any, config: dict[str, Any], params: dict[str, str]) -> dict:
+    """Pure compute function: run foundation analysis on a graph.
+
+    Called by engine.call (local path) and by routes_api (server path).
+    Params are always string-valued; parsing happens here.
+    """
+    from elspais.graph.analysis import NodeKind as NK
+    from elspais.graph.analysis import analyze_foundations
+
+    include_kinds = {NK.REQUIREMENT, NK.ASSERTION}
+    if params.get("include_code", "false") == "true":
+        include_kinds.add(NK.CODE)
+
+    top_n = int(params.get("top", "10"))
+
+    weights_str = params.get("weights", None)
+    weights = (0.3, 0.2, 0.2, 0.3)
+    if weights_str:
+        try:
+            parts = [float(x.strip()) for x in weights_str.split(",")]
+            if len(parts) in (3, 4):
+                weights = tuple(parts)
+        except ValueError:
+            pass
+
+    report = analyze_foundations(
+        graph,
+        include_kinds=include_kinds,
+        weights=weights,
+        top_n=top_n,
+    )
+
+    level_filter = params.get("level", None)
+    if level_filter:
+        level_upper = level_filter.upper()
+        report.ranked_nodes = [ns for ns in report.ranked_nodes if ns.level == level_upper]
+        report.top_foundations = [ns for ns in report.top_foundations if ns.level == level_upper]
+        report.actionable_leaves = [
+            ns for ns in report.actionable_leaves if ns.level == level_upper
+        ]
+
+    return asdict(report)
 
 
 def _render_table(report: FoundationReport, show: str) -> None:
@@ -63,59 +107,74 @@ def _render_json(report: FoundationReport) -> None:
     print(json.dumps(asdict(report), indent=2))
 
 
-def run(args: argparse.Namespace) -> int:
-    """Run the analysis command."""
-    from elspais.graph.analysis import NodeKind as NK
-    from elspais.graph.analysis import analyze_foundations
-    from elspais.graph.factory import build_graph
+def _report_from_dict(data: dict) -> FoundationReport:
+    """Reconstruct a FoundationReport from a JSON dict."""
+    from elspais.graph.analysis import FoundationReport, NodeScore
 
-    canonical_root = getattr(args, "canonical_root", None)
-    config_path = getattr(args, "config", None)
+    def _ns(d: dict) -> NodeScore:
+        return NodeScore(
+            node_id=d["node_id"],
+            label=d["label"],
+            level=d["level"],
+            centrality=d["centrality"],
+            descendant_count=d["descendant_count"],
+            fan_in_branches=d["fan_in_branches"],
+            neighborhood=d["neighborhood"],
+            uncovered_dependents=d["uncovered_dependents"],
+            composite_score=d["composite_score"],
+        )
 
-    graph = build_graph(
-        config_path=config_path,
-        canonical_root=canonical_root,
+    return FoundationReport(
+        ranked_nodes=[_ns(n) for n in data.get("ranked_nodes", [])],
+        top_foundations=[_ns(n) for n in data.get("top_foundations", [])],
+        actionable_leaves=[_ns(n) for n in data.get("actionable_leaves", [])],
+        graph_stats=data.get("graph_stats", {}),
     )
 
-    # Determine include_kinds
-    include_kinds = {NK.REQUIREMENT, NK.ASSERTION}
-    if getattr(args, "include_code", False):
-        include_kinds.add(NK.CODE)
 
-    # Parse weights (4 values: centrality, fan-in, neighborhood, uncovered)
-    weights = (0.3, 0.2, 0.2, 0.3)
+def run(args: argparse.Namespace) -> int:
+    """Run the analysis command.
+
+    Tries a running daemon/viewer first for fast results,
+    falls back to local graph build.
+    """
+    from elspais.commands._engine import call as engine_call
+
+    output_format = getattr(args, "format", "table")
+    show = getattr(args, "show", "all")
+    level_filter = getattr(args, "level", None)
+
+    # Build params dict from args
+    params: dict[str, str] = {}
+    top_n = getattr(args, "top", 10)
+    params["top"] = str(top_n)
+    if getattr(args, "include_code", False):
+        params["include_code"] = "true"
     weights_str = getattr(args, "weights", None)
+    if weights_str:
+        params["weights"] = weights_str
+    if level_filter:
+        params["level"] = level_filter
+
+    # Validate weights BEFORE engine call (bug fix: was skipped on daemon path)
     if weights_str:
         try:
             parts = [float(x.strip()) for x in weights_str.split(",")]
             if len(parts) not in (3, 4):
                 print("Error: --weights must have 3 or 4 comma-separated values")
                 return 1
-            weights = tuple(parts)
         except ValueError:
             print("Error: --weights must be numeric values")
             return 1
 
-    top_n = getattr(args, "top", 10)
-    output_format = getattr(args, "format", "table")
-    show = getattr(args, "show", "all")
-    level_filter = getattr(args, "level", None)
-
-    report = analyze_foundations(
-        graph,
-        include_kinds=include_kinds,
-        weights=weights,
-        top_n=top_n,
+    data = engine_call(
+        "/api/run/analysis",
+        params,
+        compute_analysis,
+        config_path=getattr(args, "config", None),
+        canonical_root=getattr(args, "canonical_root", None),
     )
-
-    # Apply level filter if specified
-    if level_filter:
-        level_upper = level_filter.upper()
-        report.ranked_nodes = [ns for ns in report.ranked_nodes if ns.level == level_upper]
-        report.top_foundations = [ns for ns in report.top_foundations if ns.level == level_upper]
-        report.actionable_leaves = [
-            ns for ns in report.actionable_leaves if ns.level == level_upper
-        ]
+    report = _report_from_dict(data)
 
     if output_format == "json":
         _render_json(report)

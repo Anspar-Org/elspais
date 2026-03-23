@@ -87,6 +87,12 @@ class RequirementTransformer:
                     remainder_lines.append((token.line, str(token)))  # type: ignore[attr-defined]
 
         self._flush_remainder(remainder_lines, results)
+
+        # Fill blank-line gaps that the Lark grammar discards as anonymous _NL.
+        # Without this, blank lines between content blocks are lost on render.
+        if self._source_lines:
+            results = self._fill_blank_line_gaps(results)
+
         return results
 
     # ------------------------------------------------------------------
@@ -401,7 +407,14 @@ class RequirementTransformer:
     # ------------------------------------------------------------------
 
     def _transform_journey(self, node: Tree) -> ParsedContent:
-        """Transform a journey tree node into ParsedContent."""
+        """Transform a journey tree node into ParsedContent.
+
+        Extracts structured fields from the parse tree:
+        - actor, goal, context from JNY_*_FIELD terminals
+        - validates from JNY_VALIDATES_FIELD
+        - sections (## headings) with their content
+        - body_lines (preamble text after metadata)
+        """
         header_token = node.children[0]  # JNY_HEADER
         header_text = str(header_token)
         header_line = header_token.line  # type: ignore[attr-defined]
@@ -421,18 +434,82 @@ class RequirementTransformer:
             "title": title,
             "actor": None,
             "goal": None,
+            "context": None,
             "validates": [],
+            "body_lines": [],
+            "sections": [],
         }
-        actor_match = _ACTOR_RE.search(raw_text)
-        if actor_match:
-            parsed_data["actor"] = actor_match.group("actor").strip()
-        goal_match = _GOAL_RE.search(raw_text)
-        if goal_match:
-            parsed_data["goal"] = goal_match.group("goal").strip()
-        validates_match = _VALIDATES_RE.search(raw_text)
-        if validates_match:
-            refs_str = validates_match.group("validates")
-            parsed_data["validates"] = [ref.strip() for ref in refs_str.split(",") if ref.strip()]
+
+        # Walk tree children to extract structured fields
+        for child in node.children[1:]:
+            if not isinstance(child, Tree):
+                continue
+
+            if child.data == "jny_meta_line":
+                token = child.children[0]
+                text = str(token)
+                # Extract value after the field name separator
+                val = re.sub(
+                    r"^(?:\*\*|\*|_)?(?:Actor|Goal|Context)(?:\*\*|\*|_)?[:=\s]\s*",
+                    "",
+                    text,
+                    flags=re.IGNORECASE,
+                ).strip()
+                token_type = token.type  # type: ignore[attr-defined]
+                if token_type == "JNY_ACTOR_FIELD":
+                    parsed_data["actor"] = val
+                elif token_type == "JNY_GOAL_FIELD":
+                    parsed_data["goal"] = val
+                elif token_type == "JNY_CONTEXT_FIELD":
+                    parsed_data["context"] = val
+
+            elif child.data == "jny_validates_line":
+                token = child.children[0]
+                text = str(token)
+                val = re.sub(r"^[Vv]alidates[:=\s]\s*", "", text).strip()
+                parsed_data["validates"] = [ref.strip() for ref in val.split(",") if ref.strip()]
+
+            elif child.data == "jny_body_line":
+                # Preamble body text (after metadata, before sections)
+                for tok in child.children:
+                    if hasattr(tok, "type") and tok.type == "TEXT":  # type: ignore[attr-defined]
+                        parsed_data["body_lines"].append(str(tok))
+
+            elif child.data == "jny_block":
+                # ## Section with content
+                section_hdr = str(child.children[0])
+                section_name = re.sub(r"^##\s*", "", section_hdr).strip()
+                section_lines: list[str] = []
+                for sub in child.children[1:]:
+                    if isinstance(sub, Tree) and sub.data == "jny_content_line":
+                        for tok in sub.children:
+                            if hasattr(tok, "type") and tok.type == "TEXT":  # type: ignore[attr-defined]
+                                section_lines.append(str(tok))
+                            elif hasattr(tok, "type"):  # type: ignore[attr-defined]
+                                section_lines.append("")  # blank line
+                parsed_data["sections"].append(
+                    {
+                        "name": section_name,
+                        "content": "\n".join(section_lines).strip(),
+                    }
+                )
+
+        # Fallback: if tree parsing didn't extract fields, try regex on raw_text
+        if not parsed_data["actor"]:
+            actor_match = _ACTOR_RE.search(raw_text)
+            if actor_match:
+                parsed_data["actor"] = actor_match.group("actor").strip()
+        if not parsed_data["goal"]:
+            goal_match = _GOAL_RE.search(raw_text)
+            if goal_match:
+                parsed_data["goal"] = goal_match.group("goal").strip()
+        if not parsed_data["validates"]:
+            validates_match = _VALIDATES_RE.search(raw_text)
+            if validates_match:
+                refs_str = validates_match.group("validates")
+                parsed_data["validates"] = [
+                    ref.strip() for ref in refs_str.split(",") if ref.strip()
+                ]
 
         return ParsedContent(
             content_type="journey",
@@ -441,6 +518,54 @@ class RequirementTransformer:
             raw_text=raw_text,
             parsed_data=parsed_data,
         )
+
+    # ------------------------------------------------------------------
+    # Gap filling
+    # ------------------------------------------------------------------
+
+    def _fill_blank_line_gaps(self, results: list[ParsedContent]) -> list[ParsedContent]:
+        """Insert REMAINDER blocks for blank lines between parsed content.
+
+        The Lark grammar treats bare newlines (_NL) at file level as
+        anonymous tokens, so they are discarded from the parse tree.
+        This method reconstructs those blank lines from the original
+        source text, creating REMAINDER nodes so that render_file
+        can reproduce them faithfully.
+
+        When content is later deleted, its REMAINDER separators are
+        removed too, giving automatic compaction.
+        """
+        if not results:
+            return results
+
+        results.sort(key=lambda r: r.start_line)
+        total_lines = len(self._source_lines)
+        filled: list[ParsedContent] = []
+        prev_end = 0
+
+        for item in results:
+            if item.start_line > prev_end + 1:
+                gap_lines = [
+                    (ln, self._source_lines[ln - 1])
+                    for ln in range(prev_end + 1, item.start_line)
+                    if ln - 1 < total_lines
+                ]
+                if gap_lines:
+                    self._flush_remainder(gap_lines, filled)
+            filled.append(item)
+            prev_end = max(prev_end, item.end_line)
+
+        # Trailing blank lines
+        if prev_end < total_lines:
+            gap_lines = [
+                (ln, self._source_lines[ln - 1])
+                for ln in range(prev_end + 1, total_lines + 1)
+                if ln - 1 < total_lines
+            ]
+            if gap_lines:
+                self._flush_remainder(gap_lines, filled)
+
+        return filled
 
     # ------------------------------------------------------------------
     # Remainder handling

@@ -95,9 +95,10 @@ def _find_free_port(start: int) -> int:
 
 
 def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
-    """Start the Flask trace-edit server.
+    """Start the Starlette trace-edit server.
 
-    Builds the graph, creates the Flask app, and runs the dev server.
+    Builds the graph via AppState, creates the Starlette app, and runs
+    with uvicorn.
 
     Args:
         args: Parsed CLI arguments.
@@ -107,20 +108,18 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
         Exit code (0 = success).
     """
     try:
-        from elspais.server import create_app
+        from elspais.server.app import create_app
+        from elspais.server.state import AppState
     except ImportError:
         print(
-            "Error: Flask server requires the trace-review extra.\n"
+            "Error: Starlette server requires the trace-review extra.\n"
             "Install with: pip install elspais[trace-review]",
             file=sys.stderr,
         )
         return 1
 
     from elspais.config import get_config
-    from elspais.graph.factory import build_graph
 
-    spec_dir = getattr(args, "spec_dir", None)
-    config_path = getattr(args, "config", None)
     explicit_path = getattr(args, "path", None)
     repo_root = Path(explicit_path).resolve() if explicit_path else Path.cwd().resolve()
 
@@ -129,15 +128,13 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
         quiet=True,
     )
     canonical_root = getattr(args, "canonical_root", None)
-    graph = build_graph(
-        spec_dirs=[spec_dir] if spec_dir else None,
-        config_path=config_path,
+
+    state = AppState.from_config(
         repo_root=repo_root,
+        config=config,
         canonical_root=canonical_root,
     )
-
-    app = create_app(repo_root=repo_root, graph=graph, config=config)
-    app.config["ELSPAIS_DEBUG"] = getattr(args, "verbose", False)
+    app = create_app(state)
 
     port = getattr(args, "port", None) or 5001
     quiet = getattr(args, "quiet", False)
@@ -195,7 +192,6 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
                 port = _find_free_port(port)
 
     url = f"http://127.0.0.1:{port}"
-    verbose = getattr(args, "verbose", False)
 
     if not quiet:
         print(f"Starting trace-edit server at {url}", file=sys.stderr)
@@ -214,14 +210,18 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
         except FileNotFoundError:
             webbrowser.open(url)
 
-    # Suppress Flask/Werkzeug noise unless verbose
-    if not verbose:
-        import logging
-
-        logging.getLogger("werkzeug").setLevel(logging.ERROR)
-
     try:
-        app.run(host="127.0.0.1", port=port, debug=False)
+        import anyio
+        import uvicorn
+
+        uvi_config = uvicorn.Config(
+            app,
+            host="127.0.0.1",
+            port=port,
+            log_level="warning" if quiet else "info",
+        )
+        server = uvicorn.Server(uvi_config)
+        anyio.run(server.serve)
     except KeyboardInterrupt:
         if not quiet:
             print("\nServer stopped.", file=sys.stderr)
@@ -273,7 +273,7 @@ def _run_static(args: argparse.Namespace) -> int:
 def run(args: argparse.Namespace) -> int:
     """Run the viewer command.
 
-    Generates static HTML (--static) or starts the Flask server.
+    Generates static HTML (--static) or starts the Starlette server.
     """
     if getattr(args, "static", False):
         return _run_static(args)

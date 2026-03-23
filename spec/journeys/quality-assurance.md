@@ -30,32 +30,6 @@ Rita has verified that every testable obligation in the requirements is covered 
 
 ---
 
-# JNY-SponsorQA-Review-01: Provide Structured Feedback on Requirements
-
-**Actor**: Rita (Sponsor QA Lead)
-**Goal**: Review requirement specifications for testability and clarity, providing structured feedback the development team can act on
-**Context**: The project manager has requested Rita's input on a new batch of requirements before they are finalized. Rita wants to review each requirement for testability, identify ambiguous assertions, and provide comments that are linked directly to specific requirements.
-Validates: REQ-p00006, REQ-p00007
-
-## Steps
-
-1. Rita opens the interactive traceability view generated with `elspais trace --view --review-mode`.
-2. She navigates to the first requirement in the batch, REQ-p00015, and reads through its assertions.
-3. She finds Assertion A ambiguous: "The system responds within a reasonable time" lacks a specific threshold.
-4. She adds a comment thread on REQ-p00015: "Assertion A needs a measurable value, e.g., 'within 2 seconds'."
-5. She continues reviewing the remaining requirements, flagging REQ-d00022-C as untestable in its current form.
-6. She checks if previous review comments on other requirements have been addressed by the team.
-7. She resolves two comment threads where the team incorporated her earlier feedback.
-8. She exports a summary of open comments for her QA review log.
-
-## Expected Outcome
-
-Rita has provided traceable, requirement-level feedback that the development team can address directly. Open comments are tracked to resolution, and the review history is preserved for audit purposes.
-
-*End* *Provide Structured Feedback on Requirements*
-
----
-
 # JNY-SponsorQA-Regression-01: Validate a Bug Fix Has Requirement Updates
 
 **Actor**: Rita (Sponsor QA Lead)

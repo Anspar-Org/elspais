@@ -135,6 +135,7 @@ class TestParserSatisfies:
         results = list(parser.claim_and_parse(lines, ctx))
         assert results[0].parsed_data["satisfies"] == ["REQ-p80001-A"]
 
+    # Implements: REQ-p00014-A
     def test_satisfies_bold_markdown_syntax(self):
         """Satisfies with **bold** markdown syntax should be parsed like Implements."""
         text = (
@@ -152,6 +153,7 @@ class TestParserSatisfies:
         assert len(results) == 1
         assert results[0].parsed_data["satisfies"] == ["REQ-p80001"]
 
+    # Implements: REQ-p00014-A
     def test_satisfies_bold_syntax_separate_line(self):
         """Satisfies with bold syntax on a separate line from Level/Status."""
         text = (

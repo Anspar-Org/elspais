@@ -37,12 +37,14 @@ def _make_env() -> dict[str, str]:
 class TestDocsExistence:
     """Test that all documentation files exist."""
 
+    # Implements: REQ-p00013-A
     def test_docs_dir_found(self):
         """docs/cli directory should be locatable."""
         docs_dir = find_docs_dir()
         assert docs_dir is not None, "docs/cli directory not found"
         assert docs_dir.is_dir(), f"{docs_dir} is not a directory"
 
+    # Implements: REQ-p00013-A
     @pytest.mark.parametrize("topic", TOPIC_ORDER)
     def test_topic_file_exists(self, topic: str):
         """Each topic should have a corresponding markdown file."""
@@ -51,6 +53,7 @@ class TestDocsExistence:
         topic_file = docs_dir / f"{topic}.md"
         assert topic_file.is_file(), f"Missing documentation file: {topic}.md"
 
+    # Implements: REQ-p00013-A
     def test_all_topics_available(self):
         """get_available_topics should return all expected topics."""
         available = get_available_topics()
@@ -60,6 +63,7 @@ class TestDocsExistence:
 class TestDocsContent:
     """Test that documentation files have required content."""
 
+    # Implements: REQ-p00013-A
     @pytest.mark.parametrize("topic", TOPIC_ORDER)
     def test_topic_has_heading(self, topic: str):
         """Each topic file should start with a level-1 heading."""
@@ -69,6 +73,7 @@ class TestDocsContent:
         assert len(lines) > 0, f"{topic}.md is empty"
         assert lines[0].startswith("# "), f"{topic}.md should start with # heading"
 
+    # Implements: REQ-p00013-A
     @pytest.mark.parametrize("topic", TOPIC_ORDER)
     def test_topic_has_subheadings(self, topic: str):
         """Each topic file should have at least one ## subheading."""
@@ -76,14 +81,16 @@ class TestDocsContent:
         assert content is not None
         assert "## " in content, f"{topic}.md should have at least one ## subheading"
 
+    # Implements: REQ-p00013-A
     def test_quickstart_has_essential_sections(self):
         """quickstart.md should have initialize, validate, and next steps."""
         content = load_topic("quickstart")
         assert content is not None
         assert "Initialize" in content, "quickstart should mention initialization"
         assert "elspais init" in content, "quickstart should show init command"
-        assert "elspais health" in content, "quickstart should show health command"
+        assert "elspais checks" in content, "quickstart should show checks command"
 
+    # Implements: REQ-p00013-A
     def test_format_has_structure_section(self):
         """format.md should explain requirement structure."""
         content = load_topic("format")
@@ -92,6 +99,7 @@ class TestDocsContent:
         assert "Level" in content, "format should explain Level field"
         assert "Hash" in content, "format should explain Hash"
 
+    # Implements: REQ-p00013-A
     def test_hierarchy_has_levels(self):
         """hierarchy.md should explain PRD, OPS, DEV."""
         content = load_topic("hierarchy")
@@ -100,6 +108,7 @@ class TestDocsContent:
         assert "OPS" in content, "hierarchy should mention OPS"
         assert "DEV" in content, "hierarchy should mention DEV"
 
+    # Implements: REQ-p00013-A
     def test_assertions_has_keywords(self):
         """assertions.md should explain normative keywords."""
         content = load_topic("assertions")
@@ -107,16 +116,18 @@ class TestDocsContent:
         assert "SHALL" in content, "assertions should explain SHALL"
         assert "SHALL NOT" in content, "assertions should explain SHALL NOT"
 
+    # Implements: REQ-p00013-A
     def test_commands_has_all_commands(self):
         """commands.md should document all CLI commands."""
         content = load_topic("commands")
         assert content is not None
         # Check for key commands
-        for cmd in ["health", "fix", "trace", "edit", "config", "init"]:
+        for cmd in ["checks", "fix", "trace", "edit", "config", "init"]:
             assert f"## {cmd}" in content, f"commands should document {cmd}"
         # Check for global options
         assert "Global Options" in content, "commands should have global options"
 
+    # Implements: REQ-p00013-A
     def test_all_topics_concatenation(self):
         """load_all_topics should return all topics concatenated."""
         all_content = load_all_topics()
@@ -133,6 +144,7 @@ class TestDocsContent:
 class TestMarkdownRenderer:
     """Test markdown-to-ANSI rendering."""
 
+    # Implements: REQ-p00013-A
     def test_render_heading(self):
         """Level-1 heading should render with box borders."""
         renderer = MarkdownRenderer(use_color=True)
@@ -140,6 +152,7 @@ class TestMarkdownRenderer:
         assert "═" in result, "Heading should have box border"
         assert "My Title" in result
 
+    # Implements: REQ-p00013-A
     def test_render_heading_no_color(self):
         """Heading without color should have no ANSI codes."""
         renderer = MarkdownRenderer(use_color=False)
@@ -147,6 +160,7 @@ class TestMarkdownRenderer:
         assert "\033[" not in result, "Should have no ANSI codes"
         assert "My Title" in result
 
+    # Implements: REQ-p00013-A
     def test_render_subheading(self):
         """Level-2 heading should render with underline."""
         renderer = MarkdownRenderer(use_color=True)
@@ -154,6 +168,7 @@ class TestMarkdownRenderer:
         assert "─" in result, "Subheading should have underline"
         assert "Subheading" in result
 
+    # Implements: REQ-p00013-A
     def test_render_code_block(self):
         """Code blocks should be indented and dimmed."""
         renderer = MarkdownRenderer(use_color=True)
@@ -163,6 +178,7 @@ class TestMarkdownRenderer:
         # Should have DIM escape code when colors enabled
         assert "\033[2m" in result, "Code should be dimmed"
 
+    # Implements: REQ-p00013-A
     def test_render_bold(self):
         """Bold text should use BOLD escape code."""
         renderer = MarkdownRenderer(use_color=True)
@@ -170,6 +186,7 @@ class TestMarkdownRenderer:
         assert "\033[1m" in result, "Bold should use BOLD code"
         assert "bold" in result
 
+    # Implements: REQ-p00013-A
     def test_render_inline_code(self):
         """Inline code should use CYAN."""
         renderer = MarkdownRenderer(use_color=True)
@@ -177,6 +194,7 @@ class TestMarkdownRenderer:
         assert "\033[36m" in result, "Inline code should be CYAN"
         assert "command" in result
 
+    # Implements: REQ-p00013-A
     def test_render_command_with_comment(self):
         """Command lines with comments should have green $ and dim comment."""
         renderer = MarkdownRenderer(use_color=True)
@@ -184,12 +202,14 @@ class TestMarkdownRenderer:
         assert "\033[32m" in result, "$ should be green"
         assert "\033[2m" in result, "Comment should be dim"
 
+    # Implements: REQ-p00013-A
     def test_convenience_function_auto_color(self):
         """render_markdown should auto-detect TTY."""
         # When forced off, should have no ANSI codes
         result = render_markdown("# Test", use_color=False)
         assert "\033[" not in result
 
+    # Implements: REQ-p00013-A
     def test_render_preserves_blank_lines(self):
         """Blank lines between paragraphs should be preserved."""
         content = "# Title\n\nParagraph one.\n\nParagraph two."
@@ -208,6 +228,7 @@ class TestMarkdownRenderer:
 class TestCLIIntegration:
     """Test CLI docs command integration."""
 
+    # Implements: REQ-p00013-B
     def test_docs_quickstart(self):
         """elspais docs quickstart should succeed."""
         result = subprocess.run(
@@ -220,6 +241,7 @@ class TestCLIIntegration:
         assert result.returncode == 0, f"Failed: {result.stderr}"
         assert "ELSPAIS" in result.stdout
 
+    # Implements: REQ-p00013-B
     def test_docs_all(self):
         """elspais docs all should show all topics."""
         result = subprocess.run(
@@ -235,6 +257,7 @@ class TestCLIIntegration:
         assert "HIERARCHY" in result.stdout
         assert "CONFIGURATION" in result.stdout
 
+    # Implements: REQ-p00013-B
     def test_docs_plain_no_ansi(self):
         """--plain should produce output without ANSI codes."""
         result = subprocess.run(
@@ -247,6 +270,7 @@ class TestCLIIntegration:
         assert result.returncode == 0
         assert "\033[" not in result.stdout, "Plain output should have no ANSI codes"
 
+    # Implements: REQ-p00013-B
     @pytest.mark.parametrize("topic", TOPIC_ORDER)
     def test_each_topic_loads(self, topic: str):
         """Each topic should be loadable via CLI."""

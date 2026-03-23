@@ -7,6 +7,7 @@ node_id, and related fields; to_dict() serialization; renderer compatibility.
 
 from __future__ import annotations
 
+import argparse
 import xml.etree.ElementTree as ET
 
 import pytest
@@ -15,9 +16,9 @@ from elspais.commands.health import (
     HealthCheck,
     HealthFinding,
     HealthReport,
+    _format_report,
     _print_text_report,
     _render_junit,
-    _render_markdown,
 )
 
 
@@ -121,12 +122,19 @@ class TestHealthFindingRendererCompat:
         assert output_with == output_without
 
     def test_REQ_d00085_I_markdown_rendering_unaffected(self) -> None:
-        """Markdown rendering output is the same whether findings are present or not."""
+        """Markdown rendering is the same with or without findings."""
         report_with = self._make_report_with_findings()
         report_without = self._make_report_without_findings()
 
-        md_with = _render_markdown(report_with)
-        md_without = _render_markdown(report_without)
+        args = argparse.Namespace(
+            format="markdown",
+            verbose=False,
+            quiet=False,
+            lenient=False,
+            include_passing_details=False,
+        )
+        md_with = _format_report(report_with, args)
+        md_without = _format_report(report_without, args)
 
         assert md_with == md_without
 
@@ -235,7 +243,7 @@ class TestDetailHint:
         report = HealthReport(checks=[check])
         _print_text_report(report, verbose=False)
         output = capsys.readouterr().out
-        assert "elspais health --spec -v" in output
+        assert "elspais -v checks --spec" in output
         assert "--format json -o health.json" in output
 
     def test_hint_skips_verbose_suggestion_when_already_verbose(
@@ -253,7 +261,7 @@ class TestDetailHint:
         report = HealthReport(checks=[check])
         _print_text_report(report, verbose=True)
         output = capsys.readouterr().out
-        assert "elspais health --spec -v" not in output
+        assert "elspais -v checks --spec" not in output
         assert "--format json -o health.json" in output
 
     def test_hint_not_shown_when_healthy(self, capsys: pytest.CaptureFixture) -> None:
@@ -267,7 +275,7 @@ class TestDetailHint:
         report = HealthReport(checks=[check])
         _print_text_report(report, verbose=False)
         output = capsys.readouterr().out
-        assert "elspais health" not in output
+        assert "elspais checks" not in output
 
     def test_hint_no_scope_flag_when_multiple_categories_fail(
         self, capsys: pytest.CaptureFixture
@@ -294,6 +302,6 @@ class TestDetailHint:
         report = HealthReport(checks=checks)
         _print_text_report(report, verbose=False)
         output = capsys.readouterr().out
-        assert "elspais health -v" in output
+        assert "elspais -v checks" in output
         assert "--spec" not in output
         assert "--code" not in output

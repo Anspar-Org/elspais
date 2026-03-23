@@ -39,6 +39,7 @@ def simple_graph():
 class TestTraceGraphClone:
     """Tests for TraceGraph.clone() method."""
 
+    # Implements: REQ-d00216-A
     def test_clone_creates_independent_copy(self, simple_graph):
         """Clone creates a fully independent copy."""
         cloned = simple_graph.clone()
@@ -51,6 +52,7 @@ class TestTraceGraphClone:
         assert cloned._index is not simple_graph._index
         assert cloned._roots is not simple_graph._roots
 
+    # Implements: REQ-d00216-B
     def test_clone_preserves_node_data(self, simple_graph):
         """Cloned graph has same node data."""
         cloned = simple_graph.clone()
@@ -64,6 +66,7 @@ class TestTraceGraphClone:
         assert cloned_node.get_label() == original_node.get_label()
         assert cloned_node.get_field("level") == original_node.get_field("level")
 
+    # Implements: REQ-d00216-C
     def test_clone_preserves_relationships(self, simple_graph):
         """Cloned graph preserves parent-child relationships."""
         cloned = simple_graph.clone()
@@ -80,6 +83,7 @@ class TestTraceGraphClone:
         assert len(parents) == 1
         assert parents[0].id == "REQ-p00001"
 
+    # Implements: REQ-d00216-A
     def test_clone_mutations_are_independent(self, simple_graph):
         """Mutations to clone don't affect original."""
         cloned = simple_graph.clone()
@@ -92,6 +96,7 @@ class TestTraceGraphClone:
         original_node = simple_graph.find_by_id("REQ-p00001")
         assert original_node.get_field("status") == "Active"
 
+    # Implements: REQ-d00216-F
     def test_clone_handles_circular_references(self, simple_graph):
         """Clone handles circular parent-child references."""
         # The graph already has parent->child->parent references
@@ -107,6 +112,7 @@ class TestTraceGraphClone:
         # Should be the same object (within the clone)
         assert parent_back is cloned_req
 
+    # Implements: REQ-d00216-D
     def test_clone_preserves_roots(self, simple_graph):
         """Clone preserves root nodes."""
         cloned = simple_graph.clone()
@@ -119,6 +125,7 @@ class TestTraceGraphClone:
         assert len(cloned_roots) == len(original_roots)
         assert cloned_roots[0].id == original_roots[0].id
 
+    # Implements: REQ-d00216-E
     def test_clone_preserves_repo_root(self, simple_graph):
         """Clone preserves repo_root attribute."""
         cloned = simple_graph.clone()

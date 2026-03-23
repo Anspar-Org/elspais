@@ -234,14 +234,22 @@ def render_file(node: GraphNode) -> str:
     # Sort by render_order
     children_with_order.sort(key=lambda x: x[0])
 
-    # Render each child and concatenate
+    # Render each child and concatenate.
+    # Blank lines between content blocks are captured as REMAINDER nodes
+    # by the parser, so simple join produces faithful output.
+    # When blocks are deleted, their REMAINDER separators go too,
+    # giving automatic compaction.
     parts: list[str] = []
     for _order, child in children_with_order:
         rendered = render_node(child)
-        if rendered:
+        if rendered is not None:
             parts.append(rendered)
 
-    return "\n".join(parts)
+    result = "\n".join(parts)
+    # Preserve trailing newline (files end with newline)
+    if result and not result.endswith("\n"):
+        result += "\n"
+    return result
 
 
 # ─────────────────────────────────────────────────────────────────────────

@@ -84,7 +84,7 @@
 }
 
 .req-card-expand {
-    font-size: 8px;
+    font-size: 16px;
     color: var(--card-expand);
     transition: transform 0.15s;
     flex-shrink: 0;
@@ -152,6 +152,12 @@
     letter-spacing: 0.5px;
     color: var(--card-section-label);
     margin-bottom: 4px;
+}
+
+.card-dim-badge {
+    outline: 1.5px solid var(--impl-yes-border, #0d6efd);
+    outline-offset: 1px;
+    cursor: pointer;
 }
 
 .card-meta {
@@ -243,8 +249,8 @@
     text-transform: uppercase;
 }
 
-/* Hide view-only kind badges in edit mode */
-body.edit-mode .card-parent-kind.view-only {
+/* Hide view-only elements in edit mode */
+body.edit-mode .view-only {
     display: none;
 }
 
@@ -298,14 +304,15 @@ body.edit-mode .card-parent-kind.view-only {
     border: none;
     background: none;
     cursor: pointer;
-    font-size: 1rem;
-    color: var(--muted-text);
-    padding: 0 2px;
+    font-size: 1.44rem;
+    color: var(--edit-pencil);
+    padding: 0 4px;
     line-height: 1;
-    transition: color 0.15s;
+    flex-shrink: 0;
+    transition: transform 0.15s;
 }
 .card-parent-targets-btn:hover {
-    color: var(--accent-text);
+    transform: scale(1.2);
 }
 
 /* Assertion targets picker popup */
@@ -336,6 +343,9 @@ body.edit-mode .card-parent-kind.view-only {
     margin-top: 6px;
     display: flex;
     gap: 4px;
+}
+.edge-targets-picker-inline {
+    flex: 1;
 }
 .edge-targets-apply, .edge-targets-cancel {
     font-size: 0.7rem;
@@ -660,8 +670,33 @@ body.edit-mode .card-parent-kind.view-only {
     align-items: flex-start;
 }
 
+@keyframes flash-bg {
+    0%, 15% { background-color: rgba(13, 110, 253, 0.35) !important; }
+    100% { background-color: transparent !important; }
+}
+
+.flash-highlight {
+    animation: flash-bg 1.5s ease-out !important;
+    border-radius: 4px;
+}
+
+.assertion-badges-area {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-left: auto;
+    max-width: 30%;
+    justify-content: flex-end;
+    flex-shrink: 0;
+}
+
+/* All assertion dimension buttons share base styles */
 .assertion-implemented-btn,
-.assertion-validation-btn {
+.assertion-refined-btn,
+.assertion-tested-btn,
+.assertion-verified-btn,
+.assertion-validated-btn,
+.assertion-accepted-btn {
     flex-shrink: 0;
     padding: 2px 8px;
     font-size: 0.65rem;
@@ -678,99 +713,105 @@ body.edit-mode .card-parent-kind.view-only {
     margin-left: 4px;
 }
 
-.assertion-implemented-btn { margin-left: auto; }
+/* margin-left on badges area handles right-alignment */
 
 .assertion-implemented-btn:hover,
-.assertion-validation-btn:hover {
+.assertion-refined-btn:hover,
+.assertion-tested-btn:hover,
+.assertion-verified-btn:hover,
+.assertion-validated-btn:hover,
+.assertion-accepted-btn:hover {
     background: var(--assertion-btn-hover-bg);
     border-color: var(--assertion-btn-hover-border);
 }
 
-/* Implemented button states */
-.assertion-implemented-btn.implemented-yes {
+/* "Yes/No" states (Implemented, Tested, Validated — existence checks) */
+.implemented-yes {
     border-color: var(--impl-yes-border);
     color: var(--impl-yes-text);
 }
 
-.assertion-implemented-btn.implemented-yes:hover {
+.implemented-yes:hover {
     background: var(--impl-yes-hover-bg);
 }
 
-.assertion-implemented-btn.implemented-yes.active {
+.implemented-yes.active {
     background: var(--impl-yes-active-bg);
     color: var(--impl-yes-active-text);
 }
 
-.assertion-implemented-btn.implemented-no {
+.implemented-no {
     border-color: var(--impl-no-border);
     color: var(--impl-no-text);
 }
 
-.assertion-implemented-btn.implemented-no:hover {
+.implemented-no:hover {
     background: var(--impl-no-hover-bg);
 }
 
-.assertion-implemented-btn.active {
-    font-weight: 700;
-}
-
-.assertion-validation-btn.validation-pass {
+/* "Pass/Partial/Fail" states (Verified, Accepted — result checks) */
+.validation-pass {
     border-color: var(--valid-pass-border);
     color: var(--valid-pass-text);
 }
 
-.assertion-validation-btn.validation-pass:hover {
+.validation-pass:hover {
     background: var(--valid-pass-hover-bg);
 }
 
-.assertion-validation-btn.validation-pass.active {
+.validation-pass.active {
     background: var(--valid-pass-active-bg);
     color: var(--valid-pass-active-text);
 }
 
-.assertion-validation-btn.validation-partial {
+.validation-partial {
     border-color: var(--valid-partial-border);
     color: var(--valid-partial-text);
 }
 
-.assertion-validation-btn.validation-partial:hover {
+.validation-partial:hover {
     background: var(--valid-partial-hover-bg);
 }
 
-.assertion-validation-btn.validation-partial.active {
+.validation-partial.active {
     background: var(--valid-partial-active-bg);
     color: var(--valid-partial-active-text);
 }
 
-.assertion-validation-btn.validation-fail {
+.validation-fail {
     border-color: var(--valid-fail-border);
     color: var(--valid-fail-text);
 }
 
-.assertion-validation-btn.validation-fail:hover {
+.validation-fail:hover {
     background: var(--valid-fail-hover-bg);
 }
 
-.assertion-validation-btn.validation-fail.active {
+.validation-fail.active {
     background: var(--valid-fail-active-bg);
     color: var(--valid-fail-active-text);
 }
 
-.assertion-validation-btn.validation-unknown {
+.validation-unknown {
     border-color: var(--valid-unknown-border);
     color: var(--valid-unknown-text);
 }
 
-.assertion-validation-btn.validation-unknown:hover {
+.validation-unknown:hover {
     background: var(--valid-unknown-hover-bg);
 }
 
-.assertion-validation-btn.validation-unknown.active {
+.validation-unknown.active {
     background: var(--valid-unknown-active-bg);
     color: var(--valid-unknown-active-text);
 }
 
-.assertion-validation-btn.active {
+.assertion-implemented-btn.active,
+.assertion-refined-btn.active,
+.assertion-tested-btn.active,
+.assertion-verified-btn.active,
+.assertion-validated-btn.active,
+.assertion-accepted-btn.active {
     font-weight: 700;
 }
 
@@ -782,6 +823,17 @@ body.edit-mode .card-parent-kind.view-only {
     background: var(--assertion-code-panel-bg);
     border-radius: 4px;
     border-left: 3px solid var(--assertion-code-panel-border);
+    font-size: 0.78rem;
+}
+
+/* --- Assertion UAT Panel --- */
+
+.assertion-uat-panel {
+    margin: 4px 0 2px 28px;
+    padding: 8px 10px;
+    background: var(--assertion-tests-panel-bg);
+    border-radius: 4px;
+    border-left: 3px solid var(--assertion-tests-panel-border);
     font-size: 0.78rem;
 }
 

@@ -40,28 +40,31 @@ def render_section(
     return content.rstrip("\n"), 0
 
 
+def compute_summary(graph: FederatedGraph, config: dict, params: dict[str, str]) -> dict:
+    """Engine-compatible wrapper around _collect_coverage."""
+    return _collect_coverage(graph, config=config)
+
+
 def run(args: argparse.Namespace) -> int:
-    """Run the coverage command."""
-    from elspais.graph.factory import build_graph
+    """Run the coverage command.
 
-    spec_dir = getattr(args, "spec_dir", None)
-    config_path = getattr(args, "config", None)
-    canonical_root = getattr(args, "canonical_root", None)
-
-    from elspais.config import get_config
-
-    raw_config = get_config(config_path)
-
-    graph = build_graph(
-        config=raw_config,
-        spec_dirs=[spec_dir] if spec_dir else None,
-        config_path=config_path,
-        canonical_root=canonical_root,
-    )
+    Tries a running daemon/viewer first for fast results,
+    falls back to local graph build.
+    """
+    from elspais.commands._engine import call as engine_call
 
     fmt = getattr(args, "format", "text") or "text"
+    spec_dir = getattr(args, "spec_dir", None)
 
-    data = _collect_coverage(graph, config=raw_config)
+    data = engine_call(
+        "/api/run/summary",
+        {},
+        compute_summary,
+        skip_daemon=bool(spec_dir),
+        config_path=getattr(args, "config", None),
+        canonical_root=getattr(args, "canonical_root", None),
+    )
+
     content = _render(data, fmt)
     sys.stdout.write(content)
 
@@ -118,9 +121,9 @@ def _collect_coverage(graph: FederatedGraph, config: dict | None = None) -> dict
                 passing = 0
             else:
                 total = rollup.total_assertions
-                implemented = rollup.covered_assertions
-                validated = rollup.direct_tested
-                passing = rollup.validated
+                implemented = rollup.implemented.indirect
+                validated = rollup.tested.direct
+                passing = rollup.verified.direct
 
             if implemented > 0:
                 level_totals["with_code_refs"] += 1

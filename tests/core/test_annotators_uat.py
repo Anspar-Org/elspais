@@ -23,9 +23,9 @@ class TestJnyValidatesExplicitCoverage:
         req_node = graph.find_by_id("REQ-p00001")
         metrics = req_node.get_metric("rollup_metrics")
         assert metrics is not None
-        assert metrics.uat_covered == 1
-        assert metrics.uat_direct_covered == 1
-        assert metrics.uat_inferred_covered == 0
+        assert metrics.uat_coverage.indirect == 1
+        assert metrics.uat_coverage.direct == 1
+        assert metrics.uat_coverage.indirect - metrics.uat_coverage.direct == 0
 
 
 class TestJnyValidatesInferredCoverage:
@@ -46,9 +46,9 @@ class TestJnyValidatesInferredCoverage:
 
         req_node = graph.find_by_id("REQ-p00001")
         metrics = req_node.get_metric("rollup_metrics")
-        assert metrics.uat_covered == 2
-        assert metrics.uat_inferred_covered == 2
-        assert metrics.uat_direct_covered == 0
+        assert metrics.uat_coverage.indirect == 2
+        assert metrics.uat_coverage.indirect - metrics.uat_coverage.direct == 2
+        assert metrics.uat_coverage.direct == 0
 
 
 class TestJnyValidatesIsolation:
@@ -68,9 +68,9 @@ class TestJnyValidatesIsolation:
 
         req_node = graph.find_by_id("REQ-p00001")
         metrics = req_node.get_metric("rollup_metrics")
-        assert metrics.covered_assertions == 0  # automated unaffected
-        assert metrics.direct_covered == 0
-        assert metrics.uat_covered == 1
+        assert metrics.implemented.indirect == 0  # automated unaffected
+        assert metrics.implemented.direct == 0
+        assert metrics.uat_coverage.indirect == 1
 
 
 class TestUatRollupThroughImplements:
@@ -92,4 +92,4 @@ class TestUatRollupThroughImplements:
 
         ops_node = graph.find_by_id("REQ-o00001")
         metrics = ops_node.get_metric("rollup_metrics")
-        assert metrics.uat_covered > 0
+        assert metrics.uat_coverage.indirect > 0

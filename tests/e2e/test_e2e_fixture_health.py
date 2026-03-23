@@ -33,7 +33,7 @@ class TestFixtureHealthE2E:
 
     def test_REQ_p00002_health_json_no_errors(self, fixture_dir) -> None:
         """elspais health --format json exits cleanly with no error-level failures."""
-        result = run_elspais("health", "--format", "json", "--lenient", cwd=fixture_dir)
+        result = run_elspais("checks", "--format", "json", "--lenient", cwd=fixture_dir)
 
         assert result.returncode == 0, (
             f"elspais health failed on {fixture_dir.name} "
@@ -47,7 +47,7 @@ class TestFixtureHealthE2E:
 
     def test_REQ_p00002_health_text_output(self, fixture_dir) -> None:
         """elspais health produces readable text output."""
-        result = run_elspais("health", "--lenient", cwd=fixture_dir)
+        result = run_elspais("checks", "--lenient", cwd=fixture_dir)
 
         assert (
             result.returncode == 0
@@ -57,7 +57,7 @@ class TestFixtureHealthE2E:
 
     def test_REQ_p00002_health_spec_only(self, fixture_dir) -> None:
         """elspais health --spec runs only spec checks."""
-        result = run_elspais("health", "--spec", "--format", "json", "--lenient", cwd=fixture_dir)
+        result = run_elspais("checks", "--spec", "--format", "json", "--lenient", cwd=fixture_dir)
 
         assert result.returncode == 0
         data = json.loads(result.stdout)
@@ -68,7 +68,7 @@ class TestFixtureHealthE2E:
     def test_REQ_p00002_health_formats(self, fixture_dir) -> None:
         """elspais health supports multiple output formats without crashing."""
         for fmt in ("text", "json", "markdown", "junit", "sarif"):
-            result = run_elspais("health", "--format", fmt, "--lenient", cwd=fixture_dir)
+            result = run_elspais("checks", "--format", fmt, "--lenient", cwd=fixture_dir)
             assert (
                 result.returncode == 0
             ), f"Format {fmt} failed on {fixture_dir.name}:\n{result.stderr}"

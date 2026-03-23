@@ -24,6 +24,7 @@ from elspais.config import _merge_configs, config_defaults
 class TestHealthCheck:
     """Tests for the HealthCheck dataclass."""
 
+    # Implements: REQ-d00085-I
     def test_basic_creation_defaults(self):
         """Test HealthCheck default values for severity and details."""
         check = HealthCheck(
@@ -39,6 +40,7 @@ class TestHealthCheck:
 class TestHealthReport:
     """Tests for the HealthReport dataclass."""
 
+    # Implements: REQ-d00080-A
     def test_empty_and_all_passed_are_healthy(self):
         """Empty report and all-passed report are both healthy."""
         empty = HealthReport()
@@ -51,6 +53,7 @@ class TestHealthReport:
         assert report.failed == 0
         assert report.is_healthy is True
 
+    # Implements: REQ-d00080-A
     def test_with_errors(self):
         """Test report with errors is unhealthy."""
         report = HealthReport()
@@ -61,6 +64,7 @@ class TestHealthReport:
         assert report.failed == 1
         assert report.is_healthy is False
 
+    # Implements: REQ-d00080-A
     def test_REQ_d00080_A_warnings_fail_by_default(self):
         """Validates REQ-d00080-A: warnings cause non-zero exit by default."""
         report = HealthReport()
@@ -73,6 +77,7 @@ class TestHealthReport:
         assert report.is_healthy is False  # Warnings fail by default
         assert report.is_healthy_lenient is True  # Lenient ignores warnings
 
+    # Implements: REQ-d00085-I
     def test_iter_by_category(self):
         """Test filtering checks by category."""
         report = HealthReport()
@@ -84,6 +89,7 @@ class TestHealthReport:
         assert len(config_checks) == 2
         assert all(c.category == "config" for c in config_checks)
 
+    # Implements: REQ-d00085-I
     def test_to_dict(self):
         """Test JSON serialization."""
         report = HealthReport()
@@ -103,6 +109,7 @@ class TestHealthReport:
 class TestConfigChecks:
     """Tests for configuration health checks."""
 
+    # Implements: REQ-d00080-C
     def test_required_fields_all_present(self):
         """Test required fields check with complete config."""
         config = _merge_configs(
@@ -116,6 +123,7 @@ class TestConfigChecks:
         check = check_config_required_fields(config)
         assert check.passed is True
 
+    # Implements: REQ-d00080-C
     def test_required_fields_present_with_defaults(self):
         """Test that default config with spec dirs has all required fields present."""
         config = _merge_configs(
@@ -127,6 +135,7 @@ class TestConfigChecks:
         check = check_config_required_fields(config)
         assert check.passed is True
 
+    # Implements: REQ-d00204-A
     def test_pattern_tokens_valid(self):
         """Test pattern tokens with valid template."""
         config = _merge_configs(
@@ -139,6 +148,7 @@ class TestConfigChecks:
         check = check_config_pattern_tokens(config)
         assert check.passed is True
 
+    # Implements: REQ-d00204-A
     def test_pattern_tokens_invalid(self):
         """Test pattern tokens with invalid token."""
         config = _merge_configs(
@@ -152,6 +162,7 @@ class TestConfigChecks:
         assert check.passed is False
         assert "{invalid}" in check.details.get("invalid_tokens", [])
 
+    # Implements: REQ-d00204-A
     def test_hierarchy_rules_valid(self):
         """Test hierarchy rules check with valid config."""
         config = _merge_configs(
@@ -168,6 +179,7 @@ class TestConfigChecks:
         check = check_config_hierarchy_rules(config)
         assert check.passed is True
 
+    # Implements: REQ-d00080-C
     def test_paths_exist(self, tmp_path):
         """Test paths exist check."""
         spec_dir = tmp_path / "spec"
@@ -183,6 +195,7 @@ class TestConfigChecks:
         check = check_config_paths_exist(config, tmp_path)
         assert check.passed is True
 
+    # Implements: REQ-d00080-C
     def test_paths_missing(self, tmp_path):
         """Test paths exist check with missing directory."""
         config = _merge_configs(
@@ -205,6 +218,7 @@ class TestConfigChecks:
 class TestHealthCommand:
     """Tests for the health command run function."""
 
+    # Implements: REQ-d00085-E
     def test_json_output_format(self, tmp_path, capsys):
         """Test JSON output format is valid."""
         spec_dir = tmp_path / "spec"
@@ -244,6 +258,7 @@ class TestHealthCommand:
 class TestHealthIntegration:
     """Integration tests using real spec files."""
 
+    # Implements: REQ-d00080-A
     def test_full_health_check(self, tmp_path):
         """Test full health check on minimal repo."""
         # Create minimal spec structure
@@ -288,6 +303,9 @@ leading_zeros = true
 
 [scanning.spec]
 directories = ["spec"]
+
+[rules.format]
+no_assertions_severity = "info"
 """
         )
 

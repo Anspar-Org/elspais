@@ -5,6 +5,7 @@
     background: var(--header-bg);
     border-bottom: 1px solid var(--header-border);
     padding: 10px 20px;
+    padding-right: 56px;  /* reserve space for hamburger */
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -12,6 +13,7 @@
     gap: 12px;
     flex-shrink: 0;
     z-index: 100;
+    position: relative;
 }
 
 .header-title {
@@ -217,8 +219,12 @@
     background: var(--edit-toggle-indicator-active);
 }
 
-/* Hamburger Menu */
-.hamburger-menu { position: relative; }
+/* Hamburger Menu — pinned top-right of header */
+.hamburger-menu {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+}
 
 .hamburger-btn {
     font-size: 1.2rem;
@@ -319,16 +325,27 @@
     color: var(--theme-btn-active-text) !important;
 }
 
-/* Filter toggle button */
+/* Filter toggle button — styled like stat-badge (outline off, filled on) */
 .filter-toggle-btn {
-    padding: 2px 8px !important;
-    font-size: 0.85rem !important;
+    padding: 3px 10px !important;
+    font-size: 0.8rem !important;
+    font-weight: 600;
     line-height: 1;
-    opacity: 0.6;
-    transition: opacity 0.15s;
+    background: transparent;
+    border: 1px solid var(--primary);
+    color: var(--primary);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
 }
-.filter-toggle-btn:hover { opacity: 1; }
-.filter-toggle-btn.dimmed { opacity: 0.3; }
+.filter-toggle-btn:hover {
+    background: var(--primary);
+    color: white;
+}
+.filter-toggle-btn.active {
+    background: var(--primary);
+    color: white;
+}
 
 /* Stale banner */
 .stale-banner {

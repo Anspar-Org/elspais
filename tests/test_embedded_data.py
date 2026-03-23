@@ -90,22 +90,22 @@ class TestBuildCoverageIndex:
             assert "code" in entry, f"Missing 'code' in coverage for {req_id}"
 
     def test_REQ_p00006_B_test_coverage_matches_api_shape(self, generator):
-        """Test coverage data should have success, assertion_tests, coverage_pct fields."""
+        """Test coverage data should have success, assertion_tests, referenced_pct fields."""
         index = generator._build_coverage_index()
         for _req_id, entry in index.items():
             test_data = entry["test"]
             assert "success" in test_data
             assert "assertion_tests" in test_data
-            assert "coverage_pct" in test_data
+            assert "referenced_pct" in test_data
 
     def test_REQ_p00006_B_code_coverage_matches_api_shape(self, generator):
-        """Code coverage data should have success, assertion_code, coverage_pct fields."""
+        """Code coverage data should have success, assertion_code, referenced_pct fields."""
         index = generator._build_coverage_index()
         for _req_id, entry in index.items():
             code_data = entry["code"]
             assert "success" in code_data
             assert "assertion_code" in code_data
-            assert "coverage_pct" in code_data
+            assert "referenced_pct" in code_data
 
 
 class TestBuildStatusData:

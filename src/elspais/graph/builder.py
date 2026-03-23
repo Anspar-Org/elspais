@@ -1,6 +1,7 @@
-# Implements: REQ-p00050-A, REQ-p00050-D
+# Implements: REQ-p00050-A, REQ-p00050-D, REQ-p00061-B, REQ-p00061-C
 # Implements: REQ-o00050-A, REQ-o00050-B, REQ-o00050-C, REQ-o00050-D, REQ-o00050-E
 # Implements: REQ-d00071-A, REQ-d00071-B, REQ-d00071-C, REQ-d00071-D
+# Implements: REQ-d00216-A+B+C+D+E+F
 """Graph Builder - Constructs TraceGraph from parsed content.
 
 This module provides the builder pattern for constructing a complete
@@ -380,6 +381,18 @@ class TraceGraph:
             self._undo_rename_file(entry)
         elif op == "fix_broken_reference":
             self._undo_fix_broken_reference(entry)
+        elif op in (
+            "update_journey_field",
+            "update_journey_section",
+            "add_journey_section",
+            "delete_journey_section",
+            "reconstruct_journey_body",
+        ):
+            self._undo_journey_body_mutation(entry)
+        elif op == "add_journey":
+            self._undo_add_journey(entry)
+        elif op == "delete_journey":
+            self._undo_delete_journey(entry)
         # Unknown operations are silently ignored (forward compatibility)
 
     def _undo_rename_node(self, entry: MutationEntry) -> None:
@@ -685,6 +698,71 @@ class TraceGraph:
             parent_id = entry.before_state.get("parent_id")
             if parent_id and parent_id in self._index and "parent_hash" in entry.before_state:
                 self._index[parent_id].set_field("hash", entry.before_state["parent_hash"])
+
+    def _undo_journey_body_mutation(self, entry: MutationEntry) -> None:
+        """Undo a journey field/section/body mutation by restoring body + fields."""
+        node_id = entry.target_id
+        if node_id not in self._index:
+            return
+        node = self._index[node_id]
+        # Restore body
+        old_body = entry.before_state.get("body")
+        if old_body is not None:
+            node.set_field("body", old_body)
+        # Restore field if present (update_journey_field)
+        field = entry.before_state.get("field")
+        if field:
+            old_value = entry.before_state.get("value")
+            if field == "preamble":
+                node.set_field("body_lines", old_value.splitlines() if old_value else [])
+            else:
+                node.set_field(field, old_value)
+        # Restore section if present (update/delete section)
+        old_name = entry.before_state.get("name")
+        old_content = entry.before_state.get("content")
+        op = entry.operation
+        if op == "add_journey_section":
+            # Remove the added section (last one matching after_state name)
+            added_name = entry.after_state.get("name")
+            sections = node.get_field("sections", [])
+            for i in range(len(sections) - 1, -1, -1):
+                if sections[i]["name"] == added_name:
+                    sections.pop(i)
+                    break
+            node.set_field("sections", sections)
+        elif op == "delete_journey_section" and old_name is not None:
+            # Re-insert deleted section
+            sections = node.get_field("sections", [])
+            sections.append({"name": old_name, "content": old_content or ""})
+            node.set_field("sections", sections)
+        elif op == "update_journey_section" and old_name is not None:
+            # Restore section name/content
+            current_name = entry.after_state.get("name")
+            sections = node.get_field("sections", [])
+            for s in sections:
+                if s["name"] == current_name:
+                    s["name"] = old_name
+                    if old_content is not None:
+                        s["content"] = old_content
+                    break
+            node.set_field("sections", sections)
+
+    def _undo_add_journey(self, entry: MutationEntry) -> None:
+        """Undo an add journey operation (delete the added node)."""
+        node_id = entry.target_id
+        if node_id in self._index:
+            node = self._index.pop(node_id)
+            for parent in list(node.iter_parents()):
+                parent.unlink(node)
+
+    def _undo_delete_journey(self, entry: MutationEntry) -> None:
+        """Undo a delete journey operation (restore the node)."""
+        node_id = entry.target_id
+        for i, node in enumerate(self._deleted_nodes):
+            if node.id == node_id:
+                self._deleted_nodes.pop(i)
+                self._index[node_id] = node
+                break
 
     # ─────────────────────────────────────────────────────────────────────────
     # Node Mutation API
@@ -1632,7 +1710,7 @@ class TraceGraph:
         target_id: str,
         assertion_targets: list[str],
     ) -> MutationEntry:
-        """Change assertion targets on an existing IMPLEMENTS/REFINES edge.
+        """Change assertion targets on an existing IMPLEMENTS/REFINES/VALIDATES edge.
 
         Args:
             source_id: The child/source node ID.
@@ -1644,7 +1722,7 @@ class TraceGraph:
 
         Raises:
             KeyError: If source_id or target_id is not found.
-            ValueError: If no IMPLEMENTS/REFINES edge exists between source and target.
+            ValueError: If no matching edge exists between source and target.
         """
         if source_id not in self._index:
             raise KeyError(f"Source node '{source_id}' not found")
@@ -1659,13 +1737,14 @@ class TraceGraph:
             if edge.source.id == target_id and edge.kind in (
                 EdgeKind.IMPLEMENTS,
                 EdgeKind.REFINES,
+                EdgeKind.VALIDATES,
             ):
                 edge_to_update = edge
                 break
 
         if edge_to_update is None:
             raise ValueError(
-                f"No IMPLEMENTS/REFINES edge exists from '{target_id}' to '{source_id}'"
+                f"No IMPLEMENTS/REFINES/VALIDATES edge exists from '{target_id}' to '{source_id}'"
             )
 
         old_targets = list(edge_to_update.assertion_targets)
@@ -1983,6 +2062,426 @@ class TraceGraph:
         self._mutation_log.append(entry)
         return entry
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # Journey Mutation API
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _reconstruct_journey_body(self, node: GraphNode) -> str:
+        """Rebuild body text from structured fields + live graph edges."""
+        lines: list[str] = []
+        lines.append(f"## {node.id}: {node.get_label()}")
+        actor = node.get_field("actor")
+        if actor:
+            lines.append(f"**Actor**: {actor}")
+        goal = node.get_field("goal")
+        if goal:
+            lines.append(f"**Goal**: {goal}")
+        context = node.get_field("context")
+        if context:
+            lines.append(f"**Context**: {context}")
+        # Validates references from live graph edges (REQ is parent of JNY)
+        validates_refs: list[str] = []
+        for edge in node.iter_incoming_edges():
+            if edge.kind == EdgeKind.VALIDATES:
+                validates_refs.append(edge.source.id)
+        if validates_refs:
+            lines.append(f"Validates: {', '.join(sorted(validates_refs))}")
+        preamble = node.get_field("body_lines", [])
+        if preamble:
+            lines.append("")
+            lines.extend(preamble)
+        for section in node.get_field("sections", []):
+            lines.append("")
+            lines.append(f"## {section['name']}")
+            lines.extend(section["content"].splitlines())
+        lines.append("")
+        lines.append(f"*End* *{node.id}*")
+        return "\n".join(lines)
+
+    def update_journey_field(self, node_id: str, field_name: str, value: str) -> MutationEntry:
+        """Update a structured field on a USER_JOURNEY node and reconstruct body.
+
+        Args:
+            node_id: The journey node ID.
+            field_name: One of 'actor', 'goal', 'context', 'preamble'.
+            value: The new field value.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If node_id is not found.
+            ValueError: If node is not a USER_JOURNEY or field_name is invalid.
+        """
+        if node_id not in self._index:
+            raise KeyError(f"Node '{node_id}' not found")
+
+        node = self._index[node_id]
+        if node.kind != NodeKind.USER_JOURNEY:
+            raise ValueError(f"Node '{node_id}' is not a user journey")
+
+        valid_fields = ("actor", "goal", "context", "preamble")
+        if field_name not in valid_fields:
+            raise ValueError(f"Invalid field '{field_name}', must be one of {valid_fields}")
+
+        old_body = node.get_field("body", "")
+
+        if field_name == "preamble":
+            old_value = "\n".join(node.get_field("body_lines", []))
+            node.set_field("body_lines", value.splitlines() if value else [])
+        else:
+            old_value = node.get_field(field_name)
+            node.set_field(field_name, value or None)
+
+        new_body = self._reconstruct_journey_body(node)
+        node.set_field("body", new_body)
+
+        entry = MutationEntry(
+            operation="update_journey_field",
+            target_id=node_id,
+            before_state={"field": field_name, "value": old_value, "body": old_body},
+            after_state={"field": field_name, "value": value, "body": new_body},
+        )
+        self._mutation_log.append(entry)
+        return entry
+
+    def update_journey_section(
+        self,
+        node_id: str,
+        section_name: str,
+        new_name: str | None = None,
+        new_content: str | None = None,
+    ) -> MutationEntry:
+        """Update a journey section by name.
+
+        Args:
+            node_id: The journey node ID.
+            section_name: Name of the section to update.
+            new_name: New section header name (None to keep current).
+            new_content: New section content (None to keep current).
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If node_id not found.
+            ValueError: If not a journey or section not found.
+        """
+        if node_id not in self._index:
+            raise KeyError(f"Node '{node_id}' not found")
+
+        node = self._index[node_id]
+        if node.kind != NodeKind.USER_JOURNEY:
+            raise ValueError(f"Node '{node_id}' is not a user journey")
+
+        sections = node.get_field("sections", [])
+        target = None
+        for s in sections:
+            if s["name"] == section_name:
+                target = s
+                break
+        if target is None:
+            raise ValueError(f"Section '{section_name}' not found in {node_id}")
+
+        old_body = node.get_field("body", "")
+        old_name = target["name"]
+        old_content = target["content"]
+
+        if new_name is not None:
+            target["name"] = new_name
+        if new_content is not None:
+            target["content"] = new_content
+
+        new_body = self._reconstruct_journey_body(node)
+        node.set_field("body", new_body)
+
+        entry = MutationEntry(
+            operation="update_journey_section",
+            target_id=node_id,
+            before_state={"name": old_name, "content": old_content, "body": old_body},
+            after_state={
+                "name": target["name"],
+                "content": target["content"],
+                "body": new_body,
+            },
+        )
+        self._mutation_log.append(entry)
+        return entry
+
+    def add_journey_section(
+        self,
+        node_id: str,
+        name: str,
+        content: str = "",
+    ) -> MutationEntry:
+        """Append a new section to a journey.
+
+        Args:
+            node_id: The journey node ID.
+            name: Section header name.
+            content: Section content text.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If node_id not found.
+            ValueError: If not a journey.
+        """
+        if node_id not in self._index:
+            raise KeyError(f"Node '{node_id}' not found")
+
+        node = self._index[node_id]
+        if node.kind != NodeKind.USER_JOURNEY:
+            raise ValueError(f"Node '{node_id}' is not a user journey")
+
+        old_body = node.get_field("body", "")
+        sections = node.get_field("sections", [])
+        new_section = {"name": name, "content": content}
+        sections.append(new_section)
+        node.set_field("sections", sections)
+
+        new_body = self._reconstruct_journey_body(node)
+        node.set_field("body", new_body)
+
+        entry = MutationEntry(
+            operation="add_journey_section",
+            target_id=node_id,
+            before_state={"body": old_body},
+            after_state={"name": name, "content": content, "body": new_body},
+        )
+        self._mutation_log.append(entry)
+        return entry
+
+    def delete_journey_section(
+        self,
+        node_id: str,
+        section_name: str,
+    ) -> MutationEntry:
+        """Remove a section from a journey by name.
+
+        Args:
+            node_id: The journey node ID.
+            section_name: Name of the section to delete.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If node_id not found.
+            ValueError: If not a journey or section not found.
+        """
+        if node_id not in self._index:
+            raise KeyError(f"Node '{node_id}' not found")
+
+        node = self._index[node_id]
+        if node.kind != NodeKind.USER_JOURNEY:
+            raise ValueError(f"Node '{node_id}' is not a user journey")
+
+        sections = node.get_field("sections", [])
+        old_body = node.get_field("body", "")
+        removed = None
+        new_sections = []
+        for s in sections:
+            if s["name"] == section_name and removed is None:
+                removed = s
+            else:
+                new_sections.append(s)
+
+        if removed is None:
+            raise ValueError(f"Section '{section_name}' not found in {node_id}")
+
+        node.set_field("sections", new_sections)
+        new_body = self._reconstruct_journey_body(node)
+        node.set_field("body", new_body)
+
+        entry = MutationEntry(
+            operation="delete_journey_section",
+            target_id=node_id,
+            before_state={"name": removed["name"], "content": removed["content"], "body": old_body},
+            after_state={"body": new_body},
+        )
+        self._mutation_log.append(entry)
+        return entry
+
+    def add_journey(
+        self,
+        journey_id: str,
+        title: str,
+        file_id: str,
+    ) -> MutationEntry:
+        """Create a new USER_JOURNEY node and wire it to a FILE node.
+
+        Args:
+            journey_id: The journey ID (e.g., "JNY-LOGIN-01").
+            title: The journey title.
+            file_id: The FILE node ID to contain this journey.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            ValueError: If journey_id already exists.
+            KeyError: If file_id is not found.
+        """
+        if journey_id in self._index:
+            raise ValueError(f"Node '{journey_id}' already exists")
+        if file_id not in self._index:
+            raise KeyError(f"File node '{file_id}' not found")
+
+        file_node = self._index[file_id]
+        if file_node.kind != NodeKind.FILE:
+            raise ValueError(f"Node '{file_id}' is not a FILE node")
+
+        node = GraphNode(
+            id=journey_id,
+            kind=NodeKind.USER_JOURNEY,
+            label=title,
+        )
+        node._content = {
+            "actor": None,
+            "goal": None,
+            "context": None,
+            "body_lines": [],
+            "sections": [],
+            "body": f"## {journey_id}: {title}\n\n*End* *{journey_id}*",
+            "parse_line": 0,
+            "parse_end_line": 0,
+        }
+
+        self._index[journey_id] = node
+
+        # Wire CONTAINS edge from file to journey
+        # Compute render_order as max + 1 of existing children
+        max_order = -1.0
+        for edge in file_node.iter_outgoing_edges():
+            if edge.kind == EdgeKind.CONTAINS:
+                ro = edge.metadata.get("render_order", -1.0)
+                if ro > max_order:
+                    max_order = ro
+        file_node.link(node, EdgeKind.CONTAINS)
+        # Set render_order on the new edge
+        for edge in file_node.iter_outgoing_edges():
+            if edge.kind == EdgeKind.CONTAINS and edge.target is node:
+                edge.metadata["render_order"] = max_order + 1.0
+                break
+
+        entry = MutationEntry(
+            operation="add_journey",
+            target_id=journey_id,
+            before_state={},
+            after_state={
+                "id": journey_id,
+                "title": title,
+                "file_id": file_id,
+            },
+        )
+        self._mutation_log.append(entry)
+        return entry
+
+    def delete_journey(self, node_id: str) -> MutationEntry:
+        """Delete a USER_JOURNEY node.
+
+        Removes the node from the index, disconnects all edges
+        (CONTAINS from FILE, VALIDATES to REQs), and moves to
+        _deleted_nodes for delta tracking.
+
+        Args:
+            node_id: The journey node ID to delete.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If node_id is not found.
+            ValueError: If node is not a USER_JOURNEY.
+        """
+        if node_id not in self._index:
+            raise KeyError(f"Node '{node_id}' not found")
+
+        node = self._index[node_id]
+        if node.kind != NodeKind.USER_JOURNEY:
+            raise ValueError(f"Node '{node_id}' is not a user journey")
+
+        was_root = node in self._roots
+
+        # Record state before deletion
+        _fn = node.file_node()
+        source_path = _fn.get_field("relative_path") if _fn else None
+        validates_ids = [
+            e.source.id for e in node.iter_incoming_edges() if e.kind == EdgeKind.VALIDATES
+        ]
+
+        entry = MutationEntry(
+            operation="delete_journey",
+            target_id=node_id,
+            before_state={
+                "id": node_id,
+                "title": node.get_label(),
+                "body": node.get_field("body", ""),
+                "actor": node.get_field("actor"),
+                "goal": node.get_field("goal"),
+                "was_root": was_root,
+                "source_path": source_path,
+                "validates_ids": validates_ids,
+            },
+            after_state={},
+        )
+
+        # Remove from index
+        self._index.pop(node_id)
+        self._deleted_nodes.append(node)
+
+        # Remove from roots if present
+        if was_root:
+            self._roots = [r for r in self._roots if r.id != node_id]
+
+        # Disconnect from parents (FILE node via CONTAINS)
+        for parent in list(node.iter_parents()):
+            parent.unlink(node)
+
+        # Disconnect outgoing edges (VALIDATES)
+        for child in list(node.iter_children()):
+            node.unlink(child)
+
+        self._mutation_log.append(entry)
+        return entry
+
+    def reconstruct_journey_body(self, node_id: str) -> MutationEntry:
+        """Reconstruct a journey's body from its structured fields.
+
+        Called after title or edge changes that affect the body text.
+
+        Args:
+            node_id: The journey node ID.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If node_id not found.
+            ValueError: If not a journey.
+        """
+        if node_id not in self._index:
+            raise KeyError(f"Node '{node_id}' not found")
+
+        node = self._index[node_id]
+        if node.kind != NodeKind.USER_JOURNEY:
+            raise ValueError(f"Node '{node_id}' is not a user journey")
+
+        old_body = node.get_field("body", "")
+        new_body = self._reconstruct_journey_body(node)
+        node.set_field("body", new_body)
+
+        entry = MutationEntry(
+            operation="reconstruct_journey_body",
+            target_id=node_id,
+            before_state={"body": old_body},
+            after_state={"body": new_body},
+        )
+        self._mutation_log.append(entry)
+        return entry
+
 
 class GraphBuilder:
     """Builder for constructing TraceGraph from parsed content.
@@ -2259,7 +2758,10 @@ class GraphBuilder:
         node._content = {
             "actor": data.get("actor"),
             "goal": data.get("goal"),
+            "context": data.get("context"),
             "body": content.raw_text,
+            "body_lines": data.get("body_lines", []),
+            "sections": data.get("sections", []),
             "parse_line": content.start_line,
             "parse_end_line": content.end_line,
         }
@@ -2313,6 +2815,9 @@ class GraphBuilder:
                     node.set_field("class_name", class_name)
                 if func_line:
                     node.set_field("function_line", func_line)
+                func_end_line = data.get("function_end_line", 0)
+                if func_end_line:
+                    node.set_field("function_end_line", func_end_line)
                 self._nodes[code_id] = node
 
             self._pending_links.append((code_id, impl_ref, EdgeKind.IMPLEMENTS))
@@ -2822,17 +3327,33 @@ class GraphBuilder:
                     if parent_reqs:
                         parent_req = parent_reqs[0]
                         assertion_label = target.get_field("label", "")
-                        parent_req.link(
+                        edge = parent_req.link(
                             source,
                             edge_kind,
                             assertion_targets=[assertion_label] if assertion_label else None,
                         )
                     else:
                         # Fallback: link directly if no parent found
-                        target.link(source, edge_kind)
+                        edge = target.link(source, edge_kind)
                 else:
                     # Link target as parent of source (implements relationship)
-                    target.link(source, edge_kind)
+                    edge = target.link(source, edge_kind)
+
+                # Store implementation line range on IMPLEMENTS/VERIFIES edges
+                if edge_kind in (EdgeKind.IMPLEMENTS, EdgeKind.VERIFIES):
+                    impl_start = (
+                        source.get_field("function_line")
+                        or source.get_field("parse_line")
+                    )
+                    impl_end = (
+                        source.get_field("function_end_line")
+                        or source.get_field("parse_end_line")
+                        or 0
+                    )
+                    if impl_start:
+                        edge.metadata["impl_start_line"] = impl_start
+                    if impl_end:
+                        edge.metadata["impl_end_line"] = impl_end
             elif source and not target:
                 # Broken reference: target doesn't exist
                 self._broken_references.append(

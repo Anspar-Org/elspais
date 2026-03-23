@@ -4,6 +4,7 @@ from elspais.config.status_roles import StatusRole, StatusRolesConfig
 
 
 class TestStatusRolesConfig:
+    # Implements: REQ-d00207-A
     def test_default_roles(self):
         """Default config classifies standard statuses correctly."""
         cfg = StatusRolesConfig.default()
@@ -13,11 +14,13 @@ class TestStatusRolesConfig:
         assert cfg.role_of("Deprecated") == StatusRole.RETIRED
         assert cfg.role_of("Superseded") == StatusRole.RETIRED
 
+    # Implements: REQ-d00207-A
     def test_unknown_status_defaults_to_active(self):
         """Unclassified statuses default to active role."""
         cfg = StatusRolesConfig.default()
         assert cfg.role_of("SomethingNew") == StatusRole.ACTIVE
 
+    # Implements: REQ-d00207-B
     def test_from_dict(self):
         """Parses status_roles from config dict."""
         cfg = StatusRolesConfig.from_dict(
@@ -33,6 +36,7 @@ class TestStatusRolesConfig:
         assert cfg.role_of("Future") == StatusRole.ASPIRATIONAL
         assert cfg.role_of("Archived") == StatusRole.RETIRED
 
+    # Implements: REQ-d00207-A
     def test_case_insensitive_lookup(self):
         cfg = StatusRolesConfig.default()
         assert cfg.role_of("active") == StatusRole.ACTIVE
@@ -40,6 +44,7 @@ class TestStatusRolesConfig:
         assert cfg.role_of("ROADMAP") == StatusRole.ASPIRATIONAL
         assert cfg.role_of("deprecated") == StatusRole.RETIRED
 
+    # Implements: REQ-d00086-A
     def test_is_excluded_from_coverage(self):
         """Provisional, aspirational, and retired are all excluded."""
         cfg = StatusRolesConfig.default()
@@ -48,6 +53,7 @@ class TestStatusRolesConfig:
         assert cfg.is_excluded_from_coverage("Roadmap")
         assert cfg.is_excluded_from_coverage("Deprecated")
 
+    # Implements: REQ-d00086-A
     def test_is_excluded_from_analysis(self):
         """Only aspirational and retired are excluded from analysis."""
         cfg = StatusRolesConfig.default()
@@ -56,6 +62,7 @@ class TestStatusRolesConfig:
         assert cfg.is_excluded_from_analysis("Roadmap")  # aspirational: excluded
         assert cfg.is_excluded_from_analysis("Deprecated")  # retired: excluded
 
+    # Implements: REQ-d00086-A
     def test_excluded_statuses_set(self):
         """Returns the set of status names excluded from coverage."""
         cfg = StatusRolesConfig.default()
@@ -65,6 +72,7 @@ class TestStatusRolesConfig:
         assert "Deprecated" in excluded
         assert "Active" not in excluded
 
+    # Implements: REQ-d00207-A
     def test_default_hidden_statuses(self):
         """Only retired statuses are hidden by default in viewer."""
         cfg = StatusRolesConfig.default()

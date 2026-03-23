@@ -6,32 +6,41 @@ from elspais.utilities.import_analyzer import extract_python_imports, module_to_
 
 
 class TestExtractPythonImports:
+    # Implements: REQ-o00065-B
     def test_from_import(self):
         content = "from os.path import join\n"
         assert extract_python_imports(content) == ["os.path"]
 
+    # Implements: REQ-d00072-B
     def test_plain_import(self):
         content = "import os\n"
         assert extract_python_imports(content) == ["os"]
 
+    # Implements: REQ-d00072-B
     def test_multiple_plain_imports(self):
+        # Implements: REQ-d00072-B
         content = "import os, sys\n"
         result = extract_python_imports(content)
         assert "os" in result
         assert "sys" in result
 
+    # Implements: REQ-d00072-B
     def test_from_import_dotted(self):
         content = "from elspais.graph.annotators import annotate_coverage\n"
         assert extract_python_imports(content) == ["elspais.graph.annotators"]
 
+    # Implements: REQ-d00072-B
     def test_skips_relative_imports(self):
         content = "from .utils import helper\nfrom ..base import Base\n"
         assert extract_python_imports(content) == []
 
+    # Implements: REQ-d00072-B
     def test_skips_comments(self):
+        # Implements: REQ-d00072-B
         content = "# import os\nfrom pathlib import Path\n"
         assert extract_python_imports(content) == ["pathlib"]
 
+    # Implements: REQ-d00072-B
     def test_mixed_imports(self):
         content = (
             "from __future__ import annotations\n"
@@ -39,19 +48,24 @@ class TestExtractPythonImports:
             "from pathlib import Path\n"
             "from elspais.graph.builder import GraphBuilder\n"
         )
+        # Implements: REQ-d00072-B
         result = extract_python_imports(content)
         assert "__future__" in result
         assert "re" in result
         assert "pathlib" in result
         assert "elspais.graph.builder" in result
 
+    # Implements: REQ-d00072-B
     def test_stops_at_code(self):
         content = "from os import path\n" "\n" "def main():\n" "    import inside_func\n"
         result = extract_python_imports(content)
         assert result == ["os"]
 
+    # Implements: REQ-d00072-B
     def test_empty_content(self):
         assert extract_python_imports("") == []
+
+    # Implements: REQ-d00072-B
 
     def test_type_checking_imports(self):
         content = (
@@ -60,6 +74,7 @@ class TestExtractPythonImports:
             "\n"
             "if TYPE_CHECKING:\n"
             "    from elspais.graph.builder import TraceGraph\n"
+            # Implements: REQ-o00065-B
         )
         result = extract_python_imports(content)
         assert "elspais.graph.builder" in result
@@ -76,6 +91,8 @@ class TestExtractPythonImports:
         result = extract_python_imports(content)
         assert "elspais.graph.builder" in result
 
+    # Implements: REQ-o00065-B
+
     def test_imports_after_multiline_docstring(self):
         """Imports after a multi-line docstring should be found."""
         content = (
@@ -89,6 +106,7 @@ class TestExtractPythonImports:
         )
         result = extract_python_imports(content)
         assert "pathlib" in result
+        # Implements: REQ-o00065-B
         assert "os" in result
 
     def test_imports_after_comments_and_docstring(self):
@@ -99,6 +117,7 @@ class TestExtractPythonImports:
             '"""Tests for MCP core tools.\n'
             "\n"
             "Tests REQ-o00060: MCP Core Query Tools\n"
+            # Implements: REQ-o00065-B
             "- get_graph_status()\n"
             "- refresh_graph()\n"
             '"""\n'
@@ -130,6 +149,7 @@ class TestExtractPythonImports:
 
 
 class TestModuleToSourcePath:
+    # Implements: REQ-o00065-B
     def test_resolves_module_in_src(self, tmp_path):
         # Create src/elspais/graph/annotators.py
         mod_path = tmp_path / "src" / "elspais" / "graph"
@@ -139,6 +159,7 @@ class TestModuleToSourcePath:
         result = module_to_source_path("elspais.graph.annotators", tmp_path)
         assert result == Path("src/elspais/graph/annotators.py")
 
+    # Implements: REQ-o00065-B
     def test_resolves_module_at_root(self, tmp_path):
         # Create utils.py at repo root
         (tmp_path / "utils.py").write_text("# module")
@@ -146,6 +167,7 @@ class TestModuleToSourcePath:
         result = module_to_source_path("utils", tmp_path, source_roots=["", "src"])
         assert result == Path("utils.py")
 
+    # Implements: REQ-o00065-B
     def test_resolves_package_init(self, tmp_path):
         # Create src/elspais/__init__.py (package)
         pkg_path = tmp_path / "src" / "elspais"
@@ -155,10 +177,12 @@ class TestModuleToSourcePath:
         result = module_to_source_path("elspais", tmp_path)
         assert result == Path("src/elspais/__init__.py")
 
+    # Implements: REQ-o00065-B
     def test_returns_none_for_missing(self, tmp_path):
         result = module_to_source_path("nonexistent.module", tmp_path)
         assert result is None
 
+    # Implements: REQ-o00065-B
     def test_custom_source_roots(self, tmp_path):
         # Create lib/mymod.py
         (tmp_path / "lib").mkdir()
@@ -167,6 +191,7 @@ class TestModuleToSourcePath:
         result = module_to_source_path("mymod", tmp_path, source_roots=["lib"])
         assert result == Path("lib/mymod.py")
 
+    # Implements: REQ-o00065-B
     def test_prefers_first_source_root(self, tmp_path):
         # Create both src/mod.py and mod.py
         (tmp_path / "src").mkdir()
@@ -176,6 +201,7 @@ class TestModuleToSourcePath:
         result = module_to_source_path("mod", tmp_path, source_roots=["src", ""])
         assert result == Path("src/mod.py")
 
+    # Implements: REQ-o00065-B
     def test_default_source_roots_src_first(self, tmp_path):
         """Default source_roots=["src", ""] tries src/ before root."""
         (tmp_path / "src").mkdir()
@@ -184,6 +210,7 @@ class TestModuleToSourcePath:
         result = module_to_source_path("mymod", tmp_path)
         assert result == Path("src/mymod.py")
 
+    # Implements: REQ-o00065-B
     def test_nested_package_init(self, tmp_path):
         """Deep nested package resolves via __init__.py."""
         pkg = tmp_path / "src" / "a" / "b" / "c"

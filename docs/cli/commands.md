@@ -11,15 +11,15 @@ These options work with all commands:
   `--config PATH`    Path to configuration file
   `--spec-dir PATH`  Override spec directory
 
-## health
+## checks
 
 Run health checks across configuration, spec files, code, and tests.
 
-  $ elspais health                     # Run all checks
-  $ elspais health --spec              # Spec file checks
-  $ elspais health --code              # Code reference checks
-  $ elspais health --tests             # Test mapping checks
-  $ elspais health --format json       # JSON output
+  $ elspais checks                     # Run all checks
+  $ elspais checks --spec              # Spec file checks
+  $ elspais checks --code              # Code reference checks
+  $ elspais checks --tests             # Test mapping checks
+  $ elspais checks --format json       # JSON output
 
 To auto-fix issues, use: `elspais fix`
 
@@ -68,9 +68,41 @@ Generate traceability matrix and reports.
   `--tests`              Show test references
   `--output PATH`        Output file path
 
+## search
+
+Search requirements by keyword, with ranked results.
+
+  $ elspais search 'authentication'       # Search all fields
+  $ elspais search 'auth OR login'        # OR queries
+  $ elspais search '"exact phrase"'       # Phrase match
+  $ elspais search '-deprecated auth'     # Exclude term
+  $ elspais search '=security'            # Exact keyword tag
+  $ elspais search 'graph' --field title  # Search titles only
+  $ elspais search 'REQ-p' --regex        # Regex mode
+  $ elspais search 'graph' -n 10          # Limit results
+
+**Options:**
+
+  `--field {all,id,title,body,keywords}`  Fields to search (default: all)
+  `--regex`            Treat query as regex
+  `-n, --limit N`      Max results (default: 50)
+  `--format {text,json}`  Output format
+  `--no-daemon`        Skip daemon, rebuild graph locally
+
+**Performance:** Connects to a running viewer or MCP daemon for instant
+results (~0.1s). Auto-starts a daemon on first use if neither is running.
+Use `--no-daemon` to force a local graph build (~2-4s).
+
+**Daemon config** (in `.elspais.toml`):
+
+    cli_ttl = 30     # auto-start daemon, exit after 30 min idle (default)
+    cli_ttl = 0      # never auto-launch (manual start only)
+    cli_ttl = -1     # auto-start daemon, never timeout
+
 ## viewer
 
-Interactive traceability viewer (live server or static HTML).
+Interactive traceability viewer (live server or static HTML). The viewer
+also serves MCP tools at `/mcp` for AI agent integration.
 
   $ elspais viewer                  # Start server and open browser
   $ elspais viewer --static         # Generate static HTML file
@@ -194,12 +226,10 @@ Edit requirements in-place.
 
 **Batch JSON Format:**
 
-```json
-[
-  {"req_id": "REQ-d00001", "status": "Draft"},
-  {"req_id": "REQ-d00002", "implements": ["REQ-p00001"]}
-]
-```
+    [
+      {"req_id": "REQ-d00001", "status": "Draft"},
+      {"req_id": "REQ-d00002", "implements": ["REQ-p00001"]}
+    ]
 
 ## config
 

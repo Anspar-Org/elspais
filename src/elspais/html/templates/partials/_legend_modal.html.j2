@@ -18,7 +18,7 @@
                 <span>{{ entry.label }}</span>
                 <span>{{ entry.description }}</span>
                 {% elif entry.symbol %}
-                <span class="legend-icon {% if entry.css_class %}{{ entry.css_class }}{% endif %}">{{ entry.symbol }}</span>
+                <span class="legend-icon {% if entry.css_class %}{{ entry.css_class }}{% endif %}">{{ entry.symbol | safe }}</span>
                 <span>{{ entry.description or entry.label }}</span>
                 {% elif entry.css_class %}
                 <span class="{{ entry.css_class }}" style="font-size: 0.75rem;">{{ entry.label }}</span>

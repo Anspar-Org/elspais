@@ -70,7 +70,11 @@ REPORT_PRESETS = {
             "level",
             "status",
             "implemented",
-            "validated",
+            "tested",
+            "verified",
+            "uat_coverage",
+            "uat_verified",
+            "code_tested",
         ],
     ),
     "full": ReportPreset(
@@ -81,8 +85,11 @@ REPORT_PRESETS = {
             "level",
             "status",
             "implemented",
-            "validated",
-            "passing",
+            "tested",
+            "verified",
+            "uat_coverage",
+            "uat_verified",
+            "code_tested",
         ],
     ),
 }
@@ -90,9 +97,73 @@ REPORT_PRESETS = {
 DEFAULT_PRESET = "standard"
 
 
-def _get_node_data(node, graph: FederatedGraph) -> dict:
-    """Extract data from a node for use in formatters."""
-    from elspais.graph.metrics import RollupMetrics
+def compute_trace(
+    graph: FederatedGraph,
+    config: dict,  # noqa: ARG001
+    params: dict[str, str],  # noqa: ARG001
+) -> dict:
+    """Compute trace data for engine.call.  Returns {"nodes": [...]}."""
+    nodes = []
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        nodes.append(_get_node_data(node, graph))
+    return {"nodes": nodes}
+
+
+def _compact_labels(labels: set[str]) -> str:
+    """Compact sequential assertion labels into ranges.
+
+    Single-letter labels: A,B,C,F,H,I,J,K,L -> A-C,F,H-L
+    Numeric labels: 1,2,3,4,5,10,11,12 -> 1-5,10-12
+    Text labels (non-sequential): returned comma-separated, no ranges.
+    """
+    if not labels:
+        return ""
+
+    sorted_labels = sorted(labels)
+
+    # Detect label type: all single uppercase letters, all numeric, or mixed/text
+    all_single_alpha = all(len(lb) == 1 and lb.isalpha() and lb.isupper() for lb in sorted_labels)
+    all_numeric = all(lb.isdigit() for lb in sorted_labels)
+
+    if not all_single_alpha and not all_numeric:
+        return ",".join(sorted_labels)
+
+    # Build runs of consecutive values (sort by actual value, not lexicographic)
+    if all_single_alpha:
+        values = sorted(ord(lb) for lb in sorted_labels)
+    else:
+        values = sorted(int(lb) for lb in sorted_labels)
+
+    runs: list[tuple[int, int]] = []
+    for v in values:
+        if runs and v == runs[-1][1] + 1:
+            runs[-1] = (runs[-1][0], v)
+        else:
+            runs.append((v, v))
+
+    # Format runs back to labels
+    parts = []
+    for start, end in runs:
+        if all_single_alpha:
+            s, e = chr(start), chr(end)
+        else:
+            s, e = str(start), str(end)
+        if start == end:
+            parts.append(s)
+        elif end == start + 1:
+            parts.append(f"{s},{e}")
+        else:
+            parts.append(f"{s}-{e}")
+    return ",".join(parts)
+
+
+def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = False) -> dict:
+    """Extract data from a node for use in formatters.
+
+    When assertion_labels is True, coverage columns show compact assertion
+    label ranges (e.g. "A-E (100%)") instead of counts ("5/5 (100%)").
+    """
+    from elspais.graph.metrics import CoverageDimension, RollupMetrics
 
     # Get implements IDs via parent iteration
     impl_ids = []
@@ -131,17 +202,29 @@ def _get_node_data(node, graph: FederatedGraph) -> dict:
     # Coverage columns from RollupMetrics
     rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
     total_a = rollup.total_assertions if rollup else 0
-    impl_count = rollup.covered_assertions if rollup else 0
-    val_count = rollup.direct_tested if rollup else 0
-    pass_count = rollup.validated if rollup else 0
 
-    def _fmt_coverage(num: int, total: int) -> str:
+    def _fmt_count(num: int, total: int) -> str:
         if total == 0:
             return "n/a"
         pct = round(num / total * 100)
         return f"{num}/{total} ({pct}%)"
 
-    return {
+    def _fmt_code_tested(dim: CoverageDimension) -> str:
+        if dim.total == 0:
+            return "n/a"
+        pct = round(dim.direct / dim.total * 100)
+        return f"{dim.direct}/{dim.total} ({pct}%)"
+
+    # (column_key, rollup_attr, use_indirect_for_count, use_indirect_for_labels)
+    _DIMS = [
+        ("implemented", "implemented", True, True),
+        ("tested", "tested", False, False),
+        ("verified", "verified", False, False),
+        ("uat_coverage", "uat_coverage", True, True),
+        ("uat_verified", "uat_verified", False, False),
+    ]
+
+    data: dict = {
         "id": node.id,
         "title": node.get_label() or "",
         "level": node.level or "",
@@ -154,10 +237,35 @@ def _get_node_data(node, graph: FederatedGraph) -> dict:
         "code_refs": code_refs,
         "test_refs": test_refs,
         "test_refs_grouped": test_refs_grouped,
-        "implemented": _fmt_coverage(impl_count, total_a),
-        "validated": _fmt_coverage(val_count, total_a),
-        "passing": _fmt_coverage(pass_count, total_a),
     }
+
+    if rollup:
+        for key, attr, use_ind_count, use_ind_labels in _DIMS:
+            dim: CoverageDimension = getattr(rollup, attr)
+            if assertion_labels:
+                labels = dim.indirect_labels if use_ind_labels else dim.direct_labels
+                label_str = _compact_labels(labels) if labels else "-"
+                pct = round(len(labels) / dim.total * 100) if dim.total else 0
+                data[key] = f"{label_str} ({pct}%)" if dim.total else "n/a"
+                data[key + "_labels"] = label_str if dim.total else "n/a"
+                data[key + "_pct"] = f"{pct}%" if dim.total else "n/a"
+            else:
+                num = dim.indirect if use_ind_count else dim.direct
+                data[key] = _fmt_count(num, total_a)
+        ct = rollup.code_tested
+        data["code_tested"] = _fmt_code_tested(ct)
+        if assertion_labels:
+            data["code_tested_labels"] = f"{ct.direct}/{ct.total}" if ct.total else "n/a"
+            data["code_tested_pct"] = f"{round(ct.direct / ct.total * 100)}%" if ct.total else "n/a"
+    else:
+        for key, _, _, _ in _DIMS:
+            data[key] = "n/a"
+            if assertion_labels:
+                data[key + "_labels"] = "n/a"
+                data[key + "_pct"] = "n/a"
+        data["code_tested"] = "n/a"
+
+    return data
 
 
 def _column_headers() -> dict[str, str]:
@@ -169,11 +277,20 @@ def _column_headers() -> dict[str, str]:
         "status": "Status",
         "implements": "Implements",
         "implemented": "Implemented",
-        "validated": "Validated",
-        "passing": "Passing",
+        "tested": "Tested",
+        "verified": "Verified",
+        "uat_coverage": "UAT Coverage",
+        "uat_verified": "UAT Verified",
+        "code_tested": "Code Tested",
         "hash": "Hash",
         "file": "File",
     }
+
+
+# The 6 coverage dimension column keys
+_COVERAGE_COLUMNS = [
+    "implemented", "tested", "verified", "uat_coverage", "uat_verified", "code_tested",
+]
 
 
 def _format_row(data: dict, columns: list[str]) -> list[str]:
@@ -202,7 +319,7 @@ def format_markdown(graph: FederatedGraph, preset: ReportPreset | None = None) -
     yield "|" + "|".join(["----"] * len(headers)) + "|"
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        data = _get_node_data(node, graph)
+        data = _get_node_data(node, graph, assertion_labels=preset.include_assertions)
         row_values = _format_row(data, preset.columns)
         yield "| " + " | ".join(row_values) + " |"
 
@@ -212,15 +329,6 @@ def format_markdown(graph: FederatedGraph, preset: ReportPreset | None = None) -
             yield "<details><summary>Body</summary>"
             yield ""
             yield data["body"]
-            yield ""
-            yield "</details>"
-
-        if preset.include_assertions and data["assertions"]:
-            yield ""
-            yield f"<details><summary>Assertions ({len(data['assertions'])})</summary>"
-            yield ""
-            for a in data["assertions"]:
-                yield f"- **{a['label']}**: {a['text']}"
             yield ""
             yield "</details>"
 
@@ -257,30 +365,35 @@ def format_csv(graph: FederatedGraph, preset: ReportPreset | None = None) -> Ite
             return '"' + s.replace('"', '""') + '"'
         return s
 
-    # Build header
+    # Build header — split coverage columns into Labels + % for CSV
+    # when --assertions is active
     col_headers = _column_headers()
-    header_names = [col_headers.get(c, c.title()) for c in preset.columns]
+    header_names: list[str] = []
+    csv_columns: list[str] = []  # actual data keys per CSV cell
+    for c in preset.columns:
+        if preset.include_assertions and c in _COVERAGE_COLUMNS:
+            display = col_headers.get(c, c.title())
+            header_names.extend([display, f"{display} %"])
+            csv_columns.extend([c + "_labels", c + "_pct"])
+        else:
+            header_names.append(col_headers.get(c, c.title()))
+            csv_columns.append(c)
 
     extra_prefix = []
     extra_suffix = []
     if preset.include_test_refs:
         extra_prefix.append("Kind")
         extra_suffix.extend(["Assertion", "Test Ref"])
-    if preset.include_assertions:
-        extra_suffix.insert(0, "Assertions")
 
     yield ",".join(extra_prefix + header_names + extra_suffix)
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        data = _get_node_data(node, graph)
-        row_values = [escape(v) for v in _format_row(data, preset.columns)]
+        data = _get_node_data(node, graph, assertion_labels=preset.include_assertions)
+        row_values = [escape(v) for v in _format_row(data, csv_columns)]
 
         # Build REQ row
         req_prefix = ["REQ"] if preset.include_test_refs else []
         req_suffix = []
-        if preset.include_assertions:
-            assertions_str = "; ".join(f"{a['label']}: {a['text']}" for a in data["assertions"])
-            req_suffix.append(escape(assertions_str))
         if preset.include_test_refs:
             req_suffix.extend(["", ""])  # Empty Assertion and Test Ref columns for REQ row
 
@@ -289,13 +402,12 @@ def format_csv(graph: FederatedGraph, preset: ReportPreset | None = None) -> Ite
         # Emit TEST child rows
         if preset.include_test_refs:
             grouped = data["test_refs_grouped"]
-            empty_cols = [""] * len(preset.columns)
-            empty_assertions = [""] if preset.include_assertions else []
+            empty_cols = [""] * len(csv_columns)
             for key in ["*"] + sorted(k for k in grouped if k != "*"):
                 if key not in grouped:
                     continue
                 for ref in grouped[key]:
-                    yield ",".join(["TEST"] + empty_cols + empty_assertions + [key, escape(ref)])
+                    yield ",".join(["TEST"] + empty_cols + [key, escape(ref)])
 
 
 def format_html(graph: FederatedGraph, preset: ReportPreset | None = None) -> Iterator[str]:
@@ -322,8 +434,6 @@ def format_html(graph: FederatedGraph, preset: ReportPreset | None = None) -> It
     # Build header
     col_hdrs = _column_headers()
     headers = [col_hdrs.get(col, col.title()) for col in preset.columns]
-    if preset.include_assertions:
-        headers.append("Assertions")
     if preset.include_test_refs:
         headers.append("Test Refs")
 
@@ -331,21 +441,10 @@ def format_html(graph: FederatedGraph, preset: ReportPreset | None = None) -> It
     yield "<tr>" + "".join(f"<th>{h}</th>" for h in headers) + "</tr>"
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        data = _get_node_data(node, graph)
+        data = _get_node_data(node, graph, assertion_labels=preset.include_assertions)
         cells = []
         for val in _format_row(data, preset.columns):
             cells.append(f"<td>{escape_html(val)}</td>")
-
-        if preset.include_assertions:
-            if data["assertions"]:
-                a_html = "<br>".join(
-                    f"<span class='assertion-label'>"
-                    f"{a['label']}:</span> {escape_html(a['text'])}"
-                    for a in data["assertions"]
-                )
-                cells.append(f"<td class='assertions'>{a_html}</td>")
-            else:
-                cells.append("<td>-</td>")
 
         if preset.include_test_refs:
             grouped = data["test_refs_grouped"]
@@ -381,7 +480,7 @@ def format_json(graph: FederatedGraph, preset: ReportPreset | None = None) -> It
             yield ","
         first = False
 
-        data = _get_node_data(node, graph)
+        data = _get_node_data(node, graph, assertion_labels=preset.include_assertions)
 
         # Build node dict based on preset columns
         node_dict: dict = {}
@@ -399,8 +498,6 @@ def format_json(graph: FederatedGraph, preset: ReportPreset | None = None) -> It
         # Add detail fields (controlled by flags)
         if preset.include_body:
             node_dict["body"] = data["body"]
-        if preset.include_assertions:
-            node_dict["assertions"] = data["assertions"]
         if preset.include_test_refs:
             node_dict["test_refs"] = data["test_refs_grouped"]
 
@@ -467,11 +564,53 @@ def render_section(
     return "\n".join(lines), 0
 
 
+def _render_json_from_data(data: dict, preset: ReportPreset) -> None:
+    """Render JSON output from compute_trace data dict."""
+    nodes = []
+    for node_data in data["nodes"]:
+        node_dict: dict = {}
+        for col in preset.columns:
+            if col == "file":
+                node_dict["source"] = {
+                    "path": node_data.get("file"),
+                    "line": None,
+                }
+            else:
+                node_dict[col] = node_data.get(col)
+        if preset.include_body:
+            node_dict["body"] = node_data.get("body", "")
+        if preset.include_assertions:
+            node_dict["assertions"] = node_data.get("assertions", [])
+        if preset.include_test_refs:
+            node_dict["test_refs"] = node_data.get("test_refs_grouped", {})
+        nodes.append(node_dict)
+    print(json.dumps(nodes, indent=2))
+
+
+def _render_table_from_graph(graph: FederatedGraph, fmt: str, preset: ReportPreset) -> int:
+    """Render non-JSON formats using graph-based formatters. Returns exit code."""
+    formatters = {
+        "text": format_markdown,
+        "markdown": format_markdown,
+        "csv": format_csv,
+        "html": format_html,
+    }
+    formatter = formatters.get(fmt)
+    if not formatter:
+        print(f"Error: Unknown format '{fmt}'", file=sys.stderr)
+        return 1
+    for line in formatter(graph, preset):
+        print(line)
+    return 0
+
+
 def run(args: argparse.Namespace) -> int:
     """Run the trace command.
 
-    Uses graph factory to build TraceGraph, then streams output in requested format.
+    Uses engine.call for daemon-vs-local, then renders in the requested format.
     """
+    from elspais.commands import _engine
+
     # Implements: REQ-d00084-B+C
     # Parse --preset and apply independent detail flags
     preset_name = getattr(args, "preset", None) or DEFAULT_PRESET
@@ -488,33 +627,42 @@ def run(args: argparse.Namespace) -> int:
         include_test_refs=getattr(args, "show_tests", False),
     )
 
-    # Build graph using factory
-    from elspais.graph.factory import build_graph
-
-    spec_dir = getattr(args, "spec_dir", None)
-    config_path = getattr(args, "config", None)
-    canonical_root = getattr(args, "canonical_root", None)
-
-    graph = build_graph(
-        spec_dirs=[spec_dir] if spec_dir else None,
-        config_path=config_path,
-        canonical_root=canonical_root,
-    )
-
-    # Implements: REQ-d00084-A
-    # Select formatter based on format
     fmt = getattr(args, "format", "markdown")
+    spec_dir = getattr(args, "spec_dir", None)
+    skip_daemon = bool(spec_dir)
 
-    formatters = {
-        "text": format_markdown,
-        "markdown": format_markdown,
-        "csv": format_csv,
-        "html": format_html,
-        "json": format_json,
-    }
+    if skip_daemon:
+        # Custom spec_dir: build graph directly
+        from elspais.graph.factory import build_graph
 
-    for line in formatters[fmt](graph, preset):
-        print(line)
+        config_path = getattr(args, "config", None)
+        canonical_root = getattr(args, "canonical_root", None)
+        graph = build_graph(
+            spec_dirs=[spec_dir] if spec_dir else None,
+            config_path=config_path,
+            canonical_root=canonical_root,
+        )
+        if fmt == "json":
+            data = compute_trace(graph, {}, {})
+            _render_json_from_data(data, preset)
+        else:
+            return _render_table_from_graph(graph, fmt, preset)
+    else:
+        data = _engine.call(
+            "/api/run/trace",
+            {},
+            compute_trace,
+            config_path=getattr(args, "config", None),
+            canonical_root=getattr(args, "canonical_root", None),
+        )
+
+        # Implements: REQ-d00084-A
+        if fmt == "json":
+            _render_json_from_data(data, preset)
+        else:
+            # For non-JSON formats we need the graph to stream through formatters.
+            graph = _engine.get_graph()
+            return _render_table_from_graph(graph, fmt, preset)
 
     return 0
 

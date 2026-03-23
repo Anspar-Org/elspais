@@ -1,3 +1,4 @@
+# Verifies: REQ-p00061-A+B+C
 # Validates REQ-p00050-A, REQ-p00050-C, REQ-p00050-D
 # Validates REQ-o00050-A, REQ-o00050-B, REQ-o00050-C, REQ-o00050-D, REQ-o00050-E
 """Tests for Graph Builder - builds TraceGraph from parsed content."""
@@ -65,6 +66,7 @@ def sample_requirements():
 class TestGraphBuilder:
     """Tests for GraphBuilder class."""
 
+    # Implements: REQ-o00050-A
     def test_build_creates_nodes(self, sample_requirements):
         builder = GraphBuilder()
 
@@ -76,6 +78,7 @@ class TestGraphBuilder:
         assert graph.find_by_id("REQ-p00001") is not None
         assert graph.find_by_id("REQ-o00001") is not None
 
+    # Implements: REQ-o00050-D
     def test_build_creates_assertion_nodes(self, sample_requirements):
         builder = GraphBuilder()
 
@@ -87,6 +90,7 @@ class TestGraphBuilder:
         assert graph.find_by_id("REQ-p00001-A") is not None
         assert graph.find_by_id("REQ-p00001-B") is not None
 
+    # Implements: REQ-o00050-D
     def test_build_links_assertions_to_parent(self, sample_requirements):
         builder = GraphBuilder()
 
@@ -101,6 +105,7 @@ class TestGraphBuilder:
         assert "REQ-p00001-A" in children_string(parent)
         assert "REQ-p00001" in parents_string(assertion_a)
 
+    # Implements: REQ-o00050-C
     def test_build_creates_implements_edges(self, sample_requirements):
         builder = GraphBuilder()
 
@@ -124,6 +129,7 @@ class TestGraphBuilder:
         else:
             pytest.fail("Expected edge from REQ-p00001 to REQ-o00001 not found")
 
+    # Implements: REQ-p00050-A
     def test_roots_are_top_level_requirements(self, sample_requirements):
         builder = GraphBuilder()
 
@@ -139,6 +145,7 @@ class TestGraphBuilder:
 class TestTraceGraph:
     """Tests for TraceGraph container."""
 
+    # Implements: REQ-p00050-A
     def test_find_by_id(self, sample_requirements):
         builder = GraphBuilder()
         for req in sample_requirements:
@@ -150,6 +157,7 @@ class TestTraceGraph:
         assert node is not None
         assert node.id == "REQ-p00001"
 
+    # Implements: REQ-p00050-A
     def test_find_by_id_not_found(self, sample_requirements):
         builder = GraphBuilder()
         for req in sample_requirements:
@@ -160,6 +168,7 @@ class TestTraceGraph:
 
         assert node is None
 
+    # Implements: REQ-d00051-F
     def test_all_nodes_iterator(self, sample_requirements):
         builder = GraphBuilder()
         for req in sample_requirements:
@@ -171,6 +180,7 @@ class TestTraceGraph:
         # 2 reqs + 2 assertions = 4 nodes exactly
         assert len(all_nodes) == 4
 
+    # Implements: REQ-d00130-E
     def test_nodes_by_kind(self, sample_requirements):
         builder = GraphBuilder()
         for req in sample_requirements:
@@ -185,6 +195,7 @@ class TestTraceGraph:
 class TestBuilderContentTypes:
     """Tests for builder handling different content types."""
 
+    # Implements: REQ-o00050-A
     def test_build_creates_journey_nodes(self):
         """Builder creates USER_JOURNEY nodes from journey content."""
         graph = build_graph(
@@ -196,6 +207,7 @@ class TestBuilderContentTypes:
         assert node.kind == NodeKind.USER_JOURNEY
         assert node.get_label() == "Login Flow"
 
+    # Implements: REQ-d00128-D
     def test_build_creates_code_ref_nodes(self):
         """Builder creates CODE nodes from code_ref content."""
         graph = build_graph(
@@ -211,6 +223,7 @@ class TestBuilderContentTypes:
         assert code_node is not None
         assert code_node.kind == NodeKind.CODE
 
+    # Implements: REQ-d00128-D
     def test_build_creates_test_ref_nodes(self):
         """Builder creates TEST nodes from test_ref content."""
         graph = build_graph(
@@ -226,6 +239,7 @@ class TestBuilderContentTypes:
         assert test_node is not None
         assert test_node.kind == NodeKind.TEST
 
+    # Implements: REQ-o00050-C
     def test_build_creates_refines_edges(self):
         """Builder creates REFINES edges from refines references."""
         graph = build_graph(
@@ -257,6 +271,7 @@ class TestBuilderContentTypes:
         orphan_ids = {n.id for n in graph.orphaned_nodes()}
         assert "REQ-o00001" not in orphan_ids
 
+    # Implements: REQ-d00127-C
     def test_node_content_fields_accessible(self):
         """Node content fields are accessible via get_field()."""
         graph = build_graph(
@@ -280,6 +295,7 @@ class TestBuilderContentTypes:
         assert node.status == "Active"
         assert node.hash == "abc12345"
 
+    # Implements: REQ-d00127-E
     def test_test_result_linked_to_test(self):
         """TEST_RESULT nodes should be children of their parent TEST."""
         graph = build_graph(
@@ -300,6 +316,7 @@ class TestBuilderContentTypes:
         assert children[0].id == "result-1"
         assert children[0].kind == NodeKind.RESULT
 
+    # Implements: REQ-d00127-E
     def test_test_result_without_test_id_not_linked(self):
         """TEST_RESULT without test_id should not be linked to any parent."""
         graph = build_graph(
@@ -318,6 +335,7 @@ class TestBuilderContentTypes:
 class TestTestToRequirementLinking:
     """Tests for linking tests to requirements via test names."""
 
+    # Implements: REQ-o00050-C
     def test_test_result_without_scanner_test_is_broken_ref(self):
         """TEST_RESULT with test_id but no scanner TEST node creates a broken reference."""
         graph = build_graph(
@@ -343,6 +361,7 @@ class TestTestToRequirementLinking:
         ]
         assert len(broken) == 1
 
+    # Implements: REQ-o00050-C
     def test_test_with_req_in_name_validates_requirement(self):
         """Scanner-created TEST linked to REQ, with TEST_RESULT child."""
         graph = build_graph(
@@ -378,6 +397,7 @@ class TestTestToRequirementLinking:
         assert result is not None
         assert "test:tests/test_auth.py::TestAuth::test_REQ_d00001_login" in parents_string(result)
 
+    # Implements: REQ-o00050-C
     def test_test_with_assertion_in_name_validates_assertion(self):
         """Test with REQ-xxx-A in name creates VALIDATES edge with assertion_targets."""
         graph = build_graph(
@@ -422,6 +442,7 @@ class TestTestToRequirementLinking:
         else:
             pytest.fail("Expected edge with assertion_targets not found")
 
+    # Implements: REQ-o00050-C
     def test_test_with_multiple_reqs_validates_all(self):
         """Scanner TEST with multiple REQ refs validates all requirements."""
         test_id = "test:tests/test_auth.py::TestAuth::test_REQ_d00001_REQ_d00002_combined"
@@ -454,6 +475,7 @@ class TestTestToRequirementLinking:
         assert test_id in children_string(req1)
         assert test_id in children_string(req2)
 
+    # Implements: REQ-d00127-E
     def test_multiple_results_share_same_test_node(self):
         """Multiple TEST_RESULTs with same test_id share one scanner-created TEST node."""
         test_id = "test:tests/test_auth.py::TestAuth::test_REQ_d00001_login"
@@ -494,6 +516,7 @@ class TestTestToRequirementLinking:
         assert "result-run1" in children
         assert "result-run2" in children
 
+    # Implements: REQ-d00127-E
     def test_test_without_req_in_name_is_orphan(self):
         """Test result without matching scanner TEST creates broken reference."""
         graph = build_graph(
@@ -533,6 +556,7 @@ class TestGeneralizedOrphanDetection:
     orphan candidates, alongside the existing REQUIREMENT orphan detection.
     """
 
+    # Implements: REQ-d00071-B
     def test_test_with_broken_validates_is_orphan(self):
         """TEST referencing non-existent REQ is an orphan."""
         graph = build_graph(
@@ -548,6 +572,7 @@ class TestGeneralizedOrphanDetection:
         assert any(n.kind == NodeKind.TEST for n in orphans)
         assert "test:tests/test_foo.py::test_something" in orphan_ids
 
+    # Implements: REQ-d00071-A
     def test_test_with_valid_validates_not_orphan(self):
         """TEST with resolved VALIDATES link is not an orphan."""
         graph = build_graph(
@@ -562,6 +587,7 @@ class TestGeneralizedOrphanDetection:
         orphan_ids = {n.id for n in graph.orphaned_nodes()}
         assert "test:tests/test_foo.py::test_something" not in orphan_ids
 
+    # Implements: REQ-d00071-B
     def test_result_without_parent_test_is_orphan(self):
         """TEST_RESULT whose YIELDS target doesn't exist is an orphan + broken ref."""
         graph = build_graph(
@@ -583,6 +609,7 @@ class TestGeneralizedOrphanDetection:
         broken_targets = {br.target_id for br in graph.broken_references()}
         assert "test:nonexistent::test_func" in broken_targets
 
+    # Implements: REQ-d00071-B
     def test_result_without_test_id_is_orphan(self):
         """TEST_RESULT with no test_id is an orphan (no link possible)."""
         graph = build_graph(
@@ -592,6 +619,7 @@ class TestGeneralizedOrphanDetection:
         orphan_ids = {n.id for n in graph.orphaned_nodes()}
         assert "result-no-parent" in orphan_ids
 
+    # Implements: REQ-d00071-B
     def test_code_with_broken_implements_is_orphan(self):
         """CODE referencing non-existent REQ is an orphan."""
         graph = build_graph(
@@ -626,6 +654,7 @@ class TestGeneralizedOrphanDetection:
         assert "REQ-p00001" not in orphan_ids
         assert "REQ-o00001" not in orphan_ids
 
+    # Implements: REQ-d00127-E
     def test_result_linked_to_existing_test_not_orphan(self):
         """TEST_RESULT with resolved YIELDS edge is not an orphan."""
         graph = build_graph(
@@ -1290,6 +1319,7 @@ class TestParseDirtyFlag:
     Validates: REQ-p00002-A
     """
 
+    # Implements: REQ-p00002-A
     def test_has_redundant_refs_sets_parse_dirty(self):
         # Verifies: REQ-p00002-A
         """Requirement built from parsed_data with has_redundant_refs=True has parse_dirty=True."""
@@ -1317,6 +1347,7 @@ class TestParseDirtyFlag:
         assert node is not None
         assert node.get_field("parse_dirty") is True
 
+    # Implements: REQ-p00002-A
     def test_no_redundant_refs_does_not_set_parse_dirty(self):
         # Verifies: REQ-p00002-A
         """A requirement without has_redundant_refs does NOT have parse_dirty=True."""
@@ -1342,3 +1373,120 @@ class TestParseDirtyFlag:
         node = graph.find_by_id("REQ-p00001")
         assert node is not None
         assert not node.get_field("parse_dirty")
+
+
+class TestImplementsEdgeMetadata:
+    """Tests for impl_start_line/impl_end_line metadata on IMPLEMENTS edges."""
+
+    # Verifies: REQ-p00061-A
+    def test_implements_edge_has_line_metadata(self):
+        """IMPLEMENTS edge from CODE node carries impl_start_line and impl_end_line."""
+        req = make_requirement(
+            req_id="REQ-p00001",
+            title="Test Requirement",
+            level="PRD",
+            assertions=[{"label": "A", "text": "Something"}],
+        )
+        code = ParsedContent(
+            content_type="code_ref",
+            start_line=42,
+            end_line=42,
+            raw_text="# Implements: REQ-p00001",
+            parsed_data={
+                "implements": ["REQ-p00001"],
+                "verifies": [],
+                "function_name": "do_something",
+                "class_name": None,
+                "function_line": 30,
+                "function_end_line": 60,
+            },
+        )
+        code.source_context = type("Ctx", (), {"source_id": "src/module.py"})()
+
+        graph = build_graph(req, code)
+
+        # Find the CODE node
+        code_node = graph.find_by_id("code:src/module.py:42")
+        assert code_node is not None
+        assert code_node.get_field("function_line") == 30
+        assert code_node.get_field("function_end_line") == 60
+
+        # Check IMPLEMENTS edge metadata
+        edges = [e for e in code_node.iter_incoming_edges() if e.kind == EdgeKind.IMPLEMENTS]
+        assert len(edges) >= 1
+        edge = edges[0]
+        assert edge.metadata.get("impl_start_line") == 30
+        assert edge.metadata.get("impl_end_line") == 60
+
+    # Verifies: REQ-p00061-A
+    def test_implements_edge_falls_back_to_parse_line(self):
+        """IMPLEMENTS edge falls back to parse_line when function_line is not set."""
+        req = make_requirement(
+            req_id="REQ-p00001",
+            title="Test Requirement",
+            level="PRD",
+        )
+        code = ParsedContent(
+            content_type="code_ref",
+            start_line=15,
+            end_line=15,
+            raw_text="# Implements: REQ-p00001",
+            parsed_data={
+                "implements": ["REQ-p00001"],
+                "verifies": [],
+                "function_name": None,
+                "class_name": None,
+                "function_line": 0,
+                "function_end_line": 0,
+            },
+        )
+        code.source_context = type("Ctx", (), {"source_id": "src/module.py"})()
+
+        graph = build_graph(req, code)
+
+        code_node = graph.find_by_id("code:src/module.py:15")
+        assert code_node is not None
+
+        edges = [e for e in code_node.iter_incoming_edges() if e.kind == EdgeKind.IMPLEMENTS]
+        assert len(edges) >= 1
+        edge = edges[0]
+        # Falls back to parse_line
+        assert edge.metadata.get("impl_start_line") == 15
+        # Falls back to parse_end_line
+        assert edge.metadata.get("impl_end_line") == 15
+
+    # Verifies: REQ-p00061-A
+    def test_implements_edge_to_assertion_has_metadata(self):
+        """IMPLEMENTS edge targeting an assertion still gets line metadata."""
+        req = make_requirement(
+            req_id="REQ-p00001",
+            title="Test Requirement",
+            level="PRD",
+            assertions=[{"label": "A", "text": "Something"}],
+        )
+        code = ParsedContent(
+            content_type="code_ref",
+            start_line=10,
+            end_line=10,
+            raw_text="# Implements: REQ-p00001-A",
+            parsed_data={
+                "implements": ["REQ-p00001-A"],
+                "verifies": [],
+                "function_name": "my_func",
+                "class_name": "MyClass",
+                "function_line": 5,
+                "function_end_line": 25,
+            },
+        )
+        code.source_context = type("Ctx", (), {"source_id": "src/module.py"})()
+
+        graph = build_graph(req, code)
+
+        code_node = graph.find_by_id("code:src/module.py:10")
+        assert code_node is not None
+
+        edges = [e for e in code_node.iter_incoming_edges() if e.kind == EdgeKind.IMPLEMENTS]
+        assert len(edges) >= 1
+        edge = edges[0]
+        assert edge.metadata.get("impl_start_line") == 5
+        assert edge.metadata.get("impl_end_line") == 25

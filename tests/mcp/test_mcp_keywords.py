@@ -73,6 +73,7 @@ def keyword_graph(tmp_path):
 class TestFindByKeywordsMCP:
     """Tests for the find_by_keywords MCP tool."""
 
+    # Implements: REQ-o00060-C
     def test_finds_requirements_by_keyword(self, keyword_graph):
         """Find requirements containing specified keywords."""
         from elspais.mcp.server import _find_by_keywords
@@ -87,6 +88,7 @@ class TestFindByKeywordsMCP:
         assert "REQ-o00001" in result_ids
         assert "REQ-d00001" in result_ids
 
+    # Implements: REQ-d00061-B
     def test_filters_by_multiple_keywords(self, keyword_graph):
         """AND logic: only results with ALL keywords."""
         from elspais.mcp.server import _find_by_keywords
@@ -98,6 +100,7 @@ class TestFindByKeywordsMCP:
 
         assert result["results"][0]["id"] == "REQ-d00001"
 
+    # Implements: REQ-o00060-C
     def test_returns_empty_for_no_match(self, keyword_graph):
         """Returns empty results when no keywords match."""
         from elspais.mcp.server import _find_by_keywords
@@ -108,6 +111,7 @@ class TestFindByKeywordsMCP:
         assert result["results"] == []
         assert result["count"] == 0
 
+    # Implements: REQ-d00061-B
     def test_case_insensitive_search(self, keyword_graph):
         """Keyword search is case-insensitive."""
         from elspais.mcp.server import _find_by_keywords
@@ -117,6 +121,7 @@ class TestFindByKeywordsMCP:
         assert result["success"] is True
         assert len(result["results"]) == 2
 
+    # Implements: REQ-d00064-A
     def test_returns_requirement_summaries(self, keyword_graph):
         """Results include requirement summary info."""
         from elspais.mcp.server import _find_by_keywords
@@ -141,6 +146,7 @@ class TestFindByKeywordsMCP:
 class TestGetAllKeywordsMCP:
     """Tests for the get_all_keywords MCP tool."""
 
+    # Implements: REQ-p00060-C
     def test_returns_all_unique_keywords(self, keyword_graph):
         """Get all unique keywords from the graph."""
         from elspais.mcp.server import _get_all_keywords
@@ -156,6 +162,7 @@ class TestGetAllKeywordsMCP:
         assert "rate" in keywords
         assert "authentication" in keywords
 
+    # Implements: REQ-p00060-C
     def test_returns_sorted_keywords(self, keyword_graph):
         """Keywords are returned in alphabetical order."""
         from elspais.mcp.server import _get_all_keywords
@@ -165,6 +172,7 @@ class TestGetAllKeywordsMCP:
         keywords = result["keywords"]
         assert keywords == sorted(keywords)
 
+    # Implements: REQ-p00060-C
     def test_returns_count(self, keyword_graph):
         """Result includes total keyword count."""
         from elspais.mcp.server import _get_all_keywords
@@ -183,6 +191,7 @@ class TestGetAllKeywordsMCP:
 class TestSearchWithKeywords:
     """Tests for enhanced search() with keyword field."""
 
+    # Implements: REQ-d00061-B
     def test_search_by_keywords_field(self, keyword_graph):
         """Search requirements by keywords field."""
         from elspais.mcp.server import _search
@@ -203,6 +212,7 @@ class TestSearchWithKeywords:
 class TestMCPKeywordToolRegistration:
     """Tests that keyword tools are registered with MCP."""
 
+    # Implements: REQ-p00060-A
     def test_keyword_tools_registered(self, keyword_graph, tmp_path):
         """Keyword tools are registered as MCP tools."""
         pytest.importorskip("mcp")

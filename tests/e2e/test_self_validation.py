@@ -26,11 +26,11 @@ class TestHealthSelfValidation:
     """Validates REQ-p00013-C: health command passes on own repo."""
 
     def test_REQ_p00013_C_health_passes(self):
-        result = run_elspais("health", "--lenient")
+        result = run_elspais("checks", "--lenient")
         assert result.returncode == 0, f"health --lenient failed: {result.stderr}"
 
     def test_REQ_p00013_C_health_json_zero_errors(self):
-        result = run_elspais("health", "--format", "json", "--lenient")
+        result = run_elspais("checks", "--format", "json", "--lenient")
         assert result.returncode == 0
         data = json.loads(result.stdout)
         assert (
@@ -38,7 +38,7 @@ class TestHealthSelfValidation:
         ), f"Expected 0 failures, got {data['summary']['failed']}"
 
     def test_REQ_p00013_C_health_is_healthy(self):
-        result = run_elspais("health", "--format", "json", "--lenient")
+        result = run_elspais("checks", "--format", "json", "--lenient")
         assert result.returncode == 0
         data = json.loads(result.stdout)
         assert data["healthy"] is True, f"Expected healthy=true, got {data!r}"
@@ -115,5 +115,5 @@ class TestSubdirDetection:
 
     def test_REQ_p00013_C_works_from_subdirectory(self):
         subdir = REPO_ROOT / "tests"
-        result = run_elspais("health", "--lenient", cwd=subdir)
+        result = run_elspais("checks", "--lenient", cwd=subdir)
         assert result.returncode == 0, f"health --lenient failed from subdirectory: {result.stderr}"

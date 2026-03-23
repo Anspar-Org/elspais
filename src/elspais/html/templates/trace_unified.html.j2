@@ -77,6 +77,14 @@ body {
             <span class="nav-tab-spacer"></span>
             <button class="nav-tree-action" onclick="expandAllTreeNodes()" title="Expand all">&#9660;</button>
             <button class="nav-tree-action" onclick="collapseAllTreeNodes()" title="Collapse all">&#9654;</button>
+            <select class="nav-tree-action" id="coverage-mode" onchange="setCoverageMode(this.value)" title="Coverage indicator mode" style="font-size:0.7rem;padding:1px 2px;">
+                <option value="all">Cov: All</option>
+                <option value="impl">Cov: Impl</option>
+                <option value="tested">Cov: Tested</option>
+                <option value="verified">Cov: Verified</option>
+                <option value="uat_cov">Cov: Validated</option>
+                <option value="uat_ver">Cov: Accepted</option>
+            </select>
         </div>
         <div class="nav-tree-container" id="nav-tree-container">
             <div style="padding:20px;color:#adb5bd;text-align:center;font-size:0.85rem;">Loading tree...</div>
@@ -90,6 +98,13 @@ body {
     <div class="card-stack-panel" id="card-stack-panel">
         <div class="card-stack-header">
             <span id="card-stack-count">No cards open</span>
+            <select id="assertion-badge-mode" onchange="setAssertionBadgeMode(this.value)" title="Assertion badge display mode" style="font-size:0.7rem;padding:1px 2px;">
+                <option value="full">Badges: Full</option>
+                <option value="abbrev" selected>Badges: Abbrev</option>
+                <option value="dots">Badges: Dots</option>
+            </select>
+            <button class="btn edit-only" onclick="onAddRequirement()" style="padding:3px 8px;font-size:0.75rem;">+ REQ</button>
+            <button class="btn edit-only" onclick="onAddJourney()" style="padding:3px 8px;font-size:0.75rem;">+ JNY</button>
             <button class="btn" onclick="closeAllCards()" style="padding:3px 8px;font-size:0.75rem;">Close All</button>
         </div>
         <div class="card-stack-body" id="card-stack-body">
@@ -168,6 +183,7 @@ const editState = {
         levelPrd: false,
         levelOps: false,
         levelDev: false,
+        unsaved: false,
         uncommitted: false,
         changed: false,
         main: false,
@@ -177,14 +193,15 @@ const editState = {
         hiddenStatuses: new Set({{ default_hidden_statuses | map('lower') | list | tojson }})
     },
     knownRepos: [],
-    filterStatus: '',
     filterCoverage: '',
     filterText: '',
     textMatchIds: null,
     fontSize: 14,
     theme: 'system',
     toolbarHidden: false,
-    isMain: false
+    isMain: false,
+    coverageMode: 'all',
+    assertionBadgeMode: 'abbrev'
 };
 // Apply theme early to prevent flash of wrong theme
 (function() {
@@ -298,7 +315,7 @@ function toggleToolbar() {
     var toolbar = document.getElementById('edit-toolbar');
     var btn = document.getElementById('filter-toggle-btn');
     if (toolbar) toolbar.classList.toggle('toolbar-hidden', editState.toolbarHidden);
-    if (btn) btn.classList.toggle('dimmed', editState.toolbarHidden);
+    if (btn) btn.classList.toggle('active', !editState.toolbarHidden);
     saveState();
 }
 
@@ -381,26 +398,23 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!Array.isArray(editState.activeFilters.hiddenRepos)) {
                 editState.activeFilters.hiddenRepos = [];
             }
-            // Update toolbar git filter buttons (null-guard)
+            // Update toolbar focus filter buttons (null-guard)
+            var btnUnsaved = document.getElementById('edit-btn-unsaved');
             var btnUncommitted = document.getElementById('edit-btn-uncommitted');
             var btnChanged = document.getElementById('edit-btn-changed');
+            if (btnUnsaved) btnUnsaved.classList.toggle('active', !!editState.activeFilters.unsaved);
             if (btnUncommitted) btnUncommitted.classList.toggle('active', !!editState.activeFilters.uncommitted);
             if (btnChanged) btnChanged.classList.toggle('active', !!editState.activeFilters.changed);
             // Update checkboxes (null-guard)
             var leafCb = document.getElementById('edit-toggle-leaf');
             if (leafCb) leafCb.checked = !!editState.activeFilters.leaf;
-            // Sync status filter checkboxes with restored hiddenStatuses
-            document.querySelectorAll('[id^="edit-toggle-status-"]').forEach(function(cb) {
-                var statusKey = cb.id.replace('edit-toggle-status-', '');
-                cb.checked = editState.activeFilters.hiddenStatuses.has(statusKey);
+            // Sync status filter badge buttons with restored hiddenStatuses
+            document.querySelectorAll('.status-filter-btn').forEach(function(btn) {
+                var statusKey = btn.getAttribute('data-status');
+                btn.classList.toggle('on', !editState.activeFilters.hiddenStatuses.has(statusKey));
             });
             var hideFilteredCb = document.getElementById('edit-toggle-hide-filtered');
             if (hideFilteredCb) hideFilteredCb.checked = !!editState.activeFilters.hideFiltered;
-        }
-        if (saved.filterStatus) {
-            editState.filterStatus = saved.filterStatus;
-            var filterStatusSel = document.getElementById('edit-filter-status');
-            if (filterStatusSel) filterStatusSel.value = saved.filterStatus;
         }
         if (saved.filterCoverage) {
             editState.filterCoverage = saved.filterCoverage;
@@ -435,7 +449,7 @@ document.addEventListener('DOMContentLoaded', function() {
             var tb = document.getElementById('edit-toolbar');
             var ftb = document.getElementById('filter-toggle-btn');
             if (tb) tb.classList.add('toolbar-hidden');
-            if (ftb) ftb.classList.add('dimmed');
+            if (ftb) ftb.classList.remove('active');
         }
         // Restore panel widths
         if (saved.navPanelWidth) {

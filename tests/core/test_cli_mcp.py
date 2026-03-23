@@ -32,6 +32,7 @@ class TestMcpInstallLocal:
 
     @patch("subprocess.run")
     @patch("shutil.which")
+    # Implements: REQ-d00214-A
     def test_mcp_install_local(self, mock_which, mock_run):
         mock_which.side_effect = lambda name: f"/usr/bin/{name}"
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
@@ -56,6 +57,7 @@ class TestMcpInstallLocal:
 
     @patch("subprocess.run")
     @patch("shutil.which")
+    # Implements: REQ-d00214-A
     def test_mcp_install_local_prints_tip(self, mock_which, mock_run, capsys):
         mock_which.side_effect = lambda name: f"/usr/bin/{name}"
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
@@ -71,6 +73,7 @@ class TestMcpInstallGlobal:
 
     @patch("subprocess.run")
     @patch("shutil.which")
+    # Implements: REQ-d00214-A
     def test_mcp_install_global(self, mock_which, mock_run):
         mock_which.side_effect = lambda name: f"/usr/bin/{name}"
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
@@ -84,6 +87,7 @@ class TestMcpInstallGlobal:
 
     @patch("subprocess.run")
     @patch("shutil.which")
+    # Implements: REQ-d00214-A
     def test_mcp_install_global_no_tip(self, mock_which, mock_run, capsys):
         mock_which.side_effect = lambda name: f"/usr/bin/{name}"
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
@@ -100,6 +104,7 @@ class TestMcpUninstall:
 
     @patch("subprocess.run")
     @patch("shutil.which")
+    # Implements: REQ-d00214-B
     def test_mcp_uninstall(self, mock_which, mock_run):
         mock_which.side_effect = lambda name: f"/usr/bin/{name}"
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
@@ -112,6 +117,7 @@ class TestMcpUninstall:
 
     @patch("subprocess.run")
     @patch("shutil.which")
+    # Implements: REQ-d00214-B
     def test_mcp_uninstall_global(self, mock_which, mock_run):
         mock_which.side_effect = lambda name: f"/usr/bin/{name}"
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
@@ -131,6 +137,7 @@ class TestMcpUninstall:
 
     @patch("subprocess.run")
     @patch("shutil.which")
+    # Implements: REQ-d00214-B
     def test_mcp_uninstall_prints_message(self, mock_which, mock_run, capsys):
         mock_which.side_effect = lambda name: f"/usr/bin/{name}"
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
@@ -145,6 +152,7 @@ class TestMcpInstallErrors:
     """test_mcp_install_claude_not_found / elspais_not_found."""
 
     @patch("shutil.which")
+    # Implements: REQ-d00214-C
     def test_mcp_install_claude_not_found(self, mock_which, capsys):
         mock_which.return_value = None
 
@@ -155,6 +163,7 @@ class TestMcpInstallErrors:
         assert "'claude' not found" in captured.err
 
     @patch("shutil.which")
+    # Implements: REQ-d00214-D
     def test_mcp_install_elspais_not_found(self, mock_which, capsys):
         def which_side_effect(name):
             if name == "claude":
@@ -171,6 +180,7 @@ class TestMcpInstallErrors:
 
     @patch("subprocess.run")
     @patch("shutil.which")
+    # Implements: REQ-d00214-G
     def test_mcp_install_claude_command_fails(self, mock_which, mock_run, capsys):
         mock_which.side_effect = lambda name: f"/usr/bin/{name}"
         mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="some error")
@@ -182,6 +192,7 @@ class TestMcpInstallErrors:
         assert "some error" in captured.err
 
     @patch("shutil.which")
+    # Implements: REQ-d00214-C
     def test_mcp_uninstall_claude_not_found(self, mock_which, capsys):
         mock_which.return_value = None
 
@@ -196,18 +207,21 @@ class TestDesktopConfigPath:
     """test_desktop_config_path — verifies platform detection."""
 
     @patch("platform.system", return_value="Linux")
+    # Implements: REQ-d00214-E
     def test_linux_path(self, _mock):
         path = _claude_desktop_config_path()
         assert path is not None
         assert ".config/Claude/claude_desktop_config.json" in str(path)
 
     @patch("platform.system", return_value="Darwin")
+    # Implements: REQ-d00214-E
     def test_macos_path(self, _mock):
         path = _claude_desktop_config_path()
         assert path is not None
         assert "Application Support/Claude/claude_desktop_config.json" in str(path)
 
     @patch("platform.system", return_value="FreeBSD")
+    # Implements: REQ-d00214-E
     def test_unsupported_returns_none(self, _mock):
         assert _claude_desktop_config_path() is None
 
@@ -215,6 +229,7 @@ class TestDesktopConfigPath:
 class TestMcpInstallDesktop:
     """test_mcp_install_desktop — verifies config file creation/update."""
 
+    # Implements: REQ-d00214-F
     def test_creates_config_from_scratch(self, tmp_path, capsys):
         config_file = tmp_path / "claude_desktop_config.json"
         with patch("elspais.cli._claude_desktop_config_path", return_value=config_file):
@@ -227,6 +242,7 @@ class TestMcpInstallDesktop:
         captured = capsys.readouterr()
         assert "registered" in captured.out
 
+    # Implements: REQ-d00214-F
     def test_updates_existing_config(self, tmp_path):
         config_file = tmp_path / "claude_desktop_config.json"
         existing = {"mcpServers": {"other-server": {"command": "other"}}, "extra": True}
@@ -243,6 +259,7 @@ class TestMcpInstallDesktop:
         # Adds elspais
         assert data["mcpServers"]["elspais"]["command"] == "elspais"
 
+    # Implements: REQ-d00214-F
     def test_creates_parent_dirs(self, tmp_path):
         config_file = tmp_path / "deep" / "nested" / "claude_desktop_config.json"
         with patch("elspais.cli._claude_desktop_config_path", return_value=config_file):
@@ -251,6 +268,7 @@ class TestMcpInstallDesktop:
         assert result == 0
         assert config_file.exists()
 
+    # Implements: REQ-d00214-E
     def test_unsupported_platform(self, capsys):
         with patch("elspais.cli._claude_desktop_config_path", return_value=None):
             result = _mcp_install_desktop()
@@ -262,6 +280,7 @@ class TestMcpInstallDesktop:
 class TestMcpUninstallDesktop:
     """test_mcp_uninstall_desktop — verifies config entry removal."""
 
+    # Implements: REQ-d00214-F
     def test_removes_entry(self, tmp_path, capsys):
         config_file = tmp_path / "claude_desktop_config.json"
         data = {"mcpServers": {"elspais": {"command": "elspais"}, "other": {"command": "x"}}}
@@ -276,6 +295,7 @@ class TestMcpUninstallDesktop:
         assert "other" in updated["mcpServers"]
         assert "removed" in capsys.readouterr().out
 
+    # Implements: REQ-d00214-F
     def test_missing_config_file(self, tmp_path, capsys):
         config_file = tmp_path / "nonexistent.json"
         with patch("elspais.cli._claude_desktop_config_path", return_value=config_file):
@@ -284,6 +304,7 @@ class TestMcpUninstallDesktop:
         assert result == 0
         assert "not found" in capsys.readouterr().out
 
+    # Implements: REQ-d00214-F
     def test_not_registered(self, tmp_path, capsys):
         config_file = tmp_path / "claude_desktop_config.json"
         config_file.write_text(json.dumps({"mcpServers": {}}))
@@ -306,6 +327,7 @@ class TestMcpInstallE2E:
     capture and causes all subsequent test output to vanish).
     """
 
+    # Implements: REQ-d00214-A
     def test_e2e_install_and_uninstall(self):
         result = subprocess.run(
             [

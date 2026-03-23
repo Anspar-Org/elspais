@@ -19,7 +19,7 @@ even when working from a worktree in a different directory.
 
 Use `-v` to see which roots were detected:
 
-  $ elspais health -v
+  $ elspais -v health
   Working from repository root: /home/dev/worktrees/feature-x
   Canonical root (main repo): /home/dev/my-project
 

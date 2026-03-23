@@ -151,6 +151,7 @@ class TestRenderDispatch:
         result = render_node(rem)
         assert result == "hello world"
 
+    # Implements: REQ-d00131-D
     def test_render_remainder_kind_raises(self):
         """render_node() should handle all known kinds gracefully."""
         from elspais.graph.render import render_node
@@ -527,4 +528,107 @@ class TestNormalizedHashing:
 
         assert compute_normalized_hash(assertions_clean) == compute_normalized_hash(
             assertions_extra_spaces
+        )
+
+
+class TestRenderRoundTrip:
+    """Validates REQ-d00131-I: render_file produces line-identical output for unmutated files."""
+
+    @pytest.fixture
+    def built_graph(self, tmp_path):
+        """Build a graph from a spec file with known content."""
+        from elspais.graph.factory import build_graph
+
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        (tmp_path / ".elspais.toml").write_text(
+            "version = 3\n"
+            '[project]\nname = "test"\nnamespace = "REQ"\n'
+            '[levels.prd]\nrank = 1\nletter = "p"\n'
+            '[levels.dev]\nrank = 2\nletter = "d"\nimplements = ["prd"]\n'
+            '[id-patterns]\ncanonical = "{namespace}-{level.letter}{component}"\n'
+            '[id-patterns.component]\nstyle = "numeric"\ndigits = 5\n'
+            "leading_zeros = true\n"
+            '[id-patterns.assertions]\nlabel_style = "uppercase"\nmax_count = 26\n'
+            '[scanning.spec]\ndirectories = ["spec"]\n'
+            "[rules.format]\nrequire_hash = true\nrequire_assertions = true\n"
+        )
+        content = (
+            "# Test Spec\n"
+            "\n"
+            "Introduction paragraph.\n"
+            "\n"
+            "---\n"
+            "\n"
+            "## REQ-p00001: First Requirement\n"
+            "\n"
+            "**Level**: prd | **Status**: Active\n"
+            "\n"
+            "Body text here.\n"
+            "\n"
+            "## Assertions\n"
+            "\n"
+            "A. SHALL do X.\n"
+            "\n"
+            "B. SHALL do Y.\n"
+            "\n"
+            "*End* *First Requirement* | **Hash**: placeholder\n"
+            "\n"
+            "---\n"
+            "\n"
+            "## REQ-p00002: Second Requirement\n"
+            "\n"
+            "**Level**: prd | **Status**: Draft\n"
+            "\n"
+            "Another body.\n"
+            "\n"
+            "## Assertions\n"
+            "\n"
+            "A. SHALL do Z.\n"
+            "\n"
+            "*End* *Second Requirement* | **Hash**: placeholder\n"
+        )
+        (spec_dir / "test.md").write_text(content)
+        graph = build_graph(repo_root=tmp_path)
+        return graph, spec_dir / "test.md", content
+
+    # Implements: REQ-d00131-I
+    def test_render_roundtrip_line_identical(self, built_graph):
+        """Rendered output matches original file line-by-line (except hash/canonical header)."""
+        from elspais.graph.render import render_file
+
+        graph, spec_file, original_content = built_graph
+        original_lines = original_content.split("\n")
+
+        # Find the FILE node for this spec file
+        file_node = None
+        for root in graph.iter_roots(NodeKind.FILE):
+            rel_path = root.get_field("relative_path")
+            if rel_path and rel_path.endswith("test.md"):
+                file_node = root
+                break
+        assert file_node is not None, "FILE node not found"
+
+        rendered = render_file(file_node)
+        rendered_lines = rendered.split("\n")
+
+        # Compare line by line, allowing canonical header capitalization
+        # and hash differences (the render computes the real hash)
+        for i, (orig, rend) in enumerate(
+            zip(original_lines, rendered_lines, strict=False), start=1
+        ):
+            # Skip hash line comparison (render computes canonical hash)
+            if orig.startswith("*End*"):
+                continue
+            # Allow canonical metadata capitalization (prd vs PRD)
+            if orig.startswith("**Level**") or orig.startswith("**Status**"):
+                continue
+            assert orig == rend, (
+                f"Line {i} differs:\n" f"  original: {orig!r}\n" f"  rendered: {rend!r}"
+            )
+
+        # Line count should match (within 1 for trailing newline)
+        assert abs(len(original_lines) - len(rendered_lines)) <= 1, (
+            f"Line count mismatch: original={len(original_lines)}, "
+            f"rendered={len(rendered_lines)}"
         )

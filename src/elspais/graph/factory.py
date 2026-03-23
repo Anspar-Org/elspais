@@ -438,6 +438,18 @@ def build_graph(
             )
             file_nodes[resolved] = fn
             builder.register_file_node(fn)
+        else:
+            # Multi-role: track additional file types on existing node (stored as
+            # string values for JSON serializability)
+            fn = file_nodes[resolved]
+            existing_types = fn.get_field("file_types")
+            if existing_types is None:
+                first = fn.get_field("file_type")
+                existing_types = [first.value if isinstance(first, FileType) else first]
+            type_val = file_type.value if isinstance(file_type, FileType) else file_type
+            if type_val not in existing_types:
+                existing_types.append(type_val)
+            fn.set_field("file_types", existing_types)
         return file_nodes[resolved]
 
     for spec_dir in spec_dirs:
@@ -602,6 +614,48 @@ def build_graph(
                             builder.add_parsed_content(parsed_content, file_node=fn)
 
     graph = builder.build()
+
+    # 6c. Scan coverage files and annotate FILE nodes
+    coverage_patterns = list(typed_config.scanning.coverage.file_patterns)
+    if coverage_patterns:
+        from elspais.graph.parsers.results.coverage_json import CoverageJsonParser
+        from elspais.graph.parsers.results.lcov import LcovParser
+
+        lcov_parser = LcovParser()
+        cov_json_parser = CoverageJsonParser()
+
+        for file_pattern in coverage_patterns:
+            coverage_dirs = list(typed_config.scanning.coverage.directories)
+            if not coverage_dirs:
+                coverage_dirs = ["."]
+            for cov_dir in coverage_dirs:
+                matched_files = glob(
+                    str(repo_root / cov_dir / file_pattern), recursive=True
+                )
+                for file_path in matched_files:
+                    path = Path(file_path)
+                    if not path.is_file():
+                        continue
+
+                    # Detect format
+                    if lcov_parser.can_parse(path):
+                        parser = lcov_parser
+                    elif cov_json_parser.can_parse(path):
+                        parser = cov_json_parser
+                    else:
+                        continue
+
+                    content = path.read_text(encoding="utf-8")
+                    parsed = parser.parse(content, str(path))
+
+                    # Annotate existing FILE nodes
+                    for source_file, data in parsed.items():
+                        file_id = f"file:{source_file}"
+                        node = graph.find_by_id(file_id)
+                        if node is None:
+                            continue
+                        node.set_field("line_coverage", data["line_coverage"])
+                        node.set_field("executable_lines", data["executable_lines"])
 
     # Link TEST nodes to CODE nodes via import analysis.
     # This creates TEST→CODE edges that enable transitive coverage:

@@ -741,6 +741,116 @@ class FederatedGraph:
         return result
 
     # ─────────────────────────────────────────────────────────────────────────
+    # Journey Mutations
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def update_journey_field(
+        self,
+        node_id: str,
+        field_name: str,
+        value: str,
+    ) -> MutationEntry:
+        """Update a structured field on a USER_JOURNEY node.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[node_id]
+        result = self._graph_for(node_id).update_journey_field(node_id, field_name, value)
+        self._record_mutation(repo_name, result)
+        return result
+
+    def update_journey_section(
+        self,
+        node_id: str,
+        section_name: str,
+        new_name: str | None = None,
+        new_content: str | None = None,
+    ) -> MutationEntry:
+        """Update a journey section by name.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[node_id]
+        result = self._graph_for(node_id).update_journey_section(
+            node_id,
+            section_name,
+            new_name,
+            new_content,
+        )
+        self._record_mutation(repo_name, result)
+        return result
+
+    def add_journey_section(
+        self,
+        node_id: str,
+        name: str,
+        content: str = "",
+    ) -> MutationEntry:
+        """Append a new section to a journey.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[node_id]
+        result = self._graph_for(node_id).add_journey_section(node_id, name, content)
+        self._record_mutation(repo_name, result)
+        return result
+
+    def delete_journey_section(
+        self,
+        node_id: str,
+        section_name: str,
+    ) -> MutationEntry:
+        """Remove a section from a journey by name.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[node_id]
+        result = self._graph_for(node_id).delete_journey_section(node_id, section_name)
+        self._record_mutation(repo_name, result)
+        return result
+
+    def add_journey(
+        self,
+        journey_id: str,
+        title: str,
+        file_id: str,
+        target_repo: str | None = None,
+    ) -> MutationEntry:
+        """Create a new USER_JOURNEY node.
+
+        # Strategy: special — target_repo specifies destination
+        """
+        repo_name = target_repo or self._root_repo
+        entry = self._repos.get(repo_name)
+        if entry is None or entry.graph is None:
+            raise KeyError(f"Repo '{repo_name}' not found or unavailable")
+        result = entry.graph.add_journey(journey_id, title, file_id)
+        self._ownership[journey_id] = repo_name
+        self._record_mutation(repo_name, result)
+        return result
+
+    def delete_journey(self, node_id: str) -> MutationEntry:
+        """Delete a USER_JOURNEY node. Removes from ownership.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[node_id]
+        result = self._graph_for(node_id).delete_journey(node_id)
+        del self._ownership[node_id]
+        self._record_mutation(repo_name, result)
+        return result
+
+    def reconstruct_journey_body(self, node_id: str) -> MutationEntry:
+        """Reconstruct journey body from structured fields.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[node_id]
+        result = self._graph_for(node_id).reconstruct_journey_body(node_id)
+        self._record_mutation(repo_name, result)
+        return result
+
+    # ─────────────────────────────────────────────────────────────────────────
     # Special Mutations
     # ─────────────────────────────────────────────────────────────────────────
 

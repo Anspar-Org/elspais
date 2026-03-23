@@ -6,6 +6,7 @@ from elspais.graph.parsers.results.junit_xml import JUnitXMLParser
 class TestJUnitXMLParserBasic:
     """Basic tests for JUnitXMLParser."""
 
+    # Implements: REQ-d00082-K
     def test_parse_passing_test(self):
         """Parses a passing test case."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -21,6 +22,7 @@ class TestJUnitXMLParserBasic:
         assert results[0]["name"] == "test_login_REQ_p00001"
         assert "REQ-p00001" in results[0]["verifies"]
 
+    # Implements: REQ-d00082-K
     def test_parse_failing_test(self):
         """Parses a failing test case."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -37,6 +39,7 @@ class TestJUnitXMLParserBasic:
         assert results[0]["status"] == "failed"
         assert "AssertionError" in results[0]["message"]
 
+    # Implements: REQ-d00082-K
     def test_parse_skipped_test(self):
         """Parses a skipped test case."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -52,6 +55,7 @@ class TestJUnitXMLParserBasic:
         assert len(results) == 1
         assert results[0]["status"] == "skipped"
 
+    # Implements: REQ-d00082-K
     def test_parse_error_test(self):
         """Parses a test with error."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -67,6 +71,7 @@ class TestJUnitXMLParserBasic:
         assert len(results) == 1
         assert results[0]["status"] == "error"
 
+    # Implements: REQ-d00082-K
     def test_parse_multiple_tests(self):
         """Parses multiple test cases."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -85,6 +90,7 @@ class TestJUnitXMLParserBasic:
 class TestJUnitXMLParserReqExtraction:
     """Tests for requirement ID extraction."""
 
+    # Implements: REQ-d00082-G
     def test_extracts_req_from_name(self):
         """Extracts REQ ID from test name."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -97,6 +103,7 @@ class TestJUnitXMLParserReqExtraction:
 
         assert "REQ-p00001" in results[0]["verifies"]
 
+    # Implements: REQ-d00082-G
     def test_extracts_multiple_reqs(self):
         """Extracts multiple REQ IDs from test name."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -110,6 +117,7 @@ class TestJUnitXMLParserReqExtraction:
         assert "REQ-p00001" in results[0]["verifies"]
         assert "REQ-o00002" in results[0]["verifies"]
 
+    # Implements: REQ-d00082-G
     def test_extracts_assertion_refs(self):
         """Extracts assertion references like REQ-p00001-A."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -122,6 +130,7 @@ class TestJUnitXMLParserReqExtraction:
 
         assert "REQ-p00001-A" in results[0]["verifies"]
 
+    # Implements: REQ-d00082-K
     def test_generates_test_id(self):
         """Generates stable test_id from classname and name."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -134,6 +143,7 @@ class TestJUnitXMLParserReqExtraction:
 
         assert results[0]["test_id"] == "test:tests/test_auth.py::TestLogin::test_user_can_login"
 
+    # Implements: REQ-d00082-K
     def test_generates_test_id_without_classname(self):
         """Generates test_id even without classname."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -151,6 +161,7 @@ class TestJUnitXMLParserReqExtraction:
 class TestJUnitXMLParserEdgeCases:
     """Edge case tests for JUnitXMLParser."""
 
+    # Implements: REQ-d00082-K
     def test_invalid_xml_returns_empty(self):
         """Returns empty list for invalid XML."""
         parser = JUnitXMLParser()
@@ -159,6 +170,7 @@ class TestJUnitXMLParserEdgeCases:
 
         assert results == []
 
+    # Implements: REQ-d00082-K
     def test_empty_testsuite(self):
         """Handles empty testsuite."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -170,6 +182,7 @@ class TestJUnitXMLParserEdgeCases:
 
         assert results == []
 
+    # Implements: REQ-d00082-K
     def test_testsuites_wrapper(self):
         """Handles testsuites wrapper element."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -191,6 +204,7 @@ class TestJUnitXMLParserEdgeCases:
 class TestJUnitXMLParserCanParse:
     """Tests for can_parse method."""
 
+    # Implements: REQ-d00082-K
     def test_can_parse_junit_xml(self):
         """Returns True for JUnit XML files."""
         from pathlib import Path
@@ -201,6 +215,7 @@ class TestJUnitXMLParserCanParse:
         assert parser.can_parse(Path("test-results.xml")) is True
         assert parser.can_parse(Path("results.xml")) is True
 
+    # Implements: REQ-d00082-K
     def test_cannot_parse_non_xml(self):
         """Returns False for non-XML files."""
         from pathlib import Path

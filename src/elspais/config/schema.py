@@ -55,11 +55,42 @@ class FormatConfig(_StrictModel):
     require_rationale: bool | None = None
     allowed_statuses: list[str] | None = None
     status_roles: dict[str, list[str] | str] | None = None
+    no_assertions_severity: str | None = None
+
+
+class CoverageSeverityConfig(_StrictModel):
+    """Severity mapping for a single coverage dimension's tier states.
+
+    Each tier maps to a severity: 'ok', 'info', 'warning', or 'error'.
+    """
+
+    full_direct: str = "ok"
+    full_indirect: str = "info"
+    partial: str = "warning"
+    none: str = "error"
+    failing: str = "error"
+
+
+def _uat_severity() -> CoverageSeverityConfig:
+    return CoverageSeverityConfig(none="info", partial="info")
+
+
+class CoverageConfig(_StrictModel):
+    """Coverage severity configuration for all 5 dimensions."""
+
+    implemented: CoverageSeverityConfig = Field(default_factory=CoverageSeverityConfig)
+    tested: CoverageSeverityConfig = Field(default_factory=CoverageSeverityConfig)
+    verified: CoverageSeverityConfig = Field(
+        default_factory=lambda: CoverageSeverityConfig(none="warning")
+    )
+    uat_coverage: CoverageSeverityConfig = Field(default_factory=_uat_severity)
+    uat_verified: CoverageSeverityConfig = Field(default_factory=_uat_severity)
 
 
 class RulesConfig(_StrictModel):
     hierarchy: HierarchyConfig = Field(default_factory=HierarchyConfig)
     format: FormatConfig = Field(default_factory=FormatConfig)
+    coverage: CoverageConfig = Field(default_factory=CoverageConfig)
     content_rules: list[str] | None = None
 
 
@@ -117,6 +148,12 @@ class ResultScanningConfig(ScanningKindConfig):
     run_meta_file: str = ""
 
 
+class CoverageScanningConfig(ScanningKindConfig):
+    """Configuration for code coverage report scanning."""
+
+    directories: list[str] = Field(default_factory=lambda: ["."])
+
+
 class JourneyScanningConfig(ScanningKindConfig):
     directories: list[str] = Field(default_factory=lambda: ["spec"])
     file_patterns: list[str] = Field(default_factory=lambda: ["*.md"])
@@ -134,6 +171,7 @@ class ScanningConfig(_StrictModel):
     code: CodeScanningConfig = Field(default_factory=CodeScanningConfig)
     test: TestScanningConfig = Field(default_factory=TestScanningConfig)
     result: ResultScanningConfig = Field(default_factory=ResultScanningConfig)
+    coverage: CoverageScanningConfig = Field(default_factory=CoverageScanningConfig)
     journey: JourneyScanningConfig = Field(default_factory=JourneyScanningConfig)
     docs: DocsScanningConfig = Field(default_factory=DocsScanningConfig)
 
@@ -194,6 +232,11 @@ class ElspaisConfig(_StrictModel):
     changelog: ChangelogConfig = Field(default_factory=ChangelogConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
     associates: dict[str, AssociateEntryConfig] = Field(default_factory=dict)
+    stats: str | None = Field(default=None, description="File path for MCP tool usage statistics")
+    cli_ttl: int = Field(
+        default=30,
+        description="CLI daemon TTL in minutes (>0=auto-start, 0=disabled, <0=no timeout)",
+    )
     # Implements: REQ-d00208-C
     model_config = ConfigDict(
         extra="forbid",

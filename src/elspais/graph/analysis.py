@@ -267,7 +267,8 @@ def _count_uncovered_descendants(
 
         if not included_children and nid != node_id:
             # Leaf node — check coverage
-            coverage = node.get_metric("coverage_pct", 0)
+            rollup = node.get_metric("rollup_metrics")
+            coverage = rollup.implemented.indirect_pct if rollup else 0
             if coverage == 0:
                 count += 1
         else:
@@ -338,7 +339,7 @@ def analyze_foundations(
     Assertions are included in computation (for uncovered_dependents counting)
     but filtered from ranked output -- only REQUIREMENT nodes appear in results.
     Descendant counts are computed internally alongside the other metrics.
-    Coverage is read via node.get_metric("coverage_pct", 0).
+    Coverage is read via node.get_metric("referenced_pct", 0).
     """
     from elspais.config.status_roles import StatusRolesConfig
 

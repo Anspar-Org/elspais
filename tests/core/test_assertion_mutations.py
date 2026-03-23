@@ -100,6 +100,7 @@ class TestRenameAssertion:
         node = graph.find_by_id("REQ-p00001-D")
         assert node.get_field("label") == "D"
 
+    # Implements: REQ-o00062-B
     def test_rename_not_found(self):
         """Renaming non-existent assertion raises KeyError."""
         graph = build_graph_with_assertions()
@@ -107,6 +108,7 @@ class TestRenameAssertion:
         with pytest.raises(KeyError, match="not found"):
             graph.rename_assertion("REQ-p00001-Z", "X")
 
+    # Implements: REQ-o00062-B
     def test_rename_not_assertion(self):
         """Renaming a non-assertion node raises ValueError."""
         graph = build_graph_with_assertions()
@@ -114,6 +116,7 @@ class TestRenameAssertion:
         with pytest.raises(ValueError, match="not an assertion"):
             graph.rename_assertion("REQ-p00001", "D")
 
+    # Implements: REQ-o00062-B
     def test_rename_conflict(self):
         """Renaming to existing assertion raises ValueError."""
         graph = build_graph_with_assertions()
@@ -121,6 +124,7 @@ class TestRenameAssertion:
         with pytest.raises(ValueError, match="already exists"):
             graph.rename_assertion("REQ-p00001-A", "B")
 
+    # Implements: REQ-o00062-B
     def test_rename_updates_edges(self):
         """Renaming updates edges with assertion_targets."""
         graph = build_graph_with_child_implementing_assertion()
@@ -141,6 +145,7 @@ class TestRenameAssertion:
         assert any("D" in e.assertion_targets for e in edges)
         assert not any("A" in e.assertion_targets for e in edges)
 
+    # Implements: REQ-o00062-E
     def test_rename_affects_hash(self):
         """Rename operation is marked as affecting hash."""
         graph = build_graph_with_assertions()
@@ -148,6 +153,7 @@ class TestRenameAssertion:
         entry = graph.rename_assertion("REQ-p00001-A", "D")
         assert entry.affects_hash is True
 
+    # Implements: REQ-o00062-E
     def test_rename_logs_mutation(self):
         """Rename operation is logged."""
         graph = build_graph_with_assertions()
@@ -159,6 +165,7 @@ class TestRenameAssertion:
         entry = graph.mutation_log.last()
         assert entry.operation == "rename_assertion"
 
+    # Implements: REQ-o00062-G
     def test_rename_undo(self):
         """Undo restores original assertion ID and label."""
         graph = build_graph_with_assertions()
@@ -177,6 +184,7 @@ class TestRenameAssertion:
         # Hash restored (if original was None, it should be None again)
         assert graph.find_by_id("REQ-p00001").get_field("hash") == original_hash
 
+    # Implements: REQ-o00062-G
     def test_rename_undo_restores_edges(self):
         """Undo also restores edge assertion_targets."""
         graph = build_graph_with_child_implementing_assertion()
@@ -206,6 +214,7 @@ class TestUpdateAssertion:
         node = graph.find_by_id("REQ-p00001-A")
         assert node.get_label() == "Updated assertion text"
 
+    # Implements: REQ-o00062-B
     def test_update_not_found(self):
         """Updating non-existent assertion raises KeyError."""
         graph = build_graph_with_assertions()
@@ -213,6 +222,7 @@ class TestUpdateAssertion:
         with pytest.raises(KeyError, match="not found"):
             graph.update_assertion("REQ-p00001-Z", "New text")
 
+    # Implements: REQ-o00062-B
     def test_update_not_assertion(self):
         """Updating a non-assertion node raises ValueError."""
         graph = build_graph_with_assertions()
@@ -220,6 +230,7 @@ class TestUpdateAssertion:
         with pytest.raises(ValueError, match="not an assertion"):
             graph.update_assertion("REQ-p00001", "New text")
 
+    # Implements: REQ-o00062-E
     def test_update_changes_hash(self):
         """Updating assertion text changes parent hash."""
         graph = build_graph_with_assertions()
@@ -231,6 +242,7 @@ class TestUpdateAssertion:
         new_hash = parent.get_field("hash")
         assert new_hash != old_hash
 
+    # Implements: REQ-o00062-E
     def test_update_affects_hash(self):
         """Update operation is marked as affecting hash."""
         graph = build_graph_with_assertions()
@@ -238,6 +250,7 @@ class TestUpdateAssertion:
         entry = graph.update_assertion("REQ-p00001-A", "New text")
         assert entry.affects_hash is True
 
+    # Implements: REQ-o00062-E
     def test_update_logs_mutation(self):
         """Update operation is logged."""
         graph = build_graph_with_assertions()
@@ -248,6 +261,7 @@ class TestUpdateAssertion:
         entry = graph.mutation_log.last()
         assert entry.operation == "update_assertion"
 
+    # Implements: REQ-o00062-G
     def test_update_undo(self):
         """Undo restores original text and hash."""
         graph = build_graph_with_assertions()
@@ -284,6 +298,7 @@ class TestAddAssertion:
         assert node.get_label() == "Fourth assertion"
         assert node.get_field("label") == "D"
 
+    # Implements: REQ-o00062-B
     def test_add_links_to_parent(self):
         """Added assertion is linked to parent requirement."""
         graph = build_graph_with_assertions()
@@ -296,6 +311,7 @@ class TestAddAssertion:
         assert parent.has_child(child)
         assert child.has_parent(parent)
 
+    # Implements: REQ-o00062-B
     def test_add_not_found(self):
         """Adding to non-existent requirement raises KeyError."""
         graph = build_graph_with_assertions()
@@ -303,6 +319,7 @@ class TestAddAssertion:
         with pytest.raises(KeyError, match="not found"):
             graph.add_assertion("REQ-nonexistent", "A", "Text")
 
+    # Implements: REQ-o00062-B
     def test_add_not_requirement(self):
         """Adding to a non-requirement node raises ValueError."""
         graph = build_graph_with_assertions()
@@ -310,6 +327,7 @@ class TestAddAssertion:
         with pytest.raises(ValueError, match="not a requirement"):
             graph.add_assertion("REQ-p00001-A", "X", "Text")
 
+    # Implements: REQ-o00062-B
     def test_add_duplicate(self):
         """Adding duplicate assertion raises ValueError."""
         graph = build_graph_with_assertions()
@@ -317,6 +335,7 @@ class TestAddAssertion:
         with pytest.raises(ValueError, match="already exists"):
             graph.add_assertion("REQ-p00001", "A", "Duplicate")
 
+    # Implements: REQ-o00062-E
     def test_add_changes_hash(self):
         """Adding assertion changes parent hash."""
         graph = build_graph_with_assertions()
@@ -328,6 +347,7 @@ class TestAddAssertion:
         new_hash = parent.get_field("hash")
         assert new_hash != old_hash
 
+    # Implements: REQ-o00062-E
     def test_add_affects_hash(self):
         """Add operation is marked as affecting hash."""
         graph = build_graph_with_assertions()
@@ -335,6 +355,7 @@ class TestAddAssertion:
         entry = graph.add_assertion("REQ-p00001", "D", "New assertion")
         assert entry.affects_hash is True
 
+    # Implements: REQ-o00062-E
     def test_add_logs_mutation(self):
         """Add operation is logged."""
         graph = build_graph_with_assertions()
@@ -345,6 +366,7 @@ class TestAddAssertion:
         entry = graph.mutation_log.last()
         assert entry.operation == "add_assertion"
 
+    # Implements: REQ-o00062-G
     def test_add_undo(self):
         """Undo removes the added assertion and restores hash."""
         graph = build_graph_with_assertions()
@@ -388,6 +410,7 @@ class TestDeleteAssertion:
         compacted = graph.find_by_id("REQ-p00001-B")
         assert compacted.get_label() == "Third assertion"
 
+    # Implements: REQ-o00062-B
     def test_delete_not_found(self):
         """Deleting non-existent assertion raises KeyError."""
         graph = build_graph_with_assertions()
@@ -395,6 +418,7 @@ class TestDeleteAssertion:
         with pytest.raises(KeyError, match="not found"):
             graph.delete_assertion("REQ-p00001-Z")
 
+    # Implements: REQ-o00062-B
     def test_delete_not_assertion(self):
         """Deleting a non-assertion node raises ValueError."""
         graph = build_graph_with_assertions()
@@ -402,6 +426,7 @@ class TestDeleteAssertion:
         with pytest.raises(ValueError, match="not an assertion"):
             graph.delete_assertion("REQ-p00001")
 
+    # Implements: REQ-o00062-B
     def test_delete_preserves_in_deleted_nodes(self):
         """Deleted assertion is preserved in _deleted_nodes."""
         graph = build_graph_with_assertions()
@@ -413,6 +438,7 @@ class TestDeleteAssertion:
         deleted_ids = {n.id for n in deleted}
         assert "REQ-p00001-B" in deleted_ids
 
+    # Implements: REQ-o00062-B
     def test_delete_with_compact(self):
         """Delete with compact=True renumbers subsequent assertions."""
         graph = build_graph_with_assertions()
@@ -441,6 +467,7 @@ class TestDeleteAssertion:
         assert rename["old_label"] == "C"
         assert rename["new_label"] == "B"
 
+    # Implements: REQ-o00062-B
     def test_delete_without_compact(self):
         """Delete with compact=False leaves gaps."""
         graph = build_graph_with_assertions()
@@ -452,6 +479,7 @@ class TestDeleteAssertion:
         assert graph.find_by_id("REQ-p00001-B") is None
         assert graph.find_by_id("REQ-p00001-C") is not None
 
+    # Implements: REQ-o00062-B
     def test_delete_removes_edges(self):
         """Delete removes edges referencing the assertion."""
         graph = build_graph_with_child_implementing_assertion()
@@ -468,6 +496,7 @@ class TestDeleteAssertion:
         edges = list(parent.iter_outgoing_edges())
         assert not any("A" in e.assertion_targets for e in edges)
 
+    # Implements: REQ-o00062-E
     def test_delete_changes_hash(self):
         """Deleting assertion changes parent hash."""
         graph = build_graph_with_assertions()
@@ -479,6 +508,7 @@ class TestDeleteAssertion:
         new_hash = parent.get_field("hash")
         assert new_hash != old_hash
 
+    # Implements: REQ-o00062-E
     def test_delete_affects_hash(self):
         """Delete operation is marked as affecting hash."""
         graph = build_graph_with_assertions()
@@ -486,6 +516,7 @@ class TestDeleteAssertion:
         entry = graph.delete_assertion("REQ-p00001-B")
         assert entry.affects_hash is True
 
+    # Implements: REQ-o00062-E
     def test_delete_logs_mutation(self):
         """Delete operation is logged."""
         graph = build_graph_with_assertions()
@@ -496,6 +527,7 @@ class TestDeleteAssertion:
         entry = graph.mutation_log.last()
         assert entry.operation == "delete_assertion"
 
+    # Implements: REQ-o00062-G
     def test_delete_undo_without_compact(self):
         """Undo restores the deleted assertion (no compact)."""
         graph = build_graph_with_assertions()
@@ -513,6 +545,7 @@ class TestDeleteAssertion:
         assert node.get_field("label") == "B"
         assert parent.get_field("hash") == original_hash
 
+    # Implements: REQ-o00062-G
     def test_delete_undo_with_compact(self):
         """Undo restores the deleted assertion and un-compacts."""
         graph = build_graph_with_assertions()
@@ -543,6 +576,7 @@ class TestDeleteAssertion:
         # Hash restored
         assert parent.get_field("hash") == original_hash
 
+    # Implements: REQ-o00062-B
     def test_delete_first_assertion(self):
         """Deleting first assertion compacts correctly."""
         graph = build_graph_with_assertions()
@@ -557,6 +591,7 @@ class TestDeleteAssertion:
         assert graph.find_by_id("REQ-p00001-A").get_label() == "Second assertion"
         assert graph.find_by_id("REQ-p00001-B").get_label() == "Third assertion"
 
+    # Implements: REQ-o00062-B
     def test_delete_last_assertion(self):
         """Deleting last assertion requires no compaction."""
         graph = build_graph_with_assertions()
@@ -575,6 +610,7 @@ class TestDeleteAssertion:
 class TestMultipleAssertionMutations:
     """Tests for sequences of assertion mutations."""
 
+    # Implements: REQ-o00062-E
     def test_multiple_mutations_logged(self):
         """Multiple mutations are all logged in order."""
         graph = build_graph_with_assertions()
@@ -591,6 +627,7 @@ class TestMultipleAssertionMutations:
         assert entries[2].operation == "rename_assertion"
         assert entries[3].operation == "delete_assertion"
 
+    # Implements: REQ-o00062-G
     def test_undo_multiple_in_reverse(self):
         """Multiple undos reverse operations correctly."""
         graph = build_graph_with_assertions()

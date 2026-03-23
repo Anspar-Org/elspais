@@ -11,7 +11,7 @@ resolve from the main repo, not the worktree location.
 
 Use `-v` to see detected roots:
 
-  $ elspais health -v
+  $ elspais -v health
   Working from repository root: /home/dev/worktrees/feature-x
   Canonical root (main repo): /home/dev/my-project
 

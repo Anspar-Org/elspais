@@ -1,17 +1,17 @@
-# Health Check Command
+# Checks Command
 
-The `elspais health` command diagnoses configuration and repository issues, helping you identify problems before they affect your workflow.
+The `elspais checks` command diagnoses configuration and repository issues, helping you identify problems before they affect your workflow.
 
 ## Quick Start
 
 ```bash
-# Run all health checks
-elspais health
+# Run all checks
+elspais checks
 
 # Check specific category only
-elspais health --spec      # Spec file checks
-elspais health --code      # Code reference checks
-elspais health --tests     # Test mapping checks
+elspais checks --spec      # Spec file checks
+elspais checks --code      # Code reference checks
+elspais checks --tests     # Test mapping checks
 ```
 
 ## Check Categories
@@ -41,6 +41,38 @@ Configuration checks always run as part of the full health check. For focused co
 | `spec.hierarchy_levels` | Requirements follow hierarchy rules |
 | `spec.structural_orphans` | No nodes without a FILE ancestor (build bugs) |
 | `spec.broken_references` | No edges targeting non-existent nodes |
+| `spec.no_assertions` | Requirements with no assertions (not testable); default severity: warning |
+
+#### `spec.no_assertions` — Not Testable Requirements
+
+The `spec.no_assertions` check flags requirements that have no assertions defined.
+A requirement with no assertions cannot be covered by automated tests or UAT, making
+it untraceable at the assertion level.
+
+- **Default severity**: warning (does not cause a non-zero exit by itself)
+- **Always on**: this check runs unconditionally, unlike `require_assertions` (which
+  is opt-in and produces an error when enabled)
+- **Gaps report**: requirements flagged by this check appear in `elspais gaps` with
+  the label `NOT TESTABLE (no assertions)` under the `no_assertions` gap type
+
+**Configuration** — adjust severity via `[rules.format]` in `.elspais.toml`:
+
+```toml
+[rules.format]
+no_assertions_severity = "info"   # or "warning" (default) or "error"
+```
+
+**Comparison with `require_assertions`:**
+
+| | `spec.no_assertions` | `require_assertions = true` |
+|---|---|---|
+| Always runs | Yes | No (opt-in) |
+| Default severity | warning | error |
+| Purpose | Surface untestable REQs for review | Enforce assertions as a hard rule |
+
+Use `require_assertions = true` when you want assertions to be mandatory for all
+requirements. Use `no_assertions_severity` to tune the visibility of the advisory
+check that is always present.
 
 ### Code Reference Checks (`--code`)
 
@@ -53,36 +85,74 @@ Configuration checks always run as part of the full health check. For focused co
 
 | Check | Description |
 |-------|-------------|
-| `tests.results` | Test pass/fail status from results |
-| `tests.coverage` | Test coverage statistics (informational) |
+| `tests.coverage` | Test coverage statistics with rollup (informational) |
 | `tests.unlinked` | Tests not linked to any requirement |
+| `tests.results` | Test pass/fail status from JUnit XML or pytest JSON results |
+
+### UAT Checks
+
+UAT (User Acceptance Testing) checks run automatically with `--tests` and report
+coverage and results from user journey validation.
+
+| Check | Description |
+|-------|-------------|
+| `uat.coverage` | Requirements validated by USER_JOURNEY nodes (informational) |
+| `uat.results` | Journey pass/fail status from a CSV results file |
+
+#### UAT Results CSV Format
+
+Create a `uat-results.csv` file in the repository root (or configure the path
+via `scanning.journey.results_file` in `.elspais.toml`):
+
+```csv
+journey_id,status
+JNY-Onboard-01,pass
+JNY-Onboard-02,pass
+JNY-Deploy-01,fail
+JNY-Deploy-02,skip
+```
+
+**Columns:**
+
+| Column | Required | Values |
+|--------|----------|--------|
+| `journey_id` | Yes | The journey ID (e.g., `JNY-Onboard-01`) |
+| `status` | Yes | `pass`/`passed`, `fail`/`failed`, or `skip`/`skipped` |
+
+The file is a standard CSV with a header row. When present, `elspais checks`
+reports pass/fail/skip counts and flags failing journeys.
+
+**Configuration:**
+
+```toml
+[scanning.journey]
+results_file = "uat-results.csv"   # default
+```
 
 ## Output Formats
 
 ### Text Output (default)
 
 ```
-✓ CONFIG (6/6 checks passed)
+✓ CONFIG (6 passed, 1 skipped)
 ----------------------------------------
   ✓ config.exists: Config file found: .elspais.toml
   ✓ config.syntax: TOML syntax is valid
-  ✓ config.required_fields: All required configuration fields present
-  ✓ config.pattern_tokens: Pattern template valid: {prefix}-{type}{id}
-  ✓ config.hierarchy_rules: Hierarchy rules valid (3 levels configured)
-  ✓ config.paths_exist: All spec directories exist (1 found)
+  ...
 
-✓ SPEC (7/7 checks passed)
+✓ TESTS (1 passed, 2 skipped)
 ----------------------------------------
-  ✓ spec.parseable: Parsed 42 requirements with 128 assertions
-  ✓ spec.no_duplicates: No duplicate requirement IDs
-  ✓ spec.implements_resolve: All Implements references resolve
-  ✓ spec.refines_resolve: All Refines references resolve
-  ✓ spec.hierarchy_levels: All requirements follow hierarchy rules
-  ✓ spec.structural_orphans: No structural orphans
-  ✓ spec.broken_references: No broken references
+  ~ tests.coverage: 82/87 requirements have test coverage (94.3%)
+  ✓ tests.unlinked: All tests linked to requirements
+  ~ tests.results: No test results found
+
+✓ UAT (2 skipped)
+----------------------------------------
+  ~ uat.coverage: 25/87 requirements have UAT coverage (28.7%)
+  ~ uat.results: No UAT results file found (uat-results.csv)
 
 ========================================
-✓ HEALTHY: 13 checks passed
+HEALTHY: 21/21 checks passed, 8 skipped
 ========================================
 ```
 
@@ -146,13 +216,13 @@ Produces JUnit XML that CI systems (GitHub Actions, Jenkins, GitLab CI) can inge
 
 ```yaml
 - name: Run health checks (JUnit)
-  run: elspais health --format junit -o health-results.xml
+  run: elspais checks --format junit -o health-results.xml
 
 - name: Publish test results
   uses: dorny/test-reporter@v1
   if: always()
   with:
-    name: elspais health
+    name: elspais checks
     path: health-results.xml
     reporter: java-junit
 ```
@@ -229,7 +299,7 @@ Produces [SARIF v2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.
 
 ```yaml
 - name: Run health checks (SARIF)
-  run: elspais health --format sarif -o health-results.sarif
+  run: elspais checks --format sarif -o health-results.sarif
   continue-on-error: true
 
 - name: Upload SARIF
@@ -242,42 +312,39 @@ Produces [SARIF v2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.
 
 ## Command Options
 
-| Option | Description |
-|--------|-------------|
-| `--spec` | Run spec file checks only |
-| `--code` | Run code reference checks only |
-| `--tests` | Run test mapping checks only |
-| `--format` | Output format: `text`, `markdown`, `json`, `junit`, `sarif` |
-| `--lenient` | Allow warnings without affecting exit code |
-| `-v`, `--verbose` | Show additional details |
-| `--skip-passing-details` | Hide details for passing checks (default) |
-| `--include-passing-details` | Show full details for passing checks |
+Run `elspais checks --help` for the full list of flags.  Options are
+defined in `commands/args.py:ChecksArgs` — that dataclass is the single
+source of truth for flag names and descriptions.
 
-## Passing Check Detail Control
+## Gap Listings
 
-By default, `elspais health` suppresses verbose detail for passing checks (`--skip-passing-details`). Use `--include-passing-details` to include them. The two flags are mutually exclusive.
+Use standalone gap commands or compose them with checks:
 
-The effect varies by output format:
+```bash
+elspais gaps                      # All gaps
+elspais uncovered                 # Requirements without code coverage
+elspais untested                  # Requirements without test coverage
+elspais unvalidated               # Requirements without UAT coverage
+elspais failing                   # Requirements with failing results
+elspais checks gaps               # Checklist + all gaps
+elspais checks untested           # Checklist + untested gaps
+```
 
-| Format | Default (`--skip-passing-details`) | With `--include-passing-details` |
-|--------|-------------------------------------|----------------------------------|
-| text | Aggregate summary message only | Adds verbose detail keys for each passing check |
-| markdown | Table with aggregate status | Adds a `<details>` block with per-finding list |
-| json | Full findings always included | No change |
-| junit | Empty `<testcase/>` element | Adds `<system-out>` with finding messages |
-| sarif | Omits passing checks always | No change |
-
-JSON and SARIF formats are unaffected by this flag: JSON always includes full findings, and SARIF always omits passing checks.
+Gap commands support `--format text` (default), `--format markdown`, and `--format json`.
 
 ## Exit Codes
 
-| Code | Meaning |
-|------|---------|
-| 0 | All checks passed (healthy) |
-| 1 | One or more errors found |
+Exit codes use a bitfield so composed reports indicate which sections failed:
 
-Most configuration issues are classified as errors and cause a non-zero exit.
-Only advisory checks (e.g., cross-repo paths in committed config) use warning severity.
+| Bit | Value | Section |
+|-----|-------|---------|
+| 0 | 1 | checks |
+| 1 | 2 | summary (reserved) |
+| 2 | 4 | trace (reserved) |
+| 3 | 8 | changed (reserved) |
+| 4 | 16 | gaps (reserved) |
+
+Composed reports OR the bits together. Currently only `checks` returns non-zero (when checks fail). Use `--lenient` to suppress warnings-only failures.
 
 ## Severity Levels
 
@@ -291,7 +358,7 @@ Only advisory checks (e.g., cross-repo paths in committed config) use warning se
 
 ```bash
 # Fail pipeline if health checks fail
-elspais health || exit 1
+elspais checks || exit 1
 ```
 
 ### Quick Config Validation
@@ -305,14 +372,14 @@ elspais doctor
 
 ```bash
 # Verbose output for debugging
-elspais health --spec -v
+elspais -v checks --spec
 ```
 
 ### JSON Processing
 
 ```bash
 # Get failed checks in CI
-elspais health --format json | jq '.checks | map(select(.passed == false))'
+elspais checks --format json | jq '.checks | map(select(.passed == false))'
 ```
 
 ## Troubleshooting
@@ -326,7 +393,7 @@ This usually means:
 
 Run with verbose to see details:
 ```bash
-elspais health --spec -v
+elspais -v checks --spec
 ```
 
 ### "Unresolved Implements references"

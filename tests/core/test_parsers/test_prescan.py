@@ -195,3 +195,96 @@ class TestExternalPrescan:
         # Line 15 should be in test_beta context
         assert line_context[15][0] == "test_beta"
         assert line_context[15][1] == "TestSuite"
+
+
+class TestPrescanFuncEndLine:
+    """Tests that prescan functions return 4-tuples with func_end_line."""
+
+    def test_REQ_d00082_J_ast_prescan_returns_4_tuples(self):
+        """ast_prescan line_context values are 4-tuples with func_end_line."""
+        source = "def test_foo():\n    assert True\n\ndef test_bar():\n    x = 1\n    assert x\n"
+        lines = [
+            (1, "def test_foo():"),
+            (2, "    assert True"),
+            (3, ""),
+            (4, "def test_bar():"),
+            (5, "    x = 1"),
+            (6, "    assert x"),
+        ]
+        line_context, _, _ = ast_prescan(source, lines)
+        # Each value should be a 4-tuple
+        for ln, val in line_context.items():
+            assert len(val) == 4, f"line {ln}: expected 4-tuple, got {len(val)}-tuple"
+        # Line 1 is inside test_foo (lines 1-2), func_end_line should be 2
+        assert line_context[1] == ("test_foo", None, 1, 2)
+        # Line 4 is inside test_bar (lines 4-6), func_end_line should be 6
+        assert line_context[4] == ("test_bar", None, 4, 6)
+        # Line 3 is outside any function
+        assert line_context[3] == (None, None, 0, 0)
+
+    def test_REQ_d00082_J_ast_prescan_class_method_end_line(self):
+        """ast_prescan returns correct func_end_line for class methods."""
+        source = "class TestBar:\n    def test_baz(self):\n        pass\n"
+        lines = [
+            (1, "class TestBar:"),
+            (2, "    def test_baz(self):"),
+            (3, "        pass"),
+        ]
+        line_context, _, _ = ast_prescan(source, lines)
+        # Line 2 is inside test_baz, end line is 3
+        assert line_context[2][3] == 3  # func_end_line
+        assert line_context[2][:3] == ("test_baz", "TestBar", 2)
+
+    def test_REQ_d00082_J_text_prescan_returns_4_tuples_with_sentinel(self):
+        """text_prescan returns 4-tuples with func_end_line=0 as sentinel."""
+        lines = [
+            (1, "def test_one():"),
+            (2, "    assert True"),
+        ]
+        line_context, _, _ = text_prescan(lines)
+        for ln, val in line_context.items():
+            assert len(val) == 4, f"line {ln}: expected 4-tuple, got {len(val)}-tuple"
+        # func_end_line is 0 (sentinel) since text_prescan can't determine it
+        assert line_context[1][3] == 0
+        assert line_context[2][3] == 0
+
+    def test_REQ_d00082_J_external_prescan_returns_4_tuples(self):
+        """external_prescan returns 4-tuples with func_end_line."""
+        entries = [
+            {"function": "test_alpha", "class": None, "line": 5},
+            {"function": "test_beta", "class": "TestSuite", "line": 15},
+        ]
+        lines = [(i, f"line {i}") for i in range(1, 21)]
+        line_context, _, _ = external_prescan(entries, lines)
+        for ln, val in line_context.items():
+            assert len(val) == 4, f"line {ln}: expected 4-tuple, got {len(val)}-tuple"
+        # test_alpha spans lines 5-14 (next func starts at 15)
+        assert line_context[5][3] == 14  # func_end_line
+        # test_beta spans lines 15-20 (end of file)
+        assert line_context[15][3] == 20  # func_end_line
+
+    def test_REQ_d00082_J_external_prescan_with_explicit_end_line(self):
+        """external_prescan uses end_line from JSON entries when present."""
+        entries = [
+            {"function": "test_alpha", "class": None, "line": 5, "end_line": 10},
+            {"function": "test_beta", "class": "TestSuite", "line": 15, "end_line": 18},
+        ]
+        lines = [(i, f"line {i}") for i in range(1, 21)]
+        line_context, _, _ = external_prescan(entries, lines)
+        # end_line from JSON should be used
+        assert line_context[5][3] == 10
+        assert line_context[15][3] == 18
+
+    def test_REQ_d00082_J_ast_prescan_forward_fixup_4_tuple(self):
+        """Forward-looking fixup in ast_prescan produces 4-tuples."""
+        source = "# Implements: REQ-p00001\ndef test_foo():\n    assert True\n"
+        lines = [
+            (1, "# Implements: REQ-p00001"),
+            (2, "def test_foo():"),
+            (3, "    assert True"),
+        ]
+        line_context, _, _ = ast_prescan(source, lines)
+        # Line 1 should get fixup from test_foo, and be a 4-tuple
+        assert len(line_context[1]) == 4
+        assert line_context[1][0] == "test_foo"
+        assert line_context[1][3] == 3  # func_end_line of test_foo

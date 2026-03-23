@@ -3,6 +3,7 @@
 import pytest
 
 
+# Implements: REQ-d00207-A
 def test_default_config_preserves_legacy_values():
     """ElspaisConfig defaults must preserve all DEFAULT_CONFIG values."""
     from elspais.config import config_defaults
@@ -27,6 +28,7 @@ def test_default_config_preserves_legacy_values():
     assert not errors, "Schema/legacy mismatches:\n" + "\n".join(errors)
 
 
+# Implements: REQ-d00212-F
 def test_unknown_key_rejected():
     """Unknown keys in TOML must raise ValidationError."""
     from pydantic import ValidationError
@@ -37,6 +39,7 @@ def test_unknown_key_rejected():
         ElspaisConfig.model_validate({"bogus_key": "value"})
 
 
+# Implements: REQ-d00212-C
 def test_unknown_nested_key_rejected():
     """Unknown nested keys must raise ValidationError with field path."""
     from pydantic import ValidationError
@@ -47,6 +50,7 @@ def test_unknown_nested_key_rejected():
         ElspaisConfig.model_validate({"scanning": {"bogus_nested": True}})
 
 
+# Implements: REQ-d00212-G
 def test_hyphenated_keys_accepted():
     """TOML hyphenated keys (e.g. 'id-patterns') accepted via aliases."""
     from elspais.config.schema import ElspaisConfig
@@ -57,6 +61,7 @@ def test_hyphenated_keys_accepted():
     assert config.id_patterns.canonical == "CUSTOM-{type.letter}{component}"
 
 
+# Implements: REQ-d00212-F
 def test_type_mismatch_rejected():
     """Wrong types must raise ValidationError."""
     from pydantic import ValidationError
@@ -67,6 +72,7 @@ def test_type_mismatch_rejected():
         ElspaisConfig.model_validate({"version": "not-an-int"})
 
 
+# Implements: REQ-d00212-F
 def test_unknown_top_level_key_rejected():
     """Unknown top-level keys like 'core' must fail."""
     from pydantic import ValidationError
@@ -81,6 +87,7 @@ def test_unknown_top_level_key_rejected():
         )
 
 
+# Implements: REQ-d00212-J
 def test_project_namespace_accepted():
     """project.namespace is a valid field."""
     from elspais.config.schema import ElspaisConfig
@@ -93,6 +100,7 @@ def test_project_namespace_accepted():
     assert config.project.namespace == "MYNS"
 
 
+# Implements: REQ-d00212-F
 def test_status_roles_reference_allowed_statuses():
     """status_roles referencing known statuses should work."""
     from elspais.config.schema import ElspaisConfig

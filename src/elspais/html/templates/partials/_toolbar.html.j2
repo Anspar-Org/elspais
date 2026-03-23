@@ -2,19 +2,34 @@
 {# Implements: REQ-p00006-A, REQ-p00006-B #}
 
 <div class="toolbar" id="edit-toolbar">
+    <!-- Text Filter (first, so it's always above the tree) -->
+    <input type="text" class="filter-text-input" id="edit-filter-text"
+           placeholder="Filter tree... (e.g. auth OR password)"
+           oninput="onTreeTextFilter()"
+           title="Filter the tree view: space=AND, OR, -exclude, =exact, &quot;phrase&quot;">
+
     <!-- Git Filters -->
     <div class="btn-group" role="group">
-        <button class="btn" id="edit-btn-uncommitted" onclick="toggleEditFilter('uncommitted')">Uncommitted</button>
-        <button class="btn" id="edit-btn-changed" onclick="toggleEditFilter('changed')">Changed</button>
+        <button class="btn" id="edit-btn-unsaved" onclick="toggleEditFilter('unsaved')"
+                title="Show only requirements with pending in-memory edits (not yet saved to disk)">Unsaved</button>
+        <button class="btn" id="edit-btn-uncommitted" onclick="toggleEditFilter('uncommitted')"
+                title="Show only requirements saved to disk but not yet git-committed">Uncommitted</button>
+        <button class="btn" id="edit-btn-changed" onclick="toggleEditFilter('changed')"
+                title="Show only requirements changed on this branch compared to main">Changed</button>
     </div>
 
-    <!-- Dropdowns -->
-    <select class="filter-select" id="edit-filter-status" onchange="applyEditFilters()" title="Filter by status">
-        <option value="">Status: All</option>
+    <!-- Status filter badges (filled=showing, outline=hidden) -->
+    <div class="status-filter-group" id="status-filter-group">
         {% for status in statuses %}
-        <option value="{{ status }}">{{ status }}</option>
+        <button class="status-filter-btn{% if status not in default_hidden_statuses %} on{% endif %}"
+                id="status-filter-{{ status | lower }}"
+                data-status="{{ status | lower }}"
+                onclick="toggleStatusFilter('{{ status }}')"
+                title="Toggle {{ status }} requirements">{{ status }}</button>
         {% endfor %}
-    </select>
+    </div>
+
+    <!-- Coverage dropdown -->
     <select class="filter-select" id="edit-filter-coverage" onchange="applyEditFilters()" title="Filter by coverage">
         <option value="">Cov: All</option>
         <option value="none">None</option>
@@ -28,25 +43,11 @@
             <input type="checkbox" id="edit-toggle-leaf" onchange="toggleEditFilter('leaf')">
             <span>Leaf Only</span>
         </label>
-        {% for status in statuses %}
-        <label class="toggle-item">
-            <input type="checkbox" id="edit-toggle-status-{{ status | lower }}"
-                   {% if status in default_hidden_statuses %}checked{% endif %}
-                   onchange="toggleStatusFilter('{{ status }}')">
-            <span>Hide {{ status }} <span class="status-count" id="count-{{ status | lower }}"></span></span>
-        </label>
-        {% endfor %}
         <label class="toggle-item">
             <input type="checkbox" id="edit-toggle-hide-filtered" onchange="toggleEditFilter('hideFiltered')">
             <span>Hide Filtered</span>
         </label>
     </div>
-
-    <!-- Text Filter -->
-    <input type="text" class="filter-text-input" id="edit-filter-text"
-           placeholder="Filter tree... (e.g. auth OR password)"
-           oninput="onTreeTextFilter()"
-           title="Filter the tree view: space=AND, OR, -exclude, =exact, &quot;phrase&quot;">
 
     <!-- Actions -->
     <div class="toolbar-actions">

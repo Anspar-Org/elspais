@@ -7,6 +7,7 @@ from elspais.graph.parsers.remainder import RemainderParser
 class TestRemainderParserPriority:
     """Tests for RemainderParser priority."""
 
+    # Implements: REQ-d00128-G
     def test_priority_is_999(self):
         parser = RemainderParser()
         assert parser.priority == 999
@@ -15,6 +16,7 @@ class TestRemainderParserPriority:
 class TestRemainderParserBehavior:
     """Tests for RemainderParser line grouping."""
 
+    # Implements: REQ-d00128-G
     def test_claims_all_remaining_lines(self):
         parser = RemainderParser()
         lines = [
@@ -32,6 +34,7 @@ class TestRemainderParserBehavior:
         assert results[0].start_line == 1
         assert results[0].end_line == 3
 
+    # Implements: REQ-d00128-G
     def test_groups_contiguous_lines(self):
         parser = RemainderParser()
         lines = [
@@ -52,6 +55,7 @@ class TestRemainderParserBehavior:
         assert results[1].start_line == 4
         assert results[1].end_line == 5
 
+    # Implements: REQ-d00128-G
     def test_empty_lines_returns_nothing(self):
         parser = RemainderParser()
         lines = []
@@ -61,6 +65,7 @@ class TestRemainderParserBehavior:
 
         assert len(results) == 0
 
+    # Implements: REQ-d00128-G
     def test_single_line(self):
         parser = RemainderParser()
         lines = [(5, "Only line")]
@@ -72,6 +77,7 @@ class TestRemainderParserBehavior:
         assert results[0].start_line == 5
         assert results[0].end_line == 5
 
+    # Implements: REQ-d00131-D
     def test_preserves_raw_text(self):
         parser = RemainderParser()
         lines = [
@@ -85,6 +91,7 @@ class TestRemainderParserBehavior:
         assert "First line" in results[0].raw_text
         assert "Second line" in results[0].raw_text
 
+    # Implements: REQ-d00128-G
     def test_handles_blank_lines_in_content(self):
         parser = RemainderParser()
         lines = [

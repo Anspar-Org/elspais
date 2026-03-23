@@ -62,6 +62,7 @@ from elspais.graph.annotators import (
     count_by_coverage,
     count_by_git_status,
     count_by_level,
+    count_code_coverage,
     count_with_code_refs,
 )
 from elspais.graph.factory import build_graph
@@ -317,14 +318,15 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
             EK.INSTANCE,
             EK.CONTAINS,
         ):
-            links.append(
-                {
-                    "id": edge.source.id,
-                    "kind": edge.source.kind.value,
-                    "title": edge.source.get_label(),
-                    "edge_kind": edge.kind.value,
-                }
-            )
+            link_entry: dict[str, Any] = {
+                "id": edge.source.id,
+                "kind": edge.source.kind.value,
+                "title": edge.source.get_label(),
+                "edge_kind": edge.kind.value,
+            }
+            if edge.assertion_targets:
+                link_entry["assertion_targets"] = edge.assertion_targets
+            links.append(link_entry)
     for edge in node.iter_outgoing_edges():
         if edge.kind not in (
             EK.IMPLEMENTS,
@@ -333,14 +335,15 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
             EK.INSTANCE,
             EK.CONTAINS,
         ):
-            links.append(
-                {
-                    "id": edge.target.id,
-                    "kind": edge.target.kind.value,
-                    "title": edge.target.get_label(),
-                    "edge_kind": edge.kind.value,
-                }
-            )
+            link_entry = {
+                "id": edge.target.id,
+                "kind": edge.target.kind.value,
+                "title": edge.target.get_label(),
+                "edge_kind": edge.kind.value,
+            }
+            if edge.assertion_targets:
+                link_entry["assertion_targets"] = edge.assertion_targets
+            links.append(link_entry)
 
     # ── Common: keywords ──
     keywords = node.get_field("keywords", []) or []
@@ -366,7 +369,8 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
         properties = {
             "actor": node.get_field("actor", ""),
             "goal": node.get_field("goal", ""),
-            "description": node.get_field("body", "") or node.get_field("description", ""),
+            "context": node.get_field("context", ""),
+            "sections": node.get_field("sections", []),
             "descriptor": descriptor,
         }
     elif kind == NodeKind.TEST:
@@ -1231,17 +1235,21 @@ def _get_node(graph: FederatedGraph, node_id: str) -> dict[str, Any]:
 
 
 def _get_requirement(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
-    """Get single requirement details.
+    """Get requirement details in a focused, readable format.
 
-    Thin wrapper around _get_node() with a kind == REQUIREMENT guard.
-    Preserves the function signature used by ~15 tests and the MCP tool.
+    Returns only the fields useful for understanding a requirement:
+    identity, body, assertions, hierarchy, and coverage metrics.
+    For the full generic node envelope use ``_get_node()`` / ``get_node()``.
 
     REQ-d00062-A: Uses graph.find_by_id() for O(1) lookup.
     REQ-d00062-B: Returns node fields.
     REQ-d00062-C: Returns assertions from iter_children().
     REQ-d00062-D: Returns relationships from iter_outgoing_edges().
+    REQ-d00062-E: Returns metrics from node without recomputation.
     REQ-d00062-F: Returns error for non-existent requirements.
     """
+    from elspais.graph.relations import EdgeKind as EK
+
     node = graph.find_by_id(req_id)
 
     if node is None:
@@ -1250,7 +1258,67 @@ def _get_requirement(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     if node.kind != NodeKind.REQUIREMENT:
         return {"error": f"Node '{req_id}' is not a requirement"}
 
-    return _serialize_node_generic(node, graph)
+    # Assertions
+    assertions = []
+    for child in node.iter_children(edge_kinds={EK.STRUCTURES}):
+        if child.kind == NodeKind.ASSERTION:
+            assertions.append(
+                {"id": child.id, "label": child.get_field("label"), "text": child.get_label()}
+            )
+
+    # Hierarchy: requirement parents and children only
+    req_parents = []
+    for edge in node.iter_incoming_edges():
+        if (
+            edge.kind in (EK.IMPLEMENTS, EK.REFINES, EK.SATISFIES)
+            and edge.source.kind == NodeKind.REQUIREMENT
+        ):
+            req_parents.append(
+                {
+                    "id": edge.source.id,
+                    "title": edge.source.get_label(),
+                    "edge_kind": edge.kind.value,
+                }
+            )
+
+    req_children = []
+    for child in node.iter_children():
+        if child.kind == NodeKind.REQUIREMENT:
+            req_children.append(
+                {"id": child.id, "title": child.get_label(), "level": child.get_field("level")}
+            )
+
+    # Coverage metrics
+    metrics_data = None
+    metrics = node.get_metric("rollup_metrics")
+    if metrics is not None:
+        metrics_data = {
+            "referenced_pct": metrics.implemented.indirect_pct,
+            "total_assertions": metrics.total_assertions,
+            "covered_assertions": metrics.implemented.indirect,
+        }
+
+    # Source location
+    fn = node.file_node()
+    source_path = (
+        _relative_source_path(node, graph)
+        if graph
+        else (fn.get_field("relative_path") if fn else None)
+    )
+
+    return {
+        "id": node.id,
+        "title": node.get_label(),
+        "level": node.get_field("level"),
+        "status": node.get_field("status"),
+        "hash": node.get_field("hash"),
+        "body": node.get_field("body_text"),
+        "source": {"path": source_path, "line": node.get_field("parse_line")},
+        "assertions": assertions,
+        "parents": req_parents,
+        "children": req_children,
+        "coverage": metrics_data,
+    }
 
 
 def _get_hierarchy(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
@@ -1767,7 +1835,7 @@ def _get_project_summary(
     annotate_graph_git_state(graph)
     change_metrics = count_by_git_status(graph)
 
-    return {
+    result: dict[str, Any] = {
         "requirements_by_level": level_counts,
         "coverage": coverage_stats,
         "changes": change_metrics,
@@ -1775,6 +1843,12 @@ def _get_project_summary(
         "orphan_count": graph.orphan_count(),
         "broken_reference_count": len(graph.broken_references()),
     }
+
+    code_cov = count_code_coverage(graph)
+    if code_cov["total_executable_lines"] > 0:
+        result["code_coverage"] = code_cov
+
+    return result
 
 
 def _get_changed_requirements(graph: FederatedGraph) -> dict[str, Any]:
@@ -1846,6 +1920,309 @@ def _get_agent_instructions(config: dict[str, Any], working_dir: Path) -> dict[s
             for rule in rules
         ],
         "count": len(rules),
+    }
+
+
+_TOOL_DOCS: dict[str, str] = {}  # Populated by create_server() after tool registration
+
+_FAQ_ENTRIES: list[dict[str, str]] = [
+    {
+        "topic": "linking",
+        "question": "How do I link a test to a requirement?",
+        "answer": (
+            "Add a comment above the test function at column 0 (no indentation):\n"
+            "\n"
+            "  # Implements: REQ-d00001-A\n"
+            "  def test_hashing(self):\n"
+            "      ...\n"
+            "\n"
+            "Any keyword works: Implements, Tests, Validates, Refines.\n"
+            "All create VERIFIES edges in the traceability graph.\n"
+            "The comment character (#, //, --) MUST start at column 0."
+        ),
+    },
+    {
+        "topic": "linking",
+        "question": "Why is my test still showing as unlinked?",
+        "answer": (
+            "Common causes:\n"
+            "1. The comment is indented (must start at column 0)\n"
+            "2. The requirement ID doesn't exist in any spec file\n"
+            "3. The graph hasn't been refreshed (run refresh_graph(full=True))\n"
+            "4. The file isn't in a configured test directory (check scanning.test.directories)"
+        ),
+    },
+    {
+        "topic": "linking",
+        "question": "Can I use # Implements: in test files or only # Tests:?",
+        "answer": (
+            "Both work identically in test files. The scanner recognizes all reference\n"
+            "keywords (Implements, Tests, Validates, Refines) and always creates VERIFIES\n"
+            "edges for test files. The keyword choice is purely stylistic."
+        ),
+    },
+    {
+        "topic": "linking",
+        "question": "How do I link a test to multiple assertions?",
+        "answer": (
+            "Use multi-assertion syntax with + separator:\n"
+            "\n"
+            "  # Implements: REQ-d00001-A+B+C\n"
+            "\n"
+            "This expands to REQ-d00001-A, REQ-d00001-B, REQ-d00001-C.\n"
+            "Or list them comma-separated:\n"
+            "\n"
+            "  # Implements: REQ-d00001-A, REQ-d00002-B"
+        ),
+    },
+    {
+        "topic": "linking",
+        "question": "How do file-level vs function-level links work?",
+        "answer": (
+            "A comment placed before the first function definition applies to ALL\n"
+            "test functions in the file (file-level default).\n"
+            "A comment placed above a specific function applies only to that function.\n"
+            "Function-level links override file-level defaults."
+        ),
+    },
+    {
+        "topic": "coverage",
+        "question": "What is the difference between direct and indirect coverage?",
+        "answer": (
+            "Direct coverage: a test explicitly references a requirement via comment\n"
+            "or function name.\n"
+            "Indirect coverage: a test covers code that implements a requirement,\n"
+            "creating an inferred coverage chain (test -> code -> requirement).\n"
+            "Both contribute to the coverage percentage."
+        ),
+    },
+    {
+        "topic": "coverage",
+        "question": "Why does coverage show less than I expect?",
+        "answer": (
+            "Coverage is calculated per-assertion, not per-requirement.\n"
+            "A requirement with 5 assertions needs all 5 covered.\n"
+            "Check with get_test_coverage(req_id) to see which assertions are covered."
+        ),
+    },
+    {
+        "topic": "coverage",
+        "question": "How do I find coverage gaps?",
+        "answer": (
+            "CLI: Use gap flags on the health command:\n"
+            "  elspais health --untested    (requirements without test coverage)\n"
+            "  elspais health --uncovered   (requirements without code coverage)\n"
+            "  elspais health --unvalidated (requirements without UAT coverage)\n"
+            "  elspais health --untraced    (all gaps: uncovered + untested"
+            " + unvalidated + failing)\n"
+            "  elspais health --failing     (requirements with failing results)\n"
+            "\n"
+            "MCP: Use these tools:\n"
+            "  get_uncovered_assertions()          (all assertions without test coverage)\n"
+            "  get_uncovered_assertions(req_id)     (gaps for a specific requirement)\n"
+            "  get_test_coverage(req_id)            (detailed coverage breakdown)\n"
+            "  get_project_summary()                (high-level coverage statistics)"
+        ),
+    },
+    {
+        "topic": "mutation",
+        "question": "How do I persist changes made with mutate_* tools?",
+        "answer": (
+            "All mutate_* tools modify the in-memory graph only.\n"
+            "To persist to spec files, call save_mutations().\n"
+            "Use save_mutations(save_branch=True) to create a safety branch first.\n"
+            "Use undo_last_mutation() or undo_to_mutation(id) to revert mistakes."
+        ),
+    },
+    {
+        "topic": "health",
+        "question": "What does 'structural orphan' mean vs 'unlinked'?",
+        "answer": (
+            "Structural orphan: a node with no FILE parent (not contained in any file).\n"
+            "This usually indicates a graph build error.\n"
+            "Unlinked: a CODE or TEST node that exists in a file but has no traceability\n"
+            "edge to any requirement. This is normal for utility code/tests."
+        ),
+    },
+    {
+        "topic": "assertions",
+        "question": "What is the assertion format?",
+        "answer": (
+            "Assertions are lettered sub-items of a requirement:\n"
+            "\n"
+            "  **A.** The system SHALL do X.\n"
+            "  **B.** The system SHALL do Y.\n"
+            "\n"
+            "Labels are uppercase letters (A-Z). Use SHALL for mandatory behavior.\n"
+            "Reference them as REQ-d00001-A, REQ-d00001-B, etc."
+        ),
+    },
+]
+
+
+def _get_faq(topic: str) -> dict[str, Any]:
+    """Return FAQ entries, optionally filtered by topic keyword."""
+    if topic:
+        needle = topic.lower()
+        entries = [
+            e
+            for e in _FAQ_ENTRIES
+            if needle in e["topic"]
+            or needle in e["question"].lower()
+            or needle in e["answer"].lower()
+        ]
+    else:
+        entries = list(_FAQ_ENTRIES)
+
+    return {
+        "entries": entries,
+        "count": len(entries),
+        "filter": topic or "(all)",
+    }
+
+
+def _get_docs(topic: str) -> dict[str, Any]:
+    """Return documentation content for a topic, or search all help surfaces.
+
+    If topic matches an exact topic name, returns that topic's full content.
+    Otherwise, searches docs, CLI flag docstrings, MCP tool docstrings,
+    and FAQ entries for the query string, returning full matched sections
+    with source labels.
+    """
+    from elspais.utilities.docs_loader import get_available_topics, load_topic
+
+    available = get_available_topics()
+
+    if not topic:
+        return {
+            "topics": available,
+            "count": len(available),
+            "hint": (
+                "Call docs(topic) with a topic name,"
+                " or pass a search phrase to find relevant sections."
+            ),
+        }
+
+    # Exact topic match
+    content = load_topic(topic)
+    if content is not None:
+        return {
+            "topic": topic,
+            "content": content,
+        }
+
+    # Search across all help surfaces
+    needle = topic.lower()
+    matches: list[dict[str, Any]] = []
+
+    # Build variant sets for fuzzy singular/plural matching.
+    # For each query word, generate {word, word±s} so "coverage gaps"
+    # matches text containing "coverage" AND ("gap" OR "gaps").
+    words = needle.split()
+    variant_sets: list[set[str]] = []
+    for w in words:
+        variants = {w}
+        if w.endswith("s") and len(w) > 2:
+            variants.add(w[:-1])  # strip trailing s
+        else:
+            variants.add(w + "s")  # add trailing s
+        variant_sets.append(variants)
+
+    def _text_matches(text: str) -> bool:
+        """Return True if text contains at least one variant from each set."""
+        lowered = text.lower()
+        # Fast path: single-word or exact phrase match
+        if needle in lowered:
+            return True
+        # Multi-word: each variant set must have at least one hit
+        return all(any(v in lowered for v in vs) for vs in variant_sets)
+
+    # 1. Search docs/cli/*.md files (section-level granularity)
+    for t in available:
+        tc = load_topic(t)
+        if tc is None:
+            continue
+        lines = tc.splitlines()
+        sections: list[tuple[int, int]] = []
+        section_start = 0
+        for i, line in enumerate(lines):
+            if line.startswith("## ") and i > 0:
+                sections.append((section_start, i))
+                section_start = i
+        sections.append((section_start, len(lines)))
+
+        for s_start, s_end in sections:
+            section_text = "\n".join(lines[s_start:s_end]).rstrip("\n")
+            if _text_matches(section_text):
+                matches.append(
+                    {
+                        "source": f"docs/cli/{t}.md",
+                        "content": section_text,
+                    }
+                )
+
+    # 2. Search CLI flag docstrings (from args.py dataclasses)
+    try:
+        import dataclasses
+
+        from elspais.commands import args as args_mod
+
+        for name in dir(args_mod):
+            obj = getattr(args_mod, name)
+            if not dataclasses.is_dataclass(obj) or not isinstance(obj, type):
+                continue
+            for field in dataclasses.fields(obj):
+                doc = field.metadata.get("help", "") or ""
+                # tyro uses the field's docstring from the class body
+                # Access via __dataclass_fields__ won't have it; check class source
+                if not doc:
+                    # Get the docstring from the class annotations
+                    # Fall back to field name + type
+                    doc = ""
+                # Search field name + any doc
+                field_text = f"--{field.name}: {doc}" if doc else f"--{field.name}"
+                if _text_matches(field_text) or _text_matches(field.name):
+                    matches.append(
+                        {
+                            "source": f"cli:{name}.{field.name}",
+                            "content": field_text,
+                        }
+                    )
+    except Exception:
+        pass
+
+    # 3. Search MCP tool docstrings (collected at registration)
+    for tool_name, doc in _TOOL_DOCS.items():
+        if _text_matches(doc) or _text_matches(tool_name):
+            matches.append(
+                {
+                    "source": f"mcp:{tool_name}",
+                    "content": doc,
+                }
+            )
+
+    # 4. Search FAQ entries
+    for entry in _FAQ_ENTRIES:
+        combined = f"{entry['question']}\n{entry['answer']}"
+        if _text_matches(combined):
+            matches.append(
+                {
+                    "source": f"faq:{entry['topic']}",
+                    "content": f"Q: {entry['question']}\nA: {entry['answer']}",
+                }
+            )
+
+    if not matches:
+        return {
+            "query": topic,
+            "matches": [],
+            "hint": f"No results for '{topic}'. Available topics: {', '.join(available)}",
+        }
+
+    return {
+        "query": topic,
+        "matches": matches,
+        "count": len(matches),
     }
 
 
@@ -1963,6 +2340,99 @@ def _mutate_delete_requirement(
             "success": True,
             "mutation": _serialize_mutation_entry(entry),
             "message": f"Deleted requirement {node_id}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Journey Mutation Functions
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _mutate_update_journey_field(
+    graph: FederatedGraph,
+    node_id: str,
+    field_name: str,
+    value: str,
+) -> dict[str, Any]:
+    """Update a structured field on a USER_JOURNEY node."""
+    try:
+        entry = graph.update_journey_field(node_id, field_name, value)
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Updated {field_name} of {node_id}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+def _mutate_journey_section(
+    graph: FederatedGraph,
+    node_id: str,
+    action: str,
+    name: str,
+    new_name: str | None = None,
+    content: str | None = None,
+) -> dict[str, Any]:
+    """Add, update, or delete a journey section."""
+    try:
+        if action == "add":
+            entry = graph.add_journey_section(node_id, name, content or "")
+            msg = f"Added section '{name}' to {node_id}"
+        elif action == "update":
+            entry = graph.update_journey_section(node_id, name, new_name, content)
+            msg = f"Updated section '{name}' in {node_id}"
+        elif action == "delete":
+            entry = graph.delete_journey_section(node_id, name)
+            msg = f"Deleted section '{name}' from {node_id}"
+        else:
+            return {"success": False, "error": f"Unknown action: {action}"}
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": msg,
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+def _mutate_add_journey(
+    graph: FederatedGraph,
+    journey_id: str,
+    title: str,
+    file_id: str,
+) -> dict[str, Any]:
+    """Create a new USER_JOURNEY node."""
+    try:
+        entry = graph.add_journey(journey_id, title, file_id)
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Added journey {journey_id}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+def _mutate_delete_journey(
+    graph: FederatedGraph,
+    node_id: str,
+    confirm: bool = False,
+) -> dict[str, Any]:
+    """Delete a USER_JOURNEY node."""
+    if not confirm:
+        return {
+            "success": False,
+            "error": "Destructive operation requires confirm=True",
+        }
+    try:
+        entry = graph.delete_journey(node_id)
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Deleted journey {node_id}",
         }
     except (ValueError, KeyError) as e:
         return {"success": False, "error": str(e)}
@@ -2366,7 +2836,8 @@ def _get_unlinked_nodes(graph: FederatedGraph, kind: str | None = None) -> dict[
         kind: Optional filter — "test" or "code". If None, returns both.
 
     Returns:
-        Dictionary with unlinked nodes grouped by kind with counts.
+        Dictionary with counts by file and kind, plus a compact list of
+        (source, label) pairs.
     """
     kinds_to_check: list[NodeKind] = []
     if kind is None:
@@ -2376,33 +2847,27 @@ def _get_unlinked_nodes(graph: FederatedGraph, kind: str | None = None) -> dict[
     elif kind == "code":
         kinds_to_check = [NodeKind.CODE]
 
-    unlinked: list[dict[str, Any]] = []
-    by_kind: dict[str, list[dict[str, Any]]] = {}
+    by_file: dict[str, int] = {}
+    by_kind_count: dict[str, int] = {}
+    total = 0
 
     for nk in kinds_to_check:
         for node in graph.iter_unlinked(nk):
-            entry: dict[str, Any] = {
-                "id": node.id,
-                "kind": node.kind.value,
-                "label": node.get_label(),
-            }
-            _fn = node.file_node()
-            _line = node.get_field("parse_line")
-            if _fn and _line is not None:
-                entry["source"] = f"{_fn.get_field('relative_path')}:{_line}"
-            elif _fn:
-                entry["source"] = _fn.get_field("relative_path")
-            unlinked.append(entry)
-
+            total += 1
             kind_name = node.kind.value
-            if kind_name not in by_kind:
-                by_kind[kind_name] = []
-            by_kind[kind_name].append(entry)
+            by_kind_count[kind_name] = by_kind_count.get(kind_name, 0) + 1
+
+            _fn = node.file_node()
+            file_path = _fn.get_field("relative_path") if _fn else "unknown"
+            by_file[file_path] = by_file.get(file_path, 0) + 1
+
+    # Sort files by count descending for quick triage
+    sorted_files = sorted(by_file.items(), key=lambda x: -x[1])
 
     return {
-        "unlinked": unlinked,
-        "count": len(unlinked),
-        "by_kind": {k: {"items": v, "count": len(v)} for k, v in by_kind.items()},
+        "count": total,
+        "by_kind": by_kind_count,
+        "by_file": [{"file": f, "count": c} for f, c in sorted_files],
     }
 
 
@@ -2566,7 +3031,7 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
         req_id: The requirement ID to get coverage for.
 
     Returns:
-        Dict with success, test_nodes, result_nodes, covered/uncovered assertions,
+        Dict with success, test_nodes, covered/uncovered assertions,
         and coverage statistics.
     """
     node = graph.find_by_id(req_id)
@@ -2588,7 +3053,6 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     # Deduplicated test serialization via shared iterator
     seen_test_ids: set[str] = set()
     test_nodes: list[dict[str, Any]] = []
-    result_nodes: list[dict[str, Any]] = []
     covered_assertion_ids: set[str] = set()
 
     for test_node, labels in _iter_assertion_coverage(node, NodeKind.TEST):
@@ -2601,18 +3065,14 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
             continue
         seen_test_ids.add(test_node.id)
 
-        info = _serialize_test_info(test_node, graph)
-        test_nodes.append(info)
-        # Flatten results for MCP contract compatibility
-        for r in info["results"]:
-            result_nodes.append({**r, "test_id": info["id"]})
+        test_nodes.append(_serialize_test_info(test_node, graph))
 
     covered_assertions = sorted(covered_assertion_ids)
     uncovered_assertions = sorted(set(assertion_ids) - covered_assertion_ids)
 
     total = len(assertion_ids)
     covered_count = len(covered_assertions)
-    coverage_pct = (covered_count / total * 100) if total > 0 else 0.0
+    referenced_pct = (covered_count / total * 100) if total > 0 else 0.0
 
     # UAT coverage via JNY Validates edges
     seen_jny_ids: set[str] = set()
@@ -2639,27 +3099,26 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
         )
 
     uat_covered_count = len(covered_uat_assertion_ids)
-    uat_coverage_pct = (uat_covered_count / total * 100) if total > 0 else 0.0
+    uat_referenced_pct = (uat_covered_count / total * 100) if total > 0 else 0.0
 
     # Read uat_validated_pct from rollup_metrics if available
     rollup = node.get_metric("rollup_metrics")
-    uat_validated_pct = rollup.uat_validated_pct if rollup is not None else 0.0
+    uat_validated_pct = rollup.uat_verified.indirect_pct if rollup is not None else 0.0
 
     return {
         "success": True,
         "req_id": req_id,
         "test_nodes": test_nodes,
-        "result_nodes": result_nodes,
         "covered_assertions": covered_assertions,
         "uncovered_assertions": uncovered_assertions,
         "total_assertions": total,
         "covered_count": covered_count,
-        "coverage_pct": round(coverage_pct, 1),
+        "referenced_pct": round(referenced_pct, 1),
         "uat": {
             "jny_nodes": jny_nodes,
             "covered_assertions": sorted(covered_uat_assertion_ids),
             "covered_count": uat_covered_count,
-            "coverage_pct": round(uat_coverage_pct, 1),
+            "referenced_pct": round(uat_referenced_pct, 1),
             "validated_pct": round(uat_validated_pct, 1),
         },
     }
@@ -2713,7 +3172,7 @@ def _get_assertion_test_map(graph: FederatedGraph, req_id: str) -> dict[str, Any
 
     total = len(assertions)
     covered_count = sum(1 for label in assertion_tests if assertion_tests[label]["tests"])
-    coverage_pct = (covered_count / total * 100) if total > 0 else 0.0
+    referenced_pct = (covered_count / total * 100) if total > 0 else 0.0
 
     return {
         "success": True,
@@ -2721,7 +3180,68 @@ def _get_assertion_test_map(graph: FederatedGraph, req_id: str) -> dict[str, Any
         "assertion_tests": assertion_tests,
         "total_assertions": total,
         "covered_count": covered_count,
-        "coverage_pct": round(coverage_pct, 1),
+        "referenced_pct": round(referenced_pct, 1),
+    }
+
+
+def _get_assertion_uat_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
+    """Build per-assertion UAT (journey) coverage map for a requirement.
+
+    Returns a structure mapping each assertion label to its USER_JOURNEY nodes
+    and their results, enabling the UI to show Validated/Accepted buttons.
+
+    Uses ``_iter_assertion_coverage`` for the shared two-phase traversal
+    and ``_serialize_test_info`` for the unified serializer (JNY nodes have
+    similar structure to TEST nodes with RESULT children).
+
+    Args:
+        graph: The TraceGraph to query.
+        req_id: The requirement ID.
+
+    Returns:
+        Dict with per-assertion journey lists, coverage stats.
+    """
+    node = graph.find_by_id(req_id)
+    if node is None:
+        return {"success": False, "error": f"Requirement {req_id} not found"}
+
+    if node.kind != NodeKind.REQUIREMENT:
+        return {"success": False, "error": f"{req_id} is not a requirement"}
+
+    # Collect assertions
+    assertions: list[tuple[str, str]] = []
+    for child in node.iter_children():
+        if child.kind == NodeKind.ASSERTION:
+            assertions.append((child.id, child.get_field("label", "")))
+
+    # Per-assertion buckets
+    assertion_journeys: dict[str, dict[str, Any]] = {}
+    for aid, label in assertions:
+        assertion_journeys[label] = {"assertion_id": aid, "journeys": []}
+
+    seen_per_assertion: dict[str, set[str]] = {label: set() for _, label in assertions}
+
+    for jny_node, labels in _iter_assertion_coverage(node, NodeKind.USER_JOURNEY):
+        info = _serialize_test_info(jny_node, graph)
+        for label in labels:
+            if label not in assertion_journeys:
+                continue
+            if jny_node.id in seen_per_assertion[label]:
+                continue
+            seen_per_assertion[label].add(jny_node.id)
+            assertion_journeys[label]["journeys"].append(info)
+
+    total = len(assertions)
+    covered_count = sum(1 for label in assertion_journeys if assertion_journeys[label]["journeys"])
+    referenced_pct = (covered_count / total * 100) if total > 0 else 0.0
+
+    return {
+        "success": True,
+        "req_id": req_id,
+        "assertion_journeys": assertion_journeys,
+        "total_assertions": total,
+        "covered_count": covered_count,
+        "referenced_pct": round(referenced_pct, 1),
     }
 
 
@@ -2773,7 +3293,7 @@ def _get_assertion_code_map(graph: FederatedGraph, req_id: str) -> dict[str, Any
 
     total = len(assertions)
     covered_count = sum(1 for label in assertion_code if assertion_code[label]["code_refs"])
-    coverage_pct = (covered_count / total * 100) if total > 0 else 0.0
+    referenced_pct = (covered_count / total * 100) if total > 0 else 0.0
 
     return {
         "success": True,
@@ -2781,7 +3301,7 @@ def _get_assertion_code_map(graph: FederatedGraph, req_id: str) -> dict[str, Any
         "assertion_code": assertion_code,
         "total_assertions": total,
         "covered_count": covered_count,
-        "coverage_pct": round(coverage_pct, 1),
+        "referenced_pct": round(referenced_pct, 1),
     }
 
 
@@ -2826,8 +3346,6 @@ def _get_uncovered_assertions(
                 covered.update(labels)
         return covered
 
-    uncovered: list[dict[str, Any]] = []
-
     if req_id is not None:
         node = graph.find_by_id(req_id)
         if node is None:
@@ -2837,66 +3355,56 @@ def _get_uncovered_assertions(
             return {"success": False, "error": f"{req_id} is not a requirement"}
 
         covered = _covered_labels_for_req(node)
+        uncovered_labels = []
 
         for child in node.iter_children():
             if child.kind != NodeKind.ASSERTION:
                 continue
-            if child.get_field("label", "") in covered:
-                continue
+            if child.get_field("label", "") not in covered:
+                uncovered_labels.append(child.get_field("label", ""))
 
-            uncovered.append(
-                {
-                    "id": child.id,
-                    "label": child.get_field("label", ""),
-                    "text": child.get_label(),
-                    "parent_id": req_id,
-                    "parent_title": node.get_label(),
-                }
-            )
+        total = sum(1 for c in node.iter_children() if c.kind == NodeKind.ASSERTION)
 
-            if len(uncovered) >= limit:
-                break
-    else:
-        # REQ-d00067-A: Scan all requirements, collect uncovered assertions
-        req_assertions: dict[str, list[Any]] = {}
+        return {
+            "success": True,
+            "req_id": req_id,
+            "title": node.get_label(),
+            "total_assertions": total,
+            "uncovered_count": len(uncovered_labels),
+            "uncovered_labels": uncovered_labels,
+        }
 
-        for req_node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-            covered = _covered_labels_for_req(req_node)
+    # REQ-d00067-A: Scan all requirements, return requirement-level summary
+    gaps: list[dict[str, Any]] = []
 
-            for child in req_node.iter_children():
-                if child.kind != NodeKind.ASSERTION:
-                    continue
-                if child.get_field("label", "") in covered:
-                    continue
+    for req_node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        covered = _covered_labels_for_req(req_node)
+        assertions = [c for c in req_node.iter_children() if c.kind == NodeKind.ASSERTION]
+        uncovered_labels = [
+            c.get_field("label", "") for c in assertions if c.get_field("label", "") not in covered
+        ]
+        if not uncovered_labels:
+            continue
 
-                if req_node.id not in req_assertions:
-                    req_assertions[req_node.id] = []
-                req_assertions[req_node.id].append((child, req_node))
+        gaps.append(
+            {
+                "req_id": req_node.id,
+                "title": req_node.get_label(),
+                "total_assertions": len(assertions),
+                "uncovered_count": len(uncovered_labels),
+                "uncovered_labels": uncovered_labels,
+            }
+        )
 
-        # Sort by requirement ID and build output
-        for req_id_key in sorted(req_assertions.keys()):
-            for assertion_node, parent_req in req_assertions[req_id_key]:
-                uncovered.append(
-                    {
-                        "id": assertion_node.id,
-                        "label": assertion_node.get_field("label", ""),
-                        "text": assertion_node.get_label(),
-                        "parent_id": parent_req.id,
-                        "parent_title": parent_req.get_label(),
-                    }
-                )
+        if len(gaps) >= limit:
+            break
 
-                if len(uncovered) >= limit:
-                    break
-
-            if len(uncovered) >= limit:
-                break
+    gaps.sort(key=lambda g: g["req_id"])
 
     return {
         "success": True,
-        "assertions": uncovered,
-        "uncovered_assertions": uncovered,
-        "count": len(uncovered),
+        "requirements": gaps,
+        "count": len(gaps),
     }
 
 
@@ -2994,7 +3502,7 @@ def _change_reference_type(
     target_file = None
     for md_file in spec_dir.rglob("*.md"):
         content = md_file.read_text(encoding="utf-8")
-        if f"## {req_id}:" in content or f"### {req_id}:" in content:
+        if re.search(rf"^#{{1,6}}\s+{re.escape(req_id)}:", content, re.MULTILINE):
             target_file = md_file
             break
 
@@ -3054,7 +3562,7 @@ def _move_requirement(
     source_file = None
     for md_file in spec_dir.rglob("*.md"):
         content = md_file.read_text(encoding="utf-8")
-        if f"## {req_id}:" in content or f"### {req_id}:" in content:
+        if re.search(rf"^#{{1,6}}\s+{re.escape(req_id)}:", content, re.MULTILINE):
             source_file = md_file
             break
 
@@ -3725,7 +4233,10 @@ def _materialize_cursor_items(
         )
         if not result.get("success"):
             return []
-        return result.get("uncovered", [])
+        # Per-requirement: single item; all: list of requirement summaries
+        if "requirements" in result:
+            return result["requirements"]
+        return [result]
 
     elif query == "scoped_search":
         # Implements: REQ-o00068-F, REQ-d00076-B
@@ -3846,16 +4357,25 @@ The graph is the single source of truth - all tools read directly from it.
 
 ## Quick Start
 
-1. `agent_instructions()` - Get project-specific authoring guidance
-2. `get_workspace_info(detail=...)` - Understand what project you're working with
-3. `get_project_summary()` - Get overview statistics and health metrics
-4. `search(query)` - Find requirements by keyword
-5. `get_requirement(req_id)` - Get full details including assertions
-6. `get_hierarchy(req_id)` - Navigate parent/child relationships
-7. `discover_requirements(query, scope_id)` - Find most-specific matches in a subgraph
-8. `discover_assertions(query)` - Find assertions ranked by relevance
+1. `docs(topic)` - Browse docs by topic, or search all help with a phrase
+2. `faq(topic)` - Quick answers on common topics (linking, coverage, mutations, assertions)
+3. `agent_instructions()` - Get project-specific authoring guidance
+4. `get_workspace_info(detail=...)` - Understand what project you're working with
+5. `get_project_summary()` - Get overview statistics and health metrics
+6. `search(query)` - Find requirements by keyword
+7. `get_requirement(req_id)` - Get full details including assertions
+8. `get_hierarchy(req_id)` - Navigate parent/child relationships
+9. `discover_requirements(query, scope_id)` - Find most-specific matches in a subgraph
+10. `discover_assertions(query)` - Find assertions ranked by relevance
 
 ## Tools Overview
+
+### Help & Documentation
+- `docs(topic)` - Browse docs by topic name, or search all help surfaces with a phrase
+  - Exact topic name (e.g., "checks") returns full content
+  - Search phrase (e.g., "coverage gap") returns matching sections across all help
+- `faq(topic)` - Quick Q&A on common topics (linking, coverage, mutations, assertions, health)
+- `agent_instructions()` - Project-specific authoring rules and conventions
 
 ### Graph Status & Control
 - `get_graph_status()` - Node counts, orphan/broken reference flags
@@ -3928,7 +4448,7 @@ The graph is the single source of truth - all tools read directly from it.
 
 ### Test Coverage Analysis
 - `get_test_coverage(req_id)` - Get TEST nodes and coverage stats for a requirement
-  - Returns test_nodes, result_nodes, covered/uncovered assertions
+  - Returns test_nodes (with nested results), covered/uncovered assertions
   - Includes coverage percentage calculation
 - `get_uncovered_assertions(req_id=None)` - Find assertions with no test coverage
   - When req_id is None, scans all requirements
@@ -4011,7 +4531,14 @@ Use `save_mutations()` after making in-memory changes with `mutate_*` tools to p
 
 **Checking project health:**
 1. get_graph_status() for orphans/broken refs
-2. get_project_summary() for coverage gaps
+2. get_project_summary() for coverage statistics
+
+**Finding coverage gaps:**
+1. get_project_summary() for high-level coverage percentages
+2. get_uncovered_assertions() for all assertions without test coverage
+3. get_uncovered_assertions(req_id) to check a specific requirement
+4. get_test_coverage(req_id) for detailed coverage breakdown per requirement
+5. Also: docs("coverage gap") or faq("coverage") for CLI gap flags
 
 **Drafting requirement changes:**
 1. mutate_add_requirement() to create draft
@@ -4295,19 +4822,23 @@ def create_server(
 
     @mcp.tool()
     def get_requirement(req_id: str) -> dict[str, Any]:
-        """Get full details for a single requirement.
+        """Get focused details for a single requirement.
 
-        Use when: you have a requirement ID and need its title, status, level,
-        assertions, parent/child relationships, code refs, and test coverage.
+        Returns: id, title, level, status, hash, body, source location,
+        assertions, parent/child requirements, and coverage metrics.
+        For the full generic node envelope, use get_node().
         """
         return _get_requirement(_state["graph"], req_id)
 
     @mcp.tool()
     def get_node(node_id: str) -> dict[str, Any]:
-        """Get full details for any graph node by ID (requirement, assertion, test, code, file).
+        """Get full generic details for any graph node by ID.
 
-        Use when: you have any node ID (not just requirements) and need its details.
-        For requirement IDs specifically, get_requirement() returns richer context.
+        Supports requirement, assertion, test, code, and file nodes.
+
+        Use when: you need the raw node envelope with all children, edges, and
+        kind-specific properties. For requirements, prefer get_requirement() which
+        returns a focused, readable format.
         """
         return _get_node(_state["graph"], node_id)
 
@@ -4404,6 +4935,34 @@ def create_server(
         conventions for assertion format, keyword style, hash handling, etc.
         """
         return _get_agent_instructions(_state["config"], _state["working_dir"])
+
+    @mcp.tool()
+    def faq(topic: str = "") -> dict[str, Any]:
+        """Frequently asked questions about elspais concepts and usage.
+
+        Use when: you need guidance on how something works (linking, coverage,
+        assertions, etc.) or the user asks a "how do I…" question.
+
+        Args:
+            topic: Optional keyword to filter (e.g., "linking", "test", "coverage").
+                   If empty, returns all FAQ entries.
+        """
+        return _get_faq(topic)
+
+    @mcp.tool()
+    def docs(topic: str = "") -> dict[str, Any]:
+        """Browse or search elspais documentation.
+
+        Use when: you need detailed guidance on a specific feature — linking,
+        health checks, configuration, assertions, etc.
+
+        Args:
+            topic: Exact topic name (e.g., "checks") returns full content.
+                   Any other string searches all docs for matching lines
+                   and returns excerpts with context.
+                   If empty, returns the list of available topics.
+        """
+        return _get_docs(topic)
 
     # ─────────────────────────────────────────────────────────────────────
     # Node Mutation Tools (REQ-o00062-A)
@@ -4950,18 +5509,97 @@ def create_server(
         """Check cursor state: current position, total items, and how many remain."""
         return _cursor_info(_state)
 
+    # ─────────────────────────────────────────────────────────────────────
+    # Optional usage stats (stats key in config / ELSPAIS_STATS env var)
+    # ─────────────────────────────────────────────────────────────────────
+    stats_path = _state["config"].get("stats")
+    if stats_path:
+        from elspais.mcp.stats import ToolStats, instrument
+
+        _stats = ToolStats(stats_path)
+        for tool in mcp._tool_manager._tools.values():
+            tool.fn = instrument(tool.fn, tool.name, _stats)
+
+    # Collect tool docstrings for docs() search
+    _TOOL_DOCS.clear()
+    for tool in mcp._tool_manager._tools.values():
+        doc = (tool.fn.__doc__ or "").strip()
+        if doc:
+            _TOOL_DOCS[tool.name] = doc
+
     return mcp
 
 
 def run_server(
     working_dir: Path | None = None,
     transport: str = "stdio",
+    port: int = 8000,
+    ttl_minutes: int = 0,
+    daemon_json: Path | None = None,
 ) -> None:
     """Run the MCP server.
 
     Args:
         working_dir: Working directory for graph building.
-        transport: Transport type ('stdio' or 'sse').
+        transport: Transport type ('stdio', 'sse', or 'streamable-http').
+        port: Port for HTTP transports (0 = auto-assign).
+        ttl_minutes: Auto-exit after N minutes of inactivity (0 = forever).
+        daemon_json: Path to write daemon state file (pid, port).
     """
-    mcp = create_server(working_dir=working_dir)
-    mcp.run(transport=transport)
+    import os as _os
+
+    # Support daemon mode: env var set by daemon.start_daemon()
+    env_dj = _os.environ.get("_ELSPAIS_DAEMON_JSON")
+    if env_dj and daemon_json is None:
+        daemon_json = Path(env_dj)
+
+    if transport == "stdio":
+        mcp = create_server(working_dir=working_dir)
+        mcp.run(transport="stdio")
+    else:
+        # HTTP: use unified app (REST + MCP + auto-refresh)
+        import json as _json
+        import socket
+        import time
+
+        import anyio
+        import uvicorn
+
+        from elspais import __version__
+        from elspais.server.app import create_app
+        from elspais.server.state import AppState
+
+        if working_dir is None:
+            working_dir = Path.cwd()
+
+        state = AppState.from_config(repo_root=working_dir)
+        app = create_app(state)
+
+        if ttl_minutes > 0:
+            from elspais.server.middleware import TTLMiddleware
+
+            app.add_middleware(TTLMiddleware, ttl_minutes=ttl_minutes)
+
+        # Resolve ephemeral port if port=0
+        if port == 0:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind(("127.0.0.1", 0))
+                port = s.getsockname()[1]
+
+        if daemon_json:
+            daemon_json.parent.mkdir(parents=True, exist_ok=True)
+            daemon_json.write_text(
+                _json.dumps(
+                    {
+                        "pid": _os.getpid(),
+                        "port": port,
+                        "repo_root": str(working_dir),
+                        "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                        "version": __version__,
+                    }
+                )
+            )
+
+        uvi_config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
+        anyio.run(uvicorn.Server(uvi_config).serve)

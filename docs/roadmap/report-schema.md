@@ -30,7 +30,7 @@ class RollupMetrics:
         failed_tests: Tests with status "failed".
         skipped_tests: Tests with status "skipped".
         total_code_refs: Count of code reference nodes in subtree.
-        coverage_pct: Percentage of covered assertions (0.0-100.0).
+        referenced_pct: Percentage of covered assertions (0.0-100.0).
         pass_rate_pct: Percentage of passed tests (0.0-100.0).
     """
     total_assertions: int = 0
@@ -40,7 +40,7 @@ class RollupMetrics:
     failed_tests: int = 0
     skipped_tests: int = 0
     total_code_refs: int = 0
-    coverage_pct: float = 0.0
+    referenced_pct: float = 0.0
     pass_rate_pct: float = 0.0
 ```
 
@@ -53,7 +53,7 @@ class RollupMetrics:
 
 2. **Internal Nodes** (requirements):
    - Sum all child metrics (excluding children with excluded statuses)
-   - Recalculate percentages: `coverage_pct = (covered / total) * 100`
+   - Recalculate percentages: `referenced_pct = (covered / total) * 100`
 
 3. **Exclusions** (configurable via `[rules.metrics]`):
    - Requirements with status in `exclude_status` list are excluded from parent roll-up
@@ -76,7 +76,7 @@ class ReportSchema:
         metric_fields: Which metric fields to display (if include_metrics=True).
         include_children: Whether to expand child nodes in output.
         max_depth: Maximum hierarchy depth to display (None = unlimited).
-        sort_by: Field to sort by ("id", "coverage_pct", "pass_rate_pct").
+        sort_by: Field to sort by ("id", "referenced_pct", "pass_rate_pct").
         sort_descending: Sort direction.
         filters: Optional filters (e.g., {"status": ["Active", "Draft"]}).
     """
@@ -115,7 +115,7 @@ class ReportSchema:
 - `failed_tests` - Failed test count
 - `skipped_tests` - Skipped test count
 - `total_code_refs` - Code reference count
-- `coverage_pct` - Coverage percentage
+- `referenced_pct` - Coverage percentage
 - `pass_rate_pct` - Test pass rate percentage
 
 ## Built-in Report Presets
@@ -145,7 +145,7 @@ ReportSchema(
     description="Standard report with coverage",
     include_fields=["id", "title", "status", "level", "implements"],
     include_metrics=True,
-    metric_fields=["total_assertions", "covered_assertions", "coverage_pct"],
+    metric_fields=["total_assertions", "covered_assertions", "referenced_pct"],
     include_children=True,
     max_depth=None,
 )
@@ -169,7 +169,7 @@ ReportSchema(
         "failed_tests",
         "skipped_tests",
         "total_code_refs",
-        "coverage_pct",
+        "referenced_pct",
         "pass_rate_pct",
     ],
     include_children=True,
@@ -269,7 +269,7 @@ def compute_metrics(
                     # ... sum other fields ...
             # Compute percentages
             if node.metrics.total_assertions > 0:
-                node.metrics.coverage_pct = (
+                node.metrics.referenced_pct = (
                     node.metrics.covered_assertions / node.metrics.total_assertions
                 ) * 100
             if node.metrics.total_tests > 0:

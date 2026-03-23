@@ -4,6 +4,7 @@
 This module defines the data structures for centralized coverage tracking:
 - CoverageSource: Enum indicating where coverage originated
 - CoverageContribution: A single coverage claim on an assertion
+- CoverageDimension: Uniform metrics for one coverage dimension
 - RollupMetrics: Aggregated metrics for a requirement node
 """
 
@@ -53,54 +54,85 @@ class CoverageContribution:
 
 
 @dataclass
+class CoverageDimension:
+    """Uniform coverage metrics for one dimension.
+
+    Each of the 5 coverage dimensions (implemented, tested, verified,
+    uat_covered, uat_verified) uses this same structure.
+
+    Attributes:
+        total: Total assertions in the requirement
+        direct: Assertions covered by targeted references (assertion-level)
+        indirect: Assertions covered when including blanket/whole-req references
+        has_failures: True if any result is failed/error (verified dims only)
+    """
+
+    total: int = 0
+    direct: int = 0
+    indirect: int = 0
+    has_failures: bool = False
+    direct_labels: set[str] = field(default_factory=set)
+    indirect_labels: set[str] = field(default_factory=set)
+
+    @property
+    def direct_pct(self) -> float:
+        """Percentage of assertions with direct coverage."""
+        return (self.direct / self.total * 100) if self.total else 0.0
+
+    @property
+    def indirect_pct(self) -> float:
+        """Percentage of assertions with any coverage (direct + blanket)."""
+        return (self.indirect / self.total * 100) if self.total else 0.0
+
+    @property
+    def tier(self) -> str:
+        """Classify into a tier key for color/severity mapping.
+
+        Returns one of: 'failing', 'full-direct', 'full-indirect',
+        'partial', 'none'.
+        """
+        if self.has_failures:
+            return "failing"
+        if self.direct >= self.total > 0:
+            return "full-direct"
+        if self.indirect >= self.total > 0:
+            return "full-indirect"
+        if self.direct > 0 or self.indirect > 0:
+            return "partial"
+        return "none"
+
+
+def _dim(total: int = 0) -> CoverageDimension:
+    """Factory helper for default CoverageDimension with total pre-set."""
+    return CoverageDimension(total=total)
+
+
+@dataclass
 class RollupMetrics:
     """Aggregated coverage metrics for a requirement.
 
     Computed once during graph annotation and stored in node._metrics.
     Provides both aggregate counts and per-assertion detail.
 
-    Attributes:
-        total_assertions: Number of assertions in this requirement
-        covered_assertions: Number with at least one coverage contributor
-        direct_covered: Assertions covered by TEST or CODE nodes
-        explicit_covered: Assertions covered by REQ with assertion syntax
-        inferred_covered: Assertions covered by REQ without assertion syntax
-        coverage_pct: Percentage of assertions covered (0-100)
-        assertion_coverage: Map of assertion label to coverage contributors
-        direct_tested: Assertions covered specifically by TEST nodes
-        validated: Assertions with passing RESULTs
-        has_failures: True if any RESULT is failed/error
-        uat_covered: Assertions with any UAT (JNY Validates) contribution
-        uat_direct_covered: Assertions explicitly named in Validates:
-        uat_inferred_covered: Assertions implied by whole-REQ Validates:
-        uat_coverage_pct: uat_covered / total_assertions * 100
-        uat_validated: Assertions covered by passing RESULT nodes via JNY
-        uat_has_failures: True if any JNY-linked RESULT is failed/error
-        uat_validated_pct: uat_validated / total_assertions * 100
+    The 6 CoverageDimension instances provide uniform access:
+    - implemented: CODE/REQ coverage of assertions
+    - tested: TEST nodes exist for assertions
+    - verified: TEST results passing for assertions
+    - uat_coverage: JNY Validates coverage of assertions
+    - uat_verified: JNY results passing for assertions
+    - code_tested: Implementation lines covered by tests (total=lines, not assertions)
     """
 
     total_assertions: int = 0
-    covered_assertions: int = 0
-    direct_covered: int = 0
-    explicit_covered: int = 0
-    inferred_covered: int = 0
-    coverage_pct: float = 0.0
     assertion_coverage: dict[str, list[CoverageContribution]] = field(default_factory=dict)
-    # Test-specific metrics
-    direct_tested: int = 0  # Assertions with TEST coverage (not CODE)
-    validated: int = 0  # Assertions with passing RESULTs
-    has_failures: bool = False  # Any RESULT failed?
-    # Indirect coverage metrics (whole-req tests covering all assertions)
-    indirect_coverage_pct: float = 0.0  # Coverage % including INDIRECT source
-    validated_with_indirect: int = 0  # Assertions validated when including indirect
-    # UAT coverage (JNY Validates)
-    uat_covered: int = 0  # assertions with any UAT contribution (union, for pct)
-    uat_direct_covered: int = 0  # assertions explicitly named in Validates:
-    uat_inferred_covered: int = 0  # assertions implied by whole-REQ Validates:
-    uat_coverage_pct: float = 0.0  # uat_covered / total_assertions * 100
-    uat_validated: int = 0  # assertions covered by passing RESULT nodes via JNY
-    uat_has_failures: bool = False  # any JNY-linked RESULT is failed/error
-    uat_validated_pct: float = 0.0  # uat_validated / total_assertions * 100 (fractional)
+
+    # The 6 uniform coverage dimensions
+    implemented: CoverageDimension = field(default_factory=CoverageDimension)
+    tested: CoverageDimension = field(default_factory=CoverageDimension)
+    verified: CoverageDimension = field(default_factory=CoverageDimension)
+    uat_coverage: CoverageDimension = field(default_factory=CoverageDimension)
+    uat_verified: CoverageDimension = field(default_factory=CoverageDimension)
+    code_tested: CoverageDimension = field(default_factory=CoverageDimension)
 
     def add_contribution(self, contribution: CoverageContribution) -> None:
         """Add a coverage contribution for an assertion.
@@ -116,11 +148,15 @@ class RollupMetrics:
     def finalize(self) -> None:
         """Compute aggregate counts after all contributions are added.
 
-        Call this after adding all contributions to update the aggregate
-        counts (covered_assertions, direct_covered, etc.) and coverage_pct.
+        Call this after adding all contributions to populate the implemented
+        and uat_coverage dimensions from contribution data. The tested,
+        verified, and uat_verified dimensions are populated separately by
+        populate_test_dimensions() (called from annotate_coverage()).
         """
         if self.total_assertions == 0:
             return
+
+        n = self.total_assertions
 
         # Track unique assertions by coverage source type
         direct_labels: set[str] = set()
@@ -145,29 +181,82 @@ class RollupMetrics:
                 elif contrib.source_type == CoverageSource.UAT_INFERRED:
                     uat_inferred_labels.add(label)
 
-        # Count assertions with any coverage (strict: excludes INDIRECT)
-        all_covered = direct_labels | explicit_labels | inferred_labels
-        self.covered_assertions = len(all_covered)
-        self.direct_covered = len(direct_labels)
-        self.explicit_covered = len(explicit_labels)
-        self.inferred_covered = len(inferred_labels)
-
-        # Compute strict percentage (excludes INDIRECT)
-        self.coverage_pct = (self.covered_assertions / self.total_assertions) * 100
-
-        # Compute indirect percentage (includes INDIRECT)
-        all_covered_with_indirect = all_covered | indirect_labels
-        self.indirect_coverage_pct = (len(all_covered_with_indirect) / self.total_assertions) * 100
-
-        # Compute UAT coverage (JNY Validates)
+        # ── Populate dimensions from contribution data ──
         uat_all = uat_explicit_labels | uat_inferred_labels
-        self.uat_covered = len(uat_all)
-        self.uat_direct_covered = len(uat_explicit_labels)
-        self.uat_inferred_covered = len(uat_inferred_labels)
-        self.uat_coverage_pct = (self.uat_covered / self.total_assertions) * 100
+        # Implemented: direct = assertion-targeted (DIRECT + EXPLICIT),
+        #              indirect = all (DIRECT + EXPLICIT + INFERRED)
+        impl_direct = direct_labels | explicit_labels
+        impl_indirect = impl_direct | inferred_labels
+        self.implemented = CoverageDimension(
+            total=n,
+            direct=len(impl_direct),
+            indirect=len(impl_indirect),
+            direct_labels=set(impl_direct),
+            indirect_labels=set(impl_indirect),
+        )
+
+        # UAT Coverage: direct = assertion-targeted (UAT_EXPLICIT),
+        #               indirect = all (UAT_EXPLICIT + UAT_INFERRED)
+        self.uat_coverage = CoverageDimension(
+            total=n,
+            direct=len(uat_explicit_labels),
+            indirect=len(uat_all),
+            direct_labels=set(uat_explicit_labels),
+            indirect_labels=set(uat_all),
+        )
+
+        # tested, verified, uat_verified are populated by annotate_coverage()
+        # after this method runs, because they need label-set data from the
+        # annotator (tested_labels, validated_labels, etc.)
+
+    def populate_test_dimensions(
+        self,
+        *,
+        tested_direct_labels: set[str],
+        tested_indirect_labels: set[str],
+        verified_direct_labels: set[str],
+        verified_indirect_labels: set[str],
+        verified_failures: bool,
+        uat_verified_direct_labels: set[str],
+        uat_verified_indirect_labels: set[str],
+        uat_verified_failures: bool,
+    ) -> None:
+        """Populate tested, verified, and uat_verified dimensions.
+
+        Called by annotate_coverage() after finalize() with the label sets
+        from the annotator's tracking variables.
+        """
+        n = self.total_assertions
+        tested_all = tested_direct_labels | tested_indirect_labels
+        self.tested = CoverageDimension(
+            total=n,
+            direct=len(tested_direct_labels),
+            indirect=len(tested_all),
+            direct_labels=set(tested_direct_labels),
+            indirect_labels=set(tested_all),
+        )
+        verified_all = verified_direct_labels | verified_indirect_labels
+        self.verified = CoverageDimension(
+            total=n,
+            direct=len(verified_direct_labels),
+            indirect=len(verified_all),
+            has_failures=verified_failures,
+            direct_labels=set(verified_direct_labels),
+            indirect_labels=set(verified_all),
+        )
+        uat_all = uat_verified_direct_labels | uat_verified_indirect_labels
+        self.uat_verified = CoverageDimension(
+            total=n,
+            direct=len(uat_verified_direct_labels),
+            indirect=len(uat_all),
+            has_failures=uat_verified_failures,
+            direct_labels=set(uat_verified_direct_labels),
+            indirect_labels=set(uat_all),
+        )
 
 
 __all__ = [
+    "CoverageDimension",
     "CoverageSource",
     "CoverageContribution",
     "RollupMetrics",

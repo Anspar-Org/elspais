@@ -14,6 +14,7 @@ from tests.core.graph_test_helpers import (
 class TestRollupMetrics:
     """Tests for RollupMetrics dataclass."""
 
+    # Implements: REQ-d00086-B
     def test_add_contribution(self):
         """Contributions are stored by assertion label."""
         metrics = RollupMetrics(total_assertions=2)
@@ -28,6 +29,7 @@ class TestRollupMetrics:
         assert metrics.assertion_coverage["A"][0] == contrib_a
         assert metrics.assertion_coverage["B"][0] == contrib_b
 
+    # Implements: REQ-d00069-D
     def test_finalize_computes_aggregates(self):
         """Finalize computes aggregate counts and percentage."""
         metrics = RollupMetrics(total_assertions=4)
@@ -37,20 +39,25 @@ class TestRollupMetrics:
 
         metrics.finalize()
 
-        assert metrics.covered_assertions == 2
-        assert metrics.direct_covered == 1
-        assert metrics.explicit_covered == 1
-        assert metrics.inferred_covered == 0
-        assert metrics.coverage_pct == 50.0
+        # implemented.direct = DIRECT + EXPLICIT = {A, B} = 2
+        assert metrics.implemented.direct == 2
+        # implemented.indirect = DIRECT + EXPLICIT + INFERRED = {A, B} = 2
+        assert metrics.implemented.indirect == 2
+        # No inferred: indirect - direct == 0
+        assert metrics.implemented.indirect - metrics.implemented.direct == 0
+        # 2/4 = 50%
+        assert metrics.implemented.indirect_pct == 50.0
 
+    # Implements: REQ-d00069-D
     def test_finalize_handles_zero_assertions(self):
         """Finalize handles zero assertions gracefully."""
         metrics = RollupMetrics(total_assertions=0)
 
         metrics.finalize()
 
-        assert metrics.coverage_pct == 0.0
+        assert metrics.implemented.indirect_pct == 0.0
 
+    # Implements: REQ-d00086-B
     def test_multiple_contributors_same_assertion(self):
         """Multiple contributors to same assertion only count once."""
         metrics = RollupMetrics(total_assertions=1)
@@ -60,16 +67,17 @@ class TestRollupMetrics:
 
         metrics.finalize()
 
-        assert metrics.covered_assertions == 1  # Only one assertion covered
-        assert metrics.direct_covered == 1
+        assert metrics.implemented.indirect == 1  # Only one assertion covered
+        assert metrics.implemented.direct == 1
         assert len(metrics.assertion_coverage["A"]) == 2  # But two contributors
 
 
 class TestAnnotateCoverageDirect:
-    """Tests for direct coverage (TEST/CODE → assertion)."""
+    """Tests for direct coverage (TEST/CODE -> assertion)."""
 
+    # Implements: REQ-d00086-B
     def test_direct_coverage_from_test(self):
-        """TEST node validates assertion → DIRECT coverage."""
+        """TEST node validates assertion -> DIRECT coverage."""
         # Build: REQ-100 with assertion A, validated by test
         graph = build_graph(
             make_requirement(
@@ -86,12 +94,13 @@ class TestAnnotateCoverageDirect:
         metrics: RollupMetrics = node.get_metric("rollup_metrics")
 
         assert metrics.total_assertions == 1
-        assert metrics.covered_assertions == 1
-        assert metrics.direct_covered == 1
-        assert metrics.coverage_pct == 100.0
+        assert metrics.implemented.direct == 1
+        assert metrics.implemented.indirect == 1
+        assert metrics.implemented.indirect_pct == 100.0
 
+    # Implements: REQ-d00086-B
     def test_direct_coverage_from_code(self):
-        """CODE node implements assertion → DIRECT coverage."""
+        """CODE node implements assertion -> DIRECT coverage."""
         graph = build_graph(
             make_requirement(
                 "REQ-100",
@@ -107,15 +116,16 @@ class TestAnnotateCoverageDirect:
         metrics: RollupMetrics = node.get_metric("rollup_metrics")
 
         assert metrics.total_assertions == 1
-        assert metrics.direct_covered == 1
-        assert metrics.coverage_pct == 100.0
+        assert metrics.implemented.direct == 1
+        assert metrics.implemented.indirect_pct == 100.0
 
 
 class TestAnnotateCoverageExplicit:
-    """Tests for explicit coverage (REQ → specific assertions)."""
+    """Tests for explicit coverage (REQ -> specific assertions)."""
 
+    # Implements: REQ-d00086-B
     def test_explicit_coverage_from_req_with_assertion_syntax(self):
-        """REQ implements specific assertion(s) → EXPLICIT coverage."""
+        """REQ implements specific assertion(s) -> EXPLICIT coverage."""
         # REQ-020 implements REQ-100-B (explicit assertion syntax)
         graph = build_graph(
             make_requirement(
@@ -139,11 +149,12 @@ class TestAnnotateCoverageExplicit:
         metrics: RollupMetrics = node.get_metric("rollup_metrics")
 
         assert metrics.total_assertions == 2
-        assert metrics.covered_assertions == 1  # Only B is covered
-        assert metrics.explicit_covered == 1
-        assert metrics.direct_covered == 0
-        assert metrics.inferred_covered == 0
-        assert metrics.coverage_pct == 50.0
+        # B is EXPLICIT, which counts as direct (assertion-targeted)
+        assert metrics.implemented.direct == 1
+        assert metrics.implemented.indirect == 1  # Only B is covered
+        # No inferred: indirect - direct == 0
+        assert metrics.implemented.indirect - metrics.implemented.direct == 0
+        assert metrics.implemented.indirect_pct == 50.0
 
         # Verify it's assertion B that's covered
         assert "B" in metrics.assertion_coverage
@@ -151,10 +162,11 @@ class TestAnnotateCoverageExplicit:
 
 
 class TestAnnotateCoverageInferred:
-    """Tests for inferred coverage (REQ → parent REQ)."""
+    """Tests for inferred coverage (REQ -> parent REQ)."""
 
+    # Implements: REQ-d00086-B
     def test_inferred_coverage_from_req_implements_parent(self):
-        """REQ implements parent REQ → INFERRED coverage for all assertions."""
+        """REQ implements parent REQ -> INFERRED coverage for all assertions."""
         # REQ-020 implements REQ-100 (all assertions implied)
         graph = build_graph(
             make_requirement(
@@ -178,16 +190,17 @@ class TestAnnotateCoverageInferred:
         metrics: RollupMetrics = node.get_metric("rollup_metrics")
 
         assert metrics.total_assertions == 2
-        assert metrics.covered_assertions == 2  # Both A and B covered
-        assert metrics.inferred_covered == 2
-        assert metrics.explicit_covered == 0
-        assert metrics.direct_covered == 0
-        assert metrics.coverage_pct == 100.0
+        assert metrics.implemented.indirect == 2  # Both A and B covered (inferred)
+        assert metrics.implemented.direct == 0  # No assertion-targeted coverage
+        # All inferred: indirect - direct == 2
+        assert metrics.implemented.indirect - metrics.implemented.direct == 2
+        assert metrics.implemented.indirect_pct == 100.0
 
 
 class TestAnnotateCoverageRefines:
     """Tests for REFINES edge (no coverage contribution)."""
 
+    # Implements: REQ-d00069-J
     def test_refines_does_not_contribute_coverage(self):
         """REFINES edge does NOT contribute to coverage."""
         # REQ-010 refines REQ-100-A - should NOT count as coverage
@@ -212,13 +225,14 @@ class TestAnnotateCoverageRefines:
         metrics: RollupMetrics = node.get_metric("rollup_metrics")
 
         assert metrics.total_assertions == 1
-        assert metrics.covered_assertions == 0  # REFINES doesn't count
-        assert metrics.coverage_pct == 0.0
+        assert metrics.implemented.indirect == 0  # REFINES doesn't count
+        assert metrics.implemented.indirect_pct == 0.0
 
 
 class TestAnnotateCoverageMixed:
     """Tests for mixed coverage sources."""
 
+    # Implements: REQ-d00086-B
     def test_mixed_coverage_sources(self):
         """Multiple coverage sources on different assertions."""
         # REQ-100 has A, B, C, D
@@ -253,11 +267,13 @@ class TestAnnotateCoverageMixed:
         metrics: RollupMetrics = node.get_metric("rollup_metrics")
 
         assert metrics.total_assertions == 4
-        assert metrics.covered_assertions == 3  # A, B, C covered
-        assert metrics.direct_covered == 2  # A (test), C (code)
-        assert metrics.explicit_covered == 1  # B
-        assert metrics.inferred_covered == 0  # D has none, no inferred
-        assert metrics.coverage_pct == 75.0
+        # implemented.direct = DIRECT + EXPLICIT = {A, B, C} = 3
+        assert metrics.implemented.direct == 3
+        # implemented.indirect = DIRECT + EXPLICIT + INFERRED = {A, B, C} = 3
+        assert metrics.implemented.indirect == 3
+        # No inferred: indirect - direct == 0
+        assert metrics.implemented.indirect - metrics.implemented.direct == 0
+        assert metrics.implemented.indirect_pct == 75.0
 
 
 class TestUserExample:
@@ -269,13 +285,12 @@ class TestUserExample:
     TEST validates REQ-100-A and REQ-100-B
 
     Expected:
-    - Implemented: 1 (only B via IMPLEMENTS edge)
-    - Tested: 2 (A and B have TEST nodes)
-    - But wait - tests DO provide DIRECT coverage, so:
-      - A: DIRECT from TEST (validates)
-      - B: DIRECT from TEST + EXPLICIT from REQ-020
+    - A: DIRECT from TEST (validates)
+    - B: DIRECT from TEST + EXPLICIT from REQ-020
+    - C, D: no coverage
     """
 
+    # Implements: REQ-d00069-J
     def test_user_example_scenario(self):
         """User's 4-assertion scenario with refines vs implements."""
         graph = build_graph(
@@ -319,7 +334,7 @@ class TestUserExample:
 
         # Covered assertions: A (test), B (test + REQ-020)
         # C and D have no coverage
-        assert metrics.covered_assertions == 2
+        assert metrics.implemented.indirect == 2
 
         # A is covered by TEST (DIRECT)
         assert "A" in metrics.assertion_coverage
@@ -341,12 +356,13 @@ class TestUserExample:
         assert "D" not in metrics.assertion_coverage
 
         # Coverage percentage: 2/4 = 50%
-        assert metrics.coverage_pct == 50.0
+        assert metrics.implemented.indirect_pct == 50.0
 
 
 class TestNoAssertions:
     """Tests for requirements without assertions."""
 
+    # Implements: REQ-d00051-E
     def test_requirement_with_no_assertions(self):
         """Requirements with no assertions have zero metrics."""
         graph = build_graph(
@@ -363,15 +379,16 @@ class TestNoAssertions:
         metrics: RollupMetrics = node.get_metric("rollup_metrics")
 
         assert metrics.total_assertions == 0
-        assert metrics.covered_assertions == 0
-        assert metrics.coverage_pct == 0.0
+        assert metrics.implemented.indirect == 0
+        assert metrics.implemented.indirect_pct == 0.0
 
 
 class TestCoveragePercentStored:
-    """Verify coverage_pct is stored in node metrics."""
+    """Verify implemented.indirect_pct is accessible from rollup_metrics."""
 
-    def test_coverage_pct_stored_in_metrics(self):
-        """coverage_pct is stored directly in node._metrics for convenience."""
+    # Implements: REQ-d00055-D
+    def test_coverage_pct_accessible_from_rollup(self):
+        """implemented.indirect_pct is accessible from the rollup_metrics object."""
         graph = build_graph(
             make_requirement(
                 "REQ-100",
@@ -388,19 +405,16 @@ class TestCoveragePercentStored:
 
         node = graph.find_by_id("REQ-100")
 
-        # Both methods should give same value
         rollup: RollupMetrics = node.get_metric("rollup_metrics")
-        coverage_pct = node.get_metric("coverage_pct")
-
-        assert coverage_pct == 50.0
-        assert rollup.coverage_pct == 50.0
+        assert rollup.implemented.indirect_pct == 50.0
 
 
 class TestTestSpecificMetrics:
-    """Tests for TEST-specific metrics (direct_tested, validated, has_failures)."""
+    """Tests for TEST-specific metrics (tested, verified dimensions)."""
 
+    # Implements: REQ-d00069-B
     def test_direct_tested_counts_test_coverage(self):
-        """direct_tested counts assertions with TEST nodes (not CODE)."""
+        """tested.direct counts assertions with TEST nodes (not CODE)."""
         graph = build_graph(
             make_requirement(
                 "REQ-100",
@@ -421,11 +435,12 @@ class TestTestSpecificMetrics:
         node = graph.find_by_id("REQ-100")
         rollup: RollupMetrics = node.get_metric("rollup_metrics")
 
-        assert rollup.direct_tested == 1  # Only A (TEST), not B (CODE)
-        assert rollup.covered_assertions == 2  # Both A and B covered
+        assert rollup.tested.direct == 1  # Only A (TEST), not B (CODE)
+        assert rollup.implemented.indirect == 2  # Both A and B covered
 
+    # Implements: REQ-d00069-F
     def test_validated_counts_passing_tests(self):
-        """validated counts assertions with passing TEST_RESULTs."""
+        """verified.direct counts assertions with passing TEST_RESULTs."""
         from tests.core.graph_test_helpers import make_test_result
 
         graph = build_graph(
@@ -462,12 +477,13 @@ class TestTestSpecificMetrics:
         node = graph.find_by_id("REQ-100")
         rollup: RollupMetrics = node.get_metric("rollup_metrics")
 
-        assert rollup.direct_tested == 2  # Both have TEST nodes
-        assert rollup.validated == 1  # Only A has passing result
-        assert rollup.has_failures is True  # B failed
+        assert rollup.tested.direct == 2  # Both have TEST nodes
+        assert rollup.verified.direct == 1  # Only A has passing result
+        assert rollup.verified.has_failures is True  # B failed
 
+    # Implements: REQ-d00069-F
     def test_has_failures_true_when_test_fails(self):
-        """has_failures is True when any TEST_RESULT is failed/error."""
+        """verified.has_failures is True when any TEST_RESULT is failed/error."""
         from tests.core.graph_test_helpers import make_test_result
 
         graph = build_graph(
@@ -485,10 +501,11 @@ class TestTestSpecificMetrics:
         node = graph.find_by_id("REQ-100")
         rollup: RollupMetrics = node.get_metric("rollup_metrics")
 
-        assert rollup.has_failures is True
+        assert rollup.verified.has_failures is True
 
+    # Implements: REQ-d00069-F
     def test_has_failures_false_when_all_pass(self):
-        """has_failures is False when all tests pass."""
+        """verified.has_failures is False when all tests pass."""
         from tests.core.graph_test_helpers import make_test_result
 
         graph = build_graph(
@@ -506,9 +523,10 @@ class TestTestSpecificMetrics:
         node = graph.find_by_id("REQ-100")
         rollup: RollupMetrics = node.get_metric("rollup_metrics")
 
-        assert rollup.has_failures is False
-        assert rollup.validated == 1
+        assert rollup.verified.has_failures is False
+        assert rollup.verified.direct == 1
 
+    # Implements: REQ-d00069-B
     def test_no_tests_means_zero_test_metrics(self):
         """Without TEST nodes, test metrics are zero."""
         graph = build_graph(
@@ -525,7 +543,7 @@ class TestTestSpecificMetrics:
         node = graph.find_by_id("REQ-100")
         rollup: RollupMetrics = node.get_metric("rollup_metrics")
 
-        assert rollup.direct_tested == 0
-        assert rollup.validated == 0
-        assert rollup.has_failures is False
-        assert rollup.covered_assertions == 1  # Still covered by CODE
+        assert rollup.tested.direct == 0
+        assert rollup.verified.direct == 0
+        assert rollup.verified.has_failures is False
+        assert rollup.implemented.indirect == 1  # Still covered by CODE

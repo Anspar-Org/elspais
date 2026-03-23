@@ -4,7 +4,7 @@
 
   $ elspais health                     # Check all rules
   $ elspais health --format json       # Output JSON for tooling
-  $ elspais health -v                  # Verbose output
+  $ elspais -v health                  # Verbose output
 
 ## Command Options
 

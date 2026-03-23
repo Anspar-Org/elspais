@@ -183,7 +183,7 @@ class TestCoreWithOneAssociate:
 
     def test_health_passes(self, tmp_path):
         core, _ = _build_core_with_associate(tmp_path)
-        result = run_elspais("health", "--lenient", cwd=core)
+        result = run_elspais("checks", "--lenient", cwd=core)
         assert result.returncode == 0, f"health failed: {result.stderr}\n{result.stdout}"
 
     def test_summary_includes_associate_reqs(self, tmp_path):
@@ -217,7 +217,7 @@ class TestCoreWithTwoAssociates:
 
     def test_health_passes(self, tmp_path):
         core, _, _ = _build_core_with_two_associates(tmp_path)
-        result = run_elspais("health", "--lenient", cwd=core)
+        result = run_elspais("checks", "--lenient", cwd=core)
         assert result.returncode == 0, f"health failed: {result.stderr}\n{result.stdout}"
 
     def test_summary_counts_all(self, tmp_path):
@@ -309,7 +309,7 @@ class TestAssociateNumericAssertions:
 
     def test_health_passes_mixed_assertions(self, tmp_path):
         core = self._build(tmp_path)
-        result = run_elspais("health", "--lenient", cwd=core)
+        result = run_elspais("checks", "--lenient", cwd=core)
         assert result.returncode == 0, f"health failed: {result.stderr}\n{result.stdout}"
 
 
@@ -363,7 +363,7 @@ class TestCrossRepoImplements:
 
     def test_health_passes_cross_repo(self, tmp_path):
         core = self._build(tmp_path)
-        result = run_elspais("health", "--lenient", cwd=core)
+        result = run_elspais("checks", "--lenient", cwd=core)
         assert result.returncode == 0, f"health failed: {result.stderr}\n{result.stdout}"
 
     def test_trace_shows_cross_repo_link(self, tmp_path):
@@ -514,5 +514,5 @@ class TestAssociateFDAStyle:
 
     def test_health_passes(self, tmp_path):
         core = self._build(tmp_path)
-        result = run_elspais("health", "--lenient", cwd=core)
+        result = run_elspais("checks", "--lenient", cwd=core)
         assert result.returncode == 0, f"health failed: {result.stderr}\n{result.stdout}"

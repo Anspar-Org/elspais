@@ -11,6 +11,7 @@ from tests.core.graph_test_helpers import (
 class TestNodeKind:
     """Tests for NodeKind enum."""
 
+    # Implements: REQ-d00126-A
     def test_all_node_kinds_exist(self):
         """All expected node kinds exist with correct values."""
         expected = {
@@ -30,6 +31,7 @@ class TestNodeKind:
 class TestGraphNode:
     """Tests for GraphNode dataclass."""
 
+    # Implements: REQ-d00127-A
     def test_create_minimal_node(self):
         """Node with id and kind only."""
         node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
@@ -41,6 +43,7 @@ class TestGraphNode:
         assert node.is_root
         assert node.is_leaf
 
+    # Implements: REQ-d00127-A
     def test_create_with_label(self):
         node = GraphNode(
             id="REQ-p00001",
@@ -49,6 +52,7 @@ class TestGraphNode:
         )
         assert node.get_label() == "User Authentication"
 
+    # Implements: REQ-d00129-C
     def test_create_with_parse_line(self):
         """parse_line and parse_end_line are accessible via get_field()."""
         node = GraphNode(
@@ -60,6 +64,7 @@ class TestGraphNode:
         assert node.get_field("parse_line") == 10
         assert node.get_field("parse_end_line") == 25
 
+    # Implements: REQ-d00127-A
     def test_create_with_content(self):
         """Content is typed data based on node kind - use builder."""
         builder = GraphBuilder()
@@ -76,6 +81,7 @@ class TestGraphNode:
         assert node is not None
         assert node.level == "PRD"
 
+    # Implements: REQ-d00127-A
     def test_set_field_get_field(self):
         """Field access."""
         node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
@@ -83,6 +89,7 @@ class TestGraphNode:
         assert node.get_field("status") == "Active"
         assert node.get_field("missing") is None
 
+    # Implements: REQ-d00127-A
     def test_set_metric_get_metric(self):
         """Metric access."""
         node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
@@ -94,6 +101,7 @@ class TestGraphNode:
 class TestGraphNodeEdgeOperations:
     """Tests for edge operations on GraphNode."""
 
+    # Implements: REQ-d00127-A
     def test_link_creates_parent_child(self):
         """link() creates bidirectional parent-child relationship."""
         parent = GraphNode(id="REQ-001", kind=NodeKind.REQUIREMENT)
@@ -105,6 +113,7 @@ class TestGraphNodeEdgeOperations:
         assert parent in list(child.iter_parents())
         assert edge.kind == EdgeKind.IMPLEMENTS
 
+    # Implements: REQ-d00127-B
     def test_unlink_removes_relationship(self):
         """unlink() removes bidirectional parent-child relationship."""
         parent = GraphNode(id="REQ-001", kind=NodeKind.REQUIREMENT)
@@ -117,6 +126,7 @@ class TestGraphNodeEdgeOperations:
         assert child not in list(parent.iter_children())
         assert parent not in list(child.iter_parents())
 
+    # Implements: REQ-d00127-B
     def test_unlink_returns_false_for_nonchild(self):
         """unlink() returns False for non-child node."""
         parent = GraphNode(id="REQ-001", kind=NodeKind.REQUIREMENT)
@@ -129,6 +139,7 @@ class TestGraphNodeEdgeOperations:
 class TestGraphNodeTraversal:
     """Tests for traversal methods."""
 
+    # Implements: REQ-d00127-C
     def test_walk_preorder(self):
         """walk() yields nodes in pre-order (parent first)."""
         root = GraphNode(id="root", kind=NodeKind.REQUIREMENT)
@@ -140,6 +151,7 @@ class TestGraphNodeTraversal:
         ids = [n.id for n in root.walk("pre")]
         assert ids == ["root", "child1", "child2"]
 
+    # Implements: REQ-d00127-C
     def test_walk_postorder(self):
         """walk(post) yields children before parent."""
         root = GraphNode(id="root", kind=NodeKind.REQUIREMENT)
@@ -149,6 +161,7 @@ class TestGraphNodeTraversal:
         ids = [n.id for n in root.walk("post")]
         assert ids == ["child1", "root"]
 
+    # Implements: REQ-d00127-C
     def test_walk_level_order(self):
         """walk(level) yields BFS order."""
         root = GraphNode(id="root", kind=NodeKind.REQUIREMENT)
@@ -166,18 +179,21 @@ class TestGraphNodeTraversal:
 class TestGraphNodeFieldAccess:
     """Tests for content and metric field access."""
 
+    # Implements: REQ-d00127-A
     def test_level_property(self):
         """level property reads from content."""
         node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
         node.set_field("level", "PRD")
         assert node.level == "PRD"
 
+    # Implements: REQ-d00127-A
     def test_status_property(self):
         """status property reads from content."""
         node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
         node.set_field("status", "Active")
         assert node.status == "Active"
 
+    # Implements: REQ-d00127-A
     def test_hash_property(self):
         """hash property reads from content."""
         node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
@@ -188,6 +204,7 @@ class TestGraphNodeFieldAccess:
 class TestGraphNodeID:
     """Tests for set_id mutation."""
 
+    # Implements: REQ-d00127-A
     def test_set_id(self):
         """set_id updates the node ID."""
         node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
@@ -198,11 +215,13 @@ class TestGraphNodeID:
 class TestUUID:
     """Tests for UUID property."""
 
+    # Implements: REQ-d00127-A
     def test_uuid_is_32_chars(self):
         """UUID is a 32-character hex string."""
         node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
         assert len(node.uuid) == 32
 
+    # Implements: REQ-d00127-A
     def test_uuid_is_unique(self):
         """Each node gets a unique UUID."""
         node1 = GraphNode(id="REQ-001", kind=NodeKind.REQUIREMENT)
@@ -213,6 +232,7 @@ class TestUUID:
 class TestEdgeOperations:
     """Tests for edge-related operations."""
 
+    # Implements: REQ-d00127-C
     def test_iter_outgoing_edges(self):
         """iter_outgoing_edges yields outgoing edges."""
         parent = GraphNode(id="REQ-001", kind=NodeKind.REQUIREMENT)
@@ -223,6 +243,7 @@ class TestEdgeOperations:
         assert len(edges) == 1
         assert edges[0].kind == EdgeKind.IMPLEMENTS
 
+    # Implements: REQ-d00127-C
     def test_iter_incoming_edges(self):
         """iter_incoming_edges yields incoming edges."""
         parent = GraphNode(id="REQ-001", kind=NodeKind.REQUIREMENT)
@@ -233,6 +254,7 @@ class TestEdgeOperations:
         assert len(edges) == 1
         assert edges[0].kind == EdgeKind.IMPLEMENTS
 
+    # Implements: REQ-d00127-C
     def test_iter_edges_by_kind(self):
         """iter_edges_by_kind filters outgoing edges."""
         parent = GraphNode(id="REQ-001", kind=NodeKind.REQUIREMENT)
@@ -244,6 +266,7 @@ class TestEdgeOperations:
         impl_edges = list(parent.iter_edges_by_kind(EdgeKind.IMPLEMENTS))
         assert len(impl_edges) == 1
 
+    # Implements: REQ-d00127-B
     def test_remove_edge(self):
         """remove_edge removes a specific edge."""
         parent = GraphNode(id="REQ-001", kind=NodeKind.REQUIREMENT)
@@ -254,6 +277,7 @@ class TestEdgeOperations:
         assert result is True
         assert list(parent.iter_outgoing_edges()) == []
 
+    # Implements: REQ-d00127-A
     def test_link_with_assertion_targets(self):
         """Link can specify assertion targets."""
         test = GraphNode(id="test:t1", kind=NodeKind.TEST)
@@ -262,6 +286,7 @@ class TestEdgeOperations:
 
         assert edge.assertion_targets == ["A", "B"]
 
+    # Implements: REQ-d00127-A
     def test_edge_has_source_and_target(self):
         """Edge source and target are correct."""
         test = GraphNode(id="test:t1", kind=NodeKind.TEST)

@@ -127,7 +127,7 @@ All notable changes to elspais will be documented in this file.
 
 ### Added
 
-- **UAT section in `_get_test_coverage()` MCP tool** -- Returns a `"uat"` dict alongside existing test data containing `jny_nodes`, `covered_assertions`, `covered_count`, `coverage_pct` (from VALIDATES edges), and `validated_pct` (from `RollupMetrics.uat_validated_pct`).
+- **UAT section in `_get_test_coverage()` MCP tool** -- Returns a `"uat"` dict alongside existing test data containing `jny_nodes`, `covered_assertions`, `covered_count`, `referenced_pct` (from VALIDATES edges), and `validated_pct` (from `RollupMetrics.uat_validated_pct`).
 - **`source` parameter in `_get_uncovered_assertions()` MCP tool** -- Accepts `'test'` (default, backward-compatible), `'uat'` (JNY Validates coverage only), or `'both'` (union). MCP tool wrapper `get_uncovered_assertions` forwards the parameter. Return dict now includes both `"assertions"` and `"uncovered_assertions"` keys (same list, alias for clarity).
 
 - **`_compute_coverage_from_source()` helper in `annotators.py`** -- Extracted shared algorithm for computing coverage contributions from outgoing REQ edges. Parameterized by edge kind and source types, used by both the VERIFIES (TEST) and VALIDATES (JNY) paths.
@@ -135,7 +135,7 @@ All notable changes to elspais will be documented in this file.
 - **UAT roll-up through IMPLEMENTS in `annotate_coverage()`** -- When a child REQ implements a parent REQ, UAT_EXPLICIT/UAT_INFERRED contributions are also added to the parent, mirroring the automated EXPLICIT/INFERRED roll-up pattern.
 
 - **`CoverageSource.UAT_EXPLICIT` and `CoverageSource.UAT_INFERRED`** -- Two new enum values in `CoverageSource` for UAT coverage originating from JNY `Validates:` references. `UAT_EXPLICIT` covers assertions explicitly named (e.g., `Validates: REQ-xxx-A`); `UAT_INFERRED` covers all assertions implied by a whole-REQ reference (e.g., `Validates: REQ-xxx`).
-- **7 UAT fields in `RollupMetrics`** -- `uat_covered`, `uat_direct_covered`, `uat_inferred_covered`, `uat_coverage_pct`, `uat_validated`, `uat_has_failures`, `uat_validated_pct`. Computed by `finalize()` from UAT contributions; `uat_validated` and `uat_validated_pct` set by annotator post-finalize (same pattern as `validated`/`validated_with_indirect`).
+- **7 UAT fields in `RollupMetrics`** -- `uat_covered`, `uat_direct_covered`, `uat_inferred_covered`, `uat_referenced_pct`, `uat_validated`, `uat_has_failures`, `uat_validated_pct`. Computed by `finalize()` from UAT contributions; `uat_validated` and `uat_validated_pct` set by annotator post-finalize (same pattern as `validated`/`validated_with_indirect`).
 
 ### Changed
 
@@ -772,7 +772,7 @@ All notable changes to elspais will be documented in this file.
 
 - **Indirect coverage toggle** for trace view: whole-requirement tests (tests targeting a requirement without assertion suffixes) can now count as covering all assertions. A new "Indirect coverage" toggle in the toolbar switches between strict traceability view and a progress-indicator view.
 - **`CoverageSource.INDIRECT`**: New coverage source type for whole-requirement test contributions, alongside existing DIRECT, EXPLICIT, and INFERRED sources.
-- **Dual coverage metrics**: `RollupMetrics` now tracks both `coverage_pct` (strict, excludes indirect) and `indirect_coverage_pct` (includes indirect). `validated_with_indirect` counts assertions validated when including whole-req passing tests.
+- **Dual coverage metrics**: `RollupMetrics` now tracks both `referenced_pct` (strict, excludes indirect) and `indirect_referenced_pct` (includes indirect). `validated_with_indirect` counts assertions validated when including whole-req passing tests.
 - **`data-coverage-indirect` attribute**: Tree rows carry both strict and indirect coverage data for client-side toggle without page reload.
 - **JNY→REQ linking via `Addresses:` field**: User journeys can now reference the requirements they address using `Addresses: REQ-xxx, REQ-yyy` in the journey block. Parsed into `EdgeKind.ADDRESSES` edges in the traceability graph.
 - **Trace view journey cards show linked REQs**: Addressed requirements appear as clickable pill badges on journey cards. Clicking navigates to the requirement in the requirements tab with a flash highlight.

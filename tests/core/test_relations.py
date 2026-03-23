@@ -15,6 +15,7 @@ from tests.core.graph_test_helpers import (
 class TestEdge:
     """Tests for Edge dataclass."""
 
+    # Implements: REQ-d00126-E
     def test_edge_equality(self):
         source = GraphNode(id="REQ-o00001", kind=NodeKind.REQUIREMENT)
         target = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
@@ -24,6 +25,7 @@ class TestEdge:
 
         assert edge1 == edge2
 
+    # Implements: REQ-d00126-E
     def test_edge_inequality_different_kind(self):
         source = GraphNode(id="REQ-o00001", kind=NodeKind.REQUIREMENT)
         target = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
@@ -33,6 +35,7 @@ class TestEdge:
 
         assert edge1 != edge2
 
+    # Implements: REQ-d00126-E
     def test_edge_inequality_different_assertion_targets(self):
         """Edges with different assertion_targets are not equal."""
         source = GraphNode(id="REQ-o00001", kind=NodeKind.REQUIREMENT)
@@ -53,6 +56,7 @@ class TestEdge:
 
         assert edge1 != edge2
 
+    # Implements: REQ-d00126-E
     def test_hash_consistent_with_eq(self):
         """Edges that are equal must have the same hash."""
         source = GraphNode(id="REQ-o00001", kind=NodeKind.REQUIREMENT)
@@ -74,6 +78,7 @@ class TestEdge:
         assert edge1 == edge2
         assert hash(edge1) == hash(edge2)
 
+    # Implements: REQ-d00126-E
     def test_hash_differs_with_different_assertion_targets(self):
         """Edges with different assertion_targets must hash differently."""
         source = GraphNode(id="REQ-o00001", kind=NodeKind.REQUIREMENT)
@@ -99,6 +104,7 @@ class TestEdge:
         edge_set = {edge1, edge2}
         assert len(edge_set) == 2
 
+    # Implements: REQ-d00126-E
     def test_edge_equality_with_non_edge(self):
         """Edge compared with non-Edge returns NotImplemented."""
         source = GraphNode(id="REQ-o00001", kind=NodeKind.REQUIREMENT)
@@ -115,23 +121,28 @@ class TestEdge:
 class TestEdgeSemantics:
     """Tests for edge semantic differences."""
 
+    # Implements: REQ-d00126-D
     def test_implements_rollup_flag(self):
         """IMPLEMENTS edges contribute to coverage rollup."""
         assert EdgeKind.IMPLEMENTS.contributes_to_coverage() is True
 
+    # Implements: REQ-d00126-D
     def test_refines_no_rollup_flag(self):
         """REFINES edges do NOT contribute to coverage rollup."""
         assert EdgeKind.REFINES.contributes_to_coverage() is False
 
+    # Implements: REQ-d00126-D
     def test_validates_rollup_flag(self):
         """VERIFIES edges (tests) contribute to coverage."""
         assert EdgeKind.VERIFIES.contributes_to_coverage() is True
 
+    # Implements: REQ-d00126-D
     def test_contains_no_rollup_flag(self):
         """CONTAINS edges (file structure) don't affect coverage."""
         assert EdgeKind.CONTAINS.contributes_to_coverage() is False
 
 
+# Implements: REQ-d00126-D
 def test_validates_REQ_contributes_to_coverage():
     """EdgeKind.VALIDATES contributes to coverage.
 
@@ -145,6 +156,7 @@ def test_validates_REQ_contributes_to_coverage():
 class TestNodeEdgeIntegration:
     """Tests for GraphNode edge management via GraphBuilder."""
 
+    # Implements: REQ-d00127-A
     def test_implements_relationship(self):
         """Child implementing parent creates correct edges and relationships."""
         builder = GraphBuilder()
@@ -162,6 +174,7 @@ class TestNodeEdgeIntegration:
         assert outgoing_edges_string(parent) == "REQ-p00001->REQ-o00001:implements"
         assert incoming_edges_string(child) == "REQ-p00001->REQ-o00001:implements"
 
+    # Implements: REQ-d00127-A
     def test_refines_relationship(self):
         """Child refining parent creates refines edge."""
         builder = GraphBuilder()
@@ -175,6 +188,7 @@ class TestNodeEdgeIntegration:
         assert children_string(parent) == "REQ-p00002"
         assert outgoing_edges_string(parent) == "REQ-p00001->REQ-p00002:refines"
 
+    # Implements: REQ-d00127-A
     def test_multiple_edge_kinds(self):
         """Graph can have both implements and refines edges from same parent."""
         builder = GraphBuilder()
@@ -194,6 +208,7 @@ class TestNodeEdgeIntegration:
         assert "REQ-p00001->REQ-o00001:implements" in edges_str
         assert "REQ-p00001->REQ-p00002:refines" in edges_str
 
+    # Implements: REQ-d00127-C
     def test_iter_edges_by_kind(self):
         """iter_edges_by_kind filters correctly."""
         builder = GraphBuilder()

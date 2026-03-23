@@ -20,6 +20,7 @@
         <div class="journey-count">
             <span id="journey-visible-count">{{ journeys|length }}</span> of {{ journeys|length }} journeys
         </div>
+        <button class="edit-only journey-add-btn" onclick="onAddJourney()">+ Add Journey</button>
     </div>
     <div class="journey-list" id="journey-list">
         {% for journey in journeys %}
@@ -91,6 +92,7 @@ Steps...<br><br>
 *End* *JNY-LOGIN-01*
             </code>
         </p>
+        <button class="edit-only journey-add-btn" onclick="onAddJourney()" style="margin-top:12px">+ Add Journey</button>
     </div>
     {% endif %}
 </div>

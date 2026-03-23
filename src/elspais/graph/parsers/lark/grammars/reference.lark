@@ -71,11 +71,11 @@ other_line.1: TEXT
 // Terminals
 // ===================================================================
 
-// Single-line reference: comment + keyword + refs
-SINGLE_REF_LINE.5: /(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__):?[ \t]+__NAMESPACE__[-_][^\n]+/
+// Single-line reference: comment + keyword + refs (optional leading whitespace)
+SINGLE_REF_LINE.5: /[ \t]*(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__):?[ \t]+__NAMESPACE__[-_][^\n]+/
 
-// Block header: comment + keyword + REQUIREMENTS:
-BLOCK_HEADER_LINE.5: /(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__)[ \t]+[Rr][Ee][Qq][Uu][Ii][Rr][Ee][Mm][Ee][Nn][Tt][Ss]?:?[ \t]*/
+// Block header: comment + keyword + REQUIREMENTS: (optional leading whitespace)
+BLOCK_HEADER_LINE.5: /[ \t]*(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__)[ \t]+[Rr][Ee][Qq][Uu][Ii][Rr][Ee][Mm][Ee][Nn][Tt][Ss]?:?[ \t]*/
 
 // Block reference line: comment + indented REQ-ID
 BLOCK_REF_LINE.4: /[ \t]*(?:__COMMENT_STYLES__)[ \t]+__NAMESPACE__[-_][^\n]+/

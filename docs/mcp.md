@@ -357,7 +357,7 @@ Get full traceability from requirement to tests.
   "summary": {
     "total_assertions": 5,
     "covered_assertions": 3,
-    "coverage_pct": 60.0,
+    "referenced_pct": 60.0,
     "total_tests": 8,
     "passed_tests": 8,
     "pass_rate_pct": 100.0
@@ -390,7 +390,7 @@ Get per-assertion coverage details.
   "summary": {
     "total_assertions": 5,
     "covered_assertions": 3,
-    "coverage_pct": 60.0,
+    "referenced_pct": 60.0,
     "direct_covered": 2,
     "explicit_covered": 1,
     "inferred_covered": 0

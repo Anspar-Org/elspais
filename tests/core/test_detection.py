@@ -40,6 +40,7 @@ def make_req(
 class TestOrphanDetection:
     """Tests for orphaned node detection."""
 
+    # Implements: REQ-d00071-A
     def test_no_orphans_when_all_linked(self):
         """Requirements with valid implements links are not orphans."""
         builder = GraphBuilder()
@@ -88,6 +89,7 @@ class TestOrphanDetection:
 class TestBrokenReferenceDetection:
     """Tests for broken reference detection."""
 
+    # Implements: REQ-p00002-B
     def test_no_broken_refs_valid_graph(self):
         """Valid graph has no broken references."""
         builder = GraphBuilder()
@@ -101,6 +103,7 @@ class TestBrokenReferenceDetection:
         assert not graph.has_broken_references()
         assert graph.broken_references() == []
 
+    # Implements: REQ-p00002-B
     def test_broken_ref_implements(self):
         """Broken implements reference is detected."""
         builder = GraphBuilder()
@@ -117,6 +120,7 @@ class TestBrokenReferenceDetection:
         assert broken[0].target_id == fake_reqs.FAKE_NONEXISTENT_REQ
         assert broken[0].edge_kind == "implements"
 
+    # Implements: REQ-p00002-B
     def test_broken_ref_refines(self):
         """Broken refines reference is detected."""
         builder = GraphBuilder()
@@ -133,6 +137,7 @@ class TestBrokenReferenceDetection:
         assert len(broken) == 1
         assert broken[0].edge_kind == "refines"
 
+    # Implements: REQ-p00002-B
     def test_multiple_broken_refs(self):
         """Multiple broken references are all detected."""
         builder = GraphBuilder()
@@ -151,6 +156,7 @@ class TestBrokenReferenceDetection:
         target_ids = {b.target_id for b in broken}
         assert target_ids == {"REQ-MISSING1", "REQ-MISSING2"}
 
+    # Implements: REQ-p00002-B
     def test_broken_ref_str(self):
         """BrokenReference has readable string representation."""
         ref = BrokenReference(
@@ -168,6 +174,7 @@ class TestBrokenReferenceDetection:
 class TestCodeAndTestOrphans:
     """Tests for code and test node orphan detection."""
 
+    # Implements: REQ-p00002-B
     def test_code_ref_to_nonexistent_req(self):
         """Code reference to non-existent requirement creates broken ref."""
         builder = GraphBuilder()
@@ -193,6 +200,7 @@ class TestCodeAndTestOrphans:
         assert broken[0].target_id == fake_reqs.FAKE_NONEXISTENT_REQ
         assert broken[0].edge_kind == "implements"
 
+    # Implements: REQ-p00002-B
     def test_test_ref_to_nonexistent_req(self):
         """Test reference to non-existent requirement creates broken ref."""
         builder = GraphBuilder()
@@ -222,6 +230,7 @@ class TestCodeAndTestOrphans:
 class TestIntegration:
     """Integration tests for detection with real-world scenarios."""
 
+    # Implements: REQ-p00002-B
     def test_mixed_valid_and_broken(self):
         """Graph with both valid links and broken references."""
         builder = GraphBuilder()
@@ -251,6 +260,7 @@ class TestIntegration:
         assert broken_node is not None
         assert broken_node.parent_count() == 0
 
+    # Implements: REQ-p00002-B
     def test_real_graph_detection(self):
         """Test detection with a realistic graph structure."""
         from elspais.graph.factory import build_graph

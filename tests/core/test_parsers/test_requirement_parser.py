@@ -15,6 +15,7 @@ def parser(hht_resolver):
 class TestRequirementParserPriority:
     """Tests for RequirementParser priority."""
 
+    # Implements: REQ-d00054-A
     def test_priority_is_50(self, parser):
         assert parser.priority == 50
 
@@ -22,6 +23,7 @@ class TestRequirementParserPriority:
 class TestRequirementParserBasic:
     """Tests for basic requirement parsing."""
 
+    # Implements: REQ-p00002-A
     def test_claims_simple_requirement(self, parser):
         lines = [
             (1, "# REQ-p00001: User Authentication"),
@@ -43,6 +45,7 @@ class TestRequirementParserBasic:
         assert results[0].parsed_data["id"] == "REQ-p00001"
         assert results[0].parsed_data["title"] == "User Authentication"
 
+    # Implements: REQ-p00002-A
     def test_claims_requirement_with_assertions(self, parser):
         lines = [
             (1, "## REQ-p00001: User Authentication"),
@@ -65,6 +68,7 @@ class TestRequirementParserBasic:
         assert assertions[0]["label"] == "A"
         assert assertions[1]["label"] == "B"
 
+    # Implements: REQ-p00002-A
     def test_claims_multiple_requirements(self, parser):
         lines = [
             (1, "## REQ-p00001: First Req"),
@@ -85,6 +89,7 @@ class TestRequirementParserBasic:
         assert results[0].parsed_data["id"] == "REQ-p00001"
         assert results[1].parsed_data["id"] == "REQ-p00002"
 
+    # Implements: REQ-p00002-A
     def test_parses_implements_field(self, parser):
         lines = [
             (1, "## REQ-o00001: Impl Req"),
@@ -99,6 +104,7 @@ class TestRequirementParserBasic:
         assert len(results) == 1
         assert results[0].parsed_data["implements"] == ["REQ-p00001"]
 
+    # Implements: REQ-p00002-A
     def test_parses_implements_shorthand_format(self, parser):
         """Test that shorthand references (without REQ- prefix) are normalized."""
         lines = [
@@ -115,6 +121,7 @@ class TestRequirementParserBasic:
         # Shorthand "o00001" should be normalized to "REQ-o00001"
         assert results[0].parsed_data["implements"] == ["REQ-o00001", "REQ-o00002"]
 
+    # Implements: REQ-p00002-A
     def test_parses_refines_field(self, parser):
         lines = [
             (1, "## REQ-p00002: Refining Req"),
@@ -129,6 +136,7 @@ class TestRequirementParserBasic:
         assert len(results) == 1
         assert results[0].parsed_data["refines"] == ["REQ-p00001"]
 
+    # Implements: REQ-p00002-C
     def test_extracts_hash(self, parser):
         lines = [
             (1, "## REQ-p00001: Hashed Req"),
@@ -147,6 +155,7 @@ class TestRequirementParserBasic:
 class TestRequirementParserEdgeCases:
     """Edge cases for requirement parsing."""
 
+    # Implements: REQ-p00002-A
     def test_no_requirements_returns_empty(self, parser):
         lines = [
             (1, "# Some Header"),
@@ -159,6 +168,7 @@ class TestRequirementParserEdgeCases:
 
         assert len(results) == 0
 
+    # Implements: REQ-p00002-A
     def test_invalid_id_not_claimed(self, parser):
         lines = [
             (1, "## INVALID-001: Bad Format"),
@@ -170,6 +180,7 @@ class TestRequirementParserEdgeCases:
 
         assert len(results) == 0
 
+    # Implements: REQ-p00002-A
     def test_requirement_without_end_marker(self, parser):
         lines = [
             (1, "## REQ-p00001: No End Marker"),
@@ -184,6 +195,7 @@ class TestRequirementParserEdgeCases:
         assert len(results) == 1
         assert results[0].end_line == 3
 
+    # Implements: REQ-d00081-D
     def test_passes_through_multi_assertion_syntax(self, parser):
         """Multi-assertion expansion now happens in builder, not parser."""
         lines = [
@@ -205,6 +217,7 @@ class TestRequirementParserEdgeCases:
 class TestRoundTripLineNumbers:
     """Tests for round-trip fidelity: line numbers on assertions and sections."""
 
+    # Implements: REQ-d00128-E
     def test_assertions_include_line_numbers(self, parser):
         """Assertions should include their absolute line number."""
         lines = [
@@ -230,6 +243,7 @@ class TestRoundTripLineNumbers:
         assert assertions[1]["label"] == "B"
         assert assertions[1]["line"] == 16
 
+    # Implements: REQ-d00128-E
     def test_sections_include_line_numbers(self, parser):
         """Non-normative sections should include their line number."""
         lines = [
@@ -263,6 +277,7 @@ class TestRoundTripLineNumbers:
             assert "line" in section
             assert isinstance(section["line"], int)
 
+    # Implements: REQ-d00128-E
     def test_assertion_line_zero_when_start_line_zero(self, parser):
         """When start_line is 0 (default), lines should be relative offsets."""
         lines = [
@@ -291,6 +306,7 @@ class TestPreambleMetadataStripping:
     Implements, Refines, Satisfies).
     """
 
+    # Implements: REQ-p00002-A
     def test_refines_line_stripped_from_preamble(self, parser):
         # Verifies: REQ-p00002-A
         """Validates that **Refines**: metadata line is not included in preamble section.
@@ -316,6 +332,7 @@ class TestPreambleMetadataStripping:
         if preamble is not None:
             assert "**Refines**" not in preamble["content"]
 
+    # Implements: REQ-p00002-A
     def test_multiple_refines_lines_all_stripped_from_preamble(self, parser):
         # Verifies: REQ-p00002-A
         """All **Refines**: lines in body are stripped from preamble - no matter how many."""
@@ -380,6 +397,7 @@ class TestChangelogParsing:
         (9, "*End* *Test Requirement* | **Hash**: abcdef12"),
     ]
 
+    # Implements: REQ-p00002-A
     def test_REQ_p00002_A_parses_changelog_entries(self, parser):
         """A requirement with ## Changelog should have parsed changelog entries."""
         ctx = ParseContext(file_path="spec/dev.md")
@@ -408,6 +426,7 @@ class TestChangelogParsing:
         assert entry["author_id"] == "a@b.org"
         assert entry["reason"] == "Refined A"
 
+    # Implements: REQ-p00002-A
     def test_REQ_p00002_A_changelog_empty_when_no_section(self, parser):
         """A requirement without ## Changelog should have changelog: []."""
         ctx = ParseContext(file_path="spec/dev.md")
@@ -419,6 +438,7 @@ class TestChangelogParsing:
         assert "changelog" in parsed
         assert parsed["changelog"] == []
 
+    # Implements: REQ-p00002-A
     def test_REQ_p00002_A_changelog_multiple_entries(self, parser):
         """Multiple changelog entries are parsed in order (newest first)."""
         ctx = ParseContext(file_path="spec/dev.md")
@@ -445,6 +465,7 @@ class TestChangelogParsing:
         assert changelog[1]["author_id"] == "b@b.org"
         assert changelog[1]["reason"] == "First version"
 
+    # Implements: REQ-p00002-A
     def test_REQ_p00002_A_changelog_excluded_from_sections(self, parser):
         """The ## Changelog section should NOT appear in parsed_data['sections']."""
         ctx = ParseContext(file_path="spec/dev.md")
@@ -463,6 +484,7 @@ class TestAdditiveMetadataCollection:
     Validates: REQ-p00002-A
     """
 
+    # Implements: REQ-p00002-A
     def test_multiple_implements_lines_are_additive(self, parser):
         # Verifies: REQ-p00002-A
         """Two distinct **Implements**: lines are merged into one list."""
@@ -481,6 +503,7 @@ class TestAdditiveMetadataCollection:
         assert set(results[0].parsed_data["implements"]) == {"REQ-p00002", "REQ-p00003"}
         assert results[0].parsed_data.get("has_redundant_refs") is not True
 
+    # Implements: REQ-p00002-A
     def test_multiple_refines_lines_are_additive(self, parser):
         # Verifies: REQ-p00002-A
         """Two distinct **Refines**: lines are merged into one list."""
@@ -500,6 +523,7 @@ class TestAdditiveMetadataCollection:
         assert set(results[0].parsed_data["refines"]) == {"REQ-p00002", "REQ-p00003"}
         assert results[0].parsed_data.get("has_redundant_refs") is not True
 
+    # Implements: REQ-p00002-A
     def test_duplicate_implements_ref_sets_has_redundant_refs(self, parser):
         # Verifies: REQ-p00002-A
         """Same REQ ID appearing in two **Implements**: lines sets has_redundant_refs."""
@@ -520,6 +544,7 @@ class TestAdditiveMetadataCollection:
         assert implements.count("REQ-p00002") == 1  # deduplicated
         assert results[0].parsed_data["has_redundant_refs"] is True
 
+    # Implements: REQ-p00002-A
     def test_duplicate_refines_ref_sets_has_redundant_refs(self, parser):
         # Verifies: REQ-p00002-A
         """Same REQ ID appearing in two **Refines**: lines sets has_redundant_refs."""
@@ -540,6 +565,7 @@ class TestAdditiveMetadataCollection:
         assert refines.count("REQ-p00002") == 1  # deduplicated
         assert results[0].parsed_data["has_redundant_refs"] is True
 
+    # Implements: REQ-p00002-A
     def test_no_redundant_refs_when_all_distinct(self, parser):
         # Verifies: REQ-p00002-A
         """has_redundant_refs is False/absent when all refs are unique."""

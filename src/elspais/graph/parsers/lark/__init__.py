@@ -199,6 +199,33 @@ class FileDispatcher:
             self._ref_parser = self._factory.get_reference_parser()
         return self._ref_parser
 
+    @staticmethod
+    def _neutralize_fenced_blocks(content: str) -> str:
+        """Replace content inside fenced code blocks with neutral text.
+
+        Fenced code blocks (```...```) may contain example requirement or
+        journey syntax that should not be parsed as actual content. This
+        replaces each line inside a fence with a neutral comment that the
+        grammar will match as TEXT/remainder, preserving line count.
+        """
+        lines = content.split("\n")
+        result: list[str] = []
+        in_fence = False
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("```") and not in_fence:
+                in_fence = True
+                result.append(line)  # keep the opening fence marker as-is
+            elif stripped.startswith("```") and in_fence:
+                in_fence = False
+                result.append(line)  # keep the closing fence marker as-is
+            elif in_fence:
+                # Replace with a neutral line that won't match any grammar rule
+                result.append("<!-- fenced -->" if line.strip() else "")
+            else:
+                result.append(line)
+        return "\n".join(result)
+
     def dispatch_spec(
         self,
         content: str,
@@ -209,6 +236,8 @@ class FileDispatcher:
 
         if not content.endswith("\n"):
             content += "\n"
+        # Neutralize fenced code blocks before parsing
+        content = self._neutralize_fenced_blocks(content)
         parser = self._get_req_parser()
         tree = parser.parse(content)
         transformer = RequirementTransformer(self._resolver)
@@ -218,7 +247,7 @@ class FileDispatcher:
         self,
         content: str,
         file_path: str = "",
-        line_context: dict[int, tuple[str | None, str | None, int]] | None = None,
+        line_context: dict[int, tuple[str | None, str | None, int, int]] | None = None,
     ) -> list:
         """Parse a code file and return ParsedContent list."""
         from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
@@ -296,8 +325,12 @@ class FileDispatcher:
                 text = str(token)
                 # Check if it's a verifies-type comment at file level
                 if "verifies" in text.lower():
+                    # Include multi-assertion separator (+) in pattern
+                    multi_sep = _re.escape(self._resolver.config.assertions.multi_separator or "+")
                     for ref_match in _re.finditer(
-                        rf"{_re.escape(prefix)}[-_][A-Za-z0-9\-_]+", text, _re.IGNORECASE
+                        rf"{_re.escape(prefix)}[-_][A-Za-z0-9\-_]+(?:{multi_sep}[A-Za-z0-9]+)*",
+                        text,
+                        _re.IGNORECASE,
                     ):
                         ref = self._resolver.normalize_ref(ref_match.group(0))
                         if ref not in file_default_verifies:

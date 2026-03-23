@@ -4,7 +4,7 @@
 
 const COOKIE_NAME = 'elspais_trace_state';
 const COOKIE_DAYS = 30;
-const COOKIE_VERSION = 11;  // v11: dynamic status filters replace deprecated/roadmap toggles
+const COOKIE_VERSION = 12;  // v12: status badge buttons replace dropdown+checkboxes
 
 function saveState() {
     const stateToSave = {
@@ -17,7 +17,6 @@ function saveState() {
         activeFilters: Object.assign({}, editState.activeFilters, {
             hiddenStatuses: Array.from(editState.activeFilters.hiddenStatuses)
         }),
-        filterStatus: editState.filterStatus,
         filterCoverage: editState.filterCoverage,
         fontSize: editState.fontSize,
         theme: editState.theme,

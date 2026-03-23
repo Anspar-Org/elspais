@@ -79,10 +79,25 @@ end_block: END_MARKER _NL?
 // Journey
 // ===================================================================
 
-journey: JNY_HEADER _NL jny_line* jny_footer?
+journey: JNY_HEADER _NL jny_preamble_line* jny_block* jny_footer?
 
-jny_line: TEXT _NL
-        | _NL
+?jny_preamble_line: jny_meta_line
+                  | jny_validates_line
+                  | jny_body_line
+
+jny_meta_line: JNY_ACTOR_FIELD _NL
+             | JNY_GOAL_FIELD _NL
+             | JNY_CONTEXT_FIELD _NL
+
+jny_validates_line: JNY_VALIDATES_FIELD _NL
+
+jny_body_line: TEXT _NL
+             | _NL
+
+jny_block: JNY_SECTION_HDR _NL jny_content_line*
+
+jny_content_line: TEXT _NL
+                | _NL
 
 jny_footer: JNY_END_MARKER _NL?
 
@@ -117,6 +132,15 @@ JNY_END_MARKER.9: /\*End\*[ \t]+\*JNY-[^*]+\*[^\n]*/
 ASSERTIONS_HDR.8: /##[ \t]+Assertions[ \t]*/
 CHANGELOG_HDR.8: /##[ \t]+Changelog[ \t]*/
 SECTION_HDR.7: /##[ \t]+(?!Assertions\b)(?!Changelog\b)[^\n]+/
+
+// --- Journey section headers (same pattern as SECTION_HDR but distinct terminal) ---
+JNY_SECTION_HDR.7: /##[ \t]+[^\n]+/
+
+// --- Journey metadata fields (only active inside journey preamble) ---
+JNY_ACTOR_FIELD.7: /(?:\*\*|\*|_)?[Aa][Cc][Tt][Oo][Rr](?:\*\*|\*|_)?[:= \t]\s*[^\n]+/
+JNY_GOAL_FIELD.7: /(?:\*\*|\*|_)?[Gg][Oo][Aa][Ll](?:\*\*|\*|_)?[:= \t]\s*[^\n]+/
+JNY_CONTEXT_FIELD.7: /(?:\*\*|\*|_)?[Cc][Oo][Nn][Tt][Ee][Xx][Tt](?:\*\*|\*|_)?[:= \t]\s*[^\n]+/
+JNY_VALIDATES_FIELD.7: /[Vv][Aa][Ll][Ii][Dd][Aa][Tt][Ee][Ss][:= \t]\s*[^\n]+/
 
 // --- Metadata fields (only active inside requirement preamble) ---
 // Optional markdown decoration (**, *, _) around field name.

@@ -48,7 +48,7 @@ class TestSingleAssertion:
         )
         build_project(tmp_path, cfg, spec_files={"spec/prd.md": [prd]})
 
-        health = run_elspais("health", "--lenient", cwd=tmp_path)
+        health = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert health.returncode == 0
 
     def test_single_assertion_trace(self, tmp_path):
@@ -89,7 +89,7 @@ class TestManyAssertions:
         )
         build_project(tmp_path, cfg, spec_files={"spec/prd.md": [prd]})
 
-        health = run_elspais("health", "--lenient", cwd=tmp_path)
+        health = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert health.returncode == 0
 
 
@@ -115,7 +115,7 @@ class TestPlaceholderAssertions:
         )
         build_project(tmp_path, cfg, spec_files={"spec/prd.md": [prd]})
 
-        health = run_elspais("health", "--lenient", cwd=tmp_path)
+        health = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert health.returncode == 0
 
 
@@ -166,7 +166,7 @@ class TestMultipleSpecFilesPerLevel:
             },
         )
 
-        health = run_elspais("health", "--lenient", cwd=tmp_path)
+        health = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert health.returncode == 0
 
         summary = run_elspais("summary", "--format", "json", cwd=tmp_path)
@@ -394,8 +394,7 @@ class TestMCPNumeric1Based:
         proc = start_mcp(tmp_path)
         try:
             req = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00001"})
-            children = [c for c in req.get("children", []) if c.get("kind") == "assertion"]
-            labels = [c.get("label", "") for c in children]
+            labels = [a.get("label", "") for a in req.get("assertions", [])]
             assert "1" in labels
             assert "2" in labels
 
@@ -456,7 +455,7 @@ class TestMultiAssociateHealth:
                 init_git=True,
             )
 
-        health = run_elspais("health", "--lenient", cwd=core)
+        health = run_elspais("checks", "--lenient", cwd=core)
         assert health.returncode == 0
 
 
@@ -516,8 +515,8 @@ class TestIdempotency:
         )
         build_project(tmp_path, cfg, spec_files={"spec/prd.md": [prd]})
 
-        r1 = run_elspais("health", "--format", "json", "--lenient", cwd=tmp_path)
-        r2 = run_elspais("health", "--format", "json", "--lenient", cwd=tmp_path)
+        r1 = run_elspais("checks", "--format", "json", "--lenient", cwd=tmp_path)
+        r2 = run_elspais("checks", "--format", "json", "--lenient", cwd=tmp_path)
         assert r1.returncode == r2.returncode
         assert r1.stdout == r2.stdout
 

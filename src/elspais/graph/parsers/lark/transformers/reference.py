@@ -43,7 +43,7 @@ class ReferenceTransformer:
         self,
         resolver: IdResolver,
         content_type: str,
-        line_context: dict[int, tuple[str | None, str | None, int]] | None = None,
+        line_context: dict[int, tuple[str | None, str | None, int, int]] | None = None,
         file_default_verifies: list[str] | None = None,
         expected_broken_count: int = 0,
         all_test_funcs: list[tuple[int, str, str | None]] | None = None,
@@ -112,8 +112,8 @@ class ReferenceTransformer:
                         break
 
                 if refs:
-                    func_name, class_name, func_line = self.line_context.get(
-                        start_ln, (None, None, 0)
+                    func_name, class_name, func_line, func_end_line = self.line_context.get(
+                        start_ln, (None, None, 0, 0)
                     )
                     key = "implements" if self.content_type == "code_ref" else "verifies"
                     parsed_data: dict[str, Any] = {
@@ -121,6 +121,7 @@ class ReferenceTransformer:
                         "function_name": func_name,
                         "class_name": class_name,
                         "function_line": func_line,
+                        "function_end_line": func_end_line,
                     }
                     if self.content_type == "code_ref":
                         parsed_data.setdefault("verifies", [])
@@ -255,7 +256,9 @@ class ReferenceTransformer:
         if not refs:
             return None
 
-        func_name, class_name, func_line = self.line_context.get(line_num, (None, None, 0))
+        func_name, class_name, func_line, func_end_line = self.line_context.get(
+            line_num, (None, None, 0, 0)
+        )
 
         # Determine if this is implements or verifies based on keyword
         is_verifies = self._text_has_verify_keyword(text)
@@ -267,6 +270,7 @@ class ReferenceTransformer:
                 "function_name": func_name,
                 "class_name": class_name,
                 "function_line": func_line,
+                "function_end_line": func_end_line,
             }
         else:  # test_ref
             parsed_data = {
@@ -326,7 +330,9 @@ class ReferenceTransformer:
             return None
 
         ref = self.resolver.normalize_ref(match.group("ref"))
-        func_name, class_name, func_line = self.line_context.get(line_num, (None, None, 0))
+        func_name, class_name, func_line, _func_end = self.line_context.get(
+            line_num, (None, None, 0, 0)
+        )
 
         parsed_data: dict[str, Any] = {
             "verifies": [ref],
@@ -351,10 +357,11 @@ class ReferenceTransformer:
     # ------------------------------------------------------------------
 
     def _extract_ids(self, text: str) -> list[str]:
-        """Extract requirement IDs from a reference line."""
+        """Extract requirement IDs from a reference line (including multi-assertion syntax)."""
         prefix = self.resolver.config.namespace
+        multi_sep = re.escape(self.resolver.config.assertions.multi_separator or "+")
         pattern = re.compile(
-            rf"{re.escape(prefix)}[-_][A-Za-z0-9\-_]+",
+            rf"{re.escape(prefix)}[-_][A-Za-z0-9\-_]+(?:{multi_sep}[A-Za-z0-9]+)*",
             re.IGNORECASE,
         )
         refs = []

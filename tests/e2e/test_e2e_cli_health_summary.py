@@ -79,7 +79,7 @@ class TestStandard3TierHealthSummary:
 
     def test_health_passes(self, tmp_path):
         self._build(tmp_path)
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0, f"health failed: {result.stderr}"
 
     def test_summary_counts_3_requirements(self, tmp_path):
@@ -173,7 +173,7 @@ class TestFDAStyleIds:
 
     def test_health_passes(self, tmp_path):
         self._build(tmp_path)
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0, f"health failed: {result.stderr}"
 
     def test_summary_counts_3(self, tmp_path):
@@ -224,7 +224,7 @@ class TestNumericAssertionLabels:
 
     def test_health_passes_with_numeric_labels(self, tmp_path):
         self._build(tmp_path)
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0, f"health failed: {result.stderr}"
 
     def test_summary_counts_1(self, tmp_path):
@@ -280,7 +280,7 @@ class TestNumeric1BasedAssertionLabels:
 
     def test_health_passes(self, tmp_path):
         self._build(tmp_path)
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0, f"health failed: {result.stderr}"
 
     def test_trace_json_valid(self, tmp_path):
@@ -335,7 +335,7 @@ class TestNamedComponentIds:
 
     def test_health_passes(self, tmp_path):
         self._build(tmp_path)
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0, f"health failed: {result.stderr}"
 
     def test_summary_counts_2(self, tmp_path):
@@ -400,7 +400,7 @@ class TestVariableLengthIds:
 
     def test_health_passes(self, tmp_path):
         self._build(tmp_path)
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0, f"health failed: {result.stderr}"
 
     def test_summary_counts_3(self, tmp_path):
@@ -503,7 +503,7 @@ class TestCustomStatuses:
 
     def test_health_passes_with_custom_statuses(self, tmp_path):
         self._build(tmp_path)
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0, f"health failed: {result.stderr}"
 
     def test_summary_default_counts_active_only(self, tmp_path):
@@ -557,7 +557,7 @@ class TestMultipleSpecDirs:
 
     def test_health_passes(self, tmp_path):
         self._build(tmp_path)
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0, f"health failed: {result.stderr}"
 
     def test_summary_counts_both_dirs(self, tmp_path):
@@ -627,12 +627,12 @@ class TestCodeRefsAndTesting:
 
     def test_health_passes(self, tmp_path):
         self._build(tmp_path)
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0, f"health failed: {result.stderr}"
 
     def test_health_json_shows_code_refs(self, tmp_path):
         self._build(tmp_path)
-        result = run_elspais("health", "--format", "json", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--format", "json", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
         # Output should reference code/test coverage
         assert "REQ-d00001" in result.stdout
@@ -744,17 +744,17 @@ class TestHealthScopeFlags:
 
     def test_health_spec_only(self, tmp_path):
         self._build(tmp_path)
-        result = run_elspais("health", "--spec", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--spec", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
 
     def test_health_code_only(self, tmp_path):
         self._build(tmp_path)
-        result = run_elspais("health", "--code", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--code", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
 
     def test_health_tests_only(self, tmp_path):
         self._build(tmp_path)
-        result = run_elspais("health", "--tests", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--tests", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
 
 

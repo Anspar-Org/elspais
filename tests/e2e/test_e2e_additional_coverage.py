@@ -1,4 +1,5 @@
 # Verifies: REQ-p00002, REQ-p00060
+# Verifies: REQ-d00074-A+B+C+D
 """Additional e2e tests for comprehensive feature coverage.
 
 Tests edge cases, deeper config validation, additional MCP scenarios,
@@ -56,7 +57,7 @@ class TestZeroPaddedNumericAssertions:
         )
         build_project(tmp_path, cfg, spec_files={"spec/prd.md": [prd]})
 
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0, f"health failed: {result.stderr}\n{result.stdout}"
 
 
@@ -139,7 +140,7 @@ class TestRefinesRelationship:
             spec_files={"spec/prd.md": [prd1, prd2]},
         )
 
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
 
         trace = run_elspais("trace", "--format", "json", cwd=tmp_path)
@@ -178,7 +179,7 @@ class TestDraftStatusRequirements:
         )
 
         # Health sees both
-        health = run_elspais("health", "--lenient", cwd=tmp_path)
+        health = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert health.returncode == 0
 
 
@@ -219,7 +220,7 @@ class TestMultipleCodeFilesForSameReq:
             },
         )
 
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
 
 
@@ -246,7 +247,7 @@ class TestHeadingLevel3:
             spec_files={"spec/prd.md": [prd]},
         )
 
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
 
         summary = run_elspais("summary", "--format", "json", cwd=tmp_path)
@@ -286,7 +287,7 @@ class TestSpecFilePreamble:
 
         build_project(tmp_path, cfg, spec_files={})
 
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
 
 
@@ -411,7 +412,7 @@ class TestDeepHierarchy:
             },
         )
 
-        health = run_elspais("health", "--lenient", cwd=tmp_path)
+        health = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert health.returncode == 0
 
         summary = run_elspais("summary", "--format", "json", cwd=tmp_path)
@@ -676,8 +677,7 @@ class TestMCPRenameAssertion:
 
             # Verify renamed
             req = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00001"})
-            children = req.get("children", [])
-            labels = [c.get("label", "") for c in children if c.get("kind") == "assertion"]
+            labels = [a.get("label", "") for a in req.get("assertions", [])]
             assert "X" in labels
             assert "A" not in labels
         finally:
@@ -806,7 +806,7 @@ class TestHealthOutputToFile:
 
         out_file = tmp_path / "health-output.json"
         result = run_elspais(
-            "health",
+            "checks",
             "--format",
             "json",
             "--lenient",
@@ -990,7 +990,7 @@ class TestTwoTierHierarchy:
             },
         )
 
-        health = run_elspais("health", "--lenient", cwd=tmp_path)
+        health = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert health.returncode == 0
 
         summary = run_elspais("summary", "--format", "json", cwd=tmp_path)
@@ -1029,7 +1029,7 @@ class TestEmptyAssertions:
 
         init_git_repo(tmp_path)
 
-        result = run_elspais("health", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
 
 
@@ -1103,8 +1103,7 @@ class TestMCPMultiMutationWorkflow:
             req = mcp_call(proc, "get_requirement", {"req_id": "REQ-o00001"})
             assert req["id"] == "REQ-o00001"
             assert req["title"] == "New Operations Req"
-            children = [c for c in req.get("children", []) if c.get("kind") == "assertion"]
-            assert len(children) == 2
+            assert len(req.get("assertions", [])) == 2
 
             # 5. Check hierarchy
             hier = mcp_call(proc, "get_hierarchy", {"req_id": "REQ-o00001"})

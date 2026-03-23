@@ -13,6 +13,7 @@ from elspais.config import schema as _schema
 ChangelogConfig = _schema.ChangelogConfig
 ChangelogRequireConfig = _schema.ChangelogRequireConfig
 CodeScanningConfig = _schema.CodeScanningConfig
+CoverageScanningConfig = _schema.CoverageScanningConfig
 DocsScanningConfig = _schema.DocsScanningConfig
 JourneyScanningConfig = _schema.JourneyScanningConfig
 LevelConfig = _schema.LevelConfig
@@ -214,6 +215,42 @@ class TestResultScanningConfig:
         assert rc.run_meta_file == "run_meta.json"
 
 
+class TestCoverageScanningConfig:
+    """Validates CoverageScanningConfig subclass."""
+
+    def test_coverage_directories_default(self):
+        """CoverageScanningConfig.directories defaults to ['.']."""
+        cc = CoverageScanningConfig()
+        assert cc.directories == ["."]
+
+    def test_coverage_inherits_base_fields(self):
+        """CoverageScanningConfig inherits all base fields."""
+        cc = CoverageScanningConfig(
+            directories=["coverage"],
+            file_patterns=["*.json"],
+            skip_files=["old.json"],
+            skip_dirs=["archive"],
+        )
+        assert cc.directories == ["coverage"]
+        assert cc.file_patterns == ["*.json"]
+        assert cc.skip_files == ["old.json"]
+        assert cc.skip_dirs == ["archive"]
+
+    def test_coverage_rejects_unknown(self):
+        """CoverageScanningConfig rejects unknown fields."""
+        with pytest.raises(ValidationError, match="extra"):
+            CoverageScanningConfig(directories=[], bogus="x")
+
+    def test_coverage_in_elspais_config(self):
+        """ElspaisConfig().scanning.coverage has correct defaults."""
+        from elspais.config.schema import ElspaisConfig
+
+        cfg = ElspaisConfig()
+        assert isinstance(cfg.scanning.coverage, CoverageScanningConfig)
+        assert cfg.scanning.coverage.directories == ["."]
+        assert cfg.scanning.coverage.file_patterns == []
+
+
 class TestJourneyScanningConfig:
     """Validates REQ-d00212-B: JourneyScanningConfig subclass (no extras)."""
 
@@ -259,12 +296,13 @@ class TestScanningConfig:
     """Validates REQ-d00212-C: ScanningConfig composite model."""
 
     def test_REQ_d00212_C_scanning_config_has_all_kinds(self):
-        """ScanningConfig exposes spec, code, test, result, journey, docs fields."""
+        """ScanningConfig exposes spec, code, test, result, coverage, journey, docs fields."""
         sc = ScanningConfig()
         assert isinstance(sc.spec, SpecScanningConfig)
         assert isinstance(sc.code, CodeScanningConfig)
         assert isinstance(sc.test, TestScanningCfg)
         assert isinstance(sc.result, ResultScanningConfig)
+        assert isinstance(sc.coverage, CoverageScanningConfig)
         assert isinstance(sc.journey, JourneyScanningConfig)
         assert isinstance(sc.docs, DocsScanningConfig)
 

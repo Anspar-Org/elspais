@@ -1,1035 +1,228 @@
 # Implements: REQ-p00006-B
 # Implements: REQ-d00010-A, REQ-d00010-F, REQ-d00010-G
-"""elspais.server.app - Flask app factory and REST API routes.
+"""elspais.server.app - Starlette app factory and route wiring.
 
-This is a THIN REST wrapper — all logic delegates to pure functions
+This is a THIN REST wrapper -- all logic delegates to pure functions
 in ``elspais.mcp.server``. No graph logic is duplicated here.
 
-State pattern matches the MCP server:
-    _state = {"graph": graph, "working_dir": repo_root,
-              "config": config, "build_time": time.time()}
+State is stored on ``app.state.app_state`` as an ``AppState`` instance.
 """
-
 from __future__ import annotations
 
-import time
 from pathlib import Path
-from typing import Any
 
-from flask import Flask, jsonify, render_template, request
-from flask_cors import CORS
+from starlette.applications import Starlette
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from starlette.routing import Mount, Route
 
-from elspais.config import get_status_roles
-from elspais.graph import NodeKind
-from elspais.graph.federated import FederatedGraph
-from elspais.html.theme import get_catalog
-from elspais.mcp.server import (
-    _get_assertion_code_map,
-    _get_assertion_test_map,
-    _get_graph_status,
-    _get_hierarchy,
-    _get_mutation_log,
-    _get_node,
-    _get_requirement,
-    _mutate_add_assertion,
-    _mutate_add_edge,
-    _mutate_change_edge_kind,
-    _mutate_change_edge_targets,
-    _mutate_change_status,
-    _mutate_delete_assertion,
-    _mutate_delete_edge,
-    _mutate_delete_requirement,
-    _mutate_move_node_to_file,
-    _mutate_rename_file,
-    _mutate_update_assertion,
-    _mutate_update_title,
-    _query_nodes,
-    _search,
-    _undo_last_mutation,
+from elspais.server.middleware import AutoRefreshMiddleware, NoCacheMiddleware
+from elspais.server.routes_api import (
+    api_check_freshness,
+    api_code_coverage,
+    api_dirty,
+    api_file_content,
+    api_hierarchy,
+    api_journey_files,
+    api_mutate_assertion,
+    api_mutate_assertion_add,
+    api_mutate_assertion_delete,
+    api_mutate_edge,
+    api_mutate_journey_add,
+    api_mutate_journey_delete,
+    api_mutate_journey_field,
+    api_mutate_journey_section,
+    api_mutate_move_to_file,
+    api_mutate_rename_file,
+    api_mutate_requirement_add,
+    api_mutate_requirement_delete,
+    api_mutate_status,
+    api_mutate_title,
+    api_mutate_undo,
+    api_next_req_id,
+    api_node,
+    api_query,
+    api_reload,
+    api_repos,
+    api_requirement,
+    api_revert,
+    api_run_analysis,
+    api_run_broken,
+    api_run_checks,
+    api_run_gaps,
+    api_run_summary,
+    api_run_trace,
+    api_run_unlinked,
+    api_save,
+    api_search,
+    api_shutdown,
+    api_spec_files,
+    api_status,
+    api_test_coverage,
+    api_tree_data,
+    api_uat_coverage,
 )
-
-# Implements: REQ-d00211
-# User-selectable relationship kinds for the edit UI.
-_USER_RELATIONSHIP_KINDS = ["implements", "refines", "satisfies"]
-
-
-def _extract_viewer_config(config: dict[str, Any]) -> dict[str, Any]:
-    """Extract viewer-relevant values from the config dict.
-
-    Returns a dict with keys suitable for unpacking into the Jinja2
-    template context: config_types, config_relationship_kinds,
-    config_statuses.
-    """
-    from elspais.config.schema import ElspaisConfig
-
-    try:
-        typed = ElspaisConfig.model_validate(config)
-    except Exception:
-        typed = ElspaisConfig.model_validate({})
-
-    # Types: extract name, letter, rank from levels
-    config_types = []
-    for name, level_cfg in typed.levels.items():
-        entry: dict[str, Any] = {"name": name, "level": level_cfg.rank}
-        entry["letter"] = level_cfg.letter or name[0]
-        config_types.append(entry)
-    config_types.sort(key=lambda t: t["level"])
-
-    # Statuses: from allowed_statuses if configured
-    config_statuses: list[str] = []
-    if typed.rules.format.allowed_statuses:
-        config_statuses = list(typed.rules.format.allowed_statuses)
-
-    return {
-        "config_types": config_types,
-        "config_relationship_kinds": list(_USER_RELATIONSHIP_KINDS),
-        "config_statuses": config_statuses,
-    }
+from elspais.server.routes_git import (
+    api_git_branch,
+    api_git_branches,
+    api_git_checkout,
+    api_git_checkout_commit,
+    api_git_commit,
+    api_git_commit_message,
+    api_git_commits,
+    api_git_pull,
+    api_git_push,
+    api_git_status,
+    api_git_suggest_branch_name,
+)
+from elspais.server.routes_ui import _extract_viewer_config, index
+from elspais.server.state import AppState
 
 
-def create_app(
-    repo_root: Path,
-    graph: FederatedGraph,
-    config: dict[str, Any],
-) -> Flask:
-    """Create the Flask application with REST API routes.
+class DetachedGuardMiddleware:
+    """Block mutation endpoints when in detached HEAD (read-only) mode."""
 
-    REQ-d00010-A: Flask application with factory function.
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope["path"].startswith("/api/mutate/"):
+            request = Request(scope, receive)
+            state = request.app.state.app_state
+            if state.is_detached:
+                response = JSONResponse(
+                    {
+                        "success": False,
+                        "error": "Read-only: in detached HEAD mode. Switch to a branch to edit.",
+                    },
+                    status_code=409,
+                )
+                await response(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
+
+
+# Re-export for backward compatibility (used by tests/core/test_viewer_config.py)
+__all__ = ["create_app", "_extract_viewer_config"]
+
+
+def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
+    """Create the Starlette application with REST API routes.
+
+    REQ-d00010-A: Application with factory function.
     REQ-d00010-F: CORS enabled for cross-origin requests.
     REQ-d00010-G: Static file serving from templates/static/.
 
     Args:
-        repo_root: Repository root path.
-        graph: Pre-built TraceGraph instance.
-        config: elspais configuration dict.
+        state: Pre-built AppState instance with graph, config, etc.
+        mount_mcp: Whether to mount the MCP sub-app at /mcp.
 
     Returns:
-        Configured Flask application.
+        Configured Starlette application.
     """
-    # Resolve template and static directories
+    routes: list[Route | Mount] = [
+        # UI
+        Route("/", index),
+        # Read-only GET endpoints
+        Route("/api/status", api_status),
+        Route("/api/repos", api_repos),
+        Route("/api/requirement/{req_id:path}", api_requirement),
+        Route("/api/node/{node_id:path}", api_node),
+        Route("/api/query", api_query),
+        Route("/api/hierarchy/{req_id:path}", api_hierarchy),
+        Route("/api/search", api_search),
+        Route("/api/test-coverage/{req_id:path}", api_test_coverage),
+        Route("/api/code-coverage/{req_id:path}", api_code_coverage),
+        Route("/api/uat-coverage/{req_id:path}", api_uat_coverage),
+        Route("/api/tree-data", api_tree_data),
+        Route("/api/file-content", api_file_content),
+        Route("/api/spec-files", api_spec_files),
+        Route("/api/dirty", api_dirty),
+        Route("/api/check-freshness", api_check_freshness),
+        # CLI command endpoints
+        Route("/api/run/checks", api_run_checks),
+        Route("/api/run/broken", api_run_broken),
+        Route("/api/run/summary", api_run_summary),
+        Route("/api/run/gaps", api_run_gaps),
+        Route("/api/run/unlinked", api_run_unlinked),
+        Route("/api/run/analysis", api_run_analysis),
+        Route("/api/run/trace", api_run_trace),
+        # Mutation POST endpoints
+        Route("/api/mutate/status", api_mutate_status, methods=["POST"]),
+        Route("/api/mutate/title", api_mutate_title, methods=["POST"]),
+        Route("/api/mutate/assertion", api_mutate_assertion, methods=["POST"]),
+        Route("/api/mutate/assertion/add", api_mutate_assertion_add, methods=["POST"]),
+        Route("/api/mutate/assertion/delete", api_mutate_assertion_delete, methods=["POST"]),
+        Route("/api/next-req-id", api_next_req_id),
+        Route("/api/mutate/requirement/add", api_mutate_requirement_add, methods=["POST"]),
+        Route(
+            "/api/mutate/requirement/delete",
+            api_mutate_requirement_delete,
+            methods=["POST"],
+        ),
+        Route("/api/mutate/edge", api_mutate_edge, methods=["POST"]),
+        Route("/api/mutate/journey/field", api_mutate_journey_field, methods=["POST"]),
+        Route("/api/mutate/journey/section", api_mutate_journey_section, methods=["POST"]),
+        Route("/api/mutate/journey/add", api_mutate_journey_add, methods=["POST"]),
+        Route("/api/mutate/journey/delete", api_mutate_journey_delete, methods=["POST"]),
+        Route("/api/journey-files", api_journey_files),
+        Route("/api/mutate/move-to-file", api_mutate_move_to_file, methods=["POST"]),
+        Route("/api/mutate/rename-file", api_mutate_rename_file, methods=["POST"]),
+        Route("/api/mutate/undo", api_mutate_undo, methods=["POST"]),
+        # Lifecycle
+        Route("/api/shutdown", api_shutdown, methods=["POST"]),
+        # Persistence
+        Route("/api/save", api_save, methods=["POST"]),
+        Route("/api/revert", api_revert, methods=["POST"]),
+        Route("/api/reload", api_reload, methods=["POST"]),
+        # Git endpoints
+        Route("/api/git/status", api_git_status),
+        Route("/api/git/branch", api_git_branch, methods=["POST"]),
+        Route("/api/git/push", api_git_push, methods=["POST"]),
+        Route("/api/git/pull", api_git_pull, methods=["POST"]),
+        Route("/api/git/branches", api_git_branches),
+        Route("/api/git/checkout", api_git_checkout, methods=["POST"]),
+        Route("/api/git/commits", api_git_commits),
+        Route("/api/git/commit", api_git_commit, methods=["POST"]),
+        Route("/api/git/checkout-commit", api_git_checkout_commit, methods=["POST"]),
+        Route("/api/git/commit-message", api_git_commit_message),
+        Route("/api/git/suggest-branch-name", api_git_suggest_branch_name),
+    ]
+
+    # Mount MCP sub-app at /mcp
+    if mount_mcp:
+        try:
+            from elspais.mcp.server import create_server
+
+            mcp = create_server(graph=state.graph, working_dir=state.repo_root)
+            routes.append(Mount("/mcp", app=mcp.streamable_http_app()))
+        except Exception:
+            pass  # MCP not available or setup failed
+
+    # Mount static files if directory exists
     templates_dir = Path(__file__).parent.parent / "html" / "templates"
     static_dir = templates_dir / "static"
+    if static_dir.exists():
+        from starlette.staticfiles import StaticFiles
 
-    app = Flask(
-        __name__,
-        template_folder=str(templates_dir),
-        static_folder=str(static_dir) if static_dir.exists() else None,
-    )
-
-    # Always reload templates from disk (editable installs change files in-place)
-    app.config["TEMPLATES_AUTO_RELOAD"] = True
+        routes.append(Mount("/static", app=StaticFiles(directory=str(static_dir))))
 
     # REQ-d00010-F: CORS support
-    CORS(app)
-
-    # Disable browser caching for dev server (ensures fresh content on reload)
-    @app.after_request
-    def _no_cache(response):
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
-        return response
-
-    # Build whitelist of allowed directories for file serving.
-    # Includes repo root + associated repo roots discovered via config.
-    repo_resolved = repo_root.resolve()
-    allowed_roots: list[Path] = [repo_resolved]
-    try:
-        from elspais.associates import get_associate_spec_directories
-
-        spec_dirs, _ = get_associate_spec_directories(config, repo_root)
-        for spec_dir in spec_dirs:
-            # Walk up from spec dir to find .elspais.toml (the repo root)
-            candidate = spec_dir.resolve()
-            while candidate != candidate.parent:
-                if (candidate / ".elspais.toml").exists():
-                    if candidate not in allowed_roots:
-                        allowed_roots.append(candidate)
-                    break
-                candidate = candidate.parent
-    except Exception:
-        pass  # Associates not configured; repo root is the only allowed dir
-
-    # State pattern matching MCP server
-    _state: dict[str, Any] = {
-        "graph": graph,
-        "working_dir": repo_root,
-        "config": config,
-        "build_time": time.time(),
-    }
-
-    # ─────────────────────────────────────────────────────────────────
-    # Template route
-    # ─────────────────────────────────────────────────────────────────
-
-    @app.route("/")
-    def index():
-        """Serve the trace-edit UI template with enriched context.
-
-        Reuses HTMLGenerator methods to compute stats, journeys,
-        and other view context for the unified template.
-        """
-        try:
-            from elspais.html.generator import HTMLGenerator
-            from elspais.html.highlighting import get_pygments_css
-
-            gen = HTMLGenerator(_state["graph"], base_path=str(_state["working_dir"]))
-            gen._annotate_git_state()
-            stats = gen._compute_stats()
-            journeys = gen._collect_journeys()
-            stats.journey_count = len(journeys)
-            statuses = sorted(gen._collect_unique_values("status"))
-            topics = sorted(gen._collect_unique_values("topic"))
-            roles = get_status_roles(_state["config"])
-            default_hidden = roles.default_hidden_statuses()
-
-            viewer_cfg = _extract_viewer_config(_state["config"])
-
-            return render_template(
-                "trace_unified.html.j2",
-                mode="edit",
-                stats=stats,
-                journeys=journeys,
-                statuses=statuses,
-                topics=topics,
-                default_hidden_statuses=sorted(default_hidden),
-                version=gen.version,
-                base_path=str(_state["working_dir"]),
-                repo_name=_state["config"].get("project", {}).get("name") or "unknown",
-                pygments_css=get_pygments_css(),
-                pygments_css_dark=get_pygments_css(style="monokai", scope=".theme-dark .highlight"),
-                # Empty dicts — edit mode uses live API, not embedded data
-                node_index={},
-                coverage_index={},
-                status_data={},
-                catalog=get_catalog(),
-                **viewer_cfg,
-            )
-        except Exception:
-            return jsonify({"message": "trace_unified.html.j2 template not yet available"}), 200
-
-    # ─────────────────────────────────────────────────────────────────
-    # Read-only GET endpoints
-    # ─────────────────────────────────────────────────────────────────
-
-    @app.route("/api/status")
-    def api_status():
-        """GET /api/status - Graph status with federation repo info."""
-        result = _get_graph_status(_state["graph"])
-        # Implements: REQ-d00206-C
-        # Include federation repo metadata from iter_repos()
-        graph = _state["graph"]
-        if hasattr(graph, "iter_repos"):
-            repos_info = []
-            for entry in graph.iter_repos():
-                repo_info = {
-                    "name": entry.name,
-                    "path": str(entry.repo_root),
-                    "status": "error" if entry.graph is None else "ok",
-                }
-                if entry.git_origin:
-                    repo_info["git_origin"] = entry.git_origin
-                if entry.error:
-                    repo_info["error"] = entry.error
-                repos_info.append(repo_info)
-            result["repos"] = repos_info
-        else:
-            result["repos"] = []
-        return jsonify(result)
-
-    # Implements: REQ-d00206-A, REQ-d00206-B
-    @app.route("/api/repos")
-    def api_repos():
-        """GET /api/repos - Federation repo info with optional staleness."""
-        graph = _state["graph"]
-        repos = []
-        if hasattr(graph, "iter_repos"):
-            for entry in graph.iter_repos():
-                repo_info: dict = {
-                    "name": entry.name,
-                    "path": str(entry.repo_root),
-                    "status": "error" if entry.graph is None else "ok",
-                }
-                if entry.git_origin:
-                    repo_info["git_origin"] = entry.git_origin
-                if entry.error:
-                    repo_info["error"] = entry.error
-
-                # REQ-d00206-B: Staleness info for repos with git_origin
-                if entry.git_origin and entry.graph is not None:
-                    try:
-                        from elspais.utilities.git import git_status_summary
-
-                        summary = git_status_summary(entry.repo_root)
-                        repo_info["staleness"] = {
-                            "branch": summary.get("branch"),
-                            "remote_diverged": summary.get("remote_diverged", False),
-                            "fast_forward_possible": summary.get("fast_forward_possible", False),
-                        }
-                    except Exception:
-                        repo_info["staleness"] = None
-
-                repos.append(repo_info)
-        return jsonify({"repos": repos})
-
-    @app.route("/api/requirement/<req_id>")
-    def api_requirement(req_id: str):
-        """GET /api/requirement/<req_id> - Full requirement details.
-
-        Thin wrapper: calls _get_node() internally but guards kind==requirement.
-        """
-        result = _get_requirement(_state["graph"], req_id)
-        if "error" in result:
-            return jsonify(result), 404
-        return jsonify(result)
-
-    @app.route("/api/node/<node_id>")
-    def api_node(node_id: str):
-        """GET /api/node/<node_id> - Full details for any node kind."""
-        result = _get_node(_state["graph"], node_id)
-        if "error" in result:
-            return jsonify(result), 404
-        return jsonify(result)
-
-    @app.route("/api/query")
-    def api_query():
-        """GET /api/query - Combined property + keyword filter endpoint.
-
-        Query parameters:
-            kind: Filter by NodeKind value (requirement, journey, test, etc.)
-            keywords: Comma-separated keywords
-            match_all: true (default) = AND, false = OR
-            level: Property filter (PRD, OPS, DEV)
-            status: Property filter (active, draft, passed, failed, etc.)
-            actor: Property filter (journey actor)
-            limit: Max results (default 50)
-        """
-        kind = request.args.get("kind")
-        keywords_str = request.args.get("keywords", "")
-        keywords = (
-            [k.strip() for k in keywords_str.split(",") if k.strip()] if keywords_str else None
-        )
-        match_all = request.args.get("match_all", "true").lower() != "false"
-        limit = int(request.args.get("limit", "50"))
-        # Collect property filters from known param names
-        filters: dict[str, str] = {}
-        for prop in ("level", "status", "actor"):
-            val = request.args.get(prop)
-            if val:
-                filters[prop] = val
-        return jsonify(
-            _query_nodes(_state["graph"], kind, keywords, match_all, filters or None, limit)
-        )
-
-    @app.route("/api/hierarchy/<req_id>")
-    def api_hierarchy(req_id: str):
-        """GET /api/hierarchy/<req_id> - Ancestors and children."""
-        result = _get_hierarchy(_state["graph"], req_id)
-        if "error" in result:
-            return jsonify(result), 404
-        return jsonify(result)
-
-    @app.route("/api/search")
-    def api_search():
-        """GET /api/search?q=<query>&field=<field>&limit=<n>&regex=<bool> - Search requirements."""
-        query = request.args.get("q", "")
-        field = request.args.get("field", "all")
-        regex = request.args.get("regex", "false").lower() == "true"
-        limit = int(request.args.get("limit", "50"))
-        if not query:
-            return jsonify([])
-        return jsonify(_search(_state["graph"], query, field, regex=regex, limit=limit))
-
-    @app.route("/api/test-coverage/<req_id>")
-    def api_test_coverage(req_id: str):
-        """GET /api/test-coverage/<req_id> - Per-assertion test coverage map."""
-        result = _get_assertion_test_map(_state["graph"], req_id)
-        if "error" in result:
-            return jsonify(result), 404
-        return jsonify(result)
-
-    @app.route("/api/code-coverage/<req_id>")
-    def api_code_coverage(req_id: str):
-        """GET /api/code-coverage/<req_id> - Per-assertion code implementation map."""
-        result = _get_assertion_code_map(_state["graph"], req_id)
-        if "error" in result:
-            return jsonify(result), 404
-        return jsonify(result)
-
-    @app.route("/api/tree-data")
-    def api_tree_data():
-        """GET /api/tree-data - Build tree data for nav panel.
-
-        Produces a flat list of tree nodes with coverage, git state,
-        and associated flags to enable filtering in edit mode.
-        Tests/results are NOT included — they live in per-assertion
-        validation panels instead.
-        """
-        import re
-
-        from elspais.html.generator import compute_validation_color
-
-        g = _state["graph"]
-        rows: list[dict[str, Any]] = []
-        visited: set[tuple[str, str]] = set()  # (node_id, parent_id) dedup
-
-        def _is_associated(node) -> bool:
-            """Check if a requirement is from an associated/sponsor repo."""
-            # Definitive: ID pattern (e.g., REQ-CAL-p00001)
-            if re.match(r"^REQ-[A-Z]{2,4}-[a-z]", node.id):
-                return True
-            # Definitive: repo_prefix metric set by annotator
-            rp = node.get_metric("repo_prefix", "")
-            if rp and rp != "CORE":
-                return True
-            # Implements: REQ-d00129-F
-            # Definitive: FILE node from a different repo
-            _fn = node.file_node()
-            if _fn and _fn.get_field("repo"):
-                return True
-            # Explicit field marker
-            return bool(node.get_field("associated", False))
-
-        def _get_repo_prefix(node) -> str:
-            """Get repo prefix for a node."""
-            # Check annotated metric (non-CORE values are definitive)
-            rp = node.get_metric("repo_prefix", "")
-            if rp and rp != "CORE":
-                return rp
-            # Implements: REQ-d00129-F
-            # Check FILE node repo marker
-            _fn = node.file_node()
-            if _fn and _fn.get_field("repo"):
-                return _fn.get_field("repo")
-            # Extract from ID pattern (e.g., REQ-CAL-d00001 → CAL)
-            m = re.match(r"^REQ-([A-Z]{2,4})-[a-z]", node.id)
-            if m:
-                return m.group(1)
-            return rp or "CORE"
-
-        def _walk(node, depth: int, parent_id: str | None) -> None:
-            """DFS traversal producing flat row list (requirements only)."""
-            if node.kind != NodeKind.REQUIREMENT:
-                return
-
-            visit_key = (node.id, parent_id or "__root__")
-            if visit_key in visited:
-                return
-            visited.add(visit_key)
-
-            # Collect assertion letters
-            assertions = []
-            for child in node.iter_children():
-                if child.kind == NodeKind.ASSERTION:
-                    label = child.get_field("label", "")
-                    if label:
-                        assertions.append(label)
-
-            # Check for requirement children only
-            has_children = any(c.kind == NodeKind.REQUIREMENT for c in node.iter_children())
-
-            coverage = node.get_field("coverage", "none")
-            is_changed = bool(node.get_field("is_changed", False))
-            is_uncommitted = bool(node.get_field("is_uncommitted", False))
-            val_color, val_tip = compute_validation_color(node)
-
-            rows.append(
-                {
-                    "id": node.id,
-                    "kind": "requirement",
-                    "title": node.get_label() or "",
-                    "level": (node.get_field("level") or "").upper(),
-                    "status": (node.get_field("status") or "").upper(),
-                    "depth": depth,
-                    "parent_id": parent_id,
-                    "assertions": sorted(assertions),
-                    "has_children": has_children,
-                    "is_leaf": not has_children,
-                    "coverage": coverage,
-                    "is_changed": is_changed,
-                    "is_uncommitted": is_uncommitted,
-                    "is_associated": _is_associated(node),
-                    "is_test": False,
-                    "is_test_result": False,
-                    "result_status": "",
-                    "repo_prefix": _get_repo_prefix(node),
-                    "source_file": node.get_field("source_file", ""),
-                    "source_line": node.get_field("source_line", 0),
-                    "validation_color": val_color,
-                    "validation_tip": val_tip,
-                }
-            )
-
-            # Recurse into requirement children only (sorted by ID)
-            req_children = sorted(
-                (c for c in node.iter_children() if c.kind == NodeKind.REQUIREMENT),
-                key=lambda n: n.id,
-            )
-            for child in req_children:
-                _walk(child, depth + 1, node.id)
-
-        # Start from roots (sorted by ID for stable display order)
-        for root in sorted(g.iter_roots(), key=lambda n: n.id):
-            if root.kind == NodeKind.REQUIREMENT:
-                _walk(root, 0, None)
-
-        # Add USER_JOURNEY nodes as root-level rows (sorted by ID)
-        for node in sorted(g.nodes_by_kind(NodeKind.USER_JOURNEY), key=lambda n: n.id):
-            _fn = node.file_node()
-            source_file = _fn.get_field("relative_path") if _fn else ""
-            source_line = node.get_field("parse_line") or 0
-            rows.append(
-                {
-                    "id": node.id,
-                    "kind": "journey",
-                    "title": node.get_label() or "",
-                    "level": "",
-                    "status": "",
-                    "depth": 0,
-                    "parent_id": None,
-                    "assertions": [],
-                    "has_children": False,
-                    "is_leaf": True,
-                    "coverage": "none",
-                    "is_changed": False,
-                    "is_uncommitted": False,
-                    "is_associated": False,
-                    "is_test": False,
-                    "is_test_result": False,
-                    "is_journey": True,
-                    "result_status": "",
-                    "repo_prefix": "CORE",
-                    "source_file": source_file,
-                    "source_line": source_line,
-                    "actor": node.get_field("actor", ""),
-                    "goal": node.get_field("goal", ""),
-                }
-            )
-
-        return jsonify(rows)
-
-    @app.route("/api/file-content")
-    def api_file_content():
-        """GET /api/file-content?path=<path> - Read a file from disk.
-
-        The path may be relative (to the repo root) or absolute (for
-        associated repo files outside the main repo tree).
-
-        Returns the file content as an array of lines with metadata about
-        whether the file has pending in-memory mutations that would change
-        it on save.
-        """
-        import os
-
-        from elspais.graph.mutations import MutationLog
-        from elspais.html.highlighting import highlight_file_content
-
-        rel_path = request.args.get("path", "")
-        if not rel_path:
-            return jsonify({"error": "path parameter required"}), 400
-
-        # Resolve to absolute path; if the path is already absolute
-        # (e.g. from an associated repo outside the main repo), use it
-        # directly; otherwise join with working_dir.
-        p = Path(rel_path)
-        abs_path = (p if p.is_absolute() else (_state["working_dir"] / rel_path)).resolve()
-
-        # Security: path must be under repo root or an allowed associate dir
-        if not any(abs_path.is_relative_to(root) for root in allowed_roots):
-            return jsonify({"error": "path outside repository"}), 403
-
-        if not abs_path.exists():
-            return jsonify({"error": f"file not found: {rel_path}"}), 404
-
-        try:
-            content = abs_path.read_text(encoding="utf-8")
-        except Exception as e:
-            return jsonify({"error": f"cannot read file: {e}"}), 500
-
-        lines = content.splitlines()
-
-        # Syntax highlighting via shared module
-        highlighted = highlight_file_content(rel_path, content)
-
-        # Check which nodes in the mutation log are sourced from this file
-        g = _state["graph"]
-        mutation_log: MutationLog = g.mutation_log
-        affected_node_ids: set[str] = set()
-        for entry in mutation_log.iter_entries():
-            # Each entry has node_id in before_state or after_state
-            node_id = entry.after_state.get("node_id", "") if entry.after_state else ""
-            if not node_id:
-                node_id = entry.before_state.get("node_id", "") if entry.before_state else ""
-            if not node_id:
-                continue
-            node = g.find_by_id(node_id)
-            if node:
-                _fn = node.file_node()
-                _rp = _fn.get_field("relative_path") if _fn else None
-                if _rp:
-                    source_path = Path(_rp)
-                    node_path = (
-                        source_path
-                        if source_path.is_absolute()
-                        else (_state["working_dir"] / source_path)
-                    ).resolve()
-                    if node_path == abs_path:
-                        affected_node_ids.add(node_id)
-
-        return jsonify(
-            {
-                "lines": lines,
-                "highlighted_lines": highlighted["lines"],
-                "language": highlighted["language"],
-                "line_count": len(lines),
-                "has_pending_mutations": len(affected_node_ids) > 0,
-                "pending_mutation_count": len(affected_node_ids),
-                "affected_nodes": sorted(affected_node_ids),
-                "mtime": os.path.getmtime(abs_path),
-            }
-        )
-
-    @app.route("/api/dirty")
-    def api_dirty():
-        """GET /api/dirty - Check if graph has unsaved mutations."""
-        log = _get_mutation_log(_state["graph"], limit=1)
-        count = log.get("count", 0)
-        return jsonify({"dirty": count > 0, "mutation_count": count})
-
-    @app.route("/api/check-freshness")
-    def api_check_freshness():
-        # Implements: REQ-p00006-A
-        """GET /api/check-freshness - Check if spec files changed since last build."""
-        import os
-
-        build_time = _state.get("build_time", 0)
-        spec_dirs = (
-            _state["config"].get("scanning", {}).get("spec", {}).get("directories", ["spec"])
-        )
-        working_dir = _state["working_dir"]
-
-        stale_files: list[str] = []
-        for spec_dir in spec_dirs:
-            spec_path = Path(working_dir) / spec_dir
-            if not spec_path.is_dir():
-                continue
-            for md_file in spec_path.rglob("*.md"):
-                try:
-                    if os.path.getmtime(md_file) > build_time:
-                        stale_files.append(str(md_file.relative_to(working_dir)))
-                except OSError:
-                    continue
-
-        log = _get_mutation_log(_state["graph"], limit=1)
-        has_pending = log.get("count", 0) > 0
-
-        return jsonify(
-            {
-                "stale": len(stale_files) > 0,
-                "has_pending_mutations": has_pending,
-                "stale_files": sorted(stale_files),
-            }
-        )
-
-    # ─────────────────────────────────────────────────────────────────
-    # Mutation POST endpoints
-    # ─────────────────────────────────────────────────────────────────
-
-    @app.route("/api/mutate/status", methods=["POST"])
-    def api_mutate_status():
-        """POST /api/mutate/status - Change requirement status."""
-        data = request.get_json(force=True)
-        node_id = data.get("node_id", "")
-        new_status = data.get("new_status", "")
-        if not node_id or not new_status:
-            return jsonify({"success": False, "error": "node_id and new_status required"}), 400
-        result = _mutate_change_status(_state["graph"], node_id, new_status)
-        status_code = 200 if result.get("success") else 400
-        return jsonify(result), status_code
-
-    @app.route("/api/mutate/title", methods=["POST"])
-    def api_mutate_title():
-        """POST /api/mutate/title - Update requirement title."""
-        data = request.get_json(force=True)
-        node_id = data.get("node_id", "")
-        new_title = data.get("new_title", "")
-        if not node_id or not new_title:
-            return jsonify({"success": False, "error": "node_id and new_title required"}), 400
-        result = _mutate_update_title(_state["graph"], node_id, new_title)
-        status_code = 200 if result.get("success") else 400
-        return jsonify(result), status_code
-
-    @app.route("/api/mutate/assertion", methods=["POST"])
-    def api_mutate_assertion():
-        """POST /api/mutate/assertion - Update assertion text."""
-        data = request.get_json(force=True)
-        assertion_id = data.get("assertion_id", "")
-        new_text = data.get("new_text", "")
-        if not assertion_id or not new_text:
-            return jsonify({"success": False, "error": "assertion_id and new_text required"}), 400
-        result = _mutate_update_assertion(_state["graph"], assertion_id, new_text)
-        status_code = 200 if result.get("success") else 400
-        return jsonify(result), status_code
-
-    @app.route("/api/mutate/assertion/add", methods=["POST"])
-    def api_mutate_assertion_add():
-        """POST /api/mutate/assertion/add - Add assertion to requirement."""
-        data = request.get_json(force=True)
-        req_id = data.get("req_id", "")
-        label = data.get("label", "")
-        text = data.get("text", "")
-        if not req_id or not label or not text:
-            return jsonify({"success": False, "error": "req_id, label, and text required"}), 400
-        result = _mutate_add_assertion(_state["graph"], req_id, label, text)
-        status_code = 200 if result.get("success") else 400
-        return jsonify(result), status_code
-
-    @app.route("/api/mutate/assertion/delete", methods=["POST"])
-    def api_mutate_assertion_delete():
-        # Implements: REQ-d00010-A
-        """POST /api/mutate/assertion/delete - Delete an assertion."""
-        data = request.get_json(force=True)
-        assertion_id = data.get("assertion_id", "")
-        confirm = data.get("confirm", False)
-        if not assertion_id:
-            return jsonify({"success": False, "error": "assertion_id required"}), 400
-        if not confirm:
-            return jsonify({"success": False, "error": "confirm=true required"}), 400
-        result = _mutate_delete_assertion(_state["graph"], assertion_id, confirm=True)
-        status_code = 200 if result.get("success") else 400
-        return jsonify(result), status_code
-
-    @app.route("/api/mutate/requirement/delete", methods=["POST"])
-    def api_mutate_requirement_delete():
-        # Implements: REQ-d00010-A
-        """POST /api/mutate/requirement/delete - Delete a requirement."""
-        data = request.get_json(force=True)
-        node_id = data.get("node_id", "")
-        confirm = data.get("confirm", False)
-        if not node_id:
-            return jsonify({"success": False, "error": "node_id required"}), 400
-        if not confirm:
-            return jsonify({"success": False, "error": "confirm=true required"}), 400
-        result = _mutate_delete_requirement(_state["graph"], node_id, confirm=True)
-        status_code = 200 if result.get("success") else 400
-        return jsonify(result), status_code
-
-    @app.route("/api/mutate/edge", methods=["POST"])
-    def api_mutate_edge():
-        """POST /api/mutate/edge - Edge mutations (add/change_kind/change_targets/delete).
-
-        The ``action`` field in the JSON body determines the operation:
-        - "add": requires source_id, target_id, edge_kind
-        - "change_kind": requires source_id, target_id, new_kind
-        - "change_targets": requires source_id, target_id, assertion_targets
-        - "delete": requires source_id, target_id
-        """
-        data = request.get_json(force=True)
-        action = data.get("action", "")
-        source_id = data.get("source_id", "")
-        target_id = data.get("target_id", "")
-
-        if not action:
-            return jsonify({"success": False, "error": "action required"}), 400
-        if not source_id or not target_id:
-            return jsonify({"success": False, "error": "source_id and target_id required"}), 400
-
-        if action == "add":
-            edge_kind = data.get("edge_kind", "")
-            if not edge_kind:
-                return jsonify({"success": False, "error": "edge_kind required for add"}), 400
-            assertion_targets = data.get("assertion_targets")
-            result = _mutate_add_edge(
-                _state["graph"],
-                source_id,
-                target_id,
-                edge_kind,
-                assertion_targets,
-                config=_state.get("config"),
-            )
-        elif action == "change_kind":
-            new_kind = data.get("new_kind", "")
-            if not new_kind:
-                return (
-                    jsonify({"success": False, "error": "new_kind required for change_kind"}),
-                    400,
-                )
-            result = _mutate_change_edge_kind(_state["graph"], source_id, target_id, new_kind)
-        elif action == "change_targets":
-            targets = data.get("assertion_targets", [])
-            result = _mutate_change_edge_targets(_state["graph"], source_id, target_id, targets)
-        elif action == "delete":
-            result = _mutate_delete_edge(_state["graph"], source_id, target_id, confirm=True)
-        else:
-            return jsonify({"success": False, "error": f"Unknown action: {action}"}), 400
-
-        status_code = 200 if result.get("success") else 400
-        return jsonify(result), status_code
-
-    @app.route("/api/mutate/move-to-file", methods=["POST"])
-    def api_mutate_move_to_file():
-        """POST /api/mutate/move-to-file - Move node to a different file."""
-        data = request.get_json(force=True)
-        node_id = data.get("node_id", "")
-        target_file_id = data.get("target_file_id", "")
-        if not node_id or not target_file_id:
-            return (
-                jsonify(
-                    {
-                        "success": False,
-                        "error": "node_id and target_file_id required",
-                    }
-                ),
-                400,
-            )
-        result = _mutate_move_node_to_file(_state["graph"], node_id, target_file_id)
-        status_code = 200 if result.get("success") else 400
-        return jsonify(result), status_code
-
-    @app.route("/api/mutate/rename-file", methods=["POST"])
-    def api_mutate_rename_file():
-        """POST /api/mutate/rename-file - Rename a FILE node."""
-        data = request.get_json(force=True)
-        file_id = data.get("file_id", "")
-        new_relative_path = data.get("new_relative_path", "")
-        if not file_id or not new_relative_path:
-            return (
-                jsonify(
-                    {
-                        "success": False,
-                        "error": "file_id and new_relative_path required",
-                    }
-                ),
-                400,
-            )
-        result = _mutate_rename_file(
-            _state["graph"],
-            file_id,
-            new_relative_path,
-            _state.get("repo_root"),
-        )
-        status_code = 200 if result.get("success") else 400
-        return jsonify(result), status_code
-
-    @app.route("/api/mutate/undo", methods=["POST"])
-    def api_mutate_undo():
-        """POST /api/mutate/undo - Undo the most recent mutation."""
-        result = _undo_last_mutation(_state["graph"])
-        status_code = 200 if result.get("success") else 400
-        return jsonify(result), status_code
-
-    # ─────────────────────────────────────────────────────────────────
-    # Server lifecycle endpoints
-    # ─────────────────────────────────────────────────────────────────
-
-    @app.route("/api/shutdown", methods=["POST"])
-    def api_shutdown():
-        """POST /api/shutdown - Gracefully stop the server."""
-        import os
-        import sys
-        import threading
-
-        print("\nShutdown requested via API.", file=sys.stderr)
-        # Respond before exiting so the caller gets confirmation
-        response = jsonify({"success": True, "message": "Server shutting down"})
-        threading.Timer(0.5, lambda: os._exit(0)).start()
-        return response
-
-    # ─────────────────────────────────────────────────────────────────
-    # Persistence endpoints (REQ-o00063-F)
-    # ─────────────────────────────────────────────────────────────────
-
-    @app.route("/api/save", methods=["POST"])
-    def api_save():
-        """POST /api/save - Persist mutations to spec files on disk."""
-        # Implements: REQ-d00132-A
-        from elspais.graph.render import render_save
-        from elspais.utilities.patterns import build_resolver as _build_resolver_for_save
-
-        result = render_save(
-            _state["graph"],
-            _state["working_dir"],
-            resolver=_build_resolver_for_save(_state["config"]),
-        )
-        status_code = 200 if result.get("success") else 409
-        # Update build_time after successful save
-        if result.get("success"):
-            _state["build_time"] = time.time()
-        return jsonify(result), status_code
-
-    @app.route("/api/revert", methods=["POST"])
-    def api_revert():
-        """POST /api/revert - Revert all unsaved mutations by rebuilding from disk."""
-        from elspais.graph.factory import build_graph
-
-        try:
-            new_graph = build_graph(
-                config=_state["config"],
-                repo_root=_state["working_dir"],
-                canonical_root=_state.get("canonical_root"),
-            )
-            _state["graph"] = new_graph
-            _state["build_time"] = time.time()
-            return jsonify({"success": True, "message": "Graph reverted from disk"})
-        except Exception as e:
-            return jsonify({"success": False, "error": str(e)}), 500
-
-    @app.route("/api/reload", methods=["POST"])
-    def api_reload():
-        # Implements: REQ-p00004-J
-        """POST /api/reload - Reload graph from disk with fresh config."""
-        from elspais.config import load_config
-        from elspais.graph.factory import build_graph
-
-        try:
-            # Re-read config from disk so branch switches pick up changes
-            config_path = Path(_state["working_dir"]) / ".elspais.toml"
-            if config_path.exists():
-                _state["config"] = load_config(config_path)
-
-            new_graph = build_graph(
-                config=_state["config"],
-                repo_root=_state["working_dir"],
-                canonical_root=_state.get("canonical_root"),
-            )
-            _state["graph"] = new_graph
-            _state["build_time"] = time.time()
-            return jsonify({"success": True, "message": "Graph reloaded from disk"})
-        except Exception as e:
-            return jsonify({"success": False, "error": str(e)}), 500
-
-    # ─────────────────────────────────────────────────────────────────
-    # Git sync endpoints (REQ-p00004-C/D/E/F)
-    # ─────────────────────────────────────────────────────────────────
-
-    @app.route("/api/git/status")
-    def api_git_status():
-        # Implements: REQ-p00004-C
-        """GET /api/git/status - Git status summary for the viewer UI."""
-        from elspais.utilities.git import git_status_summary
-
-        spec_dir = (
-            _state["config"].get("scanning", {}).get("spec", {}).get("directories", ["spec"])[0]
-        )
-        result = git_status_summary(_state["working_dir"], spec_dir=spec_dir)
-        return jsonify(result)
-
-    @app.route("/api/git/branch", methods=["POST"])
-    def api_git_branch():
-        # Implements: REQ-p00004-D
-        """POST /api/git/branch - Create and switch to a new branch."""
-        from elspais.utilities.git import create_and_switch_branch
-
-        data = request.get_json(force=True)
-        name = data.get("name", "").strip()
-        if not name:
-            return jsonify({"success": False, "error": "branch name required"}), 400
-        result = create_and_switch_branch(_state["working_dir"], name)
-        status_code = 200 if result.get("success") else 400
-        return jsonify(result), status_code
-
-    @app.route("/api/git/push", methods=["POST"])
-    def api_git_push():
-        # Implements: REQ-p00004-E
-        """POST /api/git/push - Commit and push spec files."""
-        from elspais.utilities.git import commit_and_push_spec_files
-
-        data = request.get_json(force=True)
-        message = data.get("message", "").strip()
-        if not message:
-            return jsonify({"success": False, "error": "commit message required"}), 400
-        spec_dir = (
-            _state["config"].get("scanning", {}).get("spec", {}).get("directories", ["spec"])[0]
-        )
-        result = commit_and_push_spec_files(_state["working_dir"], message, spec_dir=spec_dir)
-        # Always return 200 so the modal JS can display the error inline.
-        # The result contains success=false with an error message on failure.
-        return jsonify(result), 200
-
-    @app.route("/api/git/pull", methods=["POST"])
-    def api_git_pull():
-        # Implements: REQ-p00004-F
-        """POST /api/git/pull - Sync branch with remote and main."""
-        from elspais.utilities.git import sync_branch
-
-        result = sync_branch(_state["working_dir"])
-        status_code = 200 if result.get("success") else 400
-        return jsonify(result), status_code
-
-    @app.route("/api/git/branches")
-    def api_git_branches():
-        # Implements: REQ-p00004-H
-        """GET /api/git/branches - List local and remote git branches."""
-        from elspais.utilities.git import list_branches
-
-        result = list_branches(_state["working_dir"])
-        return jsonify(result)
-
-    @app.route("/api/git/checkout", methods=["POST"])
-    def api_git_checkout():
-        # Implements: REQ-p00004-I
-        """POST /api/git/checkout - Switch to an existing git branch."""
-        import subprocess
-
-        from elspais.utilities.git import _clean_git_env
-
-        data = request.get_json(force=True)
-        branch = data.get("branch", "").strip()
-        is_remote = data.get("is_remote", False)
-
-        if not branch:
-            return jsonify({"success": False, "error": "branch name required"}), 400
-
-        # Refuse if in-memory mutations are pending
-        log = _get_mutation_log(_state["graph"], limit=1)
-        if log.get("count", 0) > 0:
-            return (
-                jsonify(
-                    {
-                        "success": False,
-                        "error": "Save or revert changes before switching branches",
-                    }
-                ),
-                409,
-            )
-
-        env = _clean_git_env()
-        repo = _state["working_dir"]
-
-        try:
-            if is_remote:
-                # Try creating a local tracking branch from origin
-                result = subprocess.run(
-                    ["git", "checkout", "-b", branch, f"origin/{branch}"],
-                    cwd=repo,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                )
-                if result.returncode != 0 and "already exists" in result.stderr:
-                    # Local branch already exists — fall back to plain checkout
-                    result = subprocess.run(
-                        ["git", "checkout", branch],
-                        cwd=repo,
-                        env=env,
-                        capture_output=True,
-                        text=True,
-                    )
-            else:
-                result = subprocess.run(
-                    ["git", "checkout", branch],
-                    cwd=repo,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                )
-
-            if result.returncode != 0:
-                return jsonify({"success": False, "error": result.stderr.strip()}), 400
-
-            return jsonify({"success": True, "branch": branch})
-
-        except FileNotFoundError:
-            return jsonify({"success": False, "error": "git not found"}), 500
+    middleware = [
+        Middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_methods=["*"],
+            allow_headers=["*"],
+        ),
+        Middleware(NoCacheMiddleware),
+        Middleware(AutoRefreshMiddleware),
+        Middleware(DetachedGuardMiddleware),
+    ]
+
+    app = Starlette(routes=routes, middleware=middleware)
+    app.state.app_state = state
 
     return app

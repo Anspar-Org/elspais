@@ -91,6 +91,7 @@ def sample_graph():
 class TestSerializeNode:
     """Tests for serialize_node function."""
 
+    # Implements: REQ-d00064-B
     def test_serialize_requirement(self, sample_graph):
         """Serializes requirement node to dict."""
         node = sample_graph.find_by_id("REQ-p00001")
@@ -103,6 +104,7 @@ class TestSerializeNode:
         assert result["content"]["level"] == "PRD"
         assert result["content"]["status"] == "Active"
 
+    # Implements: REQ-d00064-B
     def test_serialize_node_with_source(self, sample_graph):
         """Includes source location in serialization."""
         node = sample_graph.find_by_id("REQ-p00001")
@@ -114,6 +116,7 @@ class TestSerializeNode:
         assert result["source"]["line"] == 10
         assert result["source"]["end_line"] == 20
 
+    # Implements: REQ-d00064-B
     def test_serialize_node_with_children(self, sample_graph):
         """Includes child IDs in serialization."""
         node = sample_graph.find_by_id("REQ-p00001")
@@ -123,6 +126,7 @@ class TestSerializeNode:
         assert "children" in result
         assert "REQ-p00001-A" in result["children"]
 
+    # Implements: REQ-d00064-C
     def test_serialize_node_with_metrics(self):
         """Includes metrics in serialization."""
         node = GraphNode(
@@ -131,14 +135,15 @@ class TestSerializeNode:
             label="Test",
         )
         # Use public API to set metrics
-        node.set_metric("coverage_pct", 75.0)
+        node.set_metric("referenced_pct", 75.0)
         node.set_metric("total_tests", 5)
 
         result = serialize_node(node)
 
-        assert result["metrics"]["coverage_pct"] == 75.0
+        assert result["metrics"]["referenced_pct"] == 75.0
         assert result["metrics"]["total_tests"] == 5
 
+    # Implements: REQ-d00064-B
     def test_serialize_assertion(self, sample_graph):
         """Serializes assertion node."""
         node = sample_graph.find_by_id("REQ-p00001-A")
@@ -153,6 +158,7 @@ class TestSerializeNode:
 class TestSerializeGraph:
     """Tests for serialize_graph function."""
 
+    # Implements: REQ-d00064-B
     def test_serialize_graph_includes_nodes(self, sample_graph):
         """Serializes all nodes in graph."""
         result = serialize_graph(sample_graph)
@@ -160,6 +166,7 @@ class TestSerializeGraph:
         assert "nodes" in result
         assert len(result["nodes"]) == 7  # 3 reqs + 1 assertion + 3 FILE nodes
 
+    # Implements: REQ-d00064-B
     def test_serialize_graph_includes_metadata(self, sample_graph):
         """Includes graph metadata."""
         result = serialize_graph(sample_graph)
@@ -168,6 +175,7 @@ class TestSerializeGraph:
         assert result["metadata"]["node_count"] == 7  # 3 reqs + 1 assertion + 3 FILE nodes
         assert result["metadata"]["root_count"] == 1
 
+    # Implements: REQ-d00064-B
     def test_serialize_graph_includes_roots(self, sample_graph):
         """Lists root node IDs."""
         result = serialize_graph(sample_graph)
@@ -179,12 +187,14 @@ class TestSerializeGraph:
 class TestToMarkdown:
     """Tests for to_markdown function."""
 
+    # Implements: REQ-d00052-B
     def test_generates_markdown_header(self, sample_graph):
         """Generates markdown with header."""
         result = to_markdown(sample_graph)
 
         assert "# Traceability Matrix" in result
 
+    # Implements: REQ-d00052-B
     def test_generates_requirement_rows(self, sample_graph):
         """Generates rows for requirements."""
         result = to_markdown(sample_graph)
@@ -192,6 +202,7 @@ class TestToMarkdown:
         assert "REQ-p00001" in result
         assert "Product Requirement" in result
 
+    # Implements: REQ-d00052-B
     def test_includes_hierarchy(self, sample_graph):
         """Shows hierarchy in markdown."""
         result = to_markdown(sample_graph)
@@ -204,6 +215,7 @@ class TestToMarkdown:
 class TestToCsv:
     """Tests for to_csv function."""
 
+    # Implements: REQ-d00052-C
     def test_generates_csv_header(self, sample_graph):
         """Generates CSV with header row."""
         result = to_csv(sample_graph)
@@ -214,6 +226,7 @@ class TestToCsv:
         assert "level" in header.lower()
         assert "title" in header.lower() or "label" in header.lower()
 
+    # Implements: REQ-d00052-C
     def test_generates_csv_rows(self, sample_graph):
         """Generates CSV rows for requirements."""
         result = to_csv(sample_graph)
@@ -222,6 +235,7 @@ class TestToCsv:
         assert "REQ-o00001" in result
         assert "REQ-d00001" in result
 
+    # Implements: REQ-d00052-C
     def test_csv_handles_commas(self):
         """Escapes commas in values."""
         builder = GraphBuilder()
@@ -240,6 +254,7 @@ class TestToCsv:
         # Comma should be properly quoted in CSV
         assert '"Title with, comma"' in result
 
+    # Implements: REQ-d00052-C
     def test_csv_handles_quotes(self):
         """Escapes quotes in values."""
         builder = GraphBuilder()
@@ -262,6 +277,7 @@ class TestToCsv:
 class TestSerializeAdditionalCoverage:
     """Additional coverage tests for serialization."""
 
+    # Implements: REQ-d00064-B
     def test_serialize_node_with_parents(self, sample_graph):
         """Includes parent IDs in serialization."""
         node = sample_graph.find_by_id("REQ-o00001")
@@ -271,6 +287,7 @@ class TestSerializeAdditionalCoverage:
         assert "parents" in result
         assert "REQ-p00001" in result["parents"]
 
+    # Implements: REQ-d00064-B
     def test_serialize_node_with_edges(self, sample_graph):
         """Includes edge information in serialization."""
         node = sample_graph.find_by_id("REQ-p00001")
@@ -283,6 +300,7 @@ class TestSerializeAdditionalCoverage:
         edge_targets = [e.get("target") for e in result["edges"]]
         assert "REQ-o00001" in edge_targets
 
+    # Implements: REQ-d00064-D
     def test_serialize_empty_graph(self):
         """Serializes empty graph correctly."""
         builder = GraphBuilder()
@@ -300,7 +318,7 @@ class TestSerializeAdditionalCoverage:
 class TestSerializeMetricsFiltering:
     """Validates REQ-d00055-D: Serializer filters non-JSON-serializable metrics.
 
-    The serialize_node function must include scalar metrics like coverage_pct
+    The serialize_node function must include scalar metrics like referenced_pct
     but exclude complex objects like RollupMetrics that are not JSON-serializable.
     """
 
@@ -317,7 +335,7 @@ class TestSerializeMetricsFiltering:
         rollup = RollupMetrics(total_assertions=2)
         rollup.finalize()
         node.set_metric("rollup_metrics", rollup)
-        node.set_metric("coverage_pct", 50.0)
+        node.set_metric("referenced_pct", 50.0)
 
         result = serialize_node(node)
 
@@ -326,8 +344,8 @@ class TestSerializeMetricsFiltering:
             "rollup_metrics" not in result["metrics"]
         ), "RollupMetrics object should be filtered out of serialized metrics"
 
-    def test_REQ_d00055_D_coverage_pct_included_in_serialization(self):
-        """coverage_pct (float scalar) SHOULD appear in serialized output."""
+    def test_REQ_d00055_D_referenced_pct_included_in_serialization(self):
+        """referenced_pct (float scalar) SHOULD appear in serialized output."""
         from elspais.graph.metrics import RollupMetrics
 
         node = GraphNode(
@@ -338,7 +356,7 @@ class TestSerializeMetricsFiltering:
         rollup = RollupMetrics(total_assertions=1)
         rollup.finalize()
         node.set_metric("rollup_metrics", rollup)
-        node.set_metric("coverage_pct", 75.0)
+        node.set_metric("referenced_pct", 75.0)
         node.set_metric("is_uncommitted", True)
         node.set_metric("total_tests", 3)
 
@@ -346,8 +364,8 @@ class TestSerializeMetricsFiltering:
 
         assert "metrics" in result
         assert (
-            result["metrics"]["coverage_pct"] == 75.0
-        ), "coverage_pct should be preserved in serialized output"
+            result["metrics"]["referenced_pct"] == 75.0
+        ), "referenced_pct should be preserved in serialized output"
         assert (
             result["metrics"]["is_uncommitted"] is True
         ), "Boolean metrics should be preserved in serialized output"
@@ -369,7 +387,7 @@ class TestSerializeMetricsFiltering:
         rollup = RollupMetrics(total_assertions=3)
         rollup.finalize()
         node.set_metric("rollup_metrics", rollup)
-        node.set_metric("coverage_pct", 66.7)
+        node.set_metric("referenced_pct", 66.7)
         node.set_metric("some_label", "text_value")
 
         result = serialize_node(node)

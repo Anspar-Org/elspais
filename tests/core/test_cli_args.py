@@ -11,9 +11,12 @@ import typing
 import tyro
 
 from elspais.commands.args import (
+    COMMAND_GROUPS,
     AnalysisArgs,
     AssociateArgs,
+    BrokenArgs,
     ChangedArgs,
+    ChecksArgs,
     Command,
     CompletionArgs,
     ConfigArgs,
@@ -23,10 +26,11 @@ from elspais.commands.args import (
     DoctorArgs,
     EditArgs,
     ExampleArgs,
+    FailingArgs,
     FixArgs,
+    GapsArgs,
     GlobalArgs,
     GraphArgs,
-    HealthArgs,
     InitArgs,
     InstallArgs,
     InstallLocalArgs,
@@ -38,12 +42,18 @@ from elspais.commands.args import (
     PdfArgs,
     RulesArgs,
     RulesShowArgs,
+    SearchArgs,
     SummaryArgs,
     TraceArgs,
+    UncoveredArgs,
     UninstallArgs,
     UninstallLocalArgs,
+    UnlinkedArgs,
+    UntestedArgs,
+    UnvalidatedArgs,
     VersionArgs,
     ViewerArgs,
+    generate_help,
 )
 
 
@@ -51,7 +61,7 @@ class TestCliArgsDataclasses:
     """Validates REQ-p00001-A: CLI arg dataclass definitions and Tyro parsing."""
 
     def test_REQ_p00001_A_global_args_has_all_subcommands(self) -> None:
-        """All 22 top-level subcommand types are present in the Command Union."""
+        """All top-level subcommand types are present in the Command Union."""
         # Extract the types from the Union
         args = typing.get_args(Command)
         # Each arg is Annotated[SomeArgs, subcommand(...)], extract the base type
@@ -64,7 +74,7 @@ class TestCliArgsDataclasses:
                 base_types.add(arg)
 
         expected = {
-            HealthArgs,
+            ChecksArgs,
             DoctorArgs,
             TraceArgs,
             ViewerArgs,
@@ -87,13 +97,21 @@ class TestCliArgsDataclasses:
             McpArgs,
             LinkArgs,
             CompletionArgs,
+            GapsArgs,
+            UncoveredArgs,
+            UntestedArgs,
+            UnvalidatedArgs,
+            FailingArgs,
+            BrokenArgs,
+            UnlinkedArgs,
+            SearchArgs,
         }
         assert base_types == expected
-        assert len(args) == 23
+        assert len(args) == 31
 
     def test_REQ_p00001_A_health_args_defaults(self) -> None:
-        """HealthArgs defaults are correct."""
-        h = HealthArgs()
+        """ChecksArgs defaults are correct."""
+        h = ChecksArgs()
         assert h.spec_only is False
         assert h.code_only is False
         assert h.tests_only is False
@@ -104,12 +122,12 @@ class TestCliArgsDataclasses:
         assert h.output is None
 
     def test_REQ_p00001_A_tyro_parses_health(self) -> None:
-        """Tyro parses 'health --format json' into HealthArgs."""
+        """Tyro parses 'health --format json' into ChecksArgs."""
         result = tyro.cli(
             GlobalArgs,
-            args=["health", "--format", "json"],
+            args=["checks", "--format", "json"],
         )
-        assert isinstance(result.command, HealthArgs)
+        assert isinstance(result.command, ChecksArgs)
         assert result.command.format == "json"
 
     def test_REQ_p00001_A_tyro_parses_config_show(self) -> None:
@@ -176,10 +194,10 @@ class TestCliArgsDataclasses:
         """Verbose flag passes through on GlobalArgs."""
         result = tyro.cli(
             GlobalArgs,
-            args=["--verbose", "health"],
+            args=["--verbose", "checks"],
         )
         assert result.verbose is True
-        assert isinstance(result.command, HealthArgs)
+        assert isinstance(result.command, ChecksArgs)
 
     def test_REQ_p00001_A_tyro_parses_install_local(self) -> None:
         """Tyro parses 'install' subcommand."""
@@ -202,7 +220,7 @@ class TestCliArgsDataclasses:
     def test_REQ_p00001_A_all_args_classes_are_dataclasses(self) -> None:
         """Every *Args class exported from args.py is a proper dataclass."""
         args_classes = [
-            HealthArgs,
+            ChecksArgs,
             DoctorArgs,
             TraceArgs,
             ViewerArgs,
@@ -233,7 +251,47 @@ class TestCliArgsDataclasses:
             LinkArgs,
             LinkSuggestArgs,
             CompletionArgs,
+            GapsArgs,
+            UncoveredArgs,
+            UntestedArgs,
+            UnvalidatedArgs,
+            FailingArgs,
+            BrokenArgs,
+            UnlinkedArgs,
             GlobalArgs,
         ]
         for cls in args_classes:
             assert dataclasses.is_dataclass(cls), f"{cls.__name__} is not a dataclass"
+
+    def test_REQ_p00001_A_command_groups_covers_all_subcommands(self) -> None:
+        """Every subcommand in the Command Union has a COMMAND_GROUPS entry."""
+        args = typing.get_args(Command)
+        subcommand_names = set()
+        for arg in args:
+            if typing.get_origin(arg) is typing.Annotated:
+                _, *metadata = typing.get_args(arg)
+                for m in metadata:
+                    if hasattr(m, "name"):
+                        subcommand_names.add(m.name)
+
+        missing = subcommand_names - set(COMMAND_GROUPS)
+        assert not missing, (
+            f"Subcommands missing from COMMAND_GROUPS: {missing}. "
+            f"Add them to elspais/commands/args.py"
+        )
+        # Also check no stale entries in COMMAND_GROUPS
+        extra = set(COMMAND_GROUPS) - subcommand_names
+        assert not extra, f"Stale entries in COMMAND_GROUPS (not in Command Union): {extra}"
+
+    def test_REQ_p00001_A_generate_help_includes_all_commands(self) -> None:
+        """generate_help() output contains every subcommand name."""
+        help_text = generate_help("0.0.0")
+        args = typing.get_args(Command)
+        for arg in args:
+            if typing.get_origin(arg) is typing.Annotated:
+                _, *metadata = typing.get_args(arg)
+                for m in metadata:
+                    if hasattr(m, "name"):
+                        assert (
+                            m.name in help_text
+                        ), f"Subcommand {m.name!r} not found in help output"

@@ -39,6 +39,51 @@ function showToast(message, type) {
 }
 
 // =====================================================================
+// Error Modal
+// =====================================================================
+
+function showErrorModal(title, message) {
+    var old = document.getElementById('error-modal-overlay');
+    if (old) old.remove();
+    var overlay = document.createElement('div');
+    overlay.id = 'error-modal-overlay';
+    overlay.className = 'modal-overlay visible';
+    overlay.innerHTML =
+        '<div class="modal-dialog">' +
+            '<div class="modal-title" style="color:var(--danger-color,#ef4444);">' + escapeHtml(title || 'Error') + '</div>' +
+            '<pre class="error-modal-body">' + escapeHtml(message || 'An unknown error occurred.') + '</pre>' +
+            '<div class="modal-actions">' +
+                '<button class="btn" id="error-modal-dismiss">Dismiss</button>' +
+            '</div>' +
+        '</div>';
+    document.body.appendChild(overlay);
+    document.getElementById('error-modal-dismiss').onclick = function() { overlay.remove(); };
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+    document.addEventListener('keydown', function onEsc(e) {
+        if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', onEsc); }
+    });
+}
+
+// =====================================================================
+// Loading Overlay
+// =====================================================================
+
+function showLoadingOverlay(message) {
+    var existing = document.getElementById('loading-overlay');
+    if (existing) existing.remove();
+    var overlay = document.createElement('div');
+    overlay.id = 'loading-overlay';
+    overlay.className = 'loading-overlay';
+    overlay.innerHTML = '<div class="loading-message">' + escapeHtml(message || 'Loading...') + '</div>';
+    document.body.appendChild(overlay);
+}
+
+function hideLoadingOverlay() {
+    var el = document.getElementById('loading-overlay');
+    if (el) el.remove();
+}
+
+// =====================================================================
 // Edit Mode
 // =====================================================================
 
@@ -64,13 +109,15 @@ function _deactivateEditMode() {
 
 function toggleEditMode() {
     if (editState.enabled) {
-        // Turning OFF — always allowed
         _deactivateEditMode();
         return;
     }
-    // Turning ON — check if on main first
     refreshBranchStatus().then(function(data) {
-        if (data && data.is_main) {
+        if (!data) return;
+        if (data.is_detached) {
+            // Rewound state — need to create a branch first
+            showBranchFromDetachedModal(data);
+        } else if (data.is_main) {
             showBranchModal('You are on the main branch. Create a working branch before editing.', function() {
                 _activateEditMode();
             });
@@ -93,15 +140,25 @@ async function refreshBranchStatus() {
     var warningEl = document.getElementById('branch-warning');
     if (!dot || !nameEl) return data;
     editState.isMain = !!data.is_main;
-    if (data.branch) {
+    if (data.is_detached && data.originating_branch) {
+        nameEl.textContent = data.originating_branch + ' (<<' + (data.commits_behind_head || '?') + ')';
+        dot.classList.add('orange');
+        nameEl.parentElement.title = 'Viewing historical checkpoint — click to switch branch';
+    } else if (data.branch) {
         nameEl.textContent = data.branch;
         nameEl.parentElement.title = 'Click to switch branch';
+    } else if (data.is_detached) {
+        // Detached HEAD without originating branch (e.g. worktree started detached)
+        var commitLabel = data.detached_commit || 'unknown';
+        nameEl.textContent = 'detached @ ' + commitLabel;
+        nameEl.parentElement.title = 'Detached HEAD — click to switch to a branch';
     } else {
-        nameEl.textContent = 'no branch selected';
-        nameEl.parentElement.title = 'No branch selected (detached HEAD) — click to choose one';
+        nameEl.textContent = 'no branch';
+        nameEl.parentElement.title = 'Not on a branch — click to choose one';
     }
     dot.className = 'branch-status-dot';
     if (data.is_main) { dot.classList.add('red'); }
+    else if (data.is_detached) { dot.classList.add('orange'); }
     else if (data.local_ahead > 0) { dot.classList.add('blue'); }
     else { dot.classList.add('green'); }
     // Sync button: visible when remote has diverged OR main has moved ahead
@@ -112,15 +169,34 @@ async function refreshBranchStatus() {
     if (warningEl) {
         warningEl.classList.toggle('hidden', !data.main_diverged);
     }
-    // Push button: enabled when not on main AND there is something to push
-    // (committed changes ahead of remote, dirty spec files on disk, or in-memory mutations)
-    var pushBtn = document.getElementById('btn-push');
-    if (pushBtn) {
-        var hasPushable = data.local_ahead > 0
-            || (data.dirty_spec_files && data.dirty_spec_files.length > 0)
-            || (typeof editState !== 'undefined' && editState.mutationCount > 0);
-        pushBtn.disabled = data.is_main || !hasPushable;
+    // Checkpoint button: enabled when uncommitted files exist
+    var checkpointBtn = document.getElementById('btn-checkpoint');
+    if (checkpointBtn) {
+        var uncommittedCount = data.uncommitted_file_count || 0;
+        checkpointBtn.disabled = uncommittedCount === 0 || data.is_detached;
+        var uncommittedBadge = document.getElementById('uncommitted-badge');
+        if (uncommittedBadge) {
+            if (uncommittedCount > 0) {
+                uncommittedBadge.textContent = uncommittedCount + ' file' + (uncommittedCount > 1 ? 's' : '');
+                uncommittedBadge.classList.remove('hidden');
+            } else {
+                uncommittedBadge.classList.add('hidden');
+            }
+        }
     }
+    // Share button: enabled when unpushed commits exist
+    var shareBtn = document.getElementById('btn-share');
+    if (shareBtn) {
+        shareBtn.disabled = data.is_main || !(data.local_ahead > 0) || data.is_detached;
+    }
+    // Detached state: grey all edit buttons
+    if (data.is_detached) {
+        ['btn-undo', 'btn-save', 'btn-checkpoint', 'btn-share'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.disabled = true;
+        });
+    }
+    editState.lastBranchStatus = data;
     return data;
 }
 
@@ -133,7 +209,7 @@ async function doGitSync() {
         showToast(result.message || 'Synced', 'success');
         refreshBranchStatus();
     } else {
-        showToast((result && result.error) || 'Sync failed', 'error');
+        showErrorModal('Sync failed', (result && result.error) || 'Unknown error');
         refreshBranchStatus();
     }
 }
@@ -253,8 +329,125 @@ function showBranchModal(reason, callback) {
 }
 
 // =====================================================================
+// Branch From Detached Modal (REQ-p00004-D)
+// =====================================================================
+
+function showBranchFromDetachedModal(statusData) {
+    var baseName = statusData.originating_branch || 'branch';
+    apiFetch('/api/git/suggest-branch-name?base=' + encodeURIComponent(baseName)).then(function(data) {
+        var suggestedName = (data && data.name) || (baseName + '-v2');
+        _showBranchFromDetachedDialog(suggestedName);
+    });
+}
+
+function _showBranchFromDetachedDialog(suggestedName) {
+    var old = document.getElementById('branch-modal-overlay');
+    if (old) old.remove();
+
+    var overlay = document.createElement('div');
+    overlay.id = 'branch-modal-overlay';
+    overlay.className = 'modal-overlay visible';
+    overlay.innerHTML =
+        '<div class="modal-dialog">' +
+            '<div class="modal-title">Create Branch From Checkpoint</div>' +
+            '<p style="font-size:0.9em;margin-bottom:12px;">You are viewing a historical checkpoint. To edit, a new branch will be created from this point.</p>' +
+            '<label class="modal-label">Branch name:</label>' +
+            '<input type="text" class="modal-input" id="detached-branch-input" value="' + escapeHtml(suggestedName) + '">' +
+            '<div class="modal-error hidden" id="detached-branch-error"></div>' +
+            '<div class="modal-actions">' +
+                '<button class="btn btn-primary" id="detached-branch-confirm">Create &amp; Edit</button>' +
+                '<button class="btn" id="detached-branch-cancel">Cancel</button>' +
+            '</div>' +
+        '</div>';
+    document.body.appendChild(overlay);
+
+    var input = document.getElementById('detached-branch-input');
+    input.focus();
+    input.select();
+
+    function doCreate() {
+        var name = input.value.trim();
+        if (!name) return;
+        var confirmBtn = document.getElementById('detached-branch-confirm');
+        var errorEl = document.getElementById('detached-branch-error');
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Creating...';
+        apiFetch('/api/git/branch', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: name})
+        }).then(function(result) {
+            if (result && result.success) {
+                overlay.remove();
+                showToast('Branch ' + name + ' created', 'success');
+                refreshBranchStatus();
+                _activateEditMode();
+            } else {
+                errorEl.textContent = (result && result.error) || 'Failed to create branch';
+                errorEl.classList.remove('hidden');
+                confirmBtn.disabled = false;
+                confirmBtn.textContent = 'Create & Edit';
+            }
+        });
+    }
+
+    document.getElementById('detached-branch-confirm').onclick = doCreate;
+    document.getElementById('detached-branch-cancel').onclick = function() { overlay.remove(); };
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') doCreate();
+        if (e.key === 'Escape') overlay.remove();
+    });
+}
+
+// =====================================================================
 // Branch Picker Modal
 // =====================================================================
+
+function loadBranchHistory(branch, container) {
+    container.innerHTML = '<div style="padding:12px;color:var(--text-secondary,#888);">Loading...</div>';
+    apiFetch('/api/git/commits?branch=' + encodeURIComponent(branch) + '&limit=20').then(function(commits) {
+        if (!commits || !Array.isArray(commits)) {
+            container.innerHTML = '<div style="padding:12px;color:var(--text-secondary,#888);">No history available</div>';
+            return;
+        }
+        container.innerHTML = '';
+        var heading = document.createElement('div');
+        heading.style.cssText = 'color:var(--text-secondary,#888);font-size:11px;margin-bottom:8px;';
+        heading.textContent = 'HISTORY: ' + branch;
+        container.appendChild(heading);
+
+        commits.forEach(function(c, i) {
+            var row = document.createElement('div');
+            row.className = 'history-row' + (i === 0 ? ' head' : '');
+            row.dataset.hash = c.hash;
+
+            var dateSpan = document.createElement('span');
+            dateSpan.className = 'history-date';
+            dateSpan.textContent = c.date;
+            row.appendChild(dateSpan);
+
+            var textSpan = document.createElement('span');
+            textSpan.className = 'history-text';
+            textSpan.textContent = (i === 0 ? 'HEAD' : c.hash) + '  ' + c.message;
+            row.appendChild(textSpan);
+
+            if (i > 0) {
+                row.addEventListener('click', function() {
+                    container.querySelectorAll('.history-row.selected').forEach(function(r) { r.classList.remove('selected'); });
+                    row.classList.add('selected');
+                    var rewindBtn = document.getElementById('rewind-confirm-btn');
+                    if (rewindBtn) {
+                        rewindBtn.disabled = false;
+                        rewindBtn.dataset.hash = c.hash;
+                        rewindBtn.dataset.branch = branch;
+                    }
+                });
+            }
+            container.appendChild(row);
+        });
+    });
+}
 
 function showBranchPickerModal() {
     // Guard: unsaved mutations
@@ -272,6 +465,12 @@ function showBranchPickerModal() {
         var localBranches = data.local || [];
         var remoteBranches = data.remote || [];
         var currentBranch = data.current || null;
+        // In detached HEAD (after rewind), use the originating branch for highlighting
+        var isRewound = false;
+        if (currentBranch === null && editState.lastBranchStatus && editState.lastBranchStatus.originating_branch) {
+            currentBranch = editState.lastBranchStatus.originating_branch;
+            isRewound = true;
+        }
 
         // Remove existing modal
         var old = document.getElementById('branch-modal-overlay');
@@ -283,10 +482,20 @@ function showBranchPickerModal() {
 
         var dialog = document.createElement('div');
         dialog.className = 'modal-dialog';
+        dialog.style.minWidth = '680px';
+        dialog.style.maxWidth = '860px';
 
         var title = document.createElement('div');
         title.className = 'modal-title';
-        title.textContent = currentBranch ? 'Switch Branch' : 'You\'re not on any branch \u2014 select one to continue';
+        title.textContent = currentBranch ? 'Switch Branch' : 'You\'re not on any branch — select one to continue';
+
+        // Two-panel container
+        var panels = document.createElement('div');
+        panels.className = 'branch-picker-panels';
+
+        // Left panel
+        var leftPanel = document.createElement('div');
+        leftPanel.className = 'branch-picker-left';
 
         var filterInput = document.createElement('input');
         filterInput.type = 'text';
@@ -296,6 +505,18 @@ function showBranchPickerModal() {
 
         var listContainer = document.createElement('div');
         listContainer.className = 'branch-list-container';
+        listContainer.style.border = 'none';
+        listContainer.style.margin = '0';
+
+        leftPanel.appendChild(filterInput);
+        leftPanel.appendChild(listContainer);
+
+        // Right panel
+        var rightPanel = document.createElement('div');
+        rightPanel.className = 'branch-picker-right';
+
+        panels.appendChild(leftPanel);
+        panels.appendChild(rightPanel);
 
         // Build branch items
         function buildList(filter) {
@@ -329,10 +550,14 @@ function showBranchPickerModal() {
                     if (branch === currentBranch) {
                         var tag = document.createElement('span');
                         tag.className = 'branch-current-tag';
-                        tag.textContent = '(current)';
+                        tag.textContent = isRewound ? '(rewound)' : '(current)';
                         item.appendChild(tag);
+                        item.addEventListener('click', function() {
+                            loadBranchHistory(branch, rightPanel);
+                        });
                     } else {
                         item.addEventListener('click', function() {
+                            loadBranchHistory(branch, rightPanel);
                             doSwitchBranch(branch, false);
                         });
                     }
@@ -361,6 +586,7 @@ function showBranchPickerModal() {
                     item.appendChild(tag);
 
                     item.addEventListener('click', function() {
+                        loadBranchHistory(branch, rightPanel);
                         doSwitchBranch(branch, true);
                     });
 
@@ -388,14 +614,52 @@ function showBranchPickerModal() {
         var actions = document.createElement('div');
         actions.className = 'modal-actions';
 
+        var rewindBtn = document.createElement('button');
+        rewindBtn.id = 'rewind-confirm-btn';
+        rewindBtn.className = 'btn btn-success';
+        rewindBtn.textContent = 'Rewind to this checkpoint';
+        rewindBtn.disabled = true;
+        rewindBtn.addEventListener('click', function() {
+            var hash = rewindBtn.dataset.hash;
+            var branch = rewindBtn.dataset.branch;
+            if (!hash || !branch) return;
+            rewindBtn.disabled = true;
+            rewindBtn.textContent = 'Rewinding...';
+            showLoadingOverlay('Rewinding...');
+            apiFetch('/api/git/checkout-commit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ hash: hash, branch: branch })
+            }).then(function(result) {
+                if (result && result.success) {
+                    apiFetch('/api/reload', { method: 'POST' }).then(function() {
+                        hideLoadingOverlay();
+                        closeModal();
+                        showToast('Rewound to ' + hash, 'success');
+                        refreshBranchStatus();
+                        refreshAllOpenCards();
+                        loadTreeData();
+                        refreshFileViewer();
+                        refreshDirtyCount();
+                        dismissStaleBanner();
+                    });
+                } else {
+                    hideLoadingOverlay();
+                    closeModal();
+                    showErrorModal('Rewind failed', (result && result.error) || 'Unknown error');
+                }
+            });
+        });
+
         var cancelBtn = document.createElement('button');
         cancelBtn.className = 'btn';
         cancelBtn.textContent = 'Cancel';
+
+        actions.appendChild(rewindBtn);
         actions.appendChild(cancelBtn);
 
         dialog.appendChild(title);
-        dialog.appendChild(filterInput);
-        dialog.appendChild(listContainer);
+        dialog.appendChild(panels);
         dialog.appendChild(errorEl);
         dialog.appendChild(actions);
         overlay.appendChild(dialog);
@@ -403,6 +667,11 @@ function showBranchPickerModal() {
 
         buildList('');
         filterInput.focus();
+
+        // Load history for the current branch by default
+        if (currentBranch) {
+            loadBranchHistory(currentBranch, rightPanel);
+        }
 
         function closeModal() {
             var el = document.getElementById('branch-modal-overlay');
@@ -427,6 +696,7 @@ function showBranchPickerModal() {
                 }
             });
 
+            showLoadingOverlay('Switching branch...');
             apiFetch('/api/git/checkout', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -436,6 +706,7 @@ function showBranchPickerModal() {
                     closeModal();
                     // Reload graph from disk after branch switch
                     apiFetch('/api/reload', { method: 'POST' }).then(function() {
+                        hideLoadingOverlay();
                         showToast('Switched to branch: ' + (result.branch || branch), 'success');
                         refreshBranchStatus();
                         refreshAllOpenCards();
@@ -445,14 +716,16 @@ function showBranchPickerModal() {
                         dismissStaleBanner();
                     });
                 } else {
-                    errorEl.textContent = (result && result.error) || 'Failed to switch branch';
-                    errorEl.classList.remove('hidden');
+                    hideLoadingOverlay();
+                    closeModal();
+                    showErrorModal('Failed to switch branch', (result && result.error) || 'Unknown error');
                     // Re-enable items
                     items.forEach(function(item) {
                         item.style.pointerEvents = '';
                         item.style.opacity = '';
                     });
                     buildList(filterInput.value);
+                    refreshBranchStatus();
                 }
             });
         }
@@ -500,7 +773,8 @@ function onStatusChange(selectEl) {
 function onTitleBlur(el) {
     if (!editState.enabled) return;
     const nodeId = el.dataset.nodeId;
-    const newTitle = el.textContent.trim();
+    const isInput = el.tagName === 'INPUT';
+    const newTitle = isInput ? el.value.trim() : el.textContent.trim();
     const original = el.dataset.original;
 
     if (newTitle === original) {
@@ -509,7 +783,7 @@ function onTitleBlur(el) {
     }
 
     if (!newTitle) {
-        el.textContent = original;
+        if (isInput) el.value = original; else el.textContent = original;
         el.classList.remove('dirty');
         showToast('Title cannot be empty', 'error');
         return;
@@ -559,15 +833,61 @@ function onAssertionBlur(el) {
     });
 }
 
+function _nextAssertionLabel(existingLabels) {
+    // Determine label style from existing labels and return the next one.
+    // Single letters: A, B, C... → next letter
+    // Numbers: 1, 2, 3... → next number
+    // Mixed/text: return null (needs manual entry)
+    if (existingLabels.length === 0) return 'A';
+
+    var allSingleLetters = existingLabels.every(function(l) { return /^[A-Z]$/.test(l); });
+    if (allSingleLetters) {
+        var maxCode = 0;
+        existingLabels.forEach(function(l) {
+            var code = l.charCodeAt(0);
+            if (code > maxCode) maxCode = code;
+        });
+        if (maxCode < 90) return String.fromCharCode(maxCode + 1); // 90 = 'Z'
+        return null;
+    }
+
+    var allNumbers = existingLabels.every(function(l) { return /^\d+$/.test(l); });
+    if (allNumbers) {
+        var maxNum = 0;
+        existingLabels.forEach(function(l) {
+            var n = parseInt(l, 10);
+            if (n > maxNum) maxNum = n;
+        });
+        return String(maxNum + 1);
+    }
+
+    return null; // text-style, needs manual entry
+}
+
 function onAddAssertion(nodeId) {
-    const label = prompt('Assertion label (e.g., A, B, C):');
-    if (!label) return;
+    // Determine next label from existing assertions
+    var info = editState.openCards.get(nodeId);
+    var existingLabels = [];
+    if (info && info.data) {
+        var children = info.data.children || [];
+        children.forEach(function(c) {
+            if (c.kind === 'assertion' && c.label) existingLabels.push(c.label);
+        });
+    }
+
+    var label = _nextAssertionLabel(existingLabels);
+    if (!label) {
+        label = prompt('Assertion label:');
+        if (!label) return;
+        label = label.trim();
+    }
+
     const text = prompt('Assertion text (SHALL statement):');
     if (!text) return;
 
     mutate('/api/mutate/assertion/add', {
         req_id: nodeId,
-        label: label.trim().toUpperCase(),
+        label: label.toUpperCase(),
         text: text.trim()
     }).then(async function(result) {
         if (result && result.success) {
@@ -634,10 +954,10 @@ function onEditableKeydown(event) {
 }
 
 async function refreshCard(nodeId) {
-    const data = await apiFetch('/api/requirement/' + encodeURIComponent(nodeId));
-    if (!data) return;
     const info = editState.openCards.get(nodeId);
     if (!info) return;
+    const data = await apiFetch('/api/node/' + encodeURIComponent(nodeId));
+    if (!data) return;
     info.data = data;
     // Invalidate assertion caches for this requirement
     delete assertionTestsCache[nodeId];
@@ -655,7 +975,9 @@ async function refreshAllOpenCards() {
 // =====================================================================
 
 async function doSave() {
+    showLoadingOverlay('Saving...');
     const result = await mutate('/api/save', {});
+    hideLoadingOverlay();
     if (result && result.success) {
         showToast('Saved to disk', 'success');
         refreshFileViewer();
@@ -666,19 +988,6 @@ async function doSave() {
     }
 }
 
-async function doRevert() {
-    if (!confirm('Revert all unsaved changes? This cannot be undone.')) return;
-    const result = await mutate('/api/revert', {});
-    if (result && result.success) {
-        showToast('All changes reverted', 'success');
-        await refreshAllOpenCards();
-        loadTreeData();
-        refreshFileViewer();
-    }
-    if (result && result.message) {
-        showToast(result.message, 'info');
-    }
-}
 
 async function doUndo() {
     const result = await mutate('/api/mutate/undo', {});
@@ -737,7 +1046,7 @@ function editEdgeTargets(sourceId, targetId, btn) {
     fetch('/api/requirement/' + encodeURIComponent(targetId))
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            var assertions = (data.children || []).filter(function(c) { return c.kind === 'assertion'; });
+            var assertions = data.assertions || [];
             if (assertions.length === 0) {
                 showToast('Target has no assertions', 'warning');
                 return;
@@ -796,18 +1105,156 @@ function applyEdgeTargets(sourceId, targetId, btn) {
     });
 }
 
-function onMoveToFile(nodeId) {
-    var targetFile = prompt('Move ' + nodeId + ' to file ID (e.g. file:spec/other.md):');
-    if (!targetFile || !targetFile.trim()) return;
-
-    mutate('/api/mutate/move-to-file', {
-        node_id: nodeId,
-        target_file_id: targetFile.trim()
-    }).then(async function(result) {
-        if (result && result.success) {
-            await refreshAllOpenCards();
-            loadTreeData();
+function onMoveToFile(nodeId, currentPath) {
+    fetch('/api/spec-files').then(function(r) { return r.json(); }).then(function(data) {
+        if (!data.files || !data.files.length) {
+            showErrorModal('No Spec Files', 'No spec files found in the graph.');
+            return;
         }
+        _showMoveToFileModal(nodeId, data.files, currentPath || '');
+    }).catch(function(err) {
+        showErrorModal('Error', 'Failed to load spec files: ' + err.message);
+    });
+}
+
+function _showMoveToFileModal(nodeId, files, currentPath) {
+    var currentFileId = currentPath ? ('file:' + currentPath) : null;
+
+    var overlay = document.createElement('div');
+    overlay.className = 'modal-overlay visible';
+    overlay.id = 'move-file-modal-overlay';
+
+    var dialog = document.createElement('div');
+    dialog.className = 'modal-dialog';
+    dialog.style.minWidth = '420px';
+
+    var title = document.createElement('div');
+    title.className = 'modal-title';
+    title.textContent = 'Move ' + nodeId + ' to file';
+
+    var listContainer = document.createElement('div');
+    listContainer.className = 'modal-file-list';
+    listContainer.style.maxHeight = '240px';
+
+    var selectedFileId = null;
+
+    files.forEach(function(f) {
+        if (f.id === currentFileId) return;
+        var item = document.createElement('label');
+        item.className = 'modal-file-checkbox';
+        var radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = 'move-target-file';
+        radio.value = f.id;
+        radio.addEventListener('change', function() {
+            selectedFileId = f.id;
+            newPathInput.style.display = 'none';
+        });
+        item.appendChild(radio);
+        item.appendChild(document.createTextNode(' ' + f.relative_path));
+        listContainer.appendChild(item);
+    });
+
+    // "New file" option
+    var newFileItem = document.createElement('label');
+    newFileItem.className = 'modal-file-checkbox';
+    newFileItem.style.borderTop = '1px solid var(--border-color, #ccc)';
+    newFileItem.style.marginTop = '4px';
+    newFileItem.style.paddingTop = '6px';
+    var newRadio = document.createElement('input');
+    newRadio.type = 'radio';
+    newRadio.name = 'move-target-file';
+    newRadio.value = '__new__';
+    newRadio.addEventListener('change', function() {
+        selectedFileId = '__new__';
+        newPathInput.style.display = 'block';
+        newPathInput.focus();
+    });
+    newFileItem.appendChild(newRadio);
+    newFileItem.appendChild(document.createTextNode(' + New file\u2026'));
+    listContainer.appendChild(newFileItem);
+
+    var newPathInput = document.createElement('input');
+    newPathInput.className = 'modal-input';
+    newPathInput.style.display = 'none';
+    newPathInput.style.marginTop = '8px';
+    var hint = (files.length > 0) ? files[0].relative_path.replace(/[^/]+$/, '') : '';
+    newPathInput.placeholder = hint + 'new-file.md';
+
+    var errorEl = document.createElement('div');
+    errorEl.className = 'modal-error';
+    errorEl.style.display = 'none';
+
+    var actions = document.createElement('div');
+    actions.className = 'modal-actions';
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn';
+    cancelBtn.textContent = 'Cancel';
+
+    var moveBtn = document.createElement('button');
+    moveBtn.className = 'btn btn-primary';
+    moveBtn.textContent = 'Move';
+
+    actions.appendChild(cancelBtn);
+    actions.appendChild(moveBtn);
+
+    dialog.appendChild(title);
+    dialog.appendChild(listContainer);
+    dialog.appendChild(newPathInput);
+    dialog.appendChild(errorEl);
+    dialog.appendChild(actions);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    function closeModal() {
+        var el = document.getElementById('move-file-modal-overlay');
+        if (el) el.remove();
+    }
+
+    cancelBtn.addEventListener('click', closeModal);
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) closeModal();
+    });
+
+    moveBtn.addEventListener('click', function() {
+        var targetId = selectedFileId;
+        if (!targetId) {
+            errorEl.textContent = 'Select a target file';
+            errorEl.style.display = 'block';
+            return;
+        }
+        if (targetId === '__new__') {
+            var newPath = newPathInput.value.trim();
+            if (!newPath) {
+                errorEl.textContent = 'Enter a file path';
+                errorEl.style.display = 'block';
+                return;
+            }
+            targetId = 'file:' + newPath;
+        }
+        moveBtn.disabled = true;
+        moveBtn.textContent = 'Moving\u2026';
+        mutate('/api/mutate/move-to-file', {
+            node_id: nodeId,
+            target_file_id: targetId
+        }).then(async function(result) {
+            if (result && result.success) {
+                closeModal();
+                await refreshAllOpenCards();
+                loadTreeData();
+            } else {
+                errorEl.textContent = (result && result.error) || 'Move failed';
+                errorEl.style.display = 'block';
+                moveBtn.disabled = false;
+                moveBtn.textContent = 'Move';
+            }
+        }).catch(function(err) {
+            errorEl.textContent = err.message || 'Move failed';
+            errorEl.style.display = 'block';
+            moveBtn.disabled = false;
+            moveBtn.textContent = 'Move';
+        });
     });
 }
 
@@ -863,15 +1310,14 @@ function onAddRelationship(nodeId, btn) {
     pickerRow.appendChild(pickerContainer);
     form.appendChild(pickerRow);
 
-    // Assertion target dropdown (populated after requirement selection)
+    // Assertion targets (checkbox picker, populated after requirement selection)
     var assertionRow = document.createElement('div');
-    assertionRow.className = 'add-rel-row';
+    assertionRow.className = 'add-rel-row add-rel-assertions';
     assertionRow.style.display = 'none';
-    assertionRow.innerHTML = '<label class="add-rel-label">Assertion:</label>';
-    var assertionSelect = document.createElement('select');
-    assertionSelect.className = 'add-rel-select';
-    assertionSelect.innerHTML = '<option value="">(Whole requirement)</option>';
-    assertionRow.appendChild(assertionSelect);
+    assertionRow.innerHTML = '<label class="add-rel-label">Assertions:</label>';
+    var assertionChecks = document.createElement('div');
+    assertionChecks.className = 'edge-targets-picker-inline';
+    assertionRow.appendChild(assertionChecks);
     form.appendChild(assertionRow);
 
     // Buttons
@@ -893,14 +1339,16 @@ function onAddRelationship(nodeId, btn) {
         fetchAssertions: true,
         onSelect: function(item) {
             addBtn.disabled = false;
-            // Populate assertion dropdown
-            assertionSelect.innerHTML = '<option value="">(Whole requirement)</option>';
+            // Build checkbox list for assertions
+            assertionChecks.innerHTML = '';
             if (item.assertions && item.assertions.length > 0) {
                 item.assertions.forEach(function(a) {
-                    var opt = document.createElement('option');
-                    opt.value = a.label || '';
-                    opt.textContent = (a.label || '') + ': ' + (a.text || '').substring(0, 60);
-                    assertionSelect.appendChild(opt);
+                    var label = document.createElement('label');
+                    label.className = 'edge-targets-option';
+                    label.innerHTML = '<input type="checkbox" value="' + escapeAttr(a.label) + '"> ' +
+                        '<strong>' + escapeHtml(a.label) + '</strong> ' +
+                        escapeHtml((a.text || '').substring(0, 60));
+                    assertionChecks.appendChild(label);
                 });
                 assertionRow.style.display = 'flex';
             } else {
@@ -910,7 +1358,7 @@ function onAddRelationship(nodeId, btn) {
         onClear: function() {
             addBtn.disabled = true;
             assertionRow.style.display = 'none';
-            assertionSelect.innerHTML = '<option value="">(Whole requirement)</option>';
+            assertionChecks.innerHTML = '';
         }
     });
 
@@ -920,7 +1368,12 @@ function onAddRelationship(nodeId, btn) {
 
         var edgeKind = typeSelect.value;
         var targetId = selected.id;
-        var assertionLabel = assertionSelect.value;
+
+        // Collect checked assertion targets
+        var targets = [];
+        assertionChecks.querySelectorAll('input[type="checkbox"]:checked').forEach(function(cb) {
+            targets.push(cb.value);
+        });
 
         var payload = {
             action: 'add',
@@ -929,8 +1382,8 @@ function onAddRelationship(nodeId, btn) {
             edge_kind: edgeKind
         };
 
-        if (assertionLabel) {
-            payload.assertion_targets = [assertionLabel];
+        if (targets.length > 0) {
+            payload.assertion_targets = targets;
         }
 
         mutate('/api/mutate/edge', payload).then(async function(result) {
@@ -953,112 +1406,310 @@ function onAddRelationship(nodeId, btn) {
 // Search functions moved to _search.js.j2 (shared by both modes)
 
 // =====================================================================
-// Push Modal (REQ-p00004-E)
+// Checkpoint Modal
 // =====================================================================
 
-function showPushModal() {
-    var pushBtn = document.getElementById('btn-push');
-    if (pushBtn) { pushBtn.disabled = true; pushBtn.textContent = 'Loading...'; }
+function showCheckpointModal() {
+    // Guard: prompt to save if unsaved mutations
+    if (editState.mutationCount > 0) {
+        if (!confirm('You have ' + editState.mutationCount + ' unsaved changes. Save before checkpointing?')) {
+            return;
+        }
+        apiFetch('/api/save', {method: 'POST'}).then(function(saveResult) {
+            if (saveResult && saveResult.success !== false) {
+                refreshDirtyCount();
+                _openCheckpointModal();
+            } else {
+                showErrorModal('Save failed', (saveResult && saveResult.error) || 'Unknown error');
+            }
+        });
+        return;
+    }
+    _openCheckpointModal();
+}
+
+function _openCheckpointModal() {
+    var checkpointBtn = document.getElementById('btn-checkpoint');
+    if (checkpointBtn) { checkpointBtn.disabled = true; checkpointBtn.textContent = 'Loading...'; }
+
     apiFetch('/api/git/status').then(function(data) {
-        if (pushBtn) { pushBtn.disabled = false; pushBtn.textContent = 'Push'; }
-        if (!data || data.is_main) return;
-        var files = data.dirty_spec_files || [];
-        // Remove existing modal
+        if (checkpointBtn) { checkpointBtn.disabled = false; checkpointBtn.textContent = 'Checkpoint'; }
+        if (!data) return;
+        var specFiles = data.dirty_spec_files || [];
+        var otherFiles = data.dirty_other_files || [];
+        var allFiles = specFiles.concat(otherFiles);
+        if (allFiles.length === 0) {
+            showToast('No uncommitted files', 'info');
+            return;
+        }
+
         var old = document.getElementById('branch-modal-overlay');
         if (old) old.remove();
 
-        var fileListHtml = files.length > 0
-            ? files.map(function(f) { return '<div class="modal-file">' + escapeHtml(f) + '</div>'; }).join('')
-            : '<div class="modal-file muted">No modified spec files</div>';
+        // Build file list with checkboxes — spec files pre-checked, others unchecked
+        var fileListHtml = '';
+        if (specFiles.length > 0) {
+            fileListHtml += '<div class="modal-file-group-label">Spec files</div>';
+            specFiles.forEach(function(f, i) {
+                fileListHtml += '<label class="modal-file-checkbox"><input type="checkbox" checked data-file="' + escapeHtml(f) + '" class="checkpoint-file-cb"> ' + escapeHtml(f) + '</label>';
+            });
+        }
+        if (otherFiles.length > 0) {
+            fileListHtml += '<div class="modal-file-group-label" style="margin-top:8px;">Other files</div>';
+            otherFiles.forEach(function(f) {
+                fileListHtml += '<label class="modal-file-checkbox"><input type="checkbox" data-file="' + escapeHtml(f) + '" class="checkpoint-file-cb"> ' + escapeHtml(f) + '</label>';
+            });
+        }
 
         var overlay = document.createElement('div');
         overlay.id = 'branch-modal-overlay';
         overlay.className = 'modal-overlay visible';
         overlay.innerHTML =
             '<div class="modal-dialog">' +
-                '<div class="modal-title">Commit &amp; Push</div>' +
-                '<div class="modal-label">Branch: <strong>' + escapeHtml(data.branch) + '</strong></div>' +
-                '<div class="modal-label" style="margin-top:12px">Modified spec files:</div>' +
+                '<div class="modal-title">Checkpoint</div>' +
+                '<div class="modal-label">Branch: <strong>' + escapeHtml(data.branch || '(detached)') + '</strong></div>' +
+                '<div class="modal-label" style="margin-top:12px">Files to include:</div>' +
                 '<div class="modal-file-list">' + fileListHtml + '</div>' +
                 '<label class="modal-label" style="margin-top:12px">Commit message:</label>' +
-                '<input type="text" class="modal-input" id="push-message-input" placeholder="Commit message" autocomplete="off">' +
-                '<div class="modal-error hidden" id="push-modal-error"></div>' +
+                '<textarea class="modal-input" id="checkpoint-message-input" rows="4" placeholder="Describe this checkpoint..." style="resize:vertical;font-family:monospace;font-size:12px;"></textarea>' +
+                '<div class="modal-error hidden" id="checkpoint-modal-error"></div>' +
                 '<div class="modal-actions">' +
-                    '<button class="btn btn-primary" id="push-modal-confirm"' + (files.length === 0 ? ' disabled' : '') + '>Push</button>' +
-                    '<button class="btn" id="push-modal-cancel">Cancel</button>' +
+                    '<button class="btn btn-warning" id="checkpoint-modal-confirm" disabled>Checkpoint</button>' +
+                    '<button class="btn" id="checkpoint-modal-cancel">Cancel</button>' +
                 '</div>' +
             '</div>';
         document.body.appendChild(overlay);
 
-        var input = document.getElementById('push-message-input');
-        var errorEl = document.getElementById('push-modal-error');
-        input.focus();
+        var textarea = document.getElementById('checkpoint-message-input');
+        var confirmBtn = document.getElementById('checkpoint-modal-confirm');
+        var errorEl = document.getElementById('checkpoint-modal-error');
 
-        function doPush() {
-            errorEl.textContent = '';
-            errorEl.classList.add('hidden');
-            var msg = input.value.trim();
-            if (!msg) {
-                errorEl.textContent = 'Commit message is required';
-                errorEl.classList.remove('hidden');
-                return;
+        function getSelectedFiles() {
+            var checked = [];
+            overlay.querySelectorAll('.checkpoint-file-cb:checked').forEach(function(cb) {
+                checked.push(cb.dataset.file);
+            });
+            return checked;
+        }
+
+        function updateConfirmState() {
+            var hasFiles = getSelectedFiles().length > 0;
+            var hasMsg = textarea.value.trim() !== '';
+            confirmBtn.disabled = !hasFiles || !hasMsg;
+        }
+
+        // Update confirm state when checkboxes change
+        overlay.querySelectorAll('.checkpoint-file-cb').forEach(function(cb) {
+            cb.addEventListener('change', updateConfirmState);
+        });
+
+        // Auto-generate commit message from server
+        apiFetch('/api/git/commit-message').then(function(msgData) {
+            if (msgData && msgData.message) {
+                textarea.value = msgData.message;
+            } else {
+                textarea.value = specFiles.join('\n');
             }
-            var confirmBtn = document.getElementById('push-modal-confirm');
+            updateConfirmState();
+        });
+
+        textarea.addEventListener('input', updateConfirmState);
+        textarea.focus();
+
+        function doCheckpoint() {
+            var msg = textarea.value.trim();
+            var selectedFiles = getSelectedFiles();
+            if (!msg || selectedFiles.length === 0) return;
             confirmBtn.disabled = true;
-            confirmBtn.textContent = 'Pushing...';
-            // Save mutations first, then push
-            apiFetch('/api/save', {method: 'POST'}).then(function(saveResult) {
-                if (saveResult && saveResult.success === false) {
-                    errorEl.textContent = 'Save failed: ' + (saveResult.error || 'unknown');
-                    errorEl.classList.remove('hidden');
-                    confirmBtn.disabled = false;
-                    confirmBtn.textContent = 'Push';
-                    return;
-                }
-                return apiFetch('/api/git/push', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({message: msg})
-                });
+            confirmBtn.textContent = 'Committing...';
+            showLoadingOverlay('Creating checkpoint...');
+            apiFetch('/api/git/commit', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({message: msg, files: selectedFiles})
             }).then(function(result) {
-                if (!result) {
-                    errorEl.textContent = 'Push failed — no response from server';
-                    errorEl.classList.remove('hidden');
-                    confirmBtn.disabled = false;
-                    confirmBtn.textContent = 'Push';
-                    return;
-                }
-                if (result.success) {
+                hideLoadingOverlay();
+                if (result && result.success) {
                     overlay.remove();
-                    var toast = 'Pushed ' + (result.files_committed || []).length + ' file(s)';
-                    if (result.push_error) {
-                        toast += ' (commit OK, push failed: ' + result.push_error + ')';
-                        showToast(toast, 'warning');
-                    } else {
-                        showToast(toast, 'success');
-                    }
+                    showToast('Checkpoint created', 'success');
                     refreshBranchStatus();
                     refreshDirtyCount();
                 } else {
-                    errorEl.textContent = result.error || 'Push failed';
-                    errorEl.classList.remove('hidden');
+                    overlay.remove();
+                    showErrorModal('Checkpoint failed', (result && result.error) || 'Unknown error');
                     confirmBtn.disabled = false;
-                    confirmBtn.textContent = 'Push';
+                    confirmBtn.textContent = 'Checkpoint';
                 }
             });
         }
 
-        document.getElementById('push-modal-confirm').onclick = doPush;
-        document.getElementById('push-modal-cancel').onclick = function() { overlay.remove(); };
-        overlay.addEventListener('click', function(e) {
-            if (e.target === overlay) overlay.remove();
-        });
-        input.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') doPush();
+        confirmBtn.onclick = doCheckpoint;
+        document.getElementById('checkpoint-modal-cancel').onclick = function() { overlay.remove(); };
+        overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+        textarea.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') overlay.remove();
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) doCheckpoint();
         });
     });
 }
+
+// =====================================================================
+// Slide-to-Share Widget
+// =====================================================================
+
+function initShareSlider() {
+    var shareBtn = document.getElementById('btn-share');
+    if (!shareBtn) return;
+
+    shareBtn.onclick = function(e) {
+        if (shareBtn.disabled) return;
+        e.stopPropagation();
+
+        // Replace button with track
+        var track = document.createElement('div');
+        track.className = 'share-track';
+        track.id = 'share-track';
+
+        var fill = document.createElement('div');
+        fill.className = 'share-fill';
+        track.appendChild(fill);
+
+        var handle = document.createElement('div');
+        handle.className = 'share-handle';
+        handle.textContent = 'Share \u2192';
+        track.appendChild(handle);
+
+        var dest = document.createElement('div');
+        dest.className = 'share-destination';
+        dest.textContent = 'origin';
+        track.appendChild(dest);
+
+        shareBtn.style.display = 'none';
+        shareBtn.parentNode.insertBefore(track, shareBtn.nextSibling);
+
+        var trackWidth = track.offsetWidth;
+        var handleWidth = handle.offsetWidth;
+        var maxLeft = trackWidth - handleWidth - 6;
+        var threshold = maxLeft * 0.9;
+        var dragging = false;
+        var startX = 0;
+        var currentLeft = 0;
+
+        var collapseTimeout = setTimeout(collapseTrack, 3000);
+
+        function onStart(clientX) {
+            dragging = true;
+            startX = clientX - currentLeft;
+            handle.classList.add('dragging');
+            fill.classList.add('dragging');
+            clearTimeout(collapseTimeout);
+        }
+        function onMove(clientX) {
+            if (!dragging) return;
+            var newLeft = Math.max(0, Math.min(clientX - startX, maxLeft));
+            currentLeft = newLeft;
+            handle.style.left = (3 + newLeft) + 'px';
+            fill.style.width = newLeft + 'px';
+        }
+        function onEnd() {
+            if (!dragging) return;
+            dragging = false;
+            handle.classList.remove('dragging');
+            fill.classList.remove('dragging');
+            if (currentLeft >= threshold) {
+                handle.style.left = (3 + maxLeft) + 'px';
+                fill.style.width = maxLeft + 'px';
+                handle.textContent = 'Sharing...';
+                handle.classList.add('sharing');
+                doPush();
+            } else {
+                currentLeft = 0;
+                handle.style.left = '3px';
+                fill.style.width = '0';
+                collapseTimeout = setTimeout(collapseTrack, 3000);
+            }
+        }
+
+        // Mouse events
+        handle.addEventListener('mousedown', function(e) { e.preventDefault(); onStart(e.clientX); });
+        var onMM = function(e) {
+            if (!document.getElementById('share-track')) { document.removeEventListener('mousemove', onMM); return; }
+            onMove(e.clientX);
+        };
+        var onMU = function() {
+            if (!document.getElementById('share-track')) { document.removeEventListener('mouseup', onMU); return; }
+            onEnd();
+        };
+        document.addEventListener('mousemove', onMM);
+        document.addEventListener('mouseup', onMU);
+
+        // Touch events
+        handle.addEventListener('touchstart', function(e) { e.preventDefault(); onStart(e.touches[0].clientX); });
+        handle.addEventListener('touchmove', function(e) { e.preventDefault(); onMove(e.touches[0].clientX); });
+        handle.addEventListener('touchend', onEnd);
+
+        function collapseTrack() {
+            if (track.parentNode) track.remove();
+            shareBtn.style.display = '';
+            document.removeEventListener('mousemove', onMM);
+            document.removeEventListener('mouseup', onMU);
+        }
+
+        function doPush() {
+            apiFetch('/api/git/push', {method: 'POST'}).then(function(result) {
+                collapseTrack();
+                if (result && result.success) {
+                    showToast('Pushed to origin/' + (result.branch || ''), 'success');
+                    refreshBranchStatus();
+                } else {
+                    showErrorModal('Push failed', (result && result.error) || 'Unknown error');
+                }
+            });
+        }
+
+        // Click outside to collapse
+        var onOutside = function(evt) {
+            if (!document.getElementById('share-track')) { document.removeEventListener('click', onOutside); return; }
+            if (!track.contains(evt.target)) {
+                collapseTrack();
+                document.removeEventListener('click', onOutside);
+            }
+        };
+        setTimeout(function() { document.addEventListener('click', onOutside); }, 0);
+    };
+}
+
+// Keyboard alternative: hold Enter for 1s on Share button
+(function() {
+    var shareBtn = document.getElementById('btn-share');
+    if (!shareBtn) return;
+    var holdTimer = null;
+    shareBtn.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !holdTimer && !shareBtn.disabled) {
+            e.preventDefault();
+            shareBtn.classList.add('hold-progress');
+            holdTimer = setTimeout(function() {
+                shareBtn.classList.remove('hold-progress');
+                holdTimer = null;
+                apiFetch('/api/git/push', {method: 'POST'}).then(function(result) {
+                    if (result && result.success) {
+                        showToast('Pushed to origin/' + (result.branch || ''), 'success');
+                        refreshBranchStatus();
+                    } else {
+                        showErrorModal('Push failed', (result && result.error) || 'Unknown error');
+                    }
+                });
+            }, 1000);
+        }
+    });
+    shareBtn.addEventListener('keyup', function(e) {
+        if (e.key === 'Enter' && holdTimer) {
+            clearTimeout(holdTimer);
+            holdTimer = null;
+            shareBtn.classList.remove('hold-progress');
+        }
+    });
+})();
 
 // =====================================================================
 // Unsaved Changes Warning (REQ-p00004-E)
@@ -1068,8 +1719,8 @@ window.addEventListener('beforeunload', function(e) {
     var dirtyBadge = document.getElementById('unsaved-badge');
     var hasMutations = dirtyBadge && !dirtyBadge.classList.contains('hidden') &&
                        parseInt(dirtyBadge.textContent, 10) > 0;
-    var dot = document.getElementById('branch-status-dot');
-    var hasUncommitted = dot && dot.classList.contains('blue');
+    var uncommittedBadge = document.getElementById('uncommitted-badge');
+    var hasUncommitted = uncommittedBadge && !uncommittedBadge.classList.contains('hidden');
     if (hasMutations || hasUncommitted) {
         e.preventDefault();
         e.returnValue = '';
@@ -1086,6 +1737,7 @@ refreshBranchStatus().then(function(data) {
     }
 });
 setInterval(refreshBranchStatus, 60000);
+initShareSlider();
 
 // =====================================================================
 // Refresh from Disk (REQ-p00006-A)
@@ -1114,7 +1766,7 @@ async function refreshFromDisk() {
         await refreshDirtyCount();
         dismissStaleBanner();
     } else {
-        showToast((result && result.error) || 'Refresh failed', 'error');
+        showErrorModal('Refresh failed', (result && result.error) || 'Unknown error');
     }
 }
 
@@ -1134,3 +1786,582 @@ setInterval(function() {
         }
     });
 }, 30000);
+
+// =====================================================================
+// Journey Editing
+// =====================================================================
+
+function onJourneyTitleBlur(journeyId, input) {
+    var original = input.defaultValue;
+    var newVal = input.value.trim();
+    if (!newVal || newVal === original) { input.value = original; return; }
+    mutate('/api/mutate/title', { node_id: journeyId, new_title: newVal }).then(function(r) {
+        if (r && r.success) {
+            input.defaultValue = newVal;
+            // Update view-mode title
+            var card = input.closest('.journey-card');
+            if (card) {
+                var viewTitle = card.querySelector('.journey-title-view');
+                if (viewTitle) viewTitle.textContent = newVal;
+            }
+        } else { input.value = original; }
+    });
+}
+
+function onJourneyFieldBlur(input) {
+    var journeyId = input.dataset.journeyId;
+    var field = input.dataset.field;
+    var original = input.defaultValue;
+    var newVal = input.value.trim();
+    if (newVal === original) return;
+    mutate('/api/mutate/journey/field', { node_id: journeyId, field: field, value: newVal }).then(function(r) {
+        if (r && r.success) {
+            input.defaultValue = newVal;
+            // Update view-mode span
+            var item = input.closest('.journey-meta-item');
+            if (item) {
+                var viewSpan = item.querySelector('.journey-field-view');
+                if (viewSpan) viewSpan.textContent = newVal;
+            }
+        } else { input.value = original; }
+    });
+}
+
+function onJourneyPreambleBlur(textarea) {
+    var journeyId = textarea.dataset.journeyId;
+    var original = textarea.defaultValue;
+    var newVal = textarea.value;
+    if (newVal === original) return;
+    mutate('/api/mutate/journey/field', { node_id: journeyId, field: 'preamble', value: newVal }).then(function(r) {
+        if (r && r.success) {
+            textarea.defaultValue = newVal;
+            var viewDiv = textarea.parentNode.querySelector('.journey-preamble-view');
+            if (viewDiv) viewDiv.textContent = newVal;
+        } else { textarea.value = original; }
+    });
+}
+
+function onJourneySectionNameBlur(input) {
+    var journeyId = input.dataset.journeyId;
+    var originalName = input.dataset.originalName;
+    var newName = input.value.trim();
+    if (!newName || newName === originalName) { input.value = originalName; return; }
+    mutate('/api/mutate/journey/section', {
+        node_id: journeyId, action: 'update', name: originalName, new_name: newName
+    }).then(function(r) {
+        if (r && r.success) {
+            input.dataset.originalName = newName;
+            input.defaultValue = newName;
+            // Update view-mode name and data attributes
+            var section = input.closest('.journey-section');
+            if (section) {
+                section.dataset.sectionName = newName;
+                var viewName = section.querySelector('.journey-section-name-view');
+                if (viewName) viewName.textContent = newName;
+                // Update content textarea data attribute
+                var contentTA = section.querySelector('.journey-section-content-edit');
+                if (contentTA) contentTA.dataset.sectionName = newName;
+            }
+        } else { input.value = originalName; }
+    });
+}
+
+function onJourneySectionContentBlur(textarea) {
+    var journeyId = textarea.dataset.journeyId;
+    var sectionName = textarea.dataset.sectionName;
+    var original = textarea.defaultValue;
+    var newVal = textarea.value;
+    if (newVal === original) return;
+    mutate('/api/mutate/journey/section', {
+        node_id: journeyId, action: 'update', name: sectionName, content: newVal
+    }).then(function(r) {
+        if (r && r.success) {
+            textarea.defaultValue = newVal;
+            var viewDiv = textarea.parentNode.querySelector('.journey-section-content-view');
+            if (viewDiv) viewDiv.textContent = newVal;
+        } else { textarea.value = original; }
+    });
+}
+
+function onAddJourneySection(journeyId) {
+    var name = prompt('Section name:');
+    if (!name) return;
+    mutate('/api/mutate/journey/section', {
+        node_id: journeyId, action: 'add', name: name, content: ''
+    }).then(function(r) {
+        if (r && r.success) {
+            // Add section DOM element
+            var container = document.querySelector('.journey-sections[data-journey-id="' + journeyId + '"]');
+            if (!container) return;
+            var addBtn = container.querySelector('.journey-section-add-btn');
+            var section = document.createElement('div');
+            section.className = 'journey-section';
+            section.dataset.sectionName = name;
+            section.innerHTML =
+                '<div class="journey-section-header">' +
+                    '<span class="journey-section-name journey-section-name-view">' + escapeHtml(name) + '</span>' +
+                    '<input type="text" class="edit-only journey-section-name-edit" value="' + escapeAttr(name) + '"' +
+                    ' data-journey-id="' + journeyId + '" data-original-name="' + escapeAttr(name) + '"' +
+                    ' onblur="onJourneySectionNameBlur(this)">' +
+                    '<button class="edit-only journey-section-delete"' +
+                    ' onclick="onDeleteJourneySection(\'' + journeyId + '\', \'' + escapeAttr(name) + '\')"' +
+                    ' title="Delete section">&times;</button>' +
+                '</div>' +
+                '<div class="journey-section-content journey-section-content-view"></div>' +
+                '<textarea class="edit-only journey-section-content-edit"' +
+                ' data-journey-id="' + journeyId + '" data-section-name="' + escapeAttr(name) + '"' +
+                ' onblur="onJourneySectionContentBlur(this)"></textarea>';
+            container.insertBefore(section, addBtn);
+        }
+    });
+}
+
+function onDeleteJourneySection(journeyId, sectionName) {
+    if (!confirm('Delete section "' + sectionName + '"?')) return;
+    mutate('/api/mutate/journey/section', {
+        node_id: journeyId, action: 'delete', name: sectionName
+    }).then(function(r) {
+        if (r && r.success) {
+            var container = document.querySelector('.journey-sections[data-journey-id="' + journeyId + '"]');
+            if (!container) return;
+            var section = container.querySelector('.journey-section[data-section-name="' + sectionName + '"]');
+            if (section) section.remove();
+        }
+    });
+}
+
+function onDeleteJourney(journeyId) {
+    if (!confirm('Delete journey ' + journeyId + '?')) return;
+    mutate('/api/mutate/journey/delete', { node_id: journeyId, confirm: true }).then(function(r) {
+        if (r && r.success) {
+            var card = document.querySelector('.journey-card[data-journey-id="' + journeyId + '"]');
+            if (card) card.remove();
+            loadTreeData();
+        }
+    });
+}
+
+function onDeleteJourneyRef(journeyId, reqId) {
+    if (!confirm('Remove Validates link to ' + reqId + '?')) return;
+    mutate('/api/mutate/edge', {
+        action: 'delete', source_id: journeyId, target_id: reqId
+    }).then(async function(r) {
+        if (r && r.success) {
+            await refreshAllOpenCards();
+            loadTreeData();
+        }
+    });
+}
+
+function onAddJourneyRef(journeyId, btn) {
+    // Toggle form
+    var existing = btn.parentNode.querySelector('.card-add-rel-form');
+    if (existing) { existing.remove(); return; }
+
+    var form = document.createElement('div');
+    form.className = 'card-add-rel-form';
+
+    // Requirement picker
+    var pickerRow = document.createElement('div');
+    pickerRow.className = 'add-rel-row';
+    pickerRow.innerHTML = '<label class="add-rel-label">Target:</label>';
+    var pickerContainer = document.createElement('div');
+    pickerContainer.className = 'add-rel-picker-container';
+    pickerRow.appendChild(pickerContainer);
+    form.appendChild(pickerRow);
+
+    // Assertion targets (checkbox picker, populated after requirement selection)
+    var assertionRow = document.createElement('div');
+    assertionRow.className = 'add-rel-row add-rel-assertions';
+    assertionRow.style.display = 'none';
+    assertionRow.innerHTML = '<label class="add-rel-label">Assertions:</label>';
+    var assertionChecks = document.createElement('div');
+    assertionChecks.className = 'edge-targets-picker-inline';
+    assertionRow.appendChild(assertionChecks);
+    form.appendChild(assertionRow);
+
+    // Buttons
+    var btnRow = document.createElement('div');
+    btnRow.className = 'add-rel-buttons';
+    var addBtnEl = document.createElement('button');
+    addBtnEl.className = 'add-rel-add-btn';
+    addBtnEl.textContent = 'Add';
+    addBtnEl.disabled = true;
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'add-rel-cancel-btn';
+    cancelBtn.textContent = 'Cancel';
+    btnRow.appendChild(addBtnEl);
+    btnRow.appendChild(cancelBtn);
+    form.appendChild(btnRow);
+
+    var picker = createReqPicker(pickerContainer, {
+        placeholder: 'Search for requirement...',
+        fetchAssertions: true,
+        onSelect: function(item) {
+            addBtnEl.disabled = false;
+            assertionChecks.innerHTML = '';
+            if (item.assertions && item.assertions.length > 0) {
+                item.assertions.forEach(function(a) {
+                    var label = document.createElement('label');
+                    label.className = 'edge-targets-option';
+                    label.innerHTML = '<input type="checkbox" value="' + escapeAttr(a.label) + '"> ' +
+                        '<strong>' + escapeHtml(a.label) + '</strong> ' +
+                        escapeHtml((a.text || '').substring(0, 60));
+                    assertionChecks.appendChild(label);
+                });
+                assertionRow.style.display = 'flex';
+            } else {
+                assertionRow.style.display = 'none';
+            }
+        },
+        onClear: function() {
+            addBtnEl.disabled = true;
+            assertionRow.style.display = 'none';
+            assertionChecks.innerHTML = '';
+        }
+    });
+
+    addBtnEl.addEventListener('click', function() {
+        var selected = picker.getSelected();
+        if (!selected) return;
+        var targetId = selected.id;
+
+        var targets = [];
+        assertionChecks.querySelectorAll('input[type="checkbox"]:checked').forEach(function(cb) {
+            targets.push(cb.value);
+        });
+
+        var payload = {
+            action: 'add',
+            source_id: journeyId,
+            target_id: targetId,
+            edge_kind: 'validates'
+        };
+        if (targets.length > 0) {
+            payload.assertion_targets = targets;
+        }
+        mutate('/api/mutate/edge', payload).then(async function(result) {
+            if (result && result.success) {
+                picker.destroy();
+                form.remove();
+                await refreshAllOpenCards();
+                loadTreeData();
+            }
+        });
+    });
+
+    cancelBtn.addEventListener('click', function() {
+        picker.destroy();
+        form.remove();
+    });
+
+    btn.parentNode.insertBefore(form, btn);
+}
+
+function onAddRequirement() {
+    apiFetch('/api/spec-files').then(function(data) {
+        _showAddRequirementModal(data ? data.files || [] : []);
+    });
+}
+
+function _showAddRequirementModal(files) {
+    var overlay = document.createElement('div');
+    overlay.className = 'modal-overlay visible';
+
+    var modal = document.createElement('div');
+    modal.className = 'modal-dialog';
+    modal.innerHTML = '<h3 class="modal-title">Add Requirement</h3>';
+
+    // Level selector (first — drives ID generation)
+    var levelSection = document.createElement('div');
+    levelSection.className = 'modal-section';
+    levelSection.innerHTML = '<label class="modal-label">Level:</label>';
+    var levelSelect = document.createElement('select');
+    levelSelect.className = 'modal-input';
+    levelSelect.innerHTML = '<option value="PRD">PRD</option><option value="OPS">OPS</option><option value="DEV">DEV</option>';
+    levelSection.appendChild(levelSelect);
+    modal.appendChild(levelSection);
+
+    // ID display (read-only, auto-generated)
+    var idSection = document.createElement('div');
+    idSection.className = 'modal-section';
+    idSection.innerHTML = '<label class="modal-label">Requirement ID:</label>';
+    var idDisplay = document.createElement('div');
+    idDisplay.className = 'modal-id-display';
+    idDisplay.textContent = 'Loading...';
+    idSection.appendChild(idDisplay);
+    modal.appendChild(idSection);
+
+    // Title
+    var titleSection = document.createElement('div');
+    titleSection.className = 'modal-section';
+    titleSection.innerHTML = '<label class="modal-label">Title:</label>';
+    var titleInput = document.createElement('input');
+    titleInput.type = 'text';
+    titleInput.className = 'modal-input';
+    titleInput.placeholder = 'Requirement title';
+    titleSection.appendChild(titleInput);
+    modal.appendChild(titleSection);
+
+    // File picker
+    var fileSection = document.createElement('div');
+    fileSection.className = 'modal-section';
+    fileSection.innerHTML = '<label class="modal-label">File:</label>';
+    var fileList = document.createElement('div');
+    fileList.className = 'modal-file-list';
+
+    files.forEach(function(f, i) {
+        var label = document.createElement('label');
+        label.className = 'modal-file-option';
+        label.innerHTML = '<input type="radio" name="req-file" value="' + escapeAttr(f.id) + '"' +
+            (i === 0 ? ' checked' : '') + '> ' + escapeHtml(f.path || f.relative_path || '');
+        fileList.appendChild(label);
+    });
+
+    var newFileLabel = document.createElement('label');
+    newFileLabel.className = 'modal-file-option';
+    newFileLabel.innerHTML = '<input type="radio" name="req-file" value="__new__"' +
+        (files.length === 0 ? ' checked' : '') + '> <em>New file</em>';
+    fileList.appendChild(newFileLabel);
+    fileSection.appendChild(fileList);
+
+    var newFileInput = document.createElement('input');
+    newFileInput.type = 'text';
+    newFileInput.className = 'modal-input';
+    newFileInput.placeholder = 'spec/new-requirements.md';
+    newFileInput.style.display = files.length === 0 ? 'block' : 'none';
+    fileSection.appendChild(newFileInput);
+
+    fileList.addEventListener('change', function() {
+        var checked = fileList.querySelector('input[name="req-file"]:checked');
+        newFileInput.style.display = (checked && checked.value === '__new__') ? 'block' : 'none';
+    });
+
+    modal.appendChild(fileSection);
+
+    // Buttons (Cancel first, then Create — standard order)
+    var btnRow = document.createElement('div');
+    btnRow.className = 'modal-actions';
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'modal-cancel-btn';
+    cancelBtn.textContent = 'Cancel';
+    var createBtn = document.createElement('button');
+    createBtn.className = 'modal-primary-btn';
+    createBtn.textContent = 'Create';
+    btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(createBtn);
+    modal.appendChild(btnRow);
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    // Fetch next ID for the default level
+    var currentReqId = '';
+    function fetchNextId() {
+        var level = levelSelect.value;
+        idDisplay.textContent = 'Loading...';
+        apiFetch('/api/next-req-id?level=' + encodeURIComponent(level)).then(function(data) {
+            if (data && data.id) {
+                currentReqId = data.id;
+                idDisplay.textContent = data.id;
+            } else {
+                idDisplay.textContent = 'Error';
+            }
+        });
+    }
+    fetchNextId();
+    levelSelect.addEventListener('change', fetchNextId);
+
+    cancelBtn.addEventListener('click', function() { overlay.remove(); });
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+
+    createBtn.addEventListener('click', function() {
+        var reqId = currentReqId;
+        var title = titleInput.value.trim();
+        var level = levelSelect.value;
+        if (!reqId || !title) {
+            showToast('Title is required', 'warning');
+            return;
+        }
+        var checkedRadio = fileList.querySelector('input[name="req-file"]:checked');
+        var fileId = checkedRadio ? checkedRadio.value : '';
+        if (fileId === '__new__') {
+            var newPath = newFileInput.value.trim();
+            if (!newPath) {
+                showToast('Enter a file path for the new file', 'warning');
+                return;
+            }
+            fileId = 'file:' + newPath;
+        }
+
+        mutate('/api/mutate/requirement/add', {
+            req_id: reqId, title: title, level: level, file_id: fileId
+        }).then(function(r) {
+            if (r && r.success) {
+                overlay.remove();
+                loadTreeData();
+                openCard(reqId);
+            }
+        });
+    });
+
+    titleInput.focus();
+}
+
+function onAddJourney() {
+    // Fetch available journey files
+    apiFetch('/api/journey-files').then(function(data) {
+        if (!data || !data.files) {
+            // No files found - just use spec-files endpoint
+            apiFetch('/api/spec-files').then(function(specData) {
+                _showAddJourneyModal(specData ? specData.files || [] : []);
+            });
+            return;
+        }
+        _showAddJourneyModal(data.files);
+    });
+}
+
+function _showAddJourneyModal(files) {
+    // Create modal
+    var overlay = document.createElement('div');
+    overlay.className = 'modal-overlay visible';
+
+    var modal = document.createElement('div');
+    modal.className = 'modal-dialog';
+    modal.innerHTML = '<h3>Add Journey</h3>';
+
+    // Journey ID — fixed JNY- prefix, editable descriptor and number
+    var idSection = document.createElement('div');
+    idSection.className = 'modal-section';
+    idSection.innerHTML = '<label class="modal-label">Journey ID:</label>';
+    var idRow = document.createElement('div');
+    idRow.style.cssText = 'display:flex;align-items:center;gap:4px;';
+    var idPrefix = document.createElement('span');
+    idPrefix.className = 'modal-id-display';
+    idPrefix.style.cssText = 'padding:6px 8px;flex-shrink:0;';
+    idPrefix.textContent = 'JNY-';
+    var descriptorInput = document.createElement('input');
+    descriptorInput.type = 'text';
+    descriptorInput.className = 'modal-input';
+    descriptorInput.placeholder = 'Descriptor (e.g. LOGIN)';
+    descriptorInput.style.flex = '1';
+    var idSep = document.createElement('span');
+    idSep.style.cssText = 'font-weight:600;flex-shrink:0;';
+    idSep.textContent = '-';
+    var numberInput = document.createElement('input');
+    numberInput.type = 'text';
+    numberInput.className = 'modal-input';
+    numberInput.placeholder = '01';
+    numberInput.style.cssText = 'width:60px;flex-shrink:0;';
+    numberInput.value = '01';
+    idRow.appendChild(idPrefix);
+    idRow.appendChild(descriptorInput);
+    idRow.appendChild(idSep);
+    idRow.appendChild(numberInput);
+    idSection.appendChild(idRow);
+    modal.appendChild(idSection);
+
+    // Title
+    var titleSection = document.createElement('div');
+    titleSection.className = 'modal-section';
+    titleSection.innerHTML = '<label class="modal-label">Title:</label>';
+    var titleInput = document.createElement('input');
+    titleInput.type = 'text';
+    titleInput.className = 'modal-input';
+    titleInput.placeholder = 'Journey title';
+    titleSection.appendChild(titleInput);
+    modal.appendChild(titleSection);
+
+    // File picker
+    var fileSection = document.createElement('div');
+    fileSection.className = 'modal-section';
+    fileSection.innerHTML = '<label class="modal-label">File:</label>';
+    var fileList = document.createElement('div');
+    fileList.className = 'modal-file-list';
+
+    files.forEach(function(f, i) {
+        var label = document.createElement('label');
+        label.className = 'modal-file-option';
+        label.innerHTML = '<input type="radio" name="journey-file" value="' + escapeAttr(f.id) + '"' +
+            (i === 0 ? ' checked' : '') + '> ' + escapeHtml(f.path || f.relative_path || '');
+        fileList.appendChild(label);
+    });
+
+    var newFileLabel = document.createElement('label');
+    newFileLabel.className = 'modal-file-option';
+    newFileLabel.innerHTML = '<input type="radio" name="journey-file" value="__new__"' +
+        (files.length === 0 ? ' checked' : '') + '> <em>New file</em>';
+    fileList.appendChild(newFileLabel);
+    fileSection.appendChild(fileList);
+
+    var newFileInput = document.createElement('input');
+    newFileInput.type = 'text';
+    newFileInput.className = 'modal-input';
+    newFileInput.placeholder = 'spec/journeys-new.md';
+    newFileInput.style.display = files.length === 0 ? 'block' : 'none';
+    fileSection.appendChild(newFileInput);
+
+    fileList.addEventListener('change', function() {
+        var checked = fileList.querySelector('input[name="journey-file"]:checked');
+        newFileInput.style.display = (checked && checked.value === '__new__') ? 'block' : 'none';
+    });
+
+    modal.appendChild(fileSection);
+
+    // Buttons (Cancel, Create — standard order)
+    var btnRow = document.createElement('div');
+    btnRow.className = 'modal-actions';
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'modal-cancel-btn';
+    cancelBtn.textContent = 'Cancel';
+    var createBtn = document.createElement('button');
+    createBtn.className = 'modal-primary-btn';
+    createBtn.textContent = 'Create';
+    btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(createBtn);
+    modal.appendChild(btnRow);
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    cancelBtn.addEventListener('click', function() { overlay.remove(); });
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+
+    descriptorInput.focus();
+
+    createBtn.addEventListener('click', function() {
+        var descriptor = descriptorInput.value.trim();
+        var number = numberInput.value.trim();
+        var title = titleInput.value.trim();
+        if (!descriptor || !number || !title) {
+            showToast('Descriptor, number, and title are required', 'warning');
+            return;
+        }
+        var journeyId = 'JNY-' + descriptor + '-' + number;
+        var checkedRadio = fileList.querySelector('input[name="journey-file"]:checked');
+        var fileId = checkedRadio ? checkedRadio.value : '';
+        if (fileId === '__new__') {
+            var newPath = newFileInput.value.trim();
+            if (!newPath) {
+                showToast('Enter a file path for the new file', 'warning');
+                return;
+            }
+            fileId = 'file:' + newPath;
+        }
+        if (!fileId) {
+            showToast('Select a file', 'warning');
+            return;
+        }
+
+        mutate('/api/mutate/journey/add', {
+            journey_id: journeyId, title: title, file_id: fileId
+        }).then(function(r) {
+            if (r && r.success) {
+                overlay.remove();
+                loadTreeData();
+                openCard(journeyId);
+            }
+        });
+    });
+}

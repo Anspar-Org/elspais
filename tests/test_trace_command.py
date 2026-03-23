@@ -38,6 +38,7 @@ A. The system SHALL do something.
         )
         return spec_dir
 
+    # Implements: REQ-p00003-A
     def test_trace_markdown_format(self, temp_spec_dir: Path, capsys):
         """Test trace command with markdown format."""
         from elspais.commands import trace
@@ -56,6 +57,7 @@ A. The system SHALL do something.
         assert "Traceability Matrix" in content
         assert "REQ-p00001" in content
 
+    # Implements: REQ-p00003-A
     def test_trace_html_format(self, temp_spec_dir: Path, capsys):
         """Test trace command with basic HTML format."""
         from elspais.commands import trace
@@ -74,6 +76,7 @@ A. The system SHALL do something.
         assert "<!DOCTYPE html>" in content
         assert "REQ-p00001" in content
 
+    # Implements: REQ-d00084-A
     def test_trace_json_format(self, temp_spec_dir: Path, capsys):
         """Test trace command with JSON format."""
         from elspais.commands import trace
@@ -94,6 +97,7 @@ A. The system SHALL do something.
         assert isinstance(data, list)
         assert any(item["id"] == "REQ-p00001" for item in data)
 
+    # Implements: REQ-p00003-A
     def test_trace_csv_format(self, temp_spec_dir: Path, capsys):
         """Test trace command with CSV format."""
         from elspais.commands import trace
@@ -157,6 +161,7 @@ A. The implementation SHALL follow the spec.
         )
         return spec_dir
 
+    # Implements: REQ-d00084-B
     def test_report_minimal_has_fewer_columns(self, temp_spec_dir: Path, capsys):
         """Test --preset minimal produces fewer columns."""
         from elspais.commands import trace
@@ -180,8 +185,9 @@ A. The implementation SHALL follow the spec.
         assert "Level" in header
         assert "Status" in header
         assert "Implemented" not in header
-        assert "Validated" not in header
+        assert "Tested" not in header
 
+    # Implements: REQ-d00084-B
     def test_report_standard_has_default_columns(self, temp_spec_dir: Path, capsys):
         """Test --preset standard produces default columns with coverage."""
         from elspais.commands import trace
@@ -198,17 +204,22 @@ A. The implementation SHALL follow the spec.
         assert result == 0
 
         content = capsys.readouterr().out
-        # Standard should have: ID, Title, Level, Status, Implemented, Validated
+        # Standard should have all coverage dimension columns
         header = content.split("\n")[0]
         assert "ID" in header
         assert "Title" in header
         assert "Level" in header
         assert "Status" in header
         assert "Implemented" in header
-        assert "Validated" in header
+        assert "Tested" in header
+        assert "Verified" in header
+        assert "UAT Coverage" in header
+        assert "UAT Verified" in header
+        assert "Code Tested" in header
 
+    # Implements: REQ-d00084-B
     def test_report_full_has_all_columns(self, temp_spec_dir: Path, capsys):
-        """Test --preset full produces all columns including Passing."""
+        """Test --preset full produces all coverage dimension columns."""
         from elspais.commands import trace
 
         args = argparse.Namespace(
@@ -230,9 +241,13 @@ A. The implementation SHALL follow the spec.
         assert "Level" in header
         assert "Status" in header
         assert "Implemented" in header
-        assert "Validated" in header
-        assert "Passing" in header
+        assert "Tested" in header
+        assert "Verified" in header
+        assert "UAT Coverage" in header
+        assert "UAT Verified" in header
+        assert "Code Tested" in header
 
+    # Implements: REQ-d00084-D
     def test_report_full_json_includes_coverage(self, temp_spec_dir: Path, capsys):
         """Test --preset full with JSON format includes coverage columns."""
         from elspais.commands import trace
@@ -256,9 +271,13 @@ A. The implementation SHALL follow the spec.
         parent = next((r for r in data if r.get("id") == "REQ-p00001"), None)
         assert parent is not None
         assert "implemented" in parent
-        assert "validated" in parent
-        assert "passing" in parent
+        assert "tested" in parent
+        assert "verified" in parent
+        assert "uat_coverage" in parent
+        assert "uat_verified" in parent
+        assert "code_tested" in parent
 
+    # Implements: REQ-d00084-B
     def test_report_minimal_json_excludes_coverage(self, temp_spec_dir: Path, capsys):
         """Test --preset minimal with JSON format excludes coverage columns."""
         from elspais.commands import trace
@@ -282,8 +301,9 @@ A. The implementation SHALL follow the spec.
         parent = next((r for r in data if r.get("id") == "REQ-p00001"), None)
         assert parent is not None
         assert "implemented" not in parent
-        assert "validated" not in parent
+        assert "tested" not in parent
 
+    # Implements: REQ-d00084-B
     def test_report_invalid_preset_returns_error(self, temp_spec_dir: Path, capsys):
         """Test invalid --preset returns error."""
         from elspais.commands import trace
@@ -303,6 +323,7 @@ A. The implementation SHALL follow the spec.
         assert "Unknown preset" in captured.err
         assert "minimal" in captured.err  # Should list available presets
 
+    # Implements: REQ-d00084-B
     def test_report_default_is_standard(self, temp_spec_dir: Path, capsys):
         """Test that no --preset defaults to standard."""
         from elspais.commands import trace

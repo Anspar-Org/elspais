@@ -269,7 +269,7 @@ class TestGetRequirement:
         assert "REQ-p00001" in find_calls
 
     def test_REQ_d00062_B_returns_node_fields(self, sample_graph):
-        """REQ-d00062-B: Returns id, title, kind, plus properties with level, status, hash."""
+        """REQ-d00062-B: Returns id, title, level, status, hash as top-level fields."""
         pytest.importorskip("mcp")
         from elspais.mcp.server import _get_requirement
 
@@ -277,10 +277,9 @@ class TestGetRequirement:
 
         assert result["id"] == "REQ-p00001"
         assert result["title"] == "Platform Security"
-        assert result["kind"] == "requirement"
-        assert result["properties"]["level"] == "PRD"
-        assert result["properties"]["status"] == "Active"
-        assert result["properties"]["hash"] == "abc12345"
+        assert result["level"] == "PRD"
+        assert result["status"] == "Active"
+        assert result["hash"] == "abc12345"
 
     def test_REQ_d00062_C_returns_assertions(self, sample_graph):
         """REQ-d00062-C: Returns assertions from iter_children()."""
@@ -289,8 +288,8 @@ class TestGetRequirement:
 
         result = _get_requirement(sample_graph, "REQ-p00001")
 
-        assert "children" in result
-        assertions = [c for c in result["children"] if c["kind"] == "assertion"]
+        assert "assertions" in result
+        assertions = result["assertions"]
         assert len(assertions) == 2
 
         labels = {a["label"] for a in assertions}
@@ -298,16 +297,14 @@ class TestGetRequirement:
         assert "B" in labels
 
     def test_REQ_d00062_D_returns_relationships(self, sample_graph):
-        """REQ-d00062-D: Returns relationships from iter_outgoing_edges()."""
+        """REQ-d00062-D: Returns requirement children in children list."""
         pytest.importorskip("mcp")
         from elspais.mcp.server import _get_requirement
 
         result = _get_requirement(sample_graph, "REQ-p00001")
 
         assert "children" in result
-        # PRD should have OPS as child (kind=="requirement")
-        req_children = [c for c in result["children"] if c["kind"] == "requirement"]
-        assert any(c["id"] == "REQ-o00001" for c in req_children)
+        assert any(c["id"] == "REQ-o00001" for c in result["children"])
 
     def test_REQ_d00062_F_returns_error_for_missing(self, sample_graph):
         """REQ-d00062-F: Returns error for non-existent requirements."""
@@ -407,6 +404,7 @@ class TestGetHierarchy:
 class TestRefreshGraph:
     """Tests for refresh_graph() tool."""
 
+    # Implements: REQ-o00060-B
     def test_refresh_rebuilds_graph(self, sample_graph):
         """Refresh should rebuild the graph from spec files."""
         pytest.importorskip("mcp")
@@ -421,6 +419,7 @@ class TestRefreshGraph:
             mock_build.assert_called_once()
             assert result["success"] is True
 
+    # Implements: REQ-o00060-B
     def test_refresh_full_clears_caches(self, sample_graph):
         """Refresh with full=True should clear all caches."""
         pytest.importorskip("mcp")
@@ -1136,6 +1135,7 @@ class TestGetProjectSummary:
         assert result["coverage"] == expected_coverage
         assert result["changes"] == expected_git
 
+    # Implements: REQ-o00060-A
     def test_returns_orphan_and_broken_counts(self, sample_graph):
         """Returns orphan and broken reference counts."""
         pytest.importorskip("mcp")
@@ -1147,20 +1147,33 @@ class TestGetProjectSummary:
         assert "broken_reference_count" in result
         assert "total_nodes" in result
 
+    # Implements: REQ-o00061-B
     def test_coverage_with_annotated_nodes(self, sample_graph):
         """Coverage stats work with annotated coverage metrics."""
         pytest.importorskip("mcp")
+        from elspais.graph.metrics import CoverageDimension, RollupMetrics
         from elspais.mcp.server import _get_project_summary
 
         # Annotate some nodes with coverage
         prd_node = sample_graph.find_by_id("REQ-p00001")
-        prd_node.set_metric("coverage_pct", 100)
+        prd_node.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=2,
+                implemented=CoverageDimension(total=2, direct=2, indirect=2),
+            ),
+        )
 
         ops_node = sample_graph.find_by_id("REQ-o00001")
-        ops_node.set_metric("coverage_pct", 50)
+        ops_node.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=2,
+                implemented=CoverageDimension(total=2, direct=1, indirect=1),
+            ),
+        )
 
-        dev_node = sample_graph.find_by_id("REQ-d00001")
-        dev_node.set_metric("coverage_pct", 0)
+        # DEV node has no rollup_metrics → zero coverage
 
         result = _get_project_summary(sample_graph, Path("/test/repo"))
 
@@ -1282,69 +1295,34 @@ class TestRoundTripFidelity:
 
         return graph
 
-    def test_children_flat_list_with_kind(self, rich_graph):
-        """Children should be a single flat list with 'kind' field."""
+    # Implements: REQ-d00062-C
+    def test_assertions_separate_list(self, rich_graph):
+        """Assertions should be in a dedicated 'assertions' list."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_requirement
+
+        result = _get_requirement(rich_graph, "REQ-p00001")
+
+        assert "assertions" in result
+        assert len(result["assertions"]) == 2
+        labels = {a["label"] for a in result["assertions"]}
+        assert labels == {"A", "B"}
+
+    # Implements: REQ-d00062-D
+    def test_children_are_requirements_only(self, rich_graph):
+        """Children list should contain only requirement children."""
         pytest.importorskip("mcp")
         from elspais.mcp.server import _get_requirement
 
         result = _get_requirement(rich_graph, "REQ-p00001")
 
         assert "children" in result
-        assert "assertions" not in result
-        assert "remainder" not in result
+        assert any(c["id"] == "REQ-o00001" for c in result["children"])
+        # No assertions or remainders in children
+        for c in result["children"]:
+            assert "level" in c  # requirement children have level
 
-        kinds = [c["kind"] for c in result["children"]]
-        assert "assertion" in kinds
-        assert "remainder" in kinds
-
-    def test_children_document_order(self, rich_graph):
-        """Children should be in document order (by line number)."""
-        pytest.importorskip("mcp")
-        from elspais.mcp.server import _get_requirement
-
-        result = _get_requirement(rich_graph, "REQ-p00001")
-
-        children = result["children"]
-        # Filter to assertions and sections (skip requirement children)
-        doc_children = [c for c in children if c["kind"] in ("assertion", "remainder")]
-
-        # Section at line 14 should come before assertions at 20, 21
-        lines = [c["line"] for c in doc_children]
-        assert lines == sorted(lines), f"Children not in document order: {lines}"
-        assert doc_children[0]["kind"] == "remainder"
-        assert doc_children[0]["line"] == 14
-
-    def test_assertion_children_have_line(self, rich_graph):
-        """Assertion children should include line number."""
-        pytest.importorskip("mcp")
-        from elspais.mcp.server import _get_requirement
-
-        result = _get_requirement(rich_graph, "REQ-p00001")
-
-        assertions = [c for c in result["children"] if c["kind"] == "assertion"]
-        for a in assertions:
-            assert "line" in a
-            assert a["line"] is not None
-
-        # Check specific line numbers
-        a_node = next(a for a in assertions if a["label"] == "A")
-        assert a_node["line"] == 20
-        b_node = next(a for a in assertions if a["label"] == "B")
-        assert b_node["line"] == 21
-
-    def test_remainder_children_have_line(self, rich_graph):
-        """Remainder (section) children should include line number."""
-        pytest.importorskip("mcp")
-        from elspais.mcp.server import _get_requirement
-
-        result = _get_requirement(rich_graph, "REQ-p00001")
-
-        sections = [c for c in result["children"] if c["kind"] == "remainder"]
-        assert len(sections) >= 1
-        for s in sections:
-            assert "line" in s
-            assert s["line"] is not None
-
+    # Implements: REQ-d00062-B
     def test_parents_include_edge_kind(self, rich_graph):
         """Parent entries should include edge_kind (IMPLEMENTS or REFINES)."""
         pytest.importorskip("mcp")
@@ -1357,6 +1335,7 @@ class TestRoundTripFidelity:
         assert parent["id"] == "REQ-p00001"
         assert parent["edge_kind"] == "implements"
 
+    # Implements: REQ-d00062-B
     def test_parents_edge_kind_refines(self, rich_graph):
         """REFINES edge kind should be exposed on parent."""
         pytest.importorskip("mcp")
@@ -1378,6 +1357,7 @@ class TestRoundTripFidelity:
 class TestGetProjectSummaryChanges:
     """Tests for get_project_summary() change metrics (CUR-879)."""
 
+    # Implements: REQ-o00061-B
     def test_REQ_CUR879_D_project_summary_includes_change_metrics(self, sample_graph):
         """REQ-CUR879-D: get_project_summary returns non-zero change metrics."""
         pytest.importorskip("mcp")
@@ -1422,6 +1402,7 @@ class TestGetProjectSummaryChanges:
 class TestGetChangedRequirements:
     """Tests for get_changed_requirements() tool (CUR-879)."""
 
+    # Implements: REQ-o00061-B
     def test_REQ_CUR879_E_get_changed_requirements_returns_changed(self, sample_graph):
         """REQ-CUR879-E: get_changed_requirements returns changed requirements."""
         pytest.importorskip("mcp")
@@ -1469,6 +1450,7 @@ class TestGetChangedRequirements:
         assert "summary" in result
         assert result["summary"]["uncommitted"] >= 1
 
+    # Implements: REQ-o00061-B
     def test_REQ_CUR879_F_get_changed_requirements_empty_when_clean(self, sample_graph):
         """REQ-CUR879-F: get_changed_requirements returns empty when no changes."""
         pytest.importorskip("mcp")
@@ -1496,6 +1478,7 @@ class TestGetChangedRequirements:
 class TestAgentInstructions:
     """Tests for agent_instructions() tool."""
 
+    # Implements: REQ-o00061-A
     def test_agent_instructions_empty_when_no_rules(self, tmp_path):
         """agent_instructions returns empty list when no rules configured."""
         pytest.importorskip("mcp")
@@ -1507,6 +1490,7 @@ class TestAgentInstructions:
         assert result["instructions"] == []
         assert result["count"] == 0
 
+    # Implements: REQ-o00061-A
     def test_agent_instructions_returns_configured_rules(self, tmp_path):
         """agent_instructions returns rules with correct metadata and content."""
         pytest.importorskip("mcp")

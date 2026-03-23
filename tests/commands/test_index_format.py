@@ -132,6 +132,7 @@ class TestFormatTable:
 class TestResolveSpecDirInfo:
     """Tests for _resolve_spec_dir_info."""
 
+    # Implements: REQ-d00217-A
     def test_with_config(self, tmp_path):
         """Info uses project name and level config from .elspais.toml."""
         (tmp_path / ".elspais.toml").write_text(
@@ -149,6 +150,7 @@ class TestResolveSpecDirInfo:
         assert info.level_order["dev"] == 3
         assert info.level_names["prd"] == "PRODUCT"
 
+    # Implements: REQ-d00217-A
     def test_no_config_falls_back(self, tmp_path):
         """Without .elspais.toml, falls back to empty level info."""
         spec_dir = tmp_path / "spec"
@@ -164,6 +166,7 @@ class TestResolveSpecDirInfo:
 class TestClassifyNode:
     """Tests for _classify_node."""
 
+    # Implements: REQ-d00217-B
     def test_matches_correct_spec_dir(self, tmp_path):
         """Node is classified to the spec dir containing its source."""
         spec_dir = tmp_path / "spec"
@@ -177,6 +180,7 @@ class TestClassifyNode:
 
         assert result == spec_dir
 
+    # Implements: REQ-d00217-B
     def test_no_source_returns_none(self, tmp_path):
         """Node with no source path returns None."""
         spec_dir = tmp_path / "spec"

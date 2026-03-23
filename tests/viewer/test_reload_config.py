@@ -11,10 +11,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from starlette.testclient import TestClient
 
 from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.server.app import create_app
+from elspais.server.state import AppState
 
 
 @pytest.fixture
@@ -41,15 +43,15 @@ class TestReloadRefreshesConfig:
 
         # Create the app with initial config and the tmp_path as working_dir
         initial_config = {"scanning": {"spec": {"directories": ["spec"]}}}
-        app = create_app(
-            repo_root=tmp_path,
+        state = AppState(
             graph=_minimal_graph,
+            repo_root=tmp_path,
             config=initial_config,
         )
-        app.config["TESTING"] = True
-        client = app.test_client()
+        app = create_app(state=state, mount_mcp=False)
+        client = TestClient(app)
 
-        # Modify config on disk — add extra-specs directory
+        # Modify config on disk -- add extra-specs directory
         config_path.write_text(
             'version = 3\n[scanning.spec]\ndirectories = ["spec", "extra-specs"]\n'
         )
@@ -65,9 +67,8 @@ class TestReloadRefreshesConfig:
         with patch("elspais.graph.factory.build_graph", fake_build_graph):
             resp = client.post("/api/reload")
 
-        data_debug = resp.get_json()
-        assert resp.status_code == 200, f"Reload failed: {data_debug}"
-        data = resp.get_json()
+        data = resp.json()
+        assert resp.status_code == 200, f"Reload failed: {data}"
         assert data["success"] is True
 
         # Verify build_graph was called with the REFRESHED config (from disk)

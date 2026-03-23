@@ -67,21 +67,21 @@ class TestPassingDetailFlagsCLI:
         """The --include-passing-details flag is accepted by the health subcommand parser."""
         from elspais.cli import parse_args
 
-        args = parse_args(["health", "--include-passing-details"])
+        args = parse_args(["checks", "--include-passing-details"])
         assert args.include_passing_details is True
 
     def test_REQ_d00085_E_no_include_passing_details_flag_accepted(self) -> None:
         """The --no-include-passing-details flag is accepted (this is the default)."""
         from elspais.cli import parse_args
 
-        args = parse_args(["health", "--no-include-passing-details"])
+        args = parse_args(["checks", "--no-include-passing-details"])
         assert args.include_passing_details is False
 
     def test_REQ_d00085_E_default_skips_passing_details(self) -> None:
         """Without either flag, passing details are skipped by default."""
         from elspais.cli import parse_args
 
-        args = parse_args(["health"])
+        args = parse_args(["checks"])
         # Default behavior: skip passing details
         assert args.include_passing_details is False
 
@@ -89,14 +89,16 @@ class TestPassingDetailFlagsCLI:
 class TestTextFormatPassingDetails:
     """Validates REQ-d00085-E: text format respects passing-detail flags."""
 
-    def test_REQ_d00085_E_text_include_passing_details_shows_details(self) -> None:
-        """Text format with --include-passing-details shows details for passing checks."""
+    def test_REQ_d00085_E_text_include_passing_details_no_details(self) -> None:
+        """Text format checklist does not render details (intentionally dropped)."""
         report = _make_passing_report()
         args = _make_args(format="text", verbose=True, include_passing_details=True)
         output = _format_report(report, args)
-        # With include-passing-details, passing check details should be visible
-        assert "total_refs" in output
-        assert "resolved" in output
+        # Text checklist intentionally omits check.details — only name+message
+        assert "total_refs" not in output
+        # But the check name and message should still appear
+        assert "valid_references" in output
+        assert "All 12 references resolved" in output
 
     def test_REQ_d00085_E_text_skip_passing_details_hides_details(self) -> None:
         """Text format with default --skip-passing-details hides details for passing checks."""
@@ -116,23 +118,21 @@ class TestMarkdownFormatPassingDetails:
     """Validates REQ-d00085-F: markdown format respects passing-detail flags."""
 
     def test_REQ_d00085_F_markdown_include_passing_details_shows_findings(self) -> None:
-        """Markdown with --include-passing-details shows <details> block for passing checks."""
+        """Markdown is a checklist -- no findings even with flag."""
         report = _make_passing_report()
         args = _make_args(format="markdown", include_passing_details=True)
         output = _format_report(report, args)
-        # Should include findings detail for passing checks
-        assert "REQ-p00001-A" in output
-        assert "<details>" in output or "REQ-p00001-A resolves" in output
+        assert "valid_references" in output
+        assert "- [x]" in output
+        assert "<details>" not in output
 
     def test_REQ_d00085_F_markdown_skip_passing_details_hides_findings(self) -> None:
-        """Markdown with --skip-passing-details hides findings for passing checks."""
+        """Markdown checklist shows check name/message, never findings."""
         report = _make_passing_report()
         args = _make_args(format="markdown", include_passing_details=False)
         output = _format_report(report, args)
-        # Passing check row should appear in the table
         assert "valid_references" in output
-        assert "PASS" in output
-        # But individual findings should NOT appear
+        assert "- [x]" in output
         assert "REQ-p00001-A resolves" not in output
 
 

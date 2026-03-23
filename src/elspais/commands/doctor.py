@@ -1,4 +1,5 @@
 # Implements: REQ-p00005-E
+# Implements: REQ-d00080-C+D
 """
 elspais.commands.doctor - Diagnose environment and installation health.
 

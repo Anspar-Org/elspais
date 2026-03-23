@@ -89,14 +89,14 @@ class TestCodeRefParsing:
     def test_block_header_and_refs(self, resolver, code_parser):
         content = """\
 # IMPLEMENTS REQUIREMENTS:
-#   REQ-d00001: First
-#   REQ-d00002: Second
+#   REQ-d00050: First
+#   REQ-d00051: Second
 def foo(): pass
 """
         results = _parse_code(content, resolver, code_parser)
         refs = [r for r in results if r.content_type == "code_ref"]
         assert len(refs) == 1
-        assert refs[0].parsed_data["implements"] == ["REQ-d00001", "REQ-d00002"]
+        assert refs[0].parsed_data["implements"] == ["REQ-d00050", "REQ-d00051"]
         assert refs[0].start_line == 1
         assert refs[0].end_line == 3
 

@@ -6,6 +6,7 @@
 # Implements: REQ-d00051-E, REQ-d00051-F
 # Implements: REQ-d00055-A, REQ-d00055-B, REQ-d00055-C, REQ-d00055-D, REQ-d00055-E
 # Implements: REQ-d00069-A, REQ-d00069-B, REQ-d00069-D
+# Implements: REQ-d00215-A+B+C+D+E
 """Node annotation functions for TraceGraph.
 
 These are pure functions that annotate individual GraphNode instances.
@@ -54,6 +55,7 @@ if TYPE_CHECKING:
     from elspais.graph import NodeKind
     from elspais.graph.federated import FederatedGraph
     from elspais.graph.GraphNode import GraphNode
+    from elspais.graph.metrics import RollupMetrics
     from elspais.utilities.git import GitChangeInfo
 
 
@@ -411,14 +413,15 @@ def get_implementation_status(node: GraphNode) -> str:
         node: The GraphNode to check.
 
     Returns:
-        'Full': coverage_pct >= 100
-        'Partial': coverage_pct > 0
-        'Unimplemented': coverage_pct == 0
+        'Full': referenced_pct >= 100
+        'Partial': referenced_pct > 0
+        'Unimplemented': referenced_pct == 0
     """
-    coverage_pct = node.get_metric("coverage_pct", 0)
-    if coverage_pct >= 100:
+    rollup = node.get_metric("rollup_metrics")
+    pct = rollup.implemented.indirect_pct if rollup else 0
+    if pct >= 100:
         return "Full"
-    elif coverage_pct > 0:
+    elif pct > 0:
         return "Partial"
     else:
         return "Unimplemented"
@@ -452,11 +455,12 @@ def count_by_coverage(
             continue
 
         counts["total"] += 1
-        coverage_pct = node.get_metric("coverage_pct", 0)
+        rollup = node.get_metric("rollup_metrics")
+        pct = rollup.implemented.indirect_pct if rollup else 0
 
-        if coverage_pct >= 100:
+        if pct >= 100:
             counts["full_coverage"] += 1
-        elif coverage_pct > 0:
+        elif pct > 0:
             counts["partial_coverage"] += 1
         else:
             counts["no_coverage"] += 1
@@ -516,6 +520,41 @@ def count_with_code_refs(
         "total_requirements": total,
         "with_code_refs": len(covered_req_ids),
         "coverage_percent": round(pct, 1),
+    }
+
+
+def count_code_coverage(graph: FederatedGraph) -> dict[str, int]:
+    """Compute project-wide code coverage statistics.
+
+    Returns dict with:
+    - total_executable_lines: sum of executable_lines across FILE nodes
+    - total_covered_lines: sum of lines where hit_count > 0 across FILE nodes
+    - total_attributed_lines: sum of code_tested.total across all REQUIREMENT nodes
+      (lines shared across REQs may be counted multiple times)
+    """
+    from elspais.graph import NodeKind
+
+    total_executable = 0
+    total_covered = 0
+
+    for node in graph.iter_by_kind(NodeKind.FILE):
+        executable = node.get_field("executable_lines")
+        if executable:
+            total_executable += executable
+        line_coverage = node.get_field("line_coverage")
+        if line_coverage:
+            total_covered += sum(1 for hit in line_coverage.values() if hit > 0)
+
+    total_attributed = 0
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        rollup = node.get_metric("rollup_metrics")
+        if rollup is not None:
+            total_attributed += rollup.code_tested.total
+
+    return {
+        "total_executable_lines": total_executable,
+        "total_covered_lines": total_covered,
+        "total_attributed_lines": total_attributed,
     }
 
 
@@ -595,13 +634,128 @@ def _compute_coverage_from_source(
     return contributions, source_nodes
 
 
+def _compute_code_tested(node: GraphNode, metrics: RollupMetrics) -> None:
+    """Compute the code_tested dimension from line coverage data.
+
+    Intersects implementation line ranges (from IMPLEMENTS edges to CODE nodes)
+    with file-level line_coverage data to determine how many implementation
+    lines are exercised by tests.
+
+    Args:
+        node: The REQUIREMENT node.
+        metrics: The RollupMetrics to update (modifies code_tested in place).
+    """
+    from elspais.graph import NodeKind
+    from elspais.graph.metrics import CoverageDimension
+    from elspais.graph.relations import EdgeKind
+
+    # Collect implementation lines: set of (relative_path, line_number)
+    impl_lines: set[tuple[str, int]] = set()
+
+    for edge in node.iter_outgoing_edges():
+        if edge.kind != EdgeKind.IMPLEMENTS:
+            continue
+        target = edge.target
+        if target.kind != NodeKind.CODE:
+            continue
+
+        impl_start = edge.metadata.get("impl_start_line")
+        impl_end = edge.metadata.get("impl_end_line")
+        if not impl_start:
+            continue
+
+        # Fallback: if impl_end is 0 or missing, use parse_end_line
+        if not impl_end:
+            impl_end = target.get_field("parse_end_line") or 0
+
+        if not impl_end or impl_end < impl_start:
+            continue
+
+        # Find FILE ancestor of CODE node
+        fn = target.file_node()
+        if fn is None:
+            continue
+        rel_path = fn.get_field("relative_path")
+        if not rel_path:
+            continue
+
+        for line_no in range(impl_start, impl_end + 1):
+            impl_lines.add((rel_path, line_no))
+
+    if not impl_lines:
+        return
+
+    # Group lines by file for efficient coverage lookup
+    lines_by_file: dict[str, set[int]] = {}
+    for rel_path, line_no in impl_lines:
+        lines_by_file.setdefault(rel_path, set()).add(line_no)
+
+    # Indirect coverage: check file-level line_coverage
+    indirect_count = 0
+    has_any_coverage = False
+
+    for edge in node.iter_outgoing_edges():
+        if edge.kind != EdgeKind.IMPLEMENTS:
+            continue
+        target = edge.target
+        if target.kind != NodeKind.CODE:
+            continue
+        fn = target.file_node()
+        if fn is None:
+            continue
+        rel_path = fn.get_field("relative_path")
+        if not rel_path or rel_path not in lines_by_file:
+            continue
+
+        line_coverage = fn.get_field("line_coverage")
+        if line_coverage is None:
+            continue
+        has_any_coverage = True
+        break  # Just checking existence
+
+    if has_any_coverage:
+        # Build file_node cache for coverage lookup
+        file_coverage: dict[str, dict[int, int]] = {}
+        for edge in node.iter_outgoing_edges():
+            if edge.kind != EdgeKind.IMPLEMENTS:
+                continue
+            target = edge.target
+            if target.kind != NodeKind.CODE:
+                continue
+            fn = target.file_node()
+            if fn is None:
+                continue
+            rel_path = fn.get_field("relative_path")
+            if not rel_path or rel_path in file_coverage:
+                continue
+            lc = fn.get_field("line_coverage")
+            if lc is not None:
+                file_coverage[rel_path] = lc
+
+        for rel_path, lines in lines_by_file.items():
+            lc = file_coverage.get(rel_path)
+            if lc is None:
+                continue
+            for line_no in lines:
+                if lc.get(line_no, 0) > 0:
+                    indirect_count += 1
+
+    metrics.code_tested = CoverageDimension(
+        total=len(impl_lines),
+        direct=0,  # Direct requires per-test attribution (RESULT.covered_lines)
+        indirect=indirect_count,
+        has_failures=False,
+    )
+
+
+# Refines: REQ-p00061-A
 def annotate_coverage(graph: FederatedGraph) -> None:
     """Compute and store coverage metrics for all requirement nodes.
 
     This function traverses the graph once to compute RollupMetrics for
     each REQUIREMENT node. Metrics are stored in node._metrics as:
     - "rollup_metrics": The full RollupMetrics object
-    - "coverage_pct": Coverage percentage (for convenience)
+    - "referenced_pct": Coverage percentage (for convenience)
 
     Coverage is determined by outgoing edges from REQUIREMENT nodes:
     - The builder links TEST/CODE/REQ as children of the parent REQ
@@ -646,7 +800,8 @@ def annotate_coverage(graph: FederatedGraph) -> None:
         metrics.total_assertions = len(assertion_labels)
 
         # Track TEST-specific metrics
-        tested_labels: set[str] = set()  # Assertions with TEST coverage
+        tested_labels: set[str] = set()  # Assertions with targeted TEST coverage
+        tested_indirect_labels: set[str] = set()  # Assertions with whole-req TEST coverage
         validated_labels: set[str] = set()  # Assertions with passing tests
         has_failures = False
 
@@ -663,6 +818,8 @@ def annotate_coverage(graph: FederatedGraph) -> None:
             metrics.add_contribution(c)
             if c.source_type == CoverageSource.DIRECT:
                 tested_labels.add(c.assertion_label)
+            elif c.source_type == CoverageSource.INDIRECT:
+                tested_indirect_labels.add(c.assertion_label)
 
         # Implements: REQ-d00069-A
         # Compute JNY (VALIDATES) UAT coverage contributions via shared helper
@@ -807,7 +964,8 @@ def annotate_coverage(graph: FederatedGraph) -> None:
 
         # Implements: REQ-d00069-A
         # Process JNY children to find RESULT nodes (UAT)
-        uat_validated_labels: set[str] = set()
+        uat_validated_direct_labels: set[str] = set()
+        uat_validated_indirect_labels: set[str] = set()
         uat_has_failures = False
         for jny_node, assertion_targets in jny_nodes_for_result_lookup:
             for result in jny_node.iter_children():
@@ -817,31 +975,33 @@ def annotate_coverage(graph: FederatedGraph) -> None:
                         if assertion_targets:
                             for label in assertion_targets:
                                 if label in assertion_labels:
-                                    uat_validated_labels.add(label)
+                                    uat_validated_direct_labels.add(label)
                         else:
                             for label in assertion_labels:
-                                uat_validated_labels.add(label)
+                                uat_validated_indirect_labels.add(label)
                     elif status in ("failed", "fail", "failure", "error"):
                         uat_has_failures = True
 
-        # Set test-specific metrics before finalize
-        metrics.direct_tested = len(tested_labels)
-        metrics.validated = len(validated_labels)
-        metrics.validated_with_indirect = len(validated_labels | validated_indirect_labels)
-        metrics.has_failures = has_failures
-        metrics.uat_has_failures = uat_has_failures
-
-        # Finalize metrics (computes aggregate coverage counts)
+        # Finalize metrics (computes aggregate coverage counts + implemented/uat_coverage dims)
         metrics.finalize()
 
-        # Set UAT validated count (needs finalize to have run for total_assertions)
-        metrics.uat_validated = len(uat_validated_labels)
-        if metrics.total_assertions > 0:
-            metrics.uat_validated_pct = (metrics.uat_validated / metrics.total_assertions) * 100
+        # Populate the tested, verified, and uat_verified dimensions
+        metrics.populate_test_dimensions(
+            tested_direct_labels=tested_labels,
+            tested_indirect_labels=tested_indirect_labels,
+            verified_direct_labels=validated_labels,
+            verified_indirect_labels=validated_indirect_labels,
+            verified_failures=has_failures,
+            uat_verified_direct_labels=uat_validated_direct_labels,
+            uat_verified_indirect_labels=uat_validated_indirect_labels,
+            uat_verified_failures=uat_has_failures,
+        )
+
+        # Compute code_tested dimension from coverage data
+        _compute_code_tested(node, metrics)
 
         # Store in node metrics
         node.set_metric("rollup_metrics", metrics)
-        node.set_metric("coverage_pct", metrics.coverage_pct)
 
 
 # =============================================================================
@@ -1197,6 +1357,7 @@ __all__ = [
     "group_by_level",
     "count_by_repo",
     "count_by_coverage",
+    "count_code_coverage",
     "count_with_code_refs",
     "count_by_git_status",
     "count_implementation_files",

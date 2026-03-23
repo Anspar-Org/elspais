@@ -25,6 +25,15 @@ main repo, not the worktree location.
 # Config schema version (defaults to 3)
 version = 3
 
+# MCP tool usage statistics file path (optional, or set ELSPAIS_STATS env var)
+stats = ""
+
+# CLI daemon auto-start TTL (minutes).
+#   >0: auto-start daemon, exit after N minutes idle (default: 30)
+#    0: never auto-launch daemon from CLI (manual start only)
+#   <0: auto-start daemon that never times out
+cli_ttl = 30
+
 #──────────────────────────────────────────────────────────────────────────────
 # PROJECT
 #──────────────────────────────────────────────────────────────────────────────
@@ -236,6 +245,11 @@ require_status = true
 
 # Require ## Assertions section in requirements
 require_assertions = true
+
+# Severity for the always-on spec.no_assertions health check
+# (flags requirements with zero assertions as not testable)
+# Values: "info" | "warning" (default) | "error"
+no_assertions_severity = "warning"
 
 # Allowed status values
 allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]

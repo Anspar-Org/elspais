@@ -36,6 +36,7 @@ def make_req(
 class TestMutationEntry:
     """Tests for MutationEntry dataclass."""
 
+    # Implements: REQ-o00062-E
     def test_entry_str(self):
         """MutationEntry has readable string representation."""
         entry = MutationEntry(
@@ -47,6 +48,7 @@ class TestMutationEntry:
         s = str(entry)
         assert s == f"[{entry.id[:8]}] rename_node(REQ-p00001)"
 
+    # Implements: REQ-o00062-E
     def test_entry_unique_ids(self):
         """Each MutationEntry gets a unique ID."""
         entry1 = MutationEntry(
@@ -68,6 +70,7 @@ class TestMutationEntry:
 class TestMutationLog:
     """Tests for MutationLog class."""
 
+    # Implements: REQ-d00132-E
     def test_empty_log(self):
         """New MutationLog is empty."""
         log = MutationLog()
@@ -75,6 +78,7 @@ class TestMutationLog:
         assert log.last() is None
         assert list(log.iter_entries()) == []
 
+    # Implements: REQ-d00132-E
     def test_append_and_iterate(self):
         """Entries can be appended and iterated."""
         log = MutationLog()
@@ -98,6 +102,7 @@ class TestMutationLog:
         entries = list(log.iter_entries())
         assert entries == [entry1, entry2]
 
+    # Implements: REQ-d00132-E
     def test_last(self):
         """last() returns most recent entry."""
         log = MutationLog()
@@ -120,6 +125,7 @@ class TestMutationLog:
         log.append(entry2)
         assert log.last() == entry2
 
+    # Implements: REQ-d00132-E
     def test_find_by_id(self):
         """find_by_id locates entry by mutation ID."""
         log = MutationLog()
@@ -137,6 +143,7 @@ class TestMutationLog:
         not_found = log.find_by_id("nonexistent")
         assert not_found is None
 
+    # Implements: REQ-d00132-E
     def test_entries_since(self):
         """entries_since returns entries from specified ID."""
         log = MutationLog()
@@ -153,12 +160,14 @@ class TestMutationLog:
         assert since[0] == entries[2]
         assert since[-1] == entries[4]
 
+    # Implements: REQ-d00132-E
     def test_entries_since_not_found(self):
         """entries_since raises ValueError for unknown ID."""
         log = MutationLog()
         with pytest.raises(ValueError, match="not found"):
             log.entries_since("nonexistent")
 
+    # Implements: REQ-d00132-E
     def test_pop(self):
         """pop() removes and returns last entry."""
         log = MutationLog()
@@ -190,6 +199,7 @@ class TestMutationLog:
         popped = log.pop()
         assert popped is None
 
+    # Implements: REQ-d00132-E
     def test_clear(self):
         """clear() removes all entries."""
         log = MutationLog()
@@ -206,6 +216,7 @@ class TestMutationLog:
 class TestTraceGraphMutationInfrastructure:
     """Tests for TraceGraph mutation infrastructure."""
 
+    # Implements: REQ-o00062-G
     def test_undo_last_empty(self):
         """undo_last on empty log returns None."""
         builder = GraphBuilder()
@@ -219,6 +230,7 @@ class TestTraceGraphMutationInfrastructure:
 class TestUndoRenameNode:
     """Tests for undo of rename_node operations."""
 
+    # Implements: REQ-o00062-G
     def test_undo_rename_restores_id(self):
         """Undoing rename restores original node ID."""
         builder = GraphBuilder()
@@ -262,6 +274,7 @@ class TestUndoRenameNode:
 class TestUndoUpdateTitle:
     """Tests for undo of update_title operations."""
 
+    # Implements: REQ-o00062-G
     def test_undo_title_restores_original(self):
         """Undoing title update restores original title."""
         builder = GraphBuilder()
@@ -291,6 +304,7 @@ class TestUndoUpdateTitle:
 class TestUndoTo:
     """Tests for undo_to batch undo operations."""
 
+    # Implements: REQ-o00062-G
     def test_undo_to_multiple(self):
         """undo_to undoes multiple mutations in reverse order."""
         builder = GraphBuilder()

@@ -135,6 +135,7 @@ _SECTION_COMMENTS: dict[str, str] = {
     "scanning.code": "Code file scanning",
     "scanning.test": "Test file scanning and reference detection",
     "scanning.result": "Test result file scanning",
+    "scanning.coverage": "Code coverage report scanning",
     "scanning.journey": "User journey file scanning",
     "scanning.docs": "Documentation file scanning",
     "rules": "Validation rules",
@@ -367,6 +368,8 @@ def _inject_optional_fields(toml_text: str) -> str:
         # Section-specific optional fields (only inject in the right section)
         if current_section == "scanning.spec" and stripped.startswith("skip_dirs"):
             result.append('# index_file = "INDEX.md"  # Index file for ordering')
+        if current_section == "scanning.coverage" and stripped.startswith("skip_dirs"):
+            result.append('# file_patterns = ["coverage.json", "**/lcov.info"]')
         if current_section == "scanning.code" and stripped.startswith("skip_dirs"):
             result.append("# source_roots = []    # Import resolution roots")
     return "\n".join(result)

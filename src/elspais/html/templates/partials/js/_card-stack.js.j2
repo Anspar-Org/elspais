@@ -126,7 +126,7 @@ function renderCardStack() {
 function buildCardHtml(nodeId, data, collapsed) {
     const collapsedClass = collapsed ? ' collapsed' : '';
     const focusedClass = editState.openCardOrder[0] === nodeId ? ' focused' : '';
-    const shortId = nodeId.replace('REQ-', '');
+    const shortId = nodeId;
     const title = escapeHtml(data.title || '');
     var props = data.properties || {};
     const level = (props.level || '').toUpperCase();
@@ -138,11 +138,15 @@ function buildCardHtml(nodeId, data, collapsed) {
 
     let html = '<div class="req-card' + collapsedClass + focusedClass + '" id="card-' + nodeId + '">';
 
-    // Header
+    // Header — with inline title editing
     html += '<div class="req-card-header" onclick="toggleCardCollapse(\'' + nodeId + '\')">';
     html += '<span class="req-card-expand">&#9660;</span>';
     html += '<span class="req-card-id">' + shortId + '</span>';
-    html += '<span class="req-card-title-display">' + title + '</span>';
+    html += '<span class="req-card-title-display view-only">' + title + '</span>';
+    html += '<input type="text" class="edit-only req-card-title-edit" value="' + escapeAttr(data.title || '') + '"' +
+        ' onclick="event.stopPropagation()" onblur="onTitleBlur(this)" data-node-id="' + nodeId + '"' +
+        ' data-original="' + escapeAttr(data.title || '') + '"' +
+        ' style="font-size:0.9rem;font-weight:600;border:none;border-bottom:1px dashed #adb5bd;background:transparent;flex:1;outline:none;padding:1px 4px;">';
     html += '<button class="req-card-delete edit-only" ' +
         'onclick="event.stopPropagation(); onDeleteRequirement(\'' + nodeId + '\')" ' +
         'title="Delete requirement">&#10005;</button>';
@@ -152,8 +156,62 @@ function buildCardHtml(nodeId, data, collapsed) {
     // Body
     html += '<div class="req-card-body">';
 
-    // Metadata section
-    html += '<div class="card-section"><div class="card-section-label">Metadata</div>';
+    // Coverage dimension badges (above metadata)
+    // Only shown when data exists; always clickable to expand links + flash assertions
+    if (data.coverage_dimensions) {
+        var rLinks = data.req_level_links || {};
+        var aLinksAll = data.assertion_links || {};
+        html += '<div class="card-section card-coverage-badges" style="padding:4px 12px 0;display:flex;gap:6px;flex-wrap:wrap;">';
+        var headerDims = [
+            {key: 'implemented', linkKey: 'implemented', assertLinkKey: 'implemented', label: 'IMPLEMENTED'},
+            {key: null, linkKey: 'refined', assertLinkKey: 'refined', label: 'REFINED'},
+            {key: 'tested', linkKey: 'tested', assertLinkKey: 'tested', label: 'TESTED'},
+            {key: 'verified', linkKey: 'verified', assertLinkKey: 'tested', label: 'VERIFIED'},
+            {key: 'uat_coverage', linkKey: 'validated', assertLinkKey: 'validated', label: 'VALIDATED'},
+            {key: 'uat_verified', linkKey: 'accepted', assertLinkKey: 'validated', label: 'ACCEPTED'}
+        ];
+        headerDims.forEach(function(d) {
+            var dim = d.key ? data.coverage_dimensions[d.key] : null;
+            var hasReqLinks = d.linkKey && rLinks[d.linkKey] && rLinks[d.linkKey].length > 0;
+            // Check if any assertion has direct links for this dimension
+            var hasAssertionLinks = false;
+            for (var lbl in aLinksAll) {
+                if (aLinksAll[lbl][d.assertLinkKey]) { hasAssertionLinks = true; break; }
+            }
+            var hasData = (dim && dim.color) || hasReqLinks || hasAssertionLinks;
+            if (!hasData) return; // hide badge if no data
+            var colorClass = dim && dim.color ? ' active val-' + dim.color : '';
+            var tipParts = [];
+            if (dim && dim.status_tip) tipParts.push(dim.status_tip);
+            if (hasReqLinks) tipParts.push(rLinks[d.linkKey].length + ' REQ-level link(s)');
+            if (hasAssertionLinks) tipParts.push('Click to highlight assertions');
+            var tip = tipParts.length > 0 ? tipParts.join(' \u2014 ') : d.label;
+            html += '<span class="status-badge' + colorClass + ' card-dim-badge" ' +
+                'title="' + escapeHtml(tip) + '" style="font-size:0.6rem;padding:1px 5px;" ' +
+                'onclick="event.stopPropagation(); toggleReqLevelLinks(this, \'' + nodeId + '\', \'' + d.linkKey + '\', \'' + d.assertLinkKey + '\')">' +
+                d.label + '</span>';
+        });
+        html += '</div>';
+        // Expandable link panels (one per header dimension, hidden by default)
+        ['implemented', 'refined', 'tested', 'verified', 'validated', 'accepted'].forEach(function(dimKey) {
+            html += '<div class="req-level-links-panel" id="req-links-' + nodeId + '-' + dimKey + '" style="display:none;margin:0 12px;padding:6px 10px;background:var(--assertion-code-panel-bg);border-radius:4px;border-left:3px solid var(--impl-yes-border);font-size:0.78rem;"></div>';
+        });
+    }
+
+    // Metadata section — source file right-justified on label line
+    var reqSourceLink = '';
+    if (sourcePath) {
+        reqSourceLink = '<span style="margin-left:auto;display:flex;align-items:baseline;gap:4px;text-transform:none;">' +
+            '<a href="#" onclick="event.preventDefault(); showSource(\'' +
+            escapeHtml(sourcePath) + '\', ' + sourceLine + ')" ' +
+            'style="color:#0d6efd;cursor:pointer;font-size:0.7rem;text-decoration:none;">' +
+            escapeHtml(sourcePath.split('/').pop()) + ':' + sourceLine + '</a>' +
+            '<button class="card-move-file-btn edit-only" ' +
+            'onclick="event.preventDefault(); onMoveToFile(\'' + nodeId + '\', \'' + escapeHtml(sourcePath) + '\')" ' +
+            'title="Move to different file" style="font-size:0.65rem;">Move</button>' +
+            '</span>';
+    }
+    html += '<div class="card-section"><div class="card-section-label" style="display:flex;align-items:baseline;">Metadata' + reqSourceLink + '</div>';
     html += '<div class="card-meta">';
 
     // Level
@@ -181,29 +239,7 @@ function buildCardHtml(nodeId, data, collapsed) {
     html += '<span class="card-meta-value" style="font-family:monospace;font-size:0.75rem;">' + hash + '</span>';
     html += '</div>';
 
-    // Source
-    if (sourcePath) {
-        html += '<div class="card-meta-item">';
-        html += '<span class="card-meta-key">Source:</span>';
-        html += '<a class="card-meta-value" href="#" onclick="event.preventDefault(); showSource(\'' +
-            escapeHtml(sourcePath) + '\', ' + sourceLine + ')" ' +
-            'style="color:#0d6efd;cursor:pointer;font-size:0.75rem;text-decoration:none;">' +
-            escapeHtml(sourcePath.split('/').pop()) + ':' + sourceLine + '</a>';
-        html += ' <button class="card-move-file-btn edit-only" ' +
-            'onclick="event.preventDefault(); onMoveToFile(\'' + nodeId + '\')" ' +
-            'title="Move to different file">Move</button>';
-        html += '</div>';
-    }
-
     html += '</div></div>';
-
-    // Editable Title (edit mode only, replaces header title on blur)
-    html += '<div class="card-section edit-only"><div class="card-section-label">Title <span class="edit-pencil" onclick="event.stopPropagation(); this.closest(\'.card-section\').querySelector(\'.editable-field\').focus()">&#9998;</span></div>';
-    html += '<div class="editable-field" contenteditable="true" data-node-id="' + nodeId + '" ' +
-        'data-field="title" data-original="' + escapeAttr(data.title || '') + '" ' +
-        'onblur="onTitleBlur(this)" onkeydown="onEditableKeydown(event)">' +
-        escapeHtml(data.title || '') + '</div>';
-    html += '</div>';
 
     // Parents section (relationship editor in edit mode)
     html += '<div class="card-section"><div class="card-section-label">Implements / Refines / Satisfies</div>';
@@ -220,19 +256,20 @@ function buildCardHtml(nodeId, data, collapsed) {
                 'data-source="' + nodeId + '" data-target="' + p.id + '" data-kind="' + edgeKind + '" ' +
                 'onclick="event.preventDefault(); onToggleEdgeKind(this)" ' +
                 'title="Click to cycle edge kind">' + edgeKindDisplay + '</button>';
-            html += '<a class="card-parent-link" href="#" onclick="event.preventDefault(); openCard(\'' + p.id + '\')">';
-            html += (p.ref_id || p.id).replace('REQ-', '') + ' - ' + escapeHtml(p.title || '');
-            html += '</a>';
-            // Assertion targets display
+            var pTargetsJson = (p.assertion_targets && p.assertion_targets.length > 0)
+                ? escapeAttr(JSON.stringify(p.assertion_targets)) : '';
+            html += '<a class="card-parent-link" href="#" onclick="event.preventDefault(); openCardAndFlash(\'' + p.id + '\', ' +
+                (pTargetsJson ? 'JSON.parse(this.dataset.targets)' : '[]') + ')"' +
+                (pTargetsJson ? ' data-targets="' + pTargetsJson + '"' : '') + '>';
+            html += (p.ref_id || p.id) + ' - ' + escapeHtml(p.title || '');
             if (p.assertion_targets && p.assertion_targets.length > 0) {
-                html += '<span class="card-parent-targets">[' + p.assertion_targets.join(', ') + ']</span>';
+                html += ' <span class="card-parent-targets">[' + p.assertion_targets.join(', ') + ']</span>';
             }
-            // Assertion targets picker button (edit mode, implements/refines only)
-            if (edgeKind === 'implements' || edgeKind === 'refines') {
-                html += '<button class="card-parent-targets-btn edit-only" ' +
-                    'onclick="event.preventDefault(); editEdgeTargets(\'' + nodeId + '\', \'' + p.id + '\', this)" ' +
-                    'title="Edit assertion targets">&#8943;</button>';
-            }
+            html += '</a>';
+            // Assertion targets picker button (edit mode)
+            html += '<button class="card-parent-targets-btn edit-only" ' +
+                'onclick="event.preventDefault(); editEdgeTargets(\'' + nodeId + '\', \'' + p.id + '\', this)" ' +
+                'title="Edit assertion targets">&#9998;</button>';
             html += '<button class="card-parent-delete edit-only" ' +
                 'onclick="event.preventDefault(); onDeleteEdge(\'' + nodeId + '\', \'' + p.id + '\')" ' +
                 'title="Remove relationship">&times;</button>';
@@ -259,20 +296,41 @@ function buildCardHtml(nodeId, data, collapsed) {
             html += '<div class="card-assertion-wrapper" data-assertion-id="' + assertionId + '">';
             html += '<div class="card-assertion">';
             html += '<span class="card-assertion-label">' + label + '</span>';
-            html += '<span class="edit-pencil edit-only" onclick="event.stopPropagation(); this.closest(\'.card-assertion\').querySelector(\'.card-assertion-text\').focus()">&#9998;</span>';
             html += '<span class="card-assertion-text editable-field" ' +
                 'contenteditable="false" data-assertion-id="' + assertionId + '" ' +
                 'data-field="assertion" data-original="' + escapeAttr(text) + '" ' +
                 'onblur="onAssertionBlur(this)" onkeydown="onEditableKeydown(event)">' +
                 escapeHtml(text) + '</span>';
-            html += '<button class="assertion-implemented-btn" ' +
-                'data-req-id="' + nodeId + '" data-label="' + escapeAttr(label) + '" ' +
-                'onclick="event.stopPropagation(); toggleAssertionCode(this, \'' + nodeId + '\', \'' + escapeAttr(label) + '\')">' +
-                'Implemented</button>';
-            html += '<button class="assertion-validation-btn" ' +
-                'data-req-id="' + nodeId + '" data-label="' + escapeAttr(label) + '" ' +
-                'onclick="event.stopPropagation(); toggleAssertionTests(this, \'' + nodeId + '\', \'' + escapeAttr(label) + '\')">' +
-                'Validation</button>';
+            // 6 dimension badges — only shown when direct assertion-level links exist
+            html += '<span class="assertion-badges-area">';
+            var badgeMode = editState.assertionBadgeMode || 'abbrev';
+            var aLinks = data.assertion_links ? data.assertion_links[label] : null;
+            var dimDefs = [
+                {cls: 'assertion-implemented-btn', full: 'Implemented', abbr: 'IMP', dot: 'I', toggle: 'toggleAssertionCode', tip: 'Code implementation', linkKey: 'implemented'},
+                {cls: 'assertion-refined-btn', full: 'Refined', abbr: 'REF', dot: 'R', toggle: 'toggleAssertionCode', tip: 'Refines references', linkKey: 'refined'},
+                {cls: 'assertion-tested-btn', full: 'Tested', abbr: 'TST', dot: 'T', toggle: 'toggleAssertionTests', tip: 'Test coverage', linkKey: 'tested'},
+                {cls: 'assertion-verified-btn', full: 'Verified', abbr: 'VER', dot: 'V', toggle: 'toggleAssertionResults', tip: 'Test results', linkKey: 'tested'},
+                {cls: 'assertion-validated-btn', full: 'Validated', abbr: 'VAL', dot: 'U', toggle: 'toggleAssertionUat', tip: 'Journey coverage', linkKey: 'validated'},
+                {cls: 'assertion-accepted-btn', full: 'Accepted', abbr: 'ACC', dot: 'A', toggle: 'toggleAssertionUatResults', tip: 'Journey results', linkKey: 'validated'}
+            ];
+            var anyBadge = false;
+            dimDefs.forEach(function(dim) {
+                // Only show badge if direct assertion-level links exist for this dimension
+                if (aLinks && !aLinks[dim.linkKey]) return;
+                anyBadge = true;
+                var btnLabel = badgeMode === 'full' ? dim.full : (badgeMode === 'dots' ? dim.dot : dim.abbr);
+                var btnStyle = badgeMode === 'dots' ? ' style="min-width:0;padding:2px 4px;font-size:0.55rem;"' : '';
+                html += '<button class="' + dim.cls + '" ' +
+                    'data-req-id="' + nodeId + '" data-label="' + escapeAttr(label) + '" ' +
+                    'title="' + dim.tip + '" ' +
+                    'onclick="event.stopPropagation(); ' + dim.toggle + '(this, \'' + nodeId + '\', \'' + escapeAttr(label) + '\')"' +
+                    btnStyle + '>' +
+                    btnLabel + '</button>';
+            });
+            if (!anyBadge) {
+                html += '<span class="assertion-no-coverage" title="No direct assertion-level coverage" style="font-size:0.6rem;color:var(--secondary-text);opacity:0.5;">no direct coverage</span>';
+            }
+            html += '</span>'; // close .assertion-badges-area
             html += '<button class="assertion-delete-btn edit-only" ' +
                 'title="Deprecate assertion" ' +
                 'onclick="event.stopPropagation(); onDeleteAssertion(\'' + nodeId + '\', \'' + escapeAttr(assertionId) + '\')">' +
@@ -280,6 +338,9 @@ function buildCardHtml(nodeId, data, collapsed) {
             html += '</div>';
             html += '<div class="assertion-code-panel" id="assertion-code-' + nodeId + '-' + label + '" style="display:none;"></div>';
             html += '<div class="assertion-tests-panel" id="assertion-tests-' + nodeId + '-' + label + '" style="display:none;"></div>';
+            html += '<div class="assertion-results-panel" id="assertion-results-' + nodeId + '-' + label + '" style="display:none;"></div>';
+            html += '<div class="assertion-uat-panel" id="assertion-uat-' + nodeId + '-' + label + '" style="display:none;"></div>';
+            html += '<div class="assertion-uat-results-panel" id="assertion-uat-results-' + nodeId + '-' + label + '" style="display:none;"></div>';
             html += '</div>';
         });
         html += '</div>';
@@ -335,36 +396,54 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
     var sourcePath = (data.source && data.source.path) || '';
     var sourceLine = (data.source && data.source.line) || 1;
 
-    var html = '<div class="req-card journey-card' + collapsedClass + focusedClass + '" id="card-' + nodeId + '">';
+    var html = '<div class="req-card journey-card' + collapsedClass + focusedClass + '" id="card-' + nodeId + '" data-journey-id="' + nodeId + '">';
 
-    // Header
+    // Header — show journey ID + editable title
     html += '<div class="req-card-header" onclick="toggleCardCollapse(\'' + nodeId + '\')">';
     html += '<span class="req-card-expand">&#9660;</span>';
-    html += '<span class="journey-card-kind">JNY</span>';
-    html += '<span class="req-card-title-display">' + title + '</span>';
+    html += '<span class="req-card-id">' + shortId + '</span>';
+    html += '<span class="req-card-title-display view-only">' + title + '</span>';
+    // Edit mode: inline title input
+    html += '<input type="text" class="edit-only journey-title-edit" value="' + escapeAttr(data.title || '') + '"' +
+        ' onclick="event.stopPropagation()" onblur="onJourneyTitleBlur(\'' + nodeId + '\', this)"' +
+        ' style="font-size:0.9rem;font-weight:600;border:none;border-bottom:1px dashed #adb5bd;background:transparent;flex:1;outline:none;">';
+    // Edit mode: delete journey
+    html += '<button class="edit-only journey-delete-btn" onclick="event.stopPropagation(); onDeleteJourney(\'' + nodeId + '\')" title="Delete journey">&times;</button>';
     html += '<button class="req-card-close" onclick="event.stopPropagation(); closeCard(\'' + nodeId + '\')" title="Close card">&times;</button>';
     html += '</div>';
 
     // Body
     html += '<div class="req-card-body">';
 
-    // Metadata section
-    html += '<div class="card-section"><div class="card-section-label">Journey Metadata</div>';
+    // Metadata section — source file right-justified on the label line
+    var sourceLink = '';
+    if (sourcePath) {
+        sourceLink = '<a href="#" onclick="event.preventDefault(); showSource(\'' +
+            escapeHtml(sourcePath) + '\', ' + sourceLine + ')" ' +
+            'style="color:#0d6efd;cursor:pointer;font-size:0.7rem;text-decoration:none;text-transform:none;margin-left:auto;">' +
+            escapeHtml(sourcePath.split('/').pop()) + ':' + sourceLine + '</a>';
+        sourceLink += '<button class="edit-only journey-move-btn" onclick="event.preventDefault(); onMoveToFile(\'' + nodeId + '\')" style="margin-left:4px;">Move</button>';
+    }
+    html += '<div class="card-section"><div class="card-section-label" style="display:flex;align-items:baseline;">Metadata' + sourceLink + '</div>';
     html += '<div class="card-meta">';
 
-    if (props.actor) {
-        html += '<div class="card-meta-item">';
-        html += '<span class="card-meta-key">Actor:</span>';
-        html += '<span class="card-meta-value">' + escapeHtml(props.actor) + '</span>';
-        html += '</div>';
-    }
+    // Actor — view + edit
+    html += '<div class="card-meta-item">';
+    html += '<span class="card-meta-key">Actor:</span>';
+    html += '<span class="card-meta-value journey-field-view">' + escapeHtml(props.actor || '') + '</span>';
+    html += '<input type="text" class="edit-only journey-field-edit" value="' + escapeAttr(props.actor || '') + '"' +
+        ' data-field="actor" data-journey-id="' + nodeId + '" onblur="onJourneyFieldBlur(this)"' +
+        ' style="font-size:inherit;border:none;border-bottom:1px dashed #adb5bd;background:transparent;width:90%;outline:none;">';
+    html += '</div>';
 
-    if (props.goal) {
-        html += '<div class="card-meta-item">';
-        html += '<span class="card-meta-key">Goal:</span>';
-        html += '<span class="card-meta-value">' + escapeHtml(props.goal) + '</span>';
-        html += '</div>';
-    }
+    // Goal — view + edit
+    html += '<div class="card-meta-item">';
+    html += '<span class="card-meta-key">Goal:</span>';
+    html += '<span class="card-meta-value journey-field-view">' + escapeHtml(props.goal || '') + '</span>';
+    html += '<input type="text" class="edit-only journey-field-edit" value="' + escapeAttr(props.goal || '') + '"' +
+        ' data-field="goal" data-journey-id="' + nodeId + '" onblur="onJourneyFieldBlur(this)"' +
+        ' style="font-size:inherit;border:none;border-bottom:1px dashed #adb5bd;background:transparent;width:90%;outline:none;">';
+    html += '</div>';
 
     if (props.descriptor) {
         html += '<div class="card-meta-item">';
@@ -373,38 +452,73 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
         html += '</div>';
     }
 
-    if (sourcePath) {
-        html += '<div class="card-meta-item">';
-        html += '<span class="card-meta-key">Source:</span>';
-        html += '<a class="card-meta-value" href="#" onclick="event.preventDefault(); showSource(\'' +
-            escapeHtml(sourcePath) + '\', ' + sourceLine + ')" ' +
-            'style="color:#0d6efd;cursor:pointer;font-size:0.75rem;text-decoration:none;">' +
-            escapeHtml(sourcePath.split('/').pop()) + '</a>';
-        html += '</div>';
-    }
-
     html += '</div></div>';
 
-    // Referenced Requirements (from links array — ADDRESSES edges)
-    var refs = (data.links || []).filter(function(l) { return l.edge_kind === 'validates'; });
-    if (refs.length > 0) {
-        html += '<div class="card-section"><div class="card-section-label">Addresses (' + refs.length + ')</div>';
-        html += '<div class="card-parents">';
-        refs.forEach(function(link) {
-            html += '<a class="card-parent-link" href="#" onclick="event.preventDefault(); openCard(\'' + link.id + '\')">';
-            html += link.id.replace('REQ-', '');
-            if (link.title) html += ' - ' + escapeHtml(link.title);
-            html += '</a>';
-        });
-        html += '</div></div>';
-    }
-
-    // Journey body (full text with steps)
-    if (props.description) {
-        html += '<div class="card-section"><div class="card-section-label">Journey Body</div>';
-        html += '<div class="journey-card-description">' + simpleMarkdown(props.description) + '</div>';
+    // Context (view + edit)
+    if (props.context || editState.enabled) {
+        html += '<div class="card-section"><div class="card-section-label">Context</div>';
+        if (props.context) {
+            html += '<div class="journey-card-description journey-field-view">' + simpleMarkdown(props.context) + '</div>';
+        }
+        html += '<input type="text" class="edit-only journey-field-edit" value="' + escapeAttr(props.context || '') + '"' +
+            ' data-field="context" data-journey-id="' + nodeId + '" onblur="onJourneyFieldBlur(this)"' +
+            ' style="width:100%;font-size:0.8rem;border:1px solid #dee2e6;border-radius:4px;padding:4px;background:#f8f9fa;">';
         html += '</div>';
     }
+
+    // Validates — with assertion targets and edit controls (same pattern as REQ parents)
+    var refs = (data.links || []).filter(function(l) { return l.edge_kind === 'validates'; });
+    html += '<div class="card-section journey-refs"><div class="card-section-label">Validates (' + refs.length + ')</div>';
+    html += '<div class="card-parents">';
+    refs.forEach(function(link) {
+        html += '<div class="card-parent-row">';
+        var lTargetsJson = (link.assertion_targets && link.assertion_targets.length > 0)
+            ? escapeAttr(JSON.stringify(link.assertion_targets)) : '';
+        html += '<a class="card-parent-link" href="#" onclick="event.preventDefault(); openCardAndFlash(\'' + link.id + '\', ' +
+            (lTargetsJson ? 'JSON.parse(this.dataset.targets)' : '[]') + ')"' +
+            (lTargetsJson ? ' data-targets="' + lTargetsJson + '"' : '') + '>';
+        html += link.id + ' - ' + escapeHtml(link.title || '');
+        if (link.assertion_targets && link.assertion_targets.length > 0) {
+            html += ' <span class="card-parent-targets">[' + link.assertion_targets.join(', ') + ']</span>';
+        }
+        html += '</a>';
+        // Assertion targets picker button (edit mode)
+        html += '<button class="card-parent-targets-btn edit-only" ' +
+            'onclick="event.preventDefault(); editEdgeTargets(\'' + nodeId + '\', \'' + link.id + '\', this)" ' +
+            'title="Edit assertion targets">&#9998;</button>';
+        html += '<button class="card-parent-delete edit-only" ' +
+            'onclick="event.preventDefault(); onDeleteEdge(\'' + nodeId + '\', \'' + link.id + '\')" ' +
+            'title="Remove relationship">&times;</button>';
+        html += '</div>';
+    });
+    html += '</div>';
+    html += '<button class="card-add-rel-btn edit-only" ' +
+        'onclick="onAddJourneyRef(\'' + nodeId + '\', this)">+ Add</button>';
+    html += '</div>';
+
+    // Sections (view + edit)
+    var sections = props.sections || [];
+    html += '<div class="journey-sections" data-journey-id="' + nodeId + '">';
+    sections.forEach(function(sec) {
+        html += '<div class="card-section journey-section" data-section-name="' + escapeAttr(sec.name) + '">';
+        // Section header — view + edit
+        html += '<div class="card-section-label journey-section-header">';
+        html += '<span class="journey-section-name-view">' + escapeHtml(sec.name) + '</span>';
+        html += '<input type="text" class="edit-only journey-section-name-edit" value="' + escapeAttr(sec.name) + '"' +
+            ' data-journey-id="' + nodeId + '" data-original-name="' + escapeAttr(sec.name) + '"' +
+            ' onblur="onJourneySectionNameBlur(this)" style="font-weight:600;flex:1;">';
+        html += '<button class="edit-only journey-section-delete" onclick="onDeleteJourneySection(\'' + nodeId + '\', \'' + escapeAttr(sec.name) + '\')" title="Delete section">&times;</button>';
+        html += '</div>';
+        // Section content — view + edit
+        html += '<div class="journey-card-description journey-section-content-view">' + simpleMarkdown(sec.content || '') + '</div>';
+        html += '<textarea class="edit-only journey-section-content-edit" data-journey-id="' + nodeId + '"' +
+            ' data-section-name="' + escapeAttr(sec.name) + '" onblur="onJourneySectionContentBlur(this)"' +
+            ' style="width:100%;min-height:40px;font-size:0.8rem;border:1px solid #dee2e6;border-radius:4px;padding:6px;resize:vertical;background:#f8f9fa;">' +
+            escapeHtml(sec.content || '') + '</textarea>';
+        html += '</div>';
+    });
+    html += '<button class="edit-only journey-section-add-btn" onclick="onAddJourneySection(\'' + nodeId + '\')">+ Add Section</button>';
+    html += '</div>';
 
     html += '</div>'; // end req-card-body
     html += '</div>'; // end req-card
@@ -431,7 +545,7 @@ function buildGenericCardHtml(nodeId, data, collapsed) {
     // Header
     html += '<div class="req-card-header" onclick="toggleCardCollapse(\'' + nodeId + '\')">';
     html += '<span class="req-card-expand">&#9660;</span>';
-    html += '<span class="journey-card-kind">' + escapeHtml(kindLabel) + '</span>';
+    html += '<span class="req-card-id">' + escapeHtml(kindLabel) + '</span>';
     html += '<span class="req-card-title-display">' + title + '</span>';
     html += '<button class="req-card-close" onclick="event.stopPropagation(); closeCard(\'' + nodeId + '\')" title="Close card">&times;</button>';
     html += '</div>';
@@ -521,8 +635,11 @@ async function prefetchCoverage(nodeId) {
     var codeData = assertionCodeCache[nodeId]
         ? Promise.resolve(assertionCodeCache[nodeId])
         : apiFetch('/api/code-coverage/' + encodeURIComponent(nodeId));
+    var uatData = assertionUatCache[nodeId]
+        ? Promise.resolve(assertionUatCache[nodeId])
+        : apiFetch('/api/uat-coverage/' + encodeURIComponent(nodeId));
 
-    var results = await Promise.all([testData, codeData]);
+    var results = await Promise.all([testData, codeData, uatData]);
 
     if (results[0] && results[0].success) {
         assertionTestsCache[nodeId] = results[0];
@@ -530,17 +647,30 @@ async function prefetchCoverage(nodeId) {
     if (results[1] && results[1].success) {
         assertionCodeCache[nodeId] = results[1];
     }
-    // Re-apply all cached colors (covers this card + any others in the DOM)
+    if (results[2] && results[2].success) {
+        assertionUatCache[nodeId] = results[2];
+    }
     recolorCachedButtons();
 }
 
 function recolorCachedButtons() {
     for (var reqId in assertionTestsCache) {
-        updateAllValidationButtons(reqId, assertionTestsCache[reqId]);
+        updateAllTestedButtons(reqId, assertionTestsCache[reqId]);
+        updateAllVerifiedButtons(reqId, assertionTestsCache[reqId]);
     }
     for (var reqId in assertionCodeCache) {
         updateAllImplementedButtons(reqId, assertionCodeCache[reqId]);
     }
+    for (var reqId in assertionUatCache) {
+        updateAllValidatedButtons(reqId, assertionUatCache[reqId]);
+        updateAllAcceptedButtons(reqId, assertionUatCache[reqId]);
+    }
+}
+
+function setAssertionBadgeMode(mode) {
+    editState.assertionBadgeMode = mode;
+    renderCardStack();
+    recolorCachedButtons();
 }
 
 // =====================================================================
@@ -573,8 +703,9 @@ async function toggleAssertionTests(btn, reqId, label) {
             return;
         }
         assertionTestsCache[reqId] = data;
-        // Update ALL validation buttons for this requirement
-        updateAllValidationButtons(reqId, data);
+        // Update ALL tested/verified buttons for this requirement
+        updateAllTestedButtons(reqId, data);
+        updateAllVerifiedButtons(reqId, data);
     }
 
     renderAssertionTests(panel, reqId, label, assertionTestsCache[reqId]);
@@ -631,48 +762,137 @@ function renderAssertionTests(panel, reqId, label, data) {
     panel.innerHTML = html;
 }
 
-function updateAllValidationButtons(reqId, data) {
-    var buttons = document.querySelectorAll('.assertion-validation-btn[data-req-id="' + reqId + '"]');
+// =====================================================================
+// Assertion Results — Test Result Files (VER badge)
+// =====================================================================
+
+async function toggleAssertionResults(btn, reqId, label) {
+    var panelId = 'assertion-results-' + reqId + '-' + label;
+    var panel = document.getElementById(panelId);
+    if (!panel) return;
+
+    if (panel.style.display !== 'none') {
+        panel.style.display = 'none';
+        btn.classList.remove('active');
+        return;
+    }
+
+    panel.style.display = 'block';
+    btn.classList.add('active');
+
+    // Fetch test data if not cached (results come from the same endpoint)
+    if (!assertionTestsCache[reqId]) {
+        panel.innerHTML = '<div class="assertion-tests-loading">Loading...</div>';
+        var data = await apiFetch('/api/test-coverage/' + encodeURIComponent(reqId));
+        if (!data || !data.success) {
+            panel.innerHTML = '<div class="assertion-tests-loading">Failed to load results data</div>';
+            return;
+        }
+        assertionTestsCache[reqId] = data;
+        updateAllTestedButtons(reqId, data);
+        updateAllVerifiedButtons(reqId, data);
+    }
+
+    renderAssertionResults(panel, reqId, label, assertionTestsCache[reqId]);
+}
+
+function renderAssertionResults(panel, reqId, label, data) {
+    var assertionData = data.assertion_tests[label];
+    if (!assertionData) {
+        panel.innerHTML = '<div class="assertion-tests-empty">No data for this assertion</div>';
+        return;
+    }
+
+    // Collect all results across all tests
+    var resultItems = [];
+    var tests = assertionData.tests;
+    for (var i = 0; i < tests.length; i++) {
+        var t = tests[i];
+        if (t.results && t.results.length > 0) {
+            for (var j = 0; j < t.results.length; j++) {
+                resultItems.push({ result: t.results[j], testLabel: t.label || t.id });
+            }
+        }
+    }
+
+    if (resultItems.length === 0) {
+        panel.innerHTML = '<div class="assertion-tests-empty">No test results for this assertion</div>';
+        return;
+    }
+
+    var html = '';
+    for (var k = 0; k < resultItems.length; k++) {
+        var r = resultItems[k].result;
+        var tLabel = resultItems[k].testLabel;
+        var status = (r.status || '').toLowerCase();
+        var statusIcon = '';
+        var statusClass = '';
+        if (status === 'passed' || status === 'pass' || status === 'success') {
+            statusIcon = '&#x2705;'; statusClass = 'test-passed';
+        } else if (status === 'failed' || status === 'fail' || status === 'failure' || status === 'error') {
+            statusIcon = '&#x274C;'; statusClass = 'test-failed';
+        } else {
+            statusIcon = '&#x2753;'; statusClass = '';
+        }
+
+        html += '<div class="assertion-test-item ' + statusClass + '">';
+        html += '<span class="assertion-test-icon">' + statusIcon + '</span>';
+        if (r.file) {
+            html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
+                escapeHtml(r.file) + '\', ' + (r.line || 0) + ')">' +
+                escapeHtml(tLabel) + ' [' + escapeHtml(r.status) + ']</a>';
+        } else {
+            html += '<span class="assertion-test-link">' + escapeHtml(tLabel) + ' [' + escapeHtml(r.status) + ']</span>';
+        }
+        html += '</div>';
+    }
+    panel.innerHTML = html;
+}
+
+// Shared helper: classify test/journey coverage into a state class
+function _classifyTestState(items) {
+    // items = array of test/journey objects with .results arrays
+    // Returns: 'validation-pass', 'validation-partial', 'validation-fail', or 'validation-unknown'
+    if (items.length === 0) return 'validation-fail';
+    var allResults = [];
+    for (var j = 0; j < items.length; j++) {
+        if (items[j].results) {
+            for (var k = 0; k < items[j].results.length; k++) {
+                allResults.push(items[j].results[k].status);
+            }
+        }
+    }
+    if (allResults.length === 0) return 'validation-unknown'; // exists but no results = unknown
+    var allPassed = allResults.every(function(s) { return s === 'passed'; });
+    var anyFailed = allResults.some(function(s) { return s === 'failed' || s === 'failure' || s === 'error'; });
+    if (allPassed) return 'validation-pass';
+    if (anyFailed) return 'validation-partial';
+    return 'validation-pass'; // unknown statuses (skipped) = covered
+}
+
+function updateAllTestedButtons(reqId, data) {
+    // TESTED: do tests exist for this assertion? (yes/no, same CSS as implemented)
+    var buttons = document.querySelectorAll('.assertion-tested-btn[data-req-id="' + reqId + '"]');
     for (var i = 0; i < buttons.length; i++) {
         var btn = buttons[i];
         var label = btn.dataset.label;
         var assertionData = data.assertion_tests[label];
         if (!assertionData) continue;
+        btn.classList.remove('implemented-yes', 'implemented-no');
+        btn.classList.add(assertionData.tests.length > 0 ? 'implemented-yes' : 'implemented-no');
+    }
+}
 
-        // Remove previous state classes
+function updateAllVerifiedButtons(reqId, data) {
+    // VERIFIED: do test results pass? (pass/partial/fail)
+    var buttons = document.querySelectorAll('.assertion-verified-btn[data-req-id="' + reqId + '"]');
+    for (var i = 0; i < buttons.length; i++) {
+        var btn = buttons[i];
+        var label = btn.dataset.label;
+        var assertionData = data.assertion_tests[label];
+        if (!assertionData) continue;
         btn.classList.remove('validation-pass', 'validation-partial', 'validation-fail', 'validation-unknown');
-
-        var tests = assertionData.tests;
-        if (tests.length === 0) {
-            btn.classList.add('validation-fail');
-            continue;
-        }
-
-        // Collect all results across all tests for this assertion
-        var allResults = [];
-        for (var j = 0; j < tests.length; j++) {
-            if (tests[j].results) {
-                for (var k = 0; k < tests[j].results.length; k++) {
-                    allResults.push(tests[j].results[k].status);
-                }
-            }
-        }
-
-        if (allResults.length === 0) {
-            // Tests exist but no results loaded — tests ARE coverage
-            btn.classList.add('validation-pass');
-        } else {
-            var allPassed = allResults.every(function(s) { return s === 'passed'; });
-            var anyFailed = allResults.some(function(s) { return s === 'failed' || s === 'failure' || s === 'error'; });
-            if (allPassed) {
-                btn.classList.add('validation-pass');
-            } else if (anyFailed) {
-                btn.classList.add('validation-partial');
-            } else {
-                // Unknown statuses (skipped, etc.) — still covered
-                btn.classList.add('validation-pass');
-            }
-        }
+        btn.classList.add(_classifyTestState(assertionData.tests));
     }
 }
 
@@ -764,4 +984,346 @@ function updateAllImplementedButtons(reqId, data) {
             btn.classList.add('implemented-no');
         }
     }
+}
+
+// =====================================================================
+// Assertion UAT — Journey Coverage Buttons (Validated + Accepted)
+// =====================================================================
+
+var assertionUatCache = {};
+
+async function toggleAssertionUat(btn, reqId, label) {
+    var panelId = 'assertion-uat-' + reqId + '-' + label;
+    var panel = document.getElementById(panelId);
+    if (!panel) return;
+
+    // Toggle visibility
+    if (panel.style.display !== 'none') {
+        panel.style.display = 'none';
+        btn.classList.remove('active');
+        return;
+    }
+
+    panel.style.display = 'block';
+    btn.classList.add('active');
+
+    // Fetch data if not cached
+    if (!assertionUatCache[reqId]) {
+        panel.innerHTML = '<div class="assertion-tests-loading">Loading...</div>';
+        var data = await apiFetch('/api/uat-coverage/' + encodeURIComponent(reqId));
+        if (!data || !data.success) {
+            panel.innerHTML = '<div class="assertion-tests-loading">Failed to load UAT data</div>';
+            return;
+        }
+        assertionUatCache[reqId] = data;
+        updateAllValidatedButtons(reqId, data);
+        updateAllAcceptedButtons(reqId, data);
+    }
+
+    renderAssertionUat(panel, reqId, label, assertionUatCache[reqId]);
+}
+
+function renderAssertionUat(panel, reqId, label, data) {
+    var assertionData = data.assertion_journeys[label];
+    if (!assertionData) {
+        panel.innerHTML = '<div class="assertion-tests-empty">No data for this assertion</div>';
+        return;
+    }
+
+    var journeys = assertionData.journeys;
+    if (journeys.length === 0) {
+        panel.innerHTML = '<div class="assertion-tests-empty">No journeys validate this assertion</div>';
+        return;
+    }
+
+    // Reuse the same rendering as tests (journeys have same structure)
+    var html = '';
+    for (var i = 0; i < journeys.length; i++) {
+        var j = journeys[i];
+        var statusIcon = '';
+        var statusClass = '';
+        var hasResults = j.results && j.results.length > 0;
+        if (hasResults) {
+            var allPassed = j.results.every(function(r) { return r.status === 'passed'; });
+            var anyFailed = j.results.some(function(r) { return r.status === 'failed' || r.status === 'failure' || r.status === 'error'; });
+            if (allPassed) { statusIcon = '&#x2705;'; statusClass = 'test-passed'; }
+            else if (anyFailed) { statusIcon = '&#x274C;'; statusClass = 'test-failed'; }
+            else { statusIcon = '&#x2753;'; statusClass = ''; }
+        } else {
+            statusIcon = '&#x2796;'; statusClass = 'test-no-result';
+        }
+
+        var jLabel = escapeHtml(j.label || j.id);
+        html += '<div class="assertion-test-item ' + statusClass + '">';
+        html += '<span class="assertion-test-icon">' + statusIcon + '</span>';
+        // Journey links open the journey card instead of showing source
+        html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
+            escapeHtml(j.id) + '\')">' + jLabel + '</a>';
+        html += '</div>';
+    }
+    panel.innerHTML = html;
+}
+
+function updateAllValidatedButtons(reqId, data) {
+    // VALIDATED: do journeys exist for this assertion? (yes/no)
+    var buttons = document.querySelectorAll('.assertion-validated-btn[data-req-id="' + reqId + '"]');
+    for (var i = 0; i < buttons.length; i++) {
+        var btn = buttons[i];
+        var label = btn.dataset.label;
+        var assertionData = data.assertion_journeys[label];
+        if (!assertionData) continue;
+        btn.classList.remove('implemented-yes', 'implemented-no');
+        btn.classList.add(assertionData.journeys.length > 0 ? 'implemented-yes' : 'implemented-no');
+    }
+}
+
+function updateAllAcceptedButtons(reqId, data) {
+    // ACCEPTED: do journey results pass? (pass/partial/fail)
+    var buttons = document.querySelectorAll('.assertion-accepted-btn[data-req-id="' + reqId + '"]');
+    for (var i = 0; i < buttons.length; i++) {
+        var btn = buttons[i];
+        var label = btn.dataset.label;
+        var assertionData = data.assertion_journeys[label];
+        if (!assertionData) continue;
+        btn.classList.remove('validation-pass', 'validation-partial', 'validation-fail', 'validation-unknown');
+        btn.classList.add(_classifyTestState(assertionData.journeys));
+    }
+}
+
+// =====================================================================
+// Assertion UAT Results — Journey Result Files (ACC badge)
+// =====================================================================
+
+async function toggleAssertionUatResults(btn, reqId, label) {
+    var panelId = 'assertion-uat-results-' + reqId + '-' + label;
+    var panel = document.getElementById(panelId);
+    if (!panel) return;
+
+    if (panel.style.display !== 'none') {
+        panel.style.display = 'none';
+        btn.classList.remove('active');
+        return;
+    }
+
+    panel.style.display = 'block';
+    btn.classList.add('active');
+
+    if (!assertionUatCache[reqId]) {
+        panel.innerHTML = '<div class="assertion-tests-loading">Loading...</div>';
+        var data = await apiFetch('/api/uat-coverage/' + encodeURIComponent(reqId));
+        if (!data || !data.success) {
+            panel.innerHTML = '<div class="assertion-tests-loading">Failed to load UAT results</div>';
+            return;
+        }
+        assertionUatCache[reqId] = data;
+        updateAllValidatedButtons(reqId, data);
+        updateAllAcceptedButtons(reqId, data);
+    }
+
+    renderAssertionUatResults(panel, reqId, label, assertionUatCache[reqId]);
+}
+
+function renderAssertionUatResults(panel, reqId, label, data) {
+    var assertionData = data.assertion_journeys[label];
+    if (!assertionData) {
+        panel.innerHTML = '<div class="assertion-tests-empty">No data for this assertion</div>';
+        return;
+    }
+
+    var resultItems = [];
+    var journeys = assertionData.journeys;
+    for (var i = 0; i < journeys.length; i++) {
+        var j = journeys[i];
+        if (j.results && j.results.length > 0) {
+            for (var k = 0; k < j.results.length; k++) {
+                resultItems.push({ result: j.results[k], jnyLabel: j.label || j.id, jnyId: j.id });
+            }
+        }
+    }
+
+    if (resultItems.length === 0) {
+        panel.innerHTML = '<div class="assertion-tests-empty">No journey results for this assertion</div>';
+        return;
+    }
+
+    var html = '';
+    for (var r = 0; r < resultItems.length; r++) {
+        var res = resultItems[r].result;
+        var jLabel = resultItems[r].jnyLabel;
+        var status = (res.status || '').toLowerCase();
+        var statusIcon = '', statusClass = '';
+        if (status === 'passed' || status === 'pass' || status === 'success') {
+            statusIcon = '&#x2705;'; statusClass = 'test-passed';
+        } else if (status === 'failed' || status === 'fail' || status === 'failure' || status === 'error') {
+            statusIcon = '&#x274C;'; statusClass = 'test-failed';
+        } else {
+            statusIcon = '&#x2753;';
+        }
+
+        html += '<div class="assertion-test-item ' + statusClass + '">';
+        html += '<span class="assertion-test-icon">' + statusIcon + '</span>';
+        if (res.file) {
+            html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
+                escapeHtml(res.file) + '\', ' + (res.line || 0) + ')">' +
+                escapeHtml(jLabel) + ' [' + escapeHtml(res.status) + ']</a>';
+        } else {
+            html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
+                escapeHtml(resultItems[r].jnyId) + '\')">' +
+                escapeHtml(jLabel) + ' [' + escapeHtml(res.status) + ']</a>';
+        }
+        html += '</div>';
+    }
+    panel.innerHTML = html;
+}
+
+// =====================================================================
+// REQ-Level Link Expansion (header badge click)
+// =====================================================================
+
+function toggleReqLevelLinks(badge, reqId, dimKey, assertLinkKey) {
+    var panelId = 'req-links-' + reqId + '-' + dimKey;
+    var panel = document.getElementById(panelId);
+
+    if (panel && panel.style.display !== 'none') {
+        // Closing — just hide, no flash/scroll
+        panel.style.display = 'none';
+        return;
+    }
+
+    // Opening — flash assertions that have direct links
+    _flashAssertions(reqId, assertLinkKey || dimKey);
+
+    if (!panel) return;
+
+    // Find the card data from editState
+    var cardState = editState.openCards.get(reqId);
+    if (!cardState || !cardState.data || !cardState.data.req_level_links) {
+        return; // no panel to show, flash was enough
+    }
+
+    var links = cardState.data.req_level_links[dimKey] || [];
+    if (links.length === 0) {
+        return; // no REQ-level links, flash was enough
+    }
+
+    var html = '';
+    for (var i = 0; i < links.length; i++) {
+        var link = links[i];
+        // Result status icon for TEST/JNY nodes
+        var statusIcon = '';
+        if (link.result_status === 'passed') statusIcon = '&#x2705; ';
+        else if (link.result_status === 'failed') statusIcon = '&#x274C; ';
+        else if (link.result_status === 'mixed') statusIcon = '&#x26A0; ';
+
+        var statusClass = '';
+        if (link.result_status === 'failed') statusClass = ' test-failed';
+        else if (link.result_status === 'passed') statusClass = ' test-passed';
+
+        if (link.kind === 'journey') {
+            html += '<div class="assertion-test-item' + statusClass + '">';
+            html += '<span class="assertion-test-icon">' + statusIcon + '&#x1F4D6;</span>';
+            html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
+                escapeHtml(link.id) + '\')">' + escapeHtml(link.title) + '</a>';
+            html += '</div>';
+        } else {
+            var icon = link.kind === 'requirement' ? '&#x1F4CB;' : (link.kind === 'test' ? '&#x1F9EA;' : '&#x1F4C4;');
+            html += '<div class="assertion-test-item' + statusClass + '">';
+            html += '<span class="assertion-test-icon">' + statusIcon + icon + '</span>';
+            if (link.file) {
+                html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
+                    escapeHtml(link.file) + '\', ' + (link.line || 0) + ')">' + escapeHtml(link.title) + '</a>';
+            } else {
+                html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
+                    escapeHtml(link.id) + '\')">' + escapeHtml(link.title) + '</a>';
+            }
+            html += '</div>';
+        }
+    }
+    panel.innerHTML = html;
+    panel.style.display = 'block';
+}
+
+function _flashAssertionsByLabel(reqId, labels) {
+    // Flash specific assertion labels (e.g., ["A", "B"]) on a card
+    if (!labels || labels.length === 0) return;
+    var card = document.getElementById('card-' + reqId);
+    if (!card) return;
+
+    var targets = [];
+    var wrappers = card.querySelectorAll('.card-assertion-wrapper');
+    for (var i = 0; i < wrappers.length; i++) {
+        var assertionDiv = wrappers[i].querySelector('.card-assertion');
+        if (!assertionDiv) continue;
+        var labelEl = assertionDiv.querySelector('.card-assertion-label');
+        if (labelEl && labels.indexOf(labelEl.textContent.trim()) >= 0) {
+            targets.push(assertionDiv);
+        }
+    }
+
+    if (targets.length > 0) {
+        targets[0].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    setTimeout(function() {
+        for (var j = 0; j < targets.length; j++) {
+            targets[j].style.transition = 'none';
+            targets[j].style.backgroundColor = 'rgba(13, 110, 253, 0.3)';
+        }
+        setTimeout(function() {
+            for (var j = 0; j < targets.length; j++) {
+                targets[j].style.transition = 'background-color 1s ease-out';
+                targets[j].style.backgroundColor = '';
+            }
+        }, 400);
+    }, 50);
+}
+
+async function openCardAndFlash(targetId, assertionTargets) {
+    await openCard(targetId);
+    if (assertionTargets && assertionTargets.length > 0) {
+        // Small delay to ensure card DOM is rendered
+        setTimeout(function() { _flashAssertionsByLabel(targetId, assertionTargets); }, 150);
+    }
+}
+
+function _flashAssertions(reqId, assertLinkKey) {
+    // Find card data to get assertion_links
+    var cardState = editState.openCards.get(reqId);
+    if (!cardState || !cardState.data || !cardState.data.assertion_links) return;
+
+    var aLinks = cardState.data.assertion_links;
+    var card = document.getElementById('card-' + reqId);
+    if (!card) return;
+
+    // Collect matching .card-assertion elements (they have the visible background)
+    var targets = [];
+    for (var label in aLinks) {
+        if (!aLinks[label][assertLinkKey]) continue;
+        var wrappers = card.querySelectorAll('.card-assertion-wrapper');
+        for (var i = 0; i < wrappers.length; i++) {
+            var assertionDiv = wrappers[i].querySelector('.card-assertion');
+            if (!assertionDiv) continue;
+            var labelEl = assertionDiv.querySelector('.card-assertion-label');
+            if (labelEl && labelEl.textContent.trim() === label) {
+                targets.push(assertionDiv);
+            }
+        }
+    }
+
+    if (targets.length > 0) {
+        targets[0].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    // Use inline style flash (same pattern as file-viewer line flash)
+    setTimeout(function() {
+        for (var j = 0; j < targets.length; j++) {
+            targets[j].style.transition = 'none';
+            targets[j].style.backgroundColor = 'rgba(13, 110, 253, 0.3)';
+        }
+        setTimeout(function() {
+            for (var j = 0; j < targets.length; j++) {
+                targets[j].style.transition = 'background-color 1s ease-out';
+                targets[j].style.backgroundColor = '';
+            }
+        }, 400);
+    }, 50);
 }

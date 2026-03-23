@@ -35,9 +35,7 @@ pytestmark = [
 
 def _assertion_labels(req_data: dict) -> list[str]:
     """Extract assertion labels from a get_requirement response."""
-    return [
-        c.get("label", "") for c in req_data.get("children", []) if c.get("kind") == "assertion"
-    ]
+    return [a.get("label", "") for a in req_data.get("assertions", [])]
 
 
 # ---------------------------------------------------------------------------
@@ -194,10 +192,7 @@ class TestMCPSearchAndNavigation:
             result = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00001"})
             assert result["id"] == "REQ-p00001"
             assert "User Management" in result.get("title", "")
-            # Assertions are in 'children' list with kind='assertion'
-            children = result.get("children", [])
-            assertion_children = [c for c in children if c.get("kind") == "assertion"]
-            assert len(assertion_children) >= 3
+            assert len(result.get("assertions", [])) >= 3
         finally:
             stop_mcp(proc)
 

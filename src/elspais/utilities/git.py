@@ -543,10 +543,14 @@ def git_status_summary(
         ):
             pass  # No remote or fetch failed — treat as not diverged
 
+    # All dirty files (not just spec) for checkpoint file picker
+    dirty_other = sorted(f for f in all_dirty if not f.startswith(prefix))
+
     return {
         "branch": branch,
         "is_main": is_main,
         "dirty_spec_files": dirty_spec,
+        "dirty_other_files": dirty_other,
         "local_ahead": local_ahead_count,
         "remote_diverged": remote_diverged,
         "fast_forward_possible": fast_forward_possible,
@@ -576,7 +580,7 @@ def list_branches(repo_root: Path) -> dict[str, Any]:
     # --- local branches ---
     try:
         local_out = subprocess.run(
-            ["git", "branch", "--list", "--no-color"],
+            ["git", "branch", "--list", "--sort=-committerdate", "--no-color"],
             cwd=repo_root,
             env=env,
             capture_output=True,
@@ -603,7 +607,7 @@ def list_branches(repo_root: Path) -> dict[str, Any]:
     # --- remote branches ---
     try:
         remote_out = subprocess.run(
-            ["git", "branch", "-r", "--list", "--no-color"],
+            ["git", "branch", "-r", "--list", "--sort=-committerdate", "--no-color"],
             cwd=repo_root,
             env=env,
             capture_output=True,
@@ -1240,6 +1244,313 @@ def _git_config(key: str) -> str:
         return ""
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Checkpoint and History Utilities
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def list_commits(
+    repo_root: Path,
+    branch: str = "HEAD",
+    limit: int = 20,
+) -> list[dict[str, str]]:
+    """List commits in reverse chronological order.
+
+    Args:
+        repo_root: Path to repository root.
+        branch: Branch or ref to list commits for (default: ``"HEAD"``).
+        limit: Maximum number of commits to return (default: 20).
+
+    Returns:
+        List of dicts with ``hash``, ``message``, ``date``, and ``author`` keys,
+        in reverse chronological order.  Returns ``[]`` on error or empty repo.
+    """
+    # Unit separator (ASCII 31) as field delimiter — safe against special chars
+    fmt = "%H%x1f%s%x1f%ci%x1f%an"
+    try:
+        result = subprocess.run(
+            ["git", "log", f"-{limit}", f"--format={fmt}", branch],
+            cwd=repo_root,
+            env=_clean_git_env(),
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        return []
+
+    if result.returncode != 0:
+        return []
+
+    commits: list[dict[str, str]] = []
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split("\x1f")
+        if len(parts) != 4:
+            continue
+        commits.append(
+            {
+                "hash": parts[0],
+                "message": parts[1],
+                "date": parts[2],
+                "author": parts[3],
+            }
+        )
+    return commits
+
+
+def checkout_commit(repo_root: Path, commit_hash: str) -> dict[str, Any]:
+    """Check out a specific commit by hash, entering detached HEAD state.
+
+    Args:
+        repo_root: Path to repository root.
+        commit_hash: Full or abbreviated commit hash.
+
+    Returns:
+        ``{"success": True}`` on success, or ``{"success": False, "error": "..."}``
+        on failure.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "checkout", "--detach", commit_hash],
+            cwd=repo_root,
+            env=_clean_git_env(),
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        return {"success": False, "error": "git not found"}
+
+    if result.returncode != 0:
+        err = (result.stderr or result.stdout or "").strip()
+        return {"success": False, "error": err}
+
+    return {"success": True}
+
+
+def commit_spec_files(
+    repo_root: Path,
+    message: str,
+    spec_dir: str = "spec",
+    main_branches: tuple[str, ...] = ("main", "master"),
+    files: list[str] | None = None,
+) -> dict[str, Any]:
+    """Stage and commit files locally without pushing.
+
+    When *files* is ``None``, delegates to ``commit_and_push_spec_files``
+    with ``push=False`` (commits all dirty spec files).  When *files* is
+    an explicit list of repo-relative paths, stages and commits exactly
+    those files.
+
+    Args:
+        repo_root: Path to repository root.
+        message: Commit message.
+        spec_dir: Spec directory relative to repo root (used when *files* is None).
+        main_branches: Branch names considered protected.
+        files: Explicit list of repo-relative file paths to commit.
+            When provided, *spec_dir* is ignored.
+    """
+    if files is None:
+        return commit_and_push_spec_files(
+            repo_root,
+            message,
+            spec_dir=spec_dir,
+            push=False,
+            main_branches=main_branches,
+        )
+
+    # Explicit file list provided
+    branch = get_current_branch(repo_root)
+    if branch in main_branches:
+        return {
+            "success": False,
+            "error": f"Refusing to commit on protected branch '{branch}'",
+        }
+    if not files:
+        return {"success": False, "error": "No files selected"}
+
+    env = _clean_git_env()
+    try:
+        subprocess.run(
+            ["git", "add", "--"] + files,
+            cwd=repo_root,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        return {"success": False, "error": f"Failed to stage files: {e.stderr}"}
+    except FileNotFoundError:
+        return {"success": False, "error": "git not found"}
+
+    try:
+        subprocess.run(
+            ["git", "commit", "-m", message],
+            cwd=repo_root,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        return {"success": False, "error": f"Commit failed: {e.stderr}"}
+
+    return {"success": True, "files_committed": files}
+
+
+def suggest_branch_name(repo_root: Path, base_name: str) -> str:
+    """Suggest a branch name that does not collide with existing local branches.
+
+    If ``base_name`` is not already a local branch, returns it as-is.
+    Otherwise appends ``-v2``, ``-v3``, etc. until a free name is found.
+
+    Args:
+        repo_root: Path to repository root.
+        base_name: Desired base branch name.
+
+    Returns:
+        A branch name that does not exist locally.
+    """
+    branches_info = list_branches(repo_root)
+    existing = set(branches_info.get("local", [])) | set(branches_info.get("remote", []))
+
+    if base_name not in existing:
+        return base_name
+
+    counter = 2
+    while True:
+        candidate = f"{base_name}-v{counter}"
+        if candidate not in existing:
+            return candidate
+        counter += 1
+
+
+def generate_checkpoint_message(repo_root: Path, spec_dir: str = "spec") -> str:
+    """Generate a commit message summarising dirty spec file changes.
+
+    Uses ``git diff`` to find changed lines, then identifies which
+    requirement sections were affected.  For tracked files the diff
+    shows exactly which requirement blocks changed.  For untracked
+    (new) files, all requirements in the file are listed.
+
+    Args:
+        repo_root: Path to repository root.
+        spec_dir: Spec directory relative to repo root (default: ``"spec"``).
+
+    Returns:
+        Multi-line string (one ``REQ-ID Title`` per line), or empty string
+        if no dirty spec files or no requirement headers found.
+    """
+    import re as _re
+
+    modified, untracked = get_modified_files(repo_root)
+    prefix = f"{spec_dir}/"
+    dirty_tracked = sorted(f for f in modified if f.startswith(prefix))
+    dirty_untracked = sorted(f for f in untracked if f.startswith(prefix))
+
+    if not dirty_tracked and not dirty_untracked:
+        return ""
+
+    _header_re = _re.compile(r"^#\s+(REQ-\S+)\s+(.*)")
+    env = _clean_git_env()
+    results: list[str] = []
+    seen: set[str] = set()
+
+    # For tracked files: use git diff to find changed line numbers,
+    # then walk the file to find which requirement section each changed
+    # line belongs to.
+    for rel_path in dirty_tracked:
+        try:
+            diff_out = subprocess.run(
+                ["git", "diff", "--unified=0", "--", rel_path],
+                cwd=repo_root,
+                env=env,
+                capture_output=True,
+                text=True,
+            )
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            continue
+
+        # Parse @@ hunks to get changed line numbers in the new file
+        changed_lines: set[int] = set()
+        for hunk_line in diff_out.stdout.splitlines():
+            if hunk_line.startswith("@@"):
+                # Format: @@ -old,count +new,count @@
+                parts = hunk_line.split("+")
+                if len(parts) >= 2:
+                    range_str = parts[1].split("@@")[0].strip()
+                    if "," in range_str:
+                        start, count = range_str.split(",", 1)
+                        start, count = int(start), int(count)
+                    else:
+                        start, count = int(range_str), 1
+                    for ln in range(start, start + count):
+                        changed_lines.add(ln)
+
+        if not changed_lines:
+            continue
+
+        # Walk the file; track current requirement header
+        abs_path = repo_root / rel_path
+        try:
+            file_lines = abs_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+
+        current_req: tuple[str, str] | None = None
+        for i, line in enumerate(file_lines, 1):
+            m = _header_re.match(line)
+            if m:
+                current_req = (m.group(1), m.group(2).strip())
+            if i in changed_lines and current_req:
+                req_id, title = current_req
+                if req_id not in seen:
+                    seen.add(req_id)
+                    results.append(f"{req_id} {title}")
+
+    # For untracked (new) files: list all requirements
+    for rel_path in dirty_untracked:
+        abs_path = repo_root / rel_path
+        try:
+            content = abs_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for line in content.splitlines():
+            m = _header_re.match(line)
+            if m:
+                req_id, title = m.group(1), m.group(2).strip()
+                if req_id not in seen:
+                    seen.add(req_id)
+                    results.append(f"{req_id} {title}")
+
+    body = "\n".join(results)
+    if not body:
+        return ""
+
+    # Attempt to carry forward the ticket prefix from the last commit
+    # (e.g. "[CUR-1082]") so the message passes commit-msg hooks.
+    try:
+        last = subprocess.run(
+            ["git", "log", "-1", "--format=%s"],
+            cwd=repo_root,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        if last.returncode == 0:
+            last_msg = last.stdout.strip()
+            bracket_end = last_msg.find("]")
+            if last_msg.startswith("[") and bracket_end > 0:
+                prefix = last_msg[: bracket_end + 1]
+                return f"{prefix} checkpoint: {body}"
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        pass
+
+    return body
+
+
 __all__ = [
     "GitChangeInfo",
     "MovedRequirement",
@@ -1266,6 +1577,12 @@ __all__ = [
     "list_safety_branches",
     "restore_from_safety_branch",
     "delete_safety_branch",
+    # Checkpoint and history utilities
+    "list_commits",
+    "checkout_commit",
+    "commit_spec_files",
+    "suggest_branch_name",
+    "generate_checkpoint_message",
     # Author identity
     "get_author_info",
 ]

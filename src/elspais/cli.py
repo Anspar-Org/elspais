@@ -1,4 +1,5 @@
 # Implements: REQ-p00001-A
+# Implements: REQ-d00214-A+B+C+D+E+F+G
 """
 elspais.cli - Command-line interface.
 
@@ -29,6 +30,7 @@ from elspais.commands import (
     link_suggest,
     pdf_cmd,
     rules_cmd,
+    search_cmd,
     summary,
     trace,
     viewer,
@@ -36,7 +38,9 @@ from elspais.commands import (
 from elspais.commands.args import (
     AnalysisArgs,
     AssociateArgs,
+    BrokenArgs,
     ChangedArgs,
+    ChecksArgs,
     CompletionArgs,
     CompletionInstallArgs,
     CompletionUninstallArgs,
@@ -53,10 +57,11 @@ from elspais.commands.args import (
     DoctorArgs,
     EditArgs,
     ExampleArgs,
+    FailingArgs,
     FixArgs,
+    GapsArgs,
     GlobalArgs,
     GraphArgs,
-    HealthArgs,
     InitArgs,
     InstallArgs,
     LinkArgs,
@@ -69,9 +74,14 @@ from elspais.commands.args import (
     RulesArgs,
     RulesListArgs,
     RulesShowArgs,
+    SearchArgs,
     SummaryArgs,
     TraceArgs,
+    UncoveredArgs,
     UninstallArgs,
+    UnlinkedArgs,
+    UntestedArgs,
+    UnvalidatedArgs,
     VersionArgs,
     ViewerArgs,
 )
@@ -106,7 +116,14 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
 
     # Determine the command name and nested action for dispatch
     _CMD_MAP: dict[type, str] = {
-        HealthArgs: "health",
+        ChecksArgs: "checks",
+        GapsArgs: "gaps",
+        UncoveredArgs: "uncovered",
+        UntestedArgs: "untested",
+        UnvalidatedArgs: "unvalidated",
+        FailingArgs: "failing",
+        BrokenArgs: "broken",
+        UnlinkedArgs: "unlinked",
         DoctorArgs: "doctor",
         TraceArgs: "trace",
         ViewerArgs: "viewer",
@@ -115,6 +132,7 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
         SummaryArgs: "summary",
         ChangedArgs: "changed",
         AnalysisArgs: "analysis",
+        SearchArgs: "search",
         VersionArgs: "version",
         InitArgs: "init",
         ExampleArgs: "example",
@@ -226,8 +244,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"elspais {__version__}")
         return 0
 
-    # Handle no args or "help" — show help text
-    if not argv or argv == ["help"]:
+    # Handle no args, "help", or bare "--help" — show grouped help text
+    if not argv or argv == ["help"] or argv == ["--help"] or argv == ["-h"]:
         _print_help()
         return 0
 
@@ -335,8 +353,20 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         # Dispatch to command handlers
-        if args.command == "health":
+        if args.command == "checks":
             return health.run(args)
+        elif args.command in ("gaps", "uncovered", "untested", "unvalidated", "failing"):
+            from elspais.commands import gaps
+
+            return gaps.run(args)
+        elif args.command == "broken":
+            from elspais.commands import broken
+
+            return broken.run(args)
+        elif args.command == "unlinked":
+            from elspais.commands import unlinked
+
+            return unlinked.run(args)
         elif args.command == "doctor":
             return doctor.run(args)
         elif args.command == "trace":
@@ -354,6 +384,8 @@ def main(argv: list[str] | None = None) -> int:
             return changed.run(args)
         elif args.command == "analysis":
             return analysis_cmd.run(args)
+        elif args.command == "search":
+            return search_cmd.run(args)
         elif args.command == "version":
             return version_command(args)
         elif args.command == "init":
@@ -407,55 +439,10 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _print_help() -> None:
-    """Print help text matching the original argparse output."""
-    print(
-        f"""elspais {__version__} — Requirements validation and traceability tools (L-Space)
+    """Print grouped help text for the CLI (auto-generated from dataclasses)."""
+    from elspais.commands.args import generate_help
 
-Usage: elspais [options] <command> [command-options]
-
-Commands:
-  health      Check repository and configuration health
-  doctor      Diagnose environment and installation health
-  trace       Generate traceability matrix
-  viewer      Interactive traceability viewer (live server or static HTML)
-  graph       Export the traceability graph structure as JSON
-  fix         Auto-fix spec file issues (hashes, formatting)
-  summary     Coverage summary by level
-  changed     Detect git changes to spec files
-  analysis    Analyze foundational requirement importance
-  version     Show version and check for updates
-  init        Create .elspais.toml configuration
-  example     Display requirement format examples and templates
-  edit        Edit requirements in-place
-  config      View and modify configuration (show, get, set, ...)
-  rules       View and manage content rules (list, show)
-  docs        Read the user guide
-  associate   Manage associate repository links
-  pdf         Compile spec files into a PDF document
-  install     Install elspais variants
-  uninstall   Revert elspais installation
-  mcp         MCP server commands
-  link        Link suggestion tools
-  completion  Generate and install shell tab-completion scripts
-
-Global options:
-  --verbose, -v       Verbose output
-  --quiet, -q         Suppress non-error output
-  --directory, -C DIR Run as if started in this directory
-  --config PATH       Path to configuration file
-  --spec-dir PATH     Override spec directory
-  --version           Show version and exit
-
-Examples:
-  elspais health                # Check project health
-  elspais summary               # Show coverage summary
-  elspais trace --format html   # Generate HTML traceability matrix
-  elspais viewer                # Start interactive viewer
-  elspais health summary trace  # Compose multiple report sections
-  elspais config show           # View all settings
-
-For command help: elspais <command> --help"""
-    )
+    print(generate_help(__version__))
 
 
 def docs_command(args: argparse.Namespace) -> int:
@@ -533,14 +520,24 @@ def mcp_command(args: argparse.Namespace) -> int:
         if hasattr(args, "spec_dir") and args.spec_dir:
             working_dir = args.spec_dir.parent
 
-        print("Starting elspais MCP server...")
-        print(f"Working directory: {working_dir}")
-        print(f"Transport: {args.transport}")
+        port = getattr(args, "port", 8000)
+        ttl = getattr(args, "ttl", 0)
+        daemon_json = getattr(args, "_daemon_json", None)
+
+        print("Starting elspais MCP server...", file=sys.stderr)
+        print(f"Working directory: {working_dir}", file=sys.stderr)
+        print(f"Transport: {args.transport}", file=sys.stderr)
 
         try:
-            run_server(working_dir=working_dir, transport=args.transport)
+            run_server(
+                working_dir=working_dir,
+                transport=args.transport,
+                port=port,
+                ttl_minutes=ttl,
+                daemon_json=daemon_json,
+            )
         except KeyboardInterrupt:
-            print("\nServer stopped.")
+            print("\nServer stopped.", file=sys.stderr)
         return 0
     else:
         print("Usage: elspais mcp {serve|install|uninstall}")

@@ -1,3 +1,6 @@
+# Implements: REQ-d00080-A+B+C+E
+# Implements: REQ-d00218-A+B+C
+# Implements: REQ-d00219-A+B+C+D
 """
 elspais.commands.health - Diagnose configuration and repository health.
 
@@ -747,6 +750,51 @@ def check_spec_format_rules(
     )
 
 
+# Implements: REQ-d00204
+def check_spec_no_assertions(graph: FederatedGraph, config: dict[str, Any]) -> HealthCheck:
+    """Flag requirements that have zero assertions (not testable)."""
+    from elspais.graph import NodeKind
+    from elspais.graph.relations import EdgeKind
+
+    severity = "warning"
+    typed = _validate_config(config)
+    if typed.rules.format.no_assertions_severity in ("info", "warning", "error"):
+        severity = typed.rules.format.no_assertions_severity
+
+    findings: list[HealthFinding] = []
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        has_assertion = any(
+            child.kind == NodeKind.ASSERTION
+            for child in node.iter_children(edge_kinds={EdgeKind.STRUCTURES})
+        )
+        if not has_assertion:
+            fn = node.file_node()
+            findings.append(
+                HealthFinding(
+                    message=f"{node.id}: No assertions — not testable",
+                    node_id=node.id,
+                    file_path=fn.get_field("relative_path") if fn else None,
+                    line=node.get_field("parse_line"),
+                )
+            )
+
+    if findings:
+        return HealthCheck(
+            name="spec.no_assertions",
+            passed=False,
+            message=f"{len(findings)} requirement(s) have no assertions (not testable)",
+            category="spec",
+            severity=severity,
+            findings=findings,
+        )
+    return HealthCheck(
+        name="spec.no_assertions",
+        passed=True,
+        message="All requirements have at least one assertion",
+        category="spec",
+    )
+
+
 # Implements: REQ-p00004
 def check_spec_hash_integrity(graph: FederatedGraph) -> HealthCheck:
     """Flag Satisfies-linked requirements for review when their template has a stale hash.
@@ -1196,6 +1244,12 @@ def run_spec_checks(
         )
         checks.append(
             _annotate_findings(
+                check_spec_no_assertions(repo_graph, repo_config),
+                entry.name,
+            )
+        )
+        checks.append(
+            _annotate_findings(
                 check_spec_changelog_present(repo_graph, repo_config),
                 entry.name,
             )
@@ -1271,38 +1325,115 @@ def _excluded_note(
     return f" [{', '.join(parts)} excluded]"
 
 
-def check_code_coverage(
+def check_dimension_coverage(
     graph: FederatedGraph,
+    dimension: str,
     exclude_status: set[str] | None = None,
     config: dict[str, Any] | None = None,
 ) -> HealthCheck:
-    """Check code coverage statistics."""
+    """Check coverage for one of the 5 CoverageDimension dimensions.
+
+    Reports both requirement-level (any coverage) and assertion-level
+    (direct/indirect percentages) metrics.
+
+    Args:
+        graph: The graph to check.
+        dimension: One of 'implemented', 'tested', 'verified',
+                   'uat_coverage', 'uat_verified'.
+        exclude_status: Statuses to exclude from counts.
+        config: Project config dict.
+    """
     from elspais.graph import NodeKind
-    from elspais.graph.annotators import count_with_code_refs
 
     if exclude_status is None:
         from elspais.config import get_status_roles
 
         exclude_status = get_status_roles(config or {}).coverage_excluded_statuses()
-    code_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.CODE))
-    coverage = count_with_code_refs(graph, exclude_status=exclude_status)
+
+    dim_labels = {
+        "implemented": ("Implemented", "code"),
+        "tested": ("Tested", "tests"),
+        "verified": ("Verified", "tests"),
+        "uat_coverage": ("Validated", "uat"),
+        "uat_verified": ("Accepted", "uat"),
+        "code_tested": ("Code Tested (line coverage)", "code"),
+    }
+    label, category = dim_labels.get(dimension, (dimension, "code"))
+
+    req_count = 0
+    req_with_any = 0  # REQs where dim.indirect > 0
+    req_with_direct = 0  # REQs where dim.direct > 0
+    total_assertions = 0
+    direct_assertions = 0
+    indirect_assertions = 0
+    has_any_failures = False
+
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if node.status in exclude_status:
+            continue
+        req_count += 1
+        metrics = node.get_metric("rollup_metrics")
+        if metrics is None:
+            continue
+        dim = getattr(metrics, dimension, None)
+        if dim is None:
+            continue
+        total_assertions += dim.total
+        direct_assertions += dim.direct
+        indirect_assertions += dim.indirect
+        if dim.indirect > 0:
+            req_with_any += 1
+        if dim.direct > 0:
+            req_with_direct += 1
+        if dim.has_failures:
+            has_any_failures = True
+
+    req_pct = (req_with_any / req_count * 100) if req_count > 0 else 0
+    direct_pct = (direct_assertions / total_assertions * 100) if total_assertions > 0 else 0
+    indirect_pct = (indirect_assertions / total_assertions * 100) if total_assertions > 0 else 0
     note = _excluded_note(graph, exclude_status)
 
+    # Build message showing both levels
+    msg_parts = [
+        f"{label}: {req_with_any}/{req_count} REQs ({req_pct:.0f}%)",
+        f"{direct_assertions}/{total_assertions} assertions direct ({direct_pct:.0f}%)",
+    ]
+    if indirect_assertions != direct_assertions:
+        msg_parts.append(f"{indirect_assertions} indirect ({indirect_pct:.0f}%)")
+    if has_any_failures:
+        msg_parts.append("FAILURES DETECTED")
+    message = ", ".join(msg_parts) + note
+
     return HealthCheck(
-        name="code.coverage",
-        passed=True,  # Informational only
-        message=(
-            f"{coverage['with_code_refs']}/{coverage['total_requirements']} requirements "
-            f"have code references ({coverage['coverage_percent']}%){note}"
-        ),
-        category="code",
-        severity="info",
+        name=f"{category}.{dimension}",
+        passed=not has_any_failures,
+        message=message,
+        category=category,
+        severity="error" if has_any_failures else "info",
         details={
-            "code_nodes": code_count,
-            "requirements_with_code": coverage["with_code_refs"],
-            "total_requirements": coverage["total_requirements"],
-            "coverage_percent": coverage["coverage_percent"],
+            "dimension": dimension,
+            "reqs_with_any_coverage": req_with_any,
+            "reqs_with_direct_coverage": req_with_direct,
+            "total_requirements": req_count,
+            "req_coverage_percent": round(req_pct, 1),
+            "total_assertions": total_assertions,
+            "direct_assertions": direct_assertions,
+            "indirect_assertions": indirect_assertions,
+            "direct_pct": round(direct_pct, 1),
+            "indirect_pct": round(indirect_pct, 1),
+            "has_failures": has_any_failures,
         },
+    )
+
+
+def check_code_coverage(
+    graph: FederatedGraph,
+    exclude_status: set[str] | None = None,
+    config: dict[str, Any] | None = None,
+) -> HealthCheck:
+    """Check code coverage — delegates to dimension check for 'implemented'."""
+    return check_dimension_coverage(
+        graph, "implemented", exclude_status=exclude_status, config=config
     )
 
 
@@ -1350,13 +1481,31 @@ def check_unlinked_code(graph: FederatedGraph) -> HealthCheck:
 
 
 def run_code_checks(
-    graph: FederatedGraph, exclude_status: set[str] | None = None
+    graph: FederatedGraph,
+    exclude_status: set[str] | None = None,
+    config: dict[str, Any] | None = None,
 ) -> list[HealthCheck]:
     """Run all code reference health checks."""
-    return [
+    from elspais.graph import NodeKind
+
+    checks = [
         check_code_coverage(graph, exclude_status=exclude_status),
         check_unlinked_code(graph),
     ]
+
+    # Add code_tested dimension only when line coverage data is present
+    has_coverage = any(
+        (m := node.get_metric("rollup_metrics")) is not None and m.code_tested.total > 0
+        for node in graph.nodes_by_kind(NodeKind.REQUIREMENT)
+    )
+    if has_coverage:
+        checks.append(
+            check_dimension_coverage(
+                graph, "code_tested", exclude_status=exclude_status, config=config
+            )
+        )
+
+    return checks
 
 
 # =============================================================================
@@ -1489,50 +1638,18 @@ def check_test_coverage(
     exclude_status: set[str] | None = None,
     config: dict[str, Any] | None = None,
 ) -> HealthCheck:
-    """Check test coverage statistics."""
-    from elspais.graph import NodeKind
+    """Check test coverage — delegates to dimension check for 'tested'."""
+    return check_dimension_coverage(graph, "tested", exclude_status=exclude_status, config=config)
 
-    if exclude_status is None:
-        from elspais.config import get_status_roles
 
-        exclude_status = get_status_roles(config or {}).coverage_excluded_statuses()
-    test_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.TEST))
-    req_count = sum(
-        1 for n in graph.nodes_by_kind(NodeKind.REQUIREMENT) if n.status not in exclude_status
-    )
-
-    # Count requirements with at least one TEST child
-    covered_reqs = set()
-    for node in graph.nodes_by_kind(NodeKind.TEST):
-        for parent in node.iter_parents():
-            if parent.kind == NodeKind.REQUIREMENT and parent.status not in exclude_status:
-                covered_reqs.add(parent.id)
-            elif parent.kind == NodeKind.ASSERTION:
-                for grandparent in parent.iter_parents():
-                    if (
-                        grandparent.kind == NodeKind.REQUIREMENT
-                        and grandparent.status not in exclude_status
-                    ):
-                        covered_reqs.add(grandparent.id)
-
-    coverage_pct = (len(covered_reqs) / req_count * 100) if req_count > 0 else 0
-    note = _excluded_note(graph, exclude_status)
-
-    return HealthCheck(
-        name="tests.coverage",
-        passed=True,  # Informational only
-        message=(
-            f"{len(covered_reqs)}/{req_count} requirements "
-            f"have test references ({coverage_pct:.1f}%){note}"
-        ),
-        category="tests",
-        severity="info",
-        details={
-            "test_nodes": test_count,
-            "requirements_with_tests": len(covered_reqs),
-            "total_requirements": req_count,
-            "coverage_percent": round(coverage_pct, 1),
-        },
+def check_uat_coverage(
+    graph: FederatedGraph,
+    exclude_status: set[str] | None = None,
+    config: dict[str, Any] | None = None,
+) -> HealthCheck:
+    """Check UAT coverage — delegates to dimension check for 'uat_coverage'."""
+    return check_dimension_coverage(
+        graph, "uat_coverage", exclude_status=exclude_status, config=config
     )
 
 
@@ -1579,14 +1696,132 @@ def check_unlinked_tests(graph: FederatedGraph) -> HealthCheck:
     )
 
 
+def check_uat_results(graph: FederatedGraph, config: dict[str, Any] | None = None) -> HealthCheck:
+    """Check UAT results from a journey results CSV file.
+
+    Expects a CSV file with columns: journey_id, status (pass/fail/skip).
+    The file path is configured via scanning.journey.results_file in .elspais.toml,
+    defaulting to 'uat-results.csv' in the repository root.
+    """
+    cfg = config or {}
+    journey_cfg = cfg.get("scanning", {}).get("journey", {})
+    results_file = journey_cfg.get("results_file", "uat-results.csv")
+
+    results_path = Path(results_file)
+    if not results_path.is_absolute():
+        git_root = cfg.get("_git_root")
+        if git_root:
+            results_path = Path(git_root) / results_path
+        elif not results_path.exists():
+            # Try cwd
+            results_path = Path.cwd() / results_file
+
+    if not results_path.exists():
+        return HealthCheck(
+            name="uat.results",
+            passed=True,
+            message=f"No UAT results file found ({results_file})",
+            category="uat",
+            severity="info",
+        )
+
+    import csv
+
+    passed = 0
+    failed = 0
+    skipped = 0
+    failures: list[str] = []
+
+    try:
+        with open(results_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                jid = row.get("journey_id", row.get("id", "")).strip()
+                status = row.get("status", "").strip().lower()
+                if status in ("pass", "passed"):
+                    passed += 1
+                elif status in ("fail", "failed"):
+                    failed += 1
+                    failures.append(jid)
+                elif status in ("skip", "skipped"):
+                    skipped += 1
+    except Exception as e:
+        return HealthCheck(
+            name="uat.results",
+            passed=False,
+            message=f"Error reading UAT results: {e}",
+            category="uat",
+            severity="warning",
+        )
+
+    total = passed + failed + skipped
+    if total == 0:
+        return HealthCheck(
+            name="uat.results",
+            passed=True,
+            message=f"UAT results file is empty ({results_file})",
+            category="uat",
+            severity="info",
+        )
+
+    pass_rate = (passed / total * 100) if total > 0 else 0
+
+    if failed > 0:
+        findings = [HealthFinding(message=f"Failed: {jid}", node_id=jid) for jid in failures]
+        return HealthCheck(
+            name="uat.results",
+            passed=False,
+            message=(
+                f"UAT failures: {passed} passed, {failed} failed, "
+                f"{skipped} skipped ({pass_rate:.1f}% pass rate)"
+            ),
+            category="uat",
+            severity="warning",
+            details={
+                "passed": passed,
+                "failed": failed,
+                "skipped": skipped,
+                "pass_rate": round(pass_rate, 1),
+            },
+            findings=findings,
+        )
+
+    return HealthCheck(
+        name="uat.results",
+        passed=True,
+        message=f"All UAT passing: {passed} passed, {skipped} skipped",
+        category="uat",
+        details={
+            "passed": passed,
+            "failed": failed,
+            "skipped": skipped,
+            "pass_rate": round(pass_rate, 1),
+        },
+    )
+
+
 def run_test_checks(
     graph: FederatedGraph, exclude_status: set[str] | None = None, config: dict | None = None
 ) -> list[HealthCheck]:
     """Run all test file health checks."""
     return [
-        check_test_results(graph, config=config),
-        check_test_coverage(graph, exclude_status=exclude_status),
+        check_test_coverage(graph, exclude_status=exclude_status, config=config),
+        check_dimension_coverage(graph, "verified", exclude_status=exclude_status, config=config),
         check_unlinked_tests(graph),
+        check_test_results(graph, config=config),
+    ]
+
+
+def run_uat_checks(
+    graph: FederatedGraph, exclude_status: set[str] | None = None, config: dict | None = None
+) -> list[HealthCheck]:
+    """Run all UAT (User Acceptance Test) health checks."""
+    return [
+        check_uat_coverage(graph, exclude_status=exclude_status, config=config),
+        check_dimension_coverage(
+            graph, "uat_verified", exclude_status=exclude_status, config=config
+        ),
+        check_uat_results(graph, config=config),
     ]
 
 
@@ -1624,9 +1859,11 @@ def render_section(
     if graph:
         raw_config = config if config else {}
         exclude_status = _resolve_exclude_status(args, config=raw_config)
-        for check in run_code_checks(graph, exclude_status=exclude_status):
+        for check in run_code_checks(graph, exclude_status=exclude_status, config=raw_config):
             report.add(check)
         for check in run_test_checks(graph, exclude_status=exclude_status, config=raw_config):
+            report.add(check)
+        for check in run_uat_checks(graph, exclude_status=exclude_status, config=raw_config):
             report.add(check)
 
     output = _format_report(report, args)
@@ -1640,11 +1877,152 @@ def render_section(
 # =============================================================================
 
 
+def compute_checks(
+    graph: FederatedGraph,
+    config: dict[str, Any],
+    params: dict[str, str],
+) -> dict[str, Any]:
+    """Compute health checks for engine.call.  Returns HealthReport.to_dict()."""
+    import argparse
+
+    spec_only = params.get("spec_only", "false") == "true"
+    code_only = params.get("code_only", "false") == "true"
+    tests_only = params.get("tests_only", "false") == "true"
+    lenient = params.get("lenient", "false") == "true"
+
+    report = HealthReport()
+    run_all = not any([spec_only, code_only, tests_only])
+
+    # Build a minimal args namespace for _resolve_exclude_status
+    fake_args = argparse.Namespace()
+    status_str = params.get("status", None)
+    fake_args.status = status_str.split(",") if status_str else None
+
+    exclude_status = _resolve_exclude_status(fake_args, config=config)
+
+    # Config checks
+    if run_all:
+        try:
+            from elspais.commands.doctor import run_config_checks as _run_config_checks
+            from elspais.config import find_git_root
+
+            repo_root = find_git_root() or Path.cwd()
+            config_path = repo_root / ".elspais.toml"
+            for check in _run_config_checks(
+                config_path if config_path.exists() else None,
+                config,
+                repo_root,
+            ):
+                report.add(check)
+        except Exception:
+            pass
+
+    # Spec checks
+    if run_all or spec_only:
+        from elspais.config import get_spec_directories
+
+        spec_dirs = get_spec_directories(None, config)
+        for check in run_spec_checks(graph, config, spec_dirs=spec_dirs):
+            report.add(check)
+
+    # Code checks
+    if run_all or code_only:
+        for check in run_code_checks(graph, exclude_status=exclude_status, config=config):
+            report.add(check)
+
+    # Test checks
+    if run_all or tests_only:
+        for check in run_test_checks(graph, exclude_status=exclude_status, config=config):
+            report.add(check)
+
+    # UAT checks
+    if run_all or tests_only:
+        for check in run_uat_checks(graph, exclude_status=exclude_status, config=config):
+            report.add(check)
+
+    return report.to_dict(lenient=lenient)
+
+
+def _report_from_dict(data: dict[str, Any]) -> HealthReport:
+    """Reconstruct a HealthReport from a to_dict() JSON dict."""
+    report = HealthReport()
+    for c in data.get("checks", []):
+        findings = [
+            HealthFinding(
+                message=f.get("message", ""),
+                file_path=f.get("file_path"),
+                line=f.get("line"),
+                node_id=f.get("node_id"),
+                related=f.get("related", []),
+                repo=f.get("repo"),
+                retired=f.get("retired", False),
+            )
+            for f in c.get("findings", [])
+        ]
+        report.add(
+            HealthCheck(
+                name=c["name"],
+                passed=c["passed"],
+                message=c["message"],
+                category=c["category"],
+                severity=c.get("severity", "error"),
+                details=c.get("details", {}),
+                findings=findings,
+            )
+        )
+    return report
+
+
 def run(args: argparse.Namespace) -> int:
     """Run the health command.
 
-    Performs comprehensive health checks on the elspais configuration
-    and repository structure.
+    Uses engine.call for daemon-vs-local, then renders the report.
+    """
+    from elspais.commands import _engine
+
+    # Build params from args
+    params: dict[str, str] = {}
+    if getattr(args, "spec_only", False):
+        params["spec_only"] = "true"
+    if getattr(args, "code_only", False):
+        params["code_only"] = "true"
+    if getattr(args, "tests_only", False):
+        params["tests_only"] = "true"
+    if getattr(args, "lenient", False):
+        params["lenient"] = "true"
+    status_filter = getattr(args, "status", None)
+    if status_filter:
+        params["status"] = ",".join(status_filter)
+
+    spec_dir = getattr(args, "spec_dir", None)
+    skip_daemon = bool(spec_dir)
+
+    if skip_daemon:
+        # Custom spec_dir: build graph directly with the requested dirs,
+        # preserving the original error-handling for config/graph failures.
+        data = _run_local_checks(args, params)
+    else:
+        data = _engine.call(
+            "/api/run/checks",
+            params,
+            compute_checks,
+            config_path=getattr(args, "config", None),
+            canonical_root=getattr(args, "canonical_root", None),
+        )
+
+    # The dict already has the correct "healthy" flag (lenient-aware).
+    # Use it for exit code; reconstruct report only for rendering.
+    healthy = data.get("healthy", False)
+    report = _report_from_dict(data)
+    print(_format_report(report, args))
+    return 0 if healthy else 1
+
+
+def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[str, Any]:
+    """Build graph from args and run checks locally.
+
+    Handles spec_dir, config_path, canonical_root and graceful error recovery
+    for config-load and graph-build failures.
     """
     from elspais.config import get_config
     from elspais.graph.factory import build_graph
@@ -1652,36 +2030,23 @@ def run(args: argparse.Namespace) -> int:
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
     start_path = Path.cwd()
+    lenient = params.get("lenient", "false") == "true"
 
     report = HealthReport()
 
-    # Determine which checks to run
     run_all = not any(
         [
-            getattr(args, "spec_only", False),
-            getattr(args, "code_only", False),
-            getattr(args, "tests_only", False),
+            params.get("spec_only") == "true",
+            params.get("code_only") == "true",
+            params.get("tests_only") == "true",
         ]
     )
 
-    run_config = run_all
-    run_spec = run_all or getattr(args, "spec_only", False)
-    run_code = run_all or getattr(args, "code_only", False)
-    run_tests = run_all or getattr(args, "tests_only", False)
-
     # Config checks can run without building the graph
     config = None
-    if run_config:
+    if run_all:
         try:
-            from elspais.commands.doctor import run_config_checks as _run_config_checks
-
-            config_dict = get_config(
-                config_path,
-                start_path=start_path,
-            )
-            config = config_dict
-            for check in _run_config_checks(config_path, config, start_path):
-                report.add(check)
+            config = get_config(config_path, start_path=start_path)
         except Exception as e:
             report.add(
                 HealthCheck(
@@ -1691,66 +2056,38 @@ def run(args: argparse.Namespace) -> int:
                     category="config",
                 )
             )
-            # Can't continue without config
-            if not run_all:
-                return _output_report(report, args)
 
-    # Build graph for other checks
+    # Build graph
     graph = None
-    if run_spec or run_code or run_tests:
-        try:
-            canonical_root = getattr(args, "canonical_root", None)
-            graph = build_graph(
-                spec_dirs=[spec_dir] if spec_dir else None,
-                config_path=config_path,
-                canonical_root=canonical_root,
+    try:
+        canonical_root = getattr(args, "canonical_root", None)
+        graph = build_graph(
+            spec_dirs=[spec_dir] if spec_dir else None,
+            config_path=config_path,
+            canonical_root=canonical_root,
+        )
+        if config is None:
+            config = get_config(config_path, start_path=start_path)
+    except Exception as e:
+        report.add(
+            HealthCheck(
+                name="graph.build",
+                passed=False,
+                message=f"Failed to build graph: {e}",
+                category="spec",
             )
-            if config is None:
-                config_dict = get_config(
-                    config_path,
-                    start_path=start_path,
-                )
-                config = config_dict
-        except Exception as e:
-            report.add(
-                HealthCheck(
-                    name="graph.build",
-                    passed=False,
-                    message=f"Failed to build graph: {e}",
-                    category="spec",
-                )
-            )
-            return _output_report(report, args)
+        )
+        return report.to_dict(lenient=lenient)
 
-    # Spec checks
-    if run_spec and graph and config:
-        from elspais.config import get_spec_directories
+    if graph is not None and config is not None:
+        # Delegate to compute_checks for the actual check logic
+        return compute_checks(graph, config, params)
 
-        config_dict = config
-        resolved_spec_dirs = get_spec_directories(spec_dir, config_dict)
-        for check in run_spec_checks(graph, config, spec_dirs=resolved_spec_dirs):
-            report.add(check)
-
-    # Code checks
-    raw_config = config if config else {}
-    exclude_status = _resolve_exclude_status(args, config=raw_config)
-    if run_code and graph:
-        for check in run_code_checks(graph, exclude_status=exclude_status):
-            report.add(check)
-
-    # Test checks
-    if run_tests and graph:
-        for check in run_test_checks(graph, exclude_status=exclude_status, config=raw_config):
-            report.add(check)
-
-    return _output_report(report, args)
+    return report.to_dict(lenient=lenient)
 
 
 def _format_report(report: HealthReport, args: argparse.Namespace) -> str:
     """Format the health report as a string."""
-    import io
-    from contextlib import redirect_stdout
-
     fmt = getattr(args, "format", "text") or "text"
     lenient = getattr(args, "lenient", False)
     quiet = getattr(args, "quiet", False)
@@ -1760,129 +2097,67 @@ def _format_report(report: HealthReport, args: argparse.Namespace) -> str:
     if fmt == "json":
         return json.dumps(report.to_dict(lenient=lenient), indent=2)
     elif fmt == "markdown":
-        return _render_markdown(report, include_passing_details=include_passing)
+        data = _build_report_data(report)
+        return _render_markdown(data)
     elif fmt == "junit":
         return _render_junit(report, include_passing_details=include_passing)
     elif fmt == "sarif":
         return _render_sarif(report)
     else:
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            if quiet:
-                _print_quiet_report(report)
-            else:
-                _print_text_report(
-                    report,
-                    verbose=verbose,
-                    include_passing_details=include_passing,
-                )
-        return buf.getvalue().rstrip("\n")
+        if quiet:
+            return _build_report_data(report, verbose=verbose).summary_line
+        data = _build_report_data(report, verbose=verbose)
+        return _render_text(data)
 
 
-def _output_report(report: HealthReport, args: argparse.Namespace) -> int:
-    """Output the health report in the requested format."""
-    print(_format_report(report, args))
-
-    lenient = getattr(args, "lenient", False)
-    healthy = report.is_healthy_lenient if lenient else report.is_healthy
-    return 0 if healthy else 1
+# =============================================================================
+# Report Data Intermediate Representation
+# =============================================================================
 
 
-def _print_text_report(
-    report: HealthReport,
-    verbose: bool = False,
-    include_passing_details: bool = False,
-) -> None:
-    """Print human-readable health report."""
-    categories = ["config", "spec", "code", "tests"]
+@dataclass
+class _CheckLine:
+    """Pre-computed display data for a single health check."""
 
-    for category in categories:
-        checks = list(report.iter_by_category(category))
-        if not checks:
-            continue
-
-        # Category header
-        skipped = sum(1 for c in checks if c.severity == "info")
-        passed = sum(1 for c in checks if c.passed and c.severity != "info")
-        total = len(checks) - skipped
-        has_errors = any(not c.passed and c.severity == "error" for c in checks)
-        has_warnings = any(not c.passed and c.severity == "warning" for c in checks)
-        if passed == total:
-            status = "✓"
-        elif has_errors:
-            status = "✗"
-        else:
-            status = "⚠"
-        suffix = ""
-        if has_warnings and not has_errors:
-            warn_count = sum(1 for c in checks if not c.passed and c.severity == "warning")
-            suffix = f", {warn_count} warnings"
-        if skipped:
-            suffix += f", {skipped} skipped"
-        print(f"\n{status} {category.upper()} ({passed}/{total} checks passed{suffix})")
-        print("-" * 40)
-
-        for check in checks:
-            if check.severity == "info":
-                icon = "~"
-            elif check.passed:
-                icon = "✓"
-            elif check.severity == "warning":
-                icon = "⚠"
-            else:
-                icon = "✗"
-
-            print(f"  {icon} {check.name}: {check.message}")
-
-            # Show details in verbose mode (skip passing unless include flag set)
-            show_details = verbose and check.details
-            if show_details and check.passed and not include_passing_details:
-                show_details = False
-            if show_details:
-                for key, value in check.details.items():
-                    if isinstance(value, list) and len(value) > 3:
-                        print(f"      {key}: {value[:3]} ... ({len(value)} total)")
-                    else:
-                        print(f"      {key}: {value}")
-
-    # Summary
-    print()
-    print("=" * 40)
-    _print_summary_line(report)
-    if not report.is_healthy:
-        _print_detail_hint(report, verbose)
-    print("=" * 40)
+    icon: str  # "\u2713", "\u2717", "\u26a0", "~"
+    name: str
+    message: str
 
 
-def _print_summary_line(report: HealthReport) -> None:
-    """Print a single summary line."""
-    counted = len(report.checks) - report.skipped
-    skip_suffix = f", {report.skipped} skipped" if report.skipped else ""
-    if report.failed == 0 and report.warnings == 0 and report.passed == counted:
-        if report.skipped:
-            print(f"HEALTHY: {counted}/{counted} checks passed{skip_suffix}")
-        else:
-            print(f"HEALTHY: {counted}/{counted} checks passed")
-    elif report.failed == 0 and report.warnings == 0:
-        print(f"{report.passed}/{counted} checks passed{skip_suffix}")
-    elif report.failed == 0:
-        print(f"{report.passed}/{counted} checks passed, {report.warnings} warnings{skip_suffix}")
-    else:
-        print(f"UNHEALTHY: {report.failed} errors, {report.warnings} warnings{skip_suffix}")
+@dataclass
+class _SectionData:
+    """Pre-computed display data for a health check category."""
+
+    name: str  # "CONFIG", "SPEC", etc.
+    icon: str  # "\u2713", "\u2717", "\u26a0"
+    stats: str  # "3 passed, 1 failed" or "3 passed, 1 failed, 1 skipped"
+    checks: list[_CheckLine]
 
 
-def _print_detail_hint(report: HealthReport, already_verbose: bool) -> None:
-    """Print a hint about how to get more details on failures."""
-    # Identify which categories have failures
-    failed_categories = set()
+@dataclass
+class _ReportData:
+    """Pre-computed display data for an entire health report."""
+
+    sections: list[_SectionData]
+    summary_line: str
+    is_healthy: bool
+    hint: str | None
+
+
+def _build_hint(report: HealthReport, already_verbose: bool) -> str | None:
+    """Build a hint string about how to get more details on failures.
+
+    Returns None if no categories have failures. Uses 'elspais checks'
+    (the renamed command).
+    """
+    failed_categories: set[str] = set()
     for check in report.checks:
         if not check.passed and check.severity in ("error", "warning"):
             failed_categories.add(check.category)
 
     if not failed_categories:
-        return
+        return None
 
-    # Build a targeted command hint
     category_flags = {"spec": "--spec", "code": "--code", "tests": "--tests", "config": ""}
     if len(failed_categories) == 1:
         cat = next(iter(failed_categories))
@@ -1892,92 +2167,153 @@ def _print_detail_hint(report: HealthReport, already_verbose: bool) -> None:
         scope = ""
 
     if not already_verbose:
-        print(f"Run 'elspais health{scope} -v' for details,")
-        print(
-            f" or 'elspais health{scope} --format json -o health.json' for machine-readable output."
+        return (
+            f"Run 'elspais -v checks{scope}' for details,\n"
+            f" or 'elspais checks{scope} --format json -o health.json'"
+            f" for machine-readable output."
         )
     else:
-        print(
-            f"Run 'elspais health{scope} --format json -o health.json' for machine-readable output."
+        return (
+            f"Run 'elspais checks{scope} --format json -o health.json'"
+            f" for machine-readable output."
         )
 
 
-def _print_quiet_report(report: HealthReport) -> None:
-    """Print summary line only (for -q/--quiet)."""
-    _print_summary_line(report)
+def _build_summary_line(report: HealthReport) -> str:
+    """Build the summary line string (matches _print_summary_line logic)."""
+    counted = len(report.checks) - report.skipped
+    skip_suffix = f", {report.skipped} skipped" if report.skipped else ""
+    if report.failed == 0 and report.warnings == 0 and report.passed == counted:
+        if report.skipped:
+            return f"HEALTHY: {counted}/{counted} checks passed{skip_suffix}"
+        else:
+            return f"HEALTHY: {counted}/{counted} checks passed"
+    elif report.failed == 0 and report.warnings == 0:
+        return f"{report.passed}/{counted} checks passed{skip_suffix}"
+    elif report.failed == 0:
+        return (
+            f"{report.passed}/{counted} checks passed," f" {report.warnings} warnings{skip_suffix}"
+        )
+    else:
+        return f"UNHEALTHY: {report.failed} errors, {report.warnings} warnings{skip_suffix}"
 
 
-# Implements: REQ-d00085-E
-def _render_markdown(
-    report: HealthReport,
-    include_passing_details: bool = False,
-) -> str:
-    """Render health report as markdown."""
-    lines = []
-    lines.append("# Health Report")
-    lines.append("")
+def _build_report_data(report: HealthReport, verbose: bool = False) -> _ReportData:
+    """Build the intermediate representation for rendering a health report.
 
-    categories = ["config", "spec", "code", "tests"]
+    Extracts all stat computation logic: category icon selection, pass/fail/skip
+    counting (excluding info-severity from pass/total), check icon selection,
+    summary line, and hint string.
+    """
+    categories = ["config", "spec", "code", "tests", "uat"]
+    sections: list[_SectionData] = []
+
     for category in categories:
         checks = list(report.iter_by_category(category))
         if not checks:
             continue
 
-        passed = sum(1 for c in checks if c.passed)
-        total = len(checks)
+        skipped = sum(1 for c in checks if c.severity == "info")
+        passed = sum(1 for c in checks if c.passed and c.severity != "info")
+        total = len(checks) - skipped
         has_errors = any(not c.passed and c.severity == "error" for c in checks)
+        failed = sum(1 for c in checks if not c.passed and c.severity in ("error", "warning"))
+
         if passed == total:
-            status = "pass"
+            icon = "\u2713"
         elif has_errors:
-            status = "FAIL"
+            icon = "\u2717"
         else:
-            status = "WARN"
-        lines.append(f"## {category.upper()} ({passed}/{total} {status})")
-        lines.append("")
-        lines.append("| Check | Status | Message |")
-        lines.append("|-------|--------|---------|")
+            icon = "\u26a0"
+
+        parts = [f"{passed} passed", f"{failed} failed"]
+        if skipped:
+            parts.append(f"{skipped} skipped")
+
+        check_lines: list[_CheckLine] = []
         for check in checks:
-            if check.passed:
-                icon = "PASS"
+            if check.severity == "info":
+                c_icon = "~"
+            elif check.passed:
+                c_icon = "\u2713"
             elif check.severity == "warning":
-                icon = "WARN"
+                c_icon = "\u26a0"
             else:
-                icon = "FAIL"
-            lines.append(f"| {check.name} | {icon} | {check.message} |")
+                c_icon = "\u2717"
+            check_lines.append(_CheckLine(icon=c_icon, name=check.name, message=check.message))
 
-            # Include findings detail for passing checks if requested
-            if check.passed and include_passing_details and check.findings:
-                lines.append("")
-                lines.append("<details>")
-                lines.append(f"<summary>{check.name} details</summary>")
-                lines.append("")
-                for finding in check.findings:
-                    loc = ""
-                    if finding.file_path:
-                        loc = f"{finding.file_path}"
-                        if finding.line is not None:
-                            loc += f":{finding.line}"
-                        loc += ": "
-                    lines.append(f"- {loc}{finding.message}")
-                lines.append("")
-                lines.append("</details>")
+        sections.append(
+            _SectionData(
+                name=category.upper(),
+                icon=icon,
+                stats=", ".join(parts),
+                checks=check_lines,
+            )
+        )
+
+    summary_line = _build_summary_line(report)
+    is_healthy = report.is_healthy
+    hint = _build_hint(report, verbose) if not is_healthy else None
+
+    return _ReportData(
+        sections=sections,
+        summary_line=summary_line,
+        is_healthy=is_healthy,
+        hint=hint,
+    )
+
+
+def _render_text(data: _ReportData) -> str:
+    """Render _ReportData as plain text checklist."""
+    lines: list[str] = []
+    for section in data.sections:
+        lines.append(f"\n{section.icon} {section.name} ({section.stats})")
+        lines.append("-" * 40)
+        for check in section.checks:
+            lines.append(f"  {check.icon} {check.name}: {check.message}")
+
+    lines.append("")
+    lines.append("=" * 40)
+    lines.append(data.summary_line)
+    if data.hint:
+        lines.append(data.hint)
+    lines.append("=" * 40)
+    return "\n".join(lines)
+
+
+def _print_text_report(
+    report: HealthReport,
+    verbose: bool = False,
+    include_passing_details: bool = False,
+) -> None:
+    """Print human-readable health report (legacy wrapper)."""
+    data = _build_report_data(report, verbose=verbose)
+    print(_render_text(data))
+
+
+# Implements: REQ-d00085-E
+def _render_markdown(data: _ReportData) -> str:
+    """Render _ReportData as markdown checklist."""
+    lines: list[str] = []
+
+    for i, section in enumerate(data.sections):
+        if i > 0:
+            lines.append("---")
+            lines.append("")
+        lines.append(f"## {section.icon} {section.name} ({section.stats})")
+        lines.append("")
+        for check in section.checks:
+            if check.icon == "~":
+                lines.append(f"- [ ] ~ {check.name}: {check.message}")
+            elif check.icon == "\u2713":
+                lines.append(f"- [x] {check.name}: {check.message}")
+            else:
+                lines.append(f"- [ ] {check.name}: {check.message}")
         lines.append("")
 
-    # Summary
-    counted = len(report.checks) - report.skipped
-    skip_suffix = f", {report.skipped} skipped" if report.skipped else ""
-    if report.failed == 0 and report.warnings == 0 and report.passed == counted:
-        lines.append(f"**HEALTHY**: {counted}/{counted} checks passed{skip_suffix}")
-    elif report.failed == 0 and report.warnings == 0:
-        lines.append(f"**{report.passed}/{counted}** checks passed{skip_suffix}")
-    elif report.failed == 0:
-        lines.append(
-            f"**{report.passed}/{counted}** checks passed, {report.warnings} warnings{skip_suffix}"
-        )
-    else:
-        lines.append(
-            f"**UNHEALTHY**: {report.failed} errors, {report.warnings} warnings{skip_suffix}"
-        )
+    lines.append("---")
+    lines.append("")
+    lines.append(data.summary_line)
 
     return "\n".join(lines)
 
@@ -1996,7 +2332,7 @@ def _render_junit(
     import xml.etree.ElementTree as ET
 
     testsuites = ET.Element("testsuites")
-    categories = ["config", "spec", "code", "tests"]
+    categories = ["config", "spec", "code", "tests", "uat"]
 
     for category in categories:
         checks = list(report.iter_by_category(category))
