@@ -207,7 +207,7 @@ def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
 
     Reads ``cli_ttl`` from config if ttl_minutes is not provided.
     Raises RuntimeError if cli_ttl=0 (daemon disabled) and no daemon running.
-    Restarts the daemon if its version doesn't match the current install.
+    Restarts the daemon if its version or config hash doesn't match.
     """
     info = get_daemon_info(repo_root)
     if info:
@@ -219,7 +219,21 @@ def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
             stop_daemon(repo_root)
             # Fall through to start a fresh daemon
         else:
-            return info["port"]
+            # Config hash check: restart if config files have changed
+            daemon_hash = info.get("config_hash")
+            if daemon_hash:
+                config_path = repo_root / ".elspais.toml"
+                if config_path.is_file():
+                    current_hash = compute_config_hash(config_path)
+                    if current_hash != daemon_hash:
+                        stop_daemon(repo_root)
+                        # Fall through to start a fresh daemon
+                    else:
+                        return info["port"]
+                else:
+                    return info["port"]
+            else:
+                return info["port"]
 
     if ttl_minutes is None:
         ttl_minutes = get_cli_ttl(repo_root)
