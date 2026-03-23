@@ -177,10 +177,10 @@ function renderNavTree() {
     var hiddenRepos = af.hiddenRepos || [];
     const hasTextFilter = editState.textMatchIds !== null;
     const hasActiveFilter = af.levelPrd || af.levelOps || af.levelDev ||
-        af.uncommitted || af.changed || af.main || af.leaf ||
+        af.unsaved || af.uncommitted || af.changed || af.main || af.leaf ||
         af.hiddenStatuses.size > 0 ||
         hiddenRepos.length > 0 ||
-        editState.filterStatus !== '' || editState.filterCoverage !== '' ||
+        editState.filterCoverage !== '' ||
         hasTextFilter;
 
     // Track which rows are direct filter matches (vs ancestor context)
@@ -214,17 +214,16 @@ function renderNavTree() {
             // Associated repo filters (hide specific repos)
             if (hiddenRepos.length > 0 && r.is_associated &&
                 r.repo_prefix && hiddenRepos.indexOf(r.repo_prefix) >= 0) continue;
-            // Git filters (when active, SHOW only matching)
+            // Focus filters (when active, SHOW only matching)
+            if (af.unsaved && !r.is_unsaved) continue;
             if (af.uncommitted && !r.is_uncommitted) continue;
             if (af.changed && !r.is_changed) continue;
             // Core filter (hide core/non-associated items)
             if (af.main && !r.is_associated) continue;
             // Leaf only
             if (af.leaf && !r.is_leaf) continue;
-            // Hide statuses (dynamic, role-based)
+            // Hide statuses (badge buttons)
             if (af.hiddenStatuses.size > 0 && r.status && af.hiddenStatuses.has(r.status.toLowerCase())) continue;
-            // Status dropdown
-            if (editState.filterStatus && r.status !== editState.filterStatus) continue;
             // Coverage dropdown
             if (editState.filterCoverage && r.coverage !== editState.filterCoverage) continue;
             // Text filter (intersect with search API results)
@@ -327,7 +326,9 @@ function renderNavTree() {
             var valClass = valColor ? ' val-' + valColor : '';
             var tipAttr = valTip ? ' data-tip="' + escapeHtml(valTip) + '"' : '';
             statusBadge = '<span class="status-badge ' + statusLower + valClass + '"' + tipAttr + ' style="font-size:0.65rem;padding:1px 4px;margin-left:auto;">' + row.status;
-            if (row.is_changed) statusBadge += '<span class="change-indicator">&#x25C6;</span>';
+            if (row.is_unsaved) statusBadge += '<span class="change-indicator unsaved" title="Unsaved in-memory edit">&#x25CF;</span>';
+            if (row.is_uncommitted) statusBadge += '<span class="change-indicator uncommitted" title="Saved but not committed">&#x25C6;</span>';
+            if (row.is_changed) statusBadge += '<span class="change-indicator" title="Changed on this branch vs main">&#x25C6;</span>';
             statusBadge += '</span>';
         }
 
@@ -412,7 +413,7 @@ function toggleEditLevelFilter(key) {
 function toggleEditFilter(key) {
     editState.activeFilters[key] = !editState.activeFilters[key];
     // Update button state for git filters
-    var btnMap = { uncommitted: 'edit-btn-uncommitted', changed: 'edit-btn-changed' };
+    var btnMap = { unsaved: 'edit-btn-unsaved', uncommitted: 'edit-btn-uncommitted', changed: 'edit-btn-changed' };
     if (btnMap[key]) {
         var btn = document.getElementById(btnMap[key]);
         if (btn) btn.classList.toggle('active', editState.activeFilters[key]);
@@ -456,15 +457,16 @@ function toggleStatusFilter(status) {
     } else {
         editState.activeFilters.hiddenStatuses.add(key);
     }
+    // Sync badge button: .on = showing (not in hiddenStatuses)
+    var btn = document.getElementById('status-filter-' + key);
+    if (btn) btn.classList.toggle('on', !editState.activeFilters.hiddenStatuses.has(key));
     renderNavTree();
     saveState();
 }
 
 function applyEditFilters() {
     // Sync dropdown values to state
-    var statusSel = document.getElementById('edit-filter-status');
     var covSel = document.getElementById('edit-filter-coverage');
-    if (statusSel) editState.filterStatus = statusSel.value;
     if (covSel) editState.filterCoverage = covSel.value;
     renderNavTree();
     saveState();
@@ -513,12 +515,11 @@ function clearEditFilters() {
     var defaultHidden = {{ default_hidden_statuses | map('lower') | list | tojson }};
     editState.activeFilters = {
         levelPrd: false, levelOps: false, levelDev: false,
-        uncommitted: false, changed: false, main: false, leaf: false,
+        unsaved: false, uncommitted: false, changed: false, main: false, leaf: false,
         hideFiltered: false,
         hiddenRepos: [],
         hiddenStatuses: new Set(defaultHidden)
     };
-    editState.filterStatus = '';
     editState.filterCoverage = '';
     editState.filterText = '';
     editState.textMatchIds = null;
@@ -529,18 +530,21 @@ function clearEditFilters() {
         b.classList.remove('dimmed');
         b.classList.remove('active');
     });
+    // Re-activate filter toggle button (toolbar is still visible after clear)
+    var ftb = document.getElementById('filter-toggle-btn');
+    if (ftb && !editState.toolbarHidden) ftb.classList.add('active');
     // Reset toolbar buttons
     document.querySelectorAll('#edit-toolbar .btn-group .btn').forEach(function(b) { b.classList.remove('active'); });
-    var statusSel = document.getElementById('edit-filter-status');
     var covSel = document.getElementById('edit-filter-coverage');
-    if (statusSel) statusSel.value = '';
     if (covSel) covSel.value = '';
     var leafCb = document.getElementById('edit-toggle-leaf');
     if (leafCb) leafCb.checked = false;
-    // Reset status filter checkboxes to their default state
-    document.querySelectorAll('[id^="edit-toggle-status-"]').forEach(function(cb) {
-        var statusKey = cb.id.replace('edit-toggle-status-', '');
-        cb.checked = defaultHidden.indexOf(statusKey) >= 0;
+    var hideFilteredCb = document.getElementById('edit-toggle-hide-filtered');
+    if (hideFilteredCb) hideFilteredCb.checked = false;
+    // Reset status filter badge buttons to default state
+    document.querySelectorAll('.status-filter-btn').forEach(function(btn) {
+        var statusKey = btn.getAttribute('data-status');
+        btn.classList.toggle('on', defaultHidden.indexOf(statusKey) < 0);
     });
     renderNavTree();
     saveState();

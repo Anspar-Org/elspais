@@ -3,47 +3,27 @@
 # Matches the categorical keys in theme.toml exactly.
 
 # ---------------------------------------------------------------------------
-# Coverage Icons
-# ---------------------------------------------------------------------------
-
-[icons.coverage.full]
-label = "Full Coverage"
-description = "All assertions have code implementations and passing tests"
-long_description = """All assertions for this requirement have direct code
-implementations (# Implements: references) and all linked tests are passing.
-This is the ideal state for a requirement."""
-
-[icons.coverage.partial]
-label = "Partial Coverage"
-description = "Some assertions have implementations or tests"
-long_description = """Some assertions have code implementations or test
-coverage, but not all. Review the assertion list to identify which
-assertions still need implementation or testing."""
-
-[icons.coverage.none]
-label = "No Coverage"
-description = "No code implementations or tests found"
-long_description = """No code references (# Implements:) or test files
-reference this requirement. This requirement is untested and unimplemented
-as far as the traceability graph can detect."""
-
-[icons.coverage.warning]
-label = "Coverage Warning"
-description = "Unexpected coverage anomaly detected"
-long_description = """Tests exist but results are missing, or tests reference
-this requirement but no code implementation is found. Investigate the
-test/code linkage for potential configuration issues."""
-
-# ---------------------------------------------------------------------------
 # Change Indicators
 # ---------------------------------------------------------------------------
 
+[icons.change.unsaved]
+label = "Unsaved"
+description = "Requirement has pending in-memory edits"
+long_description = """This requirement has been modified in the editor but
+changes have not yet been saved to disk. Click Save to write changes."""
+
+[icons.change.uncommitted]
+label = "Uncommitted"
+description = "Requirement saved to disk but not git-committed"
+long_description = """This requirement's spec file has been modified on disk
+but not yet committed to git. Use Checkpoint to commit the changes."""
+
 [icons.change.changed]
 label = "Changed"
-description = "Requirement has uncommitted changes"
-long_description = """This requirement's spec file has been modified since the
-last git commit. The diamond icon indicates that the content hash has changed.
-Review the changes before committing."""
+description = "Requirement changed on this branch vs main"
+long_description = """This requirement's spec file differs from the main
+branch. The diamond icon indicates branch-level changes that will be
+included when merging."""
 
 # ---------------------------------------------------------------------------
 # Status Badges
@@ -151,6 +131,27 @@ description = "Child requirement refines or extends parent"
 long_description = """A 'Refines' edge means the child requirement adds
 detail or constraints to the parent without being a direct implementation.
 Refinements extend rather than fulfill."""
+
+[badges.edge.satisfies]
+label = "Satisfies"
+description = "Requirement satisfies a cross-cutting template"
+long_description = """A 'Satisfies' edge means the requirement declares
+compliance with a template requirement. The template's subtree is cloned
+as instance nodes under the declaring requirement."""
+
+[badges.edge.validates]
+label = "Validates"
+description = "User journey validates a requirement"
+long_description = """A 'Validates' edge connects a user journey to a
+requirement or assertion, providing UAT-level coverage. Journeys describe
+real-world scenarios that validate requirements are met."""
+
+[badges.edge.verifies]
+label = "Verifies"
+description = "Test or code verifies an assertion"
+long_description = """A 'Verifies' edge connects a test case or code file
+to a specific assertion, providing automated coverage. This is the primary
+mechanism for tracking test-to-requirement traceability."""
 
 # ---------------------------------------------------------------------------
 # Assertion Badges

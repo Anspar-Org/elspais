@@ -17,8 +17,8 @@
             <span class="stat-sep repo-sep" id="repo-sep" style="display:none;">|</span>
             <span id="repo-badges-container"></span>
             <span class="stat-sep">|</span>
-            <button class="btn filter-toggle-btn" id="filter-toggle-btn" onclick="toggleToolbar()" title="Toggle filter bar"
-                data-help="Show or hide the filter toolbar. Filters let you narrow the tree by level, status, or text search.">&#9881;</button>
+            <button class="stat-badge filter-toggle-btn active" id="filter-toggle-btn" onclick="toggleToolbar()" title="Toggle filter bar"
+                data-help="Show or hide the filter toolbar. Filters let you narrow the tree by level, status, or text search."><svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor" style="vertical-align: middle;"><rect x="0" y="0" width="14" height="2" rx="1"/><rect x="2" y="5" width="10" height="2" rx="1"/><rect x="4" y="10" width="6" height="2" rx="1"/></svg></button>
         </div>
     </div>
 
@@ -71,30 +71,31 @@
 
         {% endif %}
 
-        <div class="hamburger-menu" id="hamburger-menu">
-            <button class="btn hamburger-btn" onclick="toggleHamburgerMenu()" title="Options">&#9776;</button>
-            <div class="hamburger-dropdown" id="hamburger-dropdown">
-                <button class="hamburger-item" id="help-mode-btn" onclick="toggleHelpMode(); closeHamburgerMenu()">
-                    ? Help
-                </button>
-                <button class="hamburger-item" onclick="toggleLegend(); closeHamburgerMenu()">
-                    &#8505; Legend
-                </button>
-                <div class="hamburger-divider"></div>
-                <div class="hamburger-label">Font Size</div>
-                <div class="hamburger-item font-size-controls">
-                    <button class="btn font-size-btn" onclick="event.stopPropagation(); adjustFontSize(-1)" title="Decrease font size">A&#x2212;</button>
-                    <span id="font-size-display">14px</span>
-                    <button class="btn font-size-btn" onclick="event.stopPropagation(); adjustFontSize(1)" title="Increase font size">A+</button>
-                </div>
-                <div class="hamburger-divider"></div>
-                <div class="hamburger-label">Theme</div>
-                <div class="hamburger-item theme-controls">
-                    {% for t in catalog.themes %}
-                    <button class="btn theme-btn" data-theme="{{ t.name }}" onclick="event.stopPropagation(); setTheme('{{ t.name }}')" title="{{ t.label }} theme">{{ t.icon }}</button>
-                    {% endfor %}
-                    <button class="btn theme-btn active" data-theme="system" onclick="event.stopPropagation(); setTheme('system')" title="System theme">&#9881;</button>
-                </div>
+    </div>
+
+    <div class="hamburger-menu" id="hamburger-menu">
+        <button class="btn hamburger-btn" onclick="toggleHamburgerMenu()" title="Options">&#9776;</button>
+        <div class="hamburger-dropdown" id="hamburger-dropdown">
+            <button class="hamburger-item" id="help-mode-btn" onclick="toggleHelpMode(); closeHamburgerMenu()">
+                ? Help
+            </button>
+            <button class="hamburger-item" onclick="toggleLegend(); closeHamburgerMenu()">
+                &#8505; Legend
+            </button>
+            <div class="hamburger-divider"></div>
+            <div class="hamburger-label">Font Size</div>
+            <div class="hamburger-item font-size-controls">
+                <button class="btn font-size-btn" onclick="event.stopPropagation(); adjustFontSize(-1)" title="Decrease font size">A&#x2212;</button>
+                <span id="font-size-display">14px</span>
+                <button class="btn font-size-btn" onclick="event.stopPropagation(); adjustFontSize(1)" title="Increase font size">A+</button>
+            </div>
+            <div class="hamburger-divider"></div>
+            <div class="hamburger-label">Theme</div>
+            <div class="hamburger-item theme-controls">
+                {% for t in catalog.themes %}
+                <button class="btn theme-btn" data-theme="{{ t.name }}" onclick="event.stopPropagation(); setTheme('{{ t.name }}')" title="{{ t.label }} theme">{{ t.icon | safe }}</button>
+                {% endfor %}
+                <button class="btn theme-btn active" data-theme="system" onclick="event.stopPropagation(); setTheme('system')" title="System theme">&#9881;</button>
             </div>
         </div>
     </div>

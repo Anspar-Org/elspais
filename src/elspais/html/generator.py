@@ -40,6 +40,7 @@ class TreeRow:
     is_leaf: bool
     is_changed: bool
     is_uncommitted: bool
+    is_unsaved: bool
     is_roadmap: bool
     is_code: bool
     is_test: bool  # TEST node for traceability
@@ -696,6 +697,7 @@ class HTMLGenerator:
                 is_changed=node.get_metric("is_branch_changed", False),
                 is_uncommitted=node.get_metric("is_uncommitted", False)
                 or node.get_metric("is_untracked", False),
+                is_unsaved=False,
                 is_roadmap=is_roadmap(node),
                 is_code=is_code,
                 is_test=is_test,
@@ -804,6 +806,7 @@ class HTMLGenerator:
                 is_leaf=False,
                 is_changed=False,
                 is_uncommitted=False,
+                is_unsaved=False,
                 is_roadmap=False,
                 is_code=False,
                 is_test=True,
@@ -892,6 +895,7 @@ class HTMLGenerator:
                 is_leaf=True,
                 is_changed=False,
                 is_uncommitted=False,
+                is_unsaved=False,
                 is_roadmap=False,
                 is_code=False,
                 is_test=False,

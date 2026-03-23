@@ -415,6 +415,19 @@ async def api_tree_data(request: Request) -> JSONResponse:
     rows: list[dict[str, Any]] = []
     visited: set[tuple[str, str]] = set()
 
+    # Collect node IDs affected by pending mutations for "Unsaved" filter
+    unsaved_ids: set[str] = set()
+    for entry in g.mutation_log.iter_entries():
+        if entry.target_id:
+            unsaved_ids.add(entry.target_id)
+        # Also check before/after state for node_id (edge mutations)
+        for st in (entry.before_state, entry.after_state):
+            if st:
+                for key in ("node_id", "source_id"):
+                    nid = st.get(key, "")
+                    if nid:
+                        unsaved_ids.add(nid)
+
     def _is_associated(node) -> bool:
         if re.match(r"^REQ-[A-Z]{2,4}-[a-z]", node.id):
             return True
@@ -478,6 +491,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
                 "coverage": coverage,
                 "is_changed": is_changed,
                 "is_uncommitted": is_uncommitted,
+                "is_unsaved": node.id in unsaved_ids,
                 "is_associated": _is_associated(node),
                 "is_test": False,
                 "is_test_result": False,
@@ -531,6 +545,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
                 "coverage": "none",
                 "is_changed": False,
                 "is_uncommitted": False,
+                "is_unsaved": False,
                 "is_associated": False,
                 "is_test": False,
                 "is_test_result": False,

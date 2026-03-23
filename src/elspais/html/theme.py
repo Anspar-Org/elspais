@@ -36,7 +36,6 @@ class CatalogEntry:
 
 # Category display names for legend grouping
 _CATEGORY_LABELS: dict[str, str] = {
-    "icons.coverage": "Coverage Status",
     "icons.change": "Change Indicators",
     "badges.status": "Status Badges",
     "badges.level": "Requirement Levels",

@@ -249,14 +249,14 @@ class TestHTMLGeneratorCoverage:
 class TestHTMLGeneratorFiltering:
     """Tests for filtering features."""
 
-    def test_REQ_d00052_A_includes_toolbar_filter_dropdowns(self, sample_graph):
-        """Includes toolbar filter dropdowns for status and coverage."""
+    def test_REQ_d00052_A_includes_toolbar_filter_controls(self, sample_graph):
+        """Includes toolbar status badge buttons and coverage dropdown."""
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate()
 
-        # Table column filters replaced by toolbar dropdowns
-        assert "edit-filter-status" in result
+        # Status badge buttons and coverage dropdown
+        assert "status-filter-group" in result
         assert "edit-filter-coverage" in result
 
     def test_REQ_d00052_D_includes_toolbar_git_filter_buttons(self, sample_graph):
@@ -342,7 +342,7 @@ class TestHTMLGeneratorLegend:
 
         assert "legend-modal" in result
         # Implements: REQ-p00006-A
-        assert "Coverage Status" in result
+        assert "Change Indicators" in result
 
 
 class TestHTMLGeneratorAssertions:

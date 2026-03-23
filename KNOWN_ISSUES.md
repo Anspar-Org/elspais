@@ -1,5 +1,8 @@
 # Known Issues
 
+[ ] viewer: changed filter
+- don't think it's working... surely there must be some REQ changes from main in this branch?
+
 [ ] viewer: feature : reports
 - allow running of 'gaps', checks, and other reports
 - Add a 'reports' tab to tree column (REQ, JNY, Reports)

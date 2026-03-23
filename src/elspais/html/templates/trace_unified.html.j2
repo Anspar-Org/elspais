@@ -183,6 +183,7 @@ const editState = {
         levelPrd: false,
         levelOps: false,
         levelDev: false,
+        unsaved: false,
         uncommitted: false,
         changed: false,
         main: false,
@@ -192,7 +193,6 @@ const editState = {
         hiddenStatuses: new Set({{ default_hidden_statuses | map('lower') | list | tojson }})
     },
     knownRepos: [],
-    filterStatus: '',
     filterCoverage: '',
     filterText: '',
     textMatchIds: null,
@@ -315,7 +315,7 @@ function toggleToolbar() {
     var toolbar = document.getElementById('edit-toolbar');
     var btn = document.getElementById('filter-toggle-btn');
     if (toolbar) toolbar.classList.toggle('toolbar-hidden', editState.toolbarHidden);
-    if (btn) btn.classList.toggle('dimmed', editState.toolbarHidden);
+    if (btn) btn.classList.toggle('active', !editState.toolbarHidden);
     saveState();
 }
 
@@ -398,26 +398,23 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!Array.isArray(editState.activeFilters.hiddenRepos)) {
                 editState.activeFilters.hiddenRepos = [];
             }
-            // Update toolbar git filter buttons (null-guard)
+            // Update toolbar focus filter buttons (null-guard)
+            var btnUnsaved = document.getElementById('edit-btn-unsaved');
             var btnUncommitted = document.getElementById('edit-btn-uncommitted');
             var btnChanged = document.getElementById('edit-btn-changed');
+            if (btnUnsaved) btnUnsaved.classList.toggle('active', !!editState.activeFilters.unsaved);
             if (btnUncommitted) btnUncommitted.classList.toggle('active', !!editState.activeFilters.uncommitted);
             if (btnChanged) btnChanged.classList.toggle('active', !!editState.activeFilters.changed);
             // Update checkboxes (null-guard)
             var leafCb = document.getElementById('edit-toggle-leaf');
             if (leafCb) leafCb.checked = !!editState.activeFilters.leaf;
-            // Sync status filter checkboxes with restored hiddenStatuses
-            document.querySelectorAll('[id^="edit-toggle-status-"]').forEach(function(cb) {
-                var statusKey = cb.id.replace('edit-toggle-status-', '');
-                cb.checked = editState.activeFilters.hiddenStatuses.has(statusKey);
+            // Sync status filter badge buttons with restored hiddenStatuses
+            document.querySelectorAll('.status-filter-btn').forEach(function(btn) {
+                var statusKey = btn.getAttribute('data-status');
+                btn.classList.toggle('on', !editState.activeFilters.hiddenStatuses.has(statusKey));
             });
             var hideFilteredCb = document.getElementById('edit-toggle-hide-filtered');
             if (hideFilteredCb) hideFilteredCb.checked = !!editState.activeFilters.hideFiltered;
-        }
-        if (saved.filterStatus) {
-            editState.filterStatus = saved.filterStatus;
-            var filterStatusSel = document.getElementById('edit-filter-status');
-            if (filterStatusSel) filterStatusSel.value = saved.filterStatus;
         }
         if (saved.filterCoverage) {
             editState.filterCoverage = saved.filterCoverage;
@@ -452,7 +449,7 @@ document.addEventListener('DOMContentLoaded', function() {
             var tb = document.getElementById('edit-toolbar');
             var ftb = document.getElementById('filter-toggle-btn');
             if (tb) tb.classList.add('toolbar-hidden');
-            if (ftb) ftb.classList.add('dimmed');
+            if (ftb) ftb.classList.remove('active');
         }
         // Restore panel widths
         if (saved.navPanelWidth) {

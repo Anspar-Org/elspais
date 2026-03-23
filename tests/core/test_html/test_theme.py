@@ -45,9 +45,9 @@ class TestCatalogEntries:
 
     def test_REQ_p00006_A_by_key_finds_entry(self):
         catalog = get_catalog()
-        entry = catalog.by_key("icons.coverage.full")
-        assert entry.label == "Full Coverage"
-        assert entry.css_class == "coverage-icon full"
+        entry = catalog.by_key("icons.change.unsaved")
+        assert entry.label == "Unsaved"
+        assert entry.css_class == "change-indicator unsaved"
 
     def test_REQ_p00006_A_by_key_raises_for_missing(self):
         catalog = get_catalog()
@@ -103,7 +103,7 @@ class TestGroupedEntries:
         catalog = get_catalog()
         groups = catalog.grouped_entries()
         cat_names = [name for name, _ in groups]
-        assert "Coverage Status" in cat_names or "Coverage" in cat_names
+        assert "Change Indicators" in cat_names
         assert len(groups) >= 5  # at least 5 categories
 
 

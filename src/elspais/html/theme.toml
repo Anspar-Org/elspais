@@ -880,21 +880,13 @@ nav-level-dev-text = "#ffffff"
 # Categorical entries — icons, badges, buttons, validation tiers
 # ---------------------------------------------------------------------------
 
-[icons.coverage.full]
+[icons.change.unsaved]
 symbol = "&#x25CF;"
-css_class = "coverage-icon full"
+css_class = "change-indicator unsaved"
 
-[icons.coverage.partial]
-symbol = "&#x25D2;"
-css_class = "coverage-icon partial"
-
-[icons.coverage.none]
-symbol = "&#x25CB;"
-css_class = "coverage-icon none"
-
-[icons.coverage.warning]
-symbol = "&#x26A0;"
-css_class = "warning-icon"
+[icons.change.uncommitted]
+symbol = "&#x25C6;"
+css_class = "change-indicator uncommitted"
 
 [icons.change.changed]
 symbol = "&#x25C6;"
@@ -940,6 +932,15 @@ css_class = "nav-tree-kind-icon"
 css_class = "card-parent-kind"
 
 [badges.edge.refines]
+css_class = "card-parent-kind"
+
+[badges.edge.satisfies]
+css_class = "card-parent-kind"
+
+[badges.edge.validates]
+css_class = "card-parent-kind"
+
+[badges.edge.verifies]
 css_class = "card-parent-kind"
 
 [badges.assertion.badge]
