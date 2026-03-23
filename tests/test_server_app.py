@@ -2375,8 +2375,9 @@ class TestGitCheckoutCommit:
 
         assert resp.status_code == 200
         assert state.is_detached is True
-        assert state.originating_branch == "main"
-        assert state.originating_head == "HEAD123"
+        ds = state.get_detached_state("root")
+        assert ds.originating_branch == "main"
+        assert ds.originating_head == "HEAD123"
 
     def test_git_checkout_commit_fallback_branch(self, sample_graph):
         """When branch not in body, falls back to get_current_branch."""
@@ -2395,7 +2396,8 @@ class TestGitCheckoutCommit:
             resp = client.post("/api/git/checkout-commit", json={"hash": "def5678"})
 
         assert resp.status_code == 200
-        assert state.originating_branch == "detected-branch"
+        ds = state.get_detached_state("root")
+        assert ds.originating_branch == "detected-branch"
 
     def test_git_checkout_commit_empty_hash_returns_400(self, client):
         """POST /api/git/checkout-commit with empty hash returns 400."""
@@ -2427,7 +2429,7 @@ class TestGitStatusDetached:
         from unittest.mock import patch
 
         state = AppState(graph=sample_graph, repo_root=Path("/test/repo"), config={})
-        state.enter_detached(branch="main", head_commit="deadbeef")
+        state.enter_detached("root", branch="main", head_commit="deadbeef")
         app = create_app(state, mount_mcp=False)
         client = TestClient(app)
 
@@ -2481,7 +2483,7 @@ class TestDetachedGuardMiddleware:
     def test_mutate_blocked_when_detached(self, sample_graph):
         """POST /api/mutate/title returns 409 when in detached HEAD mode."""
         state = AppState(graph=sample_graph, repo_root=Path("/test/repo"), config={})
-        state.enter_detached(branch="main", head_commit="deadbeef")
+        state.enter_detached("root", branch="main", head_commit="deadbeef")
         app = create_app(state, mount_mcp=False)
         client = TestClient(app)
 
