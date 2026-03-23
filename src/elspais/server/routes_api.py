@@ -467,8 +467,8 @@ async def api_tree_data(request: Request) -> JSONResponse:
                     assertions.append(label)
 
         has_children = any(c.kind == NodeKind.REQUIREMENT for c in node.iter_children())
-        is_changed = bool(node.get_field("is_changed", False))
-        is_uncommitted = bool(node.get_field("is_uncommitted", False))
+        is_changed = bool(node.get_metric("is_branch_changed", False))
+        is_uncommitted = bool(node.get_metric("is_uncommitted", False))
         tiers = compute_coverage_tiers(node, state.config)
         # Derive coverage tier from combined_color for filtering
         _cc = tiers.get("combined_color", "")

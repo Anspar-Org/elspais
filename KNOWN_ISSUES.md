@@ -1,6 +1,37 @@
 # Known Issues
 
-[ ] viewer: changed filter
+[ ] feature: viewer: add review/comment
+- In Edit Mode, allow user to tag any REQ or JNY element (and CODE and TEST reference) with a comment. 
+ - this is most 'unique' aspect of this feature. What can we put a comment on? How do we do that w/o cluttering the display with a separate 'comment' icon on every field?
+ - how do we show a comment thread without cluttering the display?
+- Those comments are stored in a .elspais/ database-like file (or actual database?)
+- this is an auditable record, so it should use an append-only event-driven system
+- The comments are kept on a per-reference basis, such that the history can be easily seen
+- comments can get replies
+- comments can be resolved
+- if the target of the comment is deleted then the comment is resolved
+
+
+[ ] checks, gaps, reports: clarification
+- we want to be able to generate prospective reports that treat provisional status as active
+- i.e. show me the gaps if all drafts were active? or if all "drafts and proposed" were active
+- e.g. "elspais gaps --status draft"
+
+[ ] checks: feature
+- checks should report which config files it is reading
+- it should report results for the whole FederaredGraph (probably working)
+- errors should identify the repo in which the source is located
+-- probably overkill to annotate all nodes in the graph for this purpose. would bloat the graph quite a bit, and its only used for reports.
+
+[ ] gaps : feature
+- errors should identify the repo in which the source is located
+- applies to all commands / reports of that kind
+
+[ ] viewer: bug : multi-repo git support
+- must support selecting independent branches for each TraceGrpah (separate repo)
+- but when making a new branch, it can apply to all repos (as a way to keep them in-sync)
+
+[x] viewer: changed filter
 - don't think it's working... surely there must be some REQ changes from main in this branch?
 
 [ ] viewer: feature : reports
@@ -9,11 +40,18 @@
 - Or would it fit better in the 'file viewer' column?
 - 'Download' button for reports?
 - highlight 'gaps' on hierarchy? Why? ...it's already captured in the badge color.
+
+[ ] bug: init template file generator
+- this is supposed to have detailed comments for every field, documenting what the options are
+- e.g. the valid values for hash_modes, and for all other enums. What does each option mean?
+- what do the true/false settings affect?
+- Not more than 1 line per enum/bool value: if the explanation is longer, then refer to the docs.
+- for text fields, explain what the value is and what allowed values are (e.g. a simple regex might work to explain?)
  
 
 [ ] feature: config
 - make journey IDs configurable like REQ IDs
-- second instand of IDresolver?
+- second instance of IDresolver?
 
 [x] testing: bug
 - xml test results are all on 'one line' so its hard to link to them (all results are on line 1).
