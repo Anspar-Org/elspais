@@ -1815,3 +1815,125 @@ class TestGenerateCheckpointMessage:
         msg = generate_checkpoint_message(tmp_path)
 
         assert "REQ-p99999" not in msg
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tests for check_monorepo_eligible
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _make_repo(tmp_path: Path, name: str, branch: str, n_commits: int = 1) -> Path:
+    """Create a git repo with a given branch and number of commits."""
+    import os
+
+    from elspais.utilities.git import _clean_git_env as _cge
+
+    repo = tmp_path / name
+    repo.mkdir()
+    env = _cge()
+    env["GIT_AUTHOR_NAME"] = "Test"
+    env["GIT_AUTHOR_EMAIL"] = "test@test.com"
+    env["GIT_COMMITTER_NAME"] = "Test"
+    env["GIT_COMMITTER_EMAIL"] = "test@test.com"
+    subprocess.run(["git", "init"], cwd=repo, capture_output=True, check=True, env=env)
+    subprocess.run(
+        ["git", "checkout", "-b", branch], cwd=repo, capture_output=True, check=True, env=env
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"],
+        cwd=repo,
+        capture_output=True,
+        check=True,
+        env=env,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test User"],
+        cwd=repo,
+        capture_output=True,
+        check=True,
+        env=env,
+    )
+    for i in range(n_commits):
+        (repo / f"file{i}.txt").write_text(f"commit {i}\n")
+        subprocess.run(["git", "add", "."], cwd=repo, capture_output=True, check=True, env=env)
+        subprocess.run(
+            ["git", "commit", "-m", f"commit {i}"],
+            cwd=repo,
+            capture_output=True,
+            check=True,
+            env=env,
+        )
+    return repo
+
+
+class TestMonorepoEligible:
+    """REQ-d00201-B: check_monorepo_eligible validates multi-repo sync conditions."""
+
+    # Implements: REQ-d00201-B
+    def test_eligible_same_branch_same_commits(self, tmp_path):
+        """Two repos on same branch with same commit count are eligible."""
+        from elspais.utilities.git import check_monorepo_eligible, invalidate_ancestor_cache
+
+        invalidate_ancestor_cache()
+        repo_a = _make_repo(tmp_path, "a", "feature", n_commits=2)
+        repo_b = _make_repo(tmp_path, "b", "feature", n_commits=2)
+        eligible, reasons = check_monorepo_eligible(
+            [("a", repo_a), ("b", repo_b)], main_branches=["main", "master"]
+        )
+        assert eligible is True
+        assert reasons == []
+
+    # Implements: REQ-d00201-B
+    def test_ineligible_different_branch_names(self, tmp_path):
+        """Repos on different branch names are ineligible."""
+        from elspais.utilities.git import check_monorepo_eligible, invalidate_ancestor_cache
+
+        invalidate_ancestor_cache()
+        repo_a = _make_repo(tmp_path, "a", "feature-x", n_commits=1)
+        repo_b = _make_repo(tmp_path, "b", "feature-y", n_commits=1)
+        eligible, reasons = check_monorepo_eligible(
+            [("a", repo_a), ("b", repo_b)], main_branches=["main", "master"]
+        )
+        assert eligible is False
+        assert any("branch" in r.lower() for r in reasons)
+
+    # Implements: REQ-d00201-B
+    def test_ineligible_different_commit_counts(self, tmp_path):
+        """Repos with different commit counts on same branch are ineligible."""
+        from elspais.utilities.git import check_monorepo_eligible, invalidate_ancestor_cache
+
+        invalidate_ancestor_cache()
+        repo_a = _make_repo(tmp_path, "a", "feature", n_commits=1)
+        repo_b = _make_repo(tmp_path, "b", "feature", n_commits=3)
+        eligible, reasons = check_monorepo_eligible(
+            [("a", repo_a), ("b", repo_b)], main_branches=["main", "master"]
+        )
+        assert eligible is False
+        assert any("commit" in r.lower() for r in reasons)
+
+    # Implements: REQ-d00201-B
+    def test_eligible_on_main(self, tmp_path):
+        """Two repos both on main branch are eligible."""
+        from elspais.utilities.git import check_monorepo_eligible, invalidate_ancestor_cache
+
+        invalidate_ancestor_cache()
+        repo_a = _make_repo(tmp_path, "a", "main", n_commits=1)
+        repo_b = _make_repo(tmp_path, "b", "main", n_commits=1)
+        eligible, reasons = check_monorepo_eligible(
+            [("a", repo_a), ("b", repo_b)], main_branches=["main", "master"]
+        )
+        assert eligible is True
+        assert reasons == []
+
+    # Implements: REQ-d00201-B
+    def test_single_repo_always_eligible(self, tmp_path):
+        """Single-repo list is trivially eligible."""
+        from elspais.utilities.git import check_monorepo_eligible, invalidate_ancestor_cache
+
+        invalidate_ancestor_cache()
+        repo_a = _make_repo(tmp_path, "a", "feature", n_commits=2)
+        eligible, reasons = check_monorepo_eligible(
+            [("a", repo_a)], main_branches=["main", "master"]
+        )
+        assert eligible is True
+        assert reasons == []

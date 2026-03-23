@@ -3,10 +3,38 @@
 """Starlette route handlers for /api/git/* endpoints."""
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Any
+
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from elspais.mcp.server import _get_mutation_log
+
+
+# Implements: REQ-d00201-A
+def _iter_repo_entries(state: Any) -> list[tuple[str, Path, dict | None]]:
+    """Yield (name, repo_root, config) for all repos in the graph.
+    Works for both FederatedGraph (iter_repos) and plain TraceGraph (root only).
+    """
+    if hasattr(state.graph, "iter_repos"):
+        return [
+            (e.name, e.repo_root, e.config)
+            for e in state.graph.iter_repos()
+            if e.error is None and e.graph is not None
+        ]
+    return [("root", state.repo_root, state.config)]
+
+
+# Implements: REQ-d00201-A
+def _resolve_repo_root(state: Any, repo_name: str | None) -> Path:
+    """Look up repo root by name. None/'root' returns state.repo_root."""
+    if repo_name is None or repo_name == "root":
+        return state.repo_root
+    for name, root, _ in _iter_repo_entries(state):
+        if name == repo_name:
+            return root
+    raise ValueError(f"Unknown repo: {repo_name!r}")
 
 
 async def api_git_status(request: Request) -> JSONResponse:

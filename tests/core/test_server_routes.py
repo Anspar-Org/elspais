@@ -161,6 +161,58 @@ class TestTreeData:
         assert isinstance(data, list)
 
 
+class TestTreeDataGitMetrics:
+    """REQ-d00010-A: /api/tree-data reads git state from node metrics."""
+
+    _VALID_SPEC = (
+        "# REQ-p00001: Test Requirement\n"
+        "\n"
+        "**Level**: PRD | **Status**: Active\n"
+        "\n"
+        "Body text.\n"
+        "\n"
+        "A. First assertion\n"
+        "\n"
+        "*End* *REQ-p00001*\n"
+    )
+
+    @pytest.fixture
+    def git_metric_client(self, tmp_path: Path):
+        """Build a project with a parseable requirement and return (client, state)."""
+        import subprocess
+
+        from elspais.server.app import create_app
+        from elspais.server.state import AppState
+
+        subprocess.run(["git", "init", str(tmp_path)], capture_output=True, check=True)
+        (tmp_path / ".elspais.toml").write_text(_MINIMAL_CONFIG)
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        (spec_dir / "test.md").write_text(self._VALID_SPEC)
+
+        state = AppState.from_config(repo_root=tmp_path)
+        app = create_app(state=state, mount_mcp=False)
+        return TestClient(app), state
+
+    def test_tree_data_reflects_git_metrics(self, git_metric_client):
+        """is_changed and is_uncommitted are read from node metrics, not fields."""
+        client, state = git_metric_client
+        node = state.graph.find_by_id("REQ-p00001")
+        assert node is not None, "fixture should produce REQ-p00001"
+
+        node.set_metric("is_branch_changed", True)
+        node.set_metric("is_uncommitted", True)
+
+        resp = client.get("/api/tree-data")
+        assert resp.status_code == 200
+        rows = resp.json()
+
+        req_row = next((r for r in rows if r["id"] == "REQ-p00001"), None)
+        assert req_row is not None, "REQ-p00001 should appear in tree-data"
+        assert req_row["is_changed"] is True
+        assert req_row["is_uncommitted"] is True
+
+
 class TestCheckFreshness:
     """REQ-p00006-A: /api/check-freshness detects stale files."""
 
@@ -180,3 +232,47 @@ class TestNoCacheMiddleware:
         """Responses include Cache-Control: no-store."""
         resp = client.get("/api/status")
         assert "no-store" in resp.headers.get("cache-control", "")
+
+
+class TestResolveRepoRoot:
+    """REQ-d00201-A: Resolve repo root from app state."""
+
+    def test_resolve_root_repo(self, tmp_path):
+        from unittest.mock import MagicMock
+
+        from elspais.server.routes_git import _resolve_repo_root
+
+        state = MagicMock()
+        state.repo_root = tmp_path
+        state.graph = MagicMock(spec=[])  # No iter_repos
+        assert _resolve_repo_root(state, None) == tmp_path
+        assert _resolve_repo_root(state, "root") == tmp_path
+
+    def test_resolve_named_repo(self, tmp_path):
+        from unittest.mock import MagicMock
+
+        from elspais.server.routes_git import _resolve_repo_root
+
+        assoc_root = tmp_path / "assoc"
+        assoc_root.mkdir()
+        entry = MagicMock()
+        entry.name = "core"
+        entry.repo_root = assoc_root
+        entry.config = {}
+        entry.error = None
+        entry.graph = MagicMock()
+        state = MagicMock()
+        state.repo_root = tmp_path
+        state.graph.iter_repos.return_value = iter([entry])
+        assert _resolve_repo_root(state, "core") == assoc_root
+
+    def test_resolve_unknown_raises(self, tmp_path):
+        from unittest.mock import MagicMock
+
+        from elspais.server.routes_git import _resolve_repo_root
+
+        state = MagicMock()
+        state.repo_root = tmp_path
+        state.graph.iter_repos.return_value = iter([])
+        with pytest.raises(ValueError, match="Unknown repo"):
+            _resolve_repo_root(state, "nonexistent")
