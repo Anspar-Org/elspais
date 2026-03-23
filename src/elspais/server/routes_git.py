@@ -22,22 +22,23 @@ async def api_git_status(request: Request) -> JSONResponse:
     # Detect detached HEAD from git state (branch is None) even if AppState
     # doesn't know about it (e.g. server started on a detached worktree).
     git_detached = result.get("branch") is None
-    is_detached = state.is_detached or git_detached
+    root_ds = state.get_detached_state("root")
+    is_detached = root_ds is not None or git_detached
     result["is_detached"] = is_detached
-    result["originating_branch"] = state.originating_branch
-    result["originating_head"] = state.originating_head
+    result["originating_branch"] = root_ds.originating_branch if root_ds else None
+    result["originating_head"] = root_ds.originating_head if root_ds else None
     if is_detached:
         from elspais.utilities.git import get_current_commit
 
         result["detached_commit"] = get_current_commit(state.repo_root)
-        if state.originating_head:
+        if root_ds and root_ds.originating_head:
             import subprocess
 
             from elspais.utilities.git import _clean_git_env
 
             try:
                 rv = subprocess.run(
-                    ["git", "rev-list", "--count", "HEAD.." + state.originating_head],
+                    ["git", "rev-list", "--count", "HEAD.." + root_ds.originating_head],
                     cwd=state.repo_root,
                     env=_clean_git_env(),
                     capture_output=True,
@@ -181,7 +182,7 @@ async def api_git_checkout(request: Request) -> JSONResponse:
         if result.returncode != 0:
             return JSONResponse({"success": False, "error": result.stderr.strip()}, status_code=400)
 
-        state.leave_detached()
+        state.leave_detached("root")
         return JSONResponse({"success": True, "branch": branch})
 
     except FileNotFoundError:
@@ -237,7 +238,7 @@ async def api_git_checkout_commit(request: Request) -> JSONResponse:
     originating_head = get_current_commit(state.repo_root) or ""
     result = checkout_commit(state.repo_root, commit_hash)
     if result.get("success"):
-        state.enter_detached(branch=originating_branch, head_commit=originating_head)
+        state.enter_detached("root", branch=originating_branch, head_commit=originating_head)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
 
