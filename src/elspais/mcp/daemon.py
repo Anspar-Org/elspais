@@ -21,6 +21,49 @@ _DEFAULT_TTL = 30  # minutes
 _VIEWER_PORT = 5001
 
 
+def compute_config_hash(config_path: Path) -> str:
+    """Compute a hash of all config files that affect the graph.
+
+    Hashes the main .elspais.toml, .elspais.local.toml (if present),
+    and any associate repo .elspais.toml files referenced in [associates].
+
+    Returns:
+        16-char hex digest (first 8 bytes of SHA-256).
+    """
+    import hashlib
+
+    h = hashlib.sha256()
+
+    # Main config
+    if config_path.is_file():
+        h.update(config_path.read_bytes())
+
+    # Local overrides
+    local_path = config_path.parent / ".elspais.local.toml"
+    if local_path.is_file():
+        h.update(local_path.read_bytes())
+
+    # Associate configs: parse merged config to find associate paths
+    try:
+        from elspais.config import get_associates_config, get_config
+
+        merged = get_config(config_path=config_path)
+        repo_root = config_path.parent
+        associates = get_associates_config(merged, repo_root=repo_root)
+        for _name, info in sorted(associates.items()):
+            assoc_path = (repo_root / info["path"]).resolve()
+            assoc_toml = assoc_path / ".elspais.toml"
+            if assoc_toml.is_file():
+                h.update(assoc_toml.read_bytes())
+            assoc_local = assoc_path / ".elspais.local.toml"
+            if assoc_local.is_file():
+                h.update(assoc_local.read_bytes())
+    except Exception:
+        pass  # Best effort - don't fail daemon start on parse errors
+
+    return h.hexdigest()[:16]
+
+
 def get_cli_ttl(repo_root: Path | None = None) -> int:
     """Read cli_ttl from .elspais.toml config.
 
