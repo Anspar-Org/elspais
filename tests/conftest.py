@@ -18,13 +18,14 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures"
 # Test run metadata sidecar for elspais health visibility.
 # Any test runner can produce this format; this is the pytest implementation.
 _REPO_ROOT = Path(__file__).parent.parent
-_RUN_META_PATH = _REPO_ROOT / "test-run-meta.json"
+_RUN_META_PATH = _REPO_ROOT / ".results" / "test-run-meta.json"
 
 
 def pytest_deselected(items):
     """Write deselected test metadata to sidecar JSON for elspais."""
     import json
 
+    _RUN_META_PATH.parent.mkdir(exist_ok=True)
     _RUN_META_PATH.write_text(
         json.dumps(
             {

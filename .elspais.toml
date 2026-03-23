@@ -75,7 +75,7 @@ reference_keyword = "Validates"
 [scanning.result]
 directories = [".results"]
 file_patterns = ["test-results.xml"]
-run_meta_file = "test-run-meta.json"
+run_meta_file = ".results/test-run-meta.json"
 
 [scanning.coverage]
 directories = [".results"]
