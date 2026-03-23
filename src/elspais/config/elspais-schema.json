@@ -754,6 +754,17 @@
           ],
           "default": null,
           "title": "Content Rules"
+        },
+        "protected_branches": {
+          "default": [
+            "main",
+            "master"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "title": "Protected Branches",
+          "type": "array"
         }
       },
       "title": "RulesConfig",
@@ -956,7 +967,7 @@
   "additionalProperties": false,
   "properties": {
     "version": {
-      "default": 3,
+      "default": 4,
       "title": "Version",
       "type": "integer"
     },

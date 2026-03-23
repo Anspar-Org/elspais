@@ -92,6 +92,7 @@ class RulesConfig(_StrictModel):
     format: FormatConfig = Field(default_factory=FormatConfig)
     coverage: CoverageConfig = Field(default_factory=CoverageConfig)
     content_rules: list[str] | None = None
+    protected_branches: list[str] = Field(default=["main", "master"])
 
 
 class KeywordsSearchConfig(_StrictModel):
@@ -208,7 +209,7 @@ class AssociateEntryConfig(_StrictModel):
 
 # Implements: REQ-d00212-F
 class ElspaisConfig(_StrictModel):
-    version: int = 3
+    version: int = 4
     project: ProjectConfig = Field(default_factory=ProjectConfig)
     id_patterns: IdPatternsConfig = Field(alias="id-patterns", default_factory=IdPatternsConfig)
     levels: dict[str, LevelConfig] = Field(

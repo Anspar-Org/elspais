@@ -103,10 +103,10 @@ class TestElspaisConfigRestructuring:
         """ElspaisConfig does NOT have an 'associated' field."""
         assert "associated" not in ElspaisConfig.model_fields
 
-    def test_REQ_d00212_F_version_defaults_to_3(self):
-        """ElspaisConfig.version defaults to 3."""
+    def test_REQ_d00212_F_version_defaults_to_4(self):
+        """ElspaisConfig.version defaults to 4."""
         cfg = ElspaisConfig()
-        assert cfg.version == 3
+        assert cfg.version == 4
 
 
 # ---------------------------------------------------------------------------
