@@ -276,3 +276,103 @@ class TestResolveRepoRoot:
         state.graph.iter_repos.return_value = iter([])
         with pytest.raises(ValueError, match="Unknown repo"):
             _resolve_repo_root(state, "nonexistent")
+
+
+class TestRepoStatus:
+    """REQ-p00004-I: Bulk repo status for multi-repo support."""
+
+    def test_repo_status_returns_list(self, client: TestClient):
+        """GET /api/git/repo-status returns per-repo status."""
+        resp = client.get("/api/git/repo-status")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "repos" in data
+        assert isinstance(data["repos"], list)
+        assert len(data["repos"]) >= 1
+        repo = data["repos"][0]
+        assert "name" in repo
+        assert "branch" in repo
+
+    def test_repo_status_has_protected_branches(self, client: TestClient):
+        """GET /api/git/repo-status includes protected_branches list."""
+        resp = client.get("/api/git/repo-status")
+        data = resp.json()
+        assert "protected_branches" in data
+        assert isinstance(data["protected_branches"], list)
+
+
+class TestMonorepoEligible:
+    """REQ-p00004-I: Monorepo eligibility check endpoint."""
+
+    def test_monorepo_eligible_returns_status(self, client: TestClient):
+        """GET /api/git/monorepo-eligible returns eligible + reasons."""
+        resp = client.get("/api/git/monorepo-eligible")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "eligible" in data
+        assert "reasons" in data
+        assert isinstance(data["reasons"], list)
+
+    def test_monorepo_eligible_boolean_field(self, client: TestClient):
+        """eligible field is a boolean value."""
+        resp = client.get("/api/git/monorepo-eligible")
+        data = resp.json()
+        assert isinstance(data["eligible"], bool)
+
+
+class TestGitStatusRepoParam:
+    """REQ-p00004-C: /api/git/status supports ?repo= param."""
+
+    def test_git_status_default_no_param(self, client: TestClient):
+        """GET /api/git/status without ?repo= works as before."""
+        resp = client.get("/api/git/status")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "is_detached" in data
+
+    def test_git_status_root_param(self, client: TestClient):
+        """GET /api/git/status?repo=root resolves to main repo root."""
+        resp = client.get("/api/git/status?repo=root")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "is_detached" in data
+
+
+class TestGitCommitsRepoParam:
+    """REQ-p00004-I: /api/git/commits supports ?repo= param."""
+
+    def test_git_commits_default_no_param(self, client: TestClient):
+        """GET /api/git/commits without ?repo= returns 200 with a list."""
+        resp = client.get("/api/git/commits")
+        assert resp.status_code == 200
+        data = resp.json()
+        # list_commits returns a list directly
+        assert isinstance(data, list)
+
+    def test_git_commits_root_param(self, client: TestClient):
+        """GET /api/git/commits?repo=root resolves to main repo root."""
+        resp = client.get("/api/git/commits?repo=root")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+
+
+class TestGitBranchMonorepo:
+    """REQ-p00004-D: /api/git/branch supports monorepo mode."""
+
+    def test_branch_no_name_returns_400(self, client: TestClient):
+        """POST /api/git/branch without name returns 400."""
+        resp = client.post("/api/git/branch", json={})
+        assert resp.status_code == 400
+        data = resp.json()
+        assert data["success"] is False
+
+    def test_branch_monorepo_false_single_repo(self, client: TestClient):
+        """POST /api/git/branch with monorepo=false uses single-repo path."""
+        # This will fail git ops on the tmp dir (not a git repo), but the
+        # endpoint should not crash — it returns a 400 with error info.
+        resp = client.post("/api/git/branch", json={"name": "test-branch", "monorepo": False})
+        # 200 (success) or 400 (git failure) — either is acceptable
+        assert resp.status_code in (200, 400)
+        data = resp.json()
+        assert "success" in data

@@ -72,8 +72,10 @@ from elspais.server.routes_git import (
     api_git_commit,
     api_git_commit_message,
     api_git_commits,
+    api_git_monorepo_eligible,
     api_git_pull,
     api_git_push,
+    api_git_repo_status,
     api_git_status,
     api_git_suggest_branch_name,
 )
@@ -189,6 +191,8 @@ def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
         Route("/api/git/checkout-commit", api_git_checkout_commit, methods=["POST"]),
         Route("/api/git/commit-message", api_git_commit_message),
         Route("/api/git/suggest-branch-name", api_git_suggest_branch_name),
+        Route("/api/git/repo-status", api_git_repo_status),
+        Route("/api/git/monorepo-eligible", api_git_monorepo_eligible),
     ]
 
     # Mount MCP sub-app at /mcp

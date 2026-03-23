@@ -37,14 +37,62 @@ def _resolve_repo_root(state: Any, repo_name: str | None) -> Path:
     raise ValueError(f"Unknown repo: {repo_name!r}")
 
 
+async def api_git_repo_status(request: Request) -> JSONResponse:
+    # Implements: REQ-p00004-I
+    """GET /api/git/repo-status - Per-repo branch/status for multi-repo UI."""
+    from elspais.utilities.git import _clean_git_env, _count_commits_since, _find_main_branch, get_current_branch
+
+    state = request.app.state.app_state
+    entries = _iter_repo_entries(state)
+    protected = state.config.get("rules", {}).get("protected_branches", ["main", "master"])
+    repos = []
+
+    for name, root, config in entries:
+        branch = get_current_branch(root)
+        env = _clean_git_env()
+        main_ref = _find_main_branch(root, ("main", "master"), env)
+        if branch and main_ref and branch != main_ref:
+            commit_count = _count_commits_since(root, main_ref, env)
+        else:
+            commit_count = 0
+        ds = state.get_detached_state(name)
+        repo_info: dict[str, Any] = {
+            "name": name,
+            "repo_root": str(root),
+            "branch": branch,
+            "commit_count": commit_count,
+            "is_detached": ds is not None,
+        }
+        if ds:
+            repo_info["originating_branch"] = ds.originating_branch
+            repo_info["originating_head"] = ds.originating_head
+        repos.append(repo_info)
+
+    return JSONResponse({"repos": repos, "protected_branches": protected})
+
+
+async def api_git_monorepo_eligible(request: Request) -> JSONResponse:
+    # Implements: REQ-p00004-I
+    """GET /api/git/monorepo-eligible - Check monorepo mode eligibility."""
+    from elspais.utilities.git import check_monorepo_eligible
+
+    state = request.app.state.app_state
+    entries = _iter_repo_entries(state)
+    repos = [(name, root) for name, root, _ in entries]
+    eligible, reasons = check_monorepo_eligible(repos)
+    return JSONResponse({"eligible": eligible, "reasons": reasons})
+
+
 async def api_git_status(request: Request) -> JSONResponse:
     # Implements: REQ-p00004-C
     """GET /api/git/status - Git status summary for the viewer UI."""
     from elspais.utilities.git import git_status_summary
 
     state = request.app.state.app_state
+    repo_name = request.query_params.get("repo")
+    root = _resolve_repo_root(state, repo_name)
     spec_dir = state.config.get("scanning", {}).get("spec", {}).get("directories", ["spec"])[0]
-    result = git_status_summary(state.repo_root, spec_dir=spec_dir)
+    result = git_status_summary(root, spec_dir=spec_dir)
 
     # Augment with detached HEAD state fields.
     # Detect detached HEAD from git state (branch is None) even if AppState
@@ -58,7 +106,7 @@ async def api_git_status(request: Request) -> JSONResponse:
     if is_detached:
         from elspais.utilities.git import get_current_commit
 
-        result["detached_commit"] = get_current_commit(state.repo_root)
+        result["detached_commit"] = get_current_commit(root)
         if root_ds and root_ds.originating_head:
             import subprocess
 
@@ -67,7 +115,7 @@ async def api_git_status(request: Request) -> JSONResponse:
             try:
                 rv = subprocess.run(
                     ["git", "rev-list", "--count", "HEAD.." + root_ds.originating_head],
-                    cwd=state.repo_root,
+                    cwd=root,
                     env=_clean_git_env(),
                     capture_output=True,
                     text=True,
@@ -90,16 +138,31 @@ async def api_git_status(request: Request) -> JSONResponse:
 async def api_git_branch(request: Request) -> JSONResponse:
     # Implements: REQ-p00004-D
     """POST /api/git/branch - Create and switch to a new branch."""
-    from elspais.utilities.git import create_and_switch_branch
+    from elspais.utilities.git import create_and_switch_branch, invalidate_ancestor_cache
 
     state = request.app.state.app_state
     data = await request.json()
     name = data.get("name", "").strip()
+    monorepo = data.get("monorepo", False)
     if not name:
         return JSONResponse({"success": False, "error": "branch name required"}, status_code=400)
-    result = create_and_switch_branch(state.repo_root, name)
-    status_code = 200 if result.get("success") else 400
-    return JSONResponse(result, status_code=status_code)
+
+    if monorepo:
+        results = []
+        for rname, root, _ in _iter_repo_entries(state):
+            r = create_and_switch_branch(root, name)
+            r["repo"] = rname
+            results.append(r)
+            if r.get("success"):
+                state.leave_detached(rname)
+        invalidate_ancestor_cache()
+        all_ok = all(r.get("success") for r in results)
+        return JSONResponse({"success": all_ok, "results": results})
+    else:
+        result = create_and_switch_branch(state.repo_root, name)
+        invalidate_ancestor_cache()
+        status_code = 200 if result.get("success") else 400
+        return JSONResponse(result, status_code=status_code)
 
 
 async def api_git_push(request: Request) -> JSONResponse:
@@ -222,9 +285,11 @@ async def api_git_commits(request: Request) -> JSONResponse:
     from elspais.utilities.git import list_commits
 
     state = request.app.state.app_state
+    repo_name = request.query_params.get("repo")
+    root = _resolve_repo_root(state, repo_name)
     branch = request.query_params.get("branch", "HEAD")
     limit = int(request.query_params.get("limit", "20"))
-    result = list_commits(state.repo_root, branch=branch, limit=limit)
+    result = list_commits(root, branch=branch, limit=limit)
     return JSONResponse(result)
 
 
