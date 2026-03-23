@@ -2013,8 +2013,9 @@ def run(args: argparse.Namespace) -> int:
     # The dict already has the correct "healthy" flag (lenient-aware).
     # Use it for exit code; reconstruct report only for rendering.
     healthy = data.get("healthy", False)
+    graph_source = _format_graph_source(data.get("graph_source"))
     report = _report_from_dict(data)
-    print(_format_report(report, args))
+    print(_format_report(report, args, graph_source=graph_source))
     return 0 if healthy else 1
 
 
@@ -2086,7 +2087,30 @@ def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[
     return report.to_dict(lenient=lenient)
 
 
-def _format_report(report: HealthReport, args: argparse.Namespace) -> str:
+def _format_graph_source(source: dict | None) -> str | None:
+    """Format graph_source metadata as a human-readable string."""
+    if source is None:
+        return None
+    source_type = source.get("type", "unknown")
+    if source_type == "local":
+        return None  # Local builds need no annotation
+    if source_type == "daemon":
+        parts = [f"daemon (port {source.get('port', '?')}"]
+        started = source.get("started_at")
+        if started:
+            parts[0] += f", started {started}"
+        parts[0] += ")"
+        return parts[0]
+    if source_type == "viewer":
+        return f"viewer (port {source.get('port', '?')})"
+    return source_type
+
+
+def _format_report(
+    report: HealthReport,
+    args: argparse.Namespace,
+    graph_source: str | None = None,
+) -> str:
     """Format the health report as a string."""
     fmt = getattr(args, "format", "text") or "text"
     lenient = getattr(args, "lenient", False)
@@ -2098,6 +2122,7 @@ def _format_report(report: HealthReport, args: argparse.Namespace) -> str:
         return json.dumps(report.to_dict(lenient=lenient), indent=2)
     elif fmt == "markdown":
         data = _build_report_data(report)
+        data.graph_source = graph_source
         return _render_markdown(data)
     elif fmt == "junit":
         return _render_junit(report, include_passing_details=include_passing)
@@ -2107,6 +2132,7 @@ def _format_report(report: HealthReport, args: argparse.Namespace) -> str:
         if quiet:
             return _build_report_data(report, verbose=verbose).summary_line
         data = _build_report_data(report, verbose=verbose)
+        data.graph_source = graph_source
         return _render_text(data)
 
 
@@ -2142,6 +2168,7 @@ class _ReportData:
     summary_line: str
     is_healthy: bool
     hint: str | None
+    graph_source: str | None = None
 
 
 def _build_hint(report: HealthReport, already_verbose: bool) -> str | None:
@@ -2275,6 +2302,8 @@ def _render_text(data: _ReportData) -> str:
     lines.append("")
     lines.append("=" * 40)
     lines.append(data.summary_line)
+    if data.graph_source:
+        lines.append(f"(via {data.graph_source})")
     if data.hint:
         lines.append(data.hint)
     lines.append("=" * 40)
