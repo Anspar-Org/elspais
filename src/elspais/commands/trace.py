@@ -122,17 +122,17 @@ def _compact_labels(labels: set[str]) -> str:
     sorted_labels = sorted(labels)
 
     # Detect label type: all single uppercase letters, all numeric, or mixed/text
-    all_single_alpha = all(len(l) == 1 and l.isalpha() and l.isupper() for l in sorted_labels)
-    all_numeric = all(l.isdigit() for l in sorted_labels)
+    all_single_alpha = all(len(lb) == 1 and lb.isalpha() and lb.isupper() for lb in sorted_labels)
+    all_numeric = all(lb.isdigit() for lb in sorted_labels)
 
     if not all_single_alpha and not all_numeric:
         return ",".join(sorted_labels)
 
     # Build runs of consecutive values (sort by actual value, not lexicographic)
     if all_single_alpha:
-        values = sorted(ord(l) for l in sorted_labels)
+        values = sorted(ord(lb) for lb in sorted_labels)
     else:
-        values = sorted(int(l) for l in sorted_labels)
+        values = sorted(int(lb) for lb in sorted_labels)
 
     runs: list[tuple[int, int]] = []
     for v in values:
@@ -288,7 +288,9 @@ def _column_headers() -> dict[str, str]:
 
 
 # The 6 coverage dimension column keys
-_COVERAGE_COLUMNS = ["implemented", "tested", "verified", "uat_coverage", "uat_verified", "code_tested"]
+_COVERAGE_COLUMNS = [
+    "implemented", "tested", "verified", "uat_coverage", "uat_verified", "code_tested",
+]
 
 
 def _format_row(data: dict, columns: list[str]) -> list[str]:

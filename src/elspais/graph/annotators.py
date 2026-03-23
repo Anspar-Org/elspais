@@ -55,6 +55,7 @@ if TYPE_CHECKING:
     from elspais.graph import NodeKind
     from elspais.graph.federated import FederatedGraph
     from elspais.graph.GraphNode import GraphNode
+    from elspais.graph.metrics import RollupMetrics
     from elspais.utilities.git import GitChangeInfo
 
 
@@ -983,8 +984,6 @@ def annotate_coverage(graph: FederatedGraph) -> None:
 
         # Finalize metrics (computes aggregate coverage counts + implemented/uat_coverage dims)
         metrics.finalize()
-
-        uat_validated_all = uat_validated_direct_labels | uat_validated_indirect_labels
 
         # Populate the tested, verified, and uat_verified dimensions
         metrics.populate_test_dimensions(
