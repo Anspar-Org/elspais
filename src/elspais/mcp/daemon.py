@@ -202,6 +202,21 @@ def stop_daemon(repo_root: Path) -> bool:
     return True
 
 
+def _config_hash_stale(info: dict, repo_root: Path) -> bool:
+    """Check if the daemon's config hash is stale.
+
+    Returns True if the config has changed since the daemon started.
+    Returns False (keep daemon) if there is no hash to compare.
+    """
+    daemon_hash = info.get("config_hash")
+    if not daemon_hash:
+        return False  # Old daemon without hash, or hash computation failed
+    config_path = repo_root / ".elspais.toml"
+    if not config_path.is_file():
+        return False
+    return compute_config_hash(config_path) != daemon_hash
+
+
 def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
     """Return port of a running daemon, starting one if needed.
 
@@ -218,22 +233,11 @@ def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
         if daemon_version and daemon_version != __version__:
             stop_daemon(repo_root)
             # Fall through to start a fresh daemon
+        elif _config_hash_stale(info, repo_root):
+            stop_daemon(repo_root)
+            # Fall through to start a fresh daemon
         else:
-            # Config hash check: restart if config files have changed
-            daemon_hash = info.get("config_hash")
-            if daemon_hash:
-                config_path = repo_root / ".elspais.toml"
-                if config_path.is_file():
-                    current_hash = compute_config_hash(config_path)
-                    if current_hash != daemon_hash:
-                        stop_daemon(repo_root)
-                        # Fall through to start a fresh daemon
-                    else:
-                        return info["port"]
-                else:
-                    return info["port"]
-            else:
-                return info["port"]
+            return info["port"]
 
     if ttl_minutes is None:
         ttl_minutes = get_cli_ttl(repo_root)

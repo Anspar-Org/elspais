@@ -4,7 +4,7 @@
 """Tests that the checks run() function passes graph_source to output."""
 
 import argparse
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from elspais.commands import _engine as _engine_mod
 from elspais.commands.health import run

@@ -3,7 +3,6 @@
 
 """Tests for config hash computation in daemon lifecycle."""
 
-import json
 from pathlib import Path
 
 from elspais.mcp.daemon import compute_config_hash
