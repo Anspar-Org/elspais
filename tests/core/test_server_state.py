@@ -197,26 +197,63 @@ class TestAppStateDetached:
 
         state = AppState.from_config(repo_root=tmp_path)
         assert state.is_detached is False
-        assert state.originating_branch is None
-        assert state.originating_head is None
 
     def test_enter_detached_sets_fields(self, tmp_path):
         """enter_detached() records branch and commit, sets is_detached."""
         from elspais.server.state import AppState
 
         state = AppState.from_config(repo_root=tmp_path)
-        state.enter_detached("main", "abc1234")
+        state.enter_detached("root", "main", "abc1234")
         assert state.is_detached is True
-        assert state.originating_branch == "main"
-        assert state.originating_head == "abc1234"
 
     def test_leave_detached_clears_fields(self, tmp_path):
-        """leave_detached() resets all three detached-state fields."""
+        """leave_detached() resets detached state for the given repo."""
         from elspais.server.state import AppState
 
         state = AppState.from_config(repo_root=tmp_path)
-        state.enter_detached("feature/foo", "deadbeef")
-        state.leave_detached()
+        state.enter_detached("root", "feature/foo", "deadbeef")
+        state.leave_detached("root")
         assert state.is_detached is False
-        assert state.originating_branch is None
-        assert state.originating_head is None
+
+
+class TestPerRepoDetachedState:
+    """REQ-p00004-I: Per-repo detached HEAD tracking."""
+
+    def test_enter_detached_for_repo(self, tmp_path):
+        """enter_detached stores state keyed by repo name."""
+        state = self._make_state(tmp_path)
+        state.enter_detached("root", "feat-branch", "abc123")
+        assert state.is_repo_detached("root")
+        ds = state.get_detached_state("root")
+        assert ds.originating_branch == "feat-branch"
+        assert ds.originating_head == "abc123"
+
+    def test_leave_detached_for_repo(self, tmp_path):
+        """leave_detached clears state for specific repo."""
+        state = self._make_state(tmp_path)
+        state.enter_detached("root", "feat-branch", "abc123")
+        state.enter_detached("core", "feat-branch", "def456")
+        state.leave_detached("root")
+        assert not state.is_repo_detached("root")
+        assert state.is_repo_detached("core")
+
+    def test_is_any_detached(self, tmp_path):
+        """is_detached returns True if any repo is detached."""
+        state = self._make_state(tmp_path)
+        assert not state.is_detached
+        state.enter_detached("core", "feat-branch", "abc123")
+        assert state.is_detached
+
+    def test_get_detached_state_returns_none(self, tmp_path):
+        """get_detached_state returns None for non-detached repo."""
+        state = self._make_state(tmp_path)
+        assert state.get_detached_state("root") is None
+
+    @staticmethod
+    def _make_state(tmp_path):
+        """Create a minimal AppState for testing."""
+        from elspais.server.state import AppState
+        state = AppState.__new__(AppState)
+        state.repo_root = tmp_path
+        state._repo_detached = {}
+        return state
