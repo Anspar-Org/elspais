@@ -8,6 +8,8 @@
 #   - Unstaged src/tests changes (prevents partial commits)
 #   - Python code quality (ruff + black)
 #   - Markdown linting (markdownlint)
+#   - Unit/integration tests with coverage
+#   - elspais fix (regenerate INDEX.md, KNOWN_ISSUES.md)
 #
 # To install this hook:
 #   git config core.hooksPath .githooks
@@ -176,7 +178,27 @@ echo -e "${GREEN}Tests passed!${NC}"
 echo ""
 
 # =====================================================
-# 6. All Validations Passed
+# 6. elspais fix (regenerate INDEX.md, KNOWN_ISSUES.md)
+# =====================================================
+
+if command -v elspais &> /dev/null; then
+    echo -e "${BLUE}Running elspais fix...${NC}"
+    if elspais fix 2>&1; then
+        # Stage any regenerated files
+        git add -u spec/INDEX.md KNOWN_ISSUES.md 2>/dev/null || true
+        echo -e "${GREEN}elspais fix passed${NC}"
+    else
+        echo -e "${RED}elspais fix failed!${NC}"
+        exit 1
+    fi
+    echo ""
+else
+    echo -e "${YELLOW}WARNING: elspais not installed - skipping fix${NC}"
+    echo ""
+fi
+
+# =====================================================
+# 7. All Validations Passed
 # =====================================================
 
 echo -e "${GREEN}Pre-commit checks passed!${NC}"
