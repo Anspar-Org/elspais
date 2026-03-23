@@ -1944,6 +1944,68 @@ class TestMonorepoEligible:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _clean_git_env():
+    """Return a clean git env for subprocess calls in tests."""
+    import os
+
+    env = os.environ.copy()
+    env.pop("GIT_DIR", None)
+    env.pop("GIT_WORK_TREE", None)
+    env.pop("GIT_INDEX_FILE", None)
+    return env
+
+
+class TestSyncCommit:
+    """REQ-p00004-I: Sync commits keep repos aligned."""
+
+    # Implements: REQ-p00004-I
+    def test_create_sync_commit(self, tmp_path):
+        from elspais.utilities.git import create_sync_commit
+
+        env = _clean_git_env()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        spec = repo / "spec"
+        spec.mkdir()
+        subprocess.run(["git", "init", "-b", "main"], cwd=repo, env=env, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "t@t.com"], cwd=repo, env=env, capture_output=True
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "T"], cwd=repo, env=env, capture_output=True
+        )
+        (spec / "reqs.md").write_text("# REQ")
+        subprocess.run(["git", "add", "."], cwd=repo, env=env, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=repo, env=env, capture_output=True)
+        result = create_sync_commit(
+            repo, spec_dir="spec", aligned_with="root", message="sync checkpoint"
+        )
+        assert result["success"]
+        sync_file = spec / ".elspais-sync"
+        assert sync_file.exists()
+        content = sync_file.read_text()
+        assert "aligned with root" in content
+
+    # Implements: REQ-p00004-I
+    def test_remove_sync_file_before_real_commit(self, tmp_path):
+        from elspais.utilities.git import remove_sync_file
+
+        spec = tmp_path / "spec"
+        spec.mkdir()
+        sync_file = spec / ".elspais-sync"
+        sync_file.write_text("sync: old")
+        remove_sync_file(tmp_path, spec_dir="spec")
+        assert not sync_file.exists()
+
+    # Implements: REQ-p00004-I
+    def test_remove_sync_file_noop_if_missing(self, tmp_path):
+        from elspais.utilities.git import remove_sync_file
+
+        spec = tmp_path / "spec"
+        spec.mkdir()
+        remove_sync_file(tmp_path, spec_dir="spec")  # Should not raise
+
+
 class TestCheckDirtyRepos:
     """REQ-p00004-I: Dirty working tree detection across repos."""
 

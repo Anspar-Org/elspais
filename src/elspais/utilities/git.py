@@ -1731,6 +1731,55 @@ def check_dirty_repos(repos: list[tuple[str, Path]]) -> list[str]:
     return dirty
 
 
+# Implements: REQ-p00004-I
+def create_sync_commit(
+    repo_root: Path,
+    spec_dir: str = "spec",
+    aligned_with: str = "",
+    message: str = "sync checkpoint",
+) -> dict[str, Any]:
+    """Create a sync commit via .elspais-sync file.
+
+    Used in monorepo mode to keep repos without real changes aligned
+    with repos that had real commits.
+
+    Args:
+        repo_root: Path to repository root.
+        spec_dir: Spec directory relative to repo root.
+        aligned_with: Human-readable label for what this sync aligns with.
+        message: Commit message.
+
+    Returns:
+        dict with 'success' bool and optional 'error' string.
+    """
+    from datetime import datetime, timezone
+
+    env = _clean_git_env()
+    sync_path = repo_root / spec_dir / ".elspais-sync"
+    timestamp = datetime.now(timezone.utc).isoformat()
+    sync_path.write_text(f"sync: {timestamp} aligned with {aligned_with}\n")
+    subprocess.run(["git", "add", str(sync_path)], cwd=repo_root, env=env, capture_output=True)
+    rv = subprocess.run(
+        ["git", "commit", "-m", message], cwd=repo_root, env=env, capture_output=True, text=True
+    )
+    if rv.returncode != 0:
+        return {"success": False, "error": rv.stderr.strip()}
+    return {"success": True}
+
+
+# Implements: REQ-p00004-I
+def remove_sync_file(repo_root: Path, spec_dir: str = "spec") -> None:
+    """Remove .elspais-sync file if it exists (before real commits).
+
+    Args:
+        repo_root: Path to repository root.
+        spec_dir: Spec directory relative to repo root.
+    """
+    sync_path = repo_root / spec_dir / ".elspais-sync"
+    if sync_path.exists():
+        sync_path.unlink()
+
+
 __all__ = [
     "GitChangeInfo",
     "MovedRequirement",
@@ -1770,4 +1819,7 @@ __all__ = [
     "invalidate_ancestor_cache",
     # Dirty tree detection (REQ-p00004-I)
     "check_dirty_repos",
+    # Sync commit helpers (REQ-p00004-I)
+    "create_sync_commit",
+    "remove_sync_file",
 ]
