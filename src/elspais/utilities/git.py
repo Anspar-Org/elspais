@@ -1706,6 +1706,31 @@ def check_monorepo_eligible(
     return (len(reasons) == 0, reasons)
 
 
+# Implements: REQ-p00004-I
+def check_dirty_repos(repos: list[tuple[str, Path]]) -> list[str]:
+    """Check which repos have dirty working trees.
+
+    Args:
+        repos: List of (name, repo_root) pairs.
+
+    Returns:
+        List of repo names that have uncommitted changes.
+    """
+    env = _clean_git_env()
+    dirty: list[str] = []
+    for name, root in repos:
+        rv = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=root,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        if rv.returncode == 0 and rv.stdout.strip():
+            dirty.append(name)
+    return dirty
+
+
 __all__ = [
     "GitChangeInfo",
     "MovedRequirement",
@@ -1743,4 +1768,6 @@ __all__ = [
     # Monorepo eligibility (REQ-d00201-B)
     "check_monorepo_eligible",
     "invalidate_ancestor_cache",
+    # Dirty tree detection (REQ-p00004-I)
+    "check_dirty_repos",
 ]

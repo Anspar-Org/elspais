@@ -1937,3 +1937,57 @@ class TestMonorepoEligible:
         )
         assert eligible is True
         assert reasons == []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tests for check_dirty_repos
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestCheckDirtyRepos:
+    """REQ-p00004-I: Dirty working tree detection across repos."""
+
+    # Implements: REQ-p00004-I
+    def test_clean_repos(self, tmp_path):
+        """Clean repos return empty list."""
+        from elspais.utilities.git import _clean_git_env as _cge
+        from elspais.utilities.git import check_dirty_repos
+
+        env = _cge()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init", "-b", "main"], cwd=repo, env=env, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "t@t.com"], cwd=repo, env=env, capture_output=True
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "T"], cwd=repo, env=env, capture_output=True
+        )
+        (repo / "f.txt").write_text("x")
+        subprocess.run(["git", "add", "."], cwd=repo, env=env, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=repo, env=env, capture_output=True)
+        dirty = check_dirty_repos([("root", repo)])
+        assert dirty == []
+
+    # Implements: REQ-p00004-I
+    def test_dirty_repo_detected(self, tmp_path):
+        """Dirty repo is reported."""
+        from elspais.utilities.git import _clean_git_env as _cge
+        from elspais.utilities.git import check_dirty_repos
+
+        env = _cge()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init", "-b", "main"], cwd=repo, env=env, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "t@t.com"], cwd=repo, env=env, capture_output=True
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "T"], cwd=repo, env=env, capture_output=True
+        )
+        (repo / "f.txt").write_text("x")
+        subprocess.run(["git", "add", "."], cwd=repo, env=env, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=repo, env=env, capture_output=True)
+        (repo / "f.txt").write_text("modified")
+        dirty = check_dirty_repos([("root", repo)])
+        assert dirty == ["root"]

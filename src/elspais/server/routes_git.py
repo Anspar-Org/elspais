@@ -211,39 +211,23 @@ async def api_git_branches(request: Request) -> JSONResponse:
     from elspais.utilities.git import list_branches
 
     state = request.app.state.app_state
-    result = list_branches(state.repo_root)
+    repo_name = request.query_params.get("repo")
+    root = _resolve_repo_root(state, repo_name)
+    result = list_branches(root)
     return JSONResponse(result)
 
 
-async def api_git_checkout(request: Request) -> JSONResponse:
-    # Implements: REQ-p00004-I
-    """POST /api/git/checkout - Switch to an existing git branch."""
+def _checkout_single_repo(repo: Path, branch: str, is_remote: bool) -> dict:
+    """Checkout a branch in a single repo.
+
+    Tries local checkout first. For remote branches, also tries creating
+    a local tracking branch. Catches FileNotFoundError for missing git.
+    """
     import subprocess
 
     from elspais.utilities.git import _clean_git_env
 
-    state = request.app.state.app_state
-    data = await request.json()
-    branch = data.get("branch", "").strip()
-    is_remote = data.get("is_remote", False)
-
-    if not branch:
-        return JSONResponse({"success": False, "error": "branch name required"}, status_code=400)
-
-    # Refuse if in-memory mutations are pending
-    log = _get_mutation_log(state.graph, limit=1)
-    if log.get("count", 0) > 0:
-        return JSONResponse(
-            {
-                "success": False,
-                "error": "Save or revert changes before switching branches",
-            },
-            status_code=409,
-        )
-
     env = _clean_git_env()
-    repo = state.repo_root
-
     try:
         if is_remote:
             result = subprocess.run(
@@ -269,15 +253,70 @@ async def api_git_checkout(request: Request) -> JSONResponse:
                 capture_output=True,
                 text=True,
             )
-
         if result.returncode != 0:
-            return JSONResponse({"success": False, "error": result.stderr.strip()}, status_code=400)
-
-        state.leave_detached("root")
-        return JSONResponse({"success": True, "branch": branch})
-
+            return {"success": False, "error": result.stderr.strip()}
+        return {"success": True, "branch": branch}
     except FileNotFoundError:
-        return JSONResponse({"success": False, "error": "git not found"}, status_code=500)
+        return {"success": False, "error": "git not found"}
+
+
+async def api_git_checkout(request: Request) -> JSONResponse:
+    # Implements: REQ-p00004-I
+    """POST /api/git/checkout - Switch to an existing git branch (single or multi-repo)."""
+    from elspais.utilities.git import check_dirty_repos, invalidate_ancestor_cache
+
+    state = request.app.state.app_state
+    data = await request.json()
+    branch = data.get("branch", "").strip()
+    is_remote = data.get("is_remote", False)
+    monorepo = data.get("monorepo", False)
+    repo_name = data.get("repo")
+
+    if not branch:
+        return JSONResponse({"success": False, "error": "branch name required"}, status_code=400)
+
+    # Refuse if in-memory mutations are pending
+    log = _get_mutation_log(state.graph, limit=1)
+    if log.get("count", 0) > 0:
+        return JSONResponse(
+            {
+                "success": False,
+                "error": "Save or revert changes before switching branches",
+            },
+            status_code=409,
+        )
+
+    if monorepo:
+        entries = _iter_repo_entries(state)
+        repos = [(name, root) for name, root, _ in entries]
+        dirty = check_dirty_repos(repos)
+        if dirty:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": f"Dirty working trees in repos: {', '.join(dirty)}",
+                },
+                status_code=409,
+            )
+        results = []
+        for rname, root, _ in entries:
+            r = _checkout_single_repo(root, branch, is_remote)
+            r["repo"] = rname
+            results.append(r)
+            if r.get("success"):
+                state.leave_detached(rname)
+        invalidate_ancestor_cache()
+        all_ok = all(r.get("success") for r in results)
+        return JSONResponse({"success": all_ok, "results": results})
+    else:
+        root = _resolve_repo_root(state, repo_name)
+        result = _checkout_single_repo(root, branch, is_remote)
+        if result.get("success"):
+            effective_name = repo_name if repo_name else "root"
+            state.leave_detached(effective_name)
+            invalidate_ancestor_cache()
+        status_code = 200 if result.get("success") else 400
+        return JSONResponse(result, status_code=status_code)
 
 
 async def api_git_commits(request: Request) -> JSONResponse:
