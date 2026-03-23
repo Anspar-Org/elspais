@@ -6,7 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from elspais.commands.gaps import GapData, GapEntry, collect_gaps, render_gap_markdown, render_gap_text
+from elspais.commands.gaps import (
+    GapData,
+    GapEntry,
+    collect_gaps,
+    render_gap_markdown,
+    render_gap_text,
+)
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind  # noqa: N817
@@ -152,7 +158,9 @@ class TestRenderGapText:
     """Tests for render_gap_text()."""
 
     def test_uncovered_section(self) -> None:
-        data = GapData(uncovered=[GapEntry("REQ-p00001", "Login"), GapEntry("REQ-p00002", "Signup")])
+        data = GapData(uncovered=[
+            GapEntry("REQ-p00001", "Login"), GapEntry("REQ-p00002", "Signup"),
+        ])
         output = render_gap_text("uncovered", data)
         assert "UNCOVERED (no code refs)" in output
         assert "(2)" in output
@@ -199,7 +207,9 @@ class TestRenderGapText:
 
     def test_partial_gap_shows_assertions(self) -> None:
         """Partial gap (some assertions uncovered) shows assertion labels."""
-        data = GapData(uncovered=[GapEntry("REQ-p00001", "Login", ["REQ-p00001-C", "REQ-p00001-D"])])
+        data = GapData(uncovered=[
+            GapEntry("REQ-p00001", "Login", ["REQ-p00001-C", "REQ-p00001-D"]),
+        ])
         output = render_gap_text("uncovered", data)
         assert "REQ-p00001" in output
         assert "[C, D]" in output

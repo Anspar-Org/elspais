@@ -1,11 +1,8 @@
 # Verifies: REQ-d00215-A+B+C+D+E
 """Tests for _compute_code_tested annotator."""
 
-from elspais.graph import NodeKind
 from elspais.graph.annotators import annotate_coverage
-from elspais.graph.GraphNode import FileType, GraphNode
-from elspais.graph.metrics import CoverageDimension, RollupMetrics
-from elspais.graph.relations import Edge, EdgeKind
+from elspais.graph.metrics import RollupMetrics
 from tests.core.graph_test_helpers import (
     build_graph,
     make_code_ref,
@@ -124,7 +121,7 @@ class TestCodeTestedDeduplicatesOverlappingRanges:
         """Overlapping ranges are deduplicated in total count."""
         # First code ref: lines 10-15, second: lines 13-20
         # Union: lines 10-20 = 11 unique lines
-        line_cov = {i: 1 for i in range(10, 21)}  # all covered
+        line_cov = dict.fromkeys(range(10, 21), 1)  # all covered
 
         _, req_node = _build_req_with_code(
             impl_start=10,
@@ -145,7 +142,7 @@ class TestCodeTestedFullCoverage:
 
     def test_code_tested_full_coverage(self):
         """Full coverage yields full-indirect tier."""
-        line_cov = {i: 1 for i in range(10, 21)}
+        line_cov = dict.fromkeys(range(10, 21), 1)
         _, req_node = _build_req_with_code(
             impl_start=10,
             impl_end=20,
@@ -165,7 +162,7 @@ class TestCodeTestedHasFailuresAlwaysFalse:
 
     def test_code_tested_has_failures_always_false(self):
         """has_failures is always False for code_tested."""
-        line_cov = {i: 1 for i in range(10, 21)}
+        line_cov = dict.fromkeys(range(10, 21), 1)
         _, req_node = _build_req_with_code(
             impl_start=10,
             impl_end=20,

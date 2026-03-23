@@ -223,8 +223,8 @@ echo ""
 
 # Run ruff on entire src directory
 if command -v ruff &> /dev/null; then
-    echo "  Running ruff check src/..."
-    if ! ruff check src/elspais 2>&1; then
+    echo "  Running ruff check src/ tests/..."
+    if ! ruff check src/ tests/ 2>&1; then
         VALIDATION_FAILED=true
         echo -e "${RED}  ruff check failed${NC}"
     else
