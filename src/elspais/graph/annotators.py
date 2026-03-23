@@ -988,13 +988,13 @@ def annotate_coverage(graph: FederatedGraph) -> None:
 
         # Populate the tested, verified, and uat_verified dimensions
         metrics.populate_test_dimensions(
-            tested_direct=len(tested_labels),
-            tested_indirect=len(tested_labels | tested_indirect_labels),
-            verified_direct=len(validated_labels),
-            verified_indirect=len(validated_labels | validated_indirect_labels),
+            tested_direct_labels=tested_labels,
+            tested_indirect_labels=tested_indirect_labels,
+            verified_direct_labels=validated_labels,
+            verified_indirect_labels=validated_indirect_labels,
             verified_failures=has_failures,
-            uat_verified_direct=len(uat_validated_direct_labels),
-            uat_verified_indirect=len(uat_validated_all),
+            uat_verified_direct_labels=uat_validated_direct_labels,
+            uat_verified_indirect_labels=uat_validated_indirect_labels,
             uat_verified_failures=uat_has_failures,
         )
 

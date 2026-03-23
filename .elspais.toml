@@ -73,10 +73,12 @@ skip_dirs = ["fixtures"]
 reference_keyword = "Validates"
 
 [scanning.result]
+directories = [".results"]
 file_patterns = ["test-results.xml"]
 run_meta_file = "test-run-meta.json"
 
 [scanning.coverage]
+directories = [".results"]
 file_patterns = ["coverage.json"]
 
 # Validation rules

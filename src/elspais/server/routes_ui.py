@@ -93,7 +93,7 @@ async def index(request: Request):
             **viewer_cfg,
         }
 
-        return templates.TemplateResponse("trace_unified.html.j2", context)
+        return templates.TemplateResponse(request, "trace_unified.html.j2", context)
     except Exception:
         return JSONResponse(
             {"message": "trace_unified.html.j2 template not yet available"},

@@ -40,10 +40,8 @@ htmlcov/
 .coverage.*
 .cache
 nosetests.xml
-test-results.xml
-test-run-meta.json
-coverage.json
 coverage.xml
+.results/
 *.cover
 *.py,cover
 .hypothesis/

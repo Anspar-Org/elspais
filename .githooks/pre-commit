@@ -151,7 +151,32 @@ if [ -n "$MARKDOWN_FILES_CHANGED" ]; then
 fi
 
 # =====================================================
-# 5. All Validations Passed
+# 5. Unit/Integration Tests with Coverage
+# =====================================================
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+
+echo -e "${BLUE}Running unit/integration tests with coverage...${NC}"
+echo ""
+
+mkdir -p "$REPO_ROOT/.results"
+
+if ! pytest tests/ --tb=short -q \
+    --cov=src/elspais --cov-context=test --cov-report=json:"$REPO_ROOT/.results/coverage.json" --cov-report= 2>&1; then
+    echo ""
+    echo -e "${RED}Tests failed!${NC}"
+    echo "Fix the errors above before committing."
+    echo ""
+    echo "To bypass this check (NOT RECOMMENDED):"
+    echo "  git commit --no-verify"
+    exit 1
+fi
+
+echo -e "${GREEN}Tests passed!${NC}"
+echo ""
+
+# =====================================================
+# 6. All Validations Passed
 # =====================================================
 
 echo -e "${GREEN}Pre-commit checks passed!${NC}"

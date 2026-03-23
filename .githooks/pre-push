@@ -337,8 +337,10 @@ echo ""
 echo -e "${BLUE}Running full test suite...${NC}"
 echo ""
 
-if ! pytest tests/ --tb=short -q --junitxml="$REPO_ROOT/test-results.xml" \
-    --cov=src/elspais --cov-context=test --cov-report=json:"$REPO_ROOT/coverage.json" --cov-report= 2>&1; then
+mkdir -p "$REPO_ROOT/.results"
+
+if ! pytest tests/ -m "" --tb=short -q --junitxml="$REPO_ROOT/.results/test-results.xml" \
+    --cov=src/elspais --cov-context=test --cov-report=json:"$REPO_ROOT/.results/coverage.json" --cov-report= 2>&1; then
     VALIDATION_FAILED=true
     echo -e "${RED}Test suite failed!${NC}"
 else
@@ -348,7 +350,7 @@ fi
 # making it possible for elspais to link to individual results.
 python3 -c "
 import xml.etree.ElementTree as ET, sys
-f = '$REPO_ROOT/test-results.xml'
+f = '$REPO_ROOT/.results/test-results.xml'
 try:
     tree = ET.parse(f)
     ET.indent(tree, space='  ')

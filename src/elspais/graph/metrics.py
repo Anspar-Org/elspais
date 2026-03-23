@@ -71,6 +71,8 @@ class CoverageDimension:
     direct: int = 0
     indirect: int = 0
     has_failures: bool = False
+    direct_labels: set[str] = field(default_factory=set)
+    indirect_labels: set[str] = field(default_factory=set)
 
     @property
     def direct_pct(self) -> float:
@@ -189,6 +191,8 @@ class RollupMetrics:
             total=n,
             direct=len(impl_direct),
             indirect=len(impl_indirect),
+            direct_labels=set(impl_direct),
+            indirect_labels=set(impl_indirect),
         )
 
         # UAT Coverage: direct = assertion-targeted (UAT_EXPLICIT),
@@ -197,6 +201,8 @@ class RollupMetrics:
             total=n,
             direct=len(uat_explicit_labels),
             indirect=len(uat_all),
+            direct_labels=set(uat_explicit_labels),
+            indirect_labels=set(uat_all),
         )
 
         # tested, verified, uat_verified are populated by annotate_coverage()
@@ -206,33 +212,46 @@ class RollupMetrics:
     def populate_test_dimensions(
         self,
         *,
-        tested_direct: int,
-        tested_indirect: int,
-        verified_direct: int,
-        verified_indirect: int,
+        tested_direct_labels: set[str],
+        tested_indirect_labels: set[str],
+        verified_direct_labels: set[str],
+        verified_indirect_labels: set[str],
         verified_failures: bool,
-        uat_verified_direct: int,
-        uat_verified_indirect: int,
+        uat_verified_direct_labels: set[str],
+        uat_verified_indirect_labels: set[str],
         uat_verified_failures: bool,
     ) -> None:
         """Populate tested, verified, and uat_verified dimensions.
 
-        Called by annotate_coverage() after finalize() with the label-set
-        counts from the annotator's tracking variables.
+        Called by annotate_coverage() after finalize() with the label sets
+        from the annotator's tracking variables.
         """
         n = self.total_assertions
-        self.tested = CoverageDimension(total=n, direct=tested_direct, indirect=tested_indirect)
+        tested_all = tested_direct_labels | tested_indirect_labels
+        self.tested = CoverageDimension(
+            total=n,
+            direct=len(tested_direct_labels),
+            indirect=len(tested_all),
+            direct_labels=set(tested_direct_labels),
+            indirect_labels=set(tested_all),
+        )
+        verified_all = verified_direct_labels | verified_indirect_labels
         self.verified = CoverageDimension(
             total=n,
-            direct=verified_direct,
-            indirect=verified_indirect,
+            direct=len(verified_direct_labels),
+            indirect=len(verified_all),
             has_failures=verified_failures,
+            direct_labels=set(verified_direct_labels),
+            indirect_labels=set(verified_all),
         )
+        uat_all = uat_verified_direct_labels | uat_verified_indirect_labels
         self.uat_verified = CoverageDimension(
             total=n,
-            direct=uat_verified_direct,
-            indirect=uat_verified_indirect,
+            direct=len(uat_verified_direct_labels),
+            indirect=len(uat_all),
             has_failures=uat_verified_failures,
+            direct_labels=set(uat_verified_direct_labels),
+            indirect_labels=set(uat_all),
         )
 
 

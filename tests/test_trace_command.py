@@ -185,7 +185,7 @@ A. The implementation SHALL follow the spec.
         assert "Level" in header
         assert "Status" in header
         assert "Implemented" not in header
-        assert "Validated" not in header
+        assert "Tested" not in header
 
     # Implements: REQ-d00084-B
     def test_report_standard_has_default_columns(self, temp_spec_dir: Path, capsys):
@@ -204,18 +204,22 @@ A. The implementation SHALL follow the spec.
         assert result == 0
 
         content = capsys.readouterr().out
-        # Standard should have: ID, Title, Level, Status, Implemented, Validated
+        # Standard should have all coverage dimension columns
         header = content.split("\n")[0]
         assert "ID" in header
         assert "Title" in header
         assert "Level" in header
         assert "Status" in header
         assert "Implemented" in header
-        assert "Validated" in header
+        assert "Tested" in header
+        assert "Verified" in header
+        assert "UAT Coverage" in header
+        assert "UAT Verified" in header
+        assert "Code Tested" in header
 
     # Implements: REQ-d00084-B
     def test_report_full_has_all_columns(self, temp_spec_dir: Path, capsys):
-        """Test --preset full produces all columns including Passing."""
+        """Test --preset full produces all coverage dimension columns."""
         from elspais.commands import trace
 
         args = argparse.Namespace(
@@ -237,8 +241,11 @@ A. The implementation SHALL follow the spec.
         assert "Level" in header
         assert "Status" in header
         assert "Implemented" in header
-        assert "Validated" in header
-        assert "Passing" in header
+        assert "Tested" in header
+        assert "Verified" in header
+        assert "UAT Coverage" in header
+        assert "UAT Verified" in header
+        assert "Code Tested" in header
 
     # Implements: REQ-d00084-D
     def test_report_full_json_includes_coverage(self, temp_spec_dir: Path, capsys):
@@ -264,8 +271,11 @@ A. The implementation SHALL follow the spec.
         parent = next((r for r in data if r.get("id") == "REQ-p00001"), None)
         assert parent is not None
         assert "implemented" in parent
-        assert "validated" in parent
-        assert "passing" in parent
+        assert "tested" in parent
+        assert "verified" in parent
+        assert "uat_coverage" in parent
+        assert "uat_verified" in parent
+        assert "code_tested" in parent
 
     # Implements: REQ-d00084-B
     def test_report_minimal_json_excludes_coverage(self, temp_spec_dir: Path, capsys):
@@ -291,7 +301,7 @@ A. The implementation SHALL follow the spec.
         parent = next((r for r in data if r.get("id") == "REQ-p00001"), None)
         assert parent is not None
         assert "implemented" not in parent
-        assert "validated" not in parent
+        assert "tested" not in parent
 
     # Implements: REQ-d00084-B
     def test_report_invalid_preset_returns_error(self, temp_spec_dir: Path, capsys):
