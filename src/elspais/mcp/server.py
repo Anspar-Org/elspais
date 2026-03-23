@@ -5530,6 +5530,19 @@ def create_server(
     return mcp
 
 
+def _config_hash_for_daemon(working_dir: Path) -> str:
+    """Compute config hash for daemon.json, best-effort."""
+    try:
+        from elspais.mcp.daemon import compute_config_hash
+
+        config_path = working_dir / ".elspais.toml"
+        if config_path.is_file():
+            return compute_config_hash(config_path)
+    except Exception:
+        pass
+    return ""
+
+
 def run_server(
     working_dir: Path | None = None,
     transport: str = "stdio",
@@ -5597,6 +5610,7 @@ def run_server(
                         "repo_root": str(working_dir),
                         "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
                         "version": __version__,
+                        "config_hash": _config_hash_for_daemon(working_dir),
                     }
                 )
             )
