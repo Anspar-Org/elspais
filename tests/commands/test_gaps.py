@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from elspais.commands.gaps import GapData, collect_gaps, render_gap_markdown, render_gap_text
+from elspais.commands.gaps import GapData, GapEntry, collect_gaps, render_gap_markdown, render_gap_text
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind  # noqa: N817
@@ -50,14 +50,14 @@ class TestCollectGaps:
     def test_uncovered_finds_zero_coverage_reqs(self, gap_graph: FederatedGraph) -> None:
         """Both REQs have no code refs, so both appear in uncovered list."""
         data = collect_gaps(gap_graph, exclude_status=set())
-        ids = {item[0] for item in data.uncovered}
+        ids = {e.req_id for e in data.uncovered}
         assert "REQ-p00001" in ids
         assert "REQ-p00002" in ids
 
     def test_untested_finds_zero_test_reqs(self, gap_graph: FederatedGraph) -> None:
         """Both REQs have no tests, so both appear in untested list."""
         data = collect_gaps(gap_graph, exclude_status=set())
-        ids = {item[0] for item in data.untested}
+        ids = {e.req_id for e in data.untested}
         assert "REQ-p00001" in ids
         assert "REQ-p00002" in ids
 
@@ -79,7 +79,7 @@ class TestCollectGaps:
         graph = _make_graph(req)
 
         data = collect_gaps(graph, exclude_status=set())
-        ids = {item[0] for item in data.uncovered}
+        ids = {e.req_id for e in data.uncovered}
         assert "REQ-p00001" not in ids
 
     def test_tested_req_not_in_untested(self) -> None:
@@ -95,7 +95,7 @@ class TestCollectGaps:
         graph = _make_graph(req)
 
         data = collect_gaps(graph, exclude_status=set())
-        ids = {item[0] for item in data.untested}
+        ids = {e.req_id for e in data.untested}
         assert "REQ-p00001" not in ids
 
     def test_failing_test_collected(self) -> None:
@@ -140,7 +140,7 @@ class TestCollectGaps:
         graph = _make_graph(req_no_assert, req_with_assert)
 
         data = collect_gaps(graph, exclude_status=set())
-        ids = {item[0] for item in data.no_assertions}
+        ids = {e.req_id for e in data.no_assertions}
         assert "REQ-p00001" in ids
         assert "REQ-p00002" not in ids
 
@@ -152,7 +152,7 @@ class TestRenderGapText:
     """Tests for render_gap_text()."""
 
     def test_uncovered_section(self) -> None:
-        data = GapData(uncovered=[("REQ-p00001", "Login"), ("REQ-p00002", "Signup")])
+        data = GapData(uncovered=[GapEntry("REQ-p00001", "Login"), GapEntry("REQ-p00002", "Signup")])
         output = render_gap_text("uncovered", data)
         assert "UNCOVERED (no code refs)" in output
         assert "(2)" in output
@@ -171,38 +171,45 @@ class TestRenderGapText:
         assert "REQ-p00001" in output
 
     def test_untested_section(self) -> None:
-        data = GapData(untested=[("REQ-p00003", "Search")])
+        data = GapData(untested=[GapEntry("REQ-p00003", "Search")])
         output = render_gap_text("untested", data)
         assert "UNTESTED (no test coverage)" in output
         assert "(1)" in output
 
     def test_unvalidated_section(self) -> None:
-        data = GapData(unvalidated=[("REQ-p00004", "Payment")])
+        data = GapData(unvalidated=[GapEntry("REQ-p00004", "Payment")])
         output = render_gap_text("unvalidated", data)
         assert "UNVALIDATED (no UAT coverage)" in output
 
     def test_no_assertions_section(self) -> None:
         # Implements: REQ-d00204
         """no_assertions gap type renders with NOT TESTABLE label."""
-        data = GapData(no_assertions=[("REQ-p00005", "No Asserts")])
+        data = GapData(no_assertions=[GapEntry("REQ-p00005", "No Asserts")])
         output = render_gap_text("no_assertions", data)
         assert "NOT TESTABLE (no assertions)" in output
         assert "(1)" in output
         assert "REQ-p00005" in output
 
     def test_sorted_output(self) -> None:
-        data = GapData(uncovered=[("REQ-p00002", "B"), ("REQ-p00001", "A")])
+        data = GapData(uncovered=[GapEntry("REQ-p00002", "B"), GapEntry("REQ-p00001", "A")])
         output = render_gap_text("uncovered", data)
         pos_a = output.index("REQ-p00001")
         pos_b = output.index("REQ-p00002")
         assert pos_a < pos_b
+
+    def test_partial_gap_shows_assertions(self) -> None:
+        """Partial gap (some assertions uncovered) shows assertion labels."""
+        data = GapData(uncovered=[GapEntry("REQ-p00001", "Login", ["REQ-p00001-C", "REQ-p00001-D"])])
+        output = render_gap_text("uncovered", data)
+        assert "REQ-p00001" in output
+        assert "[C, D]" in output
 
 
 class TestRenderGapMarkdown:
     """Tests for render_gap_markdown()."""
 
     def test_uncovered_section(self) -> None:
-        data = GapData(uncovered=[("REQ-p00001", "Login")])
+        data = GapData(uncovered=[GapEntry("REQ-p00001", "Login")])
         output = render_gap_markdown("uncovered", data)
         assert "## UNCOVERED" in output
         assert "| REQ-p00001" in output
@@ -220,7 +227,7 @@ class TestRenderGapMarkdown:
         assert "| REQ-p00001 | test | Login |" in output
 
     def test_markdown_table_format(self) -> None:
-        data = GapData(uncovered=[("REQ-p00001", "Login")])
+        data = GapData(uncovered=[GapEntry("REQ-p00001", "Login")])
         output = render_gap_markdown("uncovered", data)
         lines = output.strip().split("\n")
         # Header, separator, data row
