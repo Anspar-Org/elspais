@@ -45,16 +45,24 @@
 - must support selecting independent branches for each TraceGrpah (separate repo)
 - but when making a new branch, it can apply to all repos (as a way to keep them in-sync)
 
-[ ] feature : defined terms
-- it might be useful to use *defined terms* that can be collected and cross referenced, index and glossary-style
-- need a syntax for the *term* and for the definition. e.g.
-- *defined term* means a phrase with a specific definition in the context of these requirements.
-- Other uses: collecting all references to notifications, so we can create a catalog of all defined notifications.
-- collecting all instances of questionnaires, as in _HHT QoL_ is a short *Questionnaire* that asertains quality of life impact.
-- _defined term_ is how a term is defined. More than one instance: error, warning, override, or concat? 
-- *defined term* is how it is referenced. 
-- will need to generate an index and glossary file
-- rename INDEX to CATALOG?
+[ ] feature : defined terms (v1)
+- definition list syntax: `Term\n: definition text\n: Collection: true`
+- definitions can appear anywhere in spec files; parser collects them all
+- duplicate definitions (same term, two locations) = error by default (configurable)
+- glossary generation: `spec/_generated/glossary.md`
+- term index generation: `spec/_generated/index.md` (term + all marked-up reference sites)
+- collection manifests: `spec/_generated/collections/<term>.md`
+- health check: flag unmarked usages of defined terms in requirement/assertion text
+- CLI: `elspais glossary`, `elspais term-index`, wired into `elspais fix`
+- `--format` parameter (markdown first, JSON next)
+- references use normal *italic* or **bold** markup; matched against glossary
+
+[ ] feature : defined terms (deferred)
+- viewer: hyperlinks and hover text for defined terms in requirement cards
+- code file scanning for term references (.dart, .py, etc.)
+- MCP tools for term lookup and cross-reference queries
+- plural/inflection matching in the unmarked-usage health check
+- term aliasing (multiple surface forms mapping to one definition)
 
 
 
