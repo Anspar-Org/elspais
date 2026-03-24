@@ -632,3 +632,72 @@ class TestRenderRoundTrip:
             f"Line count mismatch: original={len(original_lines)}, "
             f"rendered={len(rendered_lines)}"
         )
+
+    # Implements: REQ-d00131-I
+    def test_render_roundtrip_assertion_sub_headings(self, tmp_path):
+        """REQ-d00131-B: Assertion sub-headings (*italic*) survive round-trip."""
+        from elspais.graph.factory import build_graph
+        from elspais.graph.render import render_file
+
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        (tmp_path / ".elspais.toml").write_text(
+            "version = 4\n"
+            '[project]\nname = "test"\nnamespace = "REQ"\n'
+            '[levels.prd]\nrank = 1\nletter = "p"\n'
+            '[id-patterns]\ncanonical = "{namespace}-{level.letter}{component}"\n'
+            '[id-patterns.component]\nstyle = "numeric"\ndigits = 5\n'
+            "leading_zeros = true\n"
+            '[id-patterns.assertions]\nlabel_style = "uppercase"\nmax_count = 26\n'
+            '[scanning.spec]\ndirectories = ["spec"]\n'
+            "[rules.format]\nrequire_hash = true\nrequire_assertions = true\n"
+        )
+        content = (
+            "## REQ-p00001: Platform Features\n"
+            "\n"
+            "**Level**: prd | **Status**: Active\n"
+            "\n"
+            "## Assertions\n"
+            "\n"
+            "A. SHALL provide feature X.\n"
+            "\n"
+            "B. SHALL provide feature Y.\n"
+            "\n"
+            "*Core Functionality*\n"
+            "\n"
+            "C. SHALL enable core operations.\n"
+            "\n"
+            "D. SHALL support offline mode.\n"
+            "\n"
+            "**Data Management**\n"
+            "\n"
+            "E. SHALL store data locally.\n"
+            "\n"
+            "*End* *Platform Features* | **Hash**: placeholder\n"
+        )
+        (spec_dir / "test.md").write_text(content)
+        graph = build_graph(repo_root=tmp_path)
+
+        # Find FILE node
+        file_node = None
+        for root in graph.iter_roots(NodeKind.FILE):
+            rel_path = root.get_field("relative_path")
+            if rel_path and rel_path.endswith("test.md"):
+                file_node = root
+                break
+        assert file_node is not None
+
+        rendered = render_file(file_node)
+
+        # The sub-headings must appear in their original format
+        assert "*Core Functionality*" in rendered, (
+            f"Italic sub-heading not preserved.\nRendered:\n{rendered}"
+        )
+        assert "**Data Management**" in rendered, (
+            f"Bold sub-heading not preserved.\nRendered:\n{rendered}"
+        )
+        # Must NOT appear as ## headings
+        assert "## Core Functionality" not in rendered
+        assert "## Data Management" not in rendered
+        assert "### Core Functionality" not in rendered
+        assert "### Data Management" not in rendered

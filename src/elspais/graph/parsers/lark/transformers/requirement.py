@@ -172,7 +172,10 @@ class RequirementTransformer:
                 end_line = token.line  # type: ignore[attr-defined]
 
             elif child.data == "assertion_block":
-                assertions = self._extract_assertions(child, header_line)
+                assertions, sub_heading_sections = self._extract_assertions(
+                    child, header_line
+                )
+                sections.extend(sub_heading_sections)
                 end_line = self._last_line(child)
 
             elif child.data == "changelog_block":
@@ -295,15 +298,47 @@ class RequirementTransformer:
     # Assertion extraction from pre-classified tokens
     # ------------------------------------------------------------------
 
-    def _extract_assertions(self, node: Tree, req_start_line: int) -> list[dict[str, Any]]:
-        """Extract assertions from an assertions_section tree node."""
+    def _extract_assertions(
+        self, node: Tree, req_start_line: int
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Extract assertions and sub-heading sections from an assertion block.
+
+        Returns:
+            (assertions, sub_heading_sections) where sub_heading_sections are
+            inline labels like ``*Core Functionality*`` stored as section dicts
+            with ``heading_style`` preserving the original formatting.
+        """
         assertions: list[dict[str, Any]] = []
+        sub_sections: list[dict[str, Any]] = []
         for child in node.children:
             if isinstance(child, Tree) and child.data == "assertion":
                 assertion = self._extract_single_assertion(child)
                 if assertion:
                     assertions.append(assertion)
-        return assertions
+            elif isinstance(child, Tree) and child.data == "assertion_sub_heading":
+                token = child.children[0]  # ASSERT_SUB_HDR
+                raw_text = str(token).strip()
+                line_num = token.line  # type: ignore[attr-defined]
+                # Determine style and strip decoration to get heading text
+                if raw_text.startswith("**") and raw_text.endswith("**"):
+                    heading_style = "**"
+                    heading_text = raw_text[2:-2].strip()
+                elif raw_text.startswith("*") and raw_text.endswith("*"):
+                    heading_style = "*"
+                    heading_text = raw_text[1:-1].strip()
+                elif raw_text.startswith("_") and raw_text.endswith("_"):
+                    heading_style = "_"
+                    heading_text = raw_text[1:-1].strip()
+                else:
+                    heading_style = "*"
+                    heading_text = raw_text
+                sub_sections.append({
+                    "heading": heading_text,
+                    "content": "",
+                    "line": line_num,
+                    "heading_style": heading_style,
+                })
+        return assertions, sub_sections
 
     def _extract_single_assertion(self, node: Tree) -> dict[str, Any] | None:
         """Extract a single assertion (entry + continuation lines)."""

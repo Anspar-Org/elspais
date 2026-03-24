@@ -2711,6 +2711,9 @@ class GraphBuilder:
                 "parse_line": section_line,
                 "parse_end_line": None,
             }
+            # Preserve heading style for assertion sub-headings (* ** _)
+            if "heading_style" in section:
+                section_node._content["heading_style"] = section["heading_style"]
             self._nodes[section_id] = section_node
             children_with_lines.append((section_line, section_node))
 
