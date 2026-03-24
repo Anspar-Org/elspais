@@ -1,4 +1,5 @@
 # Implements: REQ-d00224-A+B+C+D
+# Implements: REQ-d00225-A+B
 """Glossary and term index generators for defined terms.
 
 Produces glossary, term index, and collection manifest files in
@@ -7,8 +8,10 @@ markdown or JSON format from a TermDictionary.
 
 from __future__ import annotations
 
+import argparse
 import json
 from collections import defaultdict
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -155,3 +158,89 @@ def generate_collection_manifest(entry: TermEntry, format: str = "markdown") -> 
         lines.append("")
 
     return "\n".join(lines)
+
+
+# Implements: REQ-d00225-B
+def write_term_outputs(
+    td: TermDictionary,
+    output_dir: str | Path,
+    format: str = "markdown",
+) -> list[str]:
+    """Write glossary, term index, and collection manifests to output_dir.
+
+    Returns:
+        List of generated file paths.
+    """
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    generated: list[str] = []
+
+    ext = ".json" if format == "json" else ".md"
+
+    # Glossary
+    glossary_path = out / f"glossary{ext}"
+    glossary_path.write_text(generate_glossary(td, format=format))
+    generated.append(str(glossary_path))
+
+    # Term index
+    index_path = out / f"term-index{ext}"
+    index_path.write_text(generate_term_index(td, format=format))
+    generated.append(str(index_path))
+
+    # Collection manifests
+    collections_dir = out / "collections"
+    for entry in td.iter_collections():
+        collections_dir.mkdir(parents=True, exist_ok=True)
+        slug = entry.term.lower().replace(" ", "-")
+        manifest_path = collections_dir / f"{slug}{ext}"
+        manifest_path.write_text(generate_collection_manifest(entry, format=format))
+        generated.append(str(manifest_path))
+
+    return generated
+
+
+# Implements: REQ-d00225-A
+def run(args: argparse.Namespace) -> int:
+    """Run glossary or term-index CLI command."""
+    from elspais.commands import _engine
+
+    def _compute(graph, config, params):  # type: ignore
+        td = graph._terms if hasattr(graph, "_terms") else None
+        if not td:
+            # Try root repo graph
+            for entry in graph._repos.values():
+                if entry.graph and hasattr(entry.graph, "_terms"):
+                    td = entry.graph._terms
+                    break
+        if td is None:
+            return {"error": "No terms found in graph"}
+
+        fmt = params.get("format", "markdown")
+        output_dir = params.get("output_dir") or config.get("terms", {}).get(
+            "output_dir", "spec/_generated"
+        )
+
+        if params.get("command") == "glossary":
+            content = generate_glossary(td, format=fmt)
+            print(content)
+        else:
+            content = generate_term_index(td, format=fmt)
+            print(content)
+
+        return {"success": True}
+
+    params: dict[str, str] = {
+        "command": getattr(args, "command", "glossary"),
+        "format": getattr(args, "format", "markdown"),
+    }
+    output_dir = getattr(args, "output_dir", None)
+    if output_dir:
+        params["output_dir"] = output_dir
+
+    _engine.call(
+        f"/api/run/{params['command']}",
+        params,
+        _compute,
+        config_path=getattr(args, "config", None),
+    )
+    return 0

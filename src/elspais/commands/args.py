@@ -246,6 +246,32 @@ class FixArgs:
 
 
 # ---------------------------------------------------------------------------
+# Glossary and Term Index commands
+# Implements: REQ-d00225-A
+# ---------------------------------------------------------------------------
+@dataclasses.dataclass
+class GlossaryArgs:
+    """Generate glossary from defined terms."""
+
+    format: Literal["markdown", "json"] = "markdown"
+    """Output format."""
+
+    output_dir: str | None = None
+    """Output directory (overrides [terms] output_dir config)."""
+
+
+@dataclasses.dataclass
+class TermIndexArgs:
+    """Generate term index and collection manifests from defined terms."""
+
+    format: Literal["markdown", "json"] = "markdown"
+    """Output format."""
+
+    output_dir: str | None = None
+    """Output directory (overrides [terms] output_dir config)."""
+
+
+# ---------------------------------------------------------------------------
 # Summary command
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
@@ -866,6 +892,8 @@ Command = (
     | Annotated[McpArgs, tyro.conf.subcommand("mcp")]
     | Annotated[LinkArgs, tyro.conf.subcommand("link")]
     | Annotated[CompletionArgs, tyro.conf.subcommand("completion")]
+    | Annotated[GlossaryArgs, tyro.conf.subcommand("glossary")]
+    | Annotated[TermIndexArgs, tyro.conf.subcommand("term-index")]
 )
 
 
@@ -916,6 +944,8 @@ COMMAND_GROUPS: dict[str, str] = {
     "edit": "Authoring",
     "example": "Authoring",
     "link": "Authoring",
+    "glossary": "Authoring",
+    "term-index": "Authoring",
     "viewer": "Viewing",
     "graph": "Viewing",
     "init": "Configuration",

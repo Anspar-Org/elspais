@@ -277,3 +277,15 @@ C. `generate_collection_manifest()` SHALL produce a standalone manifest file per
 D. All generated files SHALL include an auto-generated header comment. Both `--format markdown` and `--format json` SHALL be supported.
 
 *End* *Glossary and Term Index Generators* | **Hash**: f2da30fb
+
+## REQ-d00225: CLI Registration for Glossary and Term Index
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. `GlossaryArgs` and `TermIndexArgs` dataclasses SHALL be defined in `commands/args.py` with `format` and `output_dir` fields. They SHALL be registered in the `Command` union and `_CMD_MAP`.
+
+B. `elspais fix` SHALL call glossary and term-index generation after existing fix operations when the graph has defined terms.
+
+*End* *CLI Registration for Glossary and Term Index* | **Hash**: d18fc2c9

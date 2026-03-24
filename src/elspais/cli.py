@@ -61,6 +61,7 @@ from elspais.commands.args import (
     FixArgs,
     GapsArgs,
     GlobalArgs,
+    GlossaryArgs,
     GraphArgs,
     InitArgs,
     InstallArgs,
@@ -76,6 +77,7 @@ from elspais.commands.args import (
     RulesShowArgs,
     SearchArgs,
     SummaryArgs,
+    TermIndexArgs,
     TraceArgs,
     UncoveredArgs,
     UninstallArgs,
@@ -147,6 +149,8 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
         McpArgs: "mcp",
         LinkArgs: "link",
         CompletionArgs: "completion",
+        GlossaryArgs: "glossary",
+        TermIndexArgs: "term-index",
     }
     ns.command = _CMD_MAP.get(type(cmd), "")
 
@@ -424,6 +428,10 @@ def main(argv: list[str] | None = None) -> int:
             return install_cmd.run_uninstall(args)
         elif args.command == "completion":
             return completion.run(args)
+        elif args.command in ("glossary", "term-index"):
+            from elspais.commands import glossary_cmd
+
+            return glossary_cmd.run(args)
         else:
             _print_help()
             return 1

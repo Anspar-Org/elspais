@@ -55,6 +55,10 @@ def run(args: argparse.Namespace) -> int:
     # Fix stale INDEX.md if present
     _fix_index(args, dry_run)
 
+    # Implements: REQ-d00225-B
+    # Generate glossary and term index if terms are defined
+    _fix_terms(args, dry_run)
+
     if dry_run:
         return 0
 
@@ -348,3 +352,47 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
     )
 
     _regenerate_index(graph, all_spec_dirs, args)
+
+
+# Implements: REQ-d00225-B
+def _fix_terms(args: argparse.Namespace, dry_run: bool) -> None:
+    """Generate glossary and term index if terms are defined."""
+    from elspais.config import get_config
+    from elspais.graph.factory import build_graph
+
+    config_path = getattr(args, "config", None)
+    spec_dir = getattr(args, "spec_dir", None)
+    config = get_config(config_path)
+    terms_config = config.get("terms", {})
+    output_dir = terms_config.get("output_dir", "spec/_generated")
+
+    graph = build_graph(
+        spec_dirs=[spec_dir] if spec_dir else None,
+        config_path=config_path,
+        scan_code=False,
+        scan_tests=False,
+    )
+
+    # Get terms from the graph
+    td = None
+    if hasattr(graph, "_terms"):
+        td = graph._terms
+    else:
+        # FederatedGraph — check root repo
+        for entry in graph._repos.values():
+            if entry.graph and hasattr(entry.graph, "_terms"):
+                td = entry.graph._terms
+                break
+
+    if td is None or len(td) == 0:
+        return
+
+    if dry_run:
+        print(f"Would generate glossary and term index in {output_dir}")
+        return
+
+    from elspais.commands.glossary_cmd import write_term_outputs
+
+    generated = write_term_outputs(td, output_dir)
+    for path in generated:
+        print(f"Generated: {path}")
