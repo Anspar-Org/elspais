@@ -77,6 +77,24 @@ def _build_daemon_source(port: int) -> dict[str, Any]:
     return source
 
 
+def _server_version_ok(port: int) -> bool:
+    """Check if a server's elspais version matches the current package."""
+    import json
+    from urllib.request import urlopen
+
+    from elspais import __version__
+
+    try:
+        with urlopen(f"http://127.0.0.1:{port}/api/status", timeout=2) as resp:
+            data = json.loads(resp.read())
+            server_version = data.get("version")
+            if server_version and server_version != __version__:
+                return False
+            return True
+    except Exception:
+        return False
+
+
 def _try_daemon(
     endpoint: str,
     params: dict[str, str],
@@ -89,10 +107,11 @@ def _try_daemon(
 
     _VIEWER_PORT = 5001
 
-    # 1. Try viewer
-    result = _try_port(_VIEWER_PORT, endpoint, params, "GET")
-    if result is not None:
-        return result, {"type": "viewer", "port": _VIEWER_PORT}
+    # 1. Try viewer (with version check)
+    if _server_version_ok(_VIEWER_PORT):
+        result = _try_port(_VIEWER_PORT, endpoint, params, "GET")
+        if result is not None:
+            return result, {"type": "viewer", "port": _VIEWER_PORT}
 
     # 2. Try existing daemon
     daemon_port = _get_daemon_port()

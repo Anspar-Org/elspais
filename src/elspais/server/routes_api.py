@@ -225,8 +225,11 @@ def _compute_link_data(
 
 async def api_status(request: Request) -> JSONResponse:
     """GET /api/status - Graph status with federation repo info."""
+    from elspais import __version__
+
     state = _st(request)
     result = _get_graph_status(state.graph)
+    result["version"] = __version__
     # Implements: REQ-d00206-C
     # Include federation repo metadata from iter_repos()
     graph = state.graph
