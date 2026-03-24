@@ -401,10 +401,7 @@ class TestGitStatusSummary:
 
     def test_REQ_p00004_C_clean_feature_branch(self, tmp_path):
         """On a clean feature branch with no remote divergence."""
-        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
-        subprocess.run(
-            ["git", "checkout", "-b", "main"], cwd=tmp_path, capture_output=True, check=True
-        )
+        subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
         subprocess.run(
             ["git", "config", "user.email", "test@test.com"],
             cwd=tmp_path,
@@ -439,10 +436,7 @@ class TestGitStatusSummary:
 
     def test_REQ_p00004_C_main_branch_dirty_spec(self, tmp_path):
         """On main with modified spec files."""
-        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
-        subprocess.run(
-            ["git", "checkout", "-b", "main"], cwd=tmp_path, capture_output=True, check=True
-        )
+        subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
         subprocess.run(
             ["git", "config", "user.email", "test@test.com"],
             cwd=tmp_path,
@@ -472,10 +466,7 @@ class TestGitStatusSummary:
 
     def test_REQ_p00004_C_non_spec_dirty_excluded(self, tmp_path):
         """Dirty files outside spec/ are excluded from dirty_spec_files."""
-        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
-        subprocess.run(
-            ["git", "checkout", "-b", "main"], cwd=tmp_path, capture_output=True, check=True
-        )
+        subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
         subprocess.run(
             ["git", "config", "user.email", "test@test.com"],
             cwd=tmp_path,
@@ -505,8 +496,7 @@ class TestGitStatusSummary:
 
 def _init_git_repo(tmp_path: Path) -> None:
     """Helper: init a git repo with one commit so branches can be created."""
-    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
-    subprocess.run(["git", "checkout", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
     subprocess.run(
         ["git", "config", "user.email", "test@test.com"],
         cwd=tmp_path,
@@ -1451,8 +1441,7 @@ class TestCheckoutBranch:
 
 def _init_git_repo_with_commit(tmp_path: Path, spec: bool = True) -> None:
     """Init a fresh git repo with one commit (and optional spec dir)."""
-    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
-    subprocess.run(["git", "checkout", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
     subprocess.run(
         ["git", "config", "user.email", "test@test.com"],
         cwd=tmp_path,
@@ -1520,7 +1509,7 @@ class TestListCommits:
     # Implements: REQ-p00004-E
     def test_empty_repo_returns_empty_list(self, tmp_path):
         """Returns [] on a repo with no commits."""
-        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
 
         commits = list_commits(tmp_path)
 
@@ -1629,7 +1618,7 @@ class TestCommitSpecFiles:
     # Implements: REQ-p00004-E
     def test_refuses_on_master_branch(self, tmp_path):
         """Refuses to commit on the master branch."""
-        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
         subprocess.run(
             ["git", "checkout", "-b", "master"], cwd=tmp_path, capture_output=True, check=True
         )
@@ -1834,7 +1823,7 @@ def _make_repo(tmp_path: Path, name: str, branch: str, n_commits: int = 1) -> Pa
     env["GIT_AUTHOR_EMAIL"] = "test@test.com"
     env["GIT_COMMITTER_NAME"] = "Test"
     env["GIT_COMMITTER_EMAIL"] = "test@test.com"
-    subprocess.run(["git", "init"], cwd=repo, capture_output=True, check=True, env=env)
+    subprocess.run(["git", "init", "-b", "main"], cwd=repo, capture_output=True, check=True, env=env)
     subprocess.run(
         ["git", "checkout", "-b", branch], cwd=repo, capture_output=True, check=True, env=env
     )
