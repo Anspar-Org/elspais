@@ -289,7 +289,12 @@ def _column_headers() -> dict[str, str]:
 
 # The 6 coverage dimension column keys
 _COVERAGE_COLUMNS = [
-    "implemented", "tested", "verified", "uat_coverage", "uat_verified", "code_tested",
+    "implemented",
+    "tested",
+    "verified",
+    "uat_coverage",
+    "uat_verified",
+    "code_tested",
 ]
 
 

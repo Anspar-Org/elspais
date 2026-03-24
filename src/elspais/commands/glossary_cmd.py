@@ -93,10 +93,12 @@ def generate_term_index(td: TermDictionary, format: str = "markdown") -> str:
             refs_by_ns: dict[str, list[str]] = defaultdict(list)
             for ref in entry.references:
                 refs_by_ns[ref.namespace].append(ref.node_id)
-            data.append({
-                "term": entry.term,
-                "references": dict(refs_by_ns),
-            })
+            data.append(
+                {
+                    "term": entry.term,
+                    "references": dict(refs_by_ns),
+                }
+            )
         return json.dumps(data, indent=2)
 
     # Markdown format

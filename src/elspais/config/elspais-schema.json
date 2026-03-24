@@ -60,6 +60,38 @@
       "title": "AssociateEntryConfig",
       "type": "object"
     },
+    "AssociatedPatternConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "position": {
+          "default": "after_prefix",
+          "title": "Position",
+          "type": "string"
+        },
+        "format": {
+          "default": "uppercase",
+          "title": "Format",
+          "type": "string"
+        },
+        "length": {
+          "default": 3,
+          "title": "Length",
+          "type": "integer"
+        },
+        "separator": {
+          "default": "-",
+          "title": "Separator",
+          "type": "string"
+        }
+      },
+      "title": "AssociatedPatternConfig",
+      "type": "object"
+    },
     "ChangelogConfig": {
       "additionalProperties": false,
       "properties": {
@@ -542,6 +574,9 @@
         },
         "assertions": {
           "$ref": "#/$defs/AssertionConfig"
+        },
+        "associated": {
+          "$ref": "#/$defs/AssociatedPatternConfig"
         },
         "separators": {
           "items": {

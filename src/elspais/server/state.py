@@ -15,6 +15,7 @@ from typing import Any
 @dataclass
 class DetachedState:
     """Tracks rewind state for a single repo."""
+
     originating_branch: str
     originating_head: str
 

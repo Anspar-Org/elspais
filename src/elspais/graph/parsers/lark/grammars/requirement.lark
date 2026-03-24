@@ -132,7 +132,7 @@ remainder_line: TEXT _NL
 
 // --- Structural markers (highest priority) ---
 
-REQ_HEADER.10: /#{1,6}[ \t]+__NAMESPACE__-(?:__TYPE_PATTERN__)__DIGITS_PATTERN__:[ \t]+[^\n]+/
+REQ_HEADER.10: /#{1,6}[ \t]+__ID_PATTERN__:[ \t]+[^\n]+/
 JNY_HEADER.10: /#{1,6}[ \t]+JNY-[A-Za-z0-9-]+:[ \t]+[^\n]+/
 
 END_MARKER.9: /\*End\*[ \t]+\*(?!JNY-)[^*]+\*[^\n]*/

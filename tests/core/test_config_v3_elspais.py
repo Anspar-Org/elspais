@@ -133,9 +133,11 @@ class TestIdPatternsConfigChanges:
         """IdPatternsConfig does NOT have a 'types' field."""
         assert "types" not in IdPatternsConfig.model_fields
 
-    def test_REQ_d00212_G_no_associated_field(self):
-        """IdPatternsConfig does NOT have an 'associated' field."""
-        assert "associated" not in IdPatternsConfig.model_fields
+    def test_REQ_d00212_G_has_associated_field(self):
+        """IdPatternsConfig has an 'associated' field with defaults."""
+        assert "associated" in IdPatternsConfig.model_fields
+        cfg = IdPatternsConfig()
+        assert cfg.associated.enabled is False
 
     def test_REQ_d00212_G_canonical_uses_level_letter(self):
         """canonical default uses {level.letter} not {type.letter}."""

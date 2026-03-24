@@ -3331,9 +3331,7 @@ def _get_assertion_code_map(
     }
 
 
-def _get_assertion_refines_map(
-    graph: FederatedGraph, req_id: str
-) -> dict[str, Any]:
+def _get_assertion_refines_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     """Build per-assertion refines map for a requirement.
 
     REFINES edges target REQUIREMENT nodes (not CODE). Each entry contains
@@ -3367,8 +3365,10 @@ def _get_assertion_refines_map(
     seen_per_assertion: dict[str, set[str]] = {label: set() for _, label in assertions}
 
     for req_node, labels in _iter_assertion_coverage(
-        node, NodeKind.REQUIREMENT,
-        edge_kinds={EdgeKind.REFINES}, direct_only=True,
+        node,
+        NodeKind.REQUIREMENT,
+        edge_kinds={EdgeKind.REFINES},
+        direct_only=True,
     ):
         info = {
             "id": req_node.id,

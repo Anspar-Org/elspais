@@ -30,12 +30,21 @@ class AssertionConfig(_StrictModel):
     multi_separator: str | None = None
 
 
+class AssociatedPatternConfig(_StrictModel):
+    enabled: bool = False
+    position: str = "after_prefix"
+    format: str = "uppercase"
+    length: int = 3
+    separator: str = "-"
+
+
 # Implements: REQ-d00212-G
 class IdPatternsConfig(_StrictModel):
     canonical: str = "{namespace}-{level.letter}{component}"
     aliases: dict[str, str] = Field(default_factory=lambda: {"short": "{level.letter}{component}"})
     component: ComponentConfig = Field(default_factory=ComponentConfig)
     assertions: AssertionConfig = Field(default_factory=AssertionConfig)
+    associated: AssociatedPatternConfig = Field(default_factory=AssociatedPatternConfig)
     separators: list[str] = Field(default_factory=lambda: ["-", "_"])
     prefix_optional: bool = False
 

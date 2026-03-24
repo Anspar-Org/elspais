@@ -147,9 +147,9 @@ def check_config_pattern_tokens(config: dict[str, Any]) -> HealthCheck:
 
     typed_config = _validate_config(config)
     template = typed_config.id_patterns.canonical
-    valid_tokens = {"{namespace}", "{level}", "{component}"}
-    # Also allow {level.<field>} tokens (e.g. {level.letter})
-    level_field_re = re.compile(r"\{level\.\w+\}")
+    valid_tokens = {"{namespace}", "{level}", "{type}", "{component}"}
+    # Also allow {level.<field>} and {type.<field>} tokens (e.g. {level.letter})
+    level_field_re = re.compile(r"\{(?:level|type)\.\w+\}")
 
     found_tokens = set(re.findall(r"\{[^}]+\}", template))
 
@@ -760,9 +760,7 @@ def run(args: argparse.Namespace) -> int:
         actual_config_path = find_config_file(start_path)
 
     # Environment checks
-    for check in run_environment_checks(
-        config_dict, git_root, actual_config_path, start_path
-    ):
+    for check in run_environment_checks(config_dict, git_root, actual_config_path, start_path):
         report.add(check)
 
     # Docs drift check

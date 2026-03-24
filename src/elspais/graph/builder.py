@@ -2838,9 +2838,7 @@ class GraphBuilder:
         else:
             label = f"Code at {source_id}:{content.start_line}"
 
-        all_refs = [
-            (ref, EdgeKind.IMPLEMENTS) for ref in data.get("implements", [])
-        ] + [
+        all_refs = [(ref, EdgeKind.IMPLEMENTS) for ref in data.get("implements", [])] + [
             (ref, EdgeKind.VERIFIES) for ref in data.get("verifies", [])
         ]
         for ref, edge_kind in all_refs:
@@ -3418,10 +3416,7 @@ class GraphBuilder:
 
                 # Store implementation line range on IMPLEMENTS/VERIFIES edges
                 if edge_kind in (EdgeKind.IMPLEMENTS, EdgeKind.VERIFIES):
-                    impl_start = (
-                        source.get_field("function_line")
-                        or source.get_field("parse_line")
-                    )
+                    impl_start = source.get_field("function_line") or source.get_field("parse_line")
                     impl_end = (
                         source.get_field("function_end_line")
                         or source.get_field("parse_end_line")

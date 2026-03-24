@@ -39,9 +39,7 @@ _log = logging.getLogger(__name__)
 _COMMENT_STYLES = ["#", "//", "--"]
 
 # Keyword detection pattern — matches the keyword portion of a reference comment
-_KEYWORD_RE = re.compile(
-    r"(?:implements|verifies|refines)", re.IGNORECASE
-)
+_KEYWORD_RE = re.compile(r"(?:implements|verifies|refines)", re.IGNORECASE)
 
 
 class ReferenceTransformer:

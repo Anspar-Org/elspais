@@ -87,10 +87,35 @@ class GrammarFactory:
             re.escape(cfg.assertions.multi_separator) if cfg.assertions.multi_separator else r"\+"
         )
 
+        # Build __ID_PATTERN__ from canonical template by replacing placeholders
+        # with regex fragments, then escaping the literal separators.
+        canonical = cfg.canonical_template
+        id_pattern = canonical
+        id_pattern = id_pattern.replace("{namespace}", re.escape(namespace))
+        # {type} -> alternation of canonical type codes
+        all_type_codes = list(r.config.types.keys())
+        if all_type_codes and "{type}" in id_pattern:
+            type_alt = "|".join(re.escape(t) for t in all_type_codes)
+            id_pattern = id_pattern.replace("{type}", f"(?:{type_alt})")
+        # {level.X} or {type.X} -> alternation of alias values
+        for m in re.finditer(r"\{(?:type|level)\.(\w+)\}", canonical):
+            alias_name = m.group(1)
+            alias_vals = r._reverse_aliases.get(alias_name, {})
+            if alias_vals:
+                val_alt = "|".join(re.escape(v) for v in alias_vals)
+                id_pattern = id_pattern.replace(m.group(0), f"(?:{val_alt})")
+        # {level} -> type_pattern (letter aliases)
+        id_pattern = id_pattern.replace("{level}", f"(?:{type_pattern})")
+        # {component} -> digits pattern
+        id_pattern = id_pattern.replace("{component}", digits_pattern)
+        # Escape literal separators (typically "-") that aren't part of regex
+        id_pattern = id_pattern.replace("-", r"\-")
+
         tokens: dict[str, str] = {
             "__NAMESPACE__": namespace,
             "__TYPE_PATTERN__": type_pattern,
             "__DIGITS_PATTERN__": digits_pattern,
+            "__ID_PATTERN__": id_pattern,
             "__ASSERTION_LABEL__": assertion_label,
             "__MULTI_SEP__": multi_sep,
         }
@@ -266,7 +291,10 @@ class FileDispatcher:
         parser = self._get_ref_parser()
         tree = parser.parse(content)
         transformer = ReferenceTransformer(
-            self._resolver, "code_ref", line_context, source_id=file_path,
+            self._resolver,
+            "code_ref",
+            line_context,
+            source_id=file_path,
         )
         return transformer.transform(tree)
 

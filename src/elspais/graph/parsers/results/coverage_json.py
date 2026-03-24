@@ -57,9 +57,7 @@ class CoverageJsonParser:
 
             # Extract summary or compute from line lists
             summary = file_data.get("summary", {})
-            executable_lines = summary.get(
-                "num_statements", len(executed) + len(missing)
-            )
+            executable_lines = summary.get("num_statements", len(executed) + len(missing))
             covered_lines = summary.get("covered_lines", len(executed))
 
             # Parse contexts if present

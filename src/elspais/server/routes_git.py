@@ -223,9 +223,7 @@ async def api_git_push(request: Request) -> JSONResponse:
                 text=True,
             )
             if rv.returncode != 0:
-                return JSONResponse(
-                    {"success": False, "error": rv.stderr.strip()}, status_code=400
-                )
+                return JSONResponse({"success": False, "error": rv.stderr.strip()}, status_code=400)
             return JSONResponse({"success": True, "branch": branch})
         except FileNotFoundError:
             return JSONResponse({"success": False, "error": "git not found"}, status_code=500)
@@ -410,9 +408,9 @@ async def api_git_commit(request: Request) -> JSONResponse:
         changed_repos = []
         unchanged_repos = []
         for name, root, config in _iter_repo_entries(state):
-            spec_dir = (config or {}).get("scanning", {}).get("spec", {}).get(
-                "directories", ["spec"]
-            )[0]
+            spec_dir = (
+                (config or {}).get("scanning", {}).get("spec", {}).get("directories", ["spec"])[0]
+            )
             dirty = check_dirty_repos([(name, root)])
             if dirty:
                 changed_repos.append((name, root, spec_dir))
@@ -497,9 +495,7 @@ async def api_git_checkout_commit(request: Request) -> JSONResponse:
             else:
                 results.append({"repo": name, "success": False, "error": rv.stderr.strip()})
         invalidate_ancestor_cache()
-        return JSONResponse(
-            {"success": all(r["success"] for r in results), "results": results}
-        )
+        return JSONResponse({"success": all(r["success"] for r in results), "results": results})
     else:
         commit_hash = data.get("hash", "").strip()
         originating_branch = data.get("branch", "").strip()

@@ -76,9 +76,7 @@ class LcovParser:
                 if current_file is not None:
                     executable = lf if lf is not None else len(line_coverage)
                     covered = (
-                        lh
-                        if lh is not None
-                        else sum(1 for v in line_coverage.values() if v > 0)
+                        lh if lh is not None else sum(1 for v in line_coverage.values() if v > 0)
                     )
                     results[current_file] = {
                         "line_coverage": dict(line_coverage),

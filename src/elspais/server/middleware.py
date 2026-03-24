@@ -82,11 +82,13 @@ class APIErrorMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         except Exception:
             _log.exception("Unhandled error in %s %s", request.method, request.url.path)
-            body = json.dumps({
-                "success": False,
-                "error": f"Internal server error in {request.url.path}",
-                "detail": traceback.format_exc(),
-            }).encode()
+            body = json.dumps(
+                {
+                    "success": False,
+                    "error": f"Internal server error in {request.url.path}",
+                    "detail": traceback.format_exc(),
+                }
+            ).encode()
             return Response(
                 content=body,
                 status_code=500,

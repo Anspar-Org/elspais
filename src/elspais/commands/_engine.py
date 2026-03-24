@@ -153,11 +153,7 @@ def _ensure_local_graph(
     """Build or return the cached local graph and config."""
     global _local_graph, _local_config
     # Use cache only when no explicit overrides are given
-    if (
-        _local_graph is not None
-        and _local_config is not None
-        and config_path is None
-    ):
+    if _local_graph is not None and _local_config is not None and config_path is None:
         return _local_graph, _local_config
 
     from elspais.config import get_config
