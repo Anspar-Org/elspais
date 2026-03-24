@@ -18,7 +18,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
 
-from elspais.server.middleware import AutoRefreshMiddleware, NoCacheMiddleware
+from elspais.server.middleware import APIErrorMiddleware, AutoRefreshMiddleware, NoCacheMiddleware
 from elspais.server.routes_api import (
     api_check_freshness,
     api_code_coverage,
@@ -224,6 +224,7 @@ def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
             allow_headers=["*"],
         ),
         Middleware(NoCacheMiddleware),
+        Middleware(APIErrorMiddleware),
         Middleware(AutoRefreshMiddleware),
         Middleware(DetachedGuardMiddleware),
     ]
