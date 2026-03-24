@@ -219,3 +219,15 @@ C. `TermDictionary.iter_indexed()` SHALL yield only entries where `indexed` is `
 D. `TermDictionary.merge()` SHALL combine two dictionaries and return a list of `(TermEntry, TermEntry)` pairs for duplicate terms detected across namespaces.
 
 *End* *TermDictionary Data Model* | **Hash**: 31915ae3
+
+## REQ-d00221: Grammar Extension for Definition Blocks
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. The grammar SHALL include a `DEF_LINE` terminal matching `: ` followed by non-newline text, and a `definition_block` rule matching `TEXT _NL (DEF_LINE _NL)+`. The `definition_block` rule SHALL be an alternative in `_item`, `preamble_line`, `content_line`, `jny_body_line`, and `jny_content_line` but NOT in `assertion_item` or `changelog_block`.
+
+B. The transformer SHALL handle `definition_block` nodes by extracting the term name from the TEXT token, definition text from DEF_LINE tokens, and metadata flags (Collection, Indexed) from definition lines. It SHALL return a `ParsedContent` with `content_type="definition_block"` and parsed_data containing `term`, `definition`, `collection`, and `indexed` fields.
+
+*End* *Grammar Extension for Definition Blocks* | **Hash**: 078ce203

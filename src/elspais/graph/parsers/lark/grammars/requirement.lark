@@ -18,6 +18,7 @@ start: _item*
 
 _item: requirement
      | journey
+     | definition_block
      | stray_marker
      | remainder_line
      | _NL
@@ -32,6 +33,7 @@ requirement: REQ_HEADER _NL preamble_line* block* end_block?
 
 ?preamble_line: metadata_line
               | satisfies_line
+              | definition_block
               | body_line
 
 metadata_line: _field (PIPE _field)* _NL
@@ -68,7 +70,8 @@ changelog_block: CHANGELOG_HDR _NL content_line*
 
 named_block: SECTION_HDR _NL content_line*
 
-content_line: TEXT _NL
+content_line: definition_block
+            | TEXT _NL
             | _NL
 
 // --- Footer ---
@@ -91,15 +94,23 @@ jny_meta_line: JNY_ACTOR_FIELD _NL
 
 jny_validates_line: JNY_VALIDATES_FIELD _NL
 
-jny_body_line: TEXT _NL
+jny_body_line: definition_block
+             | TEXT _NL
              | _NL
 
 jny_block: JNY_SECTION_HDR _NL jny_content_line*
 
-jny_content_line: TEXT _NL
+jny_content_line: definition_block
+                | TEXT _NL
                 | _NL
 
 jny_footer: JNY_END_MARKER _NL?
+
+// ===================================================================
+// Definition blocks (Markdown definition list syntax)
+// ===================================================================
+
+definition_block: TEXT _NL (DEF_LINE _NL)+
 
 // ===================================================================
 // Stray markers / remainder
@@ -162,6 +173,10 @@ PIPE.7: /[ \t]*\|[ \t]*/
 ASSERT_SUB_HDR.6: /(?:\*\*|\*|_)[^\n*_]+(?:\*\*|\*|_)/
 ASSERTION_ENTRY.5: /__ASSERTION_LABEL__\.[ \t]+[^\n]+/
 ASSERT_CONT.2: /[^\n]+/
+
+// --- Definition continuation line (higher priority than TEXT) ---
+// Implements: REQ-d00221-A
+DEF_LINE.3: /: [^\n]+/
 
 // --- Generic text (lowest priority -- catch-all) ---
 
