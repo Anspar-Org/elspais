@@ -203,3 +203,19 @@ F. The tool SHALL support an `--overview` flag that generates a stakeholder-orie
 
 *End* *Spec-to-PDF Compilation* | **Hash**: bfc0cadf
 ---
+
+## REQ-d00220: TermDictionary Data Model
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. `TermDictionary.add()` SHALL store a `TermEntry` keyed by normalized (lowercased) term name. If the term already exists, it SHALL return the existing entry without overwriting.
+
+B. `TermDictionary.lookup()` SHALL perform case-insensitive lookup and return the `TermEntry` or `None`.
+
+C. `TermDictionary.iter_indexed()` SHALL yield only entries where `indexed` is `True`. `iter_collections()` SHALL yield only entries where `collection` is `True`.
+
+D. `TermDictionary.merge()` SHALL combine two dictionaries and return a list of `(TermEntry, TermEntry)` pairs for duplicate terms detected across namespaces.
+
+*End* *TermDictionary Data Model* | **Hash**: 31915ae3
