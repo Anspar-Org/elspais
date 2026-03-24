@@ -87,29 +87,33 @@ class GrammarFactory:
             re.escape(cfg.assertions.multi_separator) if cfg.assertions.multi_separator else r"\+"
         )
 
-        # Build __ID_PATTERN__ from canonical template by replacing placeholders
-        # with regex fragments, then escaping the literal separators.
+        # Build __ID_PATTERN__ from canonical template.
+        # Strategy: split canonical into literal segments and placeholders,
+        # escape the literals, then join with regex fragments.
         canonical = cfg.canonical_template
-        id_pattern = canonical
-        id_pattern = id_pattern.replace("{namespace}", re.escape(namespace))
+        placeholders = {
+            "{namespace}": re.escape(namespace),
+            "{component}": digits_pattern,
+            "{level}": f"(?:{type_pattern})",
+        }
         # {type} -> alternation of canonical type codes
         all_type_codes = list(r.config.types.keys())
-        if all_type_codes and "{type}" in id_pattern:
-            type_alt = "|".join(re.escape(t) for t in all_type_codes)
-            id_pattern = id_pattern.replace("{type}", f"(?:{type_alt})")
+        if all_type_codes:
+            placeholders["{type}"] = "(?:" + "|".join(re.escape(t) for t in all_type_codes) + ")"
         # {level.X} or {type.X} -> alternation of alias values
         for m in re.finditer(r"\{(?:type|level)\.(\w+)\}", canonical):
             alias_name = m.group(1)
             alias_vals = r._reverse_aliases.get(alias_name, {})
             if alias_vals:
                 val_alt = "|".join(re.escape(v) for v in alias_vals)
-                id_pattern = id_pattern.replace(m.group(0), f"(?:{val_alt})")
-        # {level} -> type_pattern (letter aliases)
-        id_pattern = id_pattern.replace("{level}", f"(?:{type_pattern})")
-        # {component} -> digits pattern
-        id_pattern = id_pattern.replace("{component}", digits_pattern)
-        # Escape literal separators (typically "-") that aren't part of regex
-        id_pattern = id_pattern.replace("-", r"\-")
+                placeholders[m.group(0)] = f"(?:{val_alt})"
+
+        # Split on placeholders, escape literal parts, reassemble
+        parts = re.split(r"(\{[^}]+\})", canonical)
+        id_pattern = "".join(
+            placeholders[p] if p in placeholders else re.escape(p)
+            for p in parts
+        )
 
         tokens: dict[str, str] = {
             "__NAMESPACE__": namespace,

@@ -174,9 +174,12 @@ class TestConfigSetAffectsHealth:
         )
         assert set_result.returncode == 0
 
+        # Fix hashes and format issues
+        run_elspais("fix", cwd=tmp_path)
+
         # Health should now pass
         health2 = run_elspais("checks", "--lenient", cwd=tmp_path)
-        assert health2.returncode == 0
+        assert health2.returncode == 0, f"health failed: {health2.stdout}"
 
 
 # ---------------------------------------------------------------------------
