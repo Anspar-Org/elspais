@@ -986,13 +986,21 @@ class HTMLGenerator:
         (matching /api/code-coverage/<id>) response shapes.
         """
         from elspais.graph import NodeKind
-        from elspais.mcp.server import _get_assertion_code_map, _get_assertion_test_map
+        from elspais.mcp.server import (
+            _get_assertion_code_map,
+            _get_assertion_refines_map,
+            _get_assertion_test_map,
+        )
 
         index: dict[str, Any] = {}
         for node in self.graph.nodes_by_kind(NodeKind.REQUIREMENT):
             index[node.id] = {
                 "test": _get_assertion_test_map(self.graph, node.id),
                 "code": _get_assertion_code_map(self.graph, node.id),
+                "code_implements": _get_assertion_code_map(
+                    self.graph, node.id, edge_kind="implements"
+                ),
+                "refines": _get_assertion_refines_map(self.graph, node.id),
             }
         return index
 
