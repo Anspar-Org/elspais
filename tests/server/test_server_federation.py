@@ -1,4 +1,4 @@
-# Implements: REQ-d00206-A+B+C
+# Verifies: REQ-d00206-A+B+C
 """Tests for server federation endpoints (/api/repos, /api/status repos field)."""
 
 from __future__ import annotations

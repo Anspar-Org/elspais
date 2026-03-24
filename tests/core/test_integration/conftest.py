@@ -195,7 +195,7 @@ The system SHALL implement all authentication features.
         code_file = src_dir / "auth.py"
         code_file.write_text(
             """\
-# Implements: REQ-p00001-A, REQ-p00001-B
+# Verifies: REQ-p00001-A, REQ-p00001-B
 def authenticate():
     pass
 """

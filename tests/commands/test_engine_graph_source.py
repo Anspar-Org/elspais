@@ -1,4 +1,4 @@
-# Implements: REQ-d00010
+# Verifies: REQ-d00010
 
 """Tests that _engine.call injects graph_source metadata."""
 

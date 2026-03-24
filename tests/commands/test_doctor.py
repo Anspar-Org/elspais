@@ -1,4 +1,4 @@
-# Implements: REQ-p00005-E
+# Verifies: REQ-p00005-E
 """Tests for elspais doctor command.
 
 Validates REQ-p00005-E: clear config errors for invalid associate paths.

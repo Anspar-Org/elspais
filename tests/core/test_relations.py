@@ -142,7 +142,7 @@ class TestEdgeSemantics:
         assert EdgeKind.CONTAINS.contributes_to_coverage() is False
 
 
-# Implements: REQ-d00126-D
+# Verifies: REQ-d00126-D
 def test_validates_REQ_contributes_to_coverage():
     """EdgeKind.VALIDATES contributes to coverage.
 

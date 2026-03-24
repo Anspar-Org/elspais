@@ -1,4 +1,4 @@
-# Implements: REQ-d00054-A
+# Verifies: REQ-d00054-A
 # Validates REQ-d00055-D, REQ-o00061-B
 """Tests for graph factory build_graph() — code directory scanning and coverage annotation.
 

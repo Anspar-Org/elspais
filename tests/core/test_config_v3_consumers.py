@@ -1,4 +1,4 @@
-# Implements: REQ-d00212-F
+# Verifies: REQ-d00212-F
 """Tests that doctor.py and index.py consume v3 config paths.
 
 These tests verify that functions in doctor.py and index.py use the v3

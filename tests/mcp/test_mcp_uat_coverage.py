@@ -1,4 +1,4 @@
-# Implements: REQ-d00069-A
+# Verifies: REQ-d00069-A
 """Tests for MCP UAT coverage tools."""
 from tests.core.graph_test_helpers import build_graph, make_journey, make_requirement
 

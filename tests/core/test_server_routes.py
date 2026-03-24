@@ -1,4 +1,4 @@
-# Implements: REQ-d00010-A
+# Verifies: REQ-d00010-A
 """Tests for Starlette server routes using TestClient."""
 from __future__ import annotations
 

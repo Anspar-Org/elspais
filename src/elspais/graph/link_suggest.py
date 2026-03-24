@@ -332,13 +332,40 @@ def _deduplicate_suggestions(
     return list(key_map.values())
 
 
+def keyword_for_file(file_path: Path, config: dict[str, Any]) -> str:
+    """Determine the correct reference keyword for a file based on config.
+
+    Checks whether the file falls under scanning.test.directories (Verifies)
+    or scanning.code.directories (Implements) from the project config.
+
+    Args:
+        file_path: Path to the source file (absolute or relative).
+        config: Project configuration dict.
+
+    Returns:
+        The keyword string (e.g. "Verifies" or "Implements").
+    """
+    scanning = config.get("scanning", {})
+    test_cfg = scanning.get("test", {})
+    test_dirs = test_cfg.get("directories", ["tests"])
+    test_keyword = test_cfg.get("reference_keyword", "Verifies")
+
+    path_str = str(file_path)
+    for d in test_dirs:
+        if f"/{d}/" in path_str or path_str.startswith(f"{d}/"):
+            return test_keyword
+    return "Implements"
+
+
 def apply_link_to_file(
     file_path: Path,
     line: int,
     req_id: str,
+    *,
+    keyword: str = "Implements",
     dry_run: bool = False,
 ) -> str | None:
-    """Insert a # Implements: comment into a source file.
+    """Insert a reference comment into a source file.
 
     Inserts the comment at the specified line number. If the line is 0,
     inserts at the top of the file (after any shebang/encoding lines).
@@ -347,13 +374,15 @@ def apply_link_to_file(
         file_path: Absolute path to the source file.
         line: Line number to insert at (1-based). 0 means top of file.
         req_id: Requirement ID to reference.
+        keyword: Reference keyword (e.g. "Verifies", "Implements").
+            Use keyword_for_file() to determine from config.
         dry_run: If True, return the comment that would be inserted
                  without modifying the file.
 
     Returns:
         The comment line that was (or would be) inserted, or None on error.
     """
-    comment = f"# Implements: {req_id}"
+    comment = f"# {keyword}: {req_id}"
 
     if dry_run:
         return comment

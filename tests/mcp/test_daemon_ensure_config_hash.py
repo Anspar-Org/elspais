@@ -1,5 +1,5 @@
 # tests/mcp/test_daemon_ensure_config_hash.py
-# Implements: REQ-d00010
+# Verifies: REQ-d00010
 
 """Tests that ensure_daemon restarts on config_hash mismatch."""
 

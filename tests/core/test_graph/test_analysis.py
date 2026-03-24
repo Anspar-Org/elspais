@@ -1,4 +1,4 @@
-# Implements: REQ-d00124-A, REQ-d00124-B, REQ-d00124-C, REQ-d00124-D, REQ-d00124-E, REQ-d00124-F
+# Verifies: REQ-d00124-A, REQ-d00124-B, REQ-d00124-C, REQ-d00124-D, REQ-d00124-E, REQ-d00124-F
 """Tests for graph analysis module (foundational requirement prioritization).
 
 These tests validate the analysis functions that rank requirements by
