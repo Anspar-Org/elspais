@@ -306,8 +306,8 @@ function buildCardHtml(nodeId, data, collapsed) {
             var badgeMode = editState.assertionBadgeMode || 'abbrev';
             var aLinks = data.assertion_links ? data.assertion_links[label] : null;
             var dimDefs = [
-                {cls: 'assertion-implemented-btn', full: 'Implemented', abbr: 'IMP', dot: 'I', toggle: 'toggleAssertionCode', tip: 'Code implementation', linkKey: 'implemented'},
-                {cls: 'assertion-refined-btn', full: 'Refined', abbr: 'REF', dot: 'R', toggle: 'toggleAssertionCode', tip: 'Refines references', linkKey: 'refined'},
+                {cls: 'assertion-implemented-btn', full: 'Implemented', abbr: 'IMP', dot: 'I', toggle: 'toggleAssertionCode', tip: 'Code implementation', linkKey: 'implemented', edgeKind: 'implements'},
+                {cls: 'assertion-refined-btn', full: 'Refined', abbr: 'REF', dot: 'R', toggle: 'toggleAssertionRefines', tip: 'Refines references', linkKey: 'refined'},
                 {cls: 'assertion-tested-btn', full: 'Tested', abbr: 'TST', dot: 'T', toggle: 'toggleAssertionTests', tip: 'Test coverage', linkKey: 'tested'},
                 {cls: 'assertion-verified-btn', full: 'Verified', abbr: 'VER', dot: 'V', toggle: 'toggleAssertionResults', tip: 'Test results', linkKey: 'tested'},
                 {cls: 'assertion-validated-btn', full: 'Validated', abbr: 'VAL', dot: 'U', toggle: 'toggleAssertionUat', tip: 'Journey coverage', linkKey: 'validated'},
@@ -320,10 +320,11 @@ function buildCardHtml(nodeId, data, collapsed) {
                 anyBadge = true;
                 var btnLabel = badgeMode === 'full' ? dim.full : (badgeMode === 'dots' ? dim.dot : dim.abbr);
                 var btnStyle = badgeMode === 'dots' ? ' style="min-width:0;padding:2px 4px;font-size:0.55rem;"' : '';
+                var extraArg = dim.edgeKind ? ", '" + dim.edgeKind + "'" : '';
                 html += '<button class="' + dim.cls + '" ' +
                     'data-req-id="' + nodeId + '" data-label="' + escapeAttr(label) + '" ' +
                     'title="' + dim.tip + '" ' +
-                    'onclick="event.stopPropagation(); ' + dim.toggle + '(this, \'' + nodeId + '\', \'' + escapeAttr(label) + '\')"' +
+                    'onclick="event.stopPropagation(); ' + dim.toggle + '(this, \'' + nodeId + '\', \'' + escapeAttr(label) + '\'' + extraArg + ')"' +
                     btnStyle + '>' +
                     btnLabel + '</button>';
             });
@@ -337,6 +338,7 @@ function buildCardHtml(nodeId, data, collapsed) {
                 '&#8856;</button>';
             html += '</div>';
             html += '<div class="assertion-code-panel" id="assertion-code-' + nodeId + '-' + label + '" style="display:none;"></div>';
+            html += '<div class="assertion-refines-panel" id="assertion-refines-' + nodeId + '-' + label + '" style="display:none;"></div>';
             html += '<div class="assertion-tests-panel" id="assertion-tests-' + nodeId + '-' + label + '" style="display:none;"></div>';
             html += '<div class="assertion-results-panel" id="assertion-results-' + nodeId + '-' + label + '" style="display:none;"></div>';
             html += '<div class="assertion-uat-panel" id="assertion-uat-' + nodeId + '-' + label + '" style="display:none;"></div>';
@@ -902,7 +904,7 @@ function updateAllVerifiedButtons(reqId, data) {
 
 var assertionCodeCache = {};
 
-async function toggleAssertionCode(btn, reqId, label) {
+async function toggleAssertionCode(btn, reqId, label, edgeKind) {
     var panelId = 'assertion-code-' + reqId + '-' + label;
     var panel = document.getElementById(panelId);
     if (!panel) return;
@@ -917,20 +919,25 @@ async function toggleAssertionCode(btn, reqId, label) {
     panel.style.display = 'block';
     btn.classList.add('active');
 
+    var cacheKey = reqId + ':' + (edgeKind || 'all');
+
     // Fetch data if not cached
-    if (!assertionCodeCache[reqId]) {
+    if (!assertionCodeCache[cacheKey]) {
         panel.innerHTML = '<div class="assertion-tests-loading">Loading...</div>';
-        var data = await apiFetch('/api/code-coverage/' + encodeURIComponent(reqId));
+        var url = '/api/code-coverage/' + encodeURIComponent(reqId);
+        if (edgeKind) url += '?kind=' + edgeKind;
+        var data = await apiFetch(url);
         if (!data || !data.success) {
             panel.innerHTML = '<div class="assertion-tests-loading">Failed to load implementation data</div>';
             return;
         }
-        assertionCodeCache[reqId] = data;
-        // Update ALL implemented buttons for this requirement
-        updateAllImplementedButtons(reqId, data);
+        assertionCodeCache[cacheKey] = data;
+        if (edgeKind === 'implements' || !edgeKind) {
+            updateAllImplementedButtons(reqId, data);
+        }
     }
 
-    renderAssertionCode(panel, reqId, label, assertionCodeCache[reqId]);
+    renderAssertionCode(panel, reqId, label, assertionCodeCache[cacheKey]);
 }
 
 function renderAssertionCode(panel, reqId, label, data) {
@@ -942,7 +949,7 @@ function renderAssertionCode(panel, reqId, label, data) {
 
     var codeRefs = assertionData.code_refs;
     if (codeRefs.length === 0) {
-        panel.innerHTML = '<div class="assertion-tests-empty">No code implements this assertion</div>';
+        panel.innerHTML = '<div class="assertion-tests-empty">No references for this assertion</div>';
         return;
     }
 
@@ -984,6 +991,65 @@ function updateAllImplementedButtons(reqId, data) {
             btn.classList.add('implemented-no');
         }
     }
+}
+
+// =====================================================================
+// Assertion Refines — Refining Requirement Buttons
+// =====================================================================
+
+var assertionRefinesCache = {};
+
+async function toggleAssertionRefines(btn, reqId, label) {
+    var panelId = 'assertion-refines-' + reqId + '-' + label;
+    var panel = document.getElementById(panelId);
+    if (!panel) return;
+
+    if (panel.style.display !== 'none') {
+        panel.style.display = 'none';
+        btn.classList.remove('active');
+        return;
+    }
+
+    panel.style.display = 'block';
+    btn.classList.add('active');
+
+    if (!assertionRefinesCache[reqId]) {
+        panel.innerHTML = '<div class="assertion-tests-loading">Loading...</div>';
+        var data = await apiFetch('/api/refines-coverage/' + encodeURIComponent(reqId));
+        if (!data || !data.success) {
+            panel.innerHTML = '<div class="assertion-tests-loading">Failed to load refines data</div>';
+            return;
+        }
+        assertionRefinesCache[reqId] = data;
+    }
+
+    renderAssertionRefines(panel, reqId, label, assertionRefinesCache[reqId]);
+}
+
+function renderAssertionRefines(panel, reqId, label, data) {
+    var assertionData = data.assertion_refines[label];
+    if (!assertionData) {
+        panel.innerHTML = '<div class="assertion-tests-empty">No data for this assertion</div>';
+        return;
+    }
+
+    var refs = assertionData.refines_refs;
+    if (refs.length === 0) {
+        panel.innerHTML = '<div class="assertion-tests-empty">No requirements refine this assertion</div>';
+        return;
+    }
+
+    var html = '';
+    for (var i = 0; i < refs.length; i++) {
+        var r = refs[i];
+        html += '<div class="assertion-test-item">';
+        html += '<span class="assertion-test-icon">&#x1F517;</span>';
+        html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
+            escapeHtml(r.id) + '\')">' +
+            escapeHtml(r.id) + ': ' + escapeHtml(r.title) + '</a>';
+        html += '</div>';
+    }
+    panel.innerHTML = html;
 }
 
 // =====================================================================
