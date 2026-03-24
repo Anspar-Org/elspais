@@ -4,7 +4,7 @@
 
 const COOKIE_NAME = 'elspais_trace_state';
 const COOKIE_DAYS = 30;
-const COOKIE_VERSION = 12;  // v12: status badge buttons replace dropdown+checkboxes
+const COOKIE_VERSION = 13;  // v13: card view mode (compact/complete)
 
 function saveState() {
     const stateToSave = {
@@ -21,6 +21,7 @@ function saveState() {
         fontSize: editState.fontSize,
         theme: editState.theme,
         toolbarHidden: editState.toolbarHidden,
+        cardViewMode: editState.cardViewMode,
         navPanelWidth: document.getElementById('nav-panel').style.width || null,
         fileViewerWidth: document.getElementById('file-viewer-panel').style.width || null
     };

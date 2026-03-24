@@ -25,6 +25,23 @@
 
 
 
+[ ] graph: add render_order to STRUCTURES edges
+- STRUCTURES edges (REQ→ASSERTION, REQ→REMAINDER) lack explicit ordering metadata
+- Currently relies on parse_line for ordering, which is fragile if sections are moved/reordered via mutations
+- FILE→REQ CONTAINS edges already use render_order in edge metadata — STRUCTURES should follow the same pattern
+- Prerequisite for robust section reordering in Complete View editing
+- Touches: builder (assign on parse), mutation methods (maintain on add/move/reorder), API serialization (expose it), JS (sort by it instead of line)
+
+[ ] refactor: remove body_text field from requirement nodes
+- `body_text` stores the raw unparsed body (header to footer) as a flat string
+- Duplicates content already parsed into structured ASSERTION and REMAINDER children
+- Usages that should migrate to structured children:
+  - Search (CLI `search --field=body`, MCP `search.py`, `server.py` match): search REMAINDER texts + assertion texts instead
+  - API serialization (`mcp/server.py` properties): drop field, children already have the data
+- Usages tied to `full-text` hash mode (`validate.py`, `render.py`): only used when `hash_mode=full-text` (not the default); could recompute from rendered children
+- Builder mutation helpers (`_update_assertion_in_body_text`, `_add_assertion_to_body_text`, `_delete_assertion_from_body_text`, `_rename_assertion_in_body_text`): appear to be dead code since `render_save()` reconstructs from graph nodes
+- Both parsers (legacy `requirement.py` and Lark `transformers/requirement.py`) create it
+
 [ ] feature: viewer: add review/comment
 - In Edit Mode, allow user to tag any REQ or JNY element (and CODE and TEST reference) with a comment. 
  - this is most 'unique' aspect of this feature. What can we put a comment on? How do we do that w/o cluttering the display with a separate 'comment' icon on every field?

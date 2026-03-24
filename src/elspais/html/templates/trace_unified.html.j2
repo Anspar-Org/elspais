@@ -103,6 +103,7 @@ body {
                 <option value="abbrev" selected>Badges: Abbrev</option>
                 <option value="dots">Badges: Dots</option>
             </select>
+            <button id="card-view-mode" onclick="toggleCardViewMode()" title="Toggle compact/complete card view" style="padding:1px 6px;font-size:0.7rem;cursor:pointer;border:1px solid var(--border-color);border-radius:3px;background:var(--card-bg);color:var(--text-primary);">Compact</button>
             <button class="btn edit-only" onclick="onAddRequirement()" style="padding:3px 8px;font-size:0.75rem;">+ REQ</button>
             <button class="btn edit-only" onclick="onAddJourney()" style="padding:3px 8px;font-size:0.75rem;">+ JNY</button>
             <button class="btn" onclick="closeAllCards()" style="padding:3px 8px;font-size:0.75rem;">Close All</button>
@@ -201,7 +202,8 @@ const editState = {
     toolbarHidden: false,
     isMain: false,
     coverageMode: 'all',
-    assertionBadgeMode: 'abbrev'
+    assertionBadgeMode: 'abbrev',
+    cardViewMode: 'compact'
 };
 // Apply theme early to prevent flash of wrong theme
 (function() {
@@ -450,6 +452,12 @@ document.addEventListener('DOMContentLoaded', function() {
             var ftb = document.getElementById('filter-toggle-btn');
             if (tb) tb.classList.add('toolbar-hidden');
             if (ftb) ftb.classList.remove('active');
+        }
+        // Restore card view mode
+        if (saved.cardViewMode) {
+            editState.cardViewMode = saved.cardViewMode;
+            var cvmBtn = document.getElementById('card-view-mode');
+            if (cvmBtn) cvmBtn.textContent = saved.cardViewMode === 'compact' ? 'Compact' : 'Complete';
         }
         // Restore panel widths
         if (saved.navPanelWidth) {
