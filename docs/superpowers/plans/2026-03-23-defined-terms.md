@@ -4,7 +4,7 @@
 
 **Goal:** Add defined-term parsing, glossary/index generation, and health checks to elspais.
 
-**Architecture:** Definition list blocks are parsed via a post-parse extraction pass over REMAINDER/body text. Term data lives in a standalone `TermDictionary` (not on `TraceGraph`). Health checks flag duplicates, undefined terms, and unmarked usage. CLI commands generate glossary.md, term-index.md, and collection manifests.
+**Architecture:** Definition list blocks are parsed as first-class Lark grammar rules using a `DEF_LINE` terminal for LALR(1) disambiguation. Term data lives in `TraceGraph._terms` as a `TermDictionary`. Health checks flag duplicates, undefined terms, and unmarked usage. CLI commands generate glossary.md, term-index.md, and collection manifests.
 
 **Tech Stack:** Python 3.10+, Lark (existing grammar), Pydantic (config schema), pytest (tests)
 
@@ -195,8 +195,7 @@ Create `src/elspais/graph/terms.py`:
 ```python
 """Defined terms data model and dictionary.
 
-Standalone data structure for term definitions and references.
-Not stored on TraceGraph — built as a companion object during graph construction.
+Stored on TraceGraph._terms, populated during graph construction.
 """
 from __future__ import annotations
 
@@ -227,9 +226,9 @@ class TermEntry:
 
 
 class TermDictionary:
-    """Standalone term index, keyed by normalized (lowercased) term name.
+    """Term index, keyed by normalized (lowercased) term name.
 
-    Built during graph construction as a companion to FederatedGraph.
+    Stored on TraceGraph._terms, populated during graph construction.
     """
 
     def __init__(self) -> None:
@@ -290,293 +289,16 @@ git commit -m "feat(terms): add TermDictionary data model"
 
 ---
 
-### Task 3: Post-Parse Definition Extractor
+### Task 3: Grammar Extension — DEF_LINE Terminal and definition_block Rule
 
 **Files:**
-- Create: `src/elspais/graph/term_extractor.py`
+- Modify: `src/elspais/graph/parsers/lark/grammars/requirement.lark` (add DEF_LINE terminal, definition_block rule)
+- Modify: `src/elspais/graph/parsers/lark/transformers/requirement.py` (add definition_block handler)
 - Test: `tests/test_terms.py` (append)
 
-This is the core parsing logic: scan text content for definition list patterns (`Term\n: definition`) and bold/italic candidate references.
+This is the core parsing change: add definition list blocks as first-class grammar rules. The `DEF_LINE` terminal (`: text`) provides the 1-token LALR lookahead to disambiguate from regular text lines.
 
 - [ ] **Step 1: Write the failing test**
-
-```python
-# Append to tests/test_terms.py
-from elspais.graph.term_extractor import extract_definitions, extract_candidate_refs
-
-
-class TestTermExtractor:
-    def test_extract_single_definition(self):
-        """Extract a single definition block from text."""
-        text = "\nElectronic Record\n: Data stored in digital form.\n"
-        defs = extract_definitions(text, base_line=1)
-        assert len(defs) == 1
-        assert defs[0]["term"] == "Electronic Record"
-        assert defs[0]["definition"] == "Data stored in digital form."
-        assert defs[0]["collection"] is False
-        assert defs[0]["indexed"] is True
-
-    def test_extract_definition_with_collection(self):
-        """Extract definition with Collection: true flag."""
-        text = "\nQuestionnaire\n: A structured set of questions.\n: Collection: true\n"
-        defs = extract_definitions(text, base_line=1)
-        assert len(defs) == 1
-        assert defs[0]["collection"] is True
-
-    def test_extract_definition_with_indexed_false(self):
-        """Extract definition with Indexed: false flag."""
-        text = "\nLevel\n: Classification tier.\n: Indexed: false\n"
-        defs = extract_definitions(text, base_line=1)
-        assert len(defs) == 1
-        assert defs[0]["indexed"] is False
-
-    def test_extract_multiline_definition(self):
-        """Multi-line definitions are concatenated."""
-        text = "\nTerm\n: First line of\n: the definition.\n"
-        defs = extract_definitions(text, base_line=1)
-        assert len(defs) == 1
-        assert defs[0]["definition"] == "First line of the definition."
-
-    def test_extract_multiple_definitions(self):
-        """Multiple definition blocks in same text."""
-        text = "\nAlpha\n: Definition A.\n\nBeta\n: Definition B.\n"
-        defs = extract_definitions(text, base_line=1)
-        assert len(defs) == 2
-        assert defs[0]["term"] == "Alpha"
-        assert defs[1]["term"] == "Beta"
-
-    def test_no_definitions_in_plain_text(self):
-        """Plain text without definition list syntax returns empty."""
-        text = "This is just normal paragraph text.\nNo definitions here."
-        defs = extract_definitions(text, base_line=1)
-        assert len(defs) == 0
-
-    def test_extract_candidate_refs_italic(self):
-        """Extract *italic* candidate references."""
-        text = "The *electronic record* must be stored."
-        refs = extract_candidate_refs(text, base_line=5)
-        assert len(refs) == 1
-        assert refs[0]["token"] == "electronic record"
-        assert refs[0]["line"] == 5
-
-    def test_extract_candidate_refs_bold(self):
-        """Extract **bold** candidate references."""
-        text = "The **audit trail** is maintained."
-        refs = extract_candidate_refs(text, base_line=3)
-        assert len(refs) == 1
-        assert refs[0]["token"] == "audit trail"
-
-    def test_skip_structural_patterns(self):
-        """Known structural patterns like *End* are excluded."""
-        text = "*End* *REQ-p00001* | **Hash**: abc123"
-        refs = extract_candidate_refs(text, base_line=1)
-        # Should skip *End*, *REQ-p00001*, **Hash**
-        assert len(refs) == 0
-
-    def test_line_numbers_from_base(self):
-        """Line numbers are offset from base_line."""
-        text = "line one\n*term* on line two"
-        refs = extract_candidate_refs(text, base_line=10)
-        assert refs[0]["line"] == 11  # base 10 + 1 for second line
-
-    def test_definition_line_numbers(self):
-        """Definition line numbers are offset from base_line."""
-        text = "\nMyTerm\n: Definition here.\n"
-        defs = extract_definitions(text, base_line=20)
-        assert defs[0]["line"] == 21  # term name is on line 21 (base 20 + 1)
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `pytest tests/test_terms.py::TestTermExtractor -v`
-Expected: FAIL — module does not exist
-
-- [ ] **Step 3: Write minimal implementation**
-
-Create `src/elspais/graph/term_extractor.py`:
-
-```python
-"""Post-parse extraction of definition list blocks and candidate term references.
-
-Scans text content (from REMAINDER nodes, requirement bodies, named blocks)
-for Markdown definition list patterns and bold/italic tokens.
-"""
-from __future__ import annotations
-
-import re
-
-# Patterns for bold/italic tokens in prose
-_ITALIC_RE = re.compile(r"(?<!\*)\*([^*\n]+)\*(?!\*)")  # *text* not **text**
-_BOLD_RE = re.compile(r"\*\*([^*\n]+)\*\*")              # **text**
-
-# Known structural patterns to exclude from candidate refs
-_STRUCTURAL_PATTERNS = {
-    "end",  # *End* marker
-}
-_STRUCTURAL_RE = re.compile(
-    r"^(End|Hash|Level|Status|Implements|Refines|Satisfies|Validates|"
-    r"Actor|Goal|Context|REQ-|JNY-)$",
-    re.IGNORECASE,
-)
-
-# Definition list pattern: line of text followed by ": " continuation
-_DEF_CONTINUATION_RE = re.compile(r"^: (.+)$")
-
-# Metadata flags in definition lines
-_COLLECTION_RE = re.compile(r"^Collection:\s*(true|false)$", re.IGNORECASE)
-_INDEXED_RE = re.compile(r"^Indexed:\s*(true|false)$", re.IGNORECASE)
-
-
-def extract_definitions(
-    text: str,
-    base_line: int = 0,
-) -> list[dict]:
-    """Extract definition list blocks from text.
-
-    Looks for the pattern:
-        <blank line or start>
-        Term Name
-        : Definition text
-        : More definition text
-        : Collection: true
-        <blank line or end>
-
-    Args:
-        text: The text content to scan.
-        base_line: Line number offset for the start of this text block.
-
-    Returns:
-        List of dicts: {term, definition, collection, indexed, line}.
-    """
-    lines = text.split("\n")
-    results: list[dict] = []
-    i = 0
-
-    while i < len(lines):
-        # Look for a potential term name: non-empty line preceded by blank/start
-        line = lines[i]
-        is_preceded_by_blank = (i == 0) or (lines[i - 1].strip() == "")
-
-        if is_preceded_by_blank and line.strip() and not line.startswith(":"):
-            # Check if next line starts with ": "
-            if i + 1 < len(lines) and _DEF_CONTINUATION_RE.match(lines[i + 1]):
-                term_name = line.strip()
-                term_line = base_line + i
-                definition_parts: list[str] = []
-                collection = False
-                indexed = True
-
-                j = i + 1
-                while j < len(lines):
-                    m = _DEF_CONTINUATION_RE.match(lines[j])
-                    if not m:
-                        break
-                    content = m.group(1).strip()
-
-                    # Check for metadata flags
-                    cm = _COLLECTION_RE.match(content)
-                    if cm:
-                        collection = cm.group(1).lower() == "true"
-                        j += 1
-                        continue
-
-                    im = _INDEXED_RE.match(content)
-                    if im:
-                        indexed = im.group(1).lower() == "true"
-                        j += 1
-                        continue
-
-                    definition_parts.append(content)
-                    j += 1
-
-                if definition_parts:
-                    results.append({
-                        "term": term_name,
-                        "definition": " ".join(definition_parts),
-                        "collection": collection,
-                        "indexed": indexed,
-                        "line": term_line,
-                    })
-                i = j
-                continue
-        i += 1
-
-    return results
-
-
-def extract_candidate_refs(
-    text: str,
-    base_line: int = 0,
-) -> list[dict]:
-    """Extract bold/italic tokens as candidate term references.
-
-    Scans for *token* and **token** patterns, excluding known structural
-    patterns like *End*, **Hash**, metadata field names, and REQ/JNY IDs.
-
-    Args:
-        text: The text content to scan.
-        base_line: Line number offset for the start of this text block.
-
-    Returns:
-        List of dicts: {token, line, bold}.
-    """
-    results: list[dict] = []
-
-    for line_offset, line in enumerate(text.split("\n")):
-        line_num = base_line + line_offset
-
-        # Extract bold tokens first (so ** is consumed before *)
-        for m in _BOLD_RE.finditer(line):
-            token = m.group(1).strip()
-            if not _is_structural(token):
-                results.append({"token": token, "line": line_num, "bold": True})
-
-        # Extract italic tokens (skip ranges already matched by bold)
-        bold_ranges = [(m.start(), m.end()) for m in _BOLD_RE.finditer(line)]
-        for m in _ITALIC_RE.finditer(line):
-            # Skip if this match overlaps with a bold match
-            if any(m.start() >= bs and m.end() <= be for bs, be in bold_ranges):
-                continue
-            token = m.group(1).strip()
-            if not _is_structural(token):
-                results.append({"token": token, "line": line_num, "bold": False})
-
-    return results
-
-
-def _is_structural(token: str) -> bool:
-    """Check if a token is a known structural pattern (not a term reference)."""
-    if token.lower() in _STRUCTURAL_PATTERNS:
-        return True
-    if _STRUCTURAL_RE.match(token):
-        return True
-    return False
-```
-
-- [ ] **Step 4: Run test to verify it passes**
-
-Run: `pytest tests/test_terms.py::TestTermExtractor -v`
-Expected: PASS
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add src/elspais/graph/term_extractor.py tests/test_terms.py
-git commit -m "feat(terms): add post-parse definition and reference extractor"
-```
-
----
-
-### Task 4: GraphBuilder Integration — Build TermDictionary
-
-**Files:**
-- Modify: `src/elspais/graph/factory.py:668-673` (add term extraction after annotators)
-- Modify: `src/elspais/graph/federated.py` (add `term_dictionary` attribute)
-- Test: `tests/test_terms.py` (append)
-
-- [ ] **Step 1: Write the failing test using a real spec fixture**
-
-Create a small spec fixture file for testing:
 
 ```python
 # Append to tests/test_terms.py
@@ -584,9 +306,175 @@ import tempfile
 from pathlib import Path
 
 
+class TestTermGrammar:
+    def _parse_spec(self, content: str) -> list:
+        """Helper: parse spec content and return parsed content items."""
+        from elspais.config import get_config
+        from elspais.graph.parsers.lark import FileDispatcher
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spec_file = Path(tmpdir) / "spec" / "test.md"
+            spec_file.parent.mkdir()
+            spec_file.write_text(content)
+            config = get_config(None, Path(tmpdir))
+            dispatcher = FileDispatcher(config)
+            return list(dispatcher.parse_file(spec_file, "spec"))
+
+    def test_definition_block_between_requirements(self):
+        """Definition block at file level is parsed."""
+        content = """Electronic Record
+: Data stored in digital form.
+
+## REQ-p00001: Test
+**Level**: prd | **Status**: Active | **Implements**: -
+
+*End* *Test* | **Hash**: 00000000
+"""
+        items = self._parse_spec(content)
+        def_items = [i for i in items if i.content_type == "definition_block"]
+        assert len(def_items) == 1
+        assert def_items[0].parsed_data["term"] == "Electronic Record"
+
+    def test_definition_block_in_requirement_body(self):
+        """Definition block in requirement preamble is parsed."""
+        content = """## REQ-p00001: Test
+**Level**: prd | **Status**: Active | **Implements**: -
+
+Audit Trail
+: A secure, time-stamped record.
+
+## Assertions
+A. The system SHALL maintain an *audit trail*.
+
+*End* *Test* | **Hash**: 00000000
+"""
+        items = self._parse_spec(content)
+        def_items = [i for i in items if i.content_type == "definition_block"]
+        assert len(def_items) == 1
+        assert def_items[0].parsed_data["term"] == "Audit Trail"
+
+    def test_definition_not_in_assertions(self):
+        """Definition list syntax inside assertions is NOT parsed as a definition."""
+        content = """## REQ-p00001: Test
+**Level**: prd | **Status**: Active | **Implements**: -
+
+## Assertions
+A. The system SHALL support:
+: This looks like a definition but is assertion continuation.
+
+*End* *Test* | **Hash**: 00000000
+"""
+        items = self._parse_spec(content)
+        def_items = [i for i in items if i.content_type == "definition_block"]
+        assert len(def_items) == 0
+
+    def test_definition_with_collection_flag(self):
+        """Collection: true flag is parsed."""
+        content = """Questionnaire
+: A structured set of questions.
+: Collection: true
+
+## REQ-p00001: Test
+**Level**: prd | **Status**: Active | **Implements**: -
+
+*End* *Test* | **Hash**: 00000000
+"""
+        items = self._parse_spec(content)
+        def_items = [i for i in items if i.content_type == "definition_block"]
+        assert len(def_items) == 1
+        assert def_items[0].parsed_data["collection"] is True
+
+    def test_definition_with_indexed_false(self):
+        """Indexed: false flag is parsed."""
+        content = """Level
+: Classification tier.
+: Indexed: false
+
+## REQ-p00001: Test
+**Level**: prd | **Status**: Active | **Implements**: -
+
+*End* *Test* | **Hash**: 00000000
+"""
+        items = self._parse_spec(content)
+        def_items = [i for i in items if i.content_type == "definition_block"]
+        assert len(def_items) == 1
+        assert def_items[0].parsed_data["indexed"] is False
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `pytest tests/test_terms.py::TestTermGrammar -v`
+Expected: FAIL — no `definition_block` content type
+
+- [ ] **Step 3: Add DEF_LINE terminal and definition_block rule to requirement.lark**
+
+Add new terminal (priority 3, above TEXT but below structural markers):
+
+```
+DEF_LINE.3: /: [^\n]+/
+```
+
+Add `definition_block` rule:
+
+```
+definition_block: TEXT _NL (DEF_LINE _NL)+
+```
+
+Add `definition_block` as an alternative in:
+- `_item` (top level)
+- `preamble_line` (requirement body)
+- `content_line` (named blocks)
+- `jny_body_line` and `jny_content_line` (journey contexts)
+
+NOT added to `assertion_item` or `changelog_block`.
+
+- [ ] **Step 4: Add definition_block handler to requirement transformer**
+
+In `src/elspais/graph/parsers/lark/transformers/requirement.py`, add a `definition_block` method that:
+- Extracts the term name from the TEXT token
+- Extracts definition text from DEF_LINE tokens
+- Parses metadata flags (Collection, Indexed) from DEF_LINE content
+- Returns a `ParsedContent` with `content_type="definition_block"` and `parsed_data` containing term, definition, collection, indexed, line
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `pytest tests/test_terms.py::TestTermGrammar -v`
+Expected: PASS
+
+- [ ] **Step 6: Run full test suite for regressions**
+
+Run: `pytest`
+Expected: All existing tests still pass (the new terminal and rule don't affect existing parsing)
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/elspais/graph/parsers/lark/grammars/requirement.lark \
+        src/elspais/graph/parsers/lark/transformers/requirement.py \
+        tests/test_terms.py
+git commit -m "feat(terms): add DEF_LINE terminal and definition_block grammar rule"
+```
+
+---
+
+### Task 4: TraceGraph._terms and GraphBuilder Integration
+
+**Files:**
+- Modify: `src/elspais/graph/TraceGraph.py` (add `_terms: TermDictionary` field)
+- Modify: `src/elspais/graph/builder.py` (handle `definition_block` content type, populate `_terms`)
+- Modify: `src/elspais/graph/factory.py:668-673` (deferred reference resolution after annotators)
+- Modify: `src/elspais/graph/federated.py` (cross-repo term merge)
+- Test: `tests/test_terms.py` (append)
+
+- [ ] **Step 1: Write the failing test using a real spec fixture**
+
+```python
+# Append to tests/test_terms.py
 class TestTermBuildIntegration:
-    def _build_with_terms(self, spec_content: str) -> tuple:
-        """Helper: write spec content to temp dir, build graph, return (graph, term_dict)."""
+    def _build_with_terms(self, spec_content: str) -> object:
+        """Helper: write spec content to temp dir, build graph, return federated graph."""
+        import tempfile
+        from pathlib import Path
         from elspais.config import get_config
         from elspais.graph.factory import build_graph
 
@@ -594,132 +482,119 @@ class TestTermBuildIntegration:
             spec_dir = Path(tmpdir) / "spec"
             spec_dir.mkdir()
             (spec_dir / "test.md").write_text(spec_content)
-
-            # Minimal config pointing at our temp spec dir
             config = get_config(None, Path(tmpdir))
-            graph = build_graph(
+            return build_graph(
                 config=config,
                 spec_dirs=[spec_dir],
                 config_path=None,
             )
-            return graph, getattr(graph, "term_dictionary", None)
 
-    def test_definition_extracted_from_spec(self):
-        """Definition list in spec file is extracted into TermDictionary."""
-        content = """
-## REQ-p00001: Test Requirement
+    def test_definition_extracted_into_terms(self):
+        """Definition list in spec file populates TraceGraph._terms."""
+        content = """## REQ-p00001: Test Requirement
 **Level**: prd | **Status**: Active | **Implements**: -
 
 Electronic Record
 : Data stored in digital form.
 
 ## Assertions
-A. The system SHALL store *electronic records*.
+A. The system SHALL store *Electronic Record* data.
 
 *End* *Test Requirement* | **Hash**: 00000000
 """
-        graph, td = self._build_with_terms(content)
-        assert td is not None
-        entry = td.lookup("electronic record")
+        graph = self._build_with_terms(content)
+        # Access _terms from the root repo's TraceGraph
+        root_graph = graph._repos["root"].graph
+        assert root_graph._terms is not None
+        entry = root_graph._terms.lookup("electronic record")
         assert entry is not None
         assert entry.definition == "Data stored in digital form."
 
-    def test_reference_resolved(self):
-        """Bold/italic term in assertion is resolved as a reference."""
-        content = """
-## REQ-p00001: Test Requirement
+    def test_collection_flag_parsed(self):
+        """Collection: true flag is stored in TermEntry."""
+        content = """## REQ-p00001: Test
+**Level**: prd | **Status**: Active | **Implements**: -
+
+Questionnaire
+: A structured set of questions.
+: Collection: true
+
+*End* *Test* | **Hash**: 00000000
+"""
+        graph = self._build_with_terms(content)
+        root_graph = graph._repos["root"].graph
+        entry = root_graph._terms.lookup("questionnaire")
+        assert entry is not None
+        assert entry.collection is True
+
+    def test_marked_reference_resolved(self):
+        """*term* in assertion text is resolved as a marked reference."""
+        content = """## REQ-p00001: Test
 **Level**: prd | **Status**: Active | **Implements**: -
 
 Electronic Record
 : Data stored in digital form.
 
 ## Assertions
-A. The system SHALL store *electronic records*.
+A. The system SHALL store *Electronic Record* data.
 
-*End* *Test Requirement* | **Hash**: 00000000
+*End* *Test* | **Hash**: 00000000
 """
-        # Note: "electronic records" won't match "Electronic Record" exactly.
-        # This test validates that exact matching works; plural is deferred.
-        graph, td = self._build_with_terms(content)
-        entry = td.lookup("electronic record")
-        # "electronic records" (plural) should NOT match in v1 (exact only)
-        # but "Electronic Record" (exact) in a marked reference would match
+        graph = self._build_with_terms(content)
+        root_graph = graph._repos["root"].graph
+        entry = root_graph._terms.lookup("electronic record")
+        marked_refs = [r for r in entry.references if r.marked]
+        assert len(marked_refs) >= 1
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_terms.py::TestTermBuildIntegration -v`
-Expected: FAIL — `graph.term_dictionary` does not exist
+Expected: FAIL — `_terms` does not exist on TraceGraph
 
-- [ ] **Step 3: Implement term extraction in factory.py**
+- [ ] **Step 3: Add `_terms` to TraceGraph**
 
-In `src/elspais/graph/factory.py`, after the `annotate_coverage(graph)` call (line ~673), add:
-
-```python
-    # Extract defined terms from parsed content
-    from elspais.graph.term_extractor import extract_definitions, extract_candidate_refs
-    from elspais.graph.terms import TermDictionary, TermEntry, TermRef
-    from elspais.graph import NodeKind
-
-    term_dict = TermDictionary()
-
-    # Scan all REMAINDER and REQUIREMENT nodes for definition blocks
-    for node in graph.all_nodes():
-        if node.kind == NodeKind.REMAINDER:
-            raw_text = node.get_field("raw_text") or node.get_field("text") or ""
-            parse_line = node.get_field("parse_line") or 0
-            defs = extract_definitions(raw_text, base_line=parse_line)
-            for d in defs:
-                # Find nearest REQUIREMENT or FILE ancestor for defined_in
-                ancestor = _find_term_ancestor(node)
-                entry = TermEntry(
-                    term=d["term"],
-                    definition=d["definition"],
-                    collection=d["collection"],
-                    indexed=d["indexed"],
-                    defined_in=ancestor,
-                    defined_at_line=d["line"],
-                    namespace="root",  # set per-repo in federated build
-                )
-                term_dict.add(entry)
-                # Mark this REMAINDER node as a definition block
-                node.set_field("content_type", "definition_block")
-```
-
-Add helper function:
+In `src/elspais/graph/TraceGraph.py`, add:
 
 ```python
-def _find_term_ancestor(node: GraphNode) -> str:
-    """Find the nearest REQUIREMENT or FILE ancestor for a term's defined_in."""
-    for ancestor in node.ancestors(edge_kinds={EdgeKind.STRUCTURES, EdgeKind.CONTAINS}):
-        if ancestor.kind in (NodeKind.REQUIREMENT, NodeKind.FILE):
-            return ancestor.id
-    return node.id  # fallback to self
+from elspais.graph.terms import TermDictionary
+
+# In __init__ or as a field:
+self._terms: TermDictionary = TermDictionary()
 ```
 
-In `src/elspais/graph/federated.py`, add `term_dictionary` attribute to `FederatedGraph.__init__`:
+- [ ] **Step 4: Handle definition_block in GraphBuilder**
 
-```python
-    self.term_dictionary: TermDictionary = TermDictionary()
-```
+In `src/elspais/graph/builder.py`, add a handler for `content_type == "definition_block"` in `add_parsed_content()`. This creates a REMAINDER node with `content_type: "definition_block"` and adds a `TermEntry` to `_terms`.
 
-And at the end of `build_graph()` in `factory.py`, attach the term dictionary to the federated graph before returning.
+- [ ] **Step 5: Add deferred reference resolution in factory.py**
 
-- [ ] **Step 4: Run test to verify it passes**
+After `annotate_coverage(graph)`, add a pass that:
+1. Collects candidate bold/italic references from parsed node text
+2. Resolves them against `graph._terms` (case-insensitive)
+3. Populates `TermRef` entries on matched `TermEntry` objects
+
+- [ ] **Step 6: Add cross-repo term merge to FederatedGraph**
+
+In `federated.py`, after repos are built, merge per-repo `_terms` into a federated `TermDictionary`. Store on `FederatedGraph` for access by CLI commands.
+
+- [ ] **Step 7: Run test to verify it passes**
 
 Run: `pytest tests/test_terms.py::TestTermBuildIntegration -v`
 Expected: PASS
 
-- [ ] **Step 5: Run full test suite for regressions**
+- [ ] **Step 8: Run full test suite for regressions**
 
 Run: `pytest`
 Expected: All pass
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add src/elspais/graph/factory.py src/elspais/graph/federated.py tests/test_terms.py
-git commit -m "feat(terms): integrate term extraction into graph build pipeline"
+git add src/elspais/graph/TraceGraph.py src/elspais/graph/builder.py \
+        src/elspais/graph/factory.py src/elspais/graph/federated.py \
+        tests/test_terms.py
+git commit -m "feat(terms): integrate term dictionary into TraceGraph and build pipeline"
 ```
 
 ---
