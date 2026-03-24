@@ -147,11 +147,11 @@ class ReferenceTransformer:
                         msg = (
                             f"{self.source_id}:{start_ln}: '{keyword.title()}' block "
                             f"is not valid in test files (use 'Verifies' instead) "
-                            f"— treated as Verifies"
+                            f"— skipped"
                         )
                         self.warnings.append(msg)
                         _log.warning(msg)
-                        keyword = "verifies"
+                        continue
 
                     func_name, class_name, func_line, func_end_line = self.line_context.get(
                         start_ln, (None, None, 0, 0)
@@ -332,10 +332,11 @@ class ReferenceTransformer:
             if keyword != "verifies":
                 msg = (
                     f"{self.source_id}:{line_num}: '{keyword.title()}' is not valid "
-                    f"in test files (use 'Verifies' instead) — treated as Verifies"
+                    f"in test files (use 'Verifies' instead) — skipped"
                 )
                 self.warnings.append(msg)
                 _log.warning(msg)
+                return None
             parsed_data = {
                 "verifies": refs,
                 "function_name": func_name,

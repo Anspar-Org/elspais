@@ -326,9 +326,8 @@ class FileDispatcher:
                     continue
                 text = str(token)
                 # File-level reference comments become default verifies for
-                # all test functions in the file.  Only 'Verifies' is the
-                # correct keyword; 'Implements'/'Refines' are accepted with
-                # a warning for backward compatibility.
+                # all test functions in the file.  Only 'Verifies' is valid
+                # in test files; 'Implements'/'Refines' are skipped.
                 kw_match = _re.search(r"(?:implements|verifies|refines)", text, _re.IGNORECASE)
                 if kw_match:
                     kw = kw_match.group(0).lower()
@@ -337,9 +336,10 @@ class FileDispatcher:
                         _log = _logging.getLogger(__name__)
                         _log.warning(
                             "%s:%d: '%s' is not valid in test files "
-                            "(use 'Verifies' instead) — treated as Verifies",
+                            "(use 'Verifies' instead) — skipped",
                             file_path, ln, kw.title(),
                         )
+                        continue
                     # Include multi-assertion separator (+) in pattern
                     multi_sep = _re.escape(self._resolver.config.assertions.multi_separator or "+")
                     for ref_match in _re.finditer(

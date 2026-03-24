@@ -297,9 +297,9 @@ keyword produces a warning:
 
 | Keyword | Spec files | Code files | Test files | Journey files |
 |---------|-----------|------------|------------|---------------|
-| `Implements` | IMPLEMENTS edge | IMPLEMENTS edge | **warning** (treated as Verifies) | n/a |
+| `Implements` | IMPLEMENTS edge | IMPLEMENTS edge | **warning** (skipped) | n/a |
 | `Verifies` | n/a | VERIFIES edge | VERIFIES edge | n/a |
-| `Refines` | REFINES edge | **warning** (skipped) | **warning** (treated as Verifies) | n/a |
+| `Refines` | REFINES edge | **warning** (skipped) | **warning** (skipped) | n/a |
 | `Satisfies` | SATISFIES edge | n/a | n/a | n/a |
 | `Validates` | n/a | n/a | n/a | VALIDATES edge |
 

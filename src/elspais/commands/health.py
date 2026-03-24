@@ -664,6 +664,7 @@ def check_spec_format_rules(
 ) -> HealthCheck:
     """Check that requirements comply with configured format rules."""
     from elspais.graph import NodeKind
+    from elspais.graph.GraphNode import GraphNode
     from elspais.validation.format import get_format_rules_config, validate_requirement_format
 
     rules = get_format_rules_config(config)
@@ -692,23 +693,39 @@ def check_spec_format_rules(
         )
 
     all_violations = []
+    node_map: dict[str, GraphNode] = {}
     req_count = 0
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         req_count += 1
+        node_map[node.id] = node
         violations = validate_requirement_format(node, rules, resolver=resolver)
         all_violations.extend(violations)
 
     errors = [v for v in all_violations if v.severity == "error"]
     warnings = [v for v in all_violations if v.severity == "warning"]
 
-    all_findings = [
-        HealthFinding(
-            message=f"{v.rule}: {v.message}",
-            node_id=v.node_id,
+    all_findings = []
+    for v in all_violations:
+        vnode = node_map.get(v.node_id)
+        fp = None
+        ln = None
+        repo = None
+        if vnode is not None:
+            fn = vnode.file_node()
+            if fn is not None:
+                fp = fn.get_field("relative_path")
+                repo = fn.get_field("repo")
+            ln = vnode.get_field("parse_line")
+        all_findings.append(
+            HealthFinding(
+                message=f"{v.rule}: {v.message}",
+                node_id=v.node_id,
+                file_path=fp,
+                line=ln,
+                repo=repo,
+            )
         )
-        for v in all_violations
-    ]
 
     if errors:
         return HealthCheck(
@@ -2141,6 +2158,29 @@ def _format_report(
 # =============================================================================
 
 
+# Maps check names to the follow-up command a user should run.
+_FOLLOWUP_COMMANDS: dict[str, str] = {
+    "spec.hash_integrity": "elspais fix",
+    "spec.needs_rewrite": "elspais fix",
+    "spec.format_rules": "elspais checks --spec --format json",
+    "spec.no_assertions": "elspais gaps",
+    "spec.index_current": "elspais fix",
+    "spec.no_duplicates": "elspais checks --spec --format json",
+    "spec.implements_resolve": "elspais broken",
+    "spec.refines_resolve": "elspais broken",
+    "spec.broken_references": "elspais broken",
+    "spec.structural_orphans": "elspais checks --spec --format json",
+    "spec.hierarchy_levels": "elspais checks --spec --format json",
+    "spec.changelog_present": "elspais fix",
+    "spec.changelog_current": "elspais fix -m 'Update changelog'",
+    "spec.changelog_format": "elspais checks --spec --format json",
+    "code.unlinked": "elspais unlinked",
+    "tests.unlinked": "elspais unlinked",
+    "tests.results": "elspais failing",
+    "uat.results": "elspais failing",
+}
+
+
 @dataclass
 class _CheckLine:
     """Pre-computed display data for a single health check."""
@@ -2148,6 +2188,7 @@ class _CheckLine:
     icon: str  # "\u2713", "\u2717", "\u26a0", "~"
     name: str
     message: str
+    followup: str | None = None
 
 
 @dataclass
@@ -2267,7 +2308,12 @@ def _build_report_data(report: HealthReport, verbose: bool = False) -> _ReportDa
                 c_icon = "\u26a0"
             else:
                 c_icon = "\u2717"
-            check_lines.append(_CheckLine(icon=c_icon, name=check.name, message=check.message))
+            followup = None
+            if not check.passed or check.severity == "warning":
+                followup = _FOLLOWUP_COMMANDS.get(check.name)
+            check_lines.append(
+                _CheckLine(icon=c_icon, name=check.name, message=check.message, followup=followup)
+            )
 
         sections.append(
             _SectionData(
@@ -2299,13 +2345,25 @@ def _render_text(data: _ReportData) -> str:
         for check in section.checks:
             lines.append(f"  {check.icon} {check.name}: {check.message}")
 
+    # Collect follow-up commands for failing/warning checks
+    followups = [
+        (check.name, check.followup)
+        for section in data.sections
+        for check in section.checks
+        if check.followup
+    ]
+
     lines.append("")
     lines.append("=" * 40)
     lines.append(data.summary_line)
     if data.graph_source:
         lines.append(f"(via {data.graph_source})")
-    if data.hint:
-        lines.append(data.hint)
+    if followups:
+        lines.append("")
+        lines.append("Follow-up:")
+        max_name = max(len(name) for name, _ in followups)
+        for name, cmd in followups:
+            lines.append(f"  {name:<{max_name}}  {cmd}")
     lines.append("=" * 40)
     return "\n".join(lines)
 
