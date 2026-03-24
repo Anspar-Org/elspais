@@ -304,7 +304,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Auto-detect git repository root and change to it
     # This ensures elspais works the same from any subdirectory
-    from elspais.config import find_git_root
+    from elspais.config import find_config_file, find_git_root
 
     original_cwd = Path.cwd()  # Already changed by -C if provided
 
@@ -334,6 +334,18 @@ def main(argv: list[str] | None = None) -> int:
                 f"Use -C to change the working directory.",
                 file=sys.stderr,
             )
+
+    # Verbose: show which config files are in effect
+    if args.verbose:
+        effective_root = git_root or original_cwd
+        config_file = config_path or find_config_file(effective_root)
+        if config_file and Path(config_file).exists():
+            print(f"Config: {config_file}", file=sys.stderr)
+            local_file = Path(config_file).parent / ".elspais.local.toml"
+            if local_file.is_file():
+                print(f"Config override: {local_file}", file=sys.stderr)
+        else:
+            print("Config: using defaults (no .elspais.toml found)", file=sys.stderr)
 
     # Store roots on args for commands to use
     args.git_root = git_root

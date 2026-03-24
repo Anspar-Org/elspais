@@ -13,7 +13,7 @@ These options work with all commands:
 
 ## checks
 
-Run health checks across configuration, spec files, code, and tests.
+Verify requirements traceability across configuration, spec files, code, and tests.
 
   $ elspais checks                     # Run all checks
   $ elspais checks --spec              # Spec file checks

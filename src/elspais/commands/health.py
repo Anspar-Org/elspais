@@ -2,9 +2,9 @@
 # Implements: REQ-d00218-A+B+C
 # Implements: REQ-d00219-A+B+C+D
 """
-elspais.commands.health - Diagnose configuration and repository health.
+elspais.commands.health - Requirements traceability verification.
 
-Provides comprehensive health checks for:
+Verifies traceability completeness for:
 - Config: TOML syntax, required fields, valid paths
 - Spec: File parsing, duplicate IDs, reference resolution
 - Code: Code→REQ reference validation

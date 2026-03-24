@@ -1,14 +1,21 @@
 # Known Issues
 
-[ ] docs : update quickstart
-- at the top of file, Show an example of a small 'tree' of REQUIREMENTS nodes
-- then show one REQUIREMENT expanded to have multiple ASSERTIONS
-- define an ASSERTION as a testable statement (ref some ISO spec or something?)
-- DEV level REQUIREMENTS should typically "refine" a PRD
-- A code example should "implement" the DEV ASSERTION
-- a test case should reference the DEV ASSERTION
-- show 'checks' as a way of measuring the traceability of the claims in the specs
-- note: also update checks help: it's not a 'health check any more. Its a traceability summary (or some other more technical term)
+[x] checks, gaps, reports: clarification
+- The `--status` flag already exists on checks/gaps commands for prospective analysis
+- e.g. `elspais gaps --status Draft` shows gaps as if Draft requirements were active
+- Documented in checks.md "Prospective Reports" section
+
+[x] checks: feature
+- Config files now reported with `-v` (verbose) flag
+- FederatedGraph results: already working
+- Repo identification in errors: already implemented via `_annotate_findings()`
+
+[x] docs : update quickstart
+- Quickstart rewritten with traceability chain diagram (PRD->DEV->code->test)
+- Shows requirement with multiple assertions, DEV refining PRD, code Implements, test Verifies
+- Assertions defined as testable statements (ref ISO/IEC/IEEE 29148:2018)
+- Checks terminology updated from "health check" to "traceability verification" (FDA CSV alignment)
+- Updated in: ChecksArgs docstring, health.py module docstring, checks.md, commands.md
 
 
 [x] viewer : bug : card assertion lines
@@ -30,24 +37,26 @@
 - if the target of the comment is deleted then the comment is resolved
 
 
-[ ] checks, gaps, reports: clarification
-- we want to be able to generate prospective reports that treat provisional status as active
-- i.e. show me the gaps if all drafts were active? or if all "drafts and proposed" were active
-- e.g. "elspais gaps --status draft"
-
-[ ] checks: feature
-- checks should report which config files it is reading
-- it should report results for the whole FederaredGraph (probably working)
-- errors should identify the repo in which the source is located
--- probably overkill to annotate all nodes in the graph for this purpose. would bloat the graph quite a bit, and its only used for reports.
-
-[ ] gaps : feature
+[x] gaps : feature
 - errors should identify the repo in which the source is located
 - applies to all commands / reports of that kind
 
-[ ] viewer: bug : multi-repo git support
+[x] viewer: bug : multi-repo git support
 - must support selecting independent branches for each TraceGrpah (separate repo)
 - but when making a new branch, it can apply to all repos (as a way to keep them in-sync)
+
+[ ] feature : defined terms
+- it might be useful to use *defined terms* that can be collected and cross referenced, index and glossary-style
+- need a syntax for the *term* and for the definition. e.g.
+- *defined term* means a phrase with a specific definition in the context of these requirements.
+- Other uses: collecting all references to notifications, so we can create a catalog of all defined notifications.
+- collecting all instances of questionnaires, as in _HHT QoL_ is a short *Questionnaire* that asertains quality of life impact.
+- _defined term_ is how a term is defined. More than one instance: error, warning, override, or concat? 
+- *defined term* is how it is referenced. 
+- will need to generate an index and glossary file
+- rename INDEX to CATALOG?
+
+
 
 [x] viewer: changed filter
 - don't think it's working... surely there must be some REQ changes from main in this branch?
@@ -183,6 +192,12 @@
 - Don't allow editing of state = retired REQs
 
 [ ] chore (med): Unify `file_patterns` / `directories` in scanning config. `file_patterns` (glob against repo root, no skip logic) and `directories` (recursive walk with hardcoded `DEFAULT_CODE_PATTERNS` + skip/ignore) are partially redundant. Consider replacing both with a single `patterns` list that supports glob + skip/ignore.
+
+[ ] code review : no legacy code
+- we don't need any 'backwards compatible' code paths
+- find the terms that will detect these code situations
+- is there a linter that looks for dead code?
+- or perhaps a profiler: find all the functions never called in a test, as a starting point for obsolete candidates?
 
 ---
 

@@ -1,6 +1,6 @@
 # CHECKS
 
-The `elspais checks` command diagnoses configuration and repository issues, helping you identify problems before they affect your workflow.
+The `elspais checks` command performs **traceability verification** — confirming that requirements are properly traced through implementation, tests, and validation results. In FDA CSV (Computer System Validation) terms, this is the automated equivalent of verifying a Requirements Traceability Matrix (RTM).
 
 ## Quick Start
 
@@ -18,7 +18,7 @@ elspais checks --tests     # Test mapping checks
 
 ### Configuration Checks
 
-Configuration checks always run as part of the full health check. For focused configuration and environment diagnostics, use `elspais doctor`.
+Configuration checks always run as part of traceability verification. For focused configuration and environment diagnostics, use `elspais doctor`.
 
 | Check | Description |
 |-------|-------------|
@@ -293,7 +293,7 @@ Produces JUnit XML that CI systems (GitHub Actions, Jenkins, GitLab CI) can inge
 **CI Integration Example (GitHub Actions):**
 
 ```yaml
-- name: Run health checks (JUnit)
+- name: Traceability verification (JUnit)
   run: elspais checks --format junit -o health-results.xml
 
 - name: Publish test results
@@ -376,7 +376,7 @@ Produces [SARIF v2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.
 **CI Integration Example (GitHub Code Scanning):**
 
 ```yaml
-- name: Run health checks (SARIF)
+- name: Traceability verification (SARIF)
   run: elspais checks --format sarif -o health-results.sarif
   continue-on-error: true
 
@@ -410,6 +410,33 @@ elspais checks untested           # Checklist + untested gaps
 
 Gap commands support `--format text` (default), `--format markdown`, and `--format json`.
 
+## Prospective Reports (What-If Analysis)
+
+By default, `checks` and `gaps` only include requirements with **Active** status
+in coverage calculations. Requirements with Draft, Proposed, or other provisional
+statuses are excluded.
+
+Use `--status` to include additional statuses and see what traceability gaps
+would exist if those requirements were promoted to Active:
+
+```bash
+# Show gaps assuming all Draft requirements were active
+elspais gaps --status Draft
+
+# Show checks including both Draft and Proposed
+elspais checks --status Draft --status Proposed
+
+# Combine with gap subcommands
+elspais untested --status Draft
+```
+
+This is useful for planning: before promoting a batch of Draft requirements,
+run a prospective report to see which ones still need code references, tests,
+or UAT validation.
+
+The `--status` flag accepts any configured status name (case-sensitive).
+See `elspais docs config` for how status roles are configured.
+
 ## Exit Codes
 
 Exit codes use a bitfield so composed reports indicate which sections failed:
@@ -435,7 +462,7 @@ Composed reports OR the bits together. Currently only `checks` returns non-zero 
 ### CI/CD Pipeline Check
 
 ```bash
-# Fail pipeline if health checks fail
+# Fail pipeline if traceability verification fails
 elspais checks || exit 1
 ```
 

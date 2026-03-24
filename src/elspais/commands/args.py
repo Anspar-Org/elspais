@@ -23,7 +23,7 @@ import tyro
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
 class ChecksArgs:
-    """Check repository and configuration health."""
+    """Verify requirements traceability and configuration."""
 
     spec_only: Annotated[bool, tyro.conf.arg(name="spec")] = False
     """Run spec file checks only."""
