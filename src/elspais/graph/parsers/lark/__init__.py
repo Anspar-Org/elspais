@@ -332,13 +332,8 @@ class FileDispatcher:
                 if kw_match:
                     kw = kw_match.group(0).lower()
                     if kw != "verifies":
-                        import logging as _logging
-                        _log = _logging.getLogger(__name__)
-                        _log.warning(
-                            "%s:%d: '%s' is not valid in test files "
-                            "(use 'Verifies' instead) — skipped",
-                            file_path, ln, kw.title(),
-                        )
+                        # Silently skip — test fixtures contain cross-type
+                        # keywords in string literals
                         continue
                     # Include multi-assertion separator (+) in pattern
                     multi_sep = _re.escape(self._resolver.config.assertions.multi_separator or "+")

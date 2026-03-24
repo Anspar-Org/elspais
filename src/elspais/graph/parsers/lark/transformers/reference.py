@@ -134,23 +134,12 @@ class ReferenceTransformer:
                         break
 
                 if refs:
-                    # Validate keyword for file type
+                    # Skip keywords invalid for this file type (silently —
+                    # test fixtures legitimately contain cross-type keywords
+                    # in string literals that the grammar also matches)
                     if self.content_type == "code_ref" and keyword == "refines":
-                        msg = (
-                            f"{self.source_id}:{start_ln}: 'Refines' block is not "
-                            f"valid in code files — skipped"
-                        )
-                        self.warnings.append(msg)
-                        _log.warning(msg)
                         continue
                     if self.content_type == "test_ref" and keyword != "verifies":
-                        msg = (
-                            f"{self.source_id}:{start_ln}: '{keyword.title()}' block "
-                            f"is not valid in test files (use 'Verifies' instead) "
-                            f"— skipped"
-                        )
-                        self.warnings.append(msg)
-                        _log.warning(msg)
                         continue
 
                     func_name, class_name, func_line, func_end_line = self.line_context.get(
@@ -313,13 +302,7 @@ class ReferenceTransformer:
 
         if self.content_type == "code_ref":
             if keyword == "refines":
-                msg = (
-                    f"{self.source_id}:{line_num}: 'Refines' is not valid in code "
-                    f"files (Refines is requirement-to-requirement only) — skipped"
-                )
-                self.warnings.append(msg)
-                _log.warning(msg)
-                return None
+                return None  # Refines is requirement-to-requirement only
             parsed_data: dict[str, Any] = {
                 "implements": refs if keyword == "implements" else [],
                 "verifies": refs if keyword == "verifies" else [],
@@ -330,13 +313,7 @@ class ReferenceTransformer:
             }
         else:  # test_ref
             if keyword != "verifies":
-                msg = (
-                    f"{self.source_id}:{line_num}: '{keyword.title()}' is not valid "
-                    f"in test files (use 'Verifies' instead) — skipped"
-                )
-                self.warnings.append(msg)
-                _log.warning(msg)
-                return None
+                return None  # Only Verifies is valid in test files
             parsed_data = {
                 "verifies": refs,
                 "function_name": func_name,
