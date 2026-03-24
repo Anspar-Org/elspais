@@ -1,5 +1,23 @@
 # Known Issues
 
+[ ] docs : update quickstart
+- at the top of file, Show an example of a small 'tree' of REQUIREMENTS nodes
+- then show one REQUIREMENT expanded to have multiple ASSERTIONS
+- define an ASSERTION as a testable statement (ref some ISO spec or something?)
+- DEV level REQUIREMENTS should typically "refine" a PRD
+- A code example should "implement" the DEV ASSERTION
+- a test case should reference the DEV ASSERTION
+- show 'checks' as a way of measuring the traceability of the claims in the specs
+- note: also update checks help: it's not a 'health check any more. Its a traceability summary (or some other more technical term)
+
+
+[x] viewer : bug : card assertion lines
+- Fixed: IMP badge shows only direct IMPLEMENTS->CODE refs; REF badge shows REFINES->REQUIREMENT refs
+- Separate API endpoints: /api/code-coverage/?kind=implements and /api/refines-coverage/
+- Indirect/blanket coverage excluded from per-assertion panels (shown only in header)
+
+
+
 [ ] feature: viewer: add review/comment
 - In Edit Mode, allow user to tag any REQ or JNY element (and CODE and TEST reference) with a comment. 
  - this is most 'unique' aspect of this feature. What can we put a comment on? How do we do that w/o cluttering the display with a separate 'comment' icon on every field?
