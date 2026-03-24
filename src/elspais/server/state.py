@@ -53,13 +53,11 @@ class AppState:
         graph: Any,
         repo_root: Path,
         config: dict[str, Any],
-        canonical_root: Path | None = None,
         allowed_roots: list[Path] | None = None,
     ) -> None:
         self.graph = graph
         self.repo_root = repo_root
         self.config = config
-        self.canonical_root = canonical_root or repo_root
         self.allowed_roots = allowed_roots or _compute_allowed_roots(repo_root, config)
         self.build_time = time.time()
         self._mtimes: dict[str, float] = {}
@@ -98,7 +96,6 @@ class AppState:
         cls,
         repo_root: Path,
         config: dict[str, Any] | None = None,
-        canonical_root: Path | None = None,
     ) -> AppState:
         """Build graph from config and create state."""
         from elspais.config import get_config
@@ -106,12 +103,11 @@ class AppState:
 
         if config is None:
             config = get_config(start_path=repo_root, quiet=True)
-        graph = build_graph(config=config, repo_root=repo_root, canonical_root=canonical_root)
+        graph = build_graph(config=config, repo_root=repo_root)
         return cls(
             graph=graph,
             repo_root=repo_root,
             config=config,
-            canonical_root=canonical_root,
         )
 
     def snapshot_mtimes(self) -> None:
@@ -196,7 +192,6 @@ class AppState:
         self.graph = build_graph(
             config=self.config,
             repo_root=self.repo_root,
-            canonical_root=self.canonical_root,
         )
         self.build_time = time.time()
         self.snapshot_mtimes()

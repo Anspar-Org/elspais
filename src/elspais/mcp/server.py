@@ -54,7 +54,7 @@ except ImportError:
     MCP_AVAILABLE = False
     FastMCP = None
 
-from elspais.config import find_canonical_root, find_config_file, get_config
+from elspais.config import find_config_file, get_config
 from elspais.config.schema import ElspaisConfig
 from elspais.graph import NodeKind
 from elspais.graph.annotators import (
@@ -586,7 +586,6 @@ def _add_changelog_for_active_mutations(
 def _refresh_graph(
     repo_root: Path,
     full: bool = False,
-    canonical_root: Path | None = None,
 ) -> tuple[dict[str, Any], FederatedGraph]:
     """Rebuild the graph from spec files.
 
@@ -595,14 +594,13 @@ def _refresh_graph(
     Args:
         repo_root: Repository root path.
         full: If True, clear all caches before rebuild.
-        canonical_root: Canonical (non-worktree) repo root for cross-repo paths.
 
     Returns:
         Tuple of (result dict, new TraceGraph).
     """
     # Build fresh graph
     try:
-        new_graph = build_graph(repo_root=repo_root, canonical_root=canonical_root)
+        new_graph = build_graph(repo_root=repo_root)
     except (ValueError, Exception) as e:
         error_msg = str(e)
         if ".elspais.toml" in error_msg:
@@ -3782,7 +3780,7 @@ def _apply_link_impl(
         }
 
     # Refresh graph after file modification
-    _, new_graph = _refresh_graph(working_dir, canonical_root=state.get("canonical_root"))
+    _, new_graph = _refresh_graph(working_dir)
     state["graph"] = new_graph
 
     return {
@@ -4690,13 +4688,10 @@ def create_server(
     # Load config for the working directory
     config = get_config(start_path=working_dir, quiet=True)
 
-    # Compute canonical root for worktree-aware path resolution
-    canonical_root = find_canonical_root(working_dir)
-
     # Build initial graph if not provided
     if graph is None:
         try:
-            graph = build_graph(config=config, repo_root=working_dir, canonical_root=canonical_root)
+            graph = build_graph(config=config, repo_root=working_dir)
         except ValueError as e:
             import sys
 
@@ -4711,7 +4706,6 @@ def create_server(
         "graph": graph,
         "working_dir": working_dir,
         "config": config,
-        "canonical_root": canonical_root,
     }
 
     # ─────────────────────────────────────────────────────────────────────
@@ -4743,12 +4737,10 @@ def create_server(
                 return {"success": False, "message": f"Directory not found: {path}"}
             _state["working_dir"] = new_dir
             _state["config"] = get_config(start_path=new_dir, quiet=True)
-            _state["canonical_root"] = find_canonical_root(new_dir)
 
         result, new_graph = _refresh_graph(
             _state["working_dir"],
             full=full,
-            canonical_root=_state.get("canonical_root"),
         )
         _state["graph"] = new_graph
         # REQ-d00205-B: Sync config from rebuilt graph's root repo
@@ -5371,7 +5363,6 @@ def create_server(
         if result.get("success"):
             new_result, new_graph = _refresh_graph(
                 _state["working_dir"],
-                canonical_root=_state.get("canonical_root"),
             )
             _state["graph"] = new_graph
         return result
@@ -5393,7 +5384,6 @@ def create_server(
         if result.get("success"):
             new_result, new_graph = _refresh_graph(
                 _state["working_dir"],
-                canonical_root=_state.get("canonical_root"),
             )
             _state["graph"] = new_graph
         return result
@@ -5406,7 +5396,6 @@ def create_server(
         if result.get("success"):
             new_result, new_graph = _refresh_graph(
                 _state["working_dir"],
-                canonical_root=_state.get("canonical_root"),
             )
             _state["graph"] = new_graph
         return result
@@ -5481,7 +5470,6 @@ def create_server(
         if result.get("success"):
             new_result, new_graph = _refresh_graph(
                 _state["working_dir"],
-                canonical_root=_state.get("canonical_root"),
             )
             _state["graph"] = new_graph
 

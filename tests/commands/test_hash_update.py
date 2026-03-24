@@ -317,7 +317,6 @@ class TestUpdateHashesCommand:
             dry_run=True,
             spec_dir=git_repo_with_stale_hash / "spec",
             config=git_repo_with_stale_hash / ".elspais.toml",
-            canonical_root=None,
             quiet=False,
             verbose=False,
             mode="combined",
@@ -348,7 +347,6 @@ class TestUpdateHashesCommand:
             dry_run=False,
             spec_dir=git_repo_with_stale_hash / "spec",
             config=git_repo_with_stale_hash / ".elspais.toml",
-            canonical_root=None,
             quiet=False,
             verbose=False,
             mode="combined",
@@ -379,7 +377,6 @@ class TestUpdateHashesCommand:
             dry_run=False,
             spec_dir=git_repo_with_stale_hash / "spec",
             config=git_repo_with_stale_hash / ".elspais.toml",
-            canonical_root=None,
             message="Hash update",
         )
 
@@ -406,7 +403,6 @@ class TestUpdateHashesCommand:
             dry_run=False,
             spec_dir=git_repo_with_stale_hash / "spec",
             config=git_repo_with_stale_hash / ".elspais.toml",
-            canonical_root=None,
             quiet=False,
             verbose=False,
             mode="combined",
@@ -424,7 +420,6 @@ class TestUpdateHashesCommand:
             quiet=False,
             export=False,
             mode="combined",
-            canonical_root=None,
         )
         result = validate_run(verify_args)
 
@@ -543,7 +538,6 @@ A. The system SHALL do something.
             dry_run=False,
             spec_dir=spec_dir,
             config=config,
-            canonical_root=None,
             quiet=False,
             verbose=False,
             mode="combined",
@@ -665,7 +659,6 @@ A. The system SHALL do something.
             dry_run=False,
             spec_dir=spec_dir,
             config=config,
-            canonical_root=None,
             quiet=False,
             verbose=False,
             mode="combined",
@@ -726,7 +719,6 @@ class TestHashCommandOutput:
             quiet=False,
             export=False,
             mode="combined",
-            canonical_root=None,
         )
 
         result = run(args)

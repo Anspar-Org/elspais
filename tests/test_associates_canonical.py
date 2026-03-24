@@ -54,7 +54,7 @@ class TestGetAssociateSpecDirectoriesCanonicalRoot:
         }
 
         spec_dirs, errors = get_associate_spec_directories(
-            config, base_path=worktree, canonical_root=canonical_root
+            config, base_path=canonical_root
         )
 
         assert len(errors) == 0
@@ -80,7 +80,7 @@ class TestGetAssociateSpecDirectoriesCanonicalRoot:
         }
 
         spec_dirs, errors = get_associate_spec_directories(
-            config, base_path=worktree, canonical_root=canonical_root
+            config, base_path=worktree
         )
 
         assert len(errors) == 0
@@ -104,7 +104,7 @@ class TestGetAssociateSpecDirectoriesCanonicalRoot:
         # Use absolute path in config to guarantee it resolves correctly
         # when canonical_root is None
         spec_dirs, errors = get_associate_spec_directories(
-            config, base_path=base, canonical_root=None
+            config, base_path=base
         )
 
         assert len(errors) == 0

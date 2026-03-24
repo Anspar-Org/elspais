@@ -344,7 +344,6 @@ def build_graph(
     repo_root: Path | None = None,
     scan_code: bool = True,
     scan_tests: bool = True,
-    canonical_root: Path | None = None,
     strict: bool = False,
     _build_associates: bool = True,
 ) -> FederatedGraph:
@@ -366,7 +365,6 @@ def build_graph(
         repo_root: Repository root for relative paths (defaults to cwd).
         scan_code: Whether to scan code directories from traceability.scan_patterns.
         scan_tests: Whether to scan test directories from testing.test_dirs.
-        canonical_root: Canonical (non-worktree) repo root for cross-repo paths.
         strict: If True, raise on missing associate paths instead of soft-failing.
         _build_associates: Internal flag to prevent recursive associate building.
 
@@ -726,7 +724,6 @@ def build_graph(
                     repo_root=assoc_path,
                     scan_code=scan_code,
                     scan_tests=scan_tests,
-                    canonical_root=canonical_root,
                     _build_associates=False,
                 )
                 # Extract the TraceGraph from the federation-of-one

@@ -86,7 +86,6 @@ def _make_fix_args(
         dry_run=dry_run,
         spec_dir=project / "spec",
         config=project / ".elspais.toml",
-        canonical_root=None,
         verbose=False,
         quiet=False,
         message=message,

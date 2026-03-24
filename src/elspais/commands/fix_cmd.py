@@ -77,7 +77,6 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> None:
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
-    canonical_root = getattr(args, "canonical_root", None)
     repo_root = getattr(args, "git_root", None) or Path.cwd()
 
     graph = build_graph(
@@ -86,7 +85,6 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> None:
         repo_root=repo_root,
         scan_code=False,
         scan_tests=False,
-        canonical_root=canonical_root,
     )
 
     dirty_nodes = [
@@ -112,7 +110,6 @@ def _make_validate_args(args: argparse.Namespace) -> argparse.Namespace:
         # Shared CLI args
         spec_dir=getattr(args, "spec_dir", None),
         config=getattr(args, "config", None),
-        canonical_root=getattr(args, "canonical_root", None),
         quiet=getattr(args, "quiet", False),
         verbose=getattr(args, "verbose", False),
         # Validate mode
@@ -138,7 +135,6 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
-    canonical_root = getattr(args, "canonical_root", None)
     dry_run = getattr(args, "dry_run", False)
     message = getattr(args, "message", None)
     repo_root = Path(spec_dir).parent if spec_dir else Path.cwd()
@@ -153,7 +149,6 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
         repo_root=repo_root,
         scan_code=False,
         scan_tests=False,
-        canonical_root=canonical_root,
     )
 
     hash_mode = getattr(graph, "hash_mode", "full-text")
@@ -332,7 +327,6 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
-    canonical_root = getattr(args, "canonical_root", None)
 
     config = get_config(config_path)
     spec_dirs = get_spec_directories(spec_dir, config)
@@ -351,7 +345,6 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
         config_path=config_path,
         scan_code=False,
         scan_tests=False,
-        canonical_root=canonical_root,
     )
 
     _regenerate_index(graph, all_spec_dirs, args)

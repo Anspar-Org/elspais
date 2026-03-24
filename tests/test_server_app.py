@@ -1286,7 +1286,6 @@ class TestCLIWiring:
             config=None,
             quiet=True,
             path=None,
-            canonical_root=None,
         )
         with patch("elspais.commands.viewer._run_server", return_value=0) as mock:
             result = run(args)
@@ -1307,7 +1306,6 @@ class TestCLIWiring:
             config=None,
             quiet=True,
             path=None,
-            canonical_root=None,
         )
         with patch("elspais.commands.viewer._run_server", return_value=0) as mock:
             result = run(args)
@@ -1328,7 +1326,6 @@ class TestCLIWiring:
             config=None,
             quiet=True,
             path=None,
-            canonical_root=None,
             embed_content=False,
             output=None,
         )

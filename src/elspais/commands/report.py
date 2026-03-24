@@ -88,11 +88,9 @@ def parse_shared_args(argv: list[str]) -> argparse.Namespace:
 def run(
     sections: list[str],
     argv_remaining: list[str],
-    canonical_root: Path | None = None,
 ) -> int:
     """Run composed report with multiple sections."""
     args = parse_shared_args(argv_remaining)
-    args.canonical_root = canonical_root
     fmt = args.format
 
     # Validate format support for each section
@@ -133,7 +131,6 @@ def run(
         graph = build_graph(
             spec_dirs=[spec_dir] if spec_dir else None,
             config_path=config_path,
-            canonical_root=canonical_root,
         )
         config = get_config(config_path)
 

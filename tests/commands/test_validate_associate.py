@@ -175,7 +175,6 @@ def _make_validate_args(repo_path, mode="associate"):
         quiet=False,
         export=False,
         mode=mode,
-        canonical_root=None,
     )
 
 

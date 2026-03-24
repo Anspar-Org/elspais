@@ -45,7 +45,6 @@ def test_run_passes_daemon_source_to_report(capsys):
         spec_dir=None,
         status=None,
         config=None,
-        canonical_root=None,
         output=None,
     )
 

@@ -1404,7 +1404,6 @@ async def api_revert(request: Request) -> JSONResponse:
         new_graph = build_graph(
             config=state.config,
             repo_root=state.repo_root,
-            canonical_root=state.canonical_root,
         )
         state.graph = new_graph
         state.build_time = time.time()
@@ -1428,7 +1427,6 @@ async def api_reload(request: Request) -> JSONResponse:
         new_graph = build_graph(
             config=state.config,
             repo_root=state.repo_root,
-            canonical_root=state.canonical_root,
         )
         state.graph = new_graph
         state.build_time = time.time()

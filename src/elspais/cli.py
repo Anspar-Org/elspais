@@ -281,16 +281,15 @@ def main(argv: list[str] | None = None) -> int:
         i += 1
 
     if len(sections) > 1:
-        from elspais.config import find_canonical_root, find_git_root
+        from elspais.config import find_git_root
 
         git_root = find_git_root(start_dir)
-        canonical_root = find_canonical_root(start_dir)
         if git_root and git_root != Path.cwd():
             os.chdir(git_root)
 
         from elspais.commands import report
 
-        return report.run(sections, argv[i:], canonical_root=canonical_root)
+        return report.run(sections, argv[i:])
 
     # Single command — Tyro parsing
     import tyro
@@ -305,7 +304,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Auto-detect git repository root and change to it
     # This ensures elspais works the same from any subdirectory
-    from elspais.config import find_canonical_root, find_git_root
+    from elspais.config import find_git_root
 
     original_cwd = Path.cwd()  # Already changed by -C if provided
 
@@ -314,17 +313,13 @@ def main(argv: list[str] | None = None) -> int:
     if explicit_path:
         explicit_path = Path(explicit_path).resolve()
         git_root = explicit_path
-        canonical_root = find_canonical_root(explicit_path)
     else:
         git_root = find_git_root(original_cwd)
-        canonical_root = find_canonical_root(original_cwd)
 
     if git_root and git_root != original_cwd:
         os.chdir(git_root)
         if args.verbose:
             print(f"Working from repository root: {git_root}", file=sys.stderr)
-            if canonical_root and canonical_root != git_root:
-                print(f"Canonical root (main repo): {canonical_root}", file=sys.stderr)
     elif not git_root and args.verbose:
         print("Warning: Not in a git repository", file=sys.stderr)
 
@@ -342,7 +337,6 @@ def main(argv: list[str] | None = None) -> int:
 
     # Store roots on args for commands to use
     args.git_root = git_root
-    args.canonical_root = canonical_root
 
     # Global --output: redirect stdout to file
     output_file = None

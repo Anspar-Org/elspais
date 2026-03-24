@@ -68,7 +68,6 @@ def test_fix_rewrites_file_with_duplicate_refines(tmp_path):
         dry_run=False,
         spec_dir=None,
         config=project / ".elspais.toml",
-        canonical_root=None,
         git_root=project,
         verbose=False,
         quiet=False,

@@ -19,7 +19,6 @@ class TestDoctorExitCodes:
             config=str(config),
             json=False,
             verbose=False,
-            canonical_root=None,
         )
         result = run(args)
         assert result == 1
@@ -40,7 +39,6 @@ class TestDoctorExitCodes:
             config=str(config),
             json=False,
             verbose=False,
-            canonical_root=None,
         )
         result = run(args)
         assert result == 1
@@ -66,7 +64,6 @@ class TestDoctorExitCodes:
             config=str(config),
             json=False,
             verbose=False,
-            canonical_root=tmp_path,
         )
         result = run(args)
         assert result == 1
@@ -90,7 +87,6 @@ class TestDoctorExitCodes:
             config=str(config),
             json=False,
             verbose=False,
-            canonical_root=None,
         )
         result = run(args)
         assert result == 0
@@ -125,7 +121,6 @@ class TestValidateExitCodes:
             quiet=False,
             export=False,
             mode="core",
-            canonical_root=None,
         )
         result = run(args)
         assert result == 1
@@ -157,7 +152,6 @@ class TestValidateExitCodes:
             quiet=False,
             export=False,
             mode="core",
-            canonical_root=None,
         )
         result = run(args)
         assert result == 1
@@ -186,7 +180,6 @@ class TestDoctorAssociatedSection:
             config=str(config),
             json=False,
             verbose=False,
-            canonical_root=None,
         )
         result = run(args)
         assert result == 1
@@ -207,7 +200,6 @@ class TestDoctorAssociatedSection:
             config=str(config),
             json=False,
             verbose=False,
-            canonical_root=None,
         )
         result = run(args)
         assert result == 1
@@ -278,7 +270,6 @@ class TestValidateAssociateCount:
             quiet=False,
             export=False,
             mode="combined",
-            canonical_root=tmp_path,
         )
         result = run(args)
         assert result == 1
@@ -330,7 +321,6 @@ class TestValidateAssociateCount:
             quiet=False,
             export=False,
             mode="combined",
-            canonical_root=tmp_path,
         )
         result = run(args)
         assert result == 1

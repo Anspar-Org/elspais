@@ -84,10 +84,10 @@ def cmd_link(args: argparse.Namespace) -> int:
         print("Error: No configuration directory found.", file=sys.stderr)
         return 1
 
-    canonical_root = getattr(args, "canonical_root", None)
-    cr = Path(canonical_root) if canonical_root else None
+    git_root = getattr(args, "git_root", None)
+    gr = Path(git_root) if git_root else None
     already_linked = _add_path_to_local_config(
-        config_dir, str(repo_path), result.name, result.code, cr
+        config_dir, str(repo_path), result.name, result.code, gr
     )
     if already_linked:
         print(f"Already linked: {result.name} ({result.code}) at {repo_path}")
@@ -100,7 +100,7 @@ def cmd_link(args: argparse.Namespace) -> int:
 def cmd_all(args: argparse.Namespace) -> int:
     """Auto-discover and link all associate repos in sibling directories.
 
-    Scans canonical_root.parent (or config_dir.parent) for directories
+    Scans git_root.parent (or config_dir.parent) for directories
     containing .elspais.toml with project.type = 'associated'.
 
     Args:
@@ -135,12 +135,12 @@ def cmd_all(args: argparse.Namespace) -> int:
         print("No associate repositories found in sibling directories.")
         return 0
 
-    canonical_root = getattr(args, "canonical_root", None)
-    cr = Path(canonical_root) if canonical_root else None
+    git_root = getattr(args, "git_root", None)
+    gr = Path(git_root) if git_root else None
     linked_count = 0
     for repo_path, assoc in found:
         already_linked = _add_path_to_local_config(
-            config_dir, str(repo_path), assoc.name, assoc.code, cr
+            config_dir, str(repo_path), assoc.name, assoc.code, gr
         )
         status = "already linked" if already_linked else "linked"
         print(f"  Found: {repo_path} ({assoc.code}) [{status}]")
@@ -178,8 +178,7 @@ def cmd_list(args: argparse.Namespace) -> int:
         print("Use 'elspais associate <path>' or 'elspais associate --all' to link.")
         return 0
 
-    # Resolve relative paths from canonical_root (worktree support)
-    canonical_root = getattr(args, "canonical_root", None)
+    git_root = getattr(args, "git_root", None)
 
     print(f"{'Name':<20} {'Prefix':<10} {'Status':<12} Path")
     print("-" * 72)
@@ -187,8 +186,8 @@ def cmd_list(args: argparse.Namespace) -> int:
     for assoc_name, assoc_info in associates.items():
         path_str = assoc_info["path"]
         repo_path = Path(path_str)
-        if not repo_path.is_absolute() and canonical_root:
-            repo_path = Path(canonical_root) / repo_path
+        if not repo_path.is_absolute() and git_root:
+            repo_path = Path(git_root) / repo_path
         if not repo_path.exists():
             print(f"{assoc_name:<20} {'?':<10} {'NOT FOUND':<12} {path_str}")
             continue
@@ -289,11 +288,11 @@ def _get_config_dir(args: argparse.Namespace) -> Path | None:
 def _get_scan_base(args: argparse.Namespace) -> Path | None:
     """Get the base directory to scan for associates.
 
-    Uses canonical_root.parent if available, otherwise config_dir.parent.
+    Uses git_root.parent if available, otherwise config_dir.parent.
     """
-    canonical_root = getattr(args, "canonical_root", None)
-    if canonical_root:
-        return Path(canonical_root).parent
+    git_root = getattr(args, "git_root", None)
+    if git_root:
+        return Path(git_root).parent
 
     config_dir = _get_config_dir(args)
     if config_dir:
@@ -339,7 +338,7 @@ def _add_path_to_local_config(
     repo_path: str,
     assoc_name: str,
     namespace: str,
-    canonical_root: Path | None = None,
+    repo_root: Path | None = None,
 ) -> bool:
     """Add a named associate to .elspais.local.toml.
 
@@ -351,7 +350,7 @@ def _add_path_to_local_config(
         repo_path: Absolute path string to add.
         assoc_name: Name for the associate entry.
         namespace: Namespace prefix for the associate.
-        canonical_root: Canonical repo root for resolving existing relative paths.
+        repo_root: Repository root for resolving existing relative paths.
 
     Returns:
         True if already linked, False if newly added.
@@ -378,8 +377,8 @@ def _add_path_to_local_config(
         if existing_name == assoc_name:
             return True
         existing_path = Path(entry.get("path", ""))
-        if not existing_path.is_absolute() and canonical_root:
-            existing_resolved = (canonical_root / existing_path).resolve()
+        if not existing_path.is_absolute() and repo_root:
+            existing_resolved = (repo_root / existing_path).resolve()
         else:
             existing_resolved = existing_path.resolve()
         if existing_resolved == resolved_new:

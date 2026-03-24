@@ -52,7 +52,6 @@ class Associate:
 def get_associate_spec_directories(
     config: dict[str, Any],
     base_path: Path | None = None,
-    canonical_root: Path | None = None,
 ) -> tuple[list[Path], list[str]]:
     """
     Get all associate spec directories from configuration.
@@ -62,7 +61,6 @@ def get_associate_spec_directories(
     Args:
         config: Main elspais configuration dictionary
         base_path: Base path to resolve relative paths (defaults to cwd)
-        canonical_root: Canonical (non-worktree) repo root for cross-repo paths
 
     Returns:
         Tuple of (spec_dirs, errors). errors contains messages for any
@@ -81,8 +79,8 @@ def get_associate_spec_directories(
     # 1. Path-based loading from [associates] config (new format: named entries)
     for _assoc_name, assoc_entry in typed_config.associates.items():
         repo_path = Path(assoc_entry.path)
-        if not repo_path.is_absolute() and canonical_root:
-            repo_path = canonical_root / repo_path
+        if not repo_path.is_absolute():
+            repo_path = base_path / repo_path
         result = discover_associate_from_path(repo_path)
         if isinstance(result, str):
             errors.append(result)

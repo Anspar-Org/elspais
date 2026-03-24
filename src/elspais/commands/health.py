@@ -2024,7 +2024,6 @@ def run(args: argparse.Namespace) -> int:
             params,
             compute_checks,
             config_path=getattr(args, "config", None),
-            canonical_root=getattr(args, "canonical_root", None),
         )
 
     # The dict already has the correct "healthy" flag (lenient-aware).
@@ -2039,7 +2038,7 @@ def run(args: argparse.Namespace) -> int:
 def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[str, Any]:
     """Build graph from args and run checks locally.
 
-    Handles spec_dir, config_path, canonical_root and graceful error recovery
+    Handles spec_dir, config_path and graceful error recovery
     for config-load and graph-build failures.
     """
     from elspais.config import get_config
@@ -2078,11 +2077,9 @@ def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[
     # Build graph
     graph = None
     try:
-        canonical_root = getattr(args, "canonical_root", None)
         graph = build_graph(
             spec_dirs=[spec_dir] if spec_dir else None,
             config_path=config_path,
-            canonical_root=canonical_root,
         )
         if config is None:
             config = get_config(config_path, start_path=start_path)
