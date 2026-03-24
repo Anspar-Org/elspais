@@ -1446,8 +1446,9 @@ def _resolve_exclude_status(
 ) -> set[str]:
     """Compute the set of statuses to exclude from coverage.
 
-    If --status is provided, include only those statuses (case-insensitive).
-    Otherwise, use status_roles config to determine exclusions.
+    If --status is provided, add those statuses to the normally-included set
+    (e.g. --status Draft includes both Active and Draft). Without --status,
+    use status_roles config to determine exclusions.
     """
     from elspais.config import get_status_roles
 
@@ -1455,10 +1456,10 @@ def _resolve_exclude_status(
     include_raw: list[str] | None = getattr(args, "status", None)
     if not include_raw:
         return roles.coverage_excluded_statuses()
-    # --status flag: include only listed statuses, exclude all others
-    included = {s.title() for s in include_raw}
-    all_known = roles.coverage_excluded_statuses() | set(roles._original_case.values())
-    return all_known - included
+    # --status flag: add these statuses to the normally-included set
+    extra = {s.title() for s in include_raw}
+    default_excluded = roles.coverage_excluded_statuses()
+    return default_excluded - extra
 
 
 def _excluded_note(
