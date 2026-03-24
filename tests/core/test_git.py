@@ -1824,7 +1824,6 @@ class TestGenerateCheckpointMessage:
 
 def _make_repo(tmp_path: Path, name: str, branch: str, n_commits: int = 1) -> Path:
     """Create a git repo with a given branch and number of commits."""
-    import os
 
     from elspais.utilities.git import _clean_git_env as _cge
 

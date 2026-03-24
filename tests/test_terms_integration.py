@@ -7,13 +7,11 @@ handling, and defined_in ancestor resolution.
 
 from pathlib import Path
 
-import pytest
-
 from elspais.graph import NodeKind
 from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.GraphNode import GraphNode
 from elspais.graph.parsers import ParsedContent
-from elspais.graph.terms import TermDictionary, TermEntry
+from elspais.graph.terms import TermDictionary
 
 
 def _make_definition_block(
@@ -102,7 +100,9 @@ class TestTermsIntegration:
 
         # Find the REMAINDER node created for the definition
         remainder_nodes = list(graph.iter_by_kind(NodeKind.REMAINDER))
-        assert len(remainder_nodes) >= 1, "Expected at least one REMAINDER node for definition_block"
+        assert len(remainder_nodes) >= 1, (
+            "Expected at least one REMAINDER node for definition_block"
+        )
 
         # At least one should have content_type="definition_block"
         def_nodes = [

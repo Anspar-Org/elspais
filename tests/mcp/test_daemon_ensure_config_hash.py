@@ -7,8 +7,6 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-from elspais.mcp.daemon import _daemon_json_path
-
 
 def test_ensure_daemon_restarts_on_config_hash_mismatch(tmp_path: Path):
     """ensure_daemon should restart when config hash has changed."""
