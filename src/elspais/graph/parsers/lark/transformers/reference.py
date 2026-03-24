@@ -9,10 +9,20 @@ test_name_ref, control_marker, or other_line.  This transformer:
 1. Extracts requirement IDs from classified lines
 2. Annotates with function/class context from pre-scan
 3. Produces ParsedContent matching the old CodeParser/TestParser contracts
+
+Keyword semantics per file type:
+
+- **test files**: Only ``Verifies`` is valid.  ``Implements`` and ``Refines``
+  produce a warning and are treated as ``Verifies`` for backward compatibility.
+- **code files**: ``Implements`` creates IMPLEMENTS edges.  ``Verifies`` creates
+  VERIFIES edges (for code that produces pass/fail results).  ``Refines`` is
+  invalid (requirement-to-requirement only) and produces a warning; the
+  reference is skipped.
 """
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -23,8 +33,15 @@ from elspais.graph.parsers import ParsedContent
 if TYPE_CHECKING:
     from elspais.utilities.patterns import IdResolver
 
+_log = logging.getLogger(__name__)
+
 # Hardcoded comment styles for empty-comment detection
 _COMMENT_STYLES = ["#", "//", "--"]
+
+# Keyword detection pattern — matches the keyword portion of a reference comment
+_KEYWORD_RE = re.compile(
+    r"(?:implements|verifies|refines)", re.IGNORECASE
+)
 
 
 class ReferenceTransformer:
@@ -47,6 +64,7 @@ class ReferenceTransformer:
         file_default_verifies: list[str] | None = None,
         expected_broken_count: int = 0,
         all_test_funcs: list[tuple[int, str, str | None]] | None = None,
+        source_id: str = "",
     ) -> None:
         self.resolver = resolver
         self.content_type = content_type
@@ -54,6 +72,8 @@ class ReferenceTransformer:
         self.file_default_verifies = file_default_verifies or []
         self.expected_broken_count = expected_broken_count
         self.all_test_funcs = all_test_funcs or []
+        self.source_id = source_id
+        self.warnings: list[str] = []
 
     def transform(self, tree: Tree) -> list[ParsedContent]:
         """Transform parse tree into ParsedContent list."""
@@ -90,7 +110,9 @@ class ReferenceTransformer:
                 refs: list[str] = []
                 start_ln = self._token_line(child)
                 end_ln = start_ln
-                raw_lines = [self._token_text(child)]
+                header_text = self._token_text(child)
+                raw_lines = [header_text]
+                keyword = self._detect_keyword(header_text)
                 i += 1
                 while i < len(children):
                     next_child = children[i]
@@ -112,21 +134,48 @@ class ReferenceTransformer:
                         break
 
                 if refs:
+                    # Validate keyword for file type
+                    if self.content_type == "code_ref" and keyword == "refines":
+                        msg = (
+                            f"{self.source_id}:{start_ln}: 'Refines' block is not "
+                            f"valid in code files — skipped"
+                        )
+                        self.warnings.append(msg)
+                        _log.warning(msg)
+                        continue
+                    if self.content_type == "test_ref" and keyword != "verifies":
+                        msg = (
+                            f"{self.source_id}:{start_ln}: '{keyword.title()}' block "
+                            f"is not valid in test files (use 'Verifies' instead) "
+                            f"— treated as Verifies"
+                        )
+                        self.warnings.append(msg)
+                        _log.warning(msg)
+                        keyword = "verifies"
+
                     func_name, class_name, func_line, func_end_line = self.line_context.get(
                         start_ln, (None, None, 0, 0)
                     )
-                    key = "implements" if self.content_type == "code_ref" else "verifies"
-                    parsed_data: dict[str, Any] = {
-                        key: refs,
-                        "function_name": func_name,
-                        "class_name": class_name,
-                        "function_line": func_line,
-                        "function_end_line": func_end_line,
-                    }
+
                     if self.content_type == "code_ref":
-                        parsed_data.setdefault("verifies", [])
-                    if self.content_type == "test_ref":
-                        parsed_data["file_default_verifies"] = self.file_default_verifies
+                        parsed_data: dict[str, Any] = {
+                            "implements": refs if keyword == "implements" else [],
+                            "verifies": refs if keyword == "verifies" else [],
+                            "function_name": func_name,
+                            "class_name": class_name,
+                            "function_line": func_line,
+                            "function_end_line": func_end_line,
+                        }
+                    else:  # test_ref
+                        parsed_data = {
+                            "verifies": refs,
+                            "function_name": func_name,
+                            "class_name": class_name,
+                            "function_line": func_line,
+                            "function_end_line": func_end_line,
+                            "file_default_verifies": self.file_default_verifies,
+                        }
+
                     if func_line:
                         emitted_func_lines.add(func_line)
                     results.append(
@@ -260,19 +309,33 @@ class ReferenceTransformer:
             line_num, (None, None, 0, 0)
         )
 
-        # Determine if this is implements or verifies based on keyword
-        is_verifies = self._text_has_verify_keyword(text)
+        keyword = self._detect_keyword(text)
 
         if self.content_type == "code_ref":
+            if keyword == "refines":
+                msg = (
+                    f"{self.source_id}:{line_num}: 'Refines' is not valid in code "
+                    f"files (Refines is requirement-to-requirement only) — skipped"
+                )
+                self.warnings.append(msg)
+                _log.warning(msg)
+                return None
             parsed_data: dict[str, Any] = {
-                "implements": [] if is_verifies else refs,
-                "verifies": refs if is_verifies else [],
+                "implements": refs if keyword == "implements" else [],
+                "verifies": refs if keyword == "verifies" else [],
                 "function_name": func_name,
                 "class_name": class_name,
                 "function_line": func_line,
                 "function_end_line": func_end_line,
             }
         else:  # test_ref
+            if keyword != "verifies":
+                msg = (
+                    f"{self.source_id}:{line_num}: '{keyword.title()}' is not valid "
+                    f"in test files (use 'Verifies' instead) — treated as Verifies"
+                )
+                self.warnings.append(msg)
+                _log.warning(msg)
             parsed_data = {
                 "verifies": refs,
                 "function_name": func_name,
@@ -371,9 +434,17 @@ class ReferenceTransformer:
                 refs.append(ref)
         return refs
 
-    def _text_has_verify_keyword(self, text: str) -> bool:
-        """Check if text contains a verify-type keyword."""
-        return "verifies" in text.lower()
+    def _detect_keyword(self, text: str) -> str:
+        """Detect which reference keyword is used in *text*.
+
+        Returns:
+            ``"implements"``, ``"verifies"``, or ``"refines"``.
+            Falls back to ``"implements"`` if no keyword is found.
+        """
+        m = _KEYWORD_RE.search(text)
+        if m:
+            return m.group(0).lower()
+        return "implements"
 
     def _is_empty_comment(self, text: str) -> bool:
         """Check if a line is an empty comment."""

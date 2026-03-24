@@ -449,7 +449,7 @@ def docs_command(args: argparse.Namespace) -> int:
     """Handle docs command - display user documentation from markdown files."""
     import pydoc
 
-    from elspais.utilities.docs_loader import load_all_topics, load_topic
+    from elspais.utilities.docs_loader import list_topics, load_all_topics, load_topic
     from elspais.utilities.md_renderer import render_markdown
 
     topic = args.topic
@@ -457,7 +457,12 @@ def docs_command(args: argparse.Namespace) -> int:
     use_color = not args.plain and sys.stdout.isatty()
 
     # Load content from markdown files
-    if topic == "all":
+    if topic == "topics":
+        content = list_topics()
+        output = render_markdown(content, use_color=use_color)
+        print(output)
+        return 0
+    elif topic == "all":
         content = load_all_topics()
     else:
         content = load_topic(topic)

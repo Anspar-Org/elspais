@@ -265,7 +265,9 @@ class FileDispatcher:
 
         parser = self._get_ref_parser()
         tree = parser.parse(content)
-        transformer = ReferenceTransformer(self._resolver, "code_ref", line_context)
+        transformer = ReferenceTransformer(
+            self._resolver, "code_ref", line_context, source_id=file_path,
+        )
         return transformer.transform(tree)
 
     def dispatch_test(
@@ -323,8 +325,21 @@ class FileDispatcher:
                 if first_def_line and ln >= first_def_line:
                     continue
                 text = str(token)
-                # Check if it's a verifies-type comment at file level
-                if "verifies" in text.lower():
+                # File-level reference comments become default verifies for
+                # all test functions in the file.  Only 'Verifies' is the
+                # correct keyword; 'Implements'/'Refines' are accepted with
+                # a warning for backward compatibility.
+                kw_match = _re.search(r"(?:implements|verifies|refines)", text, _re.IGNORECASE)
+                if kw_match:
+                    kw = kw_match.group(0).lower()
+                    if kw != "verifies":
+                        import logging as _logging
+                        _log = _logging.getLogger(__name__)
+                        _log.warning(
+                            "%s:%d: '%s' is not valid in test files "
+                            "(use 'Verifies' instead) — treated as Verifies",
+                            file_path, ln, kw.title(),
+                        )
                     # Include multi-assertion separator (+) in pattern
                     multi_sep = _re.escape(self._resolver.config.assertions.multi_separator or "+")
                     for ref_match in _re.finditer(
@@ -343,6 +358,7 @@ class FileDispatcher:
             file_default_verifies=file_default_verifies,
             expected_broken_count=expected_broken_count,
             all_test_funcs=all_test_funcs,
+            source_id=file_path,
         )
         return transformer.transform(tree)
 

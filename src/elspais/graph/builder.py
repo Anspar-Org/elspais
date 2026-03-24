@@ -2797,7 +2797,12 @@ class GraphBuilder:
         else:
             label = f"Code at {source_id}:{content.start_line}"
 
-        for impl_ref in data.get("implements", []):
+        all_refs = [
+            (ref, EdgeKind.IMPLEMENTS) for ref in data.get("implements", [])
+        ] + [
+            (ref, EdgeKind.VERIFIES) for ref in data.get("verifies", [])
+        ]
+        for ref, edge_kind in all_refs:
             code_id = f"code:{source_id}:{content.start_line}"
             if code_id not in self._nodes:
                 node = GraphNode(
@@ -2823,7 +2828,7 @@ class GraphBuilder:
                     node.set_field("function_end_line", func_end_line)
                 self._nodes[code_id] = node
 
-            self._pending_links.append((code_id, impl_ref, EdgeKind.IMPLEMENTS))
+            self._pending_links.append((code_id, ref, edge_kind))
 
     def _add_test_ref(self, content: ParsedContent) -> None:
         """Add test reference nodes.

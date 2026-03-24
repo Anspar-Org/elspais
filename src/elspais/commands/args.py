@@ -567,7 +567,13 @@ DOCS_TOPICS = Literal[
     "config",
     "commands",
     "checks",
+    "doctor",
+    "analysis",
+    "associate",
+    "ignore",
+    "graph-model",
     "mcp",
+    "topics",
     "all",
 ]
 
@@ -576,7 +582,7 @@ DOCS_TOPICS = Literal[
 class DocsArgs:
     """Read the user guide."""
 
-    topic: tyro.conf.Positional[DOCS_TOPICS] = "quickstart"
+    topic: tyro.conf.Positional[DOCS_TOPICS] = "topics"
     """Documentation topic."""
 
     plain: bool = False
