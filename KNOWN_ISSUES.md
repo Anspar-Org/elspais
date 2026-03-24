@@ -25,6 +25,13 @@
 
 
 
+[ ] testing: restore daemon usage in e2e tests
+- E2e test fixtures currently set `cli_ttl=0` to force local graph builds
+- This was a workaround for daemon routing issues: the global daemon served the wrong project when e2e tests ran `elspais` in temp directories
+- The engine's `find_git_root()` from the subprocess CWD should find the temp repo's root, and `ensure_daemon` should start a per-project daemon there — need to trace why this wasn't working
+- Restoring daemon usage would make e2e tests faster and exercise more code paths (daemon startup, version check, HTTP transport)
+- The viewer version check (added in this branch) helps with stale versions but not wrong-project routing
+
 [ ] graph: add render_order to STRUCTURES edges
 - STRUCTURES edges (REQ→ASSERTION, REQ→REMAINDER) lack explicit ordering metadata
 - Currently relies on parse_line for ordering, which is fragile if sections are moved/reordered via mutations
