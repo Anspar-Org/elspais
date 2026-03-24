@@ -90,6 +90,7 @@ async def index(request: Request):
             "coverage_index": {},
             "status_data": {},
             "catalog": get_catalog(),
+            "config": state.config,
             **viewer_cfg,
         }
 
