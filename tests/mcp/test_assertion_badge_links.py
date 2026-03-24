@@ -4,9 +4,14 @@
 Implements: REQ-d00064
 """
 import pytest
+from unittest.mock import MagicMock
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.relations import EdgeKind
-from elspais.mcp.server import _iter_assertion_coverage
+from elspais.mcp.server import (
+    _iter_assertion_coverage,
+    _get_assertion_code_map,
+    _get_assertion_refines_map,
+)
 
 
 def _make_req_with_mixed_edges():
@@ -105,3 +110,62 @@ class TestIterAssertionCoverageFiltered:
             req, NodeKind.CODE, edge_kinds={EdgeKind.REFINES}
         ))
         assert results == []
+
+
+def _make_graph_with_req():
+    """Build a FederatedGraph mock containing REQ-001 with mixed edges."""
+    req = _make_req_with_mixed_edges()
+    graph = MagicMock()
+    graph.find_by_id.return_value = req
+    return graph
+
+
+class TestGetAssertionCodeMapFiltered:
+    """_get_assertion_code_map with edge_kind='implements'."""
+
+    def test_implements_filter_returns_only_implements_refs(self):
+        graph = _make_graph_with_req()
+        result = _get_assertion_code_map(graph, "REQ-001", edge_kind="implements")
+        assert result["success"]
+        a_ids = {r["id"] for r in result["assertion_code"]["A"]["code_refs"]}
+        assert "CODE-impl" in a_ids
+        # CODE-blanket excluded (direct_only=True when edge_kind is set)
+        assert "CODE-blanket" not in a_ids
+
+    def test_no_filter_returns_all_code(self):
+        graph = _make_graph_with_req()
+        result = _get_assertion_code_map(graph, "REQ-001")
+        assert result["success"]
+        all_ids = set()
+        for label_data in result["assertion_code"].values():
+            for r in label_data["code_refs"]:
+                all_ids.add(r["id"])
+        assert "CODE-impl" in all_ids
+        assert "CODE-blanket" in all_ids
+
+
+class TestGetAssertionRefinesMap:
+    """_get_assertion_refines_map returns REFINES->REQUIREMENT links."""
+
+    def test_returns_refining_requirements(self):
+        graph = _make_graph_with_req()
+        result = _get_assertion_refines_map(graph, "REQ-001")
+        assert result["success"]
+        b_refs = result["assertion_refines"]["B"]["refines_refs"]
+        assert len(b_refs) == 1
+        assert b_refs[0]["id"] == "REQ-child"
+        assert b_refs[0]["title"] == "Child requirement refining B"
+
+    def test_unrefined_assertion_has_empty_list(self):
+        graph = _make_graph_with_req()
+        result = _get_assertion_refines_map(graph, "REQ-001")
+        assert result["success"]
+        a_refs = result["assertion_refines"]["A"]["refines_refs"]
+        assert a_refs == []
+
+    def test_not_found_returns_error(self):
+        graph = MagicMock()
+        graph.find_by_id.return_value = None
+        result = _get_assertion_refines_map(graph, "NOPE")
+        assert not result["success"]
+        assert "error" in result

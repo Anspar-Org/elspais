@@ -3257,7 +3257,9 @@ def _get_assertion_uat_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]
     }
 
 
-def _get_assertion_code_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
+def _get_assertion_code_map(
+    graph: FederatedGraph, req_id: str, edge_kind: str | None = None
+) -> dict[str, Any]:
     """Build per-assertion code implementation map for a requirement.
 
     Returns a structure mapping each assertion label to its CODE nodes,
@@ -3269,10 +3271,15 @@ def _get_assertion_code_map(graph: FederatedGraph, req_id: str) -> dict[str, Any
     Args:
         graph: The TraceGraph to query.
         req_id: The requirement ID.
+        edge_kind: Optional edge kind filter ('implements' or 'refines').
+            When set, only edges of that kind are returned, and blanket
+            (untargeted) edges are excluded via direct_only=True.
 
     Returns:
         Dict with per-assertion code lists, coverage stats.
     """
+    from elspais.graph.relations import EdgeKind
+
     node = graph.find_by_id(req_id)
     if node is None:
         return {"success": False, "error": f"Requirement {req_id} not found"}
@@ -3293,7 +3300,16 @@ def _get_assertion_code_map(graph: FederatedGraph, req_id: str) -> dict[str, Any
 
     seen_per_assertion: dict[str, set[str]] = {label: set() for _, label in assertions}
 
-    for code_node, labels in _iter_assertion_coverage(node, NodeKind.CODE):
+    # Build optional filter kwargs
+    iter_kwargs: dict[str, Any] = {}
+    if edge_kind:
+        ek_map = {"implements": EdgeKind.IMPLEMENTS, "refines": EdgeKind.REFINES}
+        ek = ek_map.get(edge_kind)
+        if ek:
+            iter_kwargs["edge_kinds"] = {ek}
+            iter_kwargs["direct_only"] = True
+
+    for code_node, labels in _iter_assertion_coverage(node, NodeKind.CODE, **iter_kwargs):
         info = _serialize_code_info(code_node, graph)
         for label in labels:
             if label not in assertion_code:
@@ -3314,6 +3330,70 @@ def _get_assertion_code_map(graph: FederatedGraph, req_id: str) -> dict[str, Any
         "total_assertions": total,
         "covered_count": covered_count,
         "referenced_pct": round(referenced_pct, 1),
+    }
+
+
+def _get_assertion_refines_map(
+    graph: FederatedGraph, req_id: str
+) -> dict[str, Any]:
+    """Build per-assertion refines map for a requirement.
+
+    REFINES edges target REQUIREMENT nodes (not CODE). Each entry contains
+    the refining requirement's ID and title.
+
+    Args:
+        graph: The TraceGraph to query.
+        req_id: The requirement ID.
+
+    Returns:
+        Dict with per-assertion refines lists, refinement stats.
+    """
+    from elspais.graph.relations import EdgeKind
+
+    node = graph.find_by_id(req_id)
+    if node is None:
+        return {"success": False, "error": f"Requirement {req_id} not found"}
+
+    if node.kind != NodeKind.REQUIREMENT:
+        return {"success": False, "error": f"{req_id} is not a requirement"}
+
+    assertions: list[tuple[str, str]] = []
+    for child in node.iter_children():
+        if child.kind == NodeKind.ASSERTION:
+            assertions.append((child.id, child.get_field("label", "")))
+
+    assertion_refines: dict[str, dict[str, Any]] = {}
+    for aid, label in assertions:
+        assertion_refines[label] = {"assertion_id": aid, "refines_refs": []}
+
+    seen_per_assertion: dict[str, set[str]] = {label: set() for _, label in assertions}
+
+    for req_node, labels in _iter_assertion_coverage(
+        node, NodeKind.REQUIREMENT,
+        edge_kinds={EdgeKind.REFINES}, direct_only=True,
+    ):
+        info = {
+            "id": req_node.id,
+            "title": req_node.get_field("title", "") or req_node.get_label() or req_node.id,
+            "kind": req_node.kind.value,
+        }
+        for label in labels:
+            if label not in assertion_refines:
+                continue
+            if req_node.id in seen_per_assertion[label]:
+                continue
+            seen_per_assertion[label].add(req_node.id)
+            assertion_refines[label]["refines_refs"].append(info)
+
+    total = len(assertions)
+    refined_count = sum(1 for label in assertion_refines if assertion_refines[label]["refines_refs"])
+
+    return {
+        "success": True,
+        "req_id": req_id,
+        "assertion_refines": assertion_refines,
+        "total_assertions": total,
+        "refined_count": refined_count,
     }
 
 
