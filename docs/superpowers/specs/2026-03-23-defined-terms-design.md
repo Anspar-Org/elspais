@@ -80,7 +80,7 @@ Term references (`*term*` / `**term**`) are allowed everywhere prose appears, in
 
 ## Data Model
 
-Terms are stored as a lightweight dictionary on `TraceGraph`, not as graph nodes or edges:
+Terms are stored in a separate `TermDictionary` object, not on `TraceGraph` or as graph nodes/edges. This respects the CLAUDE.md prohibition on changing `TraceGraph` structure while keeping the term data self-contained.
 
 ```python
 @dataclass
@@ -89,7 +89,7 @@ class TermEntry:
     definition: str        # full definition text (metadata lines stripped)
     collection: bool       # generates its own manifest
     indexed: bool          # True by default; False suppresses index + health check
-    defined_in: str        # node ID of enclosing element
+    defined_in: str        # node ID of nearest REQUIREMENT or FILE ancestor
     defined_at_line: int   # for error reporting
     namespace: str         # repo namespace (e.g., "main", "sponsor-a")
     references: list[TermRef]
@@ -100,58 +100,56 @@ class TermRef:
     namespace: str         # repo where the reference occurs
     marked: bool           # True = *term*/**term**, False = plain text
     line: int              # for error reporting
+
+class TermDictionary:
+    """Standalone term index, keyed by normalized (lowercased) term name."""
+    _entries: dict[str, TermEntry]
+
+    def add(self, entry: TermEntry) -> None: ...
+    def lookup(self, term: str) -> TermEntry | None: ...
+    def iter_all(self) -> Iterator[TermEntry]: ...
+    def iter_indexed(self) -> Iterator[TermEntry]: ...
+    def iter_collections(self) -> Iterator[TermEntry]: ...
 ```
 
-`TraceGraph._terms: dict[str, TermEntry]` — keyed by normalized (lowercased) term name.
+The `TermDictionary` is built by `build_graph()` in `factory.py` as a companion object alongside the graph, and returned or attached to the `FederatedGraph` as a non-structural attribute (e.g., `FederatedGraph.term_dictionary`).
+
+### `defined_in` Semantics
+
+The `defined_in` field stores the nearest REQUIREMENT or FILE ancestor node ID — not the REMAINDER node itself. This ensures glossary attribution (e.g., "Defined in: prd-core.md (main)") can always resolve to a meaningful location.
 
 ### Multi-Repo Aggregation
 
-- Each `TraceGraph` builds its own `_terms` during parsing
-- `FederatedGraph` merges them: duplicate detection runs across namespaces
+- Each repo's parse pass produces term definitions, collected into a per-repo `TermDictionary`
+- `FederatedGraph` merges per-repo dictionaries into a single `TermDictionary`: duplicate detection runs across namespaces
 - Reference resolution runs after federation — a term defined in repo A can be referenced in repo B
 - Generated output groups references by namespace
+- The `FederatedGraph` extension (merge method, `term_dictionary` attribute) is an explicit deliverable
 
 ## Pipeline
 
-### 1. Parser (Lark Grammar)
+### 1. Parser (Post-Parse Extraction from REMAINDER)
 
-Extend `requirement.lark` with `definition_block` rules:
+The Lark LALR(1) grammar cannot distinguish a definition block's term-name line from a regular `TEXT` token without cross-line lookahead. Rather than fighting the grammar, definition blocks are extracted via a **post-parse pass over REMAINDER nodes**.
 
-```
-// Top level
-_item: requirement
-     | journey
-     | definition_block
-     | stray_marker
-     | remainder_line
-     | _NL
+The approach:
 
-// Inside requirement body
-?preamble_line: metadata_line
-              | satisfies_line
-              | definition_block
-              | body_line
+1. The existing Lark grammar parses definition list blocks as regular `remainder_line` / `body_line` / `content_line` text (they are valid prose)
+2. A post-parse extraction pass scans REMAINDER node text (and requirement body/named-block text) for the definition list pattern: `<blank line>\n<term name>\n: <definition>\n...\n<blank line>`
+3. When found, the extractor:
+   - Records the term definition data (name, text, flags, line number)
+   - Stores a `content_type: "definition_block"` field on the REMAINDER node (via `set_field()`) to enable distinct rendering
+   - For definitions within requirement preambles or named blocks, the definition data is extracted from the body text stored on the REQUIREMENT node's structured content
 
-// Inside named blocks
-content_line: definition_block
-            | TEXT _NL
-            | _NL
+This avoids grammar ambiguity entirely while still capturing definitions anywhere they appear in prose contexts. The blank-line requirement makes the pattern unambiguous at the text level.
 
-// Similarly for journey contexts
-```
-
-Definition blocks require a blank line before and after, distinguishing them from regular body text. The exact terminal patterns and priorities will be tuned during implementation.
-
-The transformer extracts:
-
-- Term name, definition text, and flags from definition blocks
-- Candidate references: `*...*` and `**...**` tokens from all prose lines (`TEXT`, `ASSERT_CONT`, `body_line`, etc.)
+**Candidate reference extraction** also happens in this post-parse pass: bold/italic tokens (`*...*`, `**...**`) in TEXT, ASSERT_CONT, and body content are collected as candidates.
 
 ### 2. Graph Builder (Deferred Resolution)
 
-After all files are parsed:
+After all files are parsed and post-parse extraction is complete:
 
-1. Collect all term definitions into `TraceGraph._terms`
+1. Collect all term definitions into the `TermDictionary`
 2. Flag duplicate definitions (same term, two locations)
 3. Resolve candidate references against the term dictionary (case-insensitive)
 4. Matched candidates become `TermRef` entries on the `TermEntry`
@@ -159,12 +157,12 @@ After all files are parsed:
 
 ### 3. Rendering and Round-Trip Fidelity
 
-Definition blocks are stored as `REMAINDER` nodes with `content_type: "definition_block"`:
+Definition blocks are stored as `REMAINDER` nodes with `content_type: "definition_block"` stored as a `GraphNode` field (via `set_field("content_type", "definition_block")`):
 
 - File-level definitions: REMAINDER node with CONTAINS edge from FILE
 - Requirement-level definitions: REMAINDER node with STRUCTURES edge from REQUIREMENT
 
-The renderer checks `content_type` and outputs definition list syntax. `render_order` metadata preserves original file position. This ensures definition blocks survive `render_save()` mutations unchanged.
+The `_render_remainder()` function in `render.py` is extended to check `node.get_field("content_type")`: if `"definition_block"`, it renders using definition list syntax; otherwise, it returns raw text as before. `render_order` metadata preserves original file position. This ensures definition blocks survive `render_save()` mutations unchanged.
 
 ## Health Checks
 
@@ -192,7 +190,7 @@ A `*token*` or `**token**` in prose that doesn't match any defined term and does
 WARN: Unmarked usage of 'Electronic Record' in REQ-d00045 (dev-records.md:12)
 ```
 
-Plain text occurrence of an indexed term (case-insensitive) without markup. Only checked for terms where `Indexed: true` (the default). This is the safety net: an auditor will interpret the term regardless of whether the author marked it up.
+Whole-word, case-insensitive match of an indexed term in prose text without `*...*` or `**...**` markup. Only checked for terms where `Indexed: true` (the default). Plural/inflection matching is deferred — only exact whole-word matches are detected in v1. This is the safety net: an auditor will interpret the term regardless of whether the author marked it up.
 
 ### Integration
 
@@ -301,6 +299,19 @@ undefined_severity = "warning"    # "error" | "warning" | "off"
 unmarked_severity = "warning"     # "error" | "warning" | "off"
 ```
 
+### Pydantic Model
+
+```python
+class TermsConfig(_StrictModel):
+    """Configuration for defined terms feature."""
+    output_dir: str = "spec/_generated"
+    duplicate_severity: str = "error"    # "error" | "warning" | "off"
+    undefined_severity: str = "warning"  # "error" | "warning" | "off"
+    unmarked_severity: str = "warning"   # "error" | "warning" | "off"
+```
+
+Severity fields use plain `str` with validation, matching the pattern of existing severity config fields in the codebase. Added as `terms: TermsConfig = Field(default_factory=TermsConfig)` on `ElspaisConfig`.
+
 The `elspais init` template includes this section with all options and valid values documented.
 
 ## CLI Commands
@@ -330,16 +341,18 @@ A new `docs/cli/terms.md` file covering:
 
 ## Deliverables
 
-1. **Grammar** — extend `requirement.lark` with `definition_block` rules in all prose contexts
-2. **Transformer** — extract term definitions and candidate references from parse tree
-3. **GraphBuilder** — collect terms into `TraceGraph._terms`, resolve references, flag duplicates/undefined
-4. **Health checks** — three new checks with configurable severity
-5. **CLI commands** — `elspais glossary`, `elspais term-index`, integrated into `elspais fix`
-6. **Generators** — glossary.md, term-index.md, collection manifests; `--format markdown|json`
-7. **Config schema** — `[terms]` section in `ElspaisConfig` (Pydantic model)
-8. **Init template** — `[terms]` section with all options and valid values documented
-9. **Docs** — `docs/cli/terms.md`
-10. **Tests** — parser, builder, health checks, generators, CLI commands
+1. **TermDictionary** — `TermEntry`, `TermRef`, `TermDictionary` data classes in a new module (e.g., `graph/terms.py`)
+2. **Post-parse extractor** — extract definition blocks from REMAINDER/body text, collect candidate references
+3. **GraphBuilder integration** — build `TermDictionary` during `build_graph()`, deferred resolution of references
+4. **FederatedGraph extension** — `term_dictionary` attribute, cross-repo merge method for `TermDictionary`
+5. **Render extension** — extend `_render_remainder()` to check `content_type` field for definition blocks
+6. **Health checks** — three new checks with configurable severity
+7. **CLI commands** — `elspais glossary`, `elspais term-index`, integrated into `elspais fix`
+8. **Generators** — glossary.md, term-index.md, collection manifests; `--format markdown|json`
+9. **Config schema** — `TermsConfig` Pydantic model, `[terms]` section in `ElspaisConfig`
+10. **Init template** — `[terms]` section with all options and valid values documented
+11. **Docs** — `docs/cli/terms.md`
+12. **Tests** — extractor, builder, health checks, generators, CLI commands
 
 ## Deferred (Not in Scope)
 
