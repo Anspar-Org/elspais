@@ -92,6 +92,7 @@ class RulesConfig(_StrictModel):
     format: FormatConfig = Field(default_factory=FormatConfig)
     coverage: CoverageConfig = Field(default_factory=CoverageConfig)
     content_rules: list[str] | None = None
+    protected_branches: list[str] = Field(default=["main", "master"])
 
 
 class KeywordsSearchConfig(_StrictModel):
@@ -206,9 +207,19 @@ class AssociateEntryConfig(_StrictModel):
     namespace: str
 
 
+# Implements: REQ-d00212-L
+class TermsConfig(_StrictModel):
+    """Configuration for defined terms feature."""
+
+    output_dir: str = "spec/_generated"
+    duplicate_severity: str = "error"
+    undefined_severity: str = "warning"
+    unmarked_severity: str = "warning"
+
+
 # Implements: REQ-d00212-F
 class ElspaisConfig(_StrictModel):
-    version: int = 3
+    version: int = 4
     project: ProjectConfig = Field(default_factory=ProjectConfig)
     id_patterns: IdPatternsConfig = Field(alias="id-patterns", default_factory=IdPatternsConfig)
     levels: dict[str, LevelConfig] = Field(
@@ -231,6 +242,7 @@ class ElspaisConfig(_StrictModel):
     validation: ValidationConfig = Field(default_factory=ValidationConfig)
     changelog: ChangelogConfig = Field(default_factory=ChangelogConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
+    terms: TermsConfig = Field(default_factory=TermsConfig)
     associates: dict[str, AssociateEntryConfig] = Field(default_factory=dict)
     stats: str | None = Field(default=None, description="File path for MCP tool usage statistics")
     cli_ttl: int = Field(

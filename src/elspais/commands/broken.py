@@ -159,14 +159,12 @@ def run(args: argparse.Namespace) -> int:
         from elspais.graph.factory import build_graph
 
         config_path = getattr(args, "config", None)
-        canonical_root = getattr(args, "canonical_root", None)
         start_path = Path.cwd()
 
         config = get_config(config_path, start_path=start_path)
         graph = build_graph(
             spec_dirs=[spec_dir] if spec_dir else None,
             config_path=config_path,
-            canonical_root=canonical_root,
         )
         output, exit_code = render_section(graph, config, args)
     else:
@@ -175,7 +173,6 @@ def run(args: argparse.Namespace) -> int:
             {},
             compute_broken,
             config_path=getattr(args, "config", None),
-            canonical_root=getattr(args, "canonical_root", None),
         )
         # Reconstruct output from the dict
         fmt = getattr(args, "format", "text")

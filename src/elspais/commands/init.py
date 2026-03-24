@@ -141,6 +141,10 @@ _SECTION_COMMENTS: dict[str, str] = {
     "rules": "Validation rules",
     "rules.hierarchy": "Global hierarchy settings",
     "rules.format": "Format enforcement rules",
+    "rules.protected_branches": (
+        "# Branches where edit mode is disabled in the viewer.\n"
+        "# Supports exact names and glob patterns (e.g. 'release/*').\n"
+    ),
     "rules.format.status_roles": (
         "Status role classification (determines behavior in metrics/viewer)\n"
         "# active: committed, normative - counted in all metrics\n"
@@ -151,6 +155,7 @@ _SECTION_COMMENTS: dict[str, str] = {
     "changelog": "Changelog enforcement",
     "keywords": "Keyword extraction settings",
     "validation": "Hash and validation settings",
+    "terms": "Defined terms: glossary, index, and health checks",
     "output": "Output settings",
     "associates": "Associated repository definitions",
 }
@@ -213,6 +218,7 @@ _CORE_OVERRIDES: dict[str, Any] = {
                 "retired": ["Deprecated", "Superseded"],
             },
         },
+        "protected_branches": ["main", "master"],
     },
     "changelog": {
         "hash_current": True,
@@ -240,6 +246,7 @@ _CORE_SECTIONS = [
     "changelog",
     "keywords",
     "validation",
+    "terms",
     "output",
 ]
 
@@ -253,6 +260,7 @@ _ASSOCIATED_SECTIONS = [
     "rules",
     "keywords",
     "validation",
+    "terms",
     "output",
     "associates",
 ]

@@ -2,12 +2,17 @@
 """Starlette middleware for the elspais server."""
 from __future__ import annotations
 
+import json
+import logging
 import sys
 import threading
+import traceback
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
+
+_log = logging.getLogger(__name__)
 
 
 class NoCacheMiddleware(BaseHTTPMiddleware):
@@ -61,3 +66,29 @@ class TTLMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         self._start_timer()
         return await call_next(request)
+
+
+class APIErrorMiddleware(BaseHTTPMiddleware):
+    """Catch unhandled exceptions on /api/ routes and return JSON errors.
+
+    Without this, unhandled exceptions produce an HTML 500 page which
+    the frontend can't parse, resulting in 'Unknown error' messages.
+    """
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        if not request.url.path.startswith("/api/"):
+            return await call_next(request)
+        try:
+            return await call_next(request)
+        except Exception:
+            _log.exception("Unhandled error in %s %s", request.method, request.url.path)
+            body = json.dumps({
+                "success": False,
+                "error": f"Internal server error in {request.url.path}",
+                "detail": traceback.format_exc(),
+            }).encode()
+            return Response(
+                content=body,
+                status_code=500,
+                media_type="application/json",
+            )

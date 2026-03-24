@@ -53,7 +53,7 @@ function showErrorModal(title, message) {
             '<div class="modal-title" style="color:var(--danger-color,#ef4444);">' + escapeHtml(title || 'Error') + '</div>' +
             '<pre class="error-modal-body">' + escapeHtml(message || 'An unknown error occurred.') + '</pre>' +
             '<div class="modal-actions">' +
-                '<button class="btn" id="error-modal-dismiss">Dismiss</button>' +
+                '<button class="btn" id="error-modal-dismiss">Confirm</button>' +
             '</div>' +
         '</div>';
     document.body.appendChild(overlay);
@@ -62,6 +62,42 @@ function showErrorModal(title, message) {
     document.addEventListener('keydown', function onEsc(e) {
         if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', onEsc); }
     });
+}
+
+// =====================================================================
+// Multi-Repo Helpers
+// =====================================================================
+
+async function fetchRepoStatus() {
+    var statusResp = await apiFetch('/api/git/repo-status');
+    var eligibleResp = await apiFetch('/api/git/monorepo-eligible');
+    if (!statusResp || !eligibleResp) return null;
+    return {
+        repos: statusResp.repos,
+        protected_branches: statusResp.protected_branches || [],
+        eligible: eligibleResp.eligible,
+        reasons: eligibleResp.reasons || []
+    };
+}
+
+function isProtectedBranch(branch, patterns) {
+    if (!branch || !patterns) return false;
+    return patterns.some(function(p) {
+        if (p.indexOf('*') >= 0) {
+            var regex = new RegExp('^' + p.replace(/\*/g, '.*') + '$');
+            return regex.test(branch);
+        }
+        return p === branch;
+    });
+}
+
+function getMonorepoMode() {
+    var key = 'elspais_monorepo_{{ config.project.name | default("default") }}';
+    return localStorage.getItem(key) !== 'false';
+}
+function setMonorepoMode(val) {
+    var key = 'elspais_monorepo_{{ config.project.name | default("default") }}';
+    localStorage.setItem(key, val ? 'true' : 'false');
 }
 
 // =====================================================================
@@ -197,13 +233,87 @@ async function refreshBranchStatus() {
         });
     }
     editState.lastBranchStatus = data;
+
+    // Multi-badge handling for multi-repo
+    var repoStatus = await fetchRepoStatus();
+    if (repoStatus && repoStatus.repos && repoStatus.repos.length > 1 && !getMonorepoMode()) {
+        var container = document.getElementById('branch-badges');
+        if (container) {
+            container.innerHTML = '';
+            repoStatus.repos.forEach(function(repo) {
+                var badge = document.createElement('span');
+                badge.className = 'branch-badge';
+                badge.style.cursor = 'pointer';
+                badge.title = 'Click to manage ' + repo.name + ' branch';
+                badge.onclick = function() { showBranchPickerModal(repo.name); };
+                var repoDot = document.createElement('span');
+                repoDot.className = 'branch-status-dot ' + (repo.is_detached ? 'orange' : 'green');
+                badge.appendChild(repoDot);
+                var repoName = document.createElement('span');
+                repoName.textContent = repo.name + ': ' + (repo.branch || 'detached');
+                badge.appendChild(repoName);
+                container.appendChild(badge);
+            });
+        }
+    } else {
+        // Single repo or monorepo mode: restore the original single badge
+        var container = document.getElementById('branch-badges');
+        if (container && container.children.length !== 1) {
+            container.innerHTML = '';
+            var singleBadge = document.createElement('span');
+            singleBadge.className = 'branch-badge';
+            singleBadge.id = 'branch-badge';
+            singleBadge.style.cursor = 'pointer';
+            singleBadge.title = 'Click to switch branch';
+            singleBadge.onclick = function() { showBranchPickerModal(); };
+            singleBadge.innerHTML =
+                '<span class="branch-status-dot" id="branch-status-dot"></span>' +
+                '<span id="branch-name">...</span>' +
+                '<span class="branch-warning hidden" id="branch-warning" ' +
+                'title="Main has new commits since this branch was created. Use Sync to rebase before merging.">&#x26A0;</span>';
+            container.appendChild(singleBadge);
+            // Re-apply the status we already computed
+            var newDot = document.getElementById('branch-status-dot');
+            var newNameEl = document.getElementById('branch-name');
+            if (newDot && newNameEl) {
+                if (data.branch) newNameEl.textContent = data.branch;
+                newDot.className = 'branch-status-dot';
+                if (data.is_main) newDot.classList.add('red');
+                else if (data.is_detached) newDot.classList.add('orange');
+                else if (data.local_ahead > 0) newDot.classList.add('blue');
+                else newDot.classList.add('green');
+            }
+        }
+    }
+
+    // Edit mode protection on protected branches
+    var editToggle = document.getElementById('edit-toggle');
+    if (editToggle && repoStatus && repoStatus.protected_branches) {
+        var isProtected = isProtectedBranch(data.branch, repoStatus.protected_branches);
+        if (isProtected) {
+            editToggle.disabled = true;
+            editToggle.title = 'Editing disabled on protected branch. Create a new branch to edit.';
+        } else {
+            editToggle.disabled = false;
+            editToggle.title = 'Toggle edit mode';
+        }
+    }
+
     return data;
 }
 
 async function doGitSync() {
     var syncBtn = document.getElementById('btn-sync');
     if (syncBtn) { syncBtn.disabled = true; syncBtn.textContent = 'Syncing...'; }
-    var result = await apiFetch('/api/git/pull', {method: 'POST'});
+    var monoCheck = document.getElementById('monorepo-mode');
+    var isMonorepo = monoCheck ? monoCheck.checked : getMonorepoMode();
+    var pullBody = {};
+    if (isMonorepo) pullBody.monorepo = true;
+    var result = await apiFetch('/api/git/pull', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(pullBody)
+    });
     if (syncBtn) { syncBtn.disabled = false; syncBtn.innerHTML = '&#x21bb; Sync'; }
     if (result && result.success) {
         showToast(result.message || 'Synced', 'success');
@@ -311,7 +421,7 @@ function showBranchModal(reason, callback) {
         }).catch(function(err) {
             console.error('Branch creation error:', err);
             closeModal();
-            showToast('Branch may have been created — refresh to check', 'error');
+            showErrorModal('Branch creation error', 'Branch may have been created \u2014 refresh to check.');
         });
     }
 
@@ -449,16 +559,22 @@ function loadBranchHistory(branch, container) {
     });
 }
 
-function showBranchPickerModal() {
+function showBranchPickerModal(targetRepo) {
     // Guard: unsaved mutations
     if (editState.mutationCount > 0) {
-        showToast('Save or revert changes before switching branches', 'warning');
+        showErrorModal('Unsaved changes', 'Save or revert changes before switching branches.');
         return;
     }
 
-    apiFetch('/api/git/branches').then(function(data) {
+    // Fetch repo status and branches in parallel
+    Promise.all([
+        apiFetch('/api/git/branches'),
+        fetchRepoStatus()
+    ]).then(function(results) {
+        var data = results[0];
+        var repoStatus = results[1];
         if (!data) {
-            showToast('Failed to load branches', 'error');
+            showErrorModal('Branch load failed', 'Failed to load branches.');
             return;
         }
 
@@ -487,7 +603,84 @@ function showBranchPickerModal() {
 
         var title = document.createElement('div');
         title.className = 'modal-title';
-        title.textContent = currentBranch ? 'Switch Branch' : 'You\'re not on any branch — select one to continue';
+        title.textContent = currentBranch ? 'Switch Branch' : 'You\'re not on any branch \u2014 select one to continue';
+
+        // Repo tab bar + monorepo toggle
+        var tabBar = document.createElement('div');
+        tabBar.className = 'branch-picker-tabs';
+
+        var monoCheck = null;
+        if (repoStatus && repoStatus.repos.length > 1) {
+            var monoLabel = document.createElement('label');
+            monoLabel.className = 'monorepo-toggle';
+            monoCheck = document.createElement('input');
+            monoCheck.type = 'checkbox';
+            monoCheck.id = 'monorepo-mode';
+            monoCheck.checked = repoStatus.eligible && getMonorepoMode();
+            monoCheck.disabled = !repoStatus.eligible;
+            monoLabel.appendChild(monoCheck);
+            monoLabel.appendChild(document.createTextNode(' Monorepo mode'));
+            if (!repoStatus.eligible) {
+                var reasonSpan = document.createElement('span');
+                reasonSpan.className = 'monorepo-reason';
+                reasonSpan.title = repoStatus.reasons.join('\n');
+                reasonSpan.textContent = ' (unavailable)';
+                monoLabel.appendChild(reasonSpan);
+            }
+            tabBar.appendChild(monoLabel);
+
+            var tabs = document.createElement('div');
+            tabs.className = 'repo-tab-bar';
+            var initialActiveRepo = targetRepo || repoStatus.repos[0].name;
+            repoStatus.repos.forEach(function(repo) {
+                var tab = document.createElement('button');
+                tab.className = 'repo-tab' + (repo.name === initialActiveRepo ? ' active' : '');
+                tab.dataset.repo = repo.name;
+                tab.textContent = repo.name + (repo.branch ? ' (' + repo.branch + ')' : '');
+                tab.addEventListener('click', function() {
+                    tabs.querySelectorAll('.repo-tab').forEach(function(t) { t.classList.remove('active'); });
+                    tab.classList.add('active');
+                    if (!monoCheck.checked) {
+                        loadRepoBranches(repo.name);
+                    }
+                });
+                tabs.appendChild(tab);
+            });
+            tabBar.appendChild(tabs);
+
+            monoCheck.addEventListener('change', function() {
+                setMonorepoMode(monoCheck.checked);
+                tabs.querySelectorAll('.repo-tab').forEach(function(t) {
+                    t.disabled = monoCheck.checked;
+                    t.style.opacity = monoCheck.checked ? '0.5' : '';
+                });
+                if (monoCheck.checked) {
+                    loadRepoBranches(null);
+                } else {
+                    var activeTab = tabs.querySelector('.repo-tab.active');
+                    loadRepoBranches(activeTab ? activeTab.dataset.repo : null);
+                }
+            });
+
+            // Apply initial disabled state if monorepo mode is active
+            if (monoCheck.checked) {
+                tabs.querySelectorAll('.repo-tab').forEach(function(t) {
+                    t.disabled = true;
+                    t.style.opacity = '0.5';
+                });
+            }
+        }
+
+        function loadRepoBranches(repoName) {
+            var url = '/api/git/branches' + (repoName ? '?repo=' + encodeURIComponent(repoName) : '');
+            apiFetch(url).then(function(brData) {
+                if (!brData) return;
+                localBranches = brData.local || [];
+                remoteBranches = brData.remote || [];
+                currentBranch = brData.current || null;
+                buildList(filterInput.value);
+            });
+        }
 
         // Two-panel container
         var panels = document.createElement('div');
@@ -626,10 +819,20 @@ function showBranchPickerModal() {
             rewindBtn.disabled = true;
             rewindBtn.textContent = 'Rewinding...';
             showLoadingOverlay('Rewinding...');
+            var rewindBody = { hash: hash, branch: branch };
+            if (monoCheck && monoCheck.checked) {
+                // In monorepo mode, compute offset from commit list position
+                var allRows = rightPanel.querySelectorAll('.history-row');
+                var offset = 0;
+                for (var ri = 0; ri < allRows.length; ri++) {
+                    if (allRows[ri].dataset.hash === hash) { offset = ri; break; }
+                }
+                rewindBody = { monorepo: true, offset: offset };
+            }
             apiFetch('/api/git/checkout-commit', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ hash: hash, branch: branch })
+                body: JSON.stringify(rewindBody)
             }).then(function(result) {
                 if (result && result.success) {
                     apiFetch('/api/reload', { method: 'POST' }).then(function() {
@@ -659,13 +862,19 @@ function showBranchPickerModal() {
         actions.appendChild(cancelBtn);
 
         dialog.appendChild(title);
+        dialog.appendChild(tabBar);
         dialog.appendChild(panels);
         dialog.appendChild(errorEl);
         dialog.appendChild(actions);
         overlay.appendChild(dialog);
         document.body.appendChild(overlay);
 
-        buildList('');
+        // If a specific repo was targeted and not monorepo mode, load its branches
+        if (targetRepo && repoStatus && repoStatus.repos.length > 1 && !(monoCheck && monoCheck.checked)) {
+            loadRepoBranches(targetRepo);
+        } else {
+            buildList('');
+        }
         filterInput.focus();
 
         // Load history for the current branch by default
@@ -697,10 +906,14 @@ function showBranchPickerModal() {
             });
 
             showLoadingOverlay('Switching branch...');
+            var isMonorepo = monoCheck && monoCheck.checked;
+            var body = { branch: branch, is_remote: isRemote };
+            if (isMonorepo) body.monorepo = true;
+
             apiFetch('/api/git/checkout', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ branch: branch, is_remote: isRemote })
+                body: JSON.stringify(body)
             }).then(function(result) {
                 if (result && result.success) {
                     closeModal();
@@ -717,14 +930,15 @@ function showBranchPickerModal() {
                     });
                 } else {
                     hideLoadingOverlay();
+                    // Build per-repo error message for monorepo partial failures
+                    var msg = (result && result.error) || 'Unknown error';
+                    if (result && result.results) {
+                        msg = result.results.map(function(r) {
+                            return r.repo + ': ' + (r.success ? 'OK' : (r.error || 'failed'));
+                        }).join('\n');
+                    }
+                    showErrorModal('Failed to switch branch', msg);
                     closeModal();
-                    showErrorModal('Failed to switch branch', (result && result.error) || 'Unknown error');
-                    // Re-enable items
-                    items.forEach(function(item) {
-                        item.style.pointerEvents = '';
-                        item.style.opacity = '';
-                    });
-                    buildList(filterInput.value);
                     refreshBranchStatus();
                 }
             });
@@ -1523,10 +1737,12 @@ function _openCheckpointModal() {
             confirmBtn.disabled = true;
             confirmBtn.textContent = 'Committing...';
             showLoadingOverlay('Creating checkpoint...');
+            var commitBody = {message: msg, files: selectedFiles};
+            if (getMonorepoMode()) commitBody.monorepo = true;
             apiFetch('/api/git/commit', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({message: msg, files: selectedFiles})
+                body: JSON.stringify(commitBody)
             }).then(function(result) {
                 hideLoadingOverlay();
                 if (result && result.success) {
@@ -1656,7 +1872,13 @@ function initShareSlider() {
         }
 
         function doPush() {
-            apiFetch('/api/git/push', {method: 'POST'}).then(function(result) {
+            var pushBody = {};
+            if (getMonorepoMode()) pushBody.monorepo = true;
+            apiFetch('/api/git/push', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(pushBody)
+            }).then(function(result) {
                 collapseTrack();
                 if (result && result.success) {
                     showToast('Pushed to origin/' + (result.branch || ''), 'success');
@@ -1691,7 +1913,13 @@ function initShareSlider() {
             holdTimer = setTimeout(function() {
                 shareBtn.classList.remove('hold-progress');
                 holdTimer = null;
-                apiFetch('/api/git/push', {method: 'POST'}).then(function(result) {
+                var kbPushBody = {};
+                if (getMonorepoMode()) kbPushBody.monorepo = true;
+                apiFetch('/api/git/push', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(kbPushBody)
+                }).then(function(result) {
                     if (result && result.success) {
                         showToast('Pushed to origin/' + (result.branch || ''), 'success');
                         refreshBranchStatus();

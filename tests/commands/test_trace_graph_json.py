@@ -114,7 +114,6 @@ class TestTraceGraphJsonGitMetrics:
             config=spec_repo / ".elspais.toml",
             output=None,
             quiet=False,
-            canonical_root=None,
         )
 
         with patch("elspais.utilities.git.get_git_changes", return_value=mock_git_info):

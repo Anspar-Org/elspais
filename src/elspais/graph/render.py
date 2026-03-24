@@ -138,22 +138,36 @@ def _render_requirement(node: GraphNode) -> str:
             lines.append(f"{label}. {text}")
             lines.append("")
         elif child.kind == NodeKind.REMAINDER:
-            in_assertions = False
             heading = child.get_field("heading") or "preamble"
+            heading_style = child.get_field("heading_style")
             content = child.get_field("text") or ""
             if heading == "preamble":
+                in_assertions = False
                 if content:
                     lines.append("")
                     lines.append(content)
+            elif heading_style:
+                # Assertion sub-heading (inline label like *Core Functionality*)
+                # Do NOT reset in_assertions — these are within the assertion block
+                if lines and lines[-1] != "":
+                    lines.append("")
+                s = heading_style
+                lines.append(f"{s}{heading}{s}")
+                lines.append("")
+                if content:
+                    lines.append(content)
+                    lines.append("")
             else:
+                in_assertions = False
                 # Ensure blank line before heading (unless previous line is
                 # already blank, e.g. after the last assertion)
                 if lines and lines[-1] != "":
                     lines.append("")
                 lines.append(f"## {heading}")
                 lines.append("")
-                lines.append(content)
-                lines.append("")
+                if content:
+                    lines.append(content)
+                    lines.append("")
 
     # Compute hash using configured mode (DRY: utilities/hasher.py)
     hash_mode = node.get_field("hash_mode") or "normalized-text"

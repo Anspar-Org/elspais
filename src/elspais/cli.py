@@ -61,6 +61,7 @@ from elspais.commands.args import (
     FixArgs,
     GapsArgs,
     GlobalArgs,
+    GlossaryArgs,
     GraphArgs,
     InitArgs,
     InstallArgs,
@@ -76,6 +77,7 @@ from elspais.commands.args import (
     RulesShowArgs,
     SearchArgs,
     SummaryArgs,
+    TermIndexArgs,
     TraceArgs,
     UncoveredArgs,
     UninstallArgs,
@@ -147,6 +149,8 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
         McpArgs: "mcp",
         LinkArgs: "link",
         CompletionArgs: "completion",
+        GlossaryArgs: "glossary",
+        TermIndexArgs: "term-index",
     }
     ns.command = _CMD_MAP.get(type(cmd), "")
 
@@ -281,16 +285,15 @@ def main(argv: list[str] | None = None) -> int:
         i += 1
 
     if len(sections) > 1:
-        from elspais.config import find_canonical_root, find_git_root
+        from elspais.config import find_git_root
 
         git_root = find_git_root(start_dir)
-        canonical_root = find_canonical_root(start_dir)
         if git_root and git_root != Path.cwd():
             os.chdir(git_root)
 
         from elspais.commands import report
 
-        return report.run(sections, argv[i:], canonical_root=canonical_root)
+        return report.run(sections, argv[i:])
 
     # Single command — Tyro parsing
     import tyro
@@ -305,7 +308,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Auto-detect git repository root and change to it
     # This ensures elspais works the same from any subdirectory
-    from elspais.config import find_canonical_root, find_git_root
+    from elspais.config import find_config_file, find_git_root
 
     original_cwd = Path.cwd()  # Already changed by -C if provided
 
@@ -314,17 +317,13 @@ def main(argv: list[str] | None = None) -> int:
     if explicit_path:
         explicit_path = Path(explicit_path).resolve()
         git_root = explicit_path
-        canonical_root = find_canonical_root(explicit_path)
     else:
         git_root = find_git_root(original_cwd)
-        canonical_root = find_canonical_root(original_cwd)
 
     if git_root and git_root != original_cwd:
         os.chdir(git_root)
         if args.verbose:
             print(f"Working from repository root: {git_root}", file=sys.stderr)
-            if canonical_root and canonical_root != git_root:
-                print(f"Canonical root (main repo): {canonical_root}", file=sys.stderr)
     elif not git_root and args.verbose:
         print("Warning: Not in a git repository", file=sys.stderr)
 
@@ -340,9 +339,20 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
 
+    # Verbose: show which config files are in effect
+    if args.verbose:
+        effective_root = git_root or original_cwd
+        config_file = config_path or find_config_file(effective_root)
+        if config_file and Path(config_file).exists():
+            print(f"Config: {config_file}", file=sys.stderr)
+            local_file = Path(config_file).parent / ".elspais.local.toml"
+            if local_file.is_file():
+                print(f"Config override: {local_file}", file=sys.stderr)
+        else:
+            print("Config: using defaults (no .elspais.toml found)", file=sys.stderr)
+
     # Store roots on args for commands to use
     args.git_root = git_root
-    args.canonical_root = canonical_root
 
     # Global --output: redirect stdout to file
     output_file = None
@@ -418,6 +428,10 @@ def main(argv: list[str] | None = None) -> int:
             return install_cmd.run_uninstall(args)
         elif args.command == "completion":
             return completion.run(args)
+        elif args.command in ("glossary", "term-index"):
+            from elspais.commands import glossary_cmd
+
+            return glossary_cmd.run(args)
         else:
             _print_help()
             return 1
@@ -449,7 +463,7 @@ def docs_command(args: argparse.Namespace) -> int:
     """Handle docs command - display user documentation from markdown files."""
     import pydoc
 
-    from elspais.utilities.docs_loader import load_all_topics, load_topic
+    from elspais.utilities.docs_loader import list_topics, load_all_topics, load_topic
     from elspais.utilities.md_renderer import render_markdown
 
     topic = args.topic
@@ -457,7 +471,12 @@ def docs_command(args: argparse.Namespace) -> int:
     use_color = not args.plain and sys.stdout.isatty()
 
     # Load content from markdown files
-    if topic == "all":
+    if topic == "topics":
+        content = list_topics()
+        output = render_markdown(content, use_color=use_color)
+        print(output)
+        return 0
+    elif topic == "all":
         content = load_all_topics()
     else:
         content = load_topic(topic)

@@ -7,8 +7,16 @@ Detects spec file changes and rebuilds automatically.
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+
+@dataclass
+class DetachedState:
+    """Tracks rewind state for a single repo."""
+    originating_branch: str
+    originating_head: str
 
 
 def _compute_allowed_roots(repo_root: Path, config: dict[str, Any]) -> list[Path]:
@@ -45,42 +53,49 @@ class AppState:
         graph: Any,
         repo_root: Path,
         config: dict[str, Any],
-        canonical_root: Path | None = None,
         allowed_roots: list[Path] | None = None,
     ) -> None:
         self.graph = graph
         self.repo_root = repo_root
         self.config = config
-        self.canonical_root = canonical_root or repo_root
         self.allowed_roots = allowed_roots or _compute_allowed_roots(repo_root, config)
         self.build_time = time.time()
         self._mtimes: dict[str, float] = {}
         self._mcp_state: dict[str, Any] | None = None  # set by link_mcp_state
         self._last_stale_check = 0.0
         self.snapshot_mtimes()
-        # Detached HEAD tracking (for rewind)
-        self.is_detached: bool = False
-        self.originating_branch: str | None = None
-        self.originating_head: str | None = None
+        # Per-repo detached HEAD tracking (for rewind)
+        self._repo_detached: dict[str, DetachedState] = {}
 
-    def enter_detached(self, branch: str, head_commit: str) -> None:
-        """Record that we've rewound from a branch tip."""
-        self.is_detached = True
-        self.originating_branch = branch
-        self.originating_head = head_commit
+    def enter_detached(self, repo_name: str, branch: str, head_commit: str) -> None:
+        """Record that a repo has rewound from its branch tip."""
+        self._repo_detached[repo_name] = DetachedState(
+            originating_branch=branch,
+            originating_head=head_commit,
+        )
 
-    def leave_detached(self) -> None:
-        """Clear detached state (back on a branch tip)."""
-        self.is_detached = False
-        self.originating_branch = None
-        self.originating_head = None
+    def leave_detached(self, repo_name: str) -> None:
+        """Clear detached state for a specific repo."""
+        self._repo_detached.pop(repo_name, None)
+
+    @property
+    def is_detached(self) -> bool:
+        """True if any repo is in detached HEAD state."""
+        return len(self._repo_detached) > 0
+
+    def is_repo_detached(self, repo_name: str) -> bool:
+        """Check if a specific repo is detached."""
+        return repo_name in self._repo_detached
+
+    def get_detached_state(self, repo_name: str) -> DetachedState | None:
+        """Get detached state for a repo, or None."""
+        return self._repo_detached.get(repo_name)
 
     @classmethod
     def from_config(
         cls,
         repo_root: Path,
         config: dict[str, Any] | None = None,
-        canonical_root: Path | None = None,
     ) -> AppState:
         """Build graph from config and create state."""
         from elspais.config import get_config
@@ -88,12 +103,11 @@ class AppState:
 
         if config is None:
             config = get_config(start_path=repo_root, quiet=True)
-        graph = build_graph(config=config, repo_root=repo_root, canonical_root=canonical_root)
+        graph = build_graph(config=config, repo_root=repo_root)
         return cls(
             graph=graph,
             repo_root=repo_root,
             config=config,
-            canonical_root=canonical_root,
         )
 
     def snapshot_mtimes(self) -> None:
@@ -178,7 +192,6 @@ class AppState:
         self.graph = build_graph(
             config=self.config,
             repo_root=self.repo_root,
-            canonical_root=self.canonical_root,
         )
         self.build_time = time.time()
         self.snapshot_mtimes()

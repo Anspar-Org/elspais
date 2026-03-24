@@ -54,7 +54,7 @@ except ImportError:
     MCP_AVAILABLE = False
     FastMCP = None
 
-from elspais.config import find_canonical_root, find_config_file, get_config
+from elspais.config import find_config_file, get_config
 from elspais.config.schema import ElspaisConfig
 from elspais.graph import NodeKind
 from elspais.graph.annotators import (
@@ -125,6 +125,9 @@ def _relative_source_path(node: Any, graph: FederatedGraph) -> str:
 def _iter_assertion_coverage(
     req_node: Any,
     kind_filter: NodeKind,
+    *,
+    edge_kinds: set[EdgeKind] | None = None,
+    direct_only: bool = False,
 ) -> Iterator[tuple[Any, list[str]]]:
     """Yield ``(node, labels)`` for each TEST or CODE node covering *req_node*.
 
@@ -139,6 +142,11 @@ def _iter_assertion_coverage(
 
     The same node may be yielded more than once (e.g. via both phases).
     Callers are responsible for deduplication.
+
+    Args:
+        edge_kinds: If set, only consider edges whose kind is in this set.
+        direct_only: If True, skip Phase 1 edges that have no
+            ``assertion_targets`` (blanket coverage).
     """
     # Collect all assertion labels for the indirect-coverage case
     all_labels: list[str] = []
@@ -151,17 +159,21 @@ def _iter_assertion_coverage(
 
     # Phase 1: REQ → kind_filter edges
     for edge in req_node.iter_outgoing_edges():
+        if edge_kinds and edge.kind not in edge_kinds:
+            continue
         target = edge.target
         if target.kind != kind_filter:
             continue
         if edge.assertion_targets:
             yield target, list(edge.assertion_targets)
-        else:
+        elif not direct_only:
             yield target, list(all_labels)
 
     # Phase 2: ASSERTION → kind_filter edges
     for assertion_node, label in assertion_children:
         for edge in assertion_node.iter_outgoing_edges():
+            if edge_kinds and edge.kind not in edge_kinds:
+                continue
             target = edge.target
             if target.kind != kind_filter:
                 continue
@@ -574,7 +586,6 @@ def _add_changelog_for_active_mutations(
 def _refresh_graph(
     repo_root: Path,
     full: bool = False,
-    canonical_root: Path | None = None,
 ) -> tuple[dict[str, Any], FederatedGraph]:
     """Rebuild the graph from spec files.
 
@@ -583,14 +594,13 @@ def _refresh_graph(
     Args:
         repo_root: Repository root path.
         full: If True, clear all caches before rebuild.
-        canonical_root: Canonical (non-worktree) repo root for cross-repo paths.
 
     Returns:
         Tuple of (result dict, new TraceGraph).
     """
     # Build fresh graph
     try:
-        new_graph = build_graph(repo_root=repo_root, canonical_root=canonical_root)
+        new_graph = build_graph(repo_root=repo_root)
     except (ValueError, Exception) as e:
         error_msg = str(e)
         if ".elspais.toml" in error_msg:
@@ -3245,7 +3255,9 @@ def _get_assertion_uat_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]
     }
 
 
-def _get_assertion_code_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
+def _get_assertion_code_map(
+    graph: FederatedGraph, req_id: str, edge_kind: str | None = None
+) -> dict[str, Any]:
     """Build per-assertion code implementation map for a requirement.
 
     Returns a structure mapping each assertion label to its CODE nodes,
@@ -3257,10 +3269,15 @@ def _get_assertion_code_map(graph: FederatedGraph, req_id: str) -> dict[str, Any
     Args:
         graph: The TraceGraph to query.
         req_id: The requirement ID.
+        edge_kind: Optional edge kind filter ('implements' or 'refines').
+            When set, only edges of that kind are returned, and blanket
+            (untargeted) edges are excluded via direct_only=True.
 
     Returns:
         Dict with per-assertion code lists, coverage stats.
     """
+    from elspais.graph.relations import EdgeKind
+
     node = graph.find_by_id(req_id)
     if node is None:
         return {"success": False, "error": f"Requirement {req_id} not found"}
@@ -3281,7 +3298,16 @@ def _get_assertion_code_map(graph: FederatedGraph, req_id: str) -> dict[str, Any
 
     seen_per_assertion: dict[str, set[str]] = {label: set() for _, label in assertions}
 
-    for code_node, labels in _iter_assertion_coverage(node, NodeKind.CODE):
+    # Build optional filter kwargs
+    iter_kwargs: dict[str, Any] = {}
+    if edge_kind:
+        ek_map = {"implements": EdgeKind.IMPLEMENTS, "refines": EdgeKind.REFINES}
+        ek = ek_map.get(edge_kind)
+        if ek:
+            iter_kwargs["edge_kinds"] = {ek}
+            iter_kwargs["direct_only"] = True
+
+    for code_node, labels in _iter_assertion_coverage(node, NodeKind.CODE, **iter_kwargs):
         info = _serialize_code_info(code_node, graph)
         for label in labels:
             if label not in assertion_code:
@@ -3302,6 +3328,72 @@ def _get_assertion_code_map(graph: FederatedGraph, req_id: str) -> dict[str, Any
         "total_assertions": total,
         "covered_count": covered_count,
         "referenced_pct": round(referenced_pct, 1),
+    }
+
+
+def _get_assertion_refines_map(
+    graph: FederatedGraph, req_id: str
+) -> dict[str, Any]:
+    """Build per-assertion refines map for a requirement.
+
+    REFINES edges target REQUIREMENT nodes (not CODE). Each entry contains
+    the refining requirement's ID and title.
+
+    Args:
+        graph: The TraceGraph to query.
+        req_id: The requirement ID.
+
+    Returns:
+        Dict with per-assertion refines lists, refinement stats.
+    """
+    from elspais.graph.relations import EdgeKind
+
+    node = graph.find_by_id(req_id)
+    if node is None:
+        return {"success": False, "error": f"Requirement {req_id} not found"}
+
+    if node.kind != NodeKind.REQUIREMENT:
+        return {"success": False, "error": f"{req_id} is not a requirement"}
+
+    assertions: list[tuple[str, str]] = []
+    for child in node.iter_children():
+        if child.kind == NodeKind.ASSERTION:
+            assertions.append((child.id, child.get_field("label", "")))
+
+    assertion_refines: dict[str, dict[str, Any]] = {}
+    for aid, label in assertions:
+        assertion_refines[label] = {"assertion_id": aid, "refines_refs": []}
+
+    seen_per_assertion: dict[str, set[str]] = {label: set() for _, label in assertions}
+
+    for req_node, labels in _iter_assertion_coverage(
+        node, NodeKind.REQUIREMENT,
+        edge_kinds={EdgeKind.REFINES}, direct_only=True,
+    ):
+        info = {
+            "id": req_node.id,
+            "title": req_node.get_field("title", "") or req_node.get_label() or req_node.id,
+            "kind": req_node.kind.value,
+        }
+        for label in labels:
+            if label not in assertion_refines:
+                continue
+            if req_node.id in seen_per_assertion[label]:
+                continue
+            seen_per_assertion[label].add(req_node.id)
+            assertion_refines[label]["refines_refs"].append(info)
+
+    total = len(assertions)
+    refined_count = sum(
+        1 for label in assertion_refines if assertion_refines[label]["refines_refs"]
+    )
+
+    return {
+        "success": True,
+        "req_id": req_id,
+        "assertion_refines": assertion_refines,
+        "total_assertions": total,
+        "refined_count": refined_count,
     }
 
 
@@ -3690,7 +3782,7 @@ def _apply_link_impl(
         }
 
     # Refresh graph after file modification
-    _, new_graph = _refresh_graph(working_dir, canonical_root=state.get("canonical_root"))
+    _, new_graph = _refresh_graph(working_dir)
     state["graph"] = new_graph
 
     return {
@@ -4598,13 +4690,10 @@ def create_server(
     # Load config for the working directory
     config = get_config(start_path=working_dir, quiet=True)
 
-    # Compute canonical root for worktree-aware path resolution
-    canonical_root = find_canonical_root(working_dir)
-
     # Build initial graph if not provided
     if graph is None:
         try:
-            graph = build_graph(config=config, repo_root=working_dir, canonical_root=canonical_root)
+            graph = build_graph(config=config, repo_root=working_dir)
         except ValueError as e:
             import sys
 
@@ -4619,7 +4708,6 @@ def create_server(
         "graph": graph,
         "working_dir": working_dir,
         "config": config,
-        "canonical_root": canonical_root,
     }
 
     # ─────────────────────────────────────────────────────────────────────
@@ -4651,12 +4739,10 @@ def create_server(
                 return {"success": False, "message": f"Directory not found: {path}"}
             _state["working_dir"] = new_dir
             _state["config"] = get_config(start_path=new_dir, quiet=True)
-            _state["canonical_root"] = find_canonical_root(new_dir)
 
         result, new_graph = _refresh_graph(
             _state["working_dir"],
             full=full,
-            canonical_root=_state.get("canonical_root"),
         )
         _state["graph"] = new_graph
         # REQ-d00205-B: Sync config from rebuilt graph's root repo
@@ -5279,7 +5365,6 @@ def create_server(
         if result.get("success"):
             new_result, new_graph = _refresh_graph(
                 _state["working_dir"],
-                canonical_root=_state.get("canonical_root"),
             )
             _state["graph"] = new_graph
         return result
@@ -5301,7 +5386,6 @@ def create_server(
         if result.get("success"):
             new_result, new_graph = _refresh_graph(
                 _state["working_dir"],
-                canonical_root=_state.get("canonical_root"),
             )
             _state["graph"] = new_graph
         return result
@@ -5314,7 +5398,6 @@ def create_server(
         if result.get("success"):
             new_result, new_graph = _refresh_graph(
                 _state["working_dir"],
-                canonical_root=_state.get("canonical_root"),
             )
             _state["graph"] = new_graph
         return result
@@ -5389,7 +5472,6 @@ def create_server(
         if result.get("success"):
             new_result, new_graph = _refresh_graph(
                 _state["working_dir"],
-                canonical_root=_state.get("canonical_root"),
             )
             _state["graph"] = new_graph
 
@@ -5530,6 +5612,19 @@ def create_server(
     return mcp
 
 
+def _config_hash_for_daemon(working_dir: Path) -> str:
+    """Compute config hash for daemon.json, best-effort."""
+    try:
+        from elspais.mcp.daemon import compute_config_hash
+
+        config_path = working_dir / ".elspais.toml"
+        if config_path.is_file():
+            return compute_config_hash(config_path)
+    except Exception:
+        pass
+    return ""
+
+
 def run_server(
     working_dir: Path | None = None,
     transport: str = "stdio",
@@ -5597,6 +5692,7 @@ def run_server(
                         "repo_root": str(working_dir),
                         "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
                         "version": __version__,
+                        "config_hash": _config_hash_for_daemon(working_dir),
                     }
                 )
             )

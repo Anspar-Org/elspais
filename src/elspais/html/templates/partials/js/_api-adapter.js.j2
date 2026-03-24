@@ -94,7 +94,7 @@ function apiFetch(url) {
     if (url.indexOf('/api/search') === 0) {
         var params = new URLSearchParams(url.split('?')[1] || '');
         var query = (params.get('q') || '').toLowerCase();
-        if (!query) return Promise.resolve([]);
+        if (!query) return Promise.resolve({results: []});
         var results = [];
         var nodes = _embeddedData.nodes;
         for (var key in nodes) {
@@ -107,7 +107,7 @@ function apiFetch(url) {
                 }
             }
         }
-        return Promise.resolve(results);
+        return Promise.resolve({results: results});
     }
     // Fallback: not available in static mode
     return Promise.resolve(null);

@@ -21,6 +21,49 @@ _DEFAULT_TTL = 30  # minutes
 _VIEWER_PORT = 5001
 
 
+def compute_config_hash(config_path: Path) -> str:
+    """Compute a hash of all config files that affect the graph.
+
+    Hashes the main .elspais.toml, .elspais.local.toml (if present),
+    and any associate repo .elspais.toml files referenced in [associates].
+
+    Returns:
+        16-char hex digest (first 8 bytes of SHA-256).
+    """
+    import hashlib
+
+    h = hashlib.sha256()
+
+    # Main config
+    if config_path.is_file():
+        h.update(config_path.read_bytes())
+
+    # Local overrides
+    local_path = config_path.parent / ".elspais.local.toml"
+    if local_path.is_file():
+        h.update(local_path.read_bytes())
+
+    # Associate configs: parse merged config to find associate paths
+    try:
+        from elspais.config import get_associates_config, get_config
+
+        merged = get_config(config_path=config_path)
+        repo_root = config_path.parent
+        associates = get_associates_config(merged, repo_root=repo_root)
+        for _name, info in sorted(associates.items()):
+            assoc_path = (repo_root / info["path"]).resolve()
+            assoc_toml = assoc_path / ".elspais.toml"
+            if assoc_toml.is_file():
+                h.update(assoc_toml.read_bytes())
+            assoc_local = assoc_path / ".elspais.local.toml"
+            if assoc_local.is_file():
+                h.update(assoc_local.read_bytes())
+    except Exception:
+        pass  # Best effort - don't fail daemon start on parse errors
+
+    return h.hexdigest()[:16]
+
+
 def get_cli_ttl(repo_root: Path | None = None) -> int:
     """Read cli_ttl from .elspais.toml config.
 
@@ -159,12 +202,27 @@ def stop_daemon(repo_root: Path) -> bool:
     return True
 
 
+def _config_hash_stale(info: dict, repo_root: Path) -> bool:
+    """Check if the daemon's config hash is stale.
+
+    Returns True if the config has changed since the daemon started.
+    Returns False (keep daemon) if there is no hash to compare.
+    """
+    daemon_hash = info.get("config_hash")
+    if not daemon_hash:
+        return False  # Old daemon without hash, or hash computation failed
+    config_path = repo_root / ".elspais.toml"
+    if not config_path.is_file():
+        return False
+    return compute_config_hash(config_path) != daemon_hash
+
+
 def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
     """Return port of a running daemon, starting one if needed.
 
     Reads ``cli_ttl`` from config if ttl_minutes is not provided.
     Raises RuntimeError if cli_ttl=0 (daemon disabled) and no daemon running.
-    Restarts the daemon if its version doesn't match the current install.
+    Restarts the daemon if its version or config hash doesn't match.
     """
     info = get_daemon_info(repo_root)
     if info:
@@ -173,6 +231,9 @@ def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
 
         daemon_version = info.get("version")
         if daemon_version and daemon_version != __version__:
+            stop_daemon(repo_root)
+            # Fall through to start a fresh daemon
+        elif _config_hash_stale(info, repo_root):
             stop_daemon(repo_root)
             # Fall through to start a fresh daemon
         else:

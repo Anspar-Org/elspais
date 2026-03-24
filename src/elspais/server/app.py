@@ -18,7 +18,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
 
-from elspais.server.middleware import AutoRefreshMiddleware, NoCacheMiddleware
+from elspais.server.middleware import APIErrorMiddleware, AutoRefreshMiddleware, NoCacheMiddleware
 from elspais.server.routes_api import (
     api_check_freshness,
     api_code_coverage,
@@ -44,6 +44,7 @@ from elspais.server.routes_api import (
     api_next_req_id,
     api_node,
     api_query,
+    api_refines_coverage,
     api_reload,
     api_repos,
     api_requirement,
@@ -72,8 +73,10 @@ from elspais.server.routes_git import (
     api_git_commit,
     api_git_commit_message,
     api_git_commits,
+    api_git_monorepo_eligible,
     api_git_pull,
     api_git_push,
+    api_git_repo_status,
     api_git_status,
     api_git_suggest_branch_name,
 )
@@ -135,6 +138,7 @@ def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
         Route("/api/search", api_search),
         Route("/api/test-coverage/{req_id:path}", api_test_coverage),
         Route("/api/code-coverage/{req_id:path}", api_code_coverage),
+        Route("/api/refines-coverage/{req_id:path}", api_refines_coverage),
         Route("/api/uat-coverage/{req_id:path}", api_uat_coverage),
         Route("/api/tree-data", api_tree_data),
         Route("/api/file-content", api_file_content),
@@ -189,6 +193,8 @@ def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
         Route("/api/git/checkout-commit", api_git_checkout_commit, methods=["POST"]),
         Route("/api/git/commit-message", api_git_commit_message),
         Route("/api/git/suggest-branch-name", api_git_suggest_branch_name),
+        Route("/api/git/repo-status", api_git_repo_status),
+        Route("/api/git/monorepo-eligible", api_git_monorepo_eligible),
     ]
 
     # Mount MCP sub-app at /mcp
@@ -218,6 +224,7 @@ def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
             allow_headers=["*"],
         ),
         Middleware(NoCacheMiddleware),
+        Middleware(APIErrorMiddleware),
         Middleware(AutoRefreshMiddleware),
         Middleware(DetachedGuardMiddleware),
     ]

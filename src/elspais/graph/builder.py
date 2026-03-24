@@ -22,6 +22,7 @@ from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.parsers.requirement import RequirementParser
 from elspais.graph.relations import EdgeKind, Stereotype
+from elspais.graph.terms import TermDictionary, TermEntry
 from elspais.utilities.patterns import INSTANCE_SEPARATOR
 from elspais.utilities.test_identity import build_test_id
 
@@ -63,6 +64,9 @@ class TraceGraph:
     # Detection: orphans and broken references (populated at build time)
     _orphaned_ids: set[str] = field(default_factory=set, init=False)
     _broken_references: list[BrokenReference] = field(default_factory=list, init=False)
+
+    # Implements: REQ-d00222-A
+    _terms: TermDictionary = field(default_factory=TermDictionary, init=False)
 
     # Mutation infrastructure
     _mutation_log: MutationLog = field(default_factory=MutationLog, init=False)
@@ -2535,6 +2539,8 @@ class GraphBuilder:
             self.satellite_kinds = _DEFAULT_SATELLITE_KINDS
         self._nodes: dict[str, GraphNode] = {}
         self._pending_links: list[tuple[str, str, EdgeKind]] = []
+        # Implements: REQ-d00222-A
+        self._pending_terms: list[tuple[str, dict]] = []  # (node_id, parsed_data)
         # Implements: REQ-p00014-B
         self._satisfies_links: list[tuple[str, str]] = []  # (declaring_id, template_id)
         # Detection: broken references
@@ -2620,6 +2626,17 @@ class GraphBuilder:
             self._add_test_result(content)
             if file_node is not None:
                 node = self._nodes.get(content.parsed_data.get("id", ""))
+                if node:
+                    self._wire_contains_edge(file_node, node, content)
+        elif content.content_type == "definition_block":
+            # Implements: REQ-d00222-A
+            self._add_definition_block(content)
+            if file_node is not None:
+                data = content.parsed_data
+                source_ctx = getattr(content, "source_context", None)
+                source_path = source_ctx.source_id if source_ctx else ""
+                remainder_id = data.get("id") or f"def:{source_path}:{content.start_line}"
+                node = self._nodes.get(remainder_id)
                 if node:
                     self._wire_contains_edge(file_node, node, content)
         elif content.content_type == "remainder":
@@ -2711,8 +2728,35 @@ class GraphBuilder:
                 "parse_line": section_line,
                 "parse_end_line": None,
             }
+            # Preserve heading style for assertion sub-headings (* ** _)
+            if "heading_style" in section:
+                section_node._content["heading_style"] = section["heading_style"]
             self._nodes[section_id] = section_node
             children_with_lines.append((section_line, section_node))
+
+        # Implements: REQ-d00222-A
+        # Create REMAINDER children from definition blocks in requirement preamble/sections
+        for def_idx, defn in enumerate(data.get("definitions", [])):
+            def_id = f"{req_id}:def:{def_idx}"
+            def_line = defn.get("line", content.start_line)
+            def_node = GraphNode(
+                id=def_id,
+                kind=NodeKind.REMAINDER,
+                label=defn.get("term", ""),
+            )
+            def_node._content = {
+                "text": f"{defn.get('term', '')}\n: {defn.get('definition', '')}",
+                "content_type": "definition_block",
+                "term": defn.get("term", ""),
+                "definition": defn.get("definition", ""),
+                "collection": defn.get("collection", False),
+                "indexed": defn.get("indexed", True),
+                "parse_line": def_line,
+                "parse_end_line": None,
+            }
+            self._nodes[def_id] = def_node
+            children_with_lines.append((def_line, def_node))
+            self._pending_terms.append((def_id, defn))
 
         # Add children in document order (sorted by line number)
         children_with_lines.sort(key=lambda x: x[0])
@@ -2794,7 +2838,12 @@ class GraphBuilder:
         else:
             label = f"Code at {source_id}:{content.start_line}"
 
-        for impl_ref in data.get("implements", []):
+        all_refs = [
+            (ref, EdgeKind.IMPLEMENTS) for ref in data.get("implements", [])
+        ] + [
+            (ref, EdgeKind.VERIFIES) for ref in data.get("verifies", [])
+        ]
+        for ref, edge_kind in all_refs:
             code_id = f"code:{source_id}:{content.start_line}"
             if code_id not in self._nodes:
                 node = GraphNode(
@@ -2820,7 +2869,7 @@ class GraphBuilder:
                     node.set_field("function_end_line", func_end_line)
                 self._nodes[code_id] = node
 
-            self._pending_links.append((code_id, impl_ref, EdgeKind.IMPLEMENTS))
+            self._pending_links.append((code_id, ref, edge_kind))
 
     def _add_test_ref(self, content: ParsedContent) -> None:
         """Add test reference nodes.
@@ -2912,6 +2961,34 @@ class GraphBuilder:
         if test_id:
             # Implements: REQ-d00127-E
             self._pending_links.append((result_id, test_id, EdgeKind.YIELDS))
+
+    # Implements: REQ-d00222-A
+    def _add_definition_block(self, content: ParsedContent) -> None:
+        """Add a definition block as a REMAINDER node with content_type field."""
+        data = content.parsed_data
+        source_ctx = getattr(content, "source_context", None)
+        source_path = source_ctx.source_id if source_ctx else ""
+
+        remainder_id = data.get("id") or f"def:{source_path}:{content.start_line}"
+        text = content.raw_text or ""
+
+        node = GraphNode(
+            id=remainder_id,
+            kind=NodeKind.REMAINDER,
+            label=data.get("term", text[:50]),
+        )
+        node._content = {
+            "text": text,
+            "content_type": "definition_block",
+            "term": data.get("term", ""),
+            "definition": data.get("definition", ""),
+            "collection": data.get("collection", False),
+            "indexed": data.get("indexed", True),
+            "parse_line": content.start_line,
+            "parse_end_line": content.end_line,
+        }
+        self._nodes[remainder_id] = node
+        self._pending_terms.append((remainder_id, data))
 
     def _add_remainder(self, content: ParsedContent) -> None:
         """Add a remainder/unclaimed content node."""
@@ -3421,4 +3498,31 @@ class GraphBuilder:
         graph._index = dict(self._nodes)
         graph._orphaned_ids = orphaned_ids
         graph._broken_references = list(self._broken_references)
+
+        # Implements: REQ-d00222-A, REQ-d00222-B
+        # Populate _terms from pending definition data, resolving defined_in
+        for node_id, data in self._pending_terms:
+            node = self._nodes.get(node_id)
+            if not node:
+                continue
+            # Resolve defined_in: walk up to nearest REQUIREMENT or FILE ancestor
+            defined_in = ""
+            if node:
+                for ancestor in node.ancestors():
+                    if ancestor.kind == NodeKind.REQUIREMENT:
+                        defined_in = ancestor.id
+                        break
+                    if ancestor.kind == NodeKind.FILE:
+                        defined_in = ancestor.id
+                        break
+            entry = TermEntry(
+                term=data.get("term", ""),
+                definition=data.get("definition", ""),
+                collection=data.get("collection", False),
+                indexed=data.get("indexed", True),
+                defined_in=defined_in,
+                defined_at_line=data.get("line", 0),
+            )
+            graph._terms.add(entry)
+
         return graph

@@ -61,7 +61,6 @@ def run(args: argparse.Namespace) -> int:
         compute_search,
         skip_daemon=no_daemon,
         config_path=getattr(args, "config", None),
-        canonical_root=getattr(args, "canonical_root", None),
     )
 
     results = data.get("results", [])

@@ -34,14 +34,12 @@ def run(args: argparse.Namespace) -> int:
     config = get_config(config_path)
     spec_dirs = get_spec_directories(spec_dir, config)
 
-    canonical_root = getattr(args, "canonical_root", None)
     all_spec_dirs = list(spec_dirs)
 
     graph = build_graph(
         config=config,
         spec_dirs=all_spec_dirs if spec_dir else None,
         config_path=config_path,
-        canonical_root=canonical_root,
     )
 
     action = getattr(args, "index_action", None)

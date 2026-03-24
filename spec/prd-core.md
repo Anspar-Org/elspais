@@ -203,3 +203,89 @@ F. The tool SHALL support an `--overview` flag that generates a stakeholder-orie
 
 *End* *Spec-to-PDF Compilation* | **Hash**: bfc0cadf
 ---
+
+## REQ-d00220: TermDictionary Data Model
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. `TermDictionary.add()` SHALL store a `TermEntry` keyed by normalized (lowercased) term name. If the term already exists, it SHALL return the existing entry without overwriting.
+
+B. `TermDictionary.lookup()` SHALL perform case-insensitive lookup and return the `TermEntry` or `None`.
+
+C. `TermDictionary.iter_indexed()` SHALL yield only entries where `indexed` is `True`. `iter_collections()` SHALL yield only entries where `collection` is `True`.
+
+D. `TermDictionary.merge()` SHALL combine two dictionaries and return a list of `(TermEntry, TermEntry)` pairs for duplicate terms detected across namespaces.
+
+*End* *TermDictionary Data Model* | **Hash**: 31915ae3
+
+## REQ-d00221: Grammar Extension for Definition Blocks
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. The grammar SHALL include a `DEF_LINE` terminal matching `: ` followed by non-newline text, and a `definition_block` rule matching `TEXT _NL (DEF_LINE _NL)+`. The `definition_block` rule SHALL be an alternative in `_item`, `preamble_line`, `content_line`, `jny_body_line`, and `jny_content_line` but NOT in `assertion_item` or `changelog_block`.
+
+B. The transformer SHALL handle `definition_block` nodes by extracting the term name from the TEXT token, definition text from DEF_LINE tokens, and metadata flags (Collection, Indexed) from definition lines. It SHALL return a `ParsedContent` with `content_type="definition_block"` and parsed_data containing `term`, `definition`, `collection`, and `indexed` fields.
+
+*End* *Grammar Extension for Definition Blocks* | **Hash**: 078ce203
+
+## REQ-d00222: TraceGraph Terms and GraphBuilder Integration
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. `TraceGraph` SHALL have a `_terms: TermDictionary` field. `GraphBuilder` SHALL handle `content_type == "definition_block"` by creating a REMAINDER node with `content_type` field set to `"definition_block"` and adding a `TermEntry` to the graph's `_terms` dictionary.
+
+B. The `defined_in` field of each `TermEntry` SHALL point to the nearest REQUIREMENT or FILE ancestor node ID, not the REMAINDER node itself.
+
+C. `FederatedGraph` SHALL merge per-repo `_terms` dictionaries into a single federated `TermDictionary`, detecting cross-namespace duplicates.
+
+*End* *TraceGraph Terms and GraphBuilder Integration* | **Hash**: 2e76a3f2
+
+## REQ-d00223: Term Health Checks
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. `check_term_duplicates()` SHALL return a `HealthCheck` reporting duplicate term definitions across all namespaces, using the configured `duplicate_severity`.
+
+B. `check_undefined_terms()` SHALL return a `HealthCheck` for `*token*`/`**token**` references that do not match any defined term and are not known structural patterns, using the configured `undefined_severity`.
+
+C. `check_unmarked_usage()` SHALL return a `HealthCheck` for whole-word case-insensitive matches of indexed terms in prose that lack `*...*` or `**...**` markup, using the configured `unmarked_severity`. Only terms with `indexed=True` SHALL be checked.
+
+D. When any severity is set to `"off"`, the corresponding check SHALL be skipped and return a passed HealthCheck with severity `"info"`.
+
+*End* *Term Health Checks* | **Hash**: 34da7dc1
+
+## REQ-d00224: Glossary and Term Index Generators
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. `generate_glossary()` SHALL produce an alphabetically-organized Markdown glossary with letter headings, including definition text, `defined_in` attribution, and annotation for collection/non-indexed terms.
+
+B. `generate_term_index()` SHALL produce a term index listing only indexed terms, with references grouped by namespace (one per line).
+
+C. `generate_collection_manifest()` SHALL produce a standalone manifest file per collection term, listing all reference sites.
+
+D. All generated files SHALL include an auto-generated header comment. Both `--format markdown` and `--format json` SHALL be supported.
+
+*End* *Glossary and Term Index Generators* | **Hash**: f2da30fb
+
+## REQ-d00225: CLI Registration for Glossary and Term Index
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. `GlossaryArgs` and `TermIndexArgs` dataclasses SHALL be defined in `commands/args.py` with `format` and `output_dir` fields. They SHALL be registered in the `Command` union and `_CMD_MAP`.
+
+B. `elspais fix` SHALL call glossary and term-index generation after existing fix operations when the graph has defined terms.
+
+*End* *CLI Registration for Glossary and Term Index* | **Hash**: d18fc2c9

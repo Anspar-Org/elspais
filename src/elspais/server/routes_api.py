@@ -17,6 +17,7 @@ from starlette.responses import JSONResponse
 from elspais.graph import NodeKind
 from elspais.mcp.server import (
     _get_assertion_code_map,
+    _get_assertion_refines_map,
     _get_assertion_test_map,
     _get_assertion_uat_map,
     _get_graph_status,
@@ -395,10 +396,21 @@ async def api_uat_coverage(request: Request) -> JSONResponse:
 
 
 async def api_code_coverage(request: Request) -> JSONResponse:
-    """GET /api/code-coverage/{req_id} - Per-assertion code implementation map."""
+    """GET /api/code-coverage/{req_id}?kind=implements|refines"""
     state = _st(request)
     req_id = request.path_params["req_id"]
-    result = _get_assertion_code_map(state.graph, req_id)
+    edge_kind = request.query_params.get("kind")
+    result = _get_assertion_code_map(state.graph, req_id, edge_kind=edge_kind)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+async def api_refines_coverage(request: Request) -> JSONResponse:
+    """GET /api/refines-coverage/{req_id} - Per-assertion refines map."""
+    state = _st(request)
+    req_id = request.path_params["req_id"]
+    result = _get_assertion_refines_map(state.graph, req_id)
     if "error" in result:
         return JSONResponse(result, status_code=404)
     return JSONResponse(result)
@@ -467,8 +479,8 @@ async def api_tree_data(request: Request) -> JSONResponse:
                     assertions.append(label)
 
         has_children = any(c.kind == NodeKind.REQUIREMENT for c in node.iter_children())
-        is_changed = bool(node.get_field("is_changed", False))
-        is_uncommitted = bool(node.get_field("is_uncommitted", False))
+        is_changed = bool(node.get_metric("is_branch_changed", False))
+        is_uncommitted = bool(node.get_metric("is_uncommitted", False))
         tiers = compute_coverage_tiers(node, state.config)
         # Derive coverage tier from combined_color for filtering
         _cc = tiers.get("combined_color", "")
@@ -1392,7 +1404,6 @@ async def api_revert(request: Request) -> JSONResponse:
         new_graph = build_graph(
             config=state.config,
             repo_root=state.repo_root,
-            canonical_root=state.canonical_root,
         )
         state.graph = new_graph
         state.build_time = time.time()
@@ -1416,7 +1427,6 @@ async def api_reload(request: Request) -> JSONResponse:
         new_graph = build_graph(
             config=state.config,
             repo_root=state.repo_root,
-            canonical_root=state.canonical_root,
         )
         state.graph = new_graph
         state.build_time = time.time()

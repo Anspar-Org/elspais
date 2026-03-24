@@ -144,7 +144,6 @@ class TestValidateFixDryRun:
             dry_run=True,
             spec_dir=git_repo_with_issues / "spec",
             config=git_repo_with_issues / ".elspais.toml",
-            canonical_root=None,
             quiet=False,
             verbose=False,
             mode="combined",
@@ -187,7 +186,6 @@ class TestValidateFix:
             dry_run=False,
             spec_dir=git_repo_with_issues / "spec",
             config=git_repo_with_issues / ".elspais.toml",
-            canonical_root=None,
             quiet=False,
             verbose=False,
             mode="combined",
@@ -215,7 +213,6 @@ class TestValidateFix:
             dry_run=False,
             spec_dir=git_repo_with_issues / "spec",
             config=git_repo_with_issues / ".elspais.toml",
-            canonical_root=None,
             quiet=False,
             verbose=False,
             mode="combined",
@@ -236,7 +233,6 @@ class TestValidateFix:
             quiet=False,
             export=False,
             mode="combined",
-            canonical_root=None,
         )
         result = validate_run(validate_args)
 

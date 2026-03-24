@@ -1,4 +1,4 @@
-# Ignore Configuration
+# IGNORE CONFIGURATION
 
 The `[ignore]` section in `.elspais.toml` controls which files are skipped during scanning.
 

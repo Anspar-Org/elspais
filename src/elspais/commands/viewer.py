@@ -127,12 +127,9 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
         start_path=repo_root,
         quiet=True,
     )
-    canonical_root = getattr(args, "canonical_root", None)
-
     state = AppState.from_config(
         repo_root=repo_root,
         config=config,
-        canonical_root=canonical_root,
     )
     app = create_app(state)
 
@@ -239,13 +236,10 @@ def _run_static(args: argparse.Namespace) -> int:
     config_path = getattr(args, "config", None)
     explicit_path = getattr(args, "path", None)
     repo_root = Path(explicit_path).resolve() if explicit_path else Path.cwd().resolve()
-    canonical_root = getattr(args, "canonical_root", None)
-
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
         repo_root=repo_root,
-        canonical_root=canonical_root,
     )
 
     try:

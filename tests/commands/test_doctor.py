@@ -74,8 +74,7 @@ class TestDoctorWorktreeCheck:
         from elspais.commands.doctor import check_worktree_status
 
         git_root = tmp_path
-        canonical_root = tmp_path  # same = not a worktree
-        result = check_worktree_status(git_root, canonical_root)
+        result = check_worktree_status(git_root)
         assert result.passed is True
         assert result.severity == "info"
         assert "worktree" not in result.message.lower() or "not" in result.message.lower()
@@ -84,17 +83,14 @@ class TestDoctorWorktreeCheck:
         from elspais.commands.doctor import check_worktree_status
 
         git_root = tmp_path / "worktrees" / "feature-x"
-        canonical_root = tmp_path / "main-repo"
-        result = check_worktree_status(git_root, canonical_root)
+        result = check_worktree_status(git_root)
         assert result.passed is True
         assert result.severity == "info"
-        assert "worktree" in result.message.lower()
-        assert str(canonical_root) in result.message
 
     def test_REQ_p00005_E_no_git(self):
         from elspais.commands.doctor import check_worktree_status
 
-        result = check_worktree_status(None, None)
+        result = check_worktree_status(None)
         assert result.passed is True
         assert result.severity == "info"
 
@@ -204,7 +200,6 @@ class TestDoctorRun:
             config=str(config_path),
             format="text",
             verbose=False,
-            canonical_root=None,
         )
         result = run(args)
         assert result == 0
@@ -219,7 +214,6 @@ class TestDoctorRun:
             config=None,
             format="json",
             verbose=False,
-            canonical_root=None,
         )
         run(args)
         output = capsys.readouterr().out
@@ -237,7 +231,6 @@ class TestDoctorRun:
             config=str(config_path),
             format="text",
             verbose=False,
-            canonical_root=None,
         )
         result = run(args)
         assert result == 1

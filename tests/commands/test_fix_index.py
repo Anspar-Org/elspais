@@ -71,7 +71,6 @@ class TestFixIndex:
         args = argparse.Namespace(
             spec_dir=None,
             config=project / ".elspais.toml",
-            canonical_root=None,
             git_root=project,
         )
 
@@ -101,7 +100,6 @@ class TestFixIndex:
         args = argparse.Namespace(
             spec_dir=None,
             config=project / ".elspais.toml",
-            canonical_root=None,
             git_root=project,
         )
 
@@ -127,7 +125,6 @@ class TestFixIndex:
         args = argparse.Namespace(
             spec_dir=None,
             config=project / ".elspais.toml",
-            canonical_root=None,
             git_root=project,
         )
 

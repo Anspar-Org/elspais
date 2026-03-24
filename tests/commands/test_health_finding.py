@@ -230,8 +230,8 @@ class TestRetiredFindingDowngrade:
 class TestDetailHint:
     """Unhealthy reports should show a hint about how to get details."""
 
-    def test_hint_shown_when_unhealthy(self, capsys: pytest.CaptureFixture) -> None:
-        """When report has errors, hint shows verbose and JSON commands."""
+    def test_followup_shown_when_unhealthy(self, capsys: pytest.CaptureFixture) -> None:
+        """When report has errors, follow-up section lists per-check commands."""
         check = HealthCheck(
             name="spec.hash_integrity",
             passed=False,
@@ -243,29 +243,12 @@ class TestDetailHint:
         report = HealthReport(checks=[check])
         _print_text_report(report, verbose=False)
         output = capsys.readouterr().out
-        assert "elspais -v checks --spec" in output
-        assert "--format json -o health.json" in output
+        assert "Follow-up:" in output
+        assert "spec.hash_integrity" in output
+        assert "elspais fix" in output
 
-    def test_hint_skips_verbose_suggestion_when_already_verbose(
-        self, capsys: pytest.CaptureFixture
-    ) -> None:
-        """When already verbose, hint only shows JSON command."""
-        check = HealthCheck(
-            name="spec.hash_integrity",
-            passed=False,
-            message="2 stale hashes",
-            category="spec",
-            severity="error",
-            findings=[HealthFinding(message="bad", node_id="REQ-001")],
-        )
-        report = HealthReport(checks=[check])
-        _print_text_report(report, verbose=True)
-        output = capsys.readouterr().out
-        assert "elspais -v checks --spec" not in output
-        assert "--format json -o health.json" in output
-
-    def test_hint_not_shown_when_healthy(self, capsys: pytest.CaptureFixture) -> None:
-        """Healthy reports don't show the hint."""
+    def test_followup_not_shown_when_healthy(self, capsys: pytest.CaptureFixture) -> None:
+        """Healthy reports don't show the follow-up section."""
         check = HealthCheck(
             name="spec.ok",
             passed=True,
@@ -275,15 +258,15 @@ class TestDetailHint:
         report = HealthReport(checks=[check])
         _print_text_report(report, verbose=False)
         output = capsys.readouterr().out
-        assert "elspais checks" not in output
+        assert "Follow-up:" not in output
 
-    def test_hint_no_scope_flag_when_multiple_categories_fail(
+    def test_followup_shows_multiple_categories(
         self, capsys: pytest.CaptureFixture
     ) -> None:
-        """When multiple categories fail, hint omits scope flags."""
+        """When multiple categories fail, follow-up lists all failing checks."""
         checks = [
             HealthCheck(
-                name="spec.hash",
+                name="spec.hash_integrity",
                 passed=False,
                 message="stale",
                 category="spec",
@@ -302,6 +285,8 @@ class TestDetailHint:
         report = HealthReport(checks=checks)
         _print_text_report(report, verbose=False)
         output = capsys.readouterr().out
-        assert "elspais -v checks" in output
-        assert "--spec" not in output
-        assert "--code" not in output
+        assert "Follow-up:" in output
+        assert "spec.hash_integrity" in output
+        assert "elspais fix" in output
+        assert "code.unlinked" in output
+        assert "elspais unlinked" in output

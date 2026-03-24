@@ -1,4 +1,4 @@
-# doctor
+# DOCTOR
 
 Diagnose your elspais environment and installation.
 

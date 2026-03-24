@@ -577,6 +577,47 @@ body.edit-mode .view-only {
     background: var(--card-add-btn-hover-bg);
 }
 
+/* --- Body Sections (Complete View) --- */
+
+.card-body-section-wrapper {
+    padding: 6px 8px;
+    border-radius: 4px;
+    background: var(--card-assertion-bg);
+    border: 1px solid transparent;
+}
+
+.card-body-section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--card-section-label);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.card-body-section-toggle {
+    font-size: 0.65rem;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    color: var(--muted-text);
+    cursor: pointer;
+    user-select: none;
+    padding: 0 4px;
+}
+
+.card-body-section-toggle:hover {
+    color: var(--accent-text);
+}
+
+.card-body-section-content {
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    line-height: 1.6;
+    white-space: pre-wrap;
+    margin-top: 4px;
+}
+
 /* --- Journey Card --- */
 
 .journey-card-kind {

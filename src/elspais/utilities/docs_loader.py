@@ -26,6 +26,11 @@ TOPIC_ORDER = [
     "config",
     "commands",
     "checks",
+    "doctor",
+    "analysis",
+    "associate",
+    "ignore",
+    "graph-model",
     "mcp",
 ]
 
@@ -95,6 +100,37 @@ def load_all_topics() -> str:
             parts.append(content)
 
     return "\n\n".join(parts)
+
+
+def list_topics() -> str:
+    """Build a topic index with descriptions from each file's first heading.
+
+    Returns:
+        Formatted topic listing as plain text.
+    """
+    docs_dir = find_docs_dir()
+    if docs_dir is None:
+        return "Documentation files not found."
+
+    lines: list[str] = ["# Available Topics", "", "Usage: elspais docs <topic>", ""]
+    max_name = max(len(t) for t in TOPIC_ORDER)
+    for topic in TOPIC_ORDER:
+        topic_file = docs_dir / f"{topic}.md"
+        if not topic_file.is_file():
+            continue
+        # Extract description from first markdown heading
+        desc = ""
+        for line in topic_file.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip().lstrip("#").strip()
+            if stripped:
+                desc = stripped
+                break
+        lines.append(f"  {topic:<{max_name}}  {desc}")
+
+    lines.append("")
+    lines.append(f"  {'all':<{max_name}}  Display all topics")
+    lines.append(f"  {'topics':<{max_name}}  This listing")
+    return "\n".join(lines)
 
 
 def get_available_topics() -> list[str]:

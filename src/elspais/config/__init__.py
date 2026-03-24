@@ -806,7 +806,6 @@ __all__ = [
     "config_defaults",
     "load_config",
     "find_config_file",
-    "find_canonical_root",
     "find_git_root",
     "get_config",
     "get_spec_directories",

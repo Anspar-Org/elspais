@@ -1815,3 +1815,241 @@ class TestGenerateCheckpointMessage:
         msg = generate_checkpoint_message(tmp_path)
 
         assert "REQ-p99999" not in msg
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tests for check_monorepo_eligible
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _make_repo(tmp_path: Path, name: str, branch: str, n_commits: int = 1) -> Path:
+    """Create a git repo with a given branch and number of commits."""
+    import os
+
+    from elspais.utilities.git import _clean_git_env as _cge
+
+    repo = tmp_path / name
+    repo.mkdir()
+    env = _cge()
+    env["GIT_AUTHOR_NAME"] = "Test"
+    env["GIT_AUTHOR_EMAIL"] = "test@test.com"
+    env["GIT_COMMITTER_NAME"] = "Test"
+    env["GIT_COMMITTER_EMAIL"] = "test@test.com"
+    subprocess.run(["git", "init"], cwd=repo, capture_output=True, check=True, env=env)
+    subprocess.run(
+        ["git", "checkout", "-b", branch], cwd=repo, capture_output=True, check=True, env=env
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"],
+        cwd=repo,
+        capture_output=True,
+        check=True,
+        env=env,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test User"],
+        cwd=repo,
+        capture_output=True,
+        check=True,
+        env=env,
+    )
+    for i in range(n_commits):
+        (repo / f"file{i}.txt").write_text(f"commit {i}\n")
+        subprocess.run(["git", "add", "."], cwd=repo, capture_output=True, check=True, env=env)
+        subprocess.run(
+            ["git", "commit", "-m", f"commit {i}"],
+            cwd=repo,
+            capture_output=True,
+            check=True,
+            env=env,
+        )
+    return repo
+
+
+class TestMonorepoEligible:
+    """REQ-d00201-B: check_monorepo_eligible validates multi-repo sync conditions."""
+
+    # Implements: REQ-d00201-B
+    def test_eligible_same_branch_same_commits(self, tmp_path):
+        """Two repos on same branch with same commit count are eligible."""
+        from elspais.utilities.git import check_monorepo_eligible, invalidate_ancestor_cache
+
+        invalidate_ancestor_cache()
+        repo_a = _make_repo(tmp_path, "a", "feature", n_commits=2)
+        repo_b = _make_repo(tmp_path, "b", "feature", n_commits=2)
+        eligible, reasons = check_monorepo_eligible(
+            [("a", repo_a), ("b", repo_b)], main_branches=["main", "master"]
+        )
+        assert eligible is True
+        assert reasons == []
+
+    # Implements: REQ-d00201-B
+    def test_ineligible_different_branch_names(self, tmp_path):
+        """Repos on different branch names are ineligible."""
+        from elspais.utilities.git import check_monorepo_eligible, invalidate_ancestor_cache
+
+        invalidate_ancestor_cache()
+        repo_a = _make_repo(tmp_path, "a", "feature-x", n_commits=1)
+        repo_b = _make_repo(tmp_path, "b", "feature-y", n_commits=1)
+        eligible, reasons = check_monorepo_eligible(
+            [("a", repo_a), ("b", repo_b)], main_branches=["main", "master"]
+        )
+        assert eligible is False
+        assert any("branch" in r.lower() for r in reasons)
+
+    # Implements: REQ-d00201-B
+    def test_ineligible_different_commit_counts(self, tmp_path):
+        """Repos with different commit counts on same branch are ineligible."""
+        from elspais.utilities.git import check_monorepo_eligible, invalidate_ancestor_cache
+
+        invalidate_ancestor_cache()
+        repo_a = _make_repo(tmp_path, "a", "feature", n_commits=1)
+        repo_b = _make_repo(tmp_path, "b", "feature", n_commits=3)
+        eligible, reasons = check_monorepo_eligible(
+            [("a", repo_a), ("b", repo_b)], main_branches=["main", "master"]
+        )
+        assert eligible is False
+        assert any("commit" in r.lower() for r in reasons)
+
+    # Implements: REQ-d00201-B
+    def test_eligible_on_main(self, tmp_path):
+        """Two repos both on main branch are eligible."""
+        from elspais.utilities.git import check_monorepo_eligible, invalidate_ancestor_cache
+
+        invalidate_ancestor_cache()
+        repo_a = _make_repo(tmp_path, "a", "main", n_commits=1)
+        repo_b = _make_repo(tmp_path, "b", "main", n_commits=1)
+        eligible, reasons = check_monorepo_eligible(
+            [("a", repo_a), ("b", repo_b)], main_branches=["main", "master"]
+        )
+        assert eligible is True
+        assert reasons == []
+
+    # Implements: REQ-d00201-B
+    def test_single_repo_always_eligible(self, tmp_path):
+        """Single-repo list is trivially eligible."""
+        from elspais.utilities.git import check_monorepo_eligible, invalidate_ancestor_cache
+
+        invalidate_ancestor_cache()
+        repo_a = _make_repo(tmp_path, "a", "feature", n_commits=2)
+        eligible, reasons = check_monorepo_eligible(
+            [("a", repo_a)], main_branches=["main", "master"]
+        )
+        assert eligible is True
+        assert reasons == []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tests for check_dirty_repos
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _clean_git_env():
+    """Return a clean git env for subprocess calls in tests."""
+    import os
+
+    env = os.environ.copy()
+    env.pop("GIT_DIR", None)
+    env.pop("GIT_WORK_TREE", None)
+    env.pop("GIT_INDEX_FILE", None)
+    return env
+
+
+class TestSyncCommit:
+    """REQ-p00004-I: Sync commits keep repos aligned."""
+
+    # Implements: REQ-p00004-I
+    def test_create_sync_commit(self, tmp_path):
+        from elspais.utilities.git import create_sync_commit
+
+        env = _clean_git_env()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        spec = repo / "spec"
+        spec.mkdir()
+        subprocess.run(["git", "init", "-b", "main"], cwd=repo, env=env, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "t@t.com"], cwd=repo, env=env, capture_output=True
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "T"], cwd=repo, env=env, capture_output=True
+        )
+        (spec / "reqs.md").write_text("# REQ")
+        subprocess.run(["git", "add", "."], cwd=repo, env=env, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=repo, env=env, capture_output=True)
+        result = create_sync_commit(
+            repo, spec_dir="spec", aligned_with="root", message="sync checkpoint"
+        )
+        assert result["success"]
+        sync_file = spec / ".elspais-sync"
+        assert sync_file.exists()
+        content = sync_file.read_text()
+        assert "aligned with root" in content
+
+    # Implements: REQ-p00004-I
+    def test_remove_sync_file_before_real_commit(self, tmp_path):
+        from elspais.utilities.git import remove_sync_file
+
+        spec = tmp_path / "spec"
+        spec.mkdir()
+        sync_file = spec / ".elspais-sync"
+        sync_file.write_text("sync: old")
+        remove_sync_file(tmp_path, spec_dir="spec")
+        assert not sync_file.exists()
+
+    # Implements: REQ-p00004-I
+    def test_remove_sync_file_noop_if_missing(self, tmp_path):
+        from elspais.utilities.git import remove_sync_file
+
+        spec = tmp_path / "spec"
+        spec.mkdir()
+        remove_sync_file(tmp_path, spec_dir="spec")  # Should not raise
+
+
+class TestCheckDirtyRepos:
+    """REQ-p00004-I: Dirty working tree detection across repos."""
+
+    # Implements: REQ-p00004-I
+    def test_clean_repos(self, tmp_path):
+        """Clean repos return empty list."""
+        from elspais.utilities.git import _clean_git_env as _cge
+        from elspais.utilities.git import check_dirty_repos
+
+        env = _cge()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init", "-b", "main"], cwd=repo, env=env, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "t@t.com"], cwd=repo, env=env, capture_output=True
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "T"], cwd=repo, env=env, capture_output=True
+        )
+        (repo / "f.txt").write_text("x")
+        subprocess.run(["git", "add", "."], cwd=repo, env=env, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=repo, env=env, capture_output=True)
+        dirty = check_dirty_repos([("root", repo)])
+        assert dirty == []
+
+    # Implements: REQ-p00004-I
+    def test_dirty_repo_detected(self, tmp_path):
+        """Dirty repo is reported."""
+        from elspais.utilities.git import _clean_git_env as _cge
+        from elspais.utilities.git import check_dirty_repos
+
+        env = _cge()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init", "-b", "main"], cwd=repo, env=env, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "t@t.com"], cwd=repo, env=env, capture_output=True
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "T"], cwd=repo, env=env, capture_output=True
+        )
+        (repo / "f.txt").write_text("x")
+        subprocess.run(["git", "add", "."], cwd=repo, env=env, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=repo, env=env, capture_output=True)
+        (repo / "f.txt").write_text("modified")
+        dirty = check_dirty_repos([("root", repo)])
+        assert dirty == ["root"]

@@ -1,4 +1,4 @@
-# analysis
+# ANALYSIS
 
 Analyze foundational requirement importance using graph-based metrics. Identifies which requirements are most structurally critical and which uncovered leaf requirements would deliver the most impact if addressed.
 

@@ -88,12 +88,10 @@ def run(args: argparse.Namespace) -> int:
     # Get repo root from spec_dir or cwd
     repo_root = Path(spec_dir).parent if spec_dir else Path.cwd()
 
-    canonical_root = getattr(args, "canonical_root", None)
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
         repo_root=repo_root,
-        canonical_root=canonical_root,
     )
 
     # Implements: REQ-d00085-E
@@ -143,8 +141,8 @@ def run(args: argparse.Namespace) -> int:
             for assoc_name, assoc_info in associates.items():
                 path_str = assoc_info["path"]
                 p = Path(path_str)
-                if not p.is_absolute() and canonical_root:
-                    p = canonical_root / p
+                if not p.is_absolute():
+                    p = repo_root / p
                 if not p.exists():
                     errors.append(
                         {
@@ -253,7 +251,7 @@ def run(args: argparse.Namespace) -> int:
                     "fix_type": "hash",
                     "computed_hash": computed_hash,
                     "file": (
-                        str(repo_root / node.file_node().get_field("relative_path"))
+                        node.file_node().get_field("absolute_path")
                         if node.file_node()
                         else None
                     ),
@@ -272,7 +270,7 @@ def run(args: argparse.Namespace) -> int:
                     "fix_type": "hash",
                     "computed_hash": computed_hash,
                     "file": (
-                        str(repo_root / node.file_node().get_field("relative_path"))
+                        node.file_node().get_field("absolute_path")
                         if node.file_node()
                         else None
                     ),

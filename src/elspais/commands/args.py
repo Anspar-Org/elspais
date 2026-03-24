@@ -23,7 +23,7 @@ import tyro
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
 class ChecksArgs:
-    """Check repository and configuration health."""
+    """Verify requirements traceability and configuration."""
 
     spec_only: Annotated[bool, tyro.conf.arg(name="spec")] = False
     """Run spec file checks only."""
@@ -243,6 +243,32 @@ class FixArgs:
 
     mode: Literal["core", "combined", "associate"] = "combined"
     """Which repos to include in fix operation."""
+
+
+# ---------------------------------------------------------------------------
+# Glossary and Term Index commands
+# Implements: REQ-d00225-A
+# ---------------------------------------------------------------------------
+@dataclasses.dataclass
+class GlossaryArgs:
+    """Generate glossary from defined terms."""
+
+    format: Literal["markdown", "json"] = "markdown"
+    """Output format."""
+
+    output_dir: str | None = None
+    """Output directory (overrides [terms] output_dir config)."""
+
+
+@dataclasses.dataclass
+class TermIndexArgs:
+    """Generate term index and collection manifests from defined terms."""
+
+    format: Literal["markdown", "json"] = "markdown"
+    """Output format."""
+
+    output_dir: str | None = None
+    """Output directory (overrides [terms] output_dir config)."""
 
 
 # ---------------------------------------------------------------------------
@@ -567,7 +593,13 @@ DOCS_TOPICS = Literal[
     "config",
     "commands",
     "checks",
+    "doctor",
+    "analysis",
+    "associate",
+    "ignore",
+    "graph-model",
     "mcp",
+    "topics",
     "all",
 ]
 
@@ -576,7 +608,7 @@ DOCS_TOPICS = Literal[
 class DocsArgs:
     """Read the user guide."""
 
-    topic: tyro.conf.Positional[DOCS_TOPICS] = "quickstart"
+    topic: tyro.conf.Positional[DOCS_TOPICS] = "topics"
     """Documentation topic."""
 
     plain: bool = False
@@ -860,6 +892,8 @@ Command = (
     | Annotated[McpArgs, tyro.conf.subcommand("mcp")]
     | Annotated[LinkArgs, tyro.conf.subcommand("link")]
     | Annotated[CompletionArgs, tyro.conf.subcommand("completion")]
+    | Annotated[GlossaryArgs, tyro.conf.subcommand("glossary")]
+    | Annotated[TermIndexArgs, tyro.conf.subcommand("term-index")]
 )
 
 
@@ -910,6 +944,8 @@ COMMAND_GROUPS: dict[str, str] = {
     "edit": "Authoring",
     "example": "Authoring",
     "link": "Authoring",
+    "glossary": "Authoring",
+    "term-index": "Authoring",
     "viewer": "Viewing",
     "graph": "Viewing",
     "init": "Configuration",

@@ -53,7 +53,6 @@ class TestAssociateLinkByPath:
             config=core / ".elspais.toml",
             verbose=False,
             quiet=False,
-            canonical_root=None,
         )
         rc = run(args)
         assert rc == 0
@@ -88,7 +87,6 @@ class TestAssociateLinkByPath:
             config=core / ".elspais.toml",
             verbose=False,
             quiet=False,
-            canonical_root=None,
         )
         run(args)
         assert local_config.exists()
@@ -112,7 +110,6 @@ class TestAssociateLinkByPath:
             config=core / ".elspais.toml",
             verbose=False,
             quiet=False,
-            canonical_root=None,
         )
         run(args)
 
@@ -144,7 +141,6 @@ class TestAssociateLinkByPath:
             config=core / ".elspais.toml",
             verbose=False,
             quiet=False,
-            canonical_root=None,
         )
         run(args)
         run(args)
@@ -180,7 +176,6 @@ class TestAssociateLinkByName:
             config=core / ".elspais.toml",
             verbose=False,
             quiet=False,
-            canonical_root=core,
         )
         rc = run(args)
         assert rc == 0
@@ -207,7 +202,6 @@ class TestAssociateErrors:
             config=core / ".elspais.toml",
             verbose=False,
             quiet=False,
-            canonical_root=None,
         )
         rc = run(args)
         assert rc == 1
@@ -232,7 +226,6 @@ class TestAssociateErrors:
             config=core / ".elspais.toml",
             verbose=False,
             quiet=False,
-            canonical_root=None,
         )
         rc = run(args)
         assert rc == 1
@@ -258,7 +251,6 @@ class TestAssociateErrors:
             config=core / ".elspais.toml",
             verbose=False,
             quiet=False,
-            canonical_root=None,
         )
         rc = run(args)
         assert rc == 0
@@ -278,7 +270,6 @@ class TestAssociateErrors:
             config=core / ".elspais.toml",
             verbose=False,
             quiet=False,
-            canonical_root=None,
         )
         rc = run(args)
         assert rc == 1
@@ -309,7 +300,6 @@ class TestAssociateAll:
             config=core / ".elspais.toml",
             verbose=False,
             quiet=False,
-            canonical_root=core,
         )
         rc = run(args)
         assert rc == 0
@@ -344,7 +334,6 @@ class TestAssociateAll:
             config=core / ".elspais.toml",
             verbose=False,
             quiet=False,
-            canonical_root=core,
         )
         rc = run(args)
         assert rc == 0
@@ -382,7 +371,6 @@ class TestAssociateAll:
             config=core / ".elspais.toml",
             verbose=False,
             quiet=False,
-            canonical_root=core,
         )
         rc = run(args)
         assert rc == 0
@@ -419,7 +407,6 @@ class TestAssociateList:
             config=core / ".elspais.toml",
             verbose=False,
             quiet=False,
-            canonical_root=None,
         )
         rc = run(args)
         assert rc == 0
@@ -443,7 +430,6 @@ class TestAssociateList:
             config=core / ".elspais.toml",
             verbose=False,
             quiet=False,
-            canonical_root=None,
         )
         rc = run(args)
         assert rc == 0
@@ -470,7 +456,6 @@ class TestAssociateList:
             config=core / ".elspais.toml",
             verbose=False,
             quiet=False,
-            canonical_root=None,
         )
         rc = run(args)
         assert rc == 0
@@ -507,7 +492,6 @@ class TestAssociateUnlink:
             config=core / ".elspais.toml",
             verbose=False,
             quiet=False,
-            canonical_root=None,
         )
         rc = run(args)
         assert rc == 0
@@ -542,7 +526,6 @@ class TestAssociateUnlink:
             config=core / ".elspais.toml",
             verbose=False,
             quiet=False,
-            canonical_root=None,
         )
         run(args)
 
@@ -578,7 +561,6 @@ class TestAssociateUnlink:
             config=core / ".elspais.toml",
             verbose=False,
             quiet=False,
-            canonical_root=None,
         )
         rc = run(args)
         assert rc == 0
@@ -605,7 +587,6 @@ class TestAssociateUnlink:
             config=core / ".elspais.toml",
             verbose=False,
             quiet=False,
-            canonical_root=None,
         )
         rc = run(args)
         assert rc == 0
@@ -645,7 +626,6 @@ class TestAssociateUnlink:
             config=core / ".elspais.toml",
             verbose=False,
             quiet=False,
-            canonical_root=core,
         )
         rc = run(args)
         assert rc == 0

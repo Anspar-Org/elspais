@@ -79,6 +79,10 @@ class RequirementTransformer:
                     self._flush_remainder(remainder_lines, results)
                     remainder_lines = []
                     results.append(self._transform_journey(child))
+                elif child.data == "definition_block":
+                    self._flush_remainder(remainder_lines, results)
+                    remainder_lines = []
+                    results.append(self._transform_definition_block(child))
                 elif child.data == "remainder_line":
                     token = child.children[0]  # TEXT token
                     remainder_lines.append((token.line, str(token)))  # type: ignore[attr-defined]
@@ -122,6 +126,7 @@ class RequirementTransformer:
         assertions: list[dict[str, Any]] = []
         sections: list[dict[str, Any]] = []
         changelog: list[dict[str, str]] = []
+        definitions: list[dict[str, Any]] = []
         body_lines: list[str] = []
         hash_value: str | None = None
         end_line = header_line
@@ -172,7 +177,10 @@ class RequirementTransformer:
                 end_line = token.line  # type: ignore[attr-defined]
 
             elif child.data == "assertion_block":
-                assertions = self._extract_assertions(child, header_line)
+                assertions, sub_heading_sections = self._extract_assertions(
+                    child, header_line
+                )
+                sections.extend(sub_heading_sections)
                 end_line = self._last_line(child)
 
             elif child.data == "changelog_block":
@@ -183,6 +191,20 @@ class RequirementTransformer:
                 section = self._extract_named_section(child)
                 if section:
                     sections.append(section)
+                # Extract definition_blocks nested in content_lines
+                for sub in child.children[1:]:
+                    if isinstance(sub, Tree) and sub.data == "content_line":
+                        for subsub in sub.children:
+                            if isinstance(subsub, Tree) and subsub.data == "definition_block":
+                                def_data = self._extract_definition_block(subsub)
+                                if def_data:
+                                    definitions.append(def_data)
+                end_line = self._last_line(child)
+
+            elif child.data == "definition_block":
+                def_data = self._extract_definition_block(child)
+                if def_data:
+                    definitions.append(def_data)
                 end_line = self._last_line(child)
 
             elif child.data == "body_line":
@@ -225,6 +247,7 @@ class RequirementTransformer:
             "assertions": assertions,
             "sections": sections,
             "changelog": changelog,
+            "definitions": definitions,
             "hash": hash_value,
             "body_text": body_text,
             "heading_level": heading_level,
@@ -295,15 +318,47 @@ class RequirementTransformer:
     # Assertion extraction from pre-classified tokens
     # ------------------------------------------------------------------
 
-    def _extract_assertions(self, node: Tree, req_start_line: int) -> list[dict[str, Any]]:
-        """Extract assertions from an assertions_section tree node."""
+    def _extract_assertions(
+        self, node: Tree, req_start_line: int
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Extract assertions and sub-heading sections from an assertion block.
+
+        Returns:
+            (assertions, sub_heading_sections) where sub_heading_sections are
+            inline labels like ``*Core Functionality*`` stored as section dicts
+            with ``heading_style`` preserving the original formatting.
+        """
         assertions: list[dict[str, Any]] = []
+        sub_sections: list[dict[str, Any]] = []
         for child in node.children:
             if isinstance(child, Tree) and child.data == "assertion":
                 assertion = self._extract_single_assertion(child)
                 if assertion:
                     assertions.append(assertion)
-        return assertions
+            elif isinstance(child, Tree) and child.data == "assertion_sub_heading":
+                token = child.children[0]  # ASSERT_SUB_HDR
+                raw_text = str(token).strip()
+                line_num = token.line  # type: ignore[attr-defined]
+                # Determine style and strip decoration to get heading text
+                if raw_text.startswith("**") and raw_text.endswith("**"):
+                    heading_style = "**"
+                    heading_text = raw_text[2:-2].strip()
+                elif raw_text.startswith("*") and raw_text.endswith("*"):
+                    heading_style = "*"
+                    heading_text = raw_text[1:-1].strip()
+                elif raw_text.startswith("_") and raw_text.endswith("_"):
+                    heading_style = "_"
+                    heading_text = raw_text[1:-1].strip()
+                else:
+                    heading_style = "*"
+                    heading_text = raw_text
+                sub_sections.append({
+                    "heading": heading_text,
+                    "content": "",
+                    "line": line_num,
+                    "heading_style": heading_style,
+                })
+        return assertions, sub_sections
 
     def _extract_single_assertion(self, node: Tree) -> dict[str, Any] | None:
         """Extract a single assertion (entry + continuation lines)."""
@@ -517,6 +572,78 @@ class RequirementTransformer:
             end_line=end_line,
             raw_text=raw_text,
             parsed_data=parsed_data,
+        )
+
+    # ------------------------------------------------------------------
+    # Definition block extraction
+    # Implements: REQ-d00221-B
+    # ------------------------------------------------------------------
+
+    def _extract_definition_block(self, node: Tree) -> dict[str, Any] | None:
+        """Extract term, definition, and metadata from a definition_block node.
+
+        The grammar rule is: definition_block: TEXT _NL (DEF_LINE _NL)+
+        DEF_LINE tokens match ": <text>" lines.
+        """
+        term_name: str | None = None
+        def_lines: list[str] = []
+        collection = False
+        indexed = True
+        start_line = 0
+
+        for child in node.children:
+            if isinstance(child, Token):
+                if child.type == "TEXT":
+                    term_name = str(child).strip()
+                    start_line = child.line  # type: ignore[attr-defined]
+                elif child.type == "DEF_LINE":
+                    # Strip leading ": " from the definition line
+                    line_text = str(child)
+                    if line_text.startswith(": "):
+                        line_text = line_text[2:]
+                    elif line_text.startswith(":"):
+                        line_text = line_text[1:].lstrip()
+
+                    # Check for metadata flags
+                    stripped = line_text.strip()
+                    if stripped.lower() == "collection: true":
+                        collection = True
+                    elif stripped.lower() == "collection: false":
+                        collection = False
+                    elif stripped.lower() == "indexed: true":
+                        indexed = True
+                    elif stripped.lower() == "indexed: false":
+                        indexed = False
+                    else:
+                        def_lines.append(line_text)
+
+        if not term_name:
+            return None
+
+        return {
+            "term": term_name,
+            "definition": "\n".join(def_lines).strip(),
+            "collection": collection,
+            "indexed": indexed,
+            "line": start_line,
+        }
+
+    def _transform_definition_block(self, node: Tree) -> ParsedContent:
+        """Transform a file-level definition_block into ParsedContent."""
+        data = self._extract_definition_block(node)
+        raw_text = self._reconstruct_raw_text(node)
+        start = self._first_line(node)
+        end = self._last_line(node)
+
+        if data is None:
+            return self._make_remainder(start, end, raw_text)
+
+        return ParsedContent(
+            content_type="definition_block",
+            start_line=start,
+            end_line=end,
+            raw_text=raw_text,
+            parsed_data=data,
         )
 
     # ------------------------------------------------------------------

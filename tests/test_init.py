@@ -32,7 +32,7 @@ class TestInitConfig:
         assert config_path.exists()
         content = config_path.read_text()
         assert "[project]" in content
-        assert "version = 3" in content
+        assert "version = 4" in content
 
     # Implements: REQ-d00209-A
     def test_init_core_type(self, tmp_path: Path, monkeypatch):
@@ -53,7 +53,7 @@ class TestInitConfig:
 
         assert result == 0
         content = (tmp_path / ".elspais.toml").read_text()
-        assert "version = 3" in content
+        assert "version = 4" in content
         assert "[project]" in content
 
     # Implements: REQ-d00209-B
@@ -75,7 +75,7 @@ class TestInitConfig:
 
         assert result == 0
         content = (tmp_path / ".elspais.toml").read_text()
-        assert "version = 3" in content
+        assert "version = 4" in content
         assert 'namespace = "CAL"' in content
 
     # Implements: REQ-d00209-B

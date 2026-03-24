@@ -55,6 +55,10 @@ def run(args: argparse.Namespace) -> int:
     # Fix stale INDEX.md if present
     _fix_index(args, dry_run)
 
+    # Implements: REQ-d00225-B
+    # Generate glossary and term index if terms are defined
+    _fix_terms(args, dry_run)
+
     if dry_run:
         return 0
 
@@ -77,7 +81,6 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> None:
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
-    canonical_root = getattr(args, "canonical_root", None)
     repo_root = getattr(args, "git_root", None) or Path.cwd()
 
     graph = build_graph(
@@ -86,7 +89,6 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> None:
         repo_root=repo_root,
         scan_code=False,
         scan_tests=False,
-        canonical_root=canonical_root,
     )
 
     dirty_nodes = [
@@ -112,7 +114,6 @@ def _make_validate_args(args: argparse.Namespace) -> argparse.Namespace:
         # Shared CLI args
         spec_dir=getattr(args, "spec_dir", None),
         config=getattr(args, "config", None),
-        canonical_root=getattr(args, "canonical_root", None),
         quiet=getattr(args, "quiet", False),
         verbose=getattr(args, "verbose", False),
         # Validate mode
@@ -138,7 +139,6 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
-    canonical_root = getattr(args, "canonical_root", None)
     dry_run = getattr(args, "dry_run", False)
     message = getattr(args, "message", None)
     repo_root = Path(spec_dir).parent if spec_dir else Path.cwd()
@@ -153,7 +153,6 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
         repo_root=repo_root,
         scan_code=False,
         scan_tests=False,
-        canonical_root=canonical_root,
     )
 
     hash_mode = getattr(graph, "hash_mode", "full-text")
@@ -184,7 +183,7 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
         print(f"Error: No source file for {req_id}", file=sys.stderr)
         return 1
 
-    file_path = repo_root / _fn.get_field("relative_path")
+    file_path = Path(_fn.get_field("absolute_path"))
 
     # If hash is current, check for missing Changelog section on Active reqs
     if stored == computed:
@@ -332,7 +331,6 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
-    canonical_root = getattr(args, "canonical_root", None)
 
     config = get_config(config_path)
     spec_dirs = get_spec_directories(spec_dir, config)
@@ -351,7 +349,50 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
         config_path=config_path,
         scan_code=False,
         scan_tests=False,
-        canonical_root=canonical_root,
     )
 
     _regenerate_index(graph, all_spec_dirs, args)
+
+
+# Implements: REQ-d00225-B
+def _fix_terms(args: argparse.Namespace, dry_run: bool) -> None:
+    """Generate glossary and term index if terms are defined."""
+    from elspais.config import get_config
+    from elspais.graph.factory import build_graph
+
+    config_path = getattr(args, "config", None)
+    spec_dir = getattr(args, "spec_dir", None)
+    config = get_config(config_path)
+    terms_config = config.get("terms", {})
+    output_dir = terms_config.get("output_dir", "spec/_generated")
+
+    graph = build_graph(
+        spec_dirs=[spec_dir] if spec_dir else None,
+        config_path=config_path,
+        scan_code=False,
+        scan_tests=False,
+    )
+
+    # Get terms from the graph
+    td = None
+    if hasattr(graph, "_terms"):
+        td = graph._terms
+    else:
+        # FederatedGraph — check root repo
+        for entry in graph._repos.values():
+            if entry.graph and hasattr(entry.graph, "_terms"):
+                td = entry.graph._terms
+                break
+
+    if td is None or len(td) == 0:
+        return
+
+    if dry_run:
+        print(f"Would generate glossary and term index in {output_dir}")
+        return
+
+    from elspais.commands.glossary_cmd import write_term_outputs
+
+    generated = write_term_outputs(td, output_dir)
+    for path in generated:
+        print(f"Generated: {path}")

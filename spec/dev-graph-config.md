@@ -117,5 +117,7 @@ J. `ProjectConfig` SHALL contain only `namespace` and `name`. The `version` and 
 
 K. `AssociateEntryConfig` SHALL contain `path` (str) and `namespace` (str). The `git` and `spec` fields SHALL be removed.
 
-*End* *Config Schema v3 Models* | **Hash**: 039007e7
+L. A `TermsConfig` model SHALL define defined-terms configuration: `output_dir` (str, default "spec/_generated"), `duplicate_severity` (str, default "error"), `undefined_severity` (str, default "warning"), `unmarked_severity` (str, default "warning"). `ElspaisConfig` SHALL include a `terms` field of type `TermsConfig` with factory default.
+
+*End* *Config Schema v3 Models* | **Hash**: 0cee5e84
 ---

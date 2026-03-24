@@ -1,6 +1,89 @@
 # Known Issues
 
-[ ] viewer: changed filter
+[x] checks, gaps, reports: clarification
+- The `--status` flag already exists on checks/gaps commands for prospective analysis
+- e.g. `elspais gaps --status Draft` shows gaps as if Draft requirements were active
+- Documented in checks.md "Prospective Reports" section
+
+[x] checks: feature
+- Config files now reported with `-v` (verbose) flag
+- FederatedGraph results: already working
+- Repo identification in errors: already implemented via `_annotate_findings()`
+
+[x] docs : update quickstart
+- Quickstart rewritten with traceability chain diagram (PRD->DEV->code->test)
+- Shows requirement with multiple assertions, DEV refining PRD, code Implements, test Verifies
+- Assertions defined as testable statements (ref ISO/IEC/IEEE 29148:2018)
+- Checks terminology updated from "health check" to "traceability verification" (FDA CSV alignment)
+- Updated in: ChecksArgs docstring, health.py module docstring, checks.md, commands.md
+
+
+[x] viewer : bug : card assertion lines
+- Fixed: IMP badge shows only direct IMPLEMENTS->CODE refs; REF badge shows REFINES->REQUIREMENT refs
+- Separate API endpoints: /api/code-coverage/?kind=implements and /api/refines-coverage/
+- Indirect/blanket coverage excluded from per-assertion panels (shown only in header)
+
+
+
+[ ] graph: add render_order to STRUCTURES edges
+- STRUCTURES edges (REQ→ASSERTION, REQ→REMAINDER) lack explicit ordering metadata
+- Currently relies on parse_line for ordering, which is fragile if sections are moved/reordered via mutations
+- FILE→REQ CONTAINS edges already use render_order in edge metadata — STRUCTURES should follow the same pattern
+- Prerequisite for robust section reordering in Complete View editing
+- Touches: builder (assign on parse), mutation methods (maintain on add/move/reorder), API serialization (expose it), JS (sort by it instead of line)
+
+[ ] refactor: remove body_text field from requirement nodes
+- `body_text` stores the raw unparsed body (header to footer) as a flat string
+- Duplicates content already parsed into structured ASSERTION and REMAINDER children
+- Usages that should migrate to structured children:
+  - Search (CLI `search --field=body`, MCP `search.py`, `server.py` match): search REMAINDER texts + assertion texts instead
+  - API serialization (`mcp/server.py` properties): drop field, children already have the data
+- Usages tied to `full-text` hash mode (`validate.py`, `render.py`): only used when `hash_mode=full-text` (not the default); could recompute from rendered children
+- Builder mutation helpers (`_update_assertion_in_body_text`, `_add_assertion_to_body_text`, `_delete_assertion_from_body_text`, `_rename_assertion_in_body_text`): appear to be dead code since `render_save()` reconstructs from graph nodes
+- Both parsers (legacy `requirement.py` and Lark `transformers/requirement.py`) create it
+
+[ ] feature: viewer: add review/comment
+- In Edit Mode, allow user to tag any REQ or JNY element (and CODE and TEST reference) with a comment. 
+ - this is most 'unique' aspect of this feature. What can we put a comment on? How do we do that w/o cluttering the display with a separate 'comment' icon on every field?
+ - how do we show a comment thread without cluttering the display?
+- Those comments are stored in a .elspais/ database-like file (or actual database?)
+- this is an auditable record, so it should use an append-only event-driven system
+- The comments are kept on a per-reference basis, such that the history can be easily seen
+- comments can get replies
+- comments can be resolved
+- if the target of the comment is deleted then the comment is resolved
+
+
+[x] gaps : feature
+- errors should identify the repo in which the source is located
+- applies to all commands / reports of that kind
+
+[x] viewer: bug : multi-repo git support
+- must support selecting independent branches for each TraceGrpah (separate repo)
+- but when making a new branch, it can apply to all repos (as a way to keep them in-sync)
+
+[ ] feature : defined terms (v1)
+- definition list syntax: `Term\n: definition text\n: Collection: true`
+- definitions can appear anywhere in spec files; parser collects them all
+- duplicate definitions (same term, two locations) = error by default (configurable)
+- glossary generation: `spec/_generated/glossary.md`
+- term index generation: `spec/_generated/index.md` (term + all marked-up reference sites)
+- collection manifests: `spec/_generated/collections/<term>.md`
+- health check: flag unmarked usages of defined terms in requirement/assertion text
+- CLI: `elspais glossary`, `elspais term-index`, wired into `elspais fix`
+- `--format` parameter (markdown first, JSON next)
+- references use normal *italic* or **bold** markup; matched against glossary
+
+[ ] feature : defined terms (deferred)
+- viewer: hyperlinks and hover text for defined terms in requirement cards
+- code file scanning for term references (.dart, .py, etc.)
+- MCP tools for term lookup and cross-reference queries
+- plural/inflection matching in the unmarked-usage health check
+- term aliasing (multiple surface forms mapping to one definition)
+
+
+
+[x] viewer: changed filter
 - don't think it's working... surely there must be some REQ changes from main in this branch?
 
 [ ] viewer: feature : reports
@@ -9,11 +92,18 @@
 - Or would it fit better in the 'file viewer' column?
 - 'Download' button for reports?
 - highlight 'gaps' on hierarchy? Why? ...it's already captured in the badge color.
+
+[ ] bug: init template file generator
+- this is supposed to have detailed comments for every field, documenting what the options are
+- e.g. the valid values for hash_modes, and for all other enums. What does each option mean?
+- what do the true/false settings affect?
+- Not more than 1 line per enum/bool value: if the explanation is longer, then refer to the docs.
+- for text fields, explain what the value is and what allowed values are (e.g. a simple regex might work to explain?)
  
 
 [ ] feature: config
 - make journey IDs configurable like REQ IDs
-- second instand of IDresolver?
+- second instance of IDresolver?
 
 [x] testing: bug
 - xml test results are all on 'one line' so its hard to link to them (all results are on line 1).
@@ -127,6 +217,12 @@
 - Don't allow editing of state = retired REQs
 
 [ ] chore (med): Unify `file_patterns` / `directories` in scanning config. `file_patterns` (glob against repo root, no skip logic) and `directories` (recursive walk with hardcoded `DEFAULT_CODE_PATTERNS` + skip/ignore) are partially redundant. Consider replacing both with a single `patterns` list that supports glob + skip/ignore.
+
+[ ] code review : no legacy code
+- we don't need any 'backwards compatible' code paths
+- find the terms that will detect these code situations
+- is there a linter that looks for dead code?
+- or perhaps a profiler: find all the functions never called in a test, as a starting point for obsolete candidates?
 
 ---
 

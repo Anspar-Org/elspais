@@ -38,7 +38,9 @@ Multiple requirements on one line:
 # Implements: REQ-d00001-A, REQ-d00002-B
 ```
 
-Use `Refines:` instead of `Implements:` when code partially addresses a requirement without fully satisfying it. Refines edges do not contribute to coverage metrics.
+`Refines:` is not valid in code files. Refines is a requirement-to-requirement
+relationship (see `elspais docs graph-model`). Use `Verifies:` in code files
+that produce pass/fail result output (e.g., benchmarks writing JUnit XML).
 
 ## Code Linking -- Multiline Blocks
 
@@ -82,18 +84,18 @@ class TestPasswordHashing:
 
 ## Test Linking -- Comments
 
-Use any reference keyword (`Implements`, `Tests`, `Validates`, `Refines`) in
-test files.  All keywords create the same VERIFIES edge in the traceability
-graph -- the keyword choice is purely stylistic:
+The three recognized keywords (`Implements`, `Verifies`, `Refines`) all
+create a VERIFIES edge when used in test files. The recommended keyword
+is `Verifies:`:
 
 ```python
-# Implements: REQ-d00001-A
+# Verifies: REQ-d00001-A
 def test_password_hashing():
     ...
 ```
 
 ```python
-# Tests: REQ-d00001-A, REQ-d00001-B
+# Verifies: REQ-d00001-A, REQ-d00001-B
 def test_full_auth_flow():
     ...
 ```
@@ -168,21 +170,23 @@ Indirect coverage is tracked separately from direct coverage. Use `elspais viewe
 
 ## When to Use Each Approach
 
-  **Code files**: Always add `# Implements: REQ-xxx` to functions
-  that satisfy a requirement. This is the primary link.
+  **Code files**: Add `# Implements: REQ-xxx` to functions that
+  satisfy a requirement. Use `# Verifies: REQ-xxx` only for code
+  that produces pass/fail result output (e.g., benchmarks). Do not
+  use `Refines:` in code files.
 
-  **Acceptance / integration tests**: Use direct linking via function
-  names (`test_REQ_xxx`) or comments (`# Tests: REQ-xxx`). These tests
-  validate requirements explicitly and should say so.
+  **Test files**: Use `# Verifies: REQ-xxx` or embed the ID in the
+  function name (`test_REQ_xxx`). This is the only valid keyword in
+  test files.
+
+  **Spec files**: Use `Implements:` for child requirements that fully
+  satisfy a parent. Use `Refines:` when a requirement adds detail to
+  another or splits an assertion into sub-assertions.
 
   **Unit tests**: Indirect linking is acceptable. If the function under
   test already has `# Implements: REQ-xxx`, the coverage rolls up. Add
   direct links only when the test validates something beyond what the
   function signature implies.
-
-  **Refines vs Implements**: Use `Refines:` for partial contributions
-  (helper utilities, shared libraries). Use `Implements:` when the code
-  directly satisfies the requirement.
 
 ## AI Agent Instructions
 
@@ -192,14 +196,16 @@ The following snippet can be added to agent configuration files (e.g., CLAUDE.md
 When writing code that implements a requirement, add a comment
 above the function:  # Implements: REQ-xxx-Y
 
-When writing tests, include the requirement ID in the function
-name:  def test_REQ_xxx_Y_description():
+When writing tests, use Verifies (not Implements):
+  # Verifies: REQ-xxx-Y
+  def test_description():
+
+Or include the requirement ID in the function name:
+  def test_REQ_xxx_Y_description():
 
 Use multi-assertion syntax for compact references:
-  # Implements: REQ-xxx-A+B+C
-
-Test classes should include the requirement in their docstring:
-  """Validates REQ-xxx-Y: brief description"""
+  # Implements: REQ-xxx-A+B+C  (in code files)
+  # Verifies: REQ-xxx-A+B+C   (in test files)
 ```
 
 ## Configuration

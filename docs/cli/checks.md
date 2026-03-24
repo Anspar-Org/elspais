@@ -1,6 +1,6 @@
-# Checks Command
+# CHECKS
 
-The `elspais checks` command diagnoses configuration and repository issues, helping you identify problems before they affect your workflow.
+The `elspais checks` command performs **traceability verification** — confirming that requirements are properly traced through implementation, tests, and validation results. In FDA CSV (Computer System Validation) terms, this is the automated equivalent of verifying a Requirements Traceability Matrix (RTM).
 
 ## Quick Start
 
@@ -18,7 +18,7 @@ elspais checks --tests     # Test mapping checks
 
 ### Configuration Checks
 
-Configuration checks always run as part of the full health check. For focused configuration and environment diagnostics, use `elspais doctor`.
+Configuration checks always run as part of traceability verification. For focused configuration and environment diagnostics, use `elspais doctor`.
 
 | Check | Description |
 |-------|-------------|
@@ -129,6 +129,84 @@ reports pass/fail/skip counts and flags failing journeys.
 results_file = "uat-results.csv"   # default
 ```
 
+## Coverage Dimensions
+
+Coverage checks report six **dimensions**, each tracking how thoroughly
+requirements are implemented, tested, and validated. Every dimension has
+two tiers of confidence:
+
+- **direct** — the link names specific assertions (high confidence)
+- **indirect** — the link targets the whole requirement, implying all assertions (lower confidence)
+
+### The six dimensions
+
+| Dimension | What it measures |
+|-----------|-----------------|
+| `implemented` | CODE or child-REQ covers assertions |
+| `tested` | TEST nodes linked to assertions |
+| `verified` | TEST results PASSING for those assertions |
+| `uat_coverage` | USER_JOURNEY validates assertions |
+| `uat_verified` | USER_JOURNEY results PASSING for those assertions |
+| `code_tested` | Implementation source lines hit by line-coverage data |
+
+### How coverage sources map to dimensions
+
+The system classifies *how specifically* coverage was claimed:
+
+| Source | When | Dimension effect |
+|--------|------|-----------------|
+| `DIRECT` | TEST or CODE names specific assertions (`REQ-xxx-A`) | `implemented.direct`, `tested.direct` |
+| `EXPLICIT` | Child REQ names specific assertions (`Implements: REQ-xxx-A+B`) | `implemented.direct` |
+| `INFERRED` | Child REQ targets whole parent (`Implements: REQ-xxx`) | `implemented.indirect` only |
+| `INDIRECT` | TEST targets whole REQ (no assertion labels) | `tested.indirect` only |
+| `UAT_EXPLICIT` | JNY names specific assertions (`Validates: REQ-xxx-A`) | `uat_coverage.direct` |
+| `UAT_INFERRED` | JNY targets whole REQ (`Validates: REQ-xxx`) | `uat_coverage.indirect` only |
+
+After collection, `implemented.direct = DIRECT | EXPLICIT` and
+`implemented.indirect = DIRECT | EXPLICIT | INFERRED`.
+
+### Roll-up: how RESULT nodes contribute
+
+RESULT nodes do **not** add coverage — they add **verification**. A RESULT
+inherits the assertion targets from its parent TEST's edge:
+
+```text
+REQ (assertion "A")
+  |
+  +-- VERIFIES (assertion_targets=["A"]) --> TEST
+                                               |
+                                               +-- RESULT (status="passed")
+```
+
+What gets credited:
+
+- `tested.direct` += "A" — from the VERIFIES edge (assertion-targeted)
+- `verified.direct` += "A" — from the RESULT with `status=passed`
+
+If the RESULT is absent or failing, `tested` still gets credit but `verified`
+does not. The same pattern applies to UAT: a journey RESULT populates
+`uat_verified` but not `uat_coverage`.
+
+### Dimension tiers
+
+Each dimension resolves to a **tier** that drives severity and UI color:
+
+| Tier | Meaning |
+|------|---------|
+| `none` | No coverage at all |
+| `partial` | Some assertions covered, not all |
+| `full-indirect` | All assertions covered, but only via indirect links |
+| `full-direct` | All assertions covered with assertion-level specificity |
+| `failing` | Coverage exists but results are failing |
+
+### `code_tested` — line coverage
+
+Unlike the other five dimensions, `code_tested` counts **source lines** rather
+than assertions. It cross-references implementation line ranges (from
+`Implements:` edges to CODE nodes) against file-level line-coverage data
+(LCOV or coverage.json). `code_tested.direct` is always 0 because per-test
+line attribution is not yet implemented.
+
 ## Output Formats
 
 ### Text Output (default)
@@ -215,7 +293,7 @@ Produces JUnit XML that CI systems (GitHub Actions, Jenkins, GitLab CI) can inge
 **CI Integration Example (GitHub Actions):**
 
 ```yaml
-- name: Run health checks (JUnit)
+- name: Traceability verification (JUnit)
   run: elspais checks --format junit -o health-results.xml
 
 - name: Publish test results
@@ -298,7 +376,7 @@ Produces [SARIF v2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.
 **CI Integration Example (GitHub Code Scanning):**
 
 ```yaml
-- name: Run health checks (SARIF)
+- name: Traceability verification (SARIF)
   run: elspais checks --format sarif -o health-results.sarif
   continue-on-error: true
 
@@ -332,6 +410,33 @@ elspais checks untested           # Checklist + untested gaps
 
 Gap commands support `--format text` (default), `--format markdown`, and `--format json`.
 
+## Prospective Reports (What-If Analysis)
+
+By default, `checks` and `gaps` only include requirements with **Active** status
+in coverage calculations. Requirements with Draft, Proposed, or other provisional
+statuses are excluded.
+
+Use `--status` to include additional statuses and see what traceability gaps
+would exist if those requirements were promoted to Active:
+
+```bash
+# Show gaps assuming all Draft requirements were active
+elspais gaps --status Draft
+
+# Show checks including both Draft and Proposed
+elspais checks --status Draft --status Proposed
+
+# Combine with gap subcommands
+elspais untested --status Draft
+```
+
+This is useful for planning: before promoting a batch of Draft requirements,
+run a prospective report to see which ones still need code references, tests,
+or UAT validation.
+
+The `--status` flag accepts any configured status name (case-sensitive).
+See `elspais docs config` for how status roles are configured.
+
 ## Exit Codes
 
 Exit codes use a bitfield so composed reports indicate which sections failed:
@@ -357,7 +462,7 @@ Composed reports OR the bits together. Currently only `checks` returns non-zero 
 ### CI/CD Pipeline Check
 
 ```bash
-# Fail pipeline if health checks fail
+# Fail pipeline if traceability verification fails
 elspais checks || exit 1
 ```
 

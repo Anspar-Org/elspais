@@ -2,9 +2,9 @@
 # Implements: REQ-d00218-A+B+C
 # Implements: REQ-d00219-A+B+C+D
 """
-elspais.commands.health - Diagnose configuration and repository health.
+elspais.commands.health - Requirements traceability verification.
 
-Provides comprehensive health checks for:
+Verifies traceability completeness for:
 - Config: TOML syntax, required fields, valid paths
 - Spec: File parsing, duplicate IDs, reference resolution
 - Code: Code→REQ reference validation
@@ -664,6 +664,7 @@ def check_spec_format_rules(
 ) -> HealthCheck:
     """Check that requirements comply with configured format rules."""
     from elspais.graph import NodeKind
+    from elspais.graph.GraphNode import GraphNode
     from elspais.validation.format import get_format_rules_config, validate_requirement_format
 
     rules = get_format_rules_config(config)
@@ -692,23 +693,39 @@ def check_spec_format_rules(
         )
 
     all_violations = []
+    node_map: dict[str, GraphNode] = {}
     req_count = 0
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         req_count += 1
+        node_map[node.id] = node
         violations = validate_requirement_format(node, rules, resolver=resolver)
         all_violations.extend(violations)
 
     errors = [v for v in all_violations if v.severity == "error"]
     warnings = [v for v in all_violations if v.severity == "warning"]
 
-    all_findings = [
-        HealthFinding(
-            message=f"{v.rule}: {v.message}",
-            node_id=v.node_id,
+    all_findings = []
+    for v in all_violations:
+        vnode = node_map.get(v.node_id)
+        fp = None
+        ln = None
+        repo = None
+        if vnode is not None:
+            fn = vnode.file_node()
+            if fn is not None:
+                fp = fn.get_field("relative_path")
+                repo = fn.get_field("repo")
+            ln = vnode.get_field("parse_line")
+        all_findings.append(
+            HealthFinding(
+                message=f"{v.rule}: {v.message}",
+                node_id=v.node_id,
+                file_path=fp,
+                line=ln,
+                repo=repo,
+            )
         )
-        for v in all_violations
-    ]
 
     if errors:
         return HealthCheck(
@@ -1150,6 +1167,147 @@ def _downgrade_retired_findings(
             check.message = f"[retired only] {check.message}"
 
     return checks
+
+
+# =============================================================================
+# Term Checks
+# =============================================================================
+
+
+# Implements: REQ-d00223-A
+def check_term_duplicates(
+    duplicates: list[tuple],
+    severity: str = "error",
+) -> HealthCheck:
+    """Check for duplicate term definitions."""
+    if severity == "off":
+        return HealthCheck(
+            name="terms.duplicates",
+            passed=True,
+            message="Duplicate term check skipped (severity=off)",
+            category="terms",
+            severity="info",
+        )
+
+    if not duplicates:
+        return HealthCheck(
+            name="terms.duplicates",
+            passed=True,
+            message="No duplicate term definitions",
+            category="terms",
+            severity=severity,
+        )
+
+    findings = []
+    for existing, incoming in duplicates:
+        findings.append(
+            HealthFinding(
+                message=(
+                    f"Duplicate definition of '{existing.term}': "
+                    f"{existing.defined_in}:{existing.defined_at_line} "
+                    f"and {incoming.defined_in}:{incoming.defined_at_line}"
+                ),
+                node_id=existing.defined_in,
+                line=existing.defined_at_line,
+            )
+        )
+
+    return HealthCheck(
+        name="terms.duplicates",
+        passed=False,
+        message=f"{len(duplicates)} duplicate term definition(s)",
+        category="terms",
+        severity=severity,
+        findings=findings,
+    )
+
+
+# Implements: REQ-d00223-B
+def check_undefined_terms(
+    undefined: list[dict],
+    severity: str = "warning",
+) -> HealthCheck:
+    """Check for *token*/**token** references without a matching definition."""
+    if severity == "off":
+        return HealthCheck(
+            name="terms.undefined",
+            passed=True,
+            message="Undefined term check skipped (severity=off)",
+            category="terms",
+            severity="info",
+        )
+
+    if not undefined:
+        return HealthCheck(
+            name="terms.undefined",
+            passed=True,
+            message="No undefined term references",
+            category="terms",
+            severity=severity,
+        )
+
+    findings = []
+    for item in undefined:
+        findings.append(
+            HealthFinding(
+                message=f"Possible undefined term '{item['token']}' in {item['node_id']}",
+                node_id=item.get("node_id"),
+                line=item.get("line"),
+            )
+        )
+
+    return HealthCheck(
+        name="terms.undefined",
+        passed=False,
+        message=f"{len(undefined)} possible undefined term(s)",
+        category="terms",
+        severity=severity,
+        findings=findings,
+    )
+
+
+# Implements: REQ-d00223-C
+def check_unmarked_usage(
+    unmarked: list[dict],
+    severity: str = "warning",
+) -> HealthCheck:
+    """Check for indexed terms used in prose without *...* or **...** markup."""
+    if severity == "off":
+        return HealthCheck(
+            name="terms.unmarked",
+            passed=True,
+            message="Unmarked usage check skipped (severity=off)",
+            category="terms",
+            severity="info",
+        )
+
+    if not unmarked:
+        return HealthCheck(
+            name="terms.unmarked",
+            passed=True,
+            message="No unmarked term usage",
+            category="terms",
+            severity=severity,
+        )
+
+    findings = []
+    for item in unmarked:
+        findings.append(
+            HealthFinding(
+                message=f"Unmarked usage of '{item['term']}' in {item['node_id']}",
+                node_id=item.get("node_id"),
+                line=item.get("line"),
+            )
+        )
+
+    return HealthCheck(
+        name="terms.unmarked",
+        passed=False,
+        message=f"{len(unmarked)} unmarked term usage(s)",
+        category="terms",
+        severity=severity,
+        findings=findings,
+    )
 
 
 # Implements: REQ-d00204-A, REQ-d00204-B, REQ-d00204-F
@@ -2007,21 +2165,21 @@ def run(args: argparse.Namespace) -> int:
             params,
             compute_checks,
             config_path=getattr(args, "config", None),
-            canonical_root=getattr(args, "canonical_root", None),
         )
 
     # The dict already has the correct "healthy" flag (lenient-aware).
     # Use it for exit code; reconstruct report only for rendering.
     healthy = data.get("healthy", False)
+    graph_source = _format_graph_source(data.get("graph_source"))
     report = _report_from_dict(data)
-    print(_format_report(report, args))
+    print(_format_report(report, args, graph_source=graph_source))
     return 0 if healthy else 1
 
 
 def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[str, Any]:
     """Build graph from args and run checks locally.
 
-    Handles spec_dir, config_path, canonical_root and graceful error recovery
+    Handles spec_dir, config_path and graceful error recovery
     for config-load and graph-build failures.
     """
     from elspais.config import get_config
@@ -2060,11 +2218,9 @@ def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[
     # Build graph
     graph = None
     try:
-        canonical_root = getattr(args, "canonical_root", None)
         graph = build_graph(
             spec_dirs=[spec_dir] if spec_dir else None,
             config_path=config_path,
-            canonical_root=canonical_root,
         )
         if config is None:
             config = get_config(config_path, start_path=start_path)
@@ -2086,7 +2242,30 @@ def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[
     return report.to_dict(lenient=lenient)
 
 
-def _format_report(report: HealthReport, args: argparse.Namespace) -> str:
+def _format_graph_source(source: dict | None) -> str | None:
+    """Format graph_source metadata as a human-readable string."""
+    if source is None:
+        return None
+    source_type = source.get("type", "unknown")
+    if source_type == "local":
+        return None  # Local builds need no annotation
+    if source_type == "daemon":
+        parts = [f"daemon (port {source.get('port', '?')}"]
+        started = source.get("started_at")
+        if started:
+            parts[0] += f", started {started}"
+        parts[0] += ")"
+        return parts[0]
+    if source_type == "viewer":
+        return f"viewer (port {source.get('port', '?')})"
+    return source_type
+
+
+def _format_report(
+    report: HealthReport,
+    args: argparse.Namespace,
+    graph_source: str | None = None,
+) -> str:
     """Format the health report as a string."""
     fmt = getattr(args, "format", "text") or "text"
     lenient = getattr(args, "lenient", False)
@@ -2098,6 +2277,7 @@ def _format_report(report: HealthReport, args: argparse.Namespace) -> str:
         return json.dumps(report.to_dict(lenient=lenient), indent=2)
     elif fmt == "markdown":
         data = _build_report_data(report)
+        data.graph_source = graph_source
         return _render_markdown(data)
     elif fmt == "junit":
         return _render_junit(report, include_passing_details=include_passing)
@@ -2107,12 +2287,36 @@ def _format_report(report: HealthReport, args: argparse.Namespace) -> str:
         if quiet:
             return _build_report_data(report, verbose=verbose).summary_line
         data = _build_report_data(report, verbose=verbose)
+        data.graph_source = graph_source
         return _render_text(data)
 
 
 # =============================================================================
 # Report Data Intermediate Representation
 # =============================================================================
+
+
+# Maps check names to the follow-up command a user should run.
+_FOLLOWUP_COMMANDS: dict[str, str] = {
+    "spec.hash_integrity": "elspais fix",
+    "spec.needs_rewrite": "elspais fix",
+    "spec.format_rules": "elspais checks --spec --format json",
+    "spec.no_assertions": "elspais gaps",
+    "spec.index_current": "elspais fix",
+    "spec.no_duplicates": "elspais checks --spec --format json",
+    "spec.implements_resolve": "elspais broken",
+    "spec.refines_resolve": "elspais broken",
+    "spec.broken_references": "elspais broken",
+    "spec.structural_orphans": "elspais checks --spec --format json",
+    "spec.hierarchy_levels": "elspais checks --spec --format json",
+    "spec.changelog_present": "elspais fix",
+    "spec.changelog_current": "elspais fix -m 'Update changelog'",
+    "spec.changelog_format": "elspais checks --spec --format json",
+    "code.unlinked": "elspais unlinked",
+    "tests.unlinked": "elspais unlinked",
+    "tests.results": "elspais failing",
+    "uat.results": "elspais failing",
+}
 
 
 @dataclass
@@ -2122,6 +2326,7 @@ class _CheckLine:
     icon: str  # "\u2713", "\u2717", "\u26a0", "~"
     name: str
     message: str
+    followup: str | None = None
 
 
 @dataclass
@@ -2142,6 +2347,7 @@ class _ReportData:
     summary_line: str
     is_healthy: bool
     hint: str | None
+    graph_source: str | None = None
 
 
 def _build_hint(report: HealthReport, already_verbose: bool) -> str | None:
@@ -2240,7 +2446,12 @@ def _build_report_data(report: HealthReport, verbose: bool = False) -> _ReportDa
                 c_icon = "\u26a0"
             else:
                 c_icon = "\u2717"
-            check_lines.append(_CheckLine(icon=c_icon, name=check.name, message=check.message))
+            followup = None
+            if not check.passed or check.severity == "warning":
+                followup = _FOLLOWUP_COMMANDS.get(check.name)
+            check_lines.append(
+                _CheckLine(icon=c_icon, name=check.name, message=check.message, followup=followup)
+            )
 
         sections.append(
             _SectionData(
@@ -2272,11 +2483,25 @@ def _render_text(data: _ReportData) -> str:
         for check in section.checks:
             lines.append(f"  {check.icon} {check.name}: {check.message}")
 
+    # Collect follow-up commands for failing/warning checks
+    followups = [
+        (check.name, check.followup)
+        for section in data.sections
+        for check in section.checks
+        if check.followup
+    ]
+
     lines.append("")
     lines.append("=" * 40)
     lines.append(data.summary_line)
-    if data.hint:
-        lines.append(data.hint)
+    if data.graph_source:
+        lines.append(f"(via {data.graph_source})")
+    if followups:
+        lines.append("")
+        lines.append("Follow-up:")
+        max_name = max(len(name) for name, _ in followups)
+        for name, cmd in followups:
+            lines.append(f"  {name:<{max_name}}  {cmd}")
     lines.append("=" * 40)
     return "\n".join(lines)
 

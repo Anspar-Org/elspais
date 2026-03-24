@@ -636,11 +636,9 @@ def run(args: argparse.Namespace) -> int:
         from elspais.graph.factory import build_graph
 
         config_path = getattr(args, "config", None)
-        canonical_root = getattr(args, "canonical_root", None)
         graph = build_graph(
             spec_dirs=[spec_dir] if spec_dir else None,
             config_path=config_path,
-            canonical_root=canonical_root,
         )
         if fmt == "json":
             data = compute_trace(graph, {}, {})
@@ -653,7 +651,6 @@ def run(args: argparse.Namespace) -> int:
             {},
             compute_trace,
             config_path=getattr(args, "config", None),
-            canonical_root=getattr(args, "canonical_root", None),
         )
 
         # Implements: REQ-d00084-A
@@ -676,12 +673,10 @@ def run_graph(args: argparse.Namespace) -> int:
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
-    canonical_root = getattr(args, "canonical_root", None)
 
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
-        canonical_root=canonical_root,
     )
 
     annotate_graph_git_state(graph)

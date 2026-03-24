@@ -367,7 +367,6 @@ def run(args: argparse.Namespace) -> int:
         params,
         compute_gaps,
         config_path=getattr(args, "config", None),
-        canonical_root=getattr(args, "canonical_root", None),
         skip_daemon=bool(spec_dir),
     )
 

@@ -49,14 +49,15 @@ function initSearch() {
 async function performSearch(query) {
     const data = await apiFetch('/api/search?q=' + encodeURIComponent(query));
     const results = document.getElementById('search-results');
-    if (!data || data.length === 0) {
+    const items = data ? (data.results || []) : [];
+    if (items.length === 0) {
         results.innerHTML = '<div style="padding:12px;color:#adb5bd;text-align:center;font-size:0.8rem;">No results</div>';
         results.classList.add('visible');
         return;
     }
 
     let html = '';
-    data.slice(0, 20).forEach(function(item) {
+    items.slice(0, 20).forEach(function(item) {
         const level = (item.level || '').toUpperCase();
         const levelColor = level === 'PRD' ? '#212529'
             : level === 'OPS' ? '#fd7e14'

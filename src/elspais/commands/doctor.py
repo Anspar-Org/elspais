@@ -352,8 +352,8 @@ def run_config_checks(
 # =============================================================================
 
 
-def check_worktree_status(git_root: Path | None, canonical_root: Path | None) -> HealthCheck:
-    """Detect if running in a git worktree."""
+def check_worktree_status(git_root: Path | None) -> HealthCheck:
+    """Report git repository status."""
     if git_root is None:
         return HealthCheck(
             name="worktree.status",
@@ -363,26 +363,16 @@ def check_worktree_status(git_root: Path | None, canonical_root: Path | None) ->
             severity="info",
         )
 
-    if canonical_root and canonical_root != git_root:
-        return HealthCheck(
-            name="worktree.status",
-            passed=True,
-            message=f"Running in a git worktree. Main repository: {canonical_root}",
-            category="environment",
-            severity="info",
-            details={"git_root": str(git_root), "canonical_root": str(canonical_root)},
-        )
-
     return HealthCheck(
         name="worktree.status",
         passed=True,
-        message="Running in the main repository (not a worktree)",
+        message=f"Git root: {git_root}",
         category="environment",
         severity="info",
     )
 
 
-def check_associate_paths(config: dict, canonical_root: Path | None) -> HealthCheck:
+def check_associate_paths(config: dict, git_root: Path | None) -> HealthCheck:
     """Check that each configured associate path exists on disk."""
     # Implements: REQ-d00202-A, REQ-d00212-K
     from elspais.config import get_associates_config
@@ -403,8 +393,8 @@ def check_associate_paths(config: dict, canonical_root: Path | None) -> HealthCh
     for assoc_name, assoc_info in associates.items():
         path_str = assoc_info["path"]
         p = Path(path_str)
-        if not p.is_absolute() and canonical_root:
-            p = canonical_root / p
+        if not p.is_absolute() and git_root:
+            p = git_root / p
         if p.exists():
             found.append(str(path_str))
         else:
@@ -428,7 +418,7 @@ def check_associate_paths(config: dict, canonical_root: Path | None) -> HealthCh
     )
 
 
-def check_associate_configs(config: dict, canonical_root: Path | None) -> HealthCheck:
+def check_associate_configs(config: dict, git_root: Path | None) -> HealthCheck:
     """Check that each discovered associate has valid configuration."""
     from elspais.associates import discover_associate_from_path
     from elspais.config import get_associates_config  # Implements: REQ-d00202-A, REQ-d00212-K
@@ -449,8 +439,8 @@ def check_associate_configs(config: dict, canonical_root: Path | None) -> Health
     for assoc_name, assoc_info in associates.items():
         path_str = assoc_info["path"]
         p = Path(path_str)
-        if not p.is_absolute() and canonical_root:
-            p = canonical_root / p
+        if not p.is_absolute() and git_root:
+            p = git_root / p
         if not p.exists():
             continue  # Already reported by check_associate_paths
         result = discover_associate_from_path(p)
@@ -568,15 +558,14 @@ def check_cross_repo_in_committed_config(config_path: Path | None) -> HealthChec
 def run_environment_checks(
     config: dict,
     git_root: Path | None,
-    canonical_root: Path | None,
     config_path: Path | None,
     start_path: Path,
 ) -> list[HealthCheck]:
     """Run all environment checks."""
     return [
-        check_worktree_status(git_root, canonical_root),
-        check_associate_paths(config, canonical_root),
-        check_associate_configs(config, canonical_root),
+        check_worktree_status(git_root),
+        check_associate_paths(config, git_root),
+        check_associate_configs(config, git_root),
         check_local_toml_exists(start_path),
         check_cross_repo_in_committed_config(config_path),
     ]
@@ -739,7 +728,6 @@ def run(args: argparse.Namespace) -> int:
     config_path = getattr(args, "config", None)
     if config_path:
         config_path = Path(config_path)
-    canonical_root = getattr(args, "canonical_root", None)
     start_path = Path.cwd()
     git_root = find_git_root(start_path)
 
@@ -773,7 +761,7 @@ def run(args: argparse.Namespace) -> int:
 
     # Environment checks
     for check in run_environment_checks(
-        config_dict, git_root, canonical_root, actual_config_path, start_path
+        config_dict, git_root, actual_config_path, start_path
     ):
         report.add(check)
 

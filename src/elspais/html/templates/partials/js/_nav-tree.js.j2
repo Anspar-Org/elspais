@@ -494,13 +494,14 @@ function onTreeTextFilter() {
 
     _treeTextTimer = setTimeout(function() {
         apiFetch('/api/search?q=' + encodeURIComponent(text) + '&limit=500')
-            .then(function(results) {
-                if (!results) {
+            .then(function(data) {
+                var items = data ? (data.results || []) : [];
+                if (items.length === 0) {
                     editState.textMatchIds = new Set();
                 } else {
                     var ids = new Set();
-                    for (var i = 0; i < results.length; i++) {
-                        ids.add(results[i].id);
+                    for (var i = 0; i < items.length; i++) {
+                        ids.add(items[i].id);
                     }
                     editState.textMatchIds = ids;
                 }

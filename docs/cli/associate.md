@@ -1,4 +1,4 @@
-# associate
+# ASSOCIATE
 
 Manage links to associated repositories.
 

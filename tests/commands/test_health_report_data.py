@@ -276,14 +276,24 @@ class TestRenderText:
         assert "=" * 40 in output
         assert "UNHEALTHY" in output
 
-    def test_REQ_d00085_hint_shown_when_unhealthy(self) -> None:
-        """Hint appears in output when report is unhealthy and not verbose."""
+    def test_REQ_d00085_followup_shown_when_unhealthy(self) -> None:
+        """Follow-up section appears when a failing check has a known follow-up command."""
         from elspais.commands.health import _render_text
 
-        report = _make_mixed_report()
+        report = HealthReport()
+        report.add(
+            HealthCheck(
+                name="spec.hash_integrity",
+                passed=False,
+                message="2 stale hashes",
+                category="spec",
+                severity="error",
+            )
+        )
         data = _build_report_data(report, verbose=False)
         output = _render_text(data)
-        assert "elspais -v checks" in output
+        assert "Follow-up:" in output
+        assert "elspais fix" in output
 
     def test_REQ_d00085_info_check_tilde(self) -> None:
         """Info-severity checks render with tilde icon."""

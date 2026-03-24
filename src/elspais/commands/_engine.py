@@ -29,9 +29,10 @@ def call(
     compute_fn: Callable[[Any, dict[str, Any], dict[str, str]], dict],
     skip_daemon: bool = False,
     config_path: str | None = None,
-    canonical_root: str | None = None,
 ) -> dict:
     """Run a command via daemon or locally, returning the same dict shape.
+
+    Injects ``graph_source`` metadata into the result dict for traceability.
 
     Args:
         endpoint: REST path (e.g., "/api/run/checks").
@@ -39,26 +40,51 @@ def call(
         compute_fn: Function(graph, config, params) -> dict for local path.
         skip_daemon: If True, skip daemon entirely (e.g., custom spec_dir).
         config_path: Explicit config file path (local fallback only).
-        canonical_root: Canonical repo root for worktree support (local only).
 
     Returns:
-        Result dict from daemon HTTP response or local compute_fn.
+        Result dict from daemon HTTP response or local compute_fn,
+        always including a ``graph_source`` key.
     """
     if not skip_daemon:
-        result = _try_daemon(endpoint, params)
-        if result is not None:
+        daemon_result = _try_daemon(endpoint, params)
+        if daemon_result is not None:
+            result, source = daemon_result
+            if isinstance(result, dict):
+                result["graph_source"] = source
             return result
 
     # Local fallback: build graph (cached) and compute
-    graph, config = _ensure_local_graph(config_path=config_path, canonical_root=canonical_root)
-    return compute_fn(graph, config, params)
+    graph, config = _ensure_local_graph(config_path=config_path)
+    result = compute_fn(graph, config, params)
+    result["graph_source"] = {"type": "local"}
+    return result
+
+
+def _build_daemon_source(port: int) -> dict[str, Any]:
+    """Build graph_source dict for a daemon result."""
+    source: dict[str, Any] = {"type": "daemon", "port": port}
+    try:
+        from elspais.config import find_git_root
+        from elspais.mcp.daemon import get_daemon_info
+
+        repo_root = find_git_root()
+        if repo_root:
+            info = get_daemon_info(repo_root)
+            if info:
+                source["started_at"] = info.get("started_at", "")
+    except Exception:
+        pass
+    return source
 
 
 def _try_daemon(
     endpoint: str,
     params: dict[str, str],
-) -> dict | None:
-    """Try daemon/viewer, auto-starting if allowed. Returns dict or None."""
+) -> tuple[dict, dict[str, Any]] | None:
+    """Try daemon/viewer, auto-starting if allowed.
+
+    Returns (result_dict, source_info) or None.
+    """
     from elspais.commands._daemon_client import _get_daemon_port, _try_port
 
     _VIEWER_PORT = 5001
@@ -66,14 +92,15 @@ def _try_daemon(
     # 1. Try viewer
     result = _try_port(_VIEWER_PORT, endpoint, params, "GET")
     if result is not None:
-        return result
+        return result, {"type": "viewer", "port": _VIEWER_PORT}
 
     # 2. Try existing daemon
     daemon_port = _get_daemon_port()
     if daemon_port and daemon_port != _VIEWER_PORT:
         result = _try_port(daemon_port, endpoint, params, "GET")
         if result is not None:
-            return result
+            source = _build_daemon_source(daemon_port)
+            return result, source
 
     # 3. Auto-start daemon if allowed
     try:
@@ -85,9 +112,14 @@ def _try_daemon(
             return None
 
         port = ensure_daemon(repo_root)
-        return _try_port(port, endpoint, params, "GET")
+        result = _try_port(port, endpoint, params, "GET")
+        if result is not None:
+            source = _build_daemon_source(port)
+            return result, source
     except Exception:
-        return None
+        pass
+
+    return None
 
 
 def get_graph() -> Any:
@@ -98,7 +130,6 @@ def get_graph() -> Any:
 
 def _ensure_local_graph(
     config_path: str | None = None,
-    canonical_root: str | None = None,
 ) -> tuple[Any, dict[str, Any]]:
     """Build or return the cached local graph and config."""
     global _local_graph, _local_config
@@ -107,18 +138,14 @@ def _ensure_local_graph(
         _local_graph is not None
         and _local_config is not None
         and config_path is None
-        and canonical_root is None
     ):
         return _local_graph, _local_config
-
-    from pathlib import Path
 
     from elspais.config import get_config
     from elspais.graph.factory import build_graph
 
     config = get_config(config_path)
-    cr = Path(canonical_root) if canonical_root else None
-    graph = build_graph(config=config, canonical_root=cr)
+    graph = build_graph(config=config)
     _local_graph = graph
     _local_config = config
     return graph, config

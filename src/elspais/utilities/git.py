@@ -1551,6 +1551,235 @@ def generate_checkpoint_message(repo_root: Path, spec_dir: str = "spec") -> str:
     return body
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Monorepo eligibility check (REQ-d00201-B)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_ancestor_cache: dict[tuple[str, str, str], bool] = {}
+
+
+def invalidate_ancestor_cache() -> None:
+    """Clear the ancestor check cache."""
+    _ancestor_cache.clear()
+
+
+def _find_main_branch(
+    repo_root: Path,
+    main_branches: list[str],
+    env: dict[str, str],
+) -> str | None:
+    """Return the first main branch name that exists locally in repo_root, or None."""
+    for branch in main_branches:
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", branch],
+            cwd=repo_root,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            return branch
+    return None
+
+
+def _count_commits_since(
+    repo_root: Path,
+    base_ref: str,
+    env: dict[str, str],
+) -> int | None:
+    """Count commits on HEAD since divergence from base_ref.
+
+    Returns the number of commits reachable from HEAD but not from base_ref,
+    or None if the count cannot be determined.
+    """
+    result = subprocess.run(
+        ["git", "rev-list", "--count", f"{base_ref}..HEAD"],
+        cwd=repo_root,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    try:
+        return int(result.stdout.strip())
+    except ValueError:
+        return None
+
+
+def _is_ancestor(
+    repo_root: Path,
+    ancestor: str,
+    descendant: str,
+    env: dict[str, str],
+) -> bool:
+    """Return True if ancestor is a git ancestor of descendant (or equal).
+
+    Results are cached by (repo_root, ancestor, descendant).
+    """
+    key = (str(repo_root), ancestor, descendant)
+    if key in _ancestor_cache:
+        return _ancestor_cache[key]
+    result = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", ancestor, descendant],
+        cwd=repo_root,
+        env=env,
+        capture_output=True,
+    )
+    value = result.returncode == 0
+    _ancestor_cache[key] = value
+    return value
+
+
+# Implements: REQ-d00201-B
+def check_monorepo_eligible(
+    repos: list[tuple[str, Path]],
+    main_branches: list[str] | None = None,
+) -> tuple[bool, list[str]]:
+    """Check whether all repos satisfy monorepo-mode sync conditions.
+
+    Conditions:
+    1. All repos are on the same branch name.
+    2. All repos have the same number of commits since their respective main branch.
+
+    Single-repo lists are trivially eligible.
+
+    Args:
+        repos: List of (name, repo_root) pairs.
+        main_branches: Ordered list of main branch names to try (default: ["main", "master"]).
+
+    Returns:
+        (eligible, reasons) where eligible is True iff all conditions hold,
+        and reasons is a list of human-readable failure strings.
+    """
+    if main_branches is None:
+        main_branches = ["main", "master"]
+
+    if len(repos) <= 1:
+        return (True, [])
+
+    env = _clean_git_env()
+    reasons: list[str] = []
+
+    # Gather branch names for each repo
+    branch_names: dict[str, str | None] = {}
+    for name, root in repos:
+        branch_names[name] = get_current_branch(root)
+
+    # Check all branch names are the same
+    unique_branches = set(branch_names.values())
+    if len(unique_branches) != 1:
+        branch_info = ", ".join(f"{n}={b!r}" for n, b in branch_names.items())
+        reasons.append(f"repos are on different branch names: {branch_info}")
+
+    # Check commit counts since main branch (or total if no main branch exists)
+    commit_counts: dict[str, int | None] = {}
+    for name, root in repos:
+        main_branch = _find_main_branch(root, list(main_branches), env)
+        if main_branch is None:
+            # No main branch found — use total commit count as proxy
+            result = subprocess.run(
+                ["git", "rev-list", "--count", "HEAD"],
+                cwd=root,
+                env=env,
+                capture_output=True,
+                text=True,
+            )
+            try:
+                commit_counts[name] = int(result.stdout.strip()) if result.returncode == 0 else None
+            except ValueError:
+                commit_counts[name] = None
+        else:
+            current = branch_names.get(name)
+            if current in (None, main_branch):
+                # On main itself — 0 commits since main
+                commit_counts[name] = 0
+            else:
+                count = _count_commits_since(root, main_branch, env)
+                commit_counts[name] = count
+
+    unique_counts = set(commit_counts.values())
+    if len(unique_counts) != 1:
+        count_info = ", ".join(f"{n}={c}" for n, c in commit_counts.items())
+        reasons.append(f"repos have different commit counts since main: {count_info}")
+
+    return (len(reasons) == 0, reasons)
+
+
+# Implements: REQ-p00004-I
+def check_dirty_repos(repos: list[tuple[str, Path]]) -> list[str]:
+    """Check which repos have dirty working trees.
+
+    Args:
+        repos: List of (name, repo_root) pairs.
+
+    Returns:
+        List of repo names that have uncommitted changes.
+    """
+    env = _clean_git_env()
+    dirty: list[str] = []
+    for name, root in repos:
+        rv = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=root,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        if rv.returncode == 0 and rv.stdout.strip():
+            dirty.append(name)
+    return dirty
+
+
+# Implements: REQ-p00004-I
+def create_sync_commit(
+    repo_root: Path,
+    spec_dir: str = "spec",
+    aligned_with: str = "",
+    message: str = "sync checkpoint",
+) -> dict[str, Any]:
+    """Create a sync commit via .elspais-sync file.
+
+    Used in monorepo mode to keep repos without real changes aligned
+    with repos that had real commits.
+
+    Args:
+        repo_root: Path to repository root.
+        spec_dir: Spec directory relative to repo root.
+        aligned_with: Human-readable label for what this sync aligns with.
+        message: Commit message.
+
+    Returns:
+        dict with 'success' bool and optional 'error' string.
+    """
+    from datetime import datetime, timezone
+
+    env = _clean_git_env()
+    sync_path = repo_root / spec_dir / ".elspais-sync"
+    timestamp = datetime.now(timezone.utc).isoformat()
+    sync_path.write_text(f"sync: {timestamp} aligned with {aligned_with}\n")
+    subprocess.run(["git", "add", str(sync_path)], cwd=repo_root, env=env, capture_output=True)
+    rv = subprocess.run(
+        ["git", "commit", "-m", message], cwd=repo_root, env=env, capture_output=True, text=True
+    )
+    if rv.returncode != 0:
+        return {"success": False, "error": rv.stderr.strip()}
+    return {"success": True}
+
+
+# Implements: REQ-p00004-I
+def remove_sync_file(repo_root: Path, spec_dir: str = "spec") -> None:
+    """Remove .elspais-sync file if it exists (before real commits).
+
+    Args:
+        repo_root: Path to repository root.
+        spec_dir: Spec directory relative to repo root.
+    """
+    sync_path = repo_root / spec_dir / ".elspais-sync"
+    if sync_path.exists():
+        sync_path.unlink()
+
+
 __all__ = [
     "GitChangeInfo",
     "MovedRequirement",
@@ -1585,4 +1814,12 @@ __all__ = [
     "generate_checkpoint_message",
     # Author identity
     "get_author_info",
+    # Monorepo eligibility (REQ-d00201-B)
+    "check_monorepo_eligible",
+    "invalidate_ancestor_cache",
+    # Dirty tree detection (REQ-p00004-I)
+    "check_dirty_repos",
+    # Sync commit helpers (REQ-p00004-I)
+    "create_sync_commit",
+    "remove_sync_file",
 ]
