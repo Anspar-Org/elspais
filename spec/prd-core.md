@@ -261,3 +261,19 @@ C. `check_unmarked_usage()` SHALL return a `HealthCheck` for whole-word case-ins
 D. When any severity is set to `"off"`, the corresponding check SHALL be skipped and return a passed HealthCheck with severity `"info"`.
 
 *End* *Term Health Checks* | **Hash**: 34da7dc1
+
+## REQ-d00224: Glossary and Term Index Generators
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. `generate_glossary()` SHALL produce an alphabetically-organized Markdown glossary with letter headings, including definition text, `defined_in` attribution, and annotation for collection/non-indexed terms.
+
+B. `generate_term_index()` SHALL produce a term index listing only indexed terms, with references grouped by namespace (one per line).
+
+C. `generate_collection_manifest()` SHALL produce a standalone manifest file per collection term, listing all reference sites.
+
+D. All generated files SHALL include an auto-generated header comment. Both `--format markdown` and `--format json` SHALL be supported.
+
+*End* *Glossary and Term Index Generators* | **Hash**: f2da30fb
