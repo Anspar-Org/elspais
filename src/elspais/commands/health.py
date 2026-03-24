@@ -1169,6 +1169,147 @@ def _downgrade_retired_findings(
     return checks
 
 
+# =============================================================================
+# Term Checks
+# =============================================================================
+
+
+# Implements: REQ-d00223-A
+def check_term_duplicates(
+    duplicates: list[tuple],
+    severity: str = "error",
+) -> HealthCheck:
+    """Check for duplicate term definitions."""
+    if severity == "off":
+        return HealthCheck(
+            name="terms.duplicates",
+            passed=True,
+            message="Duplicate term check skipped (severity=off)",
+            category="terms",
+            severity="info",
+        )
+
+    if not duplicates:
+        return HealthCheck(
+            name="terms.duplicates",
+            passed=True,
+            message="No duplicate term definitions",
+            category="terms",
+            severity=severity,
+        )
+
+    findings = []
+    for existing, incoming in duplicates:
+        findings.append(
+            HealthFinding(
+                message=(
+                    f"Duplicate definition of '{existing.term}': "
+                    f"{existing.defined_in}:{existing.defined_at_line} "
+                    f"and {incoming.defined_in}:{incoming.defined_at_line}"
+                ),
+                node_id=existing.defined_in,
+                line=existing.defined_at_line,
+            )
+        )
+
+    return HealthCheck(
+        name="terms.duplicates",
+        passed=False,
+        message=f"{len(duplicates)} duplicate term definition(s)",
+        category="terms",
+        severity=severity,
+        findings=findings,
+    )
+
+
+# Implements: REQ-d00223-B
+def check_undefined_terms(
+    undefined: list[dict],
+    severity: str = "warning",
+) -> HealthCheck:
+    """Check for *token*/**token** references without a matching definition."""
+    if severity == "off":
+        return HealthCheck(
+            name="terms.undefined",
+            passed=True,
+            message="Undefined term check skipped (severity=off)",
+            category="terms",
+            severity="info",
+        )
+
+    if not undefined:
+        return HealthCheck(
+            name="terms.undefined",
+            passed=True,
+            message="No undefined term references",
+            category="terms",
+            severity=severity,
+        )
+
+    findings = []
+    for item in undefined:
+        findings.append(
+            HealthFinding(
+                message=f"Possible undefined term '{item['token']}' in {item['node_id']}",
+                node_id=item.get("node_id"),
+                line=item.get("line"),
+            )
+        )
+
+    return HealthCheck(
+        name="terms.undefined",
+        passed=False,
+        message=f"{len(undefined)} possible undefined term(s)",
+        category="terms",
+        severity=severity,
+        findings=findings,
+    )
+
+
+# Implements: REQ-d00223-C
+def check_unmarked_usage(
+    unmarked: list[dict],
+    severity: str = "warning",
+) -> HealthCheck:
+    """Check for indexed terms used in prose without *...* or **...** markup."""
+    if severity == "off":
+        return HealthCheck(
+            name="terms.unmarked",
+            passed=True,
+            message="Unmarked usage check skipped (severity=off)",
+            category="terms",
+            severity="info",
+        )
+
+    if not unmarked:
+        return HealthCheck(
+            name="terms.unmarked",
+            passed=True,
+            message="No unmarked term usage",
+            category="terms",
+            severity=severity,
+        )
+
+    findings = []
+    for item in unmarked:
+        findings.append(
+            HealthFinding(
+                message=f"Unmarked usage of '{item['term']}' in {item['node_id']}",
+                node_id=item.get("node_id"),
+                line=item.get("line"),
+            )
+        )
+
+    return HealthCheck(
+        name="terms.unmarked",
+        passed=False,
+        message=f"{len(unmarked)} unmarked term usage(s)",
+        category="terms",
+        severity=severity,
+        findings=findings,
+    )
+
+
 # Implements: REQ-d00204-A, REQ-d00204-B, REQ-d00204-F
 def run_spec_checks(
     graph: FederatedGraph,

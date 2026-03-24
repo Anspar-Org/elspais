@@ -245,3 +245,19 @@ B. The `defined_in` field of each `TermEntry` SHALL point to the nearest REQUIRE
 C. `FederatedGraph` SHALL merge per-repo `_terms` dictionaries into a single federated `TermDictionary`, detecting cross-namespace duplicates.
 
 *End* *TraceGraph Terms and GraphBuilder Integration* | **Hash**: 2e76a3f2
+
+## REQ-d00223: Term Health Checks
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. `check_term_duplicates()` SHALL return a `HealthCheck` reporting duplicate term definitions across all namespaces, using the configured `duplicate_severity`.
+
+B. `check_undefined_terms()` SHALL return a `HealthCheck` for `*token*`/`**token**` references that do not match any defined term and are not known structural patterns, using the configured `undefined_severity`.
+
+C. `check_unmarked_usage()` SHALL return a `HealthCheck` for whole-word case-insensitive matches of indexed terms in prose that lack `*...*` or `**...**` markup, using the configured `unmarked_severity`. Only terms with `indexed=True` SHALL be checked.
+
+D. When any severity is set to `"off"`, the corresponding check SHALL be skipped and return a passed HealthCheck with severity `"info"`.
+
+*End* *Term Health Checks* | **Hash**: 34da7dc1
