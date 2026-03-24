@@ -1,4 +1,4 @@
-# Implements: REQ-p00005-C
+# Verifies: REQ-p00005-C
 """Tests for environment variable override enhancements in config.
 
 Validates REQ-p00005-C: JSON list values via env vars (e.g., ELSPAIS_ASSOCIATES_PATHS).

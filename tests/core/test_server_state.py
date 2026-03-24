@@ -1,4 +1,4 @@
-# Implements: REQ-d00010
+# Verifies: REQ-d00010
 """Tests for server state management and auto-refresh."""
 import time
 from pathlib import Path

@@ -1,4 +1,4 @@
-# Implements: REQ-o00063-G, REQ-o00063-H, REQ-o00063-I
+# Verifies: REQ-o00063-G, REQ-o00063-H, REQ-o00063-I
 # Validates REQ-o00063-G, REQ-o00063-H, REQ-o00063-I
 """Tests for spec_writer title/assertion mutation functions.
 

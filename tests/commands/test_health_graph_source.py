@@ -1,5 +1,5 @@
 # tests/commands/test_health_graph_source.py
-# Implements: REQ-d00010
+# Verifies: REQ-d00010
 
 """Tests that checks output shows graph source."""
 

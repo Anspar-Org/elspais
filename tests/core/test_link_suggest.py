@@ -1,5 +1,5 @@
-# Implements: REQ-o00065-A, REQ-o00065-B, REQ-o00065-C, REQ-o00065-F
-# Implements: REQ-d00072-A+B+C
+# Verifies: REQ-o00065-A, REQ-o00065-B, REQ-o00065-C, REQ-o00065-F
+# Verifies: REQ-d00072-A+B+C
 # Verifies: REQ-d00073-A+B+C+D+E
 """Tests for the link suggestion engine (link_suggest.py).
 
@@ -23,6 +23,7 @@ from elspais.graph.link_suggest import (
     _extract_search_terms,
     _find_unlinked_tests,
     apply_link_to_file,
+    keyword_for_file,
     suggest_links,
 )
 from elspais.graph.relations import EdgeKind
@@ -568,3 +569,34 @@ class TestApplyLinkToFile:
         assert lines[0] == "#!/usr/bin/env python"
         assert lines[1] == "# -*- coding: utf-8 -*-"
         assert lines[2] == "# Implements: REQ-001"
+
+    def test_REQ_o00065_F_apply_link_with_keyword(self, tmp_path: Path) -> None:
+        f = tmp_path / "test.py"
+        f.write_text("code\n")
+        result = apply_link_to_file(f, 1, "REQ-001", keyword="Verifies")
+        assert result == "# Verifies: REQ-001"
+        assert "# Verifies: REQ-001" in f.read_text()
+
+
+class TestKeywordForFile:
+    """# Verifies: REQ-d00082-F"""
+
+    def test_test_directory_returns_verifies(self) -> None:
+        cfg = {"scanning": {"test": {"directories": ["tests"], "reference_keyword": "Verifies"}}}
+        assert keyword_for_file(Path("/repo/tests/test_foo.py"), cfg) == "Verifies"
+
+    def test_code_directory_returns_implements(self) -> None:
+        cfg = {"scanning": {"test": {"directories": ["tests"]}}}
+        assert keyword_for_file(Path("/repo/src/module.py"), cfg) == "Implements"
+
+    def test_custom_test_directory(self) -> None:
+        cfg = {"scanning": {"test": {"directories": ["test", "specs/tests"]}}}
+        assert keyword_for_file(Path("/repo/specs/tests/check.py"), cfg) == "Verifies"
+
+    def test_custom_keyword(self) -> None:
+        cfg = {"scanning": {"test": {"directories": ["tests"], "reference_keyword": "Tests"}}}
+        assert keyword_for_file(Path("/repo/tests/test_x.py"), cfg) == "Tests"
+
+    def test_empty_config_defaults(self) -> None:
+        assert keyword_for_file(Path("/repo/tests/test_x.py"), {}) == "Verifies"
+        assert keyword_for_file(Path("/repo/src/app.py"), {}) == "Implements"

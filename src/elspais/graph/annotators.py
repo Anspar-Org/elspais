@@ -748,7 +748,7 @@ def _compute_code_tested(node: GraphNode, metrics: RollupMetrics) -> None:
     )
 
 
-# Refines: REQ-p00061-A
+# Implements: REQ-p00061-A
 def annotate_coverage(graph: FederatedGraph) -> None:
     """Compute and store coverage metrics for all requirement nodes.
 

@@ -3759,10 +3759,11 @@ def _apply_link_impl(
     REQ-d00074-B: Inserts comment and refreshes graph.
     REQ-d00074-D: Validates target requirement exists before modifying.
     """
-    from elspais.graph.link_suggest import apply_link_to_file
+    from elspais.graph.link_suggest import apply_link_to_file, keyword_for_file
 
     graph = state["graph"]
     working_dir = state["working_dir"]
+    config = state["config"]
 
     # Validate requirement exists
     target = graph.find_by_id(requirement_id)
@@ -3773,7 +3774,8 @@ def _apply_link_impl(
         }
 
     abs_path = working_dir / file_path
-    result = apply_link_to_file(abs_path, line, requirement_id)
+    kw = keyword_for_file(abs_path, config)
+    result = apply_link_to_file(abs_path, line, requirement_id, keyword=kw)
 
     if result is None:
         return {

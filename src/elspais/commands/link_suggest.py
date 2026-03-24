@@ -155,8 +155,10 @@ def _apply_suggestions(
 
     for s in suggestions:
         file_path = repo_root / s.test_file
-        # Insert at top of file (line 0)
-        result = apply_link_to_file(file_path, 0, s.requirement_id, dry_run=dry_run)
+        # suggest_links always targets test files
+        result = apply_link_to_file(
+            file_path, 0, s.requirement_id, keyword="Verifies", dry_run=dry_run
+        )
 
         if result:
             prefix = "[DRY RUN] " if dry_run else ""

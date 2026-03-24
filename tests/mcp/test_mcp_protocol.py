@@ -1,4 +1,4 @@
-# Implements: REQ-p00060-A, REQ-p00060-C
+# Verifies: REQ-p00060-A, REQ-p00060-C
 """End-to-end MCP protocol tests.
 
 Starts the MCP server as a subprocess using stdio transport

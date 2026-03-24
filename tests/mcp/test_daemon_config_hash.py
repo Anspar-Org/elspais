@@ -1,5 +1,5 @@
 # tests/mcp/test_daemon_config_hash.py
-# Implements: REQ-d00010
+# Verifies: REQ-d00010
 
 """Tests for config hash computation in daemon lifecycle."""
 

@@ -1,5 +1,5 @@
 # tests/commands/test_health_run_graph_source.py
-# Implements: REQ-d00010
+# Verifies: REQ-d00010
 
 """Tests that the checks run() function passes graph_source to output."""
 

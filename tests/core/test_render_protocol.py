@@ -1,4 +1,4 @@
-# Implements: REQ-d00131
+# Verifies: REQ-d00131
 # elspais: expected-broken-links 1
 """Tests for the render protocol (Task 1 of FILENODE3).
 

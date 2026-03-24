@@ -1,4 +1,4 @@
-# Implements: REQ-d00069-A
+# Verifies: REQ-d00069-A
 """Tests for CoverageSource UAT values and RollupMetrics UAT fields."""
 
 from elspais.graph.metrics import CoverageContribution, CoverageSource, RollupMetrics
