@@ -17,6 +17,7 @@ from starlette.responses import JSONResponse
 from elspais.graph import NodeKind
 from elspais.mcp.server import (
     _get_assertion_code_map,
+    _get_assertion_refines_map,
     _get_assertion_test_map,
     _get_assertion_uat_map,
     _get_graph_status,
@@ -395,10 +396,21 @@ async def api_uat_coverage(request: Request) -> JSONResponse:
 
 
 async def api_code_coverage(request: Request) -> JSONResponse:
-    """GET /api/code-coverage/{req_id} - Per-assertion code implementation map."""
+    """GET /api/code-coverage/{req_id}?kind=implements|refines"""
     state = _st(request)
     req_id = request.path_params["req_id"]
-    result = _get_assertion_code_map(state.graph, req_id)
+    edge_kind = request.query_params.get("kind")
+    result = _get_assertion_code_map(state.graph, req_id, edge_kind=edge_kind)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+async def api_refines_coverage(request: Request) -> JSONResponse:
+    """GET /api/refines-coverage/{req_id} - Per-assertion refines map."""
+    state = _st(request)
+    req_id = request.path_params["req_id"]
+    result = _get_assertion_refines_map(state.graph, req_id)
     if "error" in result:
         return JSONResponse(result, status_code=404)
     return JSONResponse(result)

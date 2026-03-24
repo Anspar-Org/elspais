@@ -169,3 +169,18 @@ class TestGetAssertionRefinesMap:
         result = _get_assertion_refines_map(graph, "NOPE")
         assert not result["success"]
         assert "error" in result
+
+
+class TestApiCodeCoverageQueryParam:
+    """Verify edge_kind='implements' filters results correctly."""
+
+    def test_kind_implements_filters_results(self):
+        """Calling with edge_kind='implements' excludes blanket refs."""
+        graph = _make_graph_with_req()
+        result = _get_assertion_code_map(graph, "REQ-001", edge_kind="implements")
+        all_ids = set()
+        for label_data in result["assertion_code"].values():
+            for r in label_data["code_refs"]:
+                all_ids.add(r["id"])
+        assert "CODE-blanket" not in all_ids
+        assert "CODE-impl" in all_ids
