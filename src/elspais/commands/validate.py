@@ -253,7 +253,7 @@ def run(args: argparse.Namespace) -> int:
                     "fix_type": "hash",
                     "computed_hash": computed_hash,
                     "file": (
-                        str(repo_root / node.file_node().get_field("relative_path"))
+                        node.file_node().get_field("absolute_path")
                         if node.file_node()
                         else None
                     ),
@@ -272,7 +272,7 @@ def run(args: argparse.Namespace) -> int:
                     "fix_type": "hash",
                     "computed_hash": computed_hash,
                     "file": (
-                        str(repo_root / node.file_node().get_field("relative_path"))
+                        node.file_node().get_field("absolute_path")
                         if node.file_node()
                         else None
                     ),
