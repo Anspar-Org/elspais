@@ -3384,7 +3384,9 @@ def _get_assertion_refines_map(
             assertion_refines[label]["refines_refs"].append(info)
 
     total = len(assertions)
-    refined_count = sum(1 for label in assertion_refines if assertion_refines[label]["refines_refs"])
+    refined_count = sum(
+        1 for label in assertion_refines if assertion_refines[label]["refines_refs"]
+    )
 
     return {
         "success": True,

@@ -40,14 +40,19 @@ def _resolve_repo_root(state: Any, repo_name: str | None) -> Path:
 async def api_git_repo_status(request: Request) -> JSONResponse:
     # Implements: REQ-p00004-I
     """GET /api/git/repo-status - Per-repo branch/status for multi-repo UI."""
-    from elspais.utilities.git import _clean_git_env, _count_commits_since, _find_main_branch, get_current_branch
+    from elspais.utilities.git import (
+        _clean_git_env,
+        _count_commits_since,
+        _find_main_branch,
+        get_current_branch,
+    )
 
     state = request.app.state.app_state
     entries = _iter_repo_entries(state)
     protected = state.config.get("rules", {}).get("protected_branches", ["main", "master"])
     repos = []
 
-    for name, root, config in entries:
+    for name, root, _config in entries:
         branch = get_current_branch(root)
         env = _clean_git_env()
         main_ref = _find_main_branch(root, ("main", "master"), env)

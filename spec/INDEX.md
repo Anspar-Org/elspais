@@ -100,7 +100,7 @@
 | REQ-d00209 | Schema-Driven Init Template Generation                        | dev-graph-config.md     | 44aeb496 |
 | REQ-d00210 | Documentation Drift Detection                                 | dev-graph-config.md     | eb94434a |
 | REQ-d00211 | Config-Driven Viewer UI Values                                | dev-graph-config.md     | b322b22e |
-| REQ-d00212 | Config Schema v3 Models                                       | dev-graph-config.md     | 039007e7 |
+| REQ-d00212 | Config Schema v3 Models                                       | dev-graph-config.md     | 0cee5e84 |
 | REQ-d00213 | Version Check and Update Notification                         | dev-cli.md              | 56b62d01 |
 | REQ-d00214 | MCP Server Install/Uninstall CLI Commands                     | dev-mcp-tools.md        | f1518d2c |
 | REQ-d00215 | Keyword Extraction Annotator                                  | dev-graph-core.md       | 3e0a2d00 |
@@ -108,6 +108,12 @@
 | REQ-d00217 | INDEX.md Regeneration                                         | dev-cli.md              | a1e3915a |
 | REQ-d00218 | Health Check Coverage Rollup                                  | dev-cli.md              | 64b0dfbb |
 | REQ-d00219 | UAT Health Check Section                                      | dev-cli.md              | 3a95ff57 |
+| REQ-d00220 | TermDictionary Data Model                                     | prd-core.md             | 31915ae3 |
+| REQ-d00221 | Grammar Extension for Definition Blocks                       | prd-core.md             | 078ce203 |
+| REQ-d00222 | TraceGraph Terms and GraphBuilder Integration                 | prd-core.md             | 2e76a3f2 |
+| REQ-d00223 | Term Health Checks                                            | prd-core.md             | 34da7dc1 |
+| REQ-d00224 | Glossary and Term Index Generators                            | prd-core.md             | f2da30fb |
+| REQ-d00225 | CLI Registration for Glossary and Term Index                  | prd-core.md             | d18fc2c9 |
 
 ## User Journeys
 

@@ -216,9 +216,6 @@ def run(args: argparse.Namespace) -> int:
             return {"error": "No terms found in graph"}
 
         fmt = params.get("format", "markdown")
-        output_dir = params.get("output_dir") or config.get("terms", {}).get(
-            "output_dir", "spec/_generated"
-        )
 
         if params.get("command") == "glossary":
             content = generate_glossary(td, format=fmt)
