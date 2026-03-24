@@ -852,6 +852,34 @@
       "title": "SpecScanningConfig",
       "type": "object"
     },
+    "TermsConfig": {
+      "additionalProperties": false,
+      "description": "Configuration for defined terms feature.",
+      "properties": {
+        "output_dir": {
+          "default": "spec/_generated",
+          "title": "Output Dir",
+          "type": "string"
+        },
+        "duplicate_severity": {
+          "default": "error",
+          "title": "Duplicate Severity",
+          "type": "string"
+        },
+        "undefined_severity": {
+          "default": "warning",
+          "title": "Undefined Severity",
+          "type": "string"
+        },
+        "unmarked_severity": {
+          "default": "warning",
+          "title": "Unmarked Severity",
+          "type": "string"
+        }
+      },
+      "title": "TermsConfig",
+      "type": "object"
+    },
     "TestScanningConfig": {
       "additionalProperties": false,
       "properties": {
@@ -1001,6 +1029,9 @@
     },
     "output": {
       "$ref": "#/$defs/OutputConfig"
+    },
+    "terms": {
+      "$ref": "#/$defs/TermsConfig"
     },
     "associates": {
       "additionalProperties": {

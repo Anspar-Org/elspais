@@ -155,6 +155,7 @@ _SECTION_COMMENTS: dict[str, str] = {
     "changelog": "Changelog enforcement",
     "keywords": "Keyword extraction settings",
     "validation": "Hash and validation settings",
+    "terms": "Defined terms: glossary, index, and health checks",
     "output": "Output settings",
     "associates": "Associated repository definitions",
 }
@@ -245,6 +246,7 @@ _CORE_SECTIONS = [
     "changelog",
     "keywords",
     "validation",
+    "terms",
     "output",
 ]
 
@@ -258,6 +260,7 @@ _ASSOCIATED_SECTIONS = [
     "rules",
     "keywords",
     "validation",
+    "terms",
     "output",
     "associates",
 ]

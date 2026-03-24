@@ -31,6 +31,7 @@ EXPECTED_SCHEMA_SECTIONS = {
     "keywords",
     "validation",
     "changelog",
+    "terms",
     "output",
     "stats",
     "cli_ttl",

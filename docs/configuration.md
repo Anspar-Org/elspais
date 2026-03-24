@@ -175,6 +175,27 @@ directories = ["docs"]
 file_patterns = ["*.md"]
 
 #──────────────────────────────────────────────────────────────────────────────
+# TERMS - Defined Terms Feature
+# Controls glossary generation, term index, and term-related health checks.
+#──────────────────────────────────────────────────────────────────────────────
+
+[terms]
+# Where generated glossary/index files go (relative to repo root)
+output_dir = "spec/_generated"
+
+# Severity for duplicate definitions (same term defined twice)
+# "error" | "warning" | "off"
+duplicate_severity = "error"
+
+# Severity for undefined terms (*bold*/*italic* with no definition)
+# "error" | "warning" | "off"
+undefined_severity = "warning"
+
+# Severity for unmarked usage of indexed terms in prose
+# "error" | "warning" | "off"
+unmarked_severity = "warning"
+
+#──────────────────────────────────────────────────────────────────────────────
 # OUTPUT - Output formats and directory
 #──────────────────────────────────────────────────────────────────────────────
 
