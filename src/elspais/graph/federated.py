@@ -169,6 +169,25 @@ class FederatedGraph:
         # Implements: REQ-d00201-B
         self._federated_log = FederatedMutationLog()
         self._federated_log._bind_repos(self._repos)
+        # Implements: REQ-d00222-C
+        self._merge_terms()
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Terms Federation
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # Implements: REQ-d00222-C
+    def _merge_terms(self) -> None:
+        """Merge per-repo _terms into a single federated TermDictionary."""
+        from elspais.graph.terms import TermDictionary
+
+        merged = TermDictionary()
+        self._term_duplicates: list[tuple] = []
+        for entry in self._repos.values():
+            if entry.graph is not None:
+                dupes = merged.merge(entry.graph._terms)
+                self._term_duplicates.extend(dupes)
+        self._terms = merged
 
     # ─────────────────────────────────────────────────────────────────────────
     # Root Repo Convenience Properties

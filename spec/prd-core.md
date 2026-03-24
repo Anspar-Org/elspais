@@ -231,3 +231,17 @@ A. The grammar SHALL include a `DEF_LINE` terminal matching `: ` followed by non
 B. The transformer SHALL handle `definition_block` nodes by extracting the term name from the TEXT token, definition text from DEF_LINE tokens, and metadata flags (Collection, Indexed) from definition lines. It SHALL return a `ParsedContent` with `content_type="definition_block"` and parsed_data containing `term`, `definition`, `collection`, and `indexed` fields.
 
 *End* *Grammar Extension for Definition Blocks* | **Hash**: 078ce203
+
+## REQ-d00222: TraceGraph Terms and GraphBuilder Integration
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. `TraceGraph` SHALL have a `_terms: TermDictionary` field. `GraphBuilder` SHALL handle `content_type == "definition_block"` by creating a REMAINDER node with `content_type` field set to `"definition_block"` and adding a `TermEntry` to the graph's `_terms` dictionary.
+
+B. The `defined_in` field of each `TermEntry` SHALL point to the nearest REQUIREMENT or FILE ancestor node ID, not the REMAINDER node itself.
+
+C. `FederatedGraph` SHALL merge per-repo `_terms` dictionaries into a single federated `TermDictionary`, detecting cross-namespace duplicates.
+
+*End* *TraceGraph Terms and GraphBuilder Integration* | **Hash**: 2e76a3f2
