@@ -125,6 +125,9 @@ def _relative_source_path(node: Any, graph: FederatedGraph) -> str:
 def _iter_assertion_coverage(
     req_node: Any,
     kind_filter: NodeKind,
+    *,
+    edge_kinds: set[EdgeKind] | None = None,
+    direct_only: bool = False,
 ) -> Iterator[tuple[Any, list[str]]]:
     """Yield ``(node, labels)`` for each TEST or CODE node covering *req_node*.
 
@@ -139,6 +142,11 @@ def _iter_assertion_coverage(
 
     The same node may be yielded more than once (e.g. via both phases).
     Callers are responsible for deduplication.
+
+    Args:
+        edge_kinds: If set, only consider edges whose kind is in this set.
+        direct_only: If True, skip Phase 1 edges that have no
+            ``assertion_targets`` (blanket coverage).
     """
     # Collect all assertion labels for the indirect-coverage case
     all_labels: list[str] = []
@@ -151,17 +159,21 @@ def _iter_assertion_coverage(
 
     # Phase 1: REQ → kind_filter edges
     for edge in req_node.iter_outgoing_edges():
+        if edge_kinds and edge.kind not in edge_kinds:
+            continue
         target = edge.target
         if target.kind != kind_filter:
             continue
         if edge.assertion_targets:
             yield target, list(edge.assertion_targets)
-        else:
+        elif not direct_only:
             yield target, list(all_labels)
 
     # Phase 2: ASSERTION → kind_filter edges
     for assertion_node, label in assertion_children:
         for edge in assertion_node.iter_outgoing_edges():
+            if edge_kinds and edge.kind not in edge_kinds:
+                continue
             target = edge.target
             if target.kind != kind_filter:
                 continue
