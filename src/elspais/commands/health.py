@@ -2289,12 +2289,19 @@ def _format_report(
         flag_parts.append("--tests")
     active_flags = ", ".join(flag_parts) if flag_parts else None
 
+    from elspais.utilities.report_meta import report_metadata
+
+    meta = report_metadata()
+
     if fmt == "json":
-        return json.dumps(report.to_dict(lenient=lenient), indent=2)
+        d = report.to_dict(lenient=lenient)
+        d["meta"] = meta
+        return json.dumps(d, indent=2)
     elif fmt == "markdown":
         data = _build_report_data(report)
         data.graph_source = graph_source
         data.active_flags = active_flags
+        data.meta = meta
         return _render_markdown(data)
     elif fmt == "junit":
         return _render_junit(report, include_passing_details=include_passing)
@@ -2306,6 +2313,7 @@ def _format_report(
         data = _build_report_data(report, verbose=verbose)
         data.graph_source = graph_source
         data.active_flags = active_flags
+        data.meta = meta
         return _render_text(data)
 
 
@@ -2367,6 +2375,7 @@ class _ReportData:
     hint: str | None
     graph_source: str | None = None
     active_flags: str | None = None
+    meta: dict[str, str] | None = None
 
 
 def _build_hint(report: HealthReport, already_verbose: bool) -> str | None:
@@ -2515,7 +2524,14 @@ def _render_text(data: _ReportData) -> str:
     lines.append(data.summary_line)
     if data.active_flags:
         lines.append(f"Flags: {data.active_flags}")
-    if data.graph_source:
+    if data.meta:
+        from elspais.utilities.report_meta import format_meta_line
+
+        meta_line = format_meta_line(data.meta)
+        if data.graph_source:
+            meta_line = meta_line[:-1] + f", via {data.graph_source})"
+        lines.append(meta_line)
+    elif data.graph_source:
         lines.append(f"(via {data.graph_source})")
     if followups:
         lines.append("")
