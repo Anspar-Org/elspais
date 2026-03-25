@@ -1,4 +1,4 @@
-# Implements: REQ-p00006-A, REQ-p00006-B, REQ-p00006-C
+# Verifies: REQ-p00006-A, REQ-p00006-B, REQ-p00006-C
 """Tests for the embedded data layer (Phase 1 of Unified Trace Viewer).
 
 Validates that HTMLGenerator produces embedded JSON indexes matching

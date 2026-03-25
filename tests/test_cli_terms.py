@@ -37,9 +37,6 @@ class TestCliTermsRegistration:
 
     def test_REQ_d00225_A_glossary_in_cmd_map(self) -> None:
         """GlossaryArgs is in the CLI _CMD_MAP."""
-        from elspais.cli import _to_namespace
-        from elspais.commands.args import GlobalArgs
-
         # Verify the import works (GlossaryArgs is importable from cli)
         from elspais.cli import GlossaryArgs as _GA  # noqa: F401
 

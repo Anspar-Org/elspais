@@ -1,4 +1,4 @@
-# Implements: REQ-p00005-C
+# Verifies: REQ-p00005-C
 """Tests for elspais associate command.
 
 Validates REQ-p00005-C: CLI-based management of associate repository links.

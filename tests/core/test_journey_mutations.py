@@ -1,4 +1,4 @@
-# Implements: REQ-p00006
+# Verifies: REQ-p00006
 """Tests for journey mutation operations."""
 
 import pytest

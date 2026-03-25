@@ -1,4 +1,4 @@
-# Implements: REQ-d00010-A
+# Verifies: REQ-d00010-A
 """Tests for Starlette server routes using TestClient."""
 from __future__ import annotations
 
@@ -184,7 +184,9 @@ class TestTreeDataGitMetrics:
         from elspais.server.app import create_app
         from elspais.server.state import AppState
 
-        subprocess.run(["git", "init", str(tmp_path)], capture_output=True, check=True)
+        subprocess.run(
+            ["git", "init", "-b", "main", str(tmp_path)], capture_output=True, check=True
+        )
         (tmp_path / ".elspais.toml").write_text(_MINIMAL_CONFIG)
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()

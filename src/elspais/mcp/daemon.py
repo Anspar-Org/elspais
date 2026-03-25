@@ -18,7 +18,6 @@ from urllib.error import URLError
 from urllib.request import urlopen
 
 _DEFAULT_TTL = 30  # minutes
-_VIEWER_PORT = 5001
 
 
 def compute_config_hash(config_path: Path) -> str:
@@ -84,7 +83,48 @@ def get_cli_ttl(repo_root: Path | None = None) -> int:
         return _DEFAULT_TTL
 
 
-# ── Viewer detection (fast path) ─────────────────────────────────────────
+def write_daemon_json(
+    repo_root: Path,
+    pid: int,
+    port: int,
+    server_type: str = "daemon",
+) -> Path:
+    """Write daemon.json state file for a running server.
+
+    Both the headless daemon and the viewer use this to register
+    themselves as the active server for a project.
+
+    Args:
+        repo_root: Project root directory.
+        pid: Process ID of the server.
+        port: Port the server is listening on.
+        server_type: "daemon" or "viewer".
+
+    Returns:
+        Path to the written daemon.json file.
+    """
+    from elspais import __version__
+
+    daemon_json = _daemon_json_path(repo_root)
+    daemon_json.parent.mkdir(parents=True, exist_ok=True)
+
+    config_path = repo_root / ".elspais.toml"
+    config_hash = compute_config_hash(config_path) if config_path.is_file() else ""
+
+    daemon_json.write_text(
+        json.dumps(
+            {
+                "pid": pid,
+                "port": port,
+                "repo_root": str(repo_root),
+                "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "version": __version__,
+                "config_hash": config_hash,
+                "type": server_type,
+            }
+        )
+    )
+    return daemon_json
 
 
 # ── Daemon lifecycle ─────────────────────────────────────────────────────
@@ -129,9 +169,12 @@ def start_daemon(repo_root: Path, ttl_minutes: int = _DEFAULT_TTL) -> int:
                      <0 = run forever (no timeout).
                       0 = should not be called (caller should check).
     """
+    # Stop any existing server before overwriting daemon.json.
+    # Without this, the old server becomes an undiscoverable orphan.
+    stop_daemon(repo_root)
+
     daemon_json = _daemon_json_path(repo_root)
     daemon_json.parent.mkdir(parents=True, exist_ok=True)
-    daemon_json.unlink(missing_ok=True)
 
     log_path = _daemon_dir(repo_root) / "daemon.log"
 

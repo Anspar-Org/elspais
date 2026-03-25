@@ -41,7 +41,7 @@ class ChecksArgs:
     """Allow warnings without affecting exit code."""
 
     status: list[str] | None = None
-    """Statuses to include in coverage (default: Active)."""
+    """Additional statuses to include in coverage (e.g. Draft Proposed)."""
 
     include_passing_details: bool = False
     """Show full details for passing checks."""

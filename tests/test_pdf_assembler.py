@@ -1,4 +1,4 @@
-# Implements: REQ-p00080-B, REQ-p00080-C, REQ-p00080-D, REQ-p00080-E, REQ-p00080-F
+# Verifies: REQ-p00080-B, REQ-p00080-C, REQ-p00080-D, REQ-p00080-E, REQ-p00080-F
 """Tests for the MarkdownAssembler.
 
 Validates:

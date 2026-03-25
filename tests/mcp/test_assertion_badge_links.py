@@ -3,14 +3,14 @@
 
 Implements: REQ-d00064
 """
-import pytest
 from unittest.mock import MagicMock
+
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.relations import EdgeKind
 from elspais.mcp.server import (
-    _iter_assertion_coverage,
     _get_assertion_code_map,
     _get_assertion_refines_map,
+    _iter_assertion_coverage,
 )
 
 

@@ -41,6 +41,19 @@ from elspais.utilities.git import (
     sync_branch,
     temporary_worktree,
 )
+from elspais.utilities.git import _clean_git_env as _clean_git_env_fn
+
+# All subprocess git calls MUST use _git_run() to prevent GIT_DIR
+# leakage when tests run inside git hooks (pre-commit, pre-push).
+_GIT_ENV = _clean_git_env_fn()
+
+
+def _git_run(args, **kwargs):
+    """Run a git subprocess with a clean environment."""
+    kwargs.setdefault("capture_output", True)
+    kwargs.setdefault("check", True)
+    kwargs.setdefault("env", _GIT_ENV)
+    return subprocess.run(args, **kwargs)
 
 
 @pytest.fixture(autouse=True)
@@ -401,17 +414,14 @@ class TestGitStatusSummary:
 
     def test_REQ_p00004_C_clean_feature_branch(self, tmp_path):
         """On a clean feature branch with no remote divergence."""
-        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
-        subprocess.run(
-            ["git", "checkout", "-b", "main"], cwd=tmp_path, capture_output=True, check=True
-        )
-        subprocess.run(
+        _git_run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
+        _git_run(
             ["git", "config", "user.email", "test@test.com"],
             cwd=tmp_path,
             capture_output=True,
             check=True,
         )
-        subprocess.run(
+        _git_run(
             ["git", "config", "user.name", "Test"],
             cwd=tmp_path,
             capture_output=True,
@@ -419,17 +429,18 @@ class TestGitStatusSummary:
         )
         (tmp_path / "spec").mkdir()
         (tmp_path / "spec" / "test.md").write_text("# REQ-p00001 Test\n")
-        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
-        subprocess.run(
-            ["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, check=True
-        )
-        subprocess.run(
-            ["git", "checkout", "-b", "feature"], cwd=tmp_path, capture_output=True, check=True
+        _git_run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+        _git_run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, check=True)
+        _git_run(
+            ["git", "checkout", "-b", "__test_feature"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
         )
 
         result = git_status_summary(tmp_path, spec_dir="spec")
 
-        assert result["branch"] == "feature"
+        assert result["branch"] == "__test_feature"
         assert result["is_main"] is False
         assert result["dirty_spec_files"] == []
         assert result["local_ahead"] == 0
@@ -439,17 +450,14 @@ class TestGitStatusSummary:
 
     def test_REQ_p00004_C_main_branch_dirty_spec(self, tmp_path):
         """On main with modified spec files."""
-        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
-        subprocess.run(
-            ["git", "checkout", "-b", "main"], cwd=tmp_path, capture_output=True, check=True
-        )
-        subprocess.run(
+        _git_run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
+        _git_run(
             ["git", "config", "user.email", "test@test.com"],
             cwd=tmp_path,
             capture_output=True,
             check=True,
         )
-        subprocess.run(
+        _git_run(
             ["git", "config", "user.name", "Test"],
             cwd=tmp_path,
             capture_output=True,
@@ -457,10 +465,8 @@ class TestGitStatusSummary:
         )
         (tmp_path / "spec").mkdir()
         (tmp_path / "spec" / "test.md").write_text("# REQ-p00001 Test\n")
-        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
-        subprocess.run(
-            ["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, check=True
-        )
+        _git_run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+        _git_run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, check=True)
         # Dirty spec file
         (tmp_path / "spec" / "test.md").write_text("# REQ-p00001 Modified\n")
 
@@ -472,17 +478,14 @@ class TestGitStatusSummary:
 
     def test_REQ_p00004_C_non_spec_dirty_excluded(self, tmp_path):
         """Dirty files outside spec/ are excluded from dirty_spec_files."""
-        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
-        subprocess.run(
-            ["git", "checkout", "-b", "main"], cwd=tmp_path, capture_output=True, check=True
-        )
-        subprocess.run(
+        _git_run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
+        _git_run(
             ["git", "config", "user.email", "test@test.com"],
             cwd=tmp_path,
             capture_output=True,
             check=True,
         )
-        subprocess.run(
+        _git_run(
             ["git", "config", "user.name", "Test"],
             cwd=tmp_path,
             capture_output=True,
@@ -491,10 +494,8 @@ class TestGitStatusSummary:
         (tmp_path / "spec").mkdir()
         (tmp_path / "spec" / "test.md").write_text("clean\n")
         (tmp_path / "other.txt").write_text("clean\n")
-        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
-        subprocess.run(
-            ["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, check=True
-        )
+        _git_run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+        _git_run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, check=True)
         # Dirty non-spec file only
         (tmp_path / "other.txt").write_text("dirty\n")
 
@@ -505,23 +506,22 @@ class TestGitStatusSummary:
 
 def _init_git_repo(tmp_path: Path) -> None:
     """Helper: init a git repo with one commit so branches can be created."""
-    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
-    subprocess.run(["git", "checkout", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
-    subprocess.run(
+    _git_run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
+    _git_run(
         ["git", "config", "user.email", "test@test.com"],
         cwd=tmp_path,
         capture_output=True,
         check=True,
     )
-    subprocess.run(
+    _git_run(
         ["git", "config", "user.name", "Test"],
         cwd=tmp_path,
         capture_output=True,
         check=True,
     )
     (tmp_path / "README.md").write_text("init\n")
-    subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
-    subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, check=True)
+    _git_run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+    _git_run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, check=True)
 
 
 class TestCreateAndSwitchBranch:
@@ -536,19 +536,19 @@ class TestCreateAndSwitchBranch:
         """Creates branch and switches on a clean working tree."""
         _init_git_repo(tmp_path)
 
-        result = create_and_switch_branch(tmp_path, "feature/test")
+        result = create_and_switch_branch(tmp_path, "__test_feature/test")
 
         assert result["success"] is True
-        assert result["branch"] == "feature/test"
+        assert result["branch"] == "__test_feature/test"
         # Verify we're on the new branch
-        branch_result = subprocess.run(
+        branch_result = _git_run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             cwd=tmp_path,
             capture_output=True,
             text=True,
             check=True,
         )
-        assert branch_result.stdout.strip() == "feature/test"
+        assert branch_result.stdout.strip() == "__test_feature/test"
 
     def test_REQ_p00004_D_dirty_stash_preserves_changes(self, tmp_path):
         """Dirty working tree changes are preserved across branch switch."""
@@ -559,10 +559,10 @@ class TestCreateAndSwitchBranch:
         # Create an untracked file
         (tmp_path / "new_file.txt").write_text("untracked\n")
 
-        result = create_and_switch_branch(tmp_path, "feature/dirty")
+        result = create_and_switch_branch(tmp_path, "__test_feature/dirty")
 
         assert result["success"] is True
-        assert result["branch"] == "feature/dirty"
+        assert result["branch"] == "__test_feature/dirty"
         # Verify changes survived the switch
         assert (tmp_path / "README.md").read_text() == "modified\n"
         assert (tmp_path / "new_file.txt").read_text() == "untracked\n"
@@ -581,14 +581,14 @@ class TestCreateAndSwitchBranch:
         _init_git_repo(tmp_path)
 
         # Create branch first time -- should succeed
-        result1 = create_and_switch_branch(tmp_path, "feature/dup")
+        result1 = create_and_switch_branch(tmp_path, "__test_feature/dup")
         assert result1["success"] is True
 
         # Switch back to main
-        subprocess.run(["git", "checkout", "main"], cwd=tmp_path, capture_output=True, check=True)
+        _git_run(["git", "checkout", "main"], cwd=tmp_path, capture_output=True, check=True)
 
         # Try to create same branch again -- should fail
-        result2 = create_and_switch_branch(tmp_path, "feature/dup")
+        result2 = create_and_switch_branch(tmp_path, "__test_feature/dup")
         assert result2["success"] is False
         assert "error" in result2
 
@@ -605,12 +605,13 @@ class TestCommitAndPushSpecFiles:
         _init_git_repo(tmp_path)
         (tmp_path / "spec").mkdir()
         (tmp_path / "spec" / "test.md").write_text("# REQ-p00001 Test\n")
-        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
-        subprocess.run(
-            ["git", "commit", "-m", "add spec"], cwd=tmp_path, capture_output=True, check=True
-        )
-        subprocess.run(
-            ["git", "checkout", "-b", "feature"], cwd=tmp_path, capture_output=True, check=True
+        _git_run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+        _git_run(["git", "commit", "-m", "add spec"], cwd=tmp_path, capture_output=True, check=True)
+        _git_run(
+            ["git", "checkout", "-b", "__test_feature"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
         )
 
         # Modify spec file
@@ -622,7 +623,7 @@ class TestCommitAndPushSpecFiles:
         assert "spec/test.md" in result["files_committed"]
 
         # Verify the commit was made
-        log = subprocess.run(
+        log = _git_run(
             ["git", "log", "--oneline", "-1"],
             cwd=tmp_path,
             capture_output=True,
@@ -636,10 +637,8 @@ class TestCommitAndPushSpecFiles:
         _init_git_repo(tmp_path)
         (tmp_path / "spec").mkdir()
         (tmp_path / "spec" / "test.md").write_text("# REQ-p00001 Test\n")
-        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
-        subprocess.run(
-            ["git", "commit", "-m", "add spec"], cwd=tmp_path, capture_output=True, check=True
-        )
+        _git_run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+        _git_run(["git", "commit", "-m", "add spec"], cwd=tmp_path, capture_output=True, check=True)
 
         # Modify spec file while on main
         (tmp_path / "spec" / "test.md").write_text("# REQ-p00001 Modified\n")
@@ -654,12 +653,13 @@ class TestCommitAndPushSpecFiles:
         _init_git_repo(tmp_path)
         (tmp_path / "spec").mkdir()
         (tmp_path / "spec" / "test.md").write_text("# REQ-p00001 Test\n")
-        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
-        subprocess.run(
-            ["git", "commit", "-m", "add spec"], cwd=tmp_path, capture_output=True, check=True
-        )
-        subprocess.run(
-            ["git", "checkout", "-b", "feature"], cwd=tmp_path, capture_output=True, check=True
+        _git_run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+        _git_run(["git", "commit", "-m", "add spec"], cwd=tmp_path, capture_output=True, check=True)
+        _git_run(
+            ["git", "checkout", "-b", "__test_feature"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
         )
 
         # No changes made -- nothing to commit
@@ -673,12 +673,13 @@ class TestCommitAndPushSpecFiles:
         _init_git_repo(tmp_path)
         (tmp_path / "spec").mkdir()
         (tmp_path / "spec" / "existing.md").write_text("# REQ-p00001 Existing\n")
-        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
-        subprocess.run(
-            ["git", "commit", "-m", "add spec"], cwd=tmp_path, capture_output=True, check=True
-        )
-        subprocess.run(
-            ["git", "checkout", "-b", "feature"], cwd=tmp_path, capture_output=True, check=True
+        _git_run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+        _git_run(["git", "commit", "-m", "add spec"], cwd=tmp_path, capture_output=True, check=True)
+        _git_run(
+            ["git", "checkout", "-b", "__test_feature"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
         )
 
         # Create a new untracked spec file
@@ -697,7 +698,7 @@ def _init_bare_and_clones(tmp_path: Path) -> tuple[Path, Path, Path]:
     """
     bare = tmp_path / "remote.git"
     bare.mkdir()
-    subprocess.run(
+    _git_run(
         ["git", "init", "--bare", "--initial-branch=main"],
         cwd=bare,
         capture_output=True,
@@ -705,14 +706,14 @@ def _init_bare_and_clones(tmp_path: Path) -> tuple[Path, Path, Path]:
     )
 
     clone_a = tmp_path / "clone_a"
-    subprocess.run(["git", "clone", str(bare), str(clone_a)], capture_output=True, check=True)
-    subprocess.run(
+    _git_run(["git", "clone", str(bare), str(clone_a)], capture_output=True, check=True)
+    _git_run(
         ["git", "config", "user.email", "test@test.com"],
         cwd=clone_a,
         capture_output=True,
         check=True,
     )
-    subprocess.run(
+    _git_run(
         ["git", "config", "user.name", "Test"],
         cwd=clone_a,
         capture_output=True,
@@ -720,9 +721,9 @@ def _init_bare_and_clones(tmp_path: Path) -> tuple[Path, Path, Path]:
     )
     # Create initial commit and push
     (clone_a / "README.md").write_text("init\n")
-    subprocess.run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
-    subprocess.run(["git", "commit", "-m", "init"], cwd=clone_a, capture_output=True, check=True)
-    subprocess.run(
+    _git_run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
+    _git_run(["git", "commit", "-m", "init"], cwd=clone_a, capture_output=True, check=True)
+    _git_run(
         ["git", "push", "-u", "origin", "main"],
         cwd=clone_a,
         capture_output=True,
@@ -730,14 +731,14 @@ def _init_bare_and_clones(tmp_path: Path) -> tuple[Path, Path, Path]:
     )
 
     clone_b = tmp_path / "clone_b"
-    subprocess.run(["git", "clone", str(bare), str(clone_b)], capture_output=True, check=True)
-    subprocess.run(
+    _git_run(["git", "clone", str(bare), str(clone_b)], capture_output=True, check=True)
+    _git_run(
         ["git", "config", "user.email", "test@test.com"],
         cwd=clone_b,
         capture_output=True,
         check=True,
     )
-    subprocess.run(
+    _git_run(
         ["git", "config", "user.name", "Test"],
         cwd=clone_b,
         capture_output=True,
@@ -769,14 +770,14 @@ class TestPullFfOnly:
 
         # Push a new commit from clone_a
         (clone_a / "new_file.txt").write_text("hello\n")
-        subprocess.run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
-        subprocess.run(
+        _git_run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
+        _git_run(
             ["git", "commit", "-m", "add file"],
             cwd=clone_a,
             capture_output=True,
             check=True,
         )
-        subprocess.run(["git", "push"], cwd=clone_a, capture_output=True, check=True)
+        _git_run(["git", "push"], cwd=clone_a, capture_output=True, check=True)
 
         # Pull from clone_b (should fast-forward)
         result = sync_branch(clone_b)
@@ -792,19 +793,19 @@ class TestPullFfOnly:
 
         # Push a commit from clone_a (different file)
         (clone_a / "file_a.txt").write_text("from a\n")
-        subprocess.run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
-        subprocess.run(
+        _git_run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
+        _git_run(
             ["git", "commit", "-m", "commit from a"],
             cwd=clone_a,
             capture_output=True,
             check=True,
         )
-        subprocess.run(["git", "push"], cwd=clone_a, capture_output=True, check=True)
+        _git_run(["git", "push"], cwd=clone_a, capture_output=True, check=True)
 
         # Make a local commit in clone_b (different file — no conflict)
         (clone_b / "file_b.txt").write_text("from b\n")
-        subprocess.run(["git", "add", "."], cwd=clone_b, capture_output=True, check=True)
-        subprocess.run(
+        _git_run(["git", "add", "."], cwd=clone_b, capture_output=True, check=True)
+        _git_run(
             ["git", "commit", "-m", "commit from b"],
             cwd=clone_b,
             capture_output=True,
@@ -825,18 +826,18 @@ class TestPullFfOnly:
 
         # Both edit the SAME file (README.md from init)
         (clone_a / "README.md").write_text("version A\n")
-        subprocess.run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
-        subprocess.run(
+        _git_run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
+        _git_run(
             ["git", "commit", "-m", "edit from a"],
             cwd=clone_a,
             capture_output=True,
             check=True,
         )
-        subprocess.run(["git", "push"], cwd=clone_a, capture_output=True, check=True)
+        _git_run(["git", "push"], cwd=clone_a, capture_output=True, check=True)
 
         (clone_b / "README.md").write_text("version B\n")
-        subprocess.run(["git", "add", "."], cwd=clone_b, capture_output=True, check=True)
-        subprocess.run(
+        _git_run(["git", "add", "."], cwd=clone_b, capture_output=True, check=True)
+        _git_run(
             ["git", "commit", "-m", "edit from b"],
             cwd=clone_b,
             capture_output=True,
@@ -848,7 +849,7 @@ class TestPullFfOnly:
         assert result["success"] is False
         assert "conflict" in result["error"].lower()
         # Working tree should be clean (merge aborted)
-        status = subprocess.run(
+        status = _git_run(
             ["git", "status", "--porcelain"],
             cwd=clone_b,
             capture_output=True,
@@ -868,17 +869,17 @@ def _init_bare_with_spec(tmp_path: Path) -> tuple[Path, Path, Path]:
     # Add spec directory in clone_a, push to remote
     (clone_a / "spec").mkdir()
     (clone_a / "spec" / "prd.md").write_text("# REQ-p00001 Original\n")
-    subprocess.run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
-    subprocess.run(
+    _git_run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
+    _git_run(
         ["git", "commit", "-m", "add spec"],
         cwd=clone_a,
         capture_output=True,
         check=True,
     )
-    subprocess.run(["git", "push"], cwd=clone_a, capture_output=True, check=True)
+    _git_run(["git", "push"], cwd=clone_a, capture_output=True, check=True)
 
     # Pull spec into clone_b
-    subprocess.run(["git", "pull"], cwd=clone_b, capture_output=True, check=True)
+    _git_run(["git", "pull"], cwd=clone_b, capture_output=True, check=True)
 
     return bare, clone_a, clone_b
 
@@ -894,8 +895,8 @@ class TestCommitAndPushWithRemote:
         _bare, clone_a, clone_b = _init_bare_with_spec(tmp_path)
 
         # Create feature branch in clone_a
-        subprocess.run(
-            ["git", "checkout", "-b", "feature"],
+        _git_run(
+            ["git", "checkout", "-b", "__test_feature"],
             cwd=clone_a,
             capture_output=True,
             check=True,
@@ -911,9 +912,9 @@ class TestCommitAndPushWithRemote:
         assert "push_error" not in result
 
         # Verify the push arrived at the remote — clone_b can fetch the branch
-        subprocess.run(["git", "fetch"], cwd=clone_b, capture_output=True, check=True)
-        log = subprocess.run(
-            ["git", "log", "origin/feature", "--oneline", "-1"],
+        _git_run(["git", "fetch"], cwd=clone_b, capture_output=True, check=True)
+        log = _git_run(
+            ["git", "log", "origin/__test_feature", "--oneline", "-1"],
             cwd=clone_b,
             capture_output=True,
             text=True,
@@ -925,15 +926,15 @@ class TestCommitAndPushWithRemote:
         _bare, clone_a, _clone_b = _init_bare_with_spec(tmp_path)
 
         # Create feature branch in clone_a
-        subprocess.run(
-            ["git", "checkout", "-b", "feature"],
+        _git_run(
+            ["git", "checkout", "-b", "__test_feature"],
             cwd=clone_a,
             capture_output=True,
             check=True,
         )
 
         # Break the remote by removing it
-        subprocess.run(
+        _git_run(
             ["git", "remote", "remove", "origin"],
             cwd=clone_a,
             capture_output=True,
@@ -951,7 +952,7 @@ class TestCommitAndPushWithRemote:
         assert "push_error" in result
 
         # Verify the commit was actually made
-        log = subprocess.run(
+        log = _git_run(
             ["git", "log", "--oneline", "-1"],
             cwd=clone_a,
             capture_output=True,
@@ -965,7 +966,7 @@ class TestCommitAndPushWithRemote:
         _bare, clone_a, clone_b = _init_bare_with_spec(tmp_path)
 
         # clone_a: create branch, edit, commit, push
-        subprocess.run(
+        _git_run(
             ["git", "checkout", "-b", "edit-spec"],
             cwd=clone_a,
             capture_output=True,
@@ -975,8 +976,8 @@ class TestCommitAndPushWithRemote:
         commit_and_push_spec_files(clone_a, "A edits prd", push=True)
 
         # clone_b: fetch and checkout the branch
-        subprocess.run(["git", "fetch"], cwd=clone_b, capture_output=True, check=True)
-        subprocess.run(
+        _git_run(["git", "fetch"], cwd=clone_b, capture_output=True, check=True)
+        _git_run(
             ["git", "checkout", "-b", "edit-spec", "origin/edit-spec"],
             cwd=clone_b,
             capture_output=True,
@@ -996,15 +997,15 @@ class TestAnsiStripping:
         _init_git_repo(tmp_path)
         (tmp_path / "spec").mkdir()
         (tmp_path / "spec" / "test.md").write_text("# REQ-p00001 Test\n")
-        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
-        subprocess.run(
+        _git_run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+        _git_run(
             ["git", "commit", "-m", "init"],
             cwd=tmp_path,
             capture_output=True,
             check=True,
         )
-        subprocess.run(
-            ["git", "checkout", "-b", "feature"],
+        _git_run(
+            ["git", "checkout", "-b", "__test_feature"],
             cwd=tmp_path,
             capture_output=True,
             check=True,
@@ -1045,14 +1046,14 @@ class TestGitStatusSummaryWithRemote:
         _bare, clone_a, _clone_b = _init_bare_with_spec(tmp_path)
 
         # Create feature branch and push it (so remote tracking exists)
-        subprocess.run(
-            ["git", "checkout", "-b", "feature"],
+        _git_run(
+            ["git", "checkout", "-b", "__test_feature"],
             cwd=clone_a,
             capture_output=True,
             check=True,
         )
-        subprocess.run(
-            ["git", "push", "-u", "origin", "feature"],
+        _git_run(
+            ["git", "push", "-u", "origin", "__test_feature"],
             cwd=clone_a,
             capture_output=True,
             check=True,
@@ -1061,8 +1062,8 @@ class TestGitStatusSummaryWithRemote:
         # Make two local commits without pushing
         for i in range(2):
             (clone_a / "spec" / "prd.md").write_text(f"# REQ-p00001 Edit {i}\n")
-            subprocess.run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
-            subprocess.run(
+            _git_run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
+            _git_run(
                 ["git", "commit", "-m", f"local edit {i}"],
                 cwd=clone_a,
                 capture_output=True,
@@ -1071,7 +1072,7 @@ class TestGitStatusSummaryWithRemote:
 
         result = git_status_summary(clone_a)
 
-        assert result["branch"] == "feature"
+        assert result["branch"] == "__test_feature"
         assert result["local_ahead"] == 2
         assert result["remote_diverged"] is False
 
@@ -1081,14 +1082,14 @@ class TestGitStatusSummaryWithRemote:
 
         # Both clones on feature branch tracking remote
         for clone in (clone_a, clone_b):
-            subprocess.run(
-                ["git", "checkout", "-b", "feature"],
+            _git_run(
+                ["git", "checkout", "-b", "__test_feature"],
                 cwd=clone,
                 capture_output=True,
                 check=True,
             )
-            subprocess.run(
-                ["git", "push", "-u", "origin", "feature"],
+            _git_run(
+                ["git", "push", "-u", "origin", "__test_feature"],
                 cwd=clone,
                 capture_output=True,
                 check=True,
@@ -1096,14 +1097,14 @@ class TestGitStatusSummaryWithRemote:
 
         # clone_b pushes a commit that clone_a doesn't have
         (clone_b / "spec" / "prd.md").write_text("# REQ-p00001 From B\n")
-        subprocess.run(["git", "add", "."], cwd=clone_b, capture_output=True, check=True)
-        subprocess.run(
+        _git_run(["git", "add", "."], cwd=clone_b, capture_output=True, check=True)
+        _git_run(
             ["git", "commit", "-m", "B edit"],
             cwd=clone_b,
             capture_output=True,
             check=True,
         )
-        subprocess.run(["git", "push"], cwd=clone_b, capture_output=True, check=True)
+        _git_run(["git", "push"], cwd=clone_b, capture_output=True, check=True)
 
         # clone_a checks status — should detect remote divergence
         result = git_status_summary(clone_a)
@@ -1114,8 +1115,8 @@ class TestGitStatusSummaryWithRemote:
     def test_REQ_p00004_C_no_remote_no_divergence(self, tmp_path):
         """No remote tracking → no divergence flags."""
         _init_git_repo(tmp_path)
-        subprocess.run(
-            ["git", "checkout", "-b", "feature"],
+        _git_run(
+            ["git", "checkout", "-b", "__test_feature"],
             cwd=tmp_path,
             capture_output=True,
             check=True,
@@ -1146,13 +1147,13 @@ class TestFullGitSyncWorkflowWithRemote:
         assert status["dirty_spec_files"] == []
 
         # 2. clone_a: create feature branch
-        result = create_and_switch_branch(clone_a, "feature/prd-update")
+        result = create_and_switch_branch(clone_a, "__test_feature/prd-update")
         assert result["success"] is True
 
         # 3. clone_a: edit spec, verify dirty
         (clone_a / "spec" / "prd.md").write_text("# REQ-p00001 Updated by A\n")
         status = git_status_summary(clone_a)
-        assert status["branch"] == "feature/prd-update"
+        assert status["branch"] == "__test_feature/prd-update"
         assert "spec/prd.md" in status["dirty_spec_files"]
 
         # 4. clone_a: commit and push
@@ -1170,9 +1171,15 @@ class TestFullGitSyncWorkflowWithRemote:
         assert status["local_ahead"] == 0
 
         # 6. clone_b: fetch and checkout the feature branch
-        subprocess.run(["git", "fetch"], cwd=clone_b, capture_output=True, check=True)
+        _git_run(["git", "fetch"], cwd=clone_b, capture_output=True, check=True)
         subprocess.run(
-            ["git", "checkout", "-b", "feature/prd-update", "origin/feature/prd-update"],
+            [
+                "git",
+                "checkout",
+                "-b",
+                "__test_feature/prd-update",
+                "origin/__test_feature/prd-update",
+            ],
             cwd=clone_b,
             capture_output=True,
             check=True,
@@ -1200,14 +1207,14 @@ class TestFullGitSyncWorkflowWithRemote:
 
         # Both on feature branch
         for clone in (clone_a, clone_b):
-            subprocess.run(
-                ["git", "checkout", "-b", "feature"],
+            _git_run(
+                ["git", "checkout", "-b", "__test_feature"],
                 cwd=clone,
                 capture_output=True,
                 check=True,
             )
-            subprocess.run(
-                ["git", "push", "-u", "origin", "feature"],
+            _git_run(
+                ["git", "push", "-u", "origin", "__test_feature"],
                 cwd=clone,
                 capture_output=True,
                 check=True,
@@ -1215,19 +1222,19 @@ class TestFullGitSyncWorkflowWithRemote:
 
         # clone_a edits and pushes
         (clone_a / "spec" / "prd.md").write_text("# REQ-p00001 Version A\n")
-        subprocess.run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
-        subprocess.run(
+        _git_run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
+        _git_run(
             ["git", "commit", "-m", "A edit"],
             cwd=clone_a,
             capture_output=True,
             check=True,
         )
-        subprocess.run(["git", "push"], cwd=clone_a, capture_output=True, check=True)
+        _git_run(["git", "push"], cwd=clone_a, capture_output=True, check=True)
 
         # clone_b edits same file (different content) and commits locally
         (clone_b / "spec" / "prd.md").write_text("# REQ-p00001 Version B\n")
-        subprocess.run(["git", "add", "."], cwd=clone_b, capture_output=True, check=True)
-        subprocess.run(
+        _git_run(["git", "add", "."], cwd=clone_b, capture_output=True, check=True)
+        _git_run(
             ["git", "commit", "-m", "B edit"],
             cwd=clone_b,
             capture_output=True,
@@ -1240,7 +1247,7 @@ class TestFullGitSyncWorkflowWithRemote:
         assert "conflict" in result["error"].lower()
 
         # Working tree should be clean (merge aborted)
-        status = subprocess.run(
+        status = _git_run(
             ["git", "status", "--porcelain"],
             cwd=clone_b,
             capture_output=True,
@@ -1312,21 +1319,21 @@ class TestCheckoutBranch:
         _init_git_repo(tmp_path)
 
         # Create a second branch and switch back to main
-        subprocess.run(
-            ["git", "checkout", "-b", "feature"],
+        _git_run(
+            ["git", "checkout", "-b", "__test_feature"],
             cwd=tmp_path,
             capture_output=True,
             check=True,
         )
         (tmp_path / "feature.txt").write_text("feature content\n")
-        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
-        subprocess.run(
+        _git_run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+        _git_run(
             ["git", "commit", "-m", "feature commit"],
             cwd=tmp_path,
             capture_output=True,
             check=True,
         )
-        subprocess.run(
+        _git_run(
             ["git", "checkout", "main"],
             cwd=tmp_path,
             capture_output=True,
@@ -1334,7 +1341,7 @@ class TestCheckoutBranch:
         )
 
         # Verify we're on main
-        result = subprocess.run(
+        result = _git_run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             cwd=tmp_path,
             capture_output=True,
@@ -1344,10 +1351,8 @@ class TestCheckoutBranch:
         assert result.stdout.strip() == "main"
 
         # Switch to feature branch using plain git checkout
-        from elspais.utilities.git import _clean_git_env
-
-        switch = subprocess.run(
-            ["git", "checkout", "feature"],
+        switch = _git_run(
+            ["git", "checkout", "__test_feature"],
             cwd=tmp_path,
             env=_clean_git_env(),
             capture_output=True,
@@ -1356,14 +1361,14 @@ class TestCheckoutBranch:
         assert switch.returncode == 0
 
         # Verify we're on feature now
-        result = subprocess.run(
+        result = _git_run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             cwd=tmp_path,
             capture_output=True,
             text=True,
             check=True,
         )
-        assert result.stdout.strip() == "feature"
+        assert result.stdout.strip() == "__test_feature"
 
     def test_REQ_p00004_I_checkout_remote_fallback(self, tmp_path):
         """When ``git checkout -b <name> origin/<name>`` fails because the
@@ -1372,36 +1377,42 @@ class TestCheckoutBranch:
         bare, clone_a, clone_b = _init_bare_and_clones(tmp_path)
 
         # clone_a creates and pushes a feature branch
-        subprocess.run(
-            ["git", "checkout", "-b", "feature/remote-test"],
+        _git_run(
+            ["git", "checkout", "-b", "__test_feature/remote-test"],
             cwd=clone_a,
             capture_output=True,
             check=True,
         )
         (clone_a / "remote.txt").write_text("from remote\n")
-        subprocess.run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
-        subprocess.run(
+        _git_run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
+        _git_run(
             ["git", "commit", "-m", "remote feature"],
             cwd=clone_a,
             capture_output=True,
             check=True,
         )
-        subprocess.run(
-            ["git", "push", "-u", "origin", "feature/remote-test"],
+        _git_run(
+            ["git", "push", "-u", "origin", "__test_feature/remote-test"],
             cwd=clone_a,
             capture_output=True,
             check=True,
         )
 
         # clone_b: fetch, create a local branch with the same name, then switch away
-        subprocess.run(["git", "fetch"], cwd=clone_b, capture_output=True, check=True)
+        _git_run(["git", "fetch"], cwd=clone_b, capture_output=True, check=True)
         subprocess.run(
-            ["git", "checkout", "-b", "feature/remote-test", "origin/feature/remote-test"],
+            [
+                "git",
+                "checkout",
+                "-b",
+                "__test_feature/remote-test",
+                "origin/__test_feature/remote-test",
+            ],
             cwd=clone_b,
             capture_output=True,
             check=True,
         )
-        subprocess.run(
+        _git_run(
             ["git", "checkout", "main"],
             cwd=clone_b,
             capture_output=True,
@@ -1410,13 +1421,15 @@ class TestCheckoutBranch:
 
         # Now simulate the remote checkout flow:
         # First attempt: git checkout -b should fail (already exists)
-        from elspais.utilities.git import _clean_git_env
-
-        env = _clean_git_env()
         attempt1 = subprocess.run(
-            ["git", "checkout", "-b", "feature/remote-test", "origin/feature/remote-test"],
+            [
+                "git",
+                "checkout",
+                "-b",
+                "__test_feature/remote-test",
+                "origin/__test_feature/remote-test",
+            ],
             cwd=clone_b,
-            env=env,
             capture_output=True,
             text=True,
         )
@@ -1424,24 +1437,23 @@ class TestCheckoutBranch:
         assert "already exists" in attempt1.stderr
 
         # Fallback: plain git checkout should succeed
-        attempt2 = subprocess.run(
-            ["git", "checkout", "feature/remote-test"],
+        attempt2 = _git_run(
+            ["git", "checkout", "__test_feature/remote-test"],
             cwd=clone_b,
-            env=env,
             capture_output=True,
             text=True,
         )
         assert attempt2.returncode == 0
 
         # Verify we're on the right branch
-        head = subprocess.run(
+        head = _git_run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             cwd=clone_b,
             capture_output=True,
             text=True,
             check=True,
         )
-        assert head.stdout.strip() == "feature/remote-test"
+        assert head.stdout.strip() == "__test_feature/remote-test"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1451,15 +1463,14 @@ class TestCheckoutBranch:
 
 def _init_git_repo_with_commit(tmp_path: Path, spec: bool = True) -> None:
     """Init a fresh git repo with one commit (and optional spec dir)."""
-    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
-    subprocess.run(["git", "checkout", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
-    subprocess.run(
+    _git_run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
+    _git_run(
         ["git", "config", "user.email", "test@test.com"],
         cwd=tmp_path,
         capture_output=True,
         check=True,
     )
-    subprocess.run(
+    _git_run(
         ["git", "config", "user.name", "Test User"],
         cwd=tmp_path,
         capture_output=True,
@@ -1469,8 +1480,8 @@ def _init_git_repo_with_commit(tmp_path: Path, spec: bool = True) -> None:
         (tmp_path / "spec").mkdir()
         (tmp_path / "spec" / "prd.md").write_text("# REQ-p00001 Initial Requirement\n")
     (tmp_path / "README.md").write_text("init\n")
-    subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
-    subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, check=True)
+    _git_run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+    _git_run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, check=True)
 
 
 class TestListCommits:
@@ -1485,8 +1496,8 @@ class TestListCommits:
         _init_git_repo_with_commit(tmp_path)
         # Add a second commit
         (tmp_path / "README.md").write_text("second\n")
-        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
-        subprocess.run(
+        _git_run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+        _git_run(
             ["git", "commit", "-m", "second commit"],
             cwd=tmp_path,
             capture_output=True,
@@ -1505,8 +1516,8 @@ class TestListCommits:
         _init_git_repo_with_commit(tmp_path)
         for i in range(5):
             (tmp_path / "README.md").write_text(f"v{i}\n")
-            subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
-            subprocess.run(
+            _git_run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+            _git_run(
                 ["git", "commit", "-m", f"commit {i}"],
                 cwd=tmp_path,
                 capture_output=True,
@@ -1520,7 +1531,7 @@ class TestListCommits:
     # Implements: REQ-p00004-E
     def test_empty_repo_returns_empty_list(self, tmp_path):
         """Returns [] on a repo with no commits."""
-        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+        _git_run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
 
         commits = list_commits(tmp_path)
 
@@ -1558,7 +1569,7 @@ class TestCheckoutCommit:
 
         assert result["success"] is True
         # Confirm detached HEAD
-        head = subprocess.run(
+        head = _git_run(
             ["git", "rev-parse", "HEAD"],
             cwd=tmp_path,
             capture_output=True,
@@ -1567,7 +1578,7 @@ class TestCheckoutCommit:
         )
         assert head.stdout.strip() == commit_hash
         # Verify detached HEAD
-        abbrev = subprocess.run(
+        abbrev = _git_run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             cwd=tmp_path,
             capture_output=True,
@@ -1597,8 +1608,8 @@ class TestCommitSpecFiles:
     def test_commits_dirty_spec_files(self, tmp_path):
         """Commits modified spec files on a feature branch."""
         _init_git_repo_with_commit(tmp_path)
-        subprocess.run(
-            ["git", "checkout", "-b", "feature"],
+        _git_run(
+            ["git", "checkout", "-b", "__test_feature"],
             cwd=tmp_path,
             capture_output=True,
             check=True,
@@ -1629,17 +1640,15 @@ class TestCommitSpecFiles:
     # Implements: REQ-p00004-E
     def test_refuses_on_master_branch(self, tmp_path):
         """Refuses to commit on the master branch."""
-        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
-        subprocess.run(
-            ["git", "checkout", "-b", "master"], cwd=tmp_path, capture_output=True, check=True
-        )
-        subprocess.run(
+        _git_run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
+        _git_run(["git", "checkout", "-b", "master"], cwd=tmp_path, capture_output=True, check=True)
+        _git_run(
             ["git", "config", "user.email", "test@test.com"],
             cwd=tmp_path,
             capture_output=True,
             check=True,
         )
-        subprocess.run(
+        _git_run(
             ["git", "config", "user.name", "Test"],
             cwd=tmp_path,
             capture_output=True,
@@ -1647,10 +1656,8 @@ class TestCommitSpecFiles:
         )
         (tmp_path / "spec").mkdir()
         (tmp_path / "spec" / "prd.md").write_text("# REQ-p00001 Init\n")
-        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
-        subprocess.run(
-            ["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, check=True
-        )
+        _git_run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+        _git_run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, check=True)
         # Dirty spec
         (tmp_path / "spec" / "prd.md").write_text("# REQ-p00001 Dirty\n")
 
@@ -1663,8 +1670,8 @@ class TestCommitSpecFiles:
     def test_nothing_to_commit_returns_error(self, tmp_path):
         """Returns error when no dirty spec files exist."""
         _init_git_repo_with_commit(tmp_path)
-        subprocess.run(
-            ["git", "checkout", "-b", "feature"],
+        _git_run(
+            ["git", "checkout", "-b", "__test_feature"],
             cwd=tmp_path,
             capture_output=True,
             check=True,
@@ -1680,8 +1687,8 @@ class TestCommitSpecFiles:
     def test_commits_untracked_spec_files(self, tmp_path):
         """Commits untracked (new) spec files on a feature branch."""
         _init_git_repo_with_commit(tmp_path)
-        subprocess.run(
-            ["git", "checkout", "-b", "feature"],
+        _git_run(
+            ["git", "checkout", "-b", "__test_feature"],
             cwd=tmp_path,
             capture_output=True,
             check=True,
@@ -1706,42 +1713,42 @@ class TestSuggestBranchName:
         """Returns the base name when it doesn't exist as a local branch."""
         _init_git_repo_with_commit(tmp_path)
 
-        name = suggest_branch_name(tmp_path, "feature/new-thing")
+        name = suggest_branch_name(tmp_path, "__test_feature/new-thing")
 
-        assert name == "feature/new-thing"
+        assert name == "__test_feature/new-thing"
 
     # Implements: REQ-p00004-D
     def test_appends_v2_when_base_exists(self, tmp_path):
         """Appends -v2 when the base name already exists."""
         _init_git_repo_with_commit(tmp_path)
-        subprocess.run(
-            ["git", "checkout", "-b", "feature/my-branch"],
+        _git_run(
+            ["git", "checkout", "-b", "__test_feature/my-branch"],
             cwd=tmp_path,
             capture_output=True,
             check=True,
         )
-        subprocess.run(["git", "checkout", "main"], cwd=tmp_path, capture_output=True, check=True)
+        _git_run(["git", "checkout", "main"], cwd=tmp_path, capture_output=True, check=True)
 
-        name = suggest_branch_name(tmp_path, "feature/my-branch")
+        name = suggest_branch_name(tmp_path, "__test_feature/my-branch")
 
-        assert name == "feature/my-branch-v2"
+        assert name == "__test_feature/my-branch-v2"
 
     # Implements: REQ-p00004-D
     def test_increments_past_existing_versioned_branches(self, tmp_path):
         """Increments to -v3 when both base and -v2 exist."""
         _init_git_repo_with_commit(tmp_path)
-        for branch in ("feature/my-branch", "feature/my-branch-v2"):
-            subprocess.run(
+        for branch in ("__test_feature/my-branch", "__test_feature/my-branch-v2"):
+            _git_run(
                 ["git", "checkout", "-b", branch],
                 cwd=tmp_path,
                 capture_output=True,
                 check=True,
             )
-        subprocess.run(["git", "checkout", "main"], cwd=tmp_path, capture_output=True, check=True)
+        _git_run(["git", "checkout", "main"], cwd=tmp_path, capture_output=True, check=True)
 
-        name = suggest_branch_name(tmp_path, "feature/my-branch")
+        name = suggest_branch_name(tmp_path, "__test_feature/my-branch")
 
-        assert name == "feature/my-branch-v3"
+        assert name == "__test_feature/my-branch-v3"
 
 
 class TestGenerateCheckpointMessage:
@@ -1754,8 +1761,8 @@ class TestGenerateCheckpointMessage:
     def test_generates_message_from_dirty_files(self, tmp_path):
         """Extracts requirement headers from dirty spec files."""
         _init_git_repo_with_commit(tmp_path)
-        subprocess.run(
-            ["git", "checkout", "-b", "feature"],
+        _git_run(
+            ["git", "checkout", "-b", "__test_feature"],
             cwd=tmp_path,
             capture_output=True,
             check=True,
@@ -1783,8 +1790,8 @@ class TestGenerateCheckpointMessage:
     def test_includes_multiple_requirements(self, tmp_path):
         """Includes all requirement headers found across dirty files."""
         _init_git_repo_with_commit(tmp_path)
-        subprocess.run(
-            ["git", "checkout", "-b", "feature"],
+        _git_run(
+            ["git", "checkout", "-b", "__test_feature"],
             cwd=tmp_path,
             capture_output=True,
             check=True,
@@ -1803,8 +1810,8 @@ class TestGenerateCheckpointMessage:
     def test_ignores_non_spec_files(self, tmp_path):
         """Only scans files under spec_dir."""
         _init_git_repo_with_commit(tmp_path)
-        subprocess.run(
-            ["git", "checkout", "-b", "feature"],
+        _git_run(
+            ["git", "checkout", "-b", "__test_feature"],
             cwd=tmp_path,
             capture_output=True,
             check=True,
@@ -1824,44 +1831,36 @@ class TestGenerateCheckpointMessage:
 
 def _make_repo(tmp_path: Path, name: str, branch: str, n_commits: int = 1) -> Path:
     """Create a git repo with a given branch and number of commits."""
-    import os
-
-    from elspais.utilities.git import _clean_git_env as _cge
 
     repo = tmp_path / name
     repo.mkdir()
-    env = _cge()
+    env = _GIT_ENV.copy()
     env["GIT_AUTHOR_NAME"] = "Test"
     env["GIT_AUTHOR_EMAIL"] = "test@test.com"
     env["GIT_COMMITTER_NAME"] = "Test"
     env["GIT_COMMITTER_EMAIL"] = "test@test.com"
-    subprocess.run(["git", "init"], cwd=repo, capture_output=True, check=True, env=env)
-    subprocess.run(
-        ["git", "checkout", "-b", branch], cwd=repo, capture_output=True, check=True, env=env
-    )
-    subprocess.run(
+    _git_run(["git", "init", "-b", "main"], cwd=repo, capture_output=True, check=True)
+    _git_run(["git", "checkout", "-b", branch], cwd=repo, capture_output=True, check=True)
+    _git_run(
         ["git", "config", "user.email", "test@test.com"],
         cwd=repo,
         capture_output=True,
         check=True,
-        env=env,
     )
-    subprocess.run(
+    _git_run(
         ["git", "config", "user.name", "Test User"],
         cwd=repo,
         capture_output=True,
         check=True,
-        env=env,
     )
     for i in range(n_commits):
         (repo / f"file{i}.txt").write_text(f"commit {i}\n")
-        subprocess.run(["git", "add", "."], cwd=repo, capture_output=True, check=True, env=env)
-        subprocess.run(
+        _git_run(["git", "add", "."], cwd=repo, capture_output=True, check=True)
+        _git_run(
             ["git", "commit", "-m", f"commit {i}"],
             cwd=repo,
             capture_output=True,
             check=True,
-            env=env,
         )
     return repo
 
@@ -1875,8 +1874,8 @@ class TestMonorepoEligible:
         from elspais.utilities.git import check_monorepo_eligible, invalidate_ancestor_cache
 
         invalidate_ancestor_cache()
-        repo_a = _make_repo(tmp_path, "a", "feature", n_commits=2)
-        repo_b = _make_repo(tmp_path, "b", "feature", n_commits=2)
+        repo_a = _make_repo(tmp_path, "a", "__test_feature", n_commits=2)
+        repo_b = _make_repo(tmp_path, "b", "__test_feature", n_commits=2)
         eligible, reasons = check_monorepo_eligible(
             [("a", repo_a), ("b", repo_b)], main_branches=["main", "master"]
         )
@@ -1889,8 +1888,8 @@ class TestMonorepoEligible:
         from elspais.utilities.git import check_monorepo_eligible, invalidate_ancestor_cache
 
         invalidate_ancestor_cache()
-        repo_a = _make_repo(tmp_path, "a", "feature-x", n_commits=1)
-        repo_b = _make_repo(tmp_path, "b", "feature-y", n_commits=1)
+        repo_a = _make_repo(tmp_path, "a", "__test_feature-x", n_commits=1)
+        repo_b = _make_repo(tmp_path, "b", "__test_feature-y", n_commits=1)
         eligible, reasons = check_monorepo_eligible(
             [("a", repo_a), ("b", repo_b)], main_branches=["main", "master"]
         )
@@ -1903,8 +1902,8 @@ class TestMonorepoEligible:
         from elspais.utilities.git import check_monorepo_eligible, invalidate_ancestor_cache
 
         invalidate_ancestor_cache()
-        repo_a = _make_repo(tmp_path, "a", "feature", n_commits=1)
-        repo_b = _make_repo(tmp_path, "b", "feature", n_commits=3)
+        repo_a = _make_repo(tmp_path, "a", "__test_feature", n_commits=1)
+        repo_b = _make_repo(tmp_path, "b", "__test_feature", n_commits=3)
         eligible, reasons = check_monorepo_eligible(
             [("a", repo_a), ("b", repo_b)], main_branches=["main", "master"]
         )
@@ -1931,7 +1930,7 @@ class TestMonorepoEligible:
         from elspais.utilities.git import check_monorepo_eligible, invalidate_ancestor_cache
 
         invalidate_ancestor_cache()
-        repo_a = _make_repo(tmp_path, "a", "feature", n_commits=2)
+        repo_a = _make_repo(tmp_path, "a", "__test_feature", n_commits=2)
         eligible, reasons = check_monorepo_eligible(
             [("a", repo_a)], main_branches=["main", "master"]
         )
@@ -1962,21 +1961,16 @@ class TestSyncCommit:
     def test_create_sync_commit(self, tmp_path):
         from elspais.utilities.git import create_sync_commit
 
-        env = _clean_git_env()
         repo = tmp_path / "repo"
         repo.mkdir()
         spec = repo / "spec"
         spec.mkdir()
-        subprocess.run(["git", "init", "-b", "main"], cwd=repo, env=env, capture_output=True)
-        subprocess.run(
-            ["git", "config", "user.email", "t@t.com"], cwd=repo, env=env, capture_output=True
-        )
-        subprocess.run(
-            ["git", "config", "user.name", "T"], cwd=repo, env=env, capture_output=True
-        )
+        _git_run(["git", "init", "-b", "main"], cwd=repo, capture_output=True)
+        _git_run(["git", "config", "user.email", "t@t.com"], cwd=repo, capture_output=True)
+        _git_run(["git", "config", "user.name", "T"], cwd=repo, capture_output=True)
         (spec / "reqs.md").write_text("# REQ")
-        subprocess.run(["git", "add", "."], cwd=repo, env=env, capture_output=True)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=repo, env=env, capture_output=True)
+        _git_run(["git", "add", "."], cwd=repo, capture_output=True)
+        _git_run(["git", "commit", "-m", "init"], cwd=repo, capture_output=True)
         result = create_sync_commit(
             repo, spec_dir="spec", aligned_with="root", message="sync checkpoint"
         )
@@ -2012,44 +2006,32 @@ class TestCheckDirtyRepos:
     # Implements: REQ-p00004-I
     def test_clean_repos(self, tmp_path):
         """Clean repos return empty list."""
-        from elspais.utilities.git import _clean_git_env as _cge
         from elspais.utilities.git import check_dirty_repos
 
-        env = _cge()
         repo = tmp_path / "repo"
         repo.mkdir()
-        subprocess.run(["git", "init", "-b", "main"], cwd=repo, env=env, capture_output=True)
-        subprocess.run(
-            ["git", "config", "user.email", "t@t.com"], cwd=repo, env=env, capture_output=True
-        )
-        subprocess.run(
-            ["git", "config", "user.name", "T"], cwd=repo, env=env, capture_output=True
-        )
+        _git_run(["git", "init", "-b", "main"], cwd=repo, capture_output=True)
+        _git_run(["git", "config", "user.email", "t@t.com"], cwd=repo, capture_output=True)
+        _git_run(["git", "config", "user.name", "T"], cwd=repo, capture_output=True)
         (repo / "f.txt").write_text("x")
-        subprocess.run(["git", "add", "."], cwd=repo, env=env, capture_output=True)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=repo, env=env, capture_output=True)
+        _git_run(["git", "add", "."], cwd=repo, capture_output=True)
+        _git_run(["git", "commit", "-m", "init"], cwd=repo, capture_output=True)
         dirty = check_dirty_repos([("root", repo)])
         assert dirty == []
 
     # Implements: REQ-p00004-I
     def test_dirty_repo_detected(self, tmp_path):
         """Dirty repo is reported."""
-        from elspais.utilities.git import _clean_git_env as _cge
         from elspais.utilities.git import check_dirty_repos
 
-        env = _cge()
         repo = tmp_path / "repo"
         repo.mkdir()
-        subprocess.run(["git", "init", "-b", "main"], cwd=repo, env=env, capture_output=True)
-        subprocess.run(
-            ["git", "config", "user.email", "t@t.com"], cwd=repo, env=env, capture_output=True
-        )
-        subprocess.run(
-            ["git", "config", "user.name", "T"], cwd=repo, env=env, capture_output=True
-        )
+        _git_run(["git", "init", "-b", "main"], cwd=repo, capture_output=True)
+        _git_run(["git", "config", "user.email", "t@t.com"], cwd=repo, capture_output=True)
+        _git_run(["git", "config", "user.name", "T"], cwd=repo, capture_output=True)
         (repo / "f.txt").write_text("x")
-        subprocess.run(["git", "add", "."], cwd=repo, env=env, capture_output=True)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=repo, env=env, capture_output=True)
+        _git_run(["git", "add", "."], cwd=repo, capture_output=True)
+        _git_run(["git", "commit", "-m", "init"], cwd=repo, capture_output=True)
         (repo / "f.txt").write_text("modified")
         dirty = check_dirty_repos([("root", repo)])
         assert dirty == ["root"]

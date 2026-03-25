@@ -168,7 +168,7 @@ class TestJourneyParserValidates:
             assert val == val.strip()
 
 
-# Implements: REQ-o00050-C
+# Verifies: REQ-o00050-C
 def test_journey_parser_REQ_validates_field():
     """JourneyParser extracts Validates: field into parsed_data['validates'].
 

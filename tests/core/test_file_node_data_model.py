@@ -1,4 +1,4 @@
-# Implements: REQ-d00126
+# Verifies: REQ-d00126
 """Tests for FILE node data model additions (Task 1).
 
 Validates REQ-d00126-A: NodeKind.FILE

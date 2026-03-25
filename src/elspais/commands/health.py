@@ -1446,8 +1446,9 @@ def _resolve_exclude_status(
 ) -> set[str]:
     """Compute the set of statuses to exclude from coverage.
 
-    If --status is provided, include only those statuses (case-insensitive).
-    Otherwise, use status_roles config to determine exclusions.
+    If --status is provided, add those statuses to the normally-included set
+    (e.g. --status Draft includes both Active and Draft). Without --status,
+    use status_roles config to determine exclusions.
     """
     from elspais.config import get_status_roles
 
@@ -1455,10 +1456,10 @@ def _resolve_exclude_status(
     include_raw: list[str] | None = getattr(args, "status", None)
     if not include_raw:
         return roles.coverage_excluded_statuses()
-    # --status flag: include only listed statuses, exclude all others
-    included = {s.title() for s in include_raw}
-    all_known = roles.coverage_excluded_statuses() | set(roles._original_case.values())
-    return all_known - included
+    # --status flag: add these statuses to the normally-included set
+    extra = {s.title() for s in include_raw}
+    default_excluded = roles.coverage_excluded_statuses()
+    return default_excluded - extra
 
 
 def _excluded_note(
@@ -2273,11 +2274,34 @@ def _format_report(
     verbose = getattr(args, "verbose", False)
     include_passing = getattr(args, "include_passing_details", False)
 
+    # Build active flags summary from args
+    flag_parts: list[str] = []
+    status_list = getattr(args, "status", None)
+    if status_list:
+        flag_parts.append("--status " + " ".join(status_list))
+    if getattr(args, "lenient", False):
+        flag_parts.append("--lenient")
+    if getattr(args, "spec_only", False):
+        flag_parts.append("--spec")
+    if getattr(args, "code_only", False):
+        flag_parts.append("--code")
+    if getattr(args, "tests_only", False):
+        flag_parts.append("--tests")
+    active_flags = ", ".join(flag_parts) if flag_parts else None
+
+    from elspais.utilities.report_meta import report_metadata
+
+    meta = report_metadata()
+
     if fmt == "json":
-        return json.dumps(report.to_dict(lenient=lenient), indent=2)
+        d = report.to_dict(lenient=lenient)
+        d["meta"] = meta
+        return json.dumps(d, indent=2)
     elif fmt == "markdown":
         data = _build_report_data(report)
         data.graph_source = graph_source
+        data.active_flags = active_flags
+        data.meta = meta
         return _render_markdown(data)
     elif fmt == "junit":
         return _render_junit(report, include_passing_details=include_passing)
@@ -2288,6 +2312,8 @@ def _format_report(
             return _build_report_data(report, verbose=verbose).summary_line
         data = _build_report_data(report, verbose=verbose)
         data.graph_source = graph_source
+        data.active_flags = active_flags
+        data.meta = meta
         return _render_text(data)
 
 
@@ -2348,6 +2374,8 @@ class _ReportData:
     is_healthy: bool
     hint: str | None
     graph_source: str | None = None
+    active_flags: str | None = None
+    meta: dict[str, str] | None = None
 
 
 def _build_hint(report: HealthReport, already_verbose: bool) -> str | None:
@@ -2494,7 +2522,16 @@ def _render_text(data: _ReportData) -> str:
     lines.append("")
     lines.append("=" * 40)
     lines.append(data.summary_line)
-    if data.graph_source:
+    if data.active_flags:
+        lines.append(f"Flags: {data.active_flags}")
+    if data.meta:
+        from elspais.utilities.report_meta import format_meta_line
+
+        meta_line = format_meta_line(data.meta)
+        if data.graph_source:
+            meta_line = meta_line[:-1] + f", via {data.graph_source})"
+        lines.append(meta_line)
+    elif data.graph_source:
         lines.append(f"(via {data.graph_source})")
     if followups:
         lines.append("")

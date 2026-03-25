@@ -37,7 +37,9 @@ def git_repo_with_issues(tmp_path):
     env = _clean_git_env()
 
     # Initialize git repo
-    subprocess.run(["git", "init"], cwd=tmp_path, env=env, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "init", "-b", "main"], cwd=tmp_path, env=env, capture_output=True, check=True
+    )
     subprocess.run(
         ["git", "config", "user.email", "test@test.com"],
         cwd=tmp_path,

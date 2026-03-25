@@ -78,8 +78,12 @@ class MarkdownAssembler:
         parts: list[str] = []
 
         # YAML metadata header for Pandoc
+        from elspais.utilities.report_meta import report_metadata
+
+        meta = report_metadata()
         parts.append("---")
         parts.append(f'title: "{self._title}"')
+        parts.append(f'subtitle: "elspais {meta["version"]}, {meta["date"]}, {meta["source"]}"')
         parts.append("toc: true")
         parts.append("toc-depth: 2")
         parts.append("---")

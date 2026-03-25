@@ -25,6 +25,13 @@
 
 
 
+[x] testing: restore daemon usage in e2e tests
+- Fixed: viewer writes daemon.json (same as daemon), removing hardcoded port 5001 probe
+- Routing is now through per-project daemon.json exclusively — no wrong-project routing possible
+- `cli_ttl=2` restores daemon usage in e2e tests; cleanup fixture prevents zombie processes
+- Git env isolation via `pytest_configure` + `GIT_CEILING_DIRECTORIES=/` prevents hook contamination
+- `unset GIT_DIR` in pre-commit/pre-push hooks prevents worktree contamination from test subprocess git calls
+
 [ ] graph: add render_order to STRUCTURES edges
 - STRUCTURES edges (REQ→ASSERTION, REQ→REMAINDER) lack explicit ordering metadata
 - Currently relies on parse_line for ordering, which is fragile if sections are moved/reordered via mutations

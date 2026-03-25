@@ -1,4 +1,4 @@
-# Implements: REQ-p00080-A, REQ-p00080-F
+# Verifies: REQ-p00080-A, REQ-p00080-F
 """Tests for the pdf CLI command registration and tool checks.
 
 Validates REQ-p00080-A: The tool SHALL provide an elspais pdf CLI command.

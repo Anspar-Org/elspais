@@ -2455,7 +2455,7 @@ class TestGitStatusDetached:
     def test_git_status_not_detached_returns_null_fields(self, client):
         """GET /api/git/status when not detached returns null detached fields."""
         mock_status = {
-            "branch": "feature",
+            "branch": "__test_feature",
             "is_main": False,
             "dirty_spec_files": [],
             "remote_diverged": False,

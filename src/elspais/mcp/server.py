@@ -3331,9 +3331,7 @@ def _get_assertion_code_map(
     }
 
 
-def _get_assertion_refines_map(
-    graph: FederatedGraph, req_id: str
-) -> dict[str, Any]:
+def _get_assertion_refines_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     """Build per-assertion refines map for a requirement.
 
     REFINES edges target REQUIREMENT nodes (not CODE). Each entry contains
@@ -3367,8 +3365,10 @@ def _get_assertion_refines_map(
     seen_per_assertion: dict[str, set[str]] = {label: set() for _, label in assertions}
 
     for req_node, labels in _iter_assertion_coverage(
-        node, NodeKind.REQUIREMENT,
-        edge_kinds={EdgeKind.REFINES}, direct_only=True,
+        node,
+        NodeKind.REQUIREMENT,
+        edge_kinds={EdgeKind.REFINES},
+        direct_only=True,
     ):
         info = {
             "id": req_node.id,
@@ -3759,10 +3759,11 @@ def _apply_link_impl(
     REQ-d00074-B: Inserts comment and refreshes graph.
     REQ-d00074-D: Validates target requirement exists before modifying.
     """
-    from elspais.graph.link_suggest import apply_link_to_file
+    from elspais.graph.link_suggest import apply_link_to_file, keyword_for_file
 
     graph = state["graph"]
     working_dir = state["working_dir"]
+    config = state["config"]
 
     # Validate requirement exists
     target = graph.find_by_id(requirement_id)
@@ -3773,7 +3774,8 @@ def _apply_link_impl(
         }
 
     abs_path = working_dir / file_path
-    result = apply_link_to_file(abs_path, line, requirement_id)
+    kw = keyword_for_file(abs_path, config)
+    result = apply_link_to_file(abs_path, line, requirement_id, keyword=kw)
 
     if result is None:
         return {
@@ -5653,14 +5655,11 @@ def run_server(
         mcp.run(transport="stdio")
     else:
         # HTTP: use unified app (REST + MCP + auto-refresh)
-        import json as _json
         import socket
-        import time
 
         import anyio
         import uvicorn
 
-        from elspais import __version__
         from elspais.server.app import create_app
         from elspais.server.state import AppState
 
@@ -5683,18 +5682,13 @@ def run_server(
                 port = s.getsockname()[1]
 
         if daemon_json:
-            daemon_json.parent.mkdir(parents=True, exist_ok=True)
-            daemon_json.write_text(
-                _json.dumps(
-                    {
-                        "pid": _os.getpid(),
-                        "port": port,
-                        "repo_root": str(working_dir),
-                        "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                        "version": __version__,
-                        "config_hash": _config_hash_for_daemon(working_dir),
-                    }
-                )
+            from elspais.mcp.daemon import write_daemon_json
+
+            write_daemon_json(
+                repo_root=working_dir,
+                pid=_os.getpid(),
+                port=port,
+                server_type="daemon",
             )
 
         uvi_config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")

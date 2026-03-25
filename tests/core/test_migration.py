@@ -3,7 +3,7 @@
 import copy
 
 
-# Implements: REQ-d00212-A
+# Verifies: REQ-d00212-A
 def test_v1_patterns_migrated_to_v2():
     """Legacy [patterns] config should be migrated to [id-patterns]."""
     from elspais.config import _migrate_legacy_patterns
@@ -26,7 +26,7 @@ def test_v1_patterns_migrated_to_v2():
     assert result["levels"]["prd"]["rank"] == 1
 
 
-# Implements: REQ-d00207-B
+# Verifies: REQ-d00207-B
 def test_v2_config_skips_migration():
     """v2+ configs should not be migrated."""
     from elspais.config import _migrate_legacy_patterns
@@ -36,7 +36,7 @@ def test_v2_config_skips_migration():
     assert result["id-patterns"]["canonical"] == "custom"
 
 
-# Implements: REQ-d00212-F
+# Verifies: REQ-d00212-F
 def test_migration_produces_valid_schema():
     """Migrated config must pass Pydantic validation."""
     from elspais.config import _merge_configs, _migrate_legacy_patterns, config_defaults

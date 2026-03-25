@@ -251,9 +251,7 @@ def run(args: argparse.Namespace) -> int:
                     "fix_type": "hash",
                     "computed_hash": computed_hash,
                     "file": (
-                        node.file_node().get_field("absolute_path")
-                        if node.file_node()
-                        else None
+                        node.file_node().get_field("absolute_path") if node.file_node() else None
                     ),
                 }
                 errors.append(issue)
@@ -270,9 +268,7 @@ def run(args: argparse.Namespace) -> int:
                     "fix_type": "hash",
                     "computed_hash": computed_hash,
                     "file": (
-                        node.file_node().get_field("absolute_path")
-                        if node.file_node()
-                        else None
+                        node.file_node().get_field("absolute_path") if node.file_node() else None
                     ),
                 }
                 errors.append(issue)

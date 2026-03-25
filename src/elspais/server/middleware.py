@@ -27,11 +27,18 @@ class NoCacheMiddleware(BaseHTTPMiddleware):
 
 
 class AutoRefreshMiddleware(BaseHTTPMiddleware):
-    """Call state.ensure_fresh() on every request (throttled internally)."""
+    """Call state.ensure_fresh() on every request (throttled internally).
+
+    CLI daemon clients send ``X-Force-Fresh: 1`` to bypass the throttle,
+    ensuring the graph reflects any file changes made since the last request
+    (e.g., after ``elspais fix`` writes spec files).
+    """
 
     async def dispatch(self, request: Request, call_next) -> Response:
         app_state = getattr(request.app.state, "app_state", None)
         if app_state is not None:
+            if request.headers.get("x-force-fresh"):
+                app_state._last_stale_check = 0  # bypass throttle
             app_state.ensure_fresh()
         return await call_next(request)
 
@@ -82,11 +89,13 @@ class APIErrorMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         except Exception:
             _log.exception("Unhandled error in %s %s", request.method, request.url.path)
-            body = json.dumps({
-                "success": False,
-                "error": f"Internal server error in {request.url.path}",
-                "detail": traceback.format_exc(),
-            }).encode()
+            body = json.dumps(
+                {
+                    "success": False,
+                    "error": f"Internal server error in {request.url.path}",
+                    "detail": traceback.format_exc(),
+                }
+            ).encode()
             return Response(
                 content=body,
                 status_code=500,

@@ -1,13 +1,11 @@
 # tests/mcp/test_daemon_ensure_config_hash.py
-# Implements: REQ-d00010
+# Verifies: REQ-d00010
 
 """Tests that ensure_daemon restarts on config_hash mismatch."""
 
 import json
 from pathlib import Path
 from unittest.mock import patch
-
-from elspais.mcp.daemon import _daemon_json_path
 
 
 def test_ensure_daemon_restarts_on_config_hash_mismatch(tmp_path: Path):

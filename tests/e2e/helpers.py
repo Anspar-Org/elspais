@@ -338,6 +338,7 @@ def base_config(
 
     cfg: dict[str, Any] = {
         "version": 3,
+        "cli_ttl": 2,
         "project": {
             "name": name,
             "namespace": namespace,

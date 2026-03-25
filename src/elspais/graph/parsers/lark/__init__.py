@@ -87,10 +87,39 @@ class GrammarFactory:
             re.escape(cfg.assertions.multi_separator) if cfg.assertions.multi_separator else r"\+"
         )
 
+        # Build __ID_PATTERN__ from canonical template.
+        # Strategy: split canonical into literal segments and placeholders,
+        # escape the literals, then join with regex fragments.
+        canonical = cfg.canonical_template
+        placeholders = {
+            "{namespace}": re.escape(namespace),
+            "{component}": digits_pattern,
+            "{level}": f"(?:{type_pattern})",
+        }
+        # {type} -> alternation of canonical type codes
+        all_type_codes = list(r.config.types.keys())
+        if all_type_codes:
+            placeholders["{type}"] = "(?:" + "|".join(re.escape(t) for t in all_type_codes) + ")"
+        # {level.X} or {type.X} -> alternation of alias values
+        for m in re.finditer(r"\{(?:type|level)\.(\w+)\}", canonical):
+            alias_name = m.group(1)
+            alias_vals = r._reverse_aliases.get(alias_name, {})
+            if alias_vals:
+                val_alt = "|".join(re.escape(v) for v in alias_vals)
+                placeholders[m.group(0)] = f"(?:{val_alt})"
+
+        # Split on placeholders, escape literal parts, reassemble
+        parts = re.split(r"(\{[^}]+\})", canonical)
+        id_pattern = "".join(
+            placeholders[p] if p in placeholders else re.escape(p)
+            for p in parts
+        )
+
         tokens: dict[str, str] = {
             "__NAMESPACE__": namespace,
             "__TYPE_PATTERN__": type_pattern,
             "__DIGITS_PATTERN__": digits_pattern,
+            "__ID_PATTERN__": id_pattern,
             "__ASSERTION_LABEL__": assertion_label,
             "__MULTI_SEP__": multi_sep,
         }
@@ -266,7 +295,10 @@ class FileDispatcher:
         parser = self._get_ref_parser()
         tree = parser.parse(content)
         transformer = ReferenceTransformer(
-            self._resolver, "code_ref", line_context, source_id=file_path,
+            self._resolver,
+            "code_ref",
+            line_context,
+            source_id=file_path,
         )
         return transformer.transform(tree)
 
@@ -332,13 +364,8 @@ class FileDispatcher:
                 if kw_match:
                     kw = kw_match.group(0).lower()
                     if kw != "verifies":
-                        import logging as _logging
-                        _log = _logging.getLogger(__name__)
-                        _log.warning(
-                            "%s:%d: '%s' is not valid in test files "
-                            "(use 'Verifies' instead) — skipped",
-                            file_path, ln, kw.title(),
-                        )
+                        # Silently skip — test fixtures contain cross-type
+                        # keywords in string literals
                         continue
                     # Include multi-assertion separator (+) in pattern
                     multi_sep = _re.escape(self._resolver.config.assertions.multi_separator or "+")

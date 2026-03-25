@@ -627,9 +627,7 @@ def build_graph(
             if not coverage_dirs:
                 coverage_dirs = ["."]
             for cov_dir in coverage_dirs:
-                matched_files = glob(
-                    str(repo_root / cov_dir / file_pattern), recursive=True
-                )
+                matched_files = glob(str(repo_root / cov_dir / file_pattern), recursive=True)
                 for file_path in matched_files:
                     path = Path(file_path)
                     if not path.is_file():

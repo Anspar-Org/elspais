@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from elspais.graph.terms import TermDictionary, TermEntry, TermRef
 
 
@@ -29,7 +27,10 @@ def _build_test_dictionary() -> TermDictionary:
             TermRef(node_id="REQ-p00003", namespace="main", marked=True, line=10),
             TermRef(node_id="REQ-p00003-B", namespace="main", marked=True, line=15),
             TermRef(node_id="REQ-d00045", namespace="main", marked=False, line=22),
-            TermRef(node_id="file:src/records/model.dart", namespace="sponsor-a", marked=False, line=5),
+            TermRef(
+                node_id="file:src/records/model.dart",
+                namespace="sponsor-a", marked=False, line=5,
+            ),
         ],
     ))
 
@@ -43,8 +44,14 @@ def _build_test_dictionary() -> TermDictionary:
         references=[
             TermRef(node_id="REQ-p00012", namespace="main", marked=True, line=1),
             TermRef(node_id="REQ-p00012-A", namespace="main", marked=True, line=5),
-            TermRef(node_id="REQ-d00067-C", namespace="sponsor-a", marked=False, line=30),
-            TermRef(node_id="file:src/questionnaire/hhc_qol.dart", namespace="sponsor-a", marked=False, line=12),
+            TermRef(
+                node_id="REQ-d00067-C",
+                namespace="sponsor-a", marked=False, line=30,
+            ),
+            TermRef(
+                node_id="file:src/questionnaire/hhc_qol.dart",
+                namespace="sponsor-a", marked=False, line=12,
+            ),
         ],
     ))
 

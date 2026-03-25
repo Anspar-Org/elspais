@@ -6,8 +6,8 @@
 //   __ASSERTION_LABEL__   e.g. "[A-Z]"
 //   __MULTI_SEP__         e.g. "\\+"
 
-// A requirement ID: REQ-p00001
-REQ_ID: __NAMESPACE__ "-" (__TYPE_PATTERN__) __DIGITS_PATTERN__
+// A requirement ID: REQ-p00001 or PRD-00001 (derived from canonical pattern)
+REQ_ID: __ID_PATTERN__
 
 // An assertion suffix: -A or -A+B+C
 ASSERTION_SUFFIX: "-" __ASSERTION_LABEL__ ("__MULTI_SEP__" __ASSERTION_LABEL__)*

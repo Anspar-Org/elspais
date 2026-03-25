@@ -1,4 +1,4 @@
-# Implements: REQ-d00061-B
+# Verifies: REQ-d00061-B
 """Tests for MCP query bug fixes.
 
 Tests three fixes:

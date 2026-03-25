@@ -1,8 +1,9 @@
-# Implements: REQ-p00013-A+B+C+D+E+F
+# Verifies: REQ-p00013-A+B+C+D+E+F
 """
 pytest configuration and shared fixtures for elspais tests.
 """
 
+import os
 import sys
 from collections.abc import Generator
 from pathlib import Path
@@ -11,6 +12,24 @@ import pytest
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+def pytest_configure(config):
+    """Strip git env vars before any test collection or coverage forking.
+
+    Git sets GIT_DIR when running hooks (pre-commit, pre-push).  This
+    overrides cwd in subprocess calls, causing test git operations to
+    target the hook's repo instead of temp directories.
+
+    GIT_CEILING_DIRECTORIES=/ prevents git from discovering a parent
+    .git above a test's working directory — defense-in-depth against
+    accidental upward repo discovery.
+
+    Using pytest_configure (not module-level code) ensures this runs
+    before pytest-cov forks coverage subprocesses.
+    """
+    os.environ.pop("GIT_DIR", None)
+    os.environ.pop("GIT_WORK_TREE", None)
+    os.environ["GIT_CEILING_DIRECTORIES"] = "/"
 
 # Fixtures directory
 FIXTURES_DIR = Path(__file__).parent / "fixtures"

@@ -11,8 +11,6 @@ from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-_VIEWER_PORT = 5001
-
 
 def _get_daemon_port() -> int | None:
     """Get port of a running daemon, if any."""
@@ -46,6 +44,10 @@ def _try_port(
             req = Request(url, data=data, headers={"Content-Type": "application/json"})
         else:
             req = Request(url)
+
+        # Tell the server to bypass its freshness throttle so the graph
+        # reflects any file changes since the last request (e.g., after fix).
+        req.add_header("X-Force-Fresh", "1")
 
         with urlopen(req, timeout=10) as resp:
             return json.loads(resp.read())

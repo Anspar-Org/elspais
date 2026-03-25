@@ -1,4 +1,4 @@
-# Implements: REQ-d00129-A, REQ-d00129-B, REQ-d00129-C, REQ-d00129-D, REQ-d00129-E, REQ-d00129-F
+# Verifies: REQ-d00129-A, REQ-d00129-B, REQ-d00129-C, REQ-d00129-D, REQ-d00129-E, REQ-d00129-F
 """Tests for SourceLocation removal (REQ-d00129).
 
 Validates that:

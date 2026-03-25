@@ -177,9 +177,7 @@ class RequirementTransformer:
                 end_line = token.line  # type: ignore[attr-defined]
 
             elif child.data == "assertion_block":
-                assertions, sub_heading_sections = self._extract_assertions(
-                    child, header_line
-                )
+                assertions, sub_heading_sections = self._extract_assertions(child, header_line)
                 sections.extend(sub_heading_sections)
                 end_line = self._last_line(child)
 
@@ -352,12 +350,14 @@ class RequirementTransformer:
                 else:
                     heading_style = "*"
                     heading_text = raw_text
-                sub_sections.append({
-                    "heading": heading_text,
-                    "content": "",
-                    "line": line_num,
-                    "heading_style": heading_style,
-                })
+                sub_sections.append(
+                    {
+                        "heading": heading_text,
+                        "content": "",
+                        "line": line_num,
+                        "heading_style": heading_style,
+                    }
+                )
         return assertions, sub_sections
 
     def _extract_single_assertion(self, node: Tree) -> dict[str, Any] | None:

@@ -159,7 +159,7 @@ A. First assertion
             has_definition = True
         for section in req_data.get("sections", []):
             if section.get("heading") == "Rationale":
-                content_text = section.get("content", "")
+                section.get("content", "")  # verify field exists
                 # If definitions were extracted, content should reference them
                 if "definition" in str(section).lower():
                     has_definition = True
