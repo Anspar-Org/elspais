@@ -5,7 +5,7 @@ Validates REQ-d00226: CommentEvent and CommentThread data models.
 
 import pytest
 
-from elspais.graph.comments import CommentEvent, CommentThread
+from elspais.graph.comments import CommentEvent, CommentIndex, CommentThread
 
 
 class TestCommentEvent:
@@ -170,3 +170,84 @@ class TestCommentThread:
         )
         assert thread.anchor == "REQ-p00001"
         assert thread.promoted_from == "REQ-p00001#D"
+
+
+class TestCommentIndex:
+    """Validates REQ-d00227: CommentIndex in-memory index."""
+
+    def _make_thread(self, anchor, comment_id="c-20260320-a3f1b2"):
+        root = CommentEvent(
+            event="comment",
+            id=comment_id,
+            anchor=anchor,
+            author="Alice",
+            author_id="alice@co.org",
+            date="2026-03-20",
+            text="A comment",
+        )
+        return CommentThread(root=root)
+
+    def test_REQ_d00227_A_empty_index(self):
+        """Empty index returns zero counts and empty iterators."""
+        idx = CommentIndex()
+        assert idx.thread_count("REQ-p00001") == 0
+        assert not idx.has_threads("REQ-p00001")
+        assert list(idx.iter_threads("REQ-p00001")) == []
+
+    def test_REQ_d00227_A_add_and_retrieve(self):
+        """Add a thread and retrieve it by anchor."""
+        idx = CommentIndex()
+        thread = self._make_thread("REQ-p00001#A")
+        idx.add_thread(thread, source_file="spec/prd.md.json")
+        assert idx.thread_count("REQ-p00001#A") == 1
+        assert idx.has_threads("REQ-p00001#A")
+        assert list(idx.iter_threads("REQ-p00001#A"))[0].root.text == "A comment"
+
+    def test_REQ_d00227_A_len(self):
+        """__len__ returns total thread count across all anchors."""
+        idx = CommentIndex()
+        assert len(idx) == 0
+        idx.add_thread(self._make_thread("REQ-p00001#A", "c1"), "f.json")
+        assert len(idx) == 1
+        idx.add_thread(self._make_thread("REQ-p00001#B", "c2"), "f.json")
+        assert len(idx) == 2
+        idx.add_thread(self._make_thread("REQ-p00001#A", "c3"), "f.json")
+        assert len(idx) == 3
+
+    def test_REQ_d00227_B_iter_all_anchors_for_node(self):
+        """iter_all_anchors_for_node matches exact node_id and node_id#fragment patterns."""
+        idx = CommentIndex()
+        idx.add_thread(self._make_thread("REQ-p00001", "c1"), "f.json")
+        idx.add_thread(self._make_thread("REQ-p00001#A", "c2"), "f.json")
+        idx.add_thread(self._make_thread("REQ-p00001#section:Rationale", "c3"), "f.json")
+        idx.add_thread(self._make_thread("REQ-p00002#A", "c4"), "f.json")
+        anchors = sorted(idx.iter_all_anchors_for_node("REQ-p00001"))
+        assert anchors == [
+            "REQ-p00001",
+            "REQ-p00001#A",
+            "REQ-p00001#section:Rationale",
+        ]
+
+    def test_REQ_d00227_A_orphaned_threads(self):
+        """Orphaned threads are stored and retrievable."""
+        idx = CommentIndex()
+        thread = self._make_thread("REQ-deleted#A")
+        idx.add_orphaned(thread)
+        assert list(idx.iter_orphaned()) == [thread]
+
+    def test_REQ_d00227_A_source_file_tracking(self):
+        """source_file_for returns the file a thread's anchor was loaded from."""
+        idx = CommentIndex()
+        thread = self._make_thread("REQ-p00001#A")
+        idx.add_thread(thread, source_file="spec/prd.md.json")
+        assert idx.source_file_for("REQ-p00001#A") == "spec/prd.md.json"
+
+    def test_REQ_d00227_C_merge_indexes(self):
+        """Merging indexes combines threads from both, following TermDictionary pattern."""
+        idx1 = CommentIndex()
+        idx1.add_thread(self._make_thread("REQ-p00001#A", "c1"), "f1.json")
+        idx2 = CommentIndex()
+        idx2.add_thread(self._make_thread("REQ-d00001#B", "c2"), "f2.json")
+        idx1.merge(idx2)
+        assert idx1.has_threads("REQ-p00001#A")
+        assert idx1.has_threads("REQ-d00001#B")
