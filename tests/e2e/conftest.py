@@ -59,3 +59,23 @@ requires_playwright = pytest.mark.skipif(
     shutil.which("playwright") is None,
     reason="playwright not found (pip install playwright && playwright install)",
 )
+
+
+@pytest.fixture(autouse=True)
+def _cleanup_daemon(tmp_path):
+    """Stop any daemon started during the test.
+
+    E2e tests may auto-start per-project daemons in temp directories.
+    This fixture ensures they are cleaned up to prevent zombie processes.
+    """
+    yield
+    try:
+        from elspais.mcp.daemon import stop_daemon
+
+        for daemon_json in tmp_path.rglob(".elspais/daemon.json"):
+            try:
+                stop_daemon(daemon_json.parent.parent)
+            except Exception:
+                pass
+    except Exception:
+        pass
