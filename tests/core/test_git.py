@@ -62,8 +62,19 @@ def _clean_git_env(monkeypatch):
 
     When tests run inside a git hook, GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE
     are set and cause subprocess git-init calls to target the real repo.
+    GIT_AUTHOR_* / GIT_COMMITTER_* override local repo user config.
     """
-    for var in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
+    for var in (
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_AUTHOR_NAME",
+        "GIT_AUTHOR_EMAIL",
+        "GIT_AUTHOR_DATE",
+        "GIT_COMMITTER_NAME",
+        "GIT_COMMITTER_EMAIL",
+        "GIT_COMMITTER_DATE",
+    ):
         monkeypatch.delenv(var, raising=False)
 
 
@@ -1172,7 +1183,7 @@ class TestFullGitSyncWorkflowWithRemote:
 
         # 6. clone_b: fetch and checkout the feature branch
         _git_run(["git", "fetch"], cwd=clone_b, capture_output=True, check=True)
-        subprocess.run(
+        _git_run(
             [
                 "git",
                 "checkout",
@@ -1181,8 +1192,6 @@ class TestFullGitSyncWorkflowWithRemote:
                 "origin/__test_feature/prd-update",
             ],
             cwd=clone_b,
-            capture_output=True,
-            check=True,
         )
         assert (clone_b / "spec" / "prd.md").read_text() == "# REQ-p00001 Updated by A\n"
 
@@ -1400,7 +1409,7 @@ class TestCheckoutBranch:
 
         # clone_b: fetch, create a local branch with the same name, then switch away
         _git_run(["git", "fetch"], cwd=clone_b, capture_output=True, check=True)
-        subprocess.run(
+        _git_run(
             [
                 "git",
                 "checkout",
@@ -1409,8 +1418,6 @@ class TestCheckoutBranch:
                 "origin/__test_feature/remote-test",
             ],
             cwd=clone_b,
-            capture_output=True,
-            check=True,
         )
         _git_run(
             ["git", "checkout", "main"],
@@ -1421,7 +1428,7 @@ class TestCheckoutBranch:
 
         # Now simulate the remote checkout flow:
         # First attempt: git checkout -b should fail (already exists)
-        attempt1 = subprocess.run(
+        attempt1 = _git_run(
             [
                 "git",
                 "checkout",
@@ -1430,8 +1437,8 @@ class TestCheckoutBranch:
                 "origin/__test_feature/remote-test",
             ],
             cwd=clone_b,
-            capture_output=True,
             text=True,
+            check=False,
         )
         assert attempt1.returncode != 0
         assert "already exists" in attempt1.stderr

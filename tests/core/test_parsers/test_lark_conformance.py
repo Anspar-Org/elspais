@@ -8,19 +8,11 @@ output for requirements.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
-from elspais.graph.parsers import ParseContext, ParserRegistry
-from elspais.graph.parsers.journey import JourneyParser
 from elspais.graph.parsers.lark import GrammarFactory
 from elspais.graph.parsers.lark.transformers.requirement import RequirementTransformer
-from elspais.graph.parsers.remainder import RemainderParser
-from elspais.graph.parsers.requirement import RequirementParser
 from elspais.utilities.patterns import IdPatternConfig, IdResolver
-
-FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures"
 
 
 @pytest.fixture
@@ -43,115 +35,6 @@ def hht_resolver():
         }
     )
     return IdResolver(config)
-
-
-def _old_pipeline(resolver: IdResolver):
-    """Create old parser registry."""
-    registry = ParserRegistry()
-    registry.register(RequirementParser(resolver))
-    registry.register(JourneyParser())
-    registry.register(RemainderParser())
-    return registry
-
-
-def _new_pipeline(resolver: IdResolver):
-    """Create new Lark parser + transformer."""
-    factory = GrammarFactory(resolver)
-    lark_parser = factory.get_requirement_parser()
-    transformer = RequirementTransformer(resolver)
-    return lark_parser, transformer
-
-
-def _parse_old(content: str, resolver: IdResolver, file_path: str = "test.md"):
-    """Parse with old pipeline, return requirement ParsedContent list."""
-    registry = _old_pipeline(resolver)
-    lines = [(i + 1, line) for i, line in enumerate(content.split("\n"))]
-    ctx = ParseContext(file_path=file_path)
-    results = list(registry.parse_all(lines, ctx))
-    return [r for r in results if r.content_type == "requirement"]
-
-
-def _parse_new(content: str, resolver: IdResolver):
-    """Parse with new Lark pipeline, return requirement ParsedContent list."""
-    lark_parser, transformer = _new_pipeline(resolver)
-    if not content.endswith("\n"):
-        content += "\n"
-    tree = lark_parser.parse(content)
-    results = transformer.transform(tree)
-    return [r for r in results if r.content_type == "requirement"]
-
-
-def _assert_req_equivalent(old, new, file_name: str = ""):
-    """Assert two requirement ParsedContent objects are equivalent."""
-    od, nd = old.parsed_data, new.parsed_data
-    prefix = f"{file_name} {od['id']}: " if file_name else f"{od['id']}: "
-
-    # Core fields
-    for key in ["id", "title", "level", "status", "hash", "heading_level"]:
-        assert od.get(key) == nd.get(key), f"{prefix}{key}: {od.get(key)!r} != {nd.get(key)!r}"
-
-    # References
-    for key in ["implements", "refines", "satisfies"]:
-        assert od.get(key) == nd.get(key), f"{prefix}{key}: {od.get(key)!r} != {nd.get(key)!r}"
-
-    # Assertions
-    old_asserts = od.get("assertions", [])
-    new_asserts = nd.get("assertions", [])
-    assert len(old_asserts) == len(
-        new_asserts
-    ), f"{prefix}assertions count: {len(old_asserts)} != {len(new_asserts)}"
-    for i, (oa, na) in enumerate(zip(old_asserts, new_asserts, strict=True)):
-        assert (
-            oa["label"] == na["label"]
-        ), f"{prefix}assertion[{i}] label: {oa['label']!r} != {na['label']!r}"
-        assert (
-            oa["text"] == na["text"]
-        ), f"{prefix}assertion[{i}] text: {oa['text']!r} != {na['text']!r}"
-
-
-class TestLarkConformanceHHT:
-    """Conformance tests using HHT-like fixtures."""
-
-    @pytest.fixture(autouse=True)
-    def _setup(self, hht_resolver):
-        self.resolver = hht_resolver
-
-    def _compare_file(self, spec_file: Path):
-        content = spec_file.read_text()
-        old_reqs = _parse_old(content, self.resolver, str(spec_file))
-        new_reqs = _parse_new(content, self.resolver)
-        assert len(old_reqs) == len(
-            new_reqs
-        ), f"{spec_file.name}: old={len(old_reqs)} new={len(new_reqs)} reqs"
-        for old, new in zip(old_reqs, new_reqs, strict=True):
-            _assert_req_equivalent(old, new, spec_file.name)
-
-    def test_prd_core(self):
-        self._compare_file(FIXTURES_DIR / "hht-like" / "spec" / "prd-core.md")
-
-    def test_ops_deploy(self):
-        self._compare_file(FIXTURES_DIR / "hht-like" / "spec" / "ops-deploy.md")
-
-    def test_dev_impl(self):
-        self._compare_file(FIXTURES_DIR / "hht-like" / "spec" / "dev-impl.md")
-
-    def test_index_no_reqs(self):
-        self._compare_file(FIXTURES_DIR / "hht-like" / "spec" / "INDEX.md")
-
-    def test_assertions_fixture_prd(self):
-        self._compare_file(FIXTURES_DIR / "assertions" / "spec" / "prd-sample.md")
-
-    def test_assertions_fixture_dev(self):
-        self._compare_file(FIXTURES_DIR / "assertions" / "spec" / "dev-impl.md")
-
-    def test_invalid_broken_links(self):
-        self._compare_file(FIXTURES_DIR / "invalid" / "broken-links" / "spec" / "broken.md")
-
-    def test_invalid_circular_deps(self):
-        self._compare_file(FIXTURES_DIR / "invalid" / "circular-deps" / "spec" / "circular.md")
-
-    def test_invalid_missing_hash(self):
-        self._compare_file(FIXTURES_DIR / "invalid" / "missing-hash" / "spec" / "missing.md")
 
 
 class TestLarkTransformerDirectly:

@@ -10,19 +10,19 @@ from __future__ import annotations
 
 from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.parsers import ParsedContent
+from elspais.graph.render import reconstruct_body_text
 from elspais.utilities.hasher import calculate_hash, compute_normalized_hash
 
 
-def make_req_with_body_text(
+def make_req(
     req_id: str,
     title: str = "Test Requirement",
     level: str = "PRD",
     status: str = "Active",
     assertions: list[dict] | None = None,
-    body_text: str = "",
     implements: list[str] | None = None,
 ) -> ParsedContent:
-    """Helper to create a requirement ParsedContent with body_text."""
+    """Helper to create a requirement ParsedContent."""
     return ParsedContent(
         content_type="requirement",
         parsed_data={
@@ -33,23 +33,12 @@ def make_req_with_body_text(
             "assertions": assertions or [],
             "implements": implements or [],
             "refines": [],
-            "body_text": body_text,
-            "hash": calculate_hash(body_text) if body_text else None,
         },
         start_line=1,
         end_line=10,
         raw_text=f"## {req_id}: {title}",
     )
 
-
-BODY_TEXT = """**Level**: PRD | **Status**: Active | **Implements**: -
-
-Introduction text for the requirement.
-
-## Assertions
-
-A. The system SHALL validate input.
-B. The system SHALL log errors."""
 
 ASSERTIONS = [
     {"label": "A", "text": "The system SHALL validate input."},
@@ -58,7 +47,7 @@ ASSERTIONS = [
 
 
 def build_graph(hash_mode: str = "full-text") -> TraceGraph:
-    """Build a graph with a single requirement containing body_text and assertions.
+    """Build a graph with a single requirement containing assertions.
 
     Args:
         hash_mode: "full-text" or "normalized-text".
@@ -68,11 +57,10 @@ def build_graph(hash_mode: str = "full-text") -> TraceGraph:
     """
     builder = GraphBuilder(hash_mode=hash_mode)
     builder.add_parsed_content(
-        make_req_with_body_text(
+        make_req(
             "REQ-p00001",
             "Test Requirement",
             assertions=ASSERTIONS,
-            body_text=BODY_TEXT,
         )
     )
     return builder.build()
@@ -95,18 +83,20 @@ class TestFullTextMode:
 
     # Implements: REQ-p00004-A
     def test_hash_mode_full_text_body_change_changes_hash(self):
-        """In full-text mode, changing body_text causes the hash to change.
+        """In full-text mode, changing assertion text causes the hash to change.
 
-        When body_text is modified (even non-assertion content like introduction
-        text), the hash must change because full-text hashes the entire body.
+        When an assertion is modified, the hash must change because full-text
+        hashes the entire reconstructed body.
         """
         graph = build_graph(hash_mode="full-text")
         parent = graph.find_by_id("REQ-p00001")
 
+        # Compute initial hash (not set during build from test fixtures)
+        graph._recompute_requirement_hash(parent)
         old_hash = parent.get_field("hash")
         assert old_hash is not None
 
-        # Simulate a body_text change via assertion mutation
+        # Mutate an assertion
         graph.update_assertion("REQ-p00001-A", "The system SHALL strictly validate all input.")
 
         new_hash = parent.get_field("hash")
@@ -134,9 +124,8 @@ class TestFullTextMode:
         # After mutation, hash should match calculate_hash of updated body_text
         graph.update_assertion("REQ-p00001-A", "Updated text.")
 
-        body_text = parent.get_field("body_text")
         stored_hash = parent.get_field("hash")
-        expected_hash = calculate_hash(body_text)
+        expected_hash = calculate_hash(reconstruct_body_text(parent))
         assert stored_hash == expected_hash
 
 
@@ -154,8 +143,8 @@ class TestNormalizedTextMode:
         """In normalized-text mode, changing non-assertion body text does NOT change hash.
 
         The normalized-text mode only hashes assertion text. Changes to
-        introduction text, metadata lines, or other non-assertion content
-        in body_text should have no effect on the hash.
+        the requirement title or status (non-assertion content) should
+        have no effect on the hash.
         """
         graph = build_graph(hash_mode="normalized-text")
         parent = graph.find_by_id("REQ-p00001")
@@ -165,14 +154,9 @@ class TestNormalizedTextMode:
         graph._recompute_requirement_hash(parent)
         hash_before = parent.get_field("hash")
 
-        # Directly modify the body_text with non-assertion content change
-        # then trigger a recompute.
-        old_body = parent.get_field("body_text")
-        new_body = old_body.replace(
-            "Introduction text for the requirement.",
-            "Completely different introduction text.",
-        )
-        parent.set_field("body_text", new_body)
+        # Modify non-assertion content (title/status) then trigger a recompute.
+        parent.set_field("status", "Draft")
+        parent.set_label("Completely Different Title")
 
         # Recompute the hash in normalized-text mode
         graph._recompute_requirement_hash(parent)
@@ -240,20 +224,18 @@ class TestNormalizedTextMode:
 
         builder_clean = GraphBuilder(hash_mode="normalized-text")
         builder_clean.add_parsed_content(
-            make_req_with_body_text(
+            make_req(
                 "REQ-p00001",
                 assertions=assertions_clean,
-                body_text=BODY_TEXT,
             )
         )
         graph_clean = builder_clean.build()
 
         builder_trailing = GraphBuilder(hash_mode="normalized-text")
         builder_trailing.add_parsed_content(
-            make_req_with_body_text(
+            make_req(
                 "REQ-p00001",
                 assertions=assertions_trailing,
-                body_text=BODY_TEXT,
             )
         )
         graph_trailing = builder_trailing.build()
@@ -352,11 +334,50 @@ class TestHashModeDifference:
     def test_hash_mode_modes_produce_different_hashes(self):
         """full-text and normalized-text modes compute different hashes for same content.
 
-        These modes hash different inputs (body_text vs normalized assertions),
-        so they should produce different hash values.
+        These modes hash different inputs (reconstructed body text including
+        REMAINDER sections vs normalized assertions only), so they should
+        produce different hash values when REMAINDER content is present.
         """
-        graph_full = build_graph(hash_mode="full-text")
-        graph_norm = build_graph(hash_mode="normalized-text")
+        # Build graphs with REMAINDER sections (preamble) so full-text differs
+        body_with_preamble = """**Level**: PRD | **Status**: Active | **Implements**: -
+
+Introduction text for the requirement.
+
+## Assertions
+
+A. The system SHALL validate input.
+B. The system SHALL log errors."""
+
+        sections = [
+            {"heading": "preamble", "content": "Introduction text for the requirement.", "line": 3}
+        ]
+
+        def _build_with_sections(hash_mode: str) -> TraceGraph:
+            builder = GraphBuilder(hash_mode=hash_mode)
+            builder.add_parsed_content(
+                ParsedContent(
+                    content_type="requirement",
+                    parsed_data={
+                        "id": "REQ-p00001",
+                        "title": "Test Requirement",
+                        "level": "PRD",
+                        "status": "Active",
+                        "assertions": ASSERTIONS,
+                        "implements": [],
+                        "refines": [],
+                        "body_text": body_with_preamble,
+                        "hash": calculate_hash(body_with_preamble),
+                        "sections": sections,
+                    },
+                    start_line=1,
+                    end_line=10,
+                    raw_text="## REQ-p00001: Test Requirement",
+                )
+            )
+            return builder.build()
+
+        graph_full = _build_with_sections(hash_mode="full-text")
+        graph_norm = _build_with_sections(hash_mode="normalized-text")
 
         parent_full = graph_full.find_by_id("REQ-p00001")
         parent_norm = graph_norm.find_by_id("REQ-p00001")
@@ -368,49 +389,25 @@ class TestHashModeDifference:
         hash_full = parent_full.get_field("hash")
         hash_norm = parent_norm.get_field("hash")
 
-        # They hash different content, so should differ
-        # (body_text includes metadata, intro text, etc. vs just assertion text)
+        # Full-text includes REMAINDER content (preamble), normalized does not
         assert hash_full != hash_norm, (
             "full-text and normalized-text modes should produce different hashes "
-            "because they hash different content"
+            "because full-text includes REMAINDER sections"
         )
 
     # Implements: REQ-d00131-J
     def test_hash_mode_normalized_stable_across_non_assertion_changes(self):
         """Normalized-text hash is stable when non-assertion content varies.
 
-        Two requirements with identical assertions but different body_text
-        preambles should have the same hash in normalized-text mode.
+        Two requirements with identical assertions should have the same hash
+        in normalized-text mode, regardless of other content differences.
         """
-        body1 = """**Level**: PRD | **Status**: Active | **Implements**: -
-
-Introduction version 1.
-
-## Assertions
-
-A. The system SHALL validate input.
-B. The system SHALL log errors."""
-
-        body2 = """**Level**: PRD | **Status**: Active | **Implements**: -
-
-Completely different introduction for version 2.
-With extra lines and different content.
-
-## Assertions
-
-A. The system SHALL validate input.
-B. The system SHALL log errors."""
-
         builder1 = GraphBuilder(hash_mode="normalized-text")
-        builder1.add_parsed_content(
-            make_req_with_body_text("REQ-p00001", assertions=ASSERTIONS, body_text=body1)
-        )
+        builder1.add_parsed_content(make_req("REQ-p00001", assertions=ASSERTIONS))
         graph1 = builder1.build()
 
         builder2 = GraphBuilder(hash_mode="normalized-text")
-        builder2.add_parsed_content(
-            make_req_with_body_text("REQ-p00001", assertions=ASSERTIONS, body_text=body2)
-        )
+        builder2.add_parsed_content(make_req("REQ-p00001", assertions=ASSERTIONS))
         graph2 = builder2.build()
 
         parent1 = graph1.find_by_id("REQ-p00001")
@@ -431,28 +428,57 @@ B. The system SHALL log errors."""
     def test_hash_mode_full_text_sensitive_to_non_assertion_changes(self):
         """Full-text hash changes when non-assertion content varies.
 
-        Two requirements with identical assertions but different body_text
-        preambles should have different hashes in full-text mode.
+        Two requirements with identical assertions but different REMAINDER
+        content should have different hashes in full-text mode.
         """
-        body1 = """Introduction version 1.
-
-A. The system SHALL validate input."""
-
-        body2 = """Introduction version 2 (different).
-
-A. The system SHALL validate input."""
-
         assertions = [{"label": "A", "text": "The system SHALL validate input."}]
+
+        sections1 = [{"heading": "preamble", "content": "Introduction version 1.", "line": 2}]
+        sections2 = [
+            {"heading": "preamble", "content": "Introduction version 2 (different).", "line": 2}
+        ]
 
         builder1 = GraphBuilder(hash_mode="full-text")
         builder1.add_parsed_content(
-            make_req_with_body_text("REQ-p00001", assertions=assertions, body_text=body1)
+            ParsedContent(
+                content_type="requirement",
+                parsed_data={
+                    "id": "REQ-p00001",
+                    "title": "Test Requirement",
+                    "level": "PRD",
+                    "status": "Active",
+                    "assertions": assertions,
+                    "implements": [],
+                    "refines": [],
+                    "body_text": "",
+                    "sections": sections1,
+                },
+                start_line=1,
+                end_line=10,
+                raw_text="## REQ-p00001: Test Requirement",
+            )
         )
         graph1 = builder1.build()
 
         builder2 = GraphBuilder(hash_mode="full-text")
         builder2.add_parsed_content(
-            make_req_with_body_text("REQ-p00001", assertions=assertions, body_text=body2)
+            ParsedContent(
+                content_type="requirement",
+                parsed_data={
+                    "id": "REQ-p00001",
+                    "title": "Test Requirement",
+                    "level": "PRD",
+                    "status": "Active",
+                    "assertions": assertions,
+                    "implements": [],
+                    "refines": [],
+                    "body_text": "",
+                    "sections": sections2,
+                },
+                start_line=1,
+                end_line=10,
+                raw_text="## REQ-p00001: Test Requirement",
+            )
         )
         graph2 = builder2.build()
 
@@ -466,6 +492,6 @@ A. The system SHALL validate input."""
         hash2 = parent2.get_field("hash")
 
         assert hash1 != hash2, (
-            "Full-text hashes should differ when body text differs, "
+            "Full-text hashes should differ when REMAINDER content differs, "
             "even if assertions are identical"
         )

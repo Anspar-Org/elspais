@@ -201,7 +201,7 @@ def modify_implements(
     Returns:
         Dict with success, old_implements, new_implements, error.
     """
-    from elspais.graph.parsers.requirement import RequirementParser
+    from elspais.graph.parsers.patterns import IMPLEMENTS_PATTERN
 
     content = file_path.read_text(encoding="utf-8")
 
@@ -215,7 +215,7 @@ def modify_implements(
     start_pos = req_match.end()
     search_region = content[start_pos : start_pos + 500]
 
-    impl_match = RequirementParser.IMPLEMENTS_PATTERN.search(search_region)
+    impl_match = IMPLEMENTS_PATTERN.search(search_region)
 
     if not impl_match:
         return {"success": False, "error": f"Could not find **Implements** for {req_id}"}
@@ -278,7 +278,7 @@ def modify_refines(
     Returns:
         Dict with success, old_refines, new_refines, error.
     """
-    from elspais.graph.parsers.requirement import RequirementParser
+    from elspais.graph.parsers.patterns import REFINES_PATTERN
 
     content = file_path.read_text(encoding="utf-8")
 
@@ -292,7 +292,7 @@ def modify_refines(
     start_pos = req_match.end()
     search_region = content[start_pos : start_pos + 500]
 
-    refines_match = RequirementParser.REFINES_PATTERN.search(search_region)
+    refines_match = REFINES_PATTERN.search(search_region)
 
     if refines_match:
         # Field exists — surgical replacement (same approach as modify_implements)
@@ -372,7 +372,7 @@ def modify_status(
     Returns:
         Dict with success, old_status, new_status, error.
     """
-    from elspais.graph.parsers.requirement import RequirementParser
+    from elspais.graph.parsers.patterns import ALT_STATUS_PATTERN
 
     content = file_path.read_text(encoding="utf-8")
 
@@ -386,7 +386,7 @@ def modify_status(
     start_pos = req_match.end()
     search_region = content[start_pos : start_pos + 500]
 
-    status_match = RequirementParser.ALT_STATUS_PATTERN.search(search_region)
+    status_match = ALT_STATUS_PATTERN.search(search_region)
 
     if not status_match:
         return {"success": False, "error": f"Could not find **Status** for {req_id}"}

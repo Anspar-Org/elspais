@@ -15,55 +15,67 @@ def _build_test_dictionary() -> TermDictionary:
     """Build a TermDictionary with representative test data."""
     td = TermDictionary()
 
-    td.add(TermEntry(
-        term="Electronic Record",
-        definition="Any combination of text, graphics, data, audio, or pictorial "
-                   "information stored in digital form.",
-        collection=False,
-        indexed=True,
-        defined_in="REQ-p00001",
-        namespace="main",
-        references=[
-            TermRef(node_id="REQ-p00003", namespace="main", marked=True, line=10),
-            TermRef(node_id="REQ-p00003-B", namespace="main", marked=True, line=15),
-            TermRef(node_id="REQ-d00045", namespace="main", marked=False, line=22),
-            TermRef(
-                node_id="file:src/records/model.dart",
-                namespace="sponsor-a", marked=False, line=5,
-            ),
-        ],
-    ))
+    td.add(
+        TermEntry(
+            term="Electronic Record",
+            definition="Any combination of text, graphics, data, audio, or pictorial "
+            "information stored in digital form.",
+            collection=False,
+            indexed=True,
+            defined_in="REQ-p00001",
+            namespace="main",
+            references=[
+                TermRef(node_id="REQ-p00003", namespace="main", marked=True, line=10),
+                TermRef(node_id="REQ-p00003-B", namespace="main", marked=True, line=15),
+                TermRef(node_id="REQ-d00045", namespace="main", marked=False, line=22),
+                TermRef(
+                    node_id="file:src/records/model.dart",
+                    namespace="sponsor-a",
+                    marked=False,
+                    line=5,
+                ),
+            ],
+        )
+    )
 
-    td.add(TermEntry(
-        term="Questionnaire",
-        definition="A structured set of questions administered to a participant.",
-        collection=True,
-        indexed=True,
-        defined_in="REQ-p00012",
-        namespace="main",
-        references=[
-            TermRef(node_id="REQ-p00012", namespace="main", marked=True, line=1),
-            TermRef(node_id="REQ-p00012-A", namespace="main", marked=True, line=5),
-            TermRef(
-                node_id="REQ-d00067-C",
-                namespace="sponsor-a", marked=False, line=30,
-            ),
-            TermRef(
-                node_id="file:src/questionnaire/hhc_qol.dart",
-                namespace="sponsor-a", marked=False, line=12,
-            ),
-        ],
-    ))
+    td.add(
+        TermEntry(
+            term="Questionnaire",
+            definition="A structured set of questions administered to a participant.",
+            collection=True,
+            indexed=True,
+            defined_in="REQ-p00012",
+            namespace="main",
+            references=[
+                TermRef(node_id="REQ-p00012", namespace="main", marked=True, line=1),
+                TermRef(node_id="REQ-p00012-A", namespace="main", marked=True, line=5),
+                TermRef(
+                    node_id="REQ-d00067-C",
+                    namespace="sponsor-a",
+                    marked=False,
+                    line=30,
+                ),
+                TermRef(
+                    node_id="file:src/questionnaire/hhc_qol.dart",
+                    namespace="sponsor-a",
+                    marked=False,
+                    line=12,
+                ),
+            ],
+        )
+    )
 
-    td.add(TermEntry(
-        term="Level",
-        definition="The classification tier of a requirement (PRD, OPS, DEV).",
-        collection=False,
-        indexed=False,
-        defined_in="REQ-p00001",
-        namespace="main",
-        references=[],
-    ))
+    td.add(
+        TermEntry(
+            term="Level",
+            definition="The classification tier of a requirement (PRD, OPS, DEV).",
+            collection=False,
+            indexed=False,
+            defined_in="REQ-p00001",
+            namespace="main",
+            references=[],
+        )
+    )
 
     return td
 
@@ -75,6 +87,7 @@ def _import_generators():
         generate_glossary,
         generate_term_index,
     )
+
     return generate_glossary, generate_term_index, generate_collection_manifest
 
 
@@ -108,7 +121,7 @@ class TestGlossaryCmd:
         td = _build_test_dictionary()
         output = generate_glossary(td)
         # Level should have (not indexed) nearby
-        level_section = output[output.index("**Level**"):]
+        level_section = output[output.index("**Level**") :]
         assert "(not indexed)" in level_section.split("\n## ")[0]
 
     def test_REQ_d00224_A_glossary_collection_annotation(self) -> None:
@@ -116,7 +129,7 @@ class TestGlossaryCmd:
         generate_glossary, _, _ = _import_generators()
         td = _build_test_dictionary()
         output = generate_glossary(td)
-        q_section = output[output.index("**Questionnaire**"):]
+        q_section = output[output.index("**Questionnaire**") :]
         assert "(collection)" in q_section.split("\n## ")[0]
 
     # -- REQ-d00224-B: term index ---------------------------------------------

@@ -129,6 +129,15 @@ function renderNavTree() {
     const activeTab = editState.activeNavTab;
     const rows = editState.treeData;
 
+    // Capture focused element's scroll offset before re-render
+    var focusOffsetFromTop = null;
+    if (editState.focusNodeId) {
+        var focusEl = container.querySelector('[data-id="' + editState.focusNodeId + '"]');
+        if (focusEl) {
+            focusOffsetFromTop = focusEl.getBoundingClientRect().top - container.getBoundingClientRect().top;
+        }
+    }
+
     if (!rows || rows.length === 0) {
         container.innerHTML = '<div style="padding:20px;color:#adb5bd;text-align:center;font-size:0.85rem;">No items found</div>';
         return;
@@ -276,12 +285,27 @@ function renderNavTree() {
         return;
     }
 
+    // Pre-compute which rows have visible children in the filtered set.
+    // This prevents showing an expand icon when all children are filtered out.
+    var rowsWithVisibleChildren = new Set();
+    for (var vi = 0; vi < filteredRows.length; vi++) {
+        if (filteredRows[vi].parent_id) {
+            for (var vj = vi - 1; vj >= 0; vj--) {
+                if (filteredRows[vj].id === filteredRows[vi].parent_id &&
+                    filteredRows[vj].depth === filteredRows[vi].depth - 1) {
+                    rowsWithVisibleChildren.add(vj);
+                    break;
+                }
+            }
+        }
+    }
+
     let html = '';
     filteredRows.forEach(function(row, arrIdx) {
         // Determine if collapsed
         const isCollapsed = editState.collapsedTreeNodes.has(row.id);
         // Check if parent is collapsed (skip rendering)
-        if (row.depth > 0 && isAncestorCollapsed(row, filteredRows, matchSet)) {
+        if (row.depth > 0 && isAncestorCollapsed(row, filteredRows, matchSet, arrIdx)) {
             return; // don't render
         }
 
@@ -290,10 +314,11 @@ function renderNavTree() {
             indents.push('<span class="nav-tree-indent"></span>');
         }
 
-        const toggleClass = row.has_children
+        const visibleChildren = rowsWithVisibleChildren.has(arrIdx);
+        const toggleClass = visibleChildren
             ? (isCollapsed ? 'nav-tree-toggle' : 'nav-tree-toggle')
             : 'nav-tree-toggle leaf';
-        const toggleIcon = row.has_children
+        const toggleIcon = visibleChildren
             ? (isCollapsed ? '&#9654;' : '&#9660;')
             : '';
 
@@ -349,15 +374,33 @@ function renderNavTree() {
     });
 
     container.innerHTML = html;
+
+    // Restore scroll position so the focused item stays in place
+    if (focusOffsetFromTop !== null && editState.focusNodeId) {
+        var newFocusEl = container.querySelector('[data-id="' + editState.focusNodeId + '"]');
+        if (newFocusEl) {
+            var newTop = newFocusEl.getBoundingClientRect().top - container.getBoundingClientRect().top;
+            container.scrollTop += (newTop - focusOffsetFromTop);
+        }
+    }
 }
 
-function isAncestorCollapsed(row, allRows, matchSet) {
+function isAncestorCollapsed(row, allRows, matchSet, rowIdx) {
     if (!row.parent_id) return false;
-    // Walk up the parent chain
+    // Walk up the parent chain, searching backward from current position
+    // to find the correct parent instance (DAG nodes may appear multiple times).
     var parentId = row.parent_id;
+    var searchFrom = (rowIdx !== undefined) ? rowIdx : allRows.length;
+    var expectedDepth = row.depth - 1;
     while (parentId) {
-        // Find parent in the rendered set
-        var pIdx = allRows.findIndex(function(r) { return r.id === parentId; });
+        // Find nearest preceding row with matching id and depth
+        var pIdx = -1;
+        for (var i = searchFrom - 1; i >= 0; i--) {
+            if (allRows[i].id === parentId && allRows[i].depth === expectedDepth) {
+                pIdx = i;
+                break;
+            }
+        }
         if (pIdx < 0) {
             // Parent was filtered out — its collapse state is irrelevant.
             // We can't walk further since we don't know its parent_id.
@@ -368,17 +411,22 @@ function isAncestorCollapsed(row, allRows, matchSet) {
             // (dimmed) row, don't honor the collapse — the user wants to see
             // the matching children even if the ancestor was previously collapsed.
             if (matchSet && !matchSet.has(pIdx)) {
+                searchFrom = pIdx;
                 parentId = allRows[pIdx].parent_id;
+                expectedDepth--;
                 continue;
             }
             return true;
         }
+        searchFrom = pIdx;
         parentId = allRows[pIdx].parent_id;
+        expectedDepth--;
     }
     return false;
 }
 
 function toggleTreeNode(nodeId) {
+    editState.focusNodeId = nodeId;
     if (editState.collapsedTreeNodes.has(nodeId)) {
         editState.collapsedTreeNodes.delete(nodeId);
     } else {

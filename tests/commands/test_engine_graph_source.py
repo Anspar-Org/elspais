@@ -32,9 +32,7 @@ def test_engine_call_daemon_includes_graph_source():
         "elspais.commands._engine._try_daemon",
         return_value=(daemon_result, {"type": "daemon", "port": 35121}),
     ):
-        result = call(
-            "/api/run/checks", {}, lambda g, c, p: {}, skip_daemon=False
-        )
+        result = call("/api/run/checks", {}, lambda g, c, p: {}, skip_daemon=False)
 
     assert "graph_source" in result
     assert result["graph_source"]["type"] == "daemon"
@@ -53,8 +51,6 @@ def test_engine_call_viewer_includes_graph_source():
         "elspais.commands._engine._try_daemon",
         return_value=(viewer_result, {"type": "viewer", "port": 5001}),
     ):
-        result = call(
-            "/api/run/checks", {}, lambda g, c, p: {}, skip_daemon=False
-        )
+        result = call("/api/run/checks", {}, lambda g, c, p: {}, skip_daemon=False)
 
     assert result["graph_source"]["type"] == "viewer"

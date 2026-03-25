@@ -499,8 +499,8 @@ hash_mode = "full-text"
 """
         )
 
-        # The body text is everything AFTER header and BEFORE footer:
-        # This includes metadata line, blank lines, intro text, assertions section
+        # The reconstructed body text includes REMAINDER and ASSERTION children
+        # (but not metadata line or ## Assertions header)
         body_text = """
 **Level**: PRD | **Status**: Active | **Implements**: -
 
@@ -510,8 +510,13 @@ This is IMPORTANT intro text that should be included in hash.
 
 A. The system SHALL do something.
 """
-        # Compute expected hash from body text (stripped of leading/trailing whitespace)
-        expected_hash = calculate_hash(body_text.strip())
+        # Compute expected hash from what reconstruct_body_text() would produce:
+        # intro text (REMAINDER) + assertion text (ASSERTION)
+        reconstructed = (
+            "This is IMPORTANT intro text that should be included in hash."
+            "\nA. The system SHALL do something."
+        )
+        expected_hash = calculate_hash(reconstructed)
 
         spec_file = spec_dir / "requirements.md"
         spec_file.write_text(
@@ -628,9 +633,12 @@ Version TWO intro text - CHANGED!
 A. The system SHALL do something.
 """
 
-        # Compute expected hashes
-        hash_v1 = calculate_hash(body_v1.strip())
-        hash_v2 = calculate_hash(body_v2.strip())
+        # Compute expected hashes from what reconstruct_body_text() would produce
+        # (REMAINDER + ASSERTION children, not raw body text)
+        reconstructed_v1 = "Version ONE intro text.\nA. The system SHALL do something."
+        reconstructed_v2 = "Version TWO intro text - CHANGED!\nA. The system SHALL do something."
+        hash_v1 = calculate_hash(reconstructed_v1)
+        hash_v2 = calculate_hash(reconstructed_v2)
 
         # They should be different since intro text changed
         assert hash_v1 != hash_v2, "Sanity check: different body text should produce different hash"

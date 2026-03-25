@@ -13,6 +13,7 @@ import pytest
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+
 def pytest_configure(config):
     """Strip git env vars before any test collection or coverage forking.
 
@@ -30,6 +31,7 @@ def pytest_configure(config):
     os.environ.pop("GIT_DIR", None)
     os.environ.pop("GIT_WORK_TREE", None)
     os.environ["GIT_CEILING_DIRECTORIES"] = "/"
+
 
 # Fixtures directory
 FIXTURES_DIR = Path(__file__).parent / "fixtures"

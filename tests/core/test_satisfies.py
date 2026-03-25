@@ -4,16 +4,16 @@ Covers: REQ-p00014, REQ-d00069-G, REQ-d00069-H, REQ-d00069-I
 """
 
 from elspais.graph.GraphNode import GraphNode, NodeKind
-from elspais.graph.parsers import ParseContext
-from elspais.graph.parsers.requirement import RequirementParser
+from elspais.graph.parsers.lark import GrammarFactory
+from elspais.graph.parsers.lark.transformers.requirement import RequirementTransformer
 from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.mcp.server import _serialize_node_generic
 from elspais.utilities.patterns import IdPatternConfig, IdResolver
 from tests.core.graph_test_helpers import build_graph, make_code_ref, make_requirement
 
 
-def _make_parser() -> RequirementParser:
-    """Create a parser with default pattern config."""
+def _make_lark_pipeline():
+    """Create Lark parser + transformer with default pattern config."""
     config = IdPatternConfig.from_dict(
         {
             "project": {"namespace": "REQ"},
@@ -29,7 +29,21 @@ def _make_parser() -> RequirementParser:
             },
         }
     )
-    return RequirementParser(IdResolver(config))
+    resolver = IdResolver(config)
+    factory = GrammarFactory(resolver)
+    lark_parser = factory.get_requirement_parser()
+    transformer = RequirementTransformer(resolver)
+    return lark_parser, transformer
+
+
+def _parse_text(text: str):
+    """Parse requirement text with Lark pipeline, return ParsedContent list."""
+    lark_parser, transformer = _make_lark_pipeline()
+    if not text.endswith("\n"):
+        text += "\n"
+    tree = lark_parser.parse(text)
+    results = transformer.transform(tree)
+    return [r for r in results if r.content_type == "requirement"]
 
 
 class TestEdgeKindSatisfies:
@@ -81,7 +95,7 @@ class TestStereotypeEnum:
 
 
 class TestParserSatisfies:
-    """RequirementParser extracts Satisfies: metadata.
+    """Lark parser extracts Satisfies: metadata.
 
     Validates REQ-d00069-H: Satisfies parsing.
     """
@@ -96,10 +110,7 @@ class TestParserSatisfies:
             "\n"
             "*End* *Document Management* | **Hash**: 00000000\n"
         )
-        lines = [(i + 1, line) for i, line in enumerate(text.split("\n"))]
-        parser = _make_parser()
-        ctx = ParseContext(file_path="spec/test.md")
-        results = list(parser.claim_and_parse(lines, ctx))
+        results = _parse_text(text)
         assert len(results) == 1
         assert results[0].parsed_data["satisfies"] == ["REQ-p80001"]
 
@@ -113,10 +124,7 @@ class TestParserSatisfies:
             "\n"
             "*End* *Document Management* | **Hash**: 00000000\n"
         )
-        lines = [(i + 1, line) for i, line in enumerate(text.split("\n"))]
-        parser = _make_parser()
-        ctx = ParseContext(file_path="spec/test.md")
-        results = list(parser.claim_and_parse(lines, ctx))
+        results = _parse_text(text)
         assert results[0].parsed_data["satisfies"] == ["REQ-p80001", "REQ-p80010"]
 
     def test_REQ_d00069_H_assertion_level_satisfies(self):
@@ -129,10 +137,7 @@ class TestParserSatisfies:
             "\n"
             "*End* *Document Management* | **Hash**: 00000000\n"
         )
-        lines = [(i + 1, line) for i, line in enumerate(text.split("\n"))]
-        parser = _make_parser()
-        ctx = ParseContext(file_path="spec/test.md")
-        results = list(parser.claim_and_parse(lines, ctx))
+        results = _parse_text(text)
         assert results[0].parsed_data["satisfies"] == ["REQ-p80001-A"]
 
     # Implements: REQ-p00014-A
@@ -146,10 +151,7 @@ class TestParserSatisfies:
             "\n"
             "*End* *Diary Mobile Application* | **Hash**: 00000000\n"
         )
-        lines = [(i + 1, line) for i, line in enumerate(text.split("\n"))]
-        parser = _make_parser()
-        ctx = ParseContext(file_path="spec/test.md")
-        results = list(parser.claim_and_parse(lines, ctx))
+        results = _parse_text(text)
         assert len(results) == 1
         assert results[0].parsed_data["satisfies"] == ["REQ-p80001"]
 
@@ -165,10 +167,7 @@ class TestParserSatisfies:
             "\n"
             "*End* *Diary Mobile Application* | **Hash**: 00000000\n"
         )
-        lines = [(i + 1, line) for i, line in enumerate(text.split("\n"))]
-        parser = _make_parser()
-        ctx = ParseContext(file_path="spec/test.md")
-        results = list(parser.claim_and_parse(lines, ctx))
+        results = _parse_text(text)
         assert len(results) == 1
         assert results[0].parsed_data["satisfies"] == ["REQ-p80001"]
 
@@ -180,10 +179,7 @@ class TestParserSatisfies:
             "\n"
             "*End* *Basic* | **Hash**: 00000000\n"
         )
-        lines = [(i + 1, line) for i, line in enumerate(text.split("\n"))]
-        parser = _make_parser()
-        ctx = ParseContext(file_path="spec/test.md")
-        results = list(parser.claim_and_parse(lines, ctx))
+        results = _parse_text(text)
         assert results[0].parsed_data["satisfies"] == []
 
 

@@ -30,7 +30,6 @@ from elspais.graph.parsers import ParserRegistry
 from elspais.graph.parsers.journey import JourneyParser
 from elspais.graph.parsers.lark import FileDispatcher
 from elspais.graph.parsers.remainder import RemainderParser
-from elspais.graph.parsers.requirement import RequirementParser
 from elspais.graph.parsers.results import JUnitXMLParser, PytestJSONParser
 from elspais.utilities.patterns import build_resolver
 
@@ -317,7 +316,7 @@ def _resolve_spec_dir_config(
 
     # Legacy registry kept for backwards compatibility during transition
     registry = ParserRegistry()
-    registry.register(RequirementParser(resolver))
+    # RequirementParser removed — Lark dispatcher handles spec files
     registry.register(JourneyParser())
     # Implements: REQ-d00128-G
     registry.register(RemainderParser())

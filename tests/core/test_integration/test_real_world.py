@@ -8,10 +8,7 @@ from elspais.config import load_config
 from elspais.graph import NodeKind
 from elspais.graph.builder import GraphBuilder
 from elspais.graph.deserializer import DomainFile
-from elspais.graph.parsers import ParserRegistry
-from elspais.graph.parsers.comments import CommentsParser
-from elspais.graph.parsers.remainder import RemainderParser
-from elspais.graph.parsers.requirement import RequirementParser
+from elspais.graph.parsers.lark import FileDispatcher
 from elspais.utilities.patterns import build_resolver
 
 # Get repo root (3 levels up from this test file)
@@ -31,13 +28,9 @@ def real_resolver():
 
 
 @pytest.fixture
-def parser_registry(real_resolver):
-    """Create parser registry with all standard parsers."""
-    registry = ParserRegistry()
-    registry.register(CommentsParser())
-    registry.register(RequirementParser(real_resolver))
-    registry.register(RemainderParser())
-    return registry
+def dispatcher(real_resolver):
+    """Create Lark FileDispatcher for spec file parsing."""
+    return FileDispatcher(real_resolver)
 
 
 class TestRealWorldSpecs:
@@ -51,19 +44,19 @@ class TestRealWorldSpecs:
         assert SPEC_DIR.is_dir()
 
     # Implements: REQ-p00013-C
-    def test_can_parse_spec_files(self, parser_registry):
+    def test_can_parse_spec_files(self, dispatcher):
         """Verify parser can process real spec files."""
         if not SPEC_DIR.exists():
             pytest.skip("No spec/ directory found")
 
         deserializer = DomainFile(SPEC_DIR, patterns=["*.md"])
-        results = list(deserializer.deserialize(parser_registry))
+        results = list(deserializer.dispatch(dispatcher.dispatch_spec))
 
         # Should get some parsed content
         assert len(results) > 0
 
     # Implements: REQ-p00013-C
-    def test_finds_prd_requirements(self, parser_registry):
+    def test_finds_prd_requirements(self, dispatcher):
         """Verify PRD requirements are found in real specs."""
         if not SPEC_DIR.exists():
             pytest.skip("No spec/ directory found")
@@ -71,7 +64,7 @@ class TestRealWorldSpecs:
         deserializer = DomainFile(SPEC_DIR, patterns=["*.md"])
 
         builder = GraphBuilder(repo_root=REPO_ROOT)
-        for content in deserializer.deserialize(parser_registry):
+        for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
         graph = builder.build()
@@ -85,7 +78,7 @@ class TestRealWorldSpecs:
         assert len(prd_reqs) > 0
 
     # Implements: REQ-p00013-C
-    def test_graph_has_roots(self, parser_registry):
+    def test_graph_has_roots(self, dispatcher):
         """Verify graph identifies root requirements."""
         if not SPEC_DIR.exists():
             pytest.skip("No spec/ directory found")
@@ -93,7 +86,7 @@ class TestRealWorldSpecs:
         deserializer = DomainFile(SPEC_DIR, patterns=["*.md"])
 
         builder = GraphBuilder(repo_root=REPO_ROOT)
-        for content in deserializer.deserialize(parser_registry):
+        for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
         graph = builder.build()
@@ -102,7 +95,7 @@ class TestRealWorldSpecs:
         assert graph.root_count() > 0
 
     # Implements: REQ-p00013-C
-    def test_assertions_are_created(self, parser_registry):
+    def test_assertions_are_created(self, dispatcher):
         """Verify assertions are extracted from requirements."""
         if not SPEC_DIR.exists():
             pytest.skip("No spec/ directory found")
@@ -110,7 +103,7 @@ class TestRealWorldSpecs:
         deserializer = DomainFile(SPEC_DIR, patterns=["*.md"])
 
         builder = GraphBuilder(repo_root=REPO_ROOT)
-        for content in deserializer.deserialize(parser_registry):
+        for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
         graph = builder.build()
@@ -121,7 +114,7 @@ class TestRealWorldSpecs:
         assert len(assertions) > 0
 
     # Implements: REQ-p00013-C
-    def test_implements_relationships(self, parser_registry):
+    def test_implements_relationships(self, dispatcher):
         """Verify implements relationships are parsed."""
         if not SPEC_DIR.exists():
             pytest.skip("No spec/ directory found")
@@ -129,7 +122,7 @@ class TestRealWorldSpecs:
         deserializer = DomainFile(SPEC_DIR, patterns=["*.md"])
 
         builder = GraphBuilder(repo_root=REPO_ROOT)
-        for content in deserializer.deserialize(parser_registry):
+        for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
         graph = builder.build()

@@ -260,9 +260,7 @@ class TestDetailHint:
         output = capsys.readouterr().out
         assert "Follow-up:" not in output
 
-    def test_followup_shows_multiple_categories(
-        self, capsys: pytest.CaptureFixture
-    ) -> None:
+    def test_followup_shows_multiple_categories(self, capsys: pytest.CaptureFixture) -> None:
         """When multiple categories fail, follow-up lists all failing checks."""
         checks = [
             HealthCheck(

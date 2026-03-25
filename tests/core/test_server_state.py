@@ -253,6 +253,7 @@ class TestPerRepoDetachedState:
     def _make_state(tmp_path):
         """Create a minimal AppState for testing."""
         from elspais.server.state import AppState
+
         state = AppState.__new__(AppState)
         state.repo_root = tmp_path
         state._repo_detached = {}

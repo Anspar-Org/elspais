@@ -63,7 +63,9 @@ def compute_hash_for_node(node, hash_mode: str) -> str | None:
             return None
         return compute_normalized_hash(assertions)
     else:
-        body = node.get_field("body_text", "")
+        from elspais.graph.render import reconstruct_body_text
+
+        body = reconstruct_body_text(node)
         if not body:
             return None
         return calculate_hash(body)

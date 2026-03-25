@@ -62,12 +62,14 @@ class TestCliTermsRegistration:
         from elspais.graph.terms import TermDictionary, TermEntry
 
         td = TermDictionary()
-        td.add(TermEntry(
-            term="Test Term",
-            definition="A test definition.",
-            defined_in="REQ-p00001",
-            namespace="main",
-        ))
+        td.add(
+            TermEntry(
+                term="Test Term",
+                definition="A test definition.",
+                defined_in="REQ-p00001",
+                namespace="main",
+            )
+        )
 
         generated = write_term_outputs(td, tmp_path)
 

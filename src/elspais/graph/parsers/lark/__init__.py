@@ -110,10 +110,7 @@ class GrammarFactory:
 
         # Split on placeholders, escape literal parts, reassemble
         parts = re.split(r"(\{[^}]+\})", canonical)
-        id_pattern = "".join(
-            placeholders[p] if p in placeholders else re.escape(p)
-            for p in parts
-        )
+        id_pattern = "".join(placeholders[p] if p in placeholders else re.escape(p) for p in parts)
 
         tokens: dict[str, str] = {
             "__NAMESPACE__": namespace,

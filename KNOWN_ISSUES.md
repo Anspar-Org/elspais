@@ -32,22 +32,14 @@
 - Git env isolation via `pytest_configure` + `GIT_CEILING_DIRECTORIES=/` prevents hook contamination
 - `unset GIT_DIR` in pre-commit/pre-push hooks prevents worktree contamination from test subprocess git calls
 
-[ ] graph: add render_order to STRUCTURES edges
-- STRUCTURES edges (REQ→ASSERTION, REQ→REMAINDER) lack explicit ordering metadata
-- Currently relies on parse_line for ordering, which is fragile if sections are moved/reordered via mutations
-- FILE→REQ CONTAINS edges already use render_order in edge metadata — STRUCTURES should follow the same pattern
-- Prerequisite for robust section reordering in Complete View editing
-- Touches: builder (assign on parse), mutation methods (maintain on add/move/reorder), API serialization (expose it), JS (sort by it instead of line)
+[x] graph: add render_order to STRUCTURES edges
+- Fixed: STRUCTURES edges carry render_order metadata; renderer sorts by it; mutations maintain it
+- API returns assertions in document order instead of alphabetical
 
-[ ] refactor: remove body_text field from requirement nodes
-- `body_text` stores the raw unparsed body (header to footer) as a flat string
-- Duplicates content already parsed into structured ASSERTION and REMAINDER children
-- Usages that should migrate to structured children:
-  - Search (CLI `search --field=body`, MCP `search.py`, `server.py` match): search REMAINDER texts + assertion texts instead
-  - API serialization (`mcp/server.py` properties): drop field, children already have the data
-- Usages tied to `full-text` hash mode (`validate.py`, `render.py`): only used when `hash_mode=full-text` (not the default); could recompute from rendered children
-- Builder mutation helpers (`_update_assertion_in_body_text`, `_add_assertion_to_body_text`, `_delete_assertion_from_body_text`, `_rename_assertion_in_body_text`): appear to be dead code since `render_save()` reconstructs from graph nodes
-- Both parsers (legacy `requirement.py` and Lark `transformers/requirement.py`) create it
+[x] refactor: remove body_text field from requirement nodes
+- Fixed: body_text removed; reconstruct_body_text() computes from children on demand
+- 4 regex mutation helpers deleted; hash/search/API migrated to structured children
+- RequirementParser deleted; Lark is sole parser; shared patterns relocated to parsers/patterns.py
 
 [ ] feature: viewer: add review/comment
 - In Edit Mode, allow user to tag any REQ or JNY element (and CODE and TEST reference) with a comment. 
@@ -230,6 +222,23 @@
 - find the terms that will detect these code situations
 - is there a linter that looks for dead code?
 - or perhaps a profiler: find all the functions never called in a test, as a starting point for obsolete candidates?
+
+[ ] feature: live recomputation of derived data after mutations
+- Currently mutations only maintain graph structure + requirement hashes
+- These derived data categories go stale until the next full rebuild:
+  - **RollupMetrics / coverage**: `annotate_coverage()` runs at build time only; mutation-added edges don't update coverage
+  - **TermDictionary**: term definitions/references populated from `_pending_terms` at build; editing a REMAINDER to add a term definition won't appear until rebuild
+  - **Keyword annotations**: `annotate_keywords()` runs at build time; new/changed keywords in mutations aren't indexed
+  - **Git state annotations**: `is_uncommitted`, `is_modified`, etc. set at build time; stale after save
+- Explore incremental recomputation after mutations for each category
+- Coverage is the highest impact (viewer badges go stale during edit sessions)
+
+[ ] feature: viewer: Term Index and Glossary tabs
+- Add a "Glossary" tab (alongside REQ, JNY in tree column or as a separate panel)
+- Shows all defined terms with their definitions, grouped or alphabetical
+- Add a "Term Index" tab showing each term + all marked-up reference sites
+- Hyperlink from term references to their definitions and back
+- Depends on TermDictionary being populated (see live recomputation issue above)
 
 ---
 

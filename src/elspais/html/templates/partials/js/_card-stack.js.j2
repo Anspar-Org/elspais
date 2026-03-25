@@ -6,6 +6,7 @@
 // =====================================================================
 
 async function openCard(nodeId) {
+    editState.focusNodeId = nodeId;
     // If already open, just focus it
     if (editState.openCards.has(nodeId)) {
         focusCard(nodeId);
