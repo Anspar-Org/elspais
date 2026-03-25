@@ -207,6 +207,29 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
         except FileNotFoundError:
             webbrowser.open(url)
 
+    # Register this viewer in daemon.json so CLI commands find it
+    import os
+
+    from elspais.mcp.daemon import (
+        _daemon_json_path,
+        stop_daemon,
+        write_daemon_json,
+    )
+
+    stop_daemon(repo_root)  # Kill any existing server for this project
+    write_daemon_json(
+        repo_root=repo_root,
+        pid=os.getpid(),
+        port=port,
+        server_type="viewer",
+    )
+    daemon_json = _daemon_json_path(repo_root)
+
+    # Safety net: remove daemon.json even on unhandled exits
+    import atexit
+
+    atexit.register(lambda: daemon_json.unlink(missing_ok=True))
+
     try:
         import anyio
         import uvicorn
@@ -222,6 +245,8 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
     except KeyboardInterrupt:
         if not quiet:
             print("\nServer stopped.", file=sys.stderr)
+    finally:
+        daemon_json.unlink(missing_ok=True)
 
     return 0
 

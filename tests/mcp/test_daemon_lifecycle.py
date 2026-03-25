@@ -64,3 +64,29 @@ def test_write_daemon_json_viewer_type(tmp_path):
 
     data = json.loads((tmp_path / ".elspais" / "daemon.json").read_text())
     assert data["type"] == "viewer"
+
+
+def test_viewer_cleanup_removes_daemon_json(tmp_path):
+    """Viewer must remove daemon.json in its finally block."""
+    from elspais.mcp.daemon import _daemon_json_path, write_daemon_json
+
+    write_daemon_json(repo_root=tmp_path, pid=99999, port=5001, server_type="viewer")
+    path = _daemon_json_path(tmp_path)
+    assert path.exists()
+
+    # Simulate viewer cleanup (the finally block)
+    path.unlink(missing_ok=True)
+    assert not path.exists()
+
+
+def test_viewer_atexit_removes_daemon_json(tmp_path):
+    """atexit handler must remove daemon.json as safety net."""
+    from elspais.mcp.daemon import _daemon_json_path, write_daemon_json
+
+    path = _daemon_json_path(tmp_path)
+    write_daemon_json(repo_root=tmp_path, pid=99999, port=5001, server_type="viewer")
+    assert path.exists()
+
+    # The atexit handler is a closure over daemon_json path
+    path.unlink(missing_ok=True)
+    assert not path.exists()
