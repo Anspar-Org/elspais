@@ -25,12 +25,12 @@
 
 
 
-[ ] testing: restore daemon usage in e2e tests
-- E2e test fixtures currently set `cli_ttl=0` to force local graph builds
-- This was a workaround for daemon routing issues: the global daemon served the wrong project when e2e tests ran `elspais` in temp directories
-- The engine's `find_git_root()` from the subprocess CWD should find the temp repo's root, and `ensure_daemon` should start a per-project daemon there — need to trace why this wasn't working
-- Restoring daemon usage would make e2e tests faster and exercise more code paths (daemon startup, version check, HTTP transport)
-- The viewer version check (added in this branch) helps with stale versions but not wrong-project routing
+[x] testing: restore daemon usage in e2e tests
+- Fixed: viewer writes daemon.json (same as daemon), removing hardcoded port 5001 probe
+- Routing is now through per-project daemon.json exclusively — no wrong-project routing possible
+- `cli_ttl=2` restores daemon usage in e2e tests; cleanup fixture prevents zombie processes
+- Git env isolation via `pytest_configure` + `GIT_CEILING_DIRECTORIES=/` prevents hook contamination
+- `unset GIT_DIR` in pre-commit/pre-push hooks prevents worktree contamination from test subprocess git calls
 
 [ ] graph: add render_order to STRUCTURES edges
 - STRUCTURES edges (REQ→ASSERTION, REQ→REMAINDER) lack explicit ordering metadata
