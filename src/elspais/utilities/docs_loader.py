@@ -28,6 +28,7 @@ TOPIC_ORDER = [
     "checks",
     "doctor",
     "analysis",
+    "terms",
     "associate",
     "ignore",
     "graph-model",

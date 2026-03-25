@@ -19,16 +19,32 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+_GIT_ENV_VARS_TO_STRIP = (
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_AUTHOR_NAME",
+    "GIT_AUTHOR_EMAIL",
+    "GIT_AUTHOR_DATE",
+    "GIT_COMMITTER_NAME",
+    "GIT_COMMITTER_EMAIL",
+    "GIT_COMMITTER_DATE",
+)
+
 
 def _clean_git_env() -> dict[str, str]:
-    """Return environment with GIT_DIR/GIT_WORK_TREE removed.
+    """Return environment with git hook context vars removed.
 
     Use when running git commands with explicit cwd to prevent
     inherited git context from overriding the provided path.
+
+    Strips: GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE (cause subprocess
+    git to target the wrong repo/index), and GIT_AUTHOR_*/GIT_COMMITTER_*
+    (override local repo user config, leak from pre-commit/pre-push hooks).
     """
     env = os.environ.copy()
-    env.pop("GIT_DIR", None)
-    env.pop("GIT_WORK_TREE", None)
+    for var in _GIT_ENV_VARS_TO_STRIP:
+        env.pop(var, None)
     return env
 
 

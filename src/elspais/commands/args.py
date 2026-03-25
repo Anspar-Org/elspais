@@ -595,6 +595,7 @@ DOCS_TOPICS = Literal[
     "checks",
     "doctor",
     "analysis",
+    "terms",
     "associate",
     "ignore",
     "graph-model",
