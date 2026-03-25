@@ -142,6 +142,22 @@ class TestGraphBuilder:
         assert not graph.has_root("REQ-o00001")  # Has parent via implements
 
 
+class TestBodyTextNotStored:
+    """After cleanup, body_text must not be stored in node content."""
+
+    # Implements: REQ-d00131-B
+    def test_body_text_not_stored_after_build(self, sample_requirements):
+        """After cleanup, body_text must not be stored in node content."""
+        builder = GraphBuilder()
+        for req in sample_requirements:
+            builder.add_parsed_content(req)
+        graph = builder.build()
+
+        req = graph.find_by_id("REQ-p00001")
+        assert req is not None
+        assert req.get_field("body_text") is None
+
+
 class TestTraceGraph:
     """Tests for TraceGraph container."""
 

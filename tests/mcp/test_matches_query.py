@@ -13,7 +13,20 @@ import re
 import pytest
 
 from elspais.graph import GraphNode, NodeKind
+from elspais.graph.relations import EdgeKind
 from elspais.mcp.search import parse_query
+
+
+def _add_body_remainder(parent: GraphNode, body_text: str) -> None:
+    """Wire a REMAINDER child with body text via STRUCTURES edge."""
+    remainder = GraphNode(
+        id=f"{parent.id}::body",
+        kind=NodeKind.REMAINDER,
+        label="",
+    )
+    remainder.set_field("text", body_text)
+    edge = parent.link(remainder, EdgeKind.STRUCTURES)
+    edge.metadata["render_order"] = 0.0
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixtures
@@ -32,9 +45,9 @@ def match_node():
         "level": "DEV",
         "status": "Active",
         "hash": "aaa11111",
-        "body_text": "All data must be encrypted at rest using AES-256.",
         "keywords": ["encryption", "security", "AES"],
     }
+    _add_body_remainder(node, "All data must be encrypted at rest using AES-256.")
     return node
 
 

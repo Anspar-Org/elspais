@@ -4,25 +4,13 @@ from elspais.config import find_config_file, load_config
 from elspais.graph import NodeKind
 from elspais.graph.builder import GraphBuilder
 from elspais.graph.deserializer import DomainFile
-from elspais.graph.parsers import ParserRegistry
-from elspais.graph.parsers.comments import CommentsParser
-from elspais.graph.parsers.remainder import RemainderParser
-from elspais.graph.parsers.requirement import RequirementParser
+from elspais.graph.parsers.lark import FileDispatcher
 from elspais.utilities.patterns import build_resolver
 
 
 def _make_resolver(config):
     """Build IdResolver from loaded config."""
     return build_resolver(config)
-
-
-def create_parser_registry(resolver) -> ParserRegistry:
-    """Create a parser registry with all standard parsers."""
-    registry = ParserRegistry()
-    registry.register(CommentsParser())
-    registry.register(RequirementParser(resolver))
-    registry.register(RemainderParser())
-    return registry
 
 
 class TestFullPipeline:
@@ -39,7 +27,7 @@ class TestFullPipeline:
         resolver = _make_resolver(config)
 
         # Create parser registry
-        registry = create_parser_registry(resolver)
+        dispatcher = FileDispatcher(resolver)
 
         # Create deserializer for spec directory
         spec_dir = integration_spec_dir / "spec"
@@ -47,7 +35,7 @@ class TestFullPipeline:
 
         # Build graph
         builder = GraphBuilder(repo_root=integration_spec_dir)
-        for content in deserializer.deserialize(registry):
+        for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
         graph = builder.build()
@@ -66,13 +54,13 @@ class TestFullPipeline:
         config_path = find_config_file(integration_spec_dir)
         config = load_config(config_path)
         resolver = _make_resolver(config)
-        registry = create_parser_registry(resolver)
+        dispatcher = FileDispatcher(resolver)
 
         spec_dir = integration_spec_dir / "spec"
         deserializer = DomainFile(spec_dir, patterns=["*.md"])
 
         builder = GraphBuilder(repo_root=integration_spec_dir)
-        for content in deserializer.deserialize(registry):
+        for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
         graph = builder.build()
@@ -94,13 +82,13 @@ class TestFullPipeline:
         config_path = find_config_file(integration_spec_dir)
         config = load_config(config_path)
         resolver = _make_resolver(config)
-        registry = create_parser_registry(resolver)
+        dispatcher = FileDispatcher(resolver)
 
         spec_dir = integration_spec_dir / "spec"
         deserializer = DomainFile(spec_dir, patterns=["*.md"])
 
         builder = GraphBuilder(repo_root=integration_spec_dir)
-        for content in deserializer.deserialize(registry):
+        for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
         graph = builder.build()
@@ -127,13 +115,13 @@ class TestFullPipeline:
         config_path = find_config_file(integration_spec_dir)
         config = load_config(config_path)
         resolver = _make_resolver(config)
-        registry = create_parser_registry(resolver)
+        dispatcher = FileDispatcher(resolver)
 
         spec_dir = integration_spec_dir / "spec"
         deserializer = DomainFile(spec_dir, patterns=["*.md"])
 
         builder = GraphBuilder(repo_root=integration_spec_dir)
-        for content in deserializer.deserialize(registry):
+        for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
         graph = builder.build()
@@ -153,13 +141,13 @@ class TestFullPipeline:
         config_path = find_config_file(integration_spec_dir)
         config = load_config(config_path)
         resolver = _make_resolver(config)
-        registry = create_parser_registry(resolver)
+        dispatcher = FileDispatcher(resolver)
 
         spec_dir = integration_spec_dir / "spec"
         deserializer = DomainFile(spec_dir, patterns=["*.md"])
 
         builder = GraphBuilder(repo_root=integration_spec_dir)
-        for content in deserializer.deserialize(registry):
+        for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
         graph = builder.build()
@@ -201,8 +189,8 @@ class TestMultiAssertionPipelineExpansion:
         config = load_config(config_path)
         resolver = _make_resolver(config)
 
-        # Registry for spec files
-        spec_registry = create_parser_registry(resolver)
+        # Lark dispatcher for spec files
+        dispatcher = FileDispatcher(resolver)
 
         # Parse spec files
         spec_dir = root_dir / "spec"
@@ -212,18 +200,16 @@ class TestMultiAssertionPipelineExpansion:
             repo_root=root_dir,
             multi_assertion_separator=multi_assertion_separator,
         )
-        for content in spec_deserializer.deserialize(spec_registry):
+        for content in spec_deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
         # Optionally parse code files via Lark FileDispatcher
         if include_code:
-            from elspais.graph.parsers.lark import FileDispatcher
-
-            dispatcher = FileDispatcher(resolver)
+            code_dispatcher = FileDispatcher(resolver)
             code_dir = root_dir / "src"
             for py_file in sorted(code_dir.rglob("*.py")):
                 text = py_file.read_text(encoding="utf-8")
-                for parsed in dispatcher.dispatch_code(text, str(py_file)):
+                for parsed in code_dispatcher.dispatch_code(text, str(py_file)):
                     builder.add_parsed_content(parsed)
 
         return builder.build()

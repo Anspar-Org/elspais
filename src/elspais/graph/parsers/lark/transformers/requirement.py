@@ -218,9 +218,8 @@ class RequirementTransformer:
                     hash_value = hash_match.group("hash")
                 end_line = footer_token.line  # type: ignore[attr-defined]
 
-        # Build raw_text and body_text for hash computation
+        # Build raw_text for hash computation
         raw_text = self._reconstruct_raw_text(node)
-        body_text = self._extract_body_text(raw_text)
 
         # Build preamble section from body_lines (text before first ## section)
         preamble_content = "\n".join(ln for ln in body_lines if ln.strip()).strip()
@@ -247,7 +246,6 @@ class RequirementTransformer:
             "changelog": changelog,
             "definitions": definitions,
             "hash": hash_value,
-            "body_text": body_text,
             "heading_level": heading_level,
         }
         if has_redundant_refs:
@@ -791,24 +789,6 @@ class RequirementTransformer:
             if hasattr(token, "line") and token.line < first:  # type: ignore[attr-defined]
                 first = token.line  # type: ignore[attr-defined]
         return first if first < 999999999 else 0
-
-    def _extract_body_text(self, raw_text: str) -> str:
-        """Extract body text for hash computation (between header and footer)."""
-        lines = raw_text.split("\n")
-        if not lines:
-            return ""
-        body_start = 1
-        body_end = len(lines)
-        for i, line in enumerate(lines):
-            if line.startswith("*End*"):
-                body_end = i
-                break
-        body_lines = lines[body_start:body_end]
-        while body_lines and not body_lines[0].strip():
-            body_lines.pop(0)
-        while body_lines and not body_lines[-1].strip():
-            body_lines.pop()
-        return "\n".join(body_lines)
 
     def _last_line(self, node: Tree) -> int:
         """Get the last line number from a tree node."""

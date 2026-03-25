@@ -25,6 +25,40 @@ if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
 
 
+def reconstruct_body_text(node: GraphNode) -> str:
+    """Reconstruct body text from STRUCTURES children in render_order.
+
+    Used for full-text hash computation and search. Produces text equivalent
+    to what was previously stored in the body_text field.
+
+    Args:
+        node: A REQUIREMENT node.
+
+    Returns:
+        Concatenated text of all ASSERTION and REMAINDER children.
+    """
+    # Collect children with render_order
+    children_with_order: list[tuple[float, GraphNode]] = []
+    for edge in node.iter_outgoing_edges():
+        if edge.kind == EdgeKind.STRUCTURES:
+            order = edge.metadata.get("render_order", 0.0)
+            children_with_order.append((order, edge.target))
+    children_with_order.sort(key=lambda x: x[0])
+
+    parts: list[str] = []
+    for _, child in children_with_order:
+        if child.kind == NodeKind.ASSERTION:
+            label = child.get_field("label") or ""
+            text = child.get_label() or ""
+            parts.append(f"{label}. {text}")
+        elif child.kind == NodeKind.REMAINDER:
+            text = child.get_field("text") or ""
+            if text:
+                parts.append(text)
+
+    return "\n".join(parts)
+
+
 def render_node(node: GraphNode) -> str:
     """Render a graph node back to its text representation.
 
@@ -185,7 +219,8 @@ def _render_requirement(node: GraphNode) -> str:
     # Compute hash using configured mode (DRY: utilities/hasher.py)
     hash_mode = node.get_field("hash_mode") or "normalized-text"
     if hash_mode == "full-text":
-        hash_val = calculate_hash(node.get_field("body_text") or "")
+        body = reconstruct_body_text(node)
+        hash_val = calculate_hash(body)
     else:
         hash_val = compute_normalized_hash(assertions)
 

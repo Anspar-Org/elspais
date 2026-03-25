@@ -471,7 +471,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
 
         if node.kind != NodeKind.REQUIREMENT:
             return
-        visit_key = (node.id, parent_id or "__root__")
+        visit_key = (node.id, parent_id or "__root__", depth)
         if visit_key in visited:
             return
         visited.add(visit_key)

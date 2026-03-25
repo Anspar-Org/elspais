@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from elspais.graph import NodeKind
 from elspais.graph.GraphNode import GraphNode
+from elspais.graph.relations import EdgeKind
 from elspais.mcp.search import (
     ParsedQuery,
     SearchTerm,
@@ -31,7 +32,10 @@ def _make_node(
     """Create a GraphNode for testing with optional body and keywords."""
     node = GraphNode(node_id, NodeKind.REQUIREMENT, title)
     if body:
-        node.set_field("body_text", body)
+        remainder = GraphNode(f"{node_id}::body", NodeKind.REMAINDER, "")
+        remainder.set_field("text", body)
+        edge = node.link(remainder, EdgeKind.STRUCTURES)
+        edge.metadata["render_order"] = 0.0
     if keywords:
         node.set_field("keywords", keywords)
     return node

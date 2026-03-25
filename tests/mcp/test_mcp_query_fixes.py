@@ -18,6 +18,20 @@ import pytest
 from elspais.graph import NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.graph.GraphNode import GraphNode
+from elspais.graph.relations import EdgeKind
+
+
+def _wire_body(parent: GraphNode, body_text: str) -> None:
+    """Wire a REMAINDER child with body text via STRUCTURES edge."""
+    remainder = GraphNode(
+        id=f"{parent.id}::body",
+        kind=NodeKind.REMAINDER,
+        label="",
+    )
+    remainder.set_field("text", body_text)
+    edge = parent.link(remainder, EdgeKind.STRUCTURES)
+    edge.metadata["render_order"] = 0.0
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixtures
@@ -38,9 +52,9 @@ def graph_with_body():
         "level": "prd",
         "status": "Active",
         "hash": "abc12345",
-        "body_text": "The system SHALL provide OAuth2 authentication.",
         "keywords": ["authentication", "oauth2", "system"],
     }
+    _wire_body(req1, "The system SHALL provide OAuth2 authentication.")
     graph._index["REQ-p00001"] = req1
     graph._roots.append(req1)
 
@@ -53,9 +67,9 @@ def graph_with_body():
         "level": "ops",
         "status": "Active",
         "hash": "def67890",
-        "body_text": "Database operations SHALL support transactions.",
         "keywords": ["database", "operations", "transactions"],
     }
+    _wire_body(req2, "Database operations SHALL support transactions.")
     graph._index["REQ-o00001"] = req2
     graph._roots.append(req2)
 
@@ -68,9 +82,9 @@ def graph_with_body():
         "level": "dev",
         "status": "Deprecated",
         "hash": "ghi11111",
-        "body_text": "The API endpoint SHALL handle pagination.",
         "keywords": ["api", "endpoint", "pagination"],
     }
+    _wire_body(req3, "The API endpoint SHALL handle pagination.")
     graph._index["REQ-d00001"] = req3
     graph._roots.append(req3)
 
@@ -157,7 +171,8 @@ class TestLevelNormalization:
     # Implements: REQ-o00060-C
     def test_parser_normalizes_level(self):
         """Parser stores canonical config type key, not raw text."""
-        from elspais.graph.parsers.requirement import RequirementParser
+        from elspais.graph.parsers.lark import GrammarFactory
+        from elspais.graph.parsers.lark.transformers.requirement import RequirementTransformer
         from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
         id_config = IdPatternConfig.from_dict(
@@ -174,9 +189,12 @@ class TestLevelNormalization:
                 },
             }
         )
-        parser = RequirementParser(IdResolver(id_config))
+        resolver = IdResolver(id_config)
+        factory = GrammarFactory(resolver)
+        lark_parser = factory.get_requirement_parser()
+        transformer = RequirementTransformer(resolver)
 
-        # Simulate parsing a requirement with uppercase level
+        # Parse a requirement with uppercase level
         text = (
             "## REQ-p00001: Test Requirement\n"
             "**Level**: PRD | **Status**: Active\n"
@@ -185,8 +203,11 @@ class TestLevelNormalization:
             "\n"
             "*End* *Test Requirement*\n"
         )
-        data = parser._parse_requirement("REQ-p00001", "Test Requirement", text)
-        assert data["level"] == "prd"
+        tree = lark_parser.parse(text)
+        results = transformer.transform(tree)
+        reqs = [r for r in results if r.content_type == "requirement"]
+        assert len(reqs) == 1
+        assert reqs[0].parsed_data["level"] == "prd"
 
     # Implements: REQ-o00061-C
     def test_count_by_level_with_config(self, graph_with_body):

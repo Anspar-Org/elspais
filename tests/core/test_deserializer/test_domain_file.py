@@ -3,19 +3,12 @@
 import pytest
 
 from elspais.graph.deserializer import DomainFile
-from elspais.graph.parsers import ParserRegistry
-from elspais.graph.parsers.comments import CommentsParser
-from elspais.graph.parsers.remainder import RemainderParser
-from elspais.graph.parsers.requirement import RequirementParser
+from elspais.graph.parsers.lark import FileDispatcher
 
 
 @pytest.fixture
-def parser_registry(hht_resolver):
-    registry = ParserRegistry()
-    registry.register(CommentsParser())
-    registry.register(RequirementParser(hht_resolver))
-    registry.register(RemainderParser())
-    return registry
+def dispatcher(hht_resolver):
+    return FileDispatcher(hht_resolver)
 
 
 class TestDomainFile:
@@ -46,10 +39,10 @@ class TestDomainFile:
         assert any("ops.md" in s for s in source_ids)
 
     # Implements: REQ-o00050-A
-    def test_deserialize_produces_parsed_content(self, temp_spec_dir, parser_registry):
+    def test_deserialize_produces_parsed_content(self, temp_spec_dir, dispatcher):
         deserializer = DomainFile(temp_spec_dir, patterns=["*.md"])
 
-        results = list(deserializer.deserialize(parser_registry))
+        results = list(deserializer.dispatch(dispatcher.dispatch_spec))
 
         # Should have parsed content from both files
         assert len(results) > 0
@@ -63,11 +56,11 @@ class TestDomainFile:
         assert "REQ-p00002" in req_ids
 
     # Implements: REQ-d00128-D
-    def test_deserialize_includes_file_context(self, temp_spec_dir, parser_registry):
+    def test_deserialize_includes_file_context(self, temp_spec_dir, dispatcher):
         prd_file = temp_spec_dir / "prd.md"
         deserializer = DomainFile(prd_file)
 
-        results = list(deserializer.deserialize(parser_registry))
+        results = list(deserializer.dispatch(dispatcher.dispatch_spec))
 
         # All results should have source context
         for result in results:

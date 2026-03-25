@@ -741,3 +741,95 @@ class TestRenderRoundTrip:
         assert "## Data Management" not in rendered
         assert "### Core Functionality" not in rendered
         assert "### Data Management" not in rendered
+
+
+class TestReconstructBodyText:
+    """Validates REQ-d00131-B: reconstruct_body_text() produces text from STRUCTURES children."""
+
+    # Implements: REQ-d00131-B
+    def test_reconstruct_body_text_from_children(self):
+        """reconstruct_body_text() should produce text from STRUCTURES children."""
+        from elspais.graph.render import reconstruct_body_text
+
+        req = GraphNode(id="REQ-t00001", kind=NodeKind.REQUIREMENT, label="Test")
+        req._content = {"level": "dev", "status": "Active"}
+
+        # Add a preamble remainder
+        preamble = GraphNode(id="rem-preamble", kind=NodeKind.REMAINDER, label="")
+        preamble._content = {"heading": "preamble", "text": "Some preamble text."}
+        edge_p = req.link(preamble, EdgeKind.STRUCTURES)
+        edge_p.metadata = {"render_order": 1.0}
+
+        # Add assertions
+        a_node = GraphNode(id="REQ-t00001-A", kind=NodeKind.ASSERTION, label="First thing")
+        a_node._content = {"label": "A"}
+        edge_a = req.link(a_node, EdgeKind.STRUCTURES)
+        edge_a.metadata = {"render_order": 2.0}
+
+        b_node = GraphNode(id="REQ-t00001-B", kind=NodeKind.ASSERTION, label="Second thing")
+        b_node._content = {"label": "B"}
+        edge_b = req.link(b_node, EdgeKind.STRUCTURES)
+        edge_b.metadata = {"render_order": 3.0}
+
+        body = reconstruct_body_text(req)
+        assert "Some preamble text." in body
+        assert "A. First thing" in body
+        assert "B. Second thing" in body
+        # A should appear before B (render_order)
+        assert body.index("A. First thing") < body.index("B. Second thing")
+
+    # Implements: REQ-d00131-B
+    def test_reconstruct_body_text_empty_node(self):
+        """reconstruct_body_text() returns empty string for node with no STRUCTURES children."""
+        from elspais.graph.render import reconstruct_body_text
+
+        req = GraphNode(id="REQ-t00001", kind=NodeKind.REQUIREMENT, label="Test")
+        req._content = {"level": "dev", "status": "Active"}
+
+        body = reconstruct_body_text(req)
+        assert body == ""
+
+    # Implements: REQ-d00131-B
+    def test_reconstruct_body_text_assertions_only(self):
+        """reconstruct_body_text() works with assertions only (no remainder)."""
+        from elspais.graph.render import reconstruct_body_text
+
+        req = GraphNode(id="REQ-t00001", kind=NodeKind.REQUIREMENT, label="Test")
+        req._content = {"level": "dev", "status": "Active"}
+
+        a_node = GraphNode(id="REQ-t00001-A", kind=NodeKind.ASSERTION, label="Do X")
+        a_node._content = {"label": "A"}
+        edge_a = req.link(a_node, EdgeKind.STRUCTURES)
+        edge_a.metadata = {"render_order": 1.0}
+
+        body = reconstruct_body_text(req)
+        assert body == "A. Do X"
+
+
+class TestFulltextHashFromStructuredChildren:
+    """Full-text hash mode should compute from structured children, not body_text."""
+
+    # Implements: REQ-d00131-B
+    def test_fulltext_hash_from_structured_children(self):
+        """Full-text hash mode should compute from structured children, not body_text."""
+        from elspais.graph.render import _render_requirement
+
+        req = GraphNode(id="REQ-t00001", kind=NodeKind.REQUIREMENT, label="Test")
+        req._content = {
+            "level": "dev",
+            "status": "Active",
+            "hash_mode": "full-text",
+            # NO body_text field
+        }
+
+        a_node = GraphNode(
+            id="REQ-t00001-A", kind=NodeKind.ASSERTION, label="Must do X"
+        )
+        a_node._content = {"label": "A"}
+        edge_a = req.link(a_node, EdgeKind.STRUCTURES)
+        edge_a.metadata = {"render_order": 1.0}
+
+        output = _render_requirement(req)
+        assert "*End*" in output
+        # Hash of empty string is "e3b0c442" — we should NOT get that
+        assert "e3b0c442" not in output

@@ -370,7 +370,6 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
             "level": node.get_field("level"),
             "status": node.get_field("status"),
             "hash": node.get_field("hash"),
-            "body_text": node.get_field("body_text"),
             "stereotype": stereotype.value if isinstance(stereotype, Stereotype) else stereotype,
         }
     elif kind == NodeKind.USER_JOURNEY:
@@ -669,9 +668,11 @@ def _matches_query(
             return True
 
     if field in ("body", "all"):
-        body = node.get_field("body_text", "")
-        if body and compiled_pattern.search(body):  # type: ignore[union-attr]
-            return True
+        from elspais.graph.render import reconstruct_body_text
+        if node.kind == NodeKind.REQUIREMENT:
+            body = reconstruct_body_text(node)
+            if body and compiled_pattern.search(body):  # type: ignore[union-attr]
+                return True
 
     if field in ("keywords", "all"):
         keywords = node.get_field("keywords", [])
@@ -1259,6 +1260,7 @@ def _get_requirement(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     REQ-d00062-F: Returns error for non-existent requirements.
     """
     from elspais.graph.relations import EdgeKind as EK
+    from elspais.graph.render import reconstruct_body_text
 
     node = graph.find_by_id(req_id)
 
@@ -1322,7 +1324,7 @@ def _get_requirement(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
         "level": node.get_field("level"),
         "status": node.get_field("status"),
         "hash": node.get_field("hash"),
-        "body": node.get_field("body_text"),
+        "body": reconstruct_body_text(node),
         "source": {"path": source_path, "line": node.get_field("parse_line")},
         "assertions": assertions,
         "parents": req_parents,

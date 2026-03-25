@@ -131,7 +131,9 @@ def _get_field_text(node: GraphNode, field_name: str) -> str:
     if field_name == "title":
         return node.get_label() or ""
     if field_name == "body":
-        return node.get_field("body_text", "")
+        from elspais.graph.render import reconstruct_body_text
+        from elspais.graph import NodeKind
+        return reconstruct_body_text(node) if node.kind == NodeKind.REQUIREMENT else ""
     if field_name == "keywords":
         keywords = node.get_field("keywords", [])
         return " ".join(keywords) if keywords else ""
