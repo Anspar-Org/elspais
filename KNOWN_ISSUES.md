@@ -1,5 +1,11 @@
 # Known Issues
 
+[ ] mcp : bug
+- MCP refresh() should return error if unsaved changes
+- must use separate 'discard' command as a safety
+
+[ ] 
+
 [x] checks, gaps, reports: clarification
 - The `--status` flag already exists on checks/gaps commands for prospective analysis
 - e.g. `elspais gaps --status Draft` shows gaps as if Draft requirements were active
