@@ -13,14 +13,23 @@ import pytest
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-# ── Git isolation ────────────────────────────────────────────────────────
-# Git sets GIT_DIR when running hooks (e.g., pre-push).  If pytest is
-# invoked from a hook, every subprocess.run(["git", ...], cwd=tmp_path)
-# will silently operate on the HOOK's repo instead of the temp directory,
-# because GIT_DIR overrides cwd.  Strip it once at session start so all
-# tests get a clean environment.
-os.environ.pop("GIT_DIR", None)
-os.environ.pop("GIT_WORK_TREE", None)
+def pytest_configure(config):
+    """Strip git env vars before any test collection or coverage forking.
+
+    Git sets GIT_DIR when running hooks (pre-commit, pre-push).  This
+    overrides cwd in subprocess calls, causing test git operations to
+    target the hook's repo instead of temp directories.
+
+    GIT_CEILING_DIRECTORIES=/ prevents git from discovering a parent
+    .git above a test's working directory — defense-in-depth against
+    accidental upward repo discovery.
+
+    Using pytest_configure (not module-level code) ensures this runs
+    before pytest-cov forks coverage subprocesses.
+    """
+    os.environ.pop("GIT_DIR", None)
+    os.environ.pop("GIT_WORK_TREE", None)
+    os.environ["GIT_CEILING_DIRECTORIES"] = "/"
 
 # Fixtures directory
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
