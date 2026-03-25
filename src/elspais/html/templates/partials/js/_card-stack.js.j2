@@ -184,14 +184,36 @@ function buildAssertionHtml(nodeId, a, data) {
 
 function buildRemainderHtml(nodeId, rem, idx) {
     var h = '';
-    h += '<div class="card-body-section-wrapper">';
+    var remId = rem.id || '';
+    var isPreamble = (rem.heading === 'preamble');
+    var isDefBlock = (rem.content_type === 'definition_block');
+    h += '<div class="card-body-section-wrapper" data-remainder-id="' + escapeAttr(remId) + '">';
     h += '<div class="card-body-section-heading">';
-    h += '<span>' + escapeHtml(rem.heading) + '</span>';
+    if (!isDefBlock && !isPreamble) {
+        h += '<span class="remainder-heading-view">' + escapeHtml(rem.heading) + '</span>';
+        h += '<input type="text" class="edit-only remainder-heading-edit" value="' + escapeAttr(rem.heading) + '"' +
+            ' data-node-id="' + escapeAttr(remId) + '" data-original="' + escapeAttr(rem.heading) + '"' +
+            ' onblur="onRemainderHeadingBlur(this)" style="font-weight:600;flex:1;">';
+    } else {
+        h += '<span>' + escapeHtml(rem.heading) + '</span>';
+    }
     h += '<span class="card-body-section-toggle" id="body-section-toggle-' + nodeId + '-' + idx + '" ' +
         'onclick="toggleBodySection(\'' + nodeId + '\', ' + idx + ')">[-]</span>';
+    if (!isDefBlock) {
+        h += '<button class="edit-only remainder-delete-btn" ' +
+            'onclick="event.stopPropagation(); onRemainderDelete(\'' + escapeAttr(remId) + '\')" ' +
+            'title="Delete section">&times;</button>';
+    }
     h += '</div>';
-    h += '<div class="card-body-section-content" id="body-section-content-' + nodeId + '-' + idx + '">' +
+    h += '<div class="card-body-section-content remainder-text-view" id="body-section-content-' + nodeId + '-' + idx + '">' +
         simpleMarkdown(rem.text || '') + '</div>';
+    if (!isDefBlock) {
+        h += '<textarea class="edit-only remainder-text-edit" data-node-id="' + escapeAttr(remId) + '"' +
+            ' data-original="' + escapeAttr(rem.text || '') + '"' +
+            ' onblur="onRemainderTextBlur(this)"' +
+            ' style="width:100%;min-height:40px;font-size:0.8rem;border:1px solid #dee2e6;border-radius:4px;padding:6px;resize:vertical;background:#f8f9fa;">' +
+            escapeHtml(rem.text || '') + '</textarea>';
+    }
     h += '</div>';
     return h;
 }
@@ -364,9 +386,9 @@ function buildCardHtml(nodeId, data, collapsed) {
 
     if (editState.cardViewMode === 'complete') {
         // Complete view: interleave assertions and sections in document order
-        var structItems = assertions.map(function(a) { return {type: 'assertion', data: a, line: a.line || 0}; })
-            .concat(remainders.map(function(r, i) { return {type: 'remainder', data: r, idx: i, line: r.line || 0}; }));
-        structItems.sort(function(a, b) { return a.line - b.line; });
+        var structItems = assertions.map(function(a) { return {type: 'assertion', data: a, order: a.render_order != null ? a.render_order : (a.line || 0)}; })
+            .concat(remainders.map(function(r, i) { return {type: 'remainder', data: r, idx: i, order: r.render_order != null ? r.render_order : (r.line || 0)}; }));
+        structItems.sort(function(a, b) { return a.order - b.order; });
 
         html += '<div class="card-section">';
         html += '<div class="card-assertions">';
@@ -384,6 +406,7 @@ function buildCardHtml(nodeId, data, collapsed) {
         });
         html += '</div>';
         html += '<button class="card-add-assertion-btn edit-only" onclick="onAddAssertion(\'' + nodeId + '\')">+ Add Assertion</button>';
+        html += '<button class="card-add-section-btn edit-only" onclick="onRemainderAdd(\'' + nodeId + '\')">+ Add Section</button>';
         html += '</div>';
     } else {
         // Compact view: assertions only

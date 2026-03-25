@@ -15,6 +15,15 @@ body.edit-mode .edit-only-block {
     display: block !important;
 }
 
+/* Textarea edit-only elements displayed as block */
+body.edit-mode textarea.edit-only {
+    display: block !important;
+}
+
+/* Remainder section: hide view elements in edit mode */
+body.edit-mode .remainder-heading-view,
+body.edit-mode .remainder-text-view { display: none !important; }
+
 /* --- Edit Mode Visual Indicators --- */
 
 /* Editable fields at rest in edit mode */

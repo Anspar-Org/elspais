@@ -700,6 +700,56 @@ body.edit-mode .view-only {
     color: var(--assertion-delete-hover);
 }
 
+/* --- Remainder Section Edit Controls --- */
+
+.remainder-delete-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: var(--assertion-delete);
+    opacity: 0;
+    transition: opacity 0.2s, color 0.2s;
+    padding: 2px 4px;
+    margin-left: 4px;
+    flex-shrink: 0;
+}
+.card-body-section-heading:hover .remainder-delete-btn {
+    opacity: 0.7;
+}
+.remainder-delete-btn:hover {
+    opacity: 1 !important;
+    color: var(--assertion-delete-hover);
+}
+
+.remainder-heading-edit {
+    font-size: 0.75rem;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 2px 6px;
+}
+
+.card-add-section-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: transparent;
+    border: 1px dashed var(--card-add-btn-border);
+    border-radius: 4px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    color: var(--card-add-btn-text);
+    transition: all 0.15s;
+    margin-top: 4px;
+    margin-left: 4px;
+}
+.card-add-section-btn:hover {
+    border-color: var(--card-add-btn-hover-border);
+    color: var(--card-add-btn-hover-text);
+    background: var(--card-add-btn-hover-bg);
+}
+
 /* --- Assertion Validation Buttons --- */
 
 .card-assertion-wrapper {
