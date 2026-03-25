@@ -92,7 +92,7 @@ class GrammarFactory:
         # escape the literals, then join with regex fragments.
         canonical = cfg.canonical_template
         placeholders = {
-            "{namespace}": re.escape(namespace),
+            "{namespace}": namespace,
             "{component}": digits_pattern,
             "{level}": f"(?:{type_pattern})",
         }

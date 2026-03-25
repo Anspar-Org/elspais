@@ -269,7 +269,7 @@ def _run_static(args: argparse.Namespace) -> int:
 
     try:
         from elspais.commands.trace import format_view
-        from elspais.config import get_config, get_project_name
+        from elspais.config import get_config
 
         config = get_config(
             start_path=repo_root,
@@ -279,7 +279,7 @@ def _run_static(args: argparse.Namespace) -> int:
             graph,
             getattr(args, "embed_content", False),
             base_path=str(repo_root),
-            repo_name=get_project_name(config),
+            repo_name=config.get("project", {}).get("name"),
         )
     except ImportError as e:
         print(f"Error: {e}", file=sys.stderr)
