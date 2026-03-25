@@ -5685,18 +5685,13 @@ def run_server(
                 port = s.getsockname()[1]
 
         if daemon_json:
-            daemon_json.parent.mkdir(parents=True, exist_ok=True)
-            daemon_json.write_text(
-                _json.dumps(
-                    {
-                        "pid": _os.getpid(),
-                        "port": port,
-                        "repo_root": str(working_dir),
-                        "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                        "version": __version__,
-                        "config_hash": _config_hash_for_daemon(working_dir),
-                    }
-                )
+            from elspais.mcp.daemon import write_daemon_json
+
+            write_daemon_json(
+                repo_root=working_dir,
+                pid=_os.getpid(),
+                port=port,
+                server_type="daemon",
             )
 
         uvi_config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")

@@ -84,6 +84,50 @@ def get_cli_ttl(repo_root: Path | None = None) -> int:
         return _DEFAULT_TTL
 
 
+def write_daemon_json(
+    repo_root: Path,
+    pid: int,
+    port: int,
+    server_type: str = "daemon",
+) -> Path:
+    """Write daemon.json state file for a running server.
+
+    Both the headless daemon and the viewer use this to register
+    themselves as the active server for a project.
+
+    Args:
+        repo_root: Project root directory.
+        pid: Process ID of the server.
+        port: Port the server is listening on.
+        server_type: "daemon" or "viewer".
+
+    Returns:
+        Path to the written daemon.json file.
+    """
+    from elspais import __version__
+
+    daemon_json = _daemon_json_path(repo_root)
+    daemon_json.parent.mkdir(parents=True, exist_ok=True)
+
+    config_path = repo_root / ".elspais.toml"
+    config_hash = compute_config_hash(config_path) if config_path.is_file() else ""
+
+    daemon_json.write_text(
+        json.dumps(
+            {
+                "pid": pid,
+                "port": port,
+                "repo_root": str(repo_root),
+                "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "version": __version__,
+                "config_hash": config_hash,
+                "type": server_type,
+            }
+        )
+    )
+    return daemon_json
+
+
 # ── Viewer detection (fast path) ─────────────────────────────────────────
 
 

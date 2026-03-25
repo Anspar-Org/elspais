@@ -24,3 +24,43 @@ def test_start_daemon_stops_existing_first(tmp_path):
 
     assert len(calls) == 1
     assert calls[0] == ("stop", tmp_path)
+
+
+def test_write_daemon_json_includes_type(tmp_path):
+    """write_daemon_json() must include a 'type' field."""
+    from elspais.mcp.daemon import write_daemon_json
+
+    path = tmp_path / ".elspais" / "daemon.json"
+    write_daemon_json(
+        repo_root=tmp_path,
+        pid=12345,
+        port=9999,
+        server_type="daemon",
+    )
+
+    import json
+
+    data = json.loads(path.read_text())
+    assert data["type"] == "daemon"
+    assert data["pid"] == 12345
+    assert data["port"] == 9999
+    assert data["repo_root"] == str(tmp_path)
+    assert "version" in data
+    assert "started_at" in data
+
+
+def test_write_daemon_json_viewer_type(tmp_path):
+    """write_daemon_json() accepts type='viewer'."""
+    from elspais.mcp.daemon import write_daemon_json
+
+    write_daemon_json(
+        repo_root=tmp_path,
+        pid=12345,
+        port=5001,
+        server_type="viewer",
+    )
+
+    import json
+
+    data = json.loads((tmp_path / ".elspais" / "daemon.json").read_text())
+    assert data["type"] == "viewer"
