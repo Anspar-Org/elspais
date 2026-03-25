@@ -11,6 +11,7 @@ from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+
 def _get_daemon_port() -> int | None:
     """Get port of a running daemon, if any."""
     try:

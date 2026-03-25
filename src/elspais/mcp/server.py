@@ -5655,14 +5655,11 @@ def run_server(
         mcp.run(transport="stdio")
     else:
         # HTTP: use unified app (REST + MCP + auto-refresh)
-        import json as _json
         import socket
-        import time
 
         import anyio
         import uvicorn
 
-        from elspais import __version__
         from elspais.server.app import create_app
         from elspais.server.state import AppState
 

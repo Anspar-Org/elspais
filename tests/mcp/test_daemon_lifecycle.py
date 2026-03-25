@@ -1,7 +1,6 @@
 # Verifies: REQ-d00010
 """Tests for daemon lifecycle — no orphan servers."""
 
-from pathlib import Path
 from unittest.mock import patch
 
 
