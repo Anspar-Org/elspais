@@ -3,6 +3,7 @@
 pytest configuration and shared fixtures for elspais tests.
 """
 
+import os
 import sys
 from collections.abc import Generator
 from pathlib import Path
@@ -11,6 +12,15 @@ import pytest
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+# ── Git isolation ────────────────────────────────────────────────────────
+# Git sets GIT_DIR when running hooks (e.g., pre-push).  If pytest is
+# invoked from a hook, every subprocess.run(["git", ...], cwd=tmp_path)
+# will silently operate on the HOOK's repo instead of the temp directory,
+# because GIT_DIR overrides cwd.  Strip it once at session start so all
+# tests get a clean environment.
+os.environ.pop("GIT_DIR", None)
+os.environ.pop("GIT_WORK_TREE", None)
 
 # Fixtures directory
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
