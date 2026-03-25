@@ -3,10 +3,9 @@
 
 Encapsulates the daemon-vs-local decision tree:
   1. skip_daemon? --> local
-  2. viewer running? --> HTTP call
-  3. daemon running + version ok? --> HTTP call
-  4. cli_ttl != 0? --> auto-start daemon, poll for readiness, HTTP call
-  5. fallback --> build graph locally, call compute_fn
+  2. daemon.json exists for this project? --> HTTP call (viewer or daemon)
+  3. cli_ttl != 0? --> auto-start daemon, poll for readiness, HTTP call
+  4. fallback --> build graph locally, call compute_fn
 
 Both daemon and local paths return the same dict shape.
 """
@@ -61,8 +60,8 @@ def call(
 
 
 def _build_daemon_source(port: int) -> dict[str, Any]:
-    """Build graph_source dict for a daemon result."""
-    source: dict[str, Any] = {"type": "daemon", "port": port}
+    """Build graph_source dict for a server result."""
+    source: dict[str, Any] = {"port": port}
     try:
         from elspais.config import find_git_root
         from elspais.mcp.daemon import get_daemon_info
@@ -71,64 +70,46 @@ def _build_daemon_source(port: int) -> dict[str, Any]:
         if repo_root:
             info = get_daemon_info(repo_root)
             if info:
+                source["type"] = info.get("type", "daemon")
                 source["started_at"] = info.get("started_at", "")
+            else:
+                source["type"] = "daemon"
+        else:
+            source["type"] = "daemon"
     except Exception:
-        pass
+        source["type"] = "daemon"
     return source
-
-
-def _server_version_ok(port: int) -> bool:
-    """Check if a server's elspais version matches the current package."""
-    import json
-    from urllib.request import urlopen
-
-    from elspais import __version__
-
-    try:
-        with urlopen(f"http://127.0.0.1:{port}/api/status", timeout=2) as resp:
-            data = json.loads(resp.read())
-            server_version = data.get("version")
-            if server_version and server_version != __version__:
-                return False
-            return True
-    except Exception:
-        return False
 
 
 def _try_daemon(
     endpoint: str,
     params: dict[str, str],
 ) -> tuple[dict, dict[str, Any]] | None:
-    """Try daemon/viewer, auto-starting if allowed.
+    """Try to serve a request via a running server (viewer or daemon).
+
+    Routing is entirely through daemon.json — no hardcoded ports.
+    Both the viewer and headless daemon write daemon.json on startup.
 
     Returns (result_dict, source_info) or None.
     """
     from elspais.commands._daemon_client import _get_daemon_port, _try_port
+    from elspais.config import find_git_root
 
-    _VIEWER_PORT = 5001
+    repo_root = find_git_root()
+    if repo_root is None:
+        return None
 
-    # 1. Try viewer (with version check)
-    if _server_version_ok(_VIEWER_PORT):
-        result = _try_port(_VIEWER_PORT, endpoint, params, "GET")
+    # 1. Try existing server (viewer or daemon — both use daemon.json)
+    port = _get_daemon_port()
+    if port:
+        result = _try_port(port, endpoint, params, "GET")
         if result is not None:
-            return result, {"type": "viewer", "port": _VIEWER_PORT}
-
-    # 2. Try existing daemon
-    daemon_port = _get_daemon_port()
-    if daemon_port and daemon_port != _VIEWER_PORT:
-        result = _try_port(daemon_port, endpoint, params, "GET")
-        if result is not None:
-            source = _build_daemon_source(daemon_port)
+            source = _build_daemon_source(port)
             return result, source
 
-    # 3. Auto-start daemon if allowed
+    # 2. Auto-start daemon if allowed
     try:
-        from elspais.config import find_git_root
         from elspais.mcp.daemon import ensure_daemon
-
-        repo_root = find_git_root()
-        if repo_root is None:
-            return None
 
         port = ensure_daemon(repo_root)
         result = _try_port(port, endpoint, params, "GET")

@@ -18,7 +18,6 @@ from urllib.error import URLError
 from urllib.request import urlopen
 
 _DEFAULT_TTL = 30  # minutes
-_VIEWER_PORT = 5001
 
 
 def compute_config_hash(config_path: Path) -> str:
@@ -126,9 +125,6 @@ def write_daemon_json(
         )
     )
     return daemon_json
-
-
-# ── Viewer detection (fast path) ─────────────────────────────────────────
 
 
 # ── Daemon lifecycle ─────────────────────────────────────────────────────

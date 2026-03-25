@@ -28,7 +28,6 @@ def test_engine_call_daemon_includes_graph_source():
 
     daemon_result = {"healthy": True, "checks": []}
 
-    # _try_daemon returns (result_dict, source_info_dict)
     with patch(
         "elspais.commands._engine._try_daemon",
         return_value=(daemon_result, {"type": "daemon", "port": 35121}),
@@ -48,6 +47,8 @@ def test_engine_call_viewer_includes_graph_source():
 
     viewer_result = {"healthy": True, "checks": []}
 
+    # Viewer now goes through daemon.json like everything else —
+    # the type comes from daemon.json "type" field
     with patch(
         "elspais.commands._engine._try_daemon",
         return_value=(viewer_result, {"type": "viewer", "port": 5001}),
