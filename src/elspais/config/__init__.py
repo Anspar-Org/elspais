@@ -171,7 +171,7 @@ def load_config(config_path: Path) -> dict[str, Any]:
     merged = _apply_env_overrides(merged)
 
     # Version-gated sequential migration
-    version = merged.get("version", 1)
+    version = int(merged.get("version", 1))
     for v in range(version, CURRENT_CONFIG_VERSION):
         if v in MIGRATIONS:
             merged = MIGRATIONS[v](merged)
@@ -353,6 +353,11 @@ def _try_parse_env_value(value: str) -> Any:
         return True
     if value.lower() == "false":
         return False
+
+    # Numeric (int or float)
+    numeric = _try_parse_numeric(value)
+    if numeric is not None:
+        return numeric
 
     return value
 
