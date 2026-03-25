@@ -4,7 +4,8 @@ Handles reading/writing JSONL comment files in .elspais/comments/.
 All file I/O is isolated here -- comments.py contains only data models.
 """
 
-# Implements: REQ-d00228+REQ-d00229
+# Implements: REQ-d00228
+# Implements: REQ-d00229
 
 from __future__ import annotations
 

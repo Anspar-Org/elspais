@@ -5,7 +5,8 @@ append-only JSONL files in .elspais/comments/. Models are frozen
 (immutable) to match the append-only storage semantics.
 """
 
-# Implements: REQ-d00226+REQ-d00227
+# Implements: REQ-d00226
+# Implements: REQ-d00227
 
 from __future__ import annotations
 
