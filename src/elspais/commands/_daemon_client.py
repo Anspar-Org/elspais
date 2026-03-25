@@ -45,6 +45,10 @@ def _try_port(
         else:
             req = Request(url)
 
+        # Tell the server to bypass its freshness throttle so the graph
+        # reflects any file changes since the last request (e.g., after fix).
+        req.add_header("X-Force-Fresh", "1")
+
         with urlopen(req, timeout=10) as resp:
             return json.loads(resp.read())
     except (URLError, OSError, json.JSONDecodeError, ValueError):
