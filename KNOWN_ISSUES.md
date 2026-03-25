@@ -223,6 +223,23 @@
 - is there a linter that looks for dead code?
 - or perhaps a profiler: find all the functions never called in a test, as a starting point for obsolete candidates?
 
+[ ] feature: live recomputation of derived data after mutations
+- Currently mutations only maintain graph structure + requirement hashes
+- These derived data categories go stale until the next full rebuild:
+  - **RollupMetrics / coverage**: `annotate_coverage()` runs at build time only; mutation-added edges don't update coverage
+  - **TermDictionary**: term definitions/references populated from `_pending_terms` at build; editing a REMAINDER to add a term definition won't appear until rebuild
+  - **Keyword annotations**: `annotate_keywords()` runs at build time; new/changed keywords in mutations aren't indexed
+  - **Git state annotations**: `is_uncommitted`, `is_modified`, etc. set at build time; stale after save
+- Explore incremental recomputation after mutations for each category
+- Coverage is the highest impact (viewer badges go stale during edit sessions)
+
+[ ] feature: viewer: Term Index and Glossary tabs
+- Add a "Glossary" tab (alongside REQ, JNY in tree column or as a separate panel)
+- Shows all defined terms with their definitions, grouped or alphabetical
+- Add a "Term Index" tab showing each term + all marked-up reference sites
+- Hyperlink from term references to their definitions and back
+- Depends on TermDictionary being populated (see live recomputation issue above)
+
 ---
 
 [x] feature: cli search 'search terms string' : invokes the 'search' api. takes a string.
