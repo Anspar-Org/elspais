@@ -129,9 +129,12 @@ def start_daemon(repo_root: Path, ttl_minutes: int = _DEFAULT_TTL) -> int:
                      <0 = run forever (no timeout).
                       0 = should not be called (caller should check).
     """
+    # Stop any existing server before overwriting daemon.json.
+    # Without this, the old server becomes an undiscoverable orphan.
+    stop_daemon(repo_root)
+
     daemon_json = _daemon_json_path(repo_root)
     daemon_json.parent.mkdir(parents=True, exist_ok=True)
-    daemon_json.unlink(missing_ok=True)
 
     log_path = _daemon_dir(repo_root) / "daemon.log"
 
