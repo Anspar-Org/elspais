@@ -28,18 +28,21 @@ from elspais.mcp.server import (
     _mutate_add_assertion,
     _mutate_add_edge,
     _mutate_add_journey,
+    _mutate_add_remainder,
     _mutate_change_edge_kind,
     _mutate_change_edge_targets,
     _mutate_change_status,
     _mutate_delete_assertion,
     _mutate_delete_edge,
     _mutate_delete_journey,
+    _mutate_delete_remainder,
     _mutate_delete_requirement,
     _mutate_journey_section,
     _mutate_move_node_to_file,
     _mutate_rename_file,
     _mutate_update_assertion,
     _mutate_update_journey_field,
+    _mutate_update_remainder,
     _mutate_update_title,
     _query_nodes,
     _undo_last_mutation,
@@ -860,6 +863,53 @@ async def api_mutate_assertion_delete(request: Request) -> JSONResponse:
     if not confirm:
         return JSONResponse({"success": False, "error": "confirm=true required"}, status_code=400)
     result = _mutate_delete_assertion(state.graph, assertion_id, confirm=True)
+    status_code = 200 if result.get("success") else 400
+    return JSONResponse(result, status_code=status_code)
+
+
+async def api_mutate_remainder(request: Request) -> JSONResponse:
+    """POST /api/mutate/remainder - Update remainder text/heading."""
+    state = _st(request)
+    data = await request.json()
+    node_id = data.get("node_id", "")
+    text = data.get("text")
+    heading = data.get("heading")
+    if not node_id:
+        return JSONResponse({"success": False, "error": "node_id required"}, status_code=400)
+    if text is None and heading is None:
+        return JSONResponse(
+            {"success": False, "error": "At least one of text or heading required"},
+            status_code=400,
+        )
+    result = _mutate_update_remainder(state.graph, node_id, text=text, heading=heading)
+    status_code = 200 if result.get("success") else 400
+    return JSONResponse(result, status_code=status_code)
+
+
+async def api_mutate_remainder_add(request: Request) -> JSONResponse:
+    """POST /api/mutate/remainder/add - Add remainder section to requirement."""
+    state = _st(request)
+    data = await request.json()
+    req_id = data.get("req_id", "")
+    heading = data.get("heading", "")
+    text = data.get("text", "")
+    if not req_id or not heading:
+        return JSONResponse(
+            {"success": False, "error": "req_id and heading required"}, status_code=400
+        )
+    result = _mutate_add_remainder(state.graph, req_id, heading, text)
+    status_code = 200 if result.get("success") else 400
+    return JSONResponse(result, status_code=status_code)
+
+
+async def api_mutate_remainder_delete(request: Request) -> JSONResponse:
+    """POST /api/mutate/remainder/delete - Delete a remainder section."""
+    state = _st(request)
+    data = await request.json()
+    node_id = data.get("node_id", "")
+    if not node_id:
+        return JSONResponse({"success": False, "error": "node_id required"}, status_code=400)
+    result = _mutate_delete_remainder(state.graph, node_id)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
 

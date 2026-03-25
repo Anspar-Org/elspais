@@ -166,29 +166,42 @@ if [ -n "$MARKDOWN_FILES_CHANGED" ]; then
 fi
 
 # =====================================================
-# 5. Unit/Integration Tests with Coverage
+# 5. Unit/Integration Tests with Coverage (cached)
 # =====================================================
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
+CACHE_DIR="$REPO_ROOT/.results"
+UNIT_CACHE="$CACHE_DIR/.test-cache-unit"
 
-echo -e "${BLUE}Running unit/integration tests with coverage...${NC}"
-echo ""
+mkdir -p "$CACHE_DIR"
 
-mkdir -p "$REPO_ROOT/.results"
+# Compute content hash from HEAD tree (committed state after this commit)
+# Uses staged index which reflects what the commit will contain
+CONTENT_HASH=$(git write-tree 2>/dev/null | head -c 40)
 
-if ! pytest tests/ --tb=short -q \
-    --cov=src/elspais --cov-context=test --cov-report=json:"$REPO_ROOT/.results/coverage.json" --cov-report= 2>&1; then
+if [ -f "$UNIT_CACHE" ] && [ "$(cat "$UNIT_CACHE" 2>/dev/null)" = "$CONTENT_HASH" ]; then
+    echo -e "${GREEN}Tests cached — no changes since last pass${NC}"
     echo ""
-    echo -e "${RED}Tests failed!${NC}"
-    echo "Fix the errors above before committing."
+else
+    echo -e "${BLUE}Running unit/integration tests with coverage...${NC}"
     echo ""
-    echo "To bypass this check (NOT RECOMMENDED):"
-    echo "  git commit --no-verify"
-    exit 1
+
+    if ! pytest tests/ --tb=short -q \
+        --cov=src/elspais --cov-context=test --cov-report=json:"$CACHE_DIR/coverage.json" --cov-report= 2>&1; then
+        echo ""
+        echo -e "${RED}Tests failed!${NC}"
+        echo "Fix the errors above before committing."
+        echo ""
+        echo "To bypass this check (NOT RECOMMENDED):"
+        echo "  git commit --no-verify"
+        rm -f "$UNIT_CACHE"
+        exit 1
+    fi
+
+    echo -e "${GREEN}Tests passed!${NC}"
+    echo "$CONTENT_HASH" > "$UNIT_CACHE"
+    echo ""
 fi
-
-echo -e "${GREEN}Tests passed!${NC}"
-echo ""
 
 # =====================================================
 # 6. elspais fix (regenerate INDEX.md, KNOWN_ISSUES.md)

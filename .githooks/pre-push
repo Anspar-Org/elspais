@@ -176,19 +176,47 @@ fi
 echo ""
 
 VALIDATION_FAILED=false
+REPO_ROOT=$(git rev-parse --show-toplevel)
 
 # =====================================================
-# 3. Documentation Sync Tests
+# 3. Test Cache Setup
 # =====================================================
 
-echo -e "${BLUE}Running documentation sync tests...${NC}"
-echo ""
+CACHE_DIR="$REPO_ROOT/.results"
+UNIT_CACHE="$CACHE_DIR/.test-cache-unit"
+E2E_CACHE="$CACHE_DIR/.test-cache-e2e"
 
-if ! pytest tests/test_doc_sync.py -v --tb=short 2>&1; then
-    VALIDATION_FAILED=true
-    echo -e "${RED}Documentation sync tests failed!${NC}"
+mkdir -p "$CACHE_DIR"
+
+# Same hash as pre-commit: the committed tree hash
+CONTENT_HASH=$(git write-tree 2>/dev/null | head -c 40)
+
+UNIT_CACHED=false
+E2E_CACHED=false
+
+if [ -f "$UNIT_CACHE" ] && [ "$(cat "$UNIT_CACHE" 2>/dev/null)" = "$CONTENT_HASH" ]; then
+    UNIT_CACHED=true
+fi
+if [ -f "$E2E_CACHE" ] && [ "$(cat "$E2E_CACHE" 2>/dev/null)" = "$CONTENT_HASH" ]; then
+    E2E_CACHED=true
+fi
+
+# =====================================================
+# 3a. Documentation Sync Tests
+# =====================================================
+
+if [ "$UNIT_CACHED" = true ]; then
+    echo -e "${GREEN}Documentation sync tests cached — passed in pre-commit${NC}"
 else
-    echo -e "${GREEN}Documentation sync tests passed!${NC}"
+    echo -e "${BLUE}Running documentation sync tests...${NC}"
+    echo ""
+
+    if ! pytest tests/test_doc_sync.py -v --tb=short 2>&1; then
+        VALIDATION_FAILED=true
+        echo -e "${RED}Documentation sync tests failed!${NC}"
+    else
+        echo -e "${GREEN}Documentation sync tests passed!${NC}"
+    fi
 fi
 echo ""
 
@@ -257,9 +285,6 @@ echo ""
 # =====================================================
 # 7. Markdown Linting
 # =====================================================
-
-# Get repo root
-REPO_ROOT=$(git rev-parse --show-toplevel)
 
 # Get list of markdown files that will be pushed
 REMOTE_BRANCH=$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || echo "")
@@ -337,34 +362,57 @@ fi
 echo ""
 
 # =====================================================
-# 9. Full Test Suite
+# 9. Test Suite (cached)
 # =====================================================
 
-echo -e "${BLUE}Running full test suite...${NC}"
-echo ""
+if [ "$UNIT_CACHED" = true ] && [ "$E2E_CACHED" = true ]; then
+    echo -e "${GREEN}Full test suite cached — all tests passed since last change${NC}"
+    echo ""
+elif [ "$UNIT_CACHED" = true ]; then
+    echo -e "${GREEN}Unit/integration tests cached — passed in pre-commit${NC}"
+    echo -e "${BLUE}Running e2e tests...${NC}"
+    echo ""
 
-mkdir -p "$REPO_ROOT/.results"
-
-if ! pytest tests/ -m "" --tb=short -q --junitxml="$REPO_ROOT/.results/test-results.xml" \
-    --cov=src/elspais --cov-context=test --cov-report=json:"$REPO_ROOT/.results/coverage.json" --cov-report= 2>&1; then
-    VALIDATION_FAILED=true
-    echo -e "${RED}Test suite failed!${NC}"
+    if ! pytest tests/ -m "e2e or browser" --tb=short -q \
+        --junitxml="$CACHE_DIR/test-results-e2e.xml" 2>&1; then
+        VALIDATION_FAILED=true
+        echo -e "${RED}E2E tests failed!${NC}"
+    else
+        echo -e "${GREEN}E2E tests passed!${NC}"
+        echo "$CONTENT_HASH" > "$E2E_CACHE"
+    fi
+    echo ""
 else
-    echo -e "${GREEN}Test suite passed!${NC}"
+    echo -e "${BLUE}Running full test suite...${NC}"
+    echo ""
+
+    if ! pytest tests/ -m "" --tb=short -q --junitxml="$CACHE_DIR/test-results.xml" \
+        --cov=src/elspais --cov-context=test --cov-report=json:"$CACHE_DIR/coverage.json" --cov-report= 2>&1; then
+        VALIDATION_FAILED=true
+        rm -f "$UNIT_CACHE" "$E2E_CACHE"
+        echo -e "${RED}Test suite failed!${NC}"
+    else
+        echo -e "${GREEN}Test suite passed!${NC}"
+        echo "$CONTENT_HASH" > "$UNIT_CACHE"
+        echo "$CONTENT_HASH" > "$E2E_CACHE"
+    fi
+    echo ""
 fi
-# Pretty-print the JUnit XML so each <testcase> has its own line,
+
+# Pretty-print any JUnit XML so each <testcase> has its own line,
 # making it possible for elspais to link to individual results.
-python3 -c "
+for xml_file in "$CACHE_DIR"/test-results*.xml; do
+    [ -f "$xml_file" ] || continue
+    python3 -c "
 import xml.etree.ElementTree as ET, sys
-f = '$REPO_ROOT/.results/test-results.xml'
 try:
-    tree = ET.parse(f)
+    tree = ET.parse('$xml_file')
     ET.indent(tree, space='  ')
-    tree.write(f, encoding='unicode', xml_declaration=True)
+    tree.write('$xml_file', encoding='unicode', xml_declaration=True)
 except Exception:
     sys.exit(0)
 " 2>/dev/null || true
-echo ""
+done
 
 # =====================================================
 # 11. Handle Validation Results

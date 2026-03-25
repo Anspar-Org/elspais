@@ -1153,6 +1153,83 @@ function onDeleteAssertion(nodeId, assertionId) {
     }
 }
 
+// ── REMAINDER section edit handlers ──
+
+function onRemainderTextBlur(el) {
+    if (!editState.enabled) return;
+    var nodeId = el.dataset.nodeId;
+    var newText = el.value;
+    var original = el.dataset.original;
+    if (newText === original) {
+        el.classList.remove('dirty');
+        return;
+    }
+    el.classList.add('dirty');
+    mutate('/api/mutate/remainder', { node_id: nodeId, text: newText }).then(function(result) {
+        if (result && result.success) {
+            el.dataset.original = newText;
+            el.classList.remove('dirty');
+            refreshAllOpenCards();
+            loadTreeData();
+        } else {
+            el.value = original;
+            el.classList.remove('dirty');
+        }
+    });
+}
+
+function onRemainderHeadingBlur(el) {
+    if (!editState.enabled) return;
+    var nodeId = el.dataset.nodeId;
+    var newHeading = el.value.trim();
+    var original = el.dataset.original;
+    if (newHeading === original) {
+        el.classList.remove('dirty');
+        return;
+    }
+    if (!newHeading) {
+        el.value = original;
+        el.classList.remove('dirty');
+        showToast('Section heading cannot be empty', 'error');
+        return;
+    }
+    el.classList.add('dirty');
+    mutate('/api/mutate/remainder', { node_id: nodeId, heading: newHeading }).then(function(result) {
+        if (result && result.success) {
+            el.dataset.original = newHeading;
+            el.classList.remove('dirty');
+            refreshAllOpenCards();
+            loadTreeData();
+        } else {
+            el.value = original;
+            el.classList.remove('dirty');
+        }
+    });
+}
+
+function onRemainderDelete(nodeId) {
+    if (!confirm('Delete this section? This can be undone with Ctrl+Z.')) return;
+    mutate('/api/mutate/remainder/delete', { node_id: nodeId }).then(async function(result) {
+        if (result && result.success) {
+            refreshAllOpenCards();
+            loadTreeData();
+        }
+    });
+}
+
+function onRemainderAdd(reqId) {
+    mutate('/api/mutate/remainder/add', {
+        req_id: reqId,
+        heading: 'New Section',
+        text: ''
+    }).then(async function(result) {
+        if (result && result.success) {
+            refreshAllOpenCards();
+            loadTreeData();
+        }
+    });
+}
+
 function onEditableKeydown(event) {
     // Enter key = blur (save)
     if (event.key === 'Enter' && !event.shiftKey) {

@@ -267,37 +267,48 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
     kind = node.kind
 
     # ── Common: children ──
+    # Use edges to access render_order metadata for STRUCTURES children
     children = []
-    for child in node.iter_children():
+    _seen_children: set[str] = set()
+    for edge in node.iter_outgoing_edges():
+        child = edge.target
+        if child.id in _seen_children:
+            continue
+        _seen_children.add(child.id)
+        ro = edge.metadata.get("render_order")
         if child.kind == NodeKind.ASSERTION:
-            children.append(
-                {
-                    "kind": "assertion",
-                    "id": child.id,
-                    "label": child.get_field("label"),
-                    "text": child.get_label(),
-                    "line": child.get_field("parse_line"),
-                }
-            )
+            entry = {
+                "kind": "assertion",
+                "id": child.id,
+                "label": child.get_field("label"),
+                "text": child.get_label(),
+                "line": child.get_field("parse_line"),
+            }
+            if ro is not None:
+                entry["render_order"] = ro
+            children.append(entry)
         elif child.kind == NodeKind.REMAINDER:
-            children.append(
-                {
-                    "kind": "remainder",
-                    "id": child.id,
-                    "heading": child.get_field("heading"),
-                    "text": child.get_field("text"),
-                    "line": child.get_field("parse_line"),
-                }
-            )
+            entry = {
+                "kind": "remainder",
+                "id": child.id,
+                "heading": child.get_field("heading"),
+                "text": child.get_field("text"),
+                "line": child.get_field("parse_line"),
+                "content_type": child.get_field("content_type"),
+            }
+            if ro is not None:
+                entry["render_order"] = ro
+            children.append(entry)
         else:
-            children.append(
-                {
-                    "kind": child.kind.value,
-                    "id": child.id,
-                    "title": child.get_label(),
-                    "line": child.get_field("parse_line"),
-                }
-            )
+            entry = {
+                "kind": child.kind.value,
+                "id": child.id,
+                "title": child.get_label(),
+                "line": child.get_field("parse_line"),
+            }
+            if ro is not None:
+                entry["render_order"] = ro
+            children.append(entry)
 
     # ── Common: parents with edge_kind and assertion_targets ──
     parents = []
@@ -2534,6 +2545,54 @@ def _mutate_rename_assertion(graph: FederatedGraph, old_id: str, new_label: str)
             "success": True,
             "mutation": _serialize_mutation_entry(entry),
             "message": f"Renamed assertion {old_id} to new label {new_label}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# REMAINDER Section Mutation Functions
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _mutate_update_remainder(
+    graph: FederatedGraph, node_id: str, text: str | None = None, heading: str | None = None
+) -> dict[str, Any]:
+    """Update text and/or heading of a REMAINDER node."""
+    try:
+        entry = graph.update_remainder(node_id, text=text, heading=heading)
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Updated remainder {node_id}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+def _mutate_add_remainder(
+    graph: FederatedGraph, req_id: str, heading: str, text: str
+) -> dict[str, Any]:
+    """Create a new REMAINDER section on a requirement."""
+    try:
+        entry = graph.add_remainder(req_id, heading, text)
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Added section '{heading}' to {req_id}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+def _mutate_delete_remainder(graph: FederatedGraph, node_id: str) -> dict[str, Any]:
+    """Delete a REMAINDER section node."""
+    try:
+        entry = graph.delete_remainder(node_id)
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": f"Deleted remainder {node_id}",
         }
     except (ValueError, KeyError) as e:
         return {"success": False, "error": str(e)}

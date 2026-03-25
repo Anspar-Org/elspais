@@ -418,6 +418,16 @@ def _find_dirty_files(graph: FederatedGraph, resolver: Any | None = None) -> set
             if ref_id:
                 _mark_node_file(ref_id)
 
+        # For remainder mutations, find the parent requirement's file
+        if entry.operation in (
+            "update_remainder",
+            "add_remainder",
+            "delete_remainder",
+        ):
+            parent_id = entry.before_state.get("parent_id", "")
+            if parent_id:
+                _mark_node_file(parent_id)
+
         # For assertion mutations, find the parent requirement's file
         if entry.operation in (
             "add_assertion",

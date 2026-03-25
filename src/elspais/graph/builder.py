@@ -395,6 +395,12 @@ class TraceGraph:
             self._undo_add_journey(entry)
         elif op == "delete_journey":
             self._undo_delete_journey(entry)
+        elif op == "update_remainder":
+            self._undo_update_remainder(entry)
+        elif op == "add_remainder":
+            self._undo_add_remainder(entry)
+        elif op == "delete_remainder":
+            self._undo_delete_remainder(entry)
         # Unknown operations are silently ignored (forward compatibility)
 
     def _undo_rename_node(self, entry: MutationEntry) -> None:
@@ -765,6 +771,63 @@ class TraceGraph:
                 self._deleted_nodes.pop(i)
                 self._index[node_id] = node
                 break
+
+    def _undo_update_remainder(self, entry: MutationEntry) -> None:
+        """Undo an update_remainder by restoring original text/heading."""
+        node_id = entry.target_id
+        if node_id not in self._index:
+            return
+        node = self._index[node_id]
+        old_text = entry.before_state.get("text")
+        old_heading = entry.before_state.get("heading")
+        if old_text is not None:
+            node.set_field("text", old_text)
+        if old_heading is not None:
+            node.set_field("heading", old_heading)
+            node._label = old_heading
+        parent_id = entry.before_state.get("parent_id")
+        if parent_id and parent_id in self._index and "parent_hash" in entry.before_state:
+            self._index[parent_id].set_field("hash", entry.before_state["parent_hash"])
+
+    def _undo_add_remainder(self, entry: MutationEntry) -> None:
+        """Undo an add_remainder by removing the created node."""
+        node_id = entry.target_id
+        if node_id not in self._index:
+            return
+        node = self._index.pop(node_id)
+        for parent in list(node.iter_parents()):
+            parent.unlink(node)
+        parent_id = entry.before_state.get("parent_id")
+        if parent_id and parent_id in self._index and "parent_hash" in entry.before_state:
+            self._index[parent_id].set_field("hash", entry.before_state["parent_hash"])
+
+    def _undo_delete_remainder(self, entry: MutationEntry) -> None:
+        """Undo a delete_remainder by re-creating and re-linking the node."""
+        node_id = entry.target_id
+        parent_id = entry.before_state.get("parent_id")
+        if not parent_id or parent_id not in self._index:
+            return
+        parent = self._index[parent_id]
+        heading = entry.before_state.get("heading", "")
+        text = entry.before_state.get("text", "")
+        render_order = entry.before_state.get("render_order", 0.0)
+
+        node = GraphNode(id=node_id, kind=NodeKind.REMAINDER, label=heading)
+        node._content = {
+            "heading": heading,
+            "text": text,
+            "order": entry.before_state.get("order", 0),
+            "parse_line": entry.before_state.get("parse_line"),
+            "parse_end_line": None,
+        }
+        self._index[node_id] = node
+        parent.link(node, EdgeKind.STRUCTURES)
+        for edge in parent.iter_outgoing_edges():
+            if edge.kind == EdgeKind.STRUCTURES and edge.target is node:
+                edge.metadata["render_order"] = render_order
+                break
+        if "parent_hash" in entry.before_state:
+            parent.set_field("hash", entry.before_state["parent_hash"])
 
     # ─────────────────────────────────────────────────────────────────────────
     # Node Mutation API
@@ -2179,6 +2242,237 @@ class TraceGraph:
             target_id=node_id,
             before_state={"name": removed["name"], "content": removed["content"], "body": old_body},
             after_state={"body": new_body},
+        )
+        self._mutation_log.append(entry)
+        return entry
+
+    # ── REMAINDER section mutations ──
+
+    def update_remainder(
+        self,
+        node_id: str,
+        text: str | None = None,
+        heading: str | None = None,
+    ) -> MutationEntry:
+        """Update text and/or heading of an existing REMAINDER node.
+
+        Args:
+            node_id: The REMAINDER node ID.
+            text: New text content (None to keep current).
+            heading: New heading (None to keep current).
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If node_id not found.
+            ValueError: If not a REMAINDER or is a definition_block.
+        """
+        if node_id not in self._index:
+            raise KeyError(f"Node '{node_id}' not found")
+
+        node = self._index[node_id]
+        if node.kind != NodeKind.REMAINDER:
+            raise ValueError(f"Node '{node_id}' is not a REMAINDER")
+        if node.get_field("content_type") == "definition_block":
+            raise ValueError(f"Cannot edit definition_block node '{node_id}'")
+
+        if text is None and heading is None:
+            raise ValueError("At least one of text or heading must be provided")
+
+        parents = [p for p in node.iter_parents() if p.kind == NodeKind.REQUIREMENT]
+        if not parents:
+            raise ValueError(f"REMAINDER '{node_id}' has no parent requirement")
+        parent = parents[0]
+
+        old_text = node.get_field("text", "")
+        old_heading = node.get_field("heading", "")
+        old_hash = parent.get_field("hash")
+
+        if text is not None:
+            node.set_field("text", text)
+        if heading is not None:
+            node.set_field("heading", heading)
+            node._label = heading
+
+        new_hash = self._recompute_requirement_hash(parent)
+
+        entry = MutationEntry(
+            operation="update_remainder",
+            target_id=node_id,
+            before_state={
+                "text": old_text,
+                "heading": old_heading,
+                "parent_id": parent.id,
+                "parent_hash": old_hash,
+            },
+            after_state={
+                "text": node.get_field("text", ""),
+                "heading": node.get_field("heading", ""),
+                "parent_hash": new_hash,
+            },
+            affects_hash=True,
+        )
+        self._mutation_log.append(entry)
+        return entry
+
+    def add_remainder(
+        self,
+        req_id: str,
+        heading: str,
+        text: str,
+    ) -> MutationEntry:
+        """Create a new REMAINDER node linked to a requirement.
+
+        Args:
+            req_id: The parent requirement ID.
+            heading: Section heading.
+            text: Section text content.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If req_id not found.
+            ValueError: If req_id is not a requirement.
+        """
+        if req_id not in self._index:
+            raise KeyError(f"Requirement '{req_id}' not found")
+
+        parent = self._index[req_id]
+        if parent.kind != NodeKind.REQUIREMENT:
+            raise ValueError(f"Node '{req_id}' is not a requirement")
+
+        old_hash = parent.get_field("hash")
+
+        # Generate unique section ID with m-prefix for mutation-created nodes
+        max_counter = -1
+        for child in parent.iter_children(edge_kinds={EdgeKind.STRUCTURES}):
+            if child.kind == NodeKind.REMAINDER and ":section:m" in child.id:
+                suffix = child.id.rsplit(":section:m", 1)[-1]
+                try:
+                    max_counter = max(max_counter, int(suffix))
+                except ValueError:
+                    pass
+        section_id = f"{req_id}:section:m{max_counter + 1}"
+
+        # Compute render_order as max existing STRUCTURES edge render_order + 1.0
+        max_order = -1.0
+        for edge in parent.iter_outgoing_edges():
+            if edge.kind == EdgeKind.STRUCTURES:
+                ro = edge.metadata.get("render_order", -1.0)
+                if ro > max_order:
+                    max_order = ro
+        if max_order < 0:
+            max_order = float(
+                sum(1 for _ in parent.iter_children(edge_kinds={EdgeKind.STRUCTURES}))
+            )
+        render_order = max_order + 1.0
+
+        section_node = GraphNode(
+            id=section_id,
+            kind=NodeKind.REMAINDER,
+            label=heading,
+        )
+        section_node._content = {
+            "heading": heading,
+            "text": text,
+            "order": int(render_order),
+            "parse_line": None,
+            "parse_end_line": None,
+        }
+
+        self._index[section_id] = section_node
+        parent.link(section_node, EdgeKind.STRUCTURES)
+        for edge in parent.iter_outgoing_edges():
+            if edge.kind == EdgeKind.STRUCTURES and edge.target is section_node:
+                edge.metadata["render_order"] = render_order
+                break
+
+        new_hash = self._recompute_requirement_hash(parent)
+
+        entry = MutationEntry(
+            operation="add_remainder",
+            target_id=section_id,
+            before_state={
+                "parent_id": req_id,
+                "parent_hash": old_hash,
+            },
+            after_state={
+                "id": section_id,
+                "heading": heading,
+                "text": text,
+                "render_order": render_order,
+                "parent_hash": new_hash,
+            },
+            affects_hash=True,
+        )
+        self._mutation_log.append(entry)
+        return entry
+
+    def delete_remainder(
+        self,
+        node_id: str,
+    ) -> MutationEntry:
+        """Remove a REMAINDER node from its parent requirement.
+
+        Args:
+            node_id: The REMAINDER node ID.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If node_id not found.
+            ValueError: If not a REMAINDER or is a definition_block.
+        """
+        if node_id not in self._index:
+            raise KeyError(f"Node '{node_id}' not found")
+
+        node = self._index[node_id]
+        if node.kind != NodeKind.REMAINDER:
+            raise ValueError(f"Node '{node_id}' is not a REMAINDER")
+        if node.get_field("content_type") == "definition_block":
+            raise ValueError(f"Cannot delete definition_block node '{node_id}'")
+
+        parents = [p for p in node.iter_parents() if p.kind == NodeKind.REQUIREMENT]
+        if not parents:
+            raise ValueError(f"REMAINDER '{node_id}' has no parent requirement")
+        parent = parents[0]
+
+        old_hash = parent.get_field("hash")
+        old_text = node.get_field("text", "")
+        old_heading = node.get_field("heading", "")
+        old_order = node.get_field("order", 0)
+        old_parse_line = node.get_field("parse_line")
+
+        old_render_order = 0.0
+        for edge in parent.iter_outgoing_edges():
+            if edge.kind == EdgeKind.STRUCTURES and edge.target is node:
+                old_render_order = edge.metadata.get("render_order", 0.0)
+                break
+
+        parent.unlink(node)
+        del self._index[node_id]
+
+        new_hash = self._recompute_requirement_hash(parent)
+
+        entry = MutationEntry(
+            operation="delete_remainder",
+            target_id=node_id,
+            before_state={
+                "parent_id": parent.id,
+                "parent_hash": old_hash,
+                "text": old_text,
+                "heading": old_heading,
+                "order": old_order,
+                "parse_line": old_parse_line,
+                "render_order": old_render_order,
+            },
+            after_state={
+                "parent_hash": new_hash,
+            },
+            affects_hash=True,
         )
         self._mutation_log.append(entry)
         return entry
