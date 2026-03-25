@@ -25,6 +25,12 @@
 
 set -e
 
+# Git sets GIT_DIR when invoking hooks — this causes subprocess git
+# commands in tests to silently operate on this repo instead of their
+# temp directories.  Unset it so pytest child processes get a clean env.
+unset GIT_DIR
+unset GIT_WORK_TREE
+
 # Colors for output
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
