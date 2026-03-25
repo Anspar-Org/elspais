@@ -4,15 +4,21 @@ Handles reading/writing JSONL comment files in .elspais/comments/.
 All file I/O is isolated here -- comments.py contains only data models.
 """
 
-# Implements: REQ-d00228
+# Implements: REQ-d00228+REQ-d00229
 
 from __future__ import annotations
 
 import json
+from datetime import date as date_type
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from elspais.graph.comments import CommentEvent, CommentIndex, CommentThread
+from elspais.graph.relations import EdgeKind
 from elspais.utilities.hasher import calculate_hash
+
+if TYPE_CHECKING:
+    from elspais.graph.builder import TraceGraph
 
 ORPHANED_FILE = "_orphaned.json"
 
@@ -183,3 +189,183 @@ def load_comment_index(repo_root: Path) -> CommentIndex:
             else:
                 index.add_thread(thread, source_file=relative)
     return index
+
+
+_STRUCTURAL_EDGE_KINDS = frozenset({EdgeKind.STRUCTURES})
+
+
+def validate_anchor(anchor: str, graph: TraceGraph) -> bool:
+    """Check if an anchor's target exists in the current graph.
+
+    Uses existing graph API: find_by_id, iter_children, iter_outgoing_edges.
+    """
+    node_id, frag_type, frag_value = parse_anchor(anchor)
+    node = graph.find_by_id(node_id)
+    if node is None:
+        return False
+    if frag_type is None:
+        return True
+    if frag_type == "assertion":
+        for child in node.iter_children(edge_kinds=_STRUCTURAL_EDGE_KINDS):
+            if child.get_field("label") == frag_value:
+                return True
+        return False
+    if frag_type == "section":
+        sections = node.get_field("sections", {})
+        return frag_value in sections
+    if frag_type == "edge":
+        for edge in node.iter_outgoing_edges():
+            if edge.target.id == frag_value:
+                return True
+        return False
+    return False
+
+
+def promote_orphaned_comments(
+    index: CommentIndex,
+    graph: TraceGraph,
+    repo_root: Path,
+) -> list[CommentEvent]:
+    """Check all indexed anchors against the live graph. Promote stale ones.
+
+    For each unresolved thread whose anchor is invalid:
+    1. Drop fragment -> check if node exists (promote to node)
+    2. Walk parents -> find nearest living ancestor
+    3. No ancestor -> move to _orphaned.json
+
+    Returns list of promote events appended to disk.
+    """
+    promote_events: list[CommentEvent] = []
+    today = date_type.today().isoformat()
+    comments_dir = repo_root / ".elspais" / "comments"
+
+    # Snapshot anchors to avoid mutating dict during iteration
+    anchors_to_check = list(index._threads.keys())
+
+    for anchor in anchors_to_check:
+        if validate_anchor(anchor, graph):
+            continue
+
+        threads = list(index._threads.pop(anchor, []))
+        node_id, frag_type, _frag_value = parse_anchor(anchor)
+        source_file = index._file_map.pop(anchor, None)
+
+        # Try promoting to bare node (drop fragment)
+        new_anchor = None
+        reason = ""
+        if frag_type is not None and graph.find_by_id(node_id) is not None:
+            new_anchor = node_id
+            reason = f"{frag_type} deleted from {node_id}"
+        else:
+            # Walk parents to find nearest living ancestor
+            node = graph.find_by_id(node_id)
+            if node is not None:
+                for parent in node.ancestors():
+                    if parent.kind.value in ("requirement", "user_journey"):
+                        new_anchor = parent.id
+                        reason = f"Node {node_id} unreachable, promoted to {parent.id}"
+                        break
+
+        for thread in threads:
+            if new_anchor:
+                evt = CommentEvent(
+                    event="promote",
+                    id=generate_comment_id(anchor, "system", today, new_anchor),
+                    anchor=new_anchor,
+                    author="system",
+                    author_id="system",
+                    date=today,
+                    target=thread.root.id,
+                    old_anchor=anchor,
+                    new_anchor=new_anchor,
+                    reason=reason,
+                    from_file=source_file or "",
+                )
+                thread.promoted_from = anchor
+                thread.promotion_reason = reason
+                thread.anchor = new_anchor
+                index.add_thread(thread, source_file or "")
+                # Append to source JSONL file
+                if source_file:
+                    append_event(comments_dir / source_file, evt)
+                promote_events.append(evt)
+            else:
+                # No ancestor found -> orphan
+                evt = CommentEvent(
+                    event="promote",
+                    id=generate_comment_id(anchor, "system", today, "_orphaned"),
+                    anchor="",
+                    author="system",
+                    author_id="system",
+                    date=today,
+                    target=thread.root.id,
+                    old_anchor=anchor,
+                    new_anchor="",
+                    reason=f"No living ancestor for {anchor}",
+                    from_file=source_file or "",
+                )
+                thread.promoted_from = anchor
+                thread.promotion_reason = evt.reason
+                index.add_orphaned(thread)
+                append_event(comments_dir / ORPHANED_FILE, evt)
+                promote_events.append(evt)
+
+    return promote_events
+
+
+def update_anchors_on_rename(
+    index: CommentIndex,
+    old_id: str,
+    new_id: str,
+    repo_root: Path,
+) -> list[CommentEvent]:
+    """Update anchors when a node or assertion is renamed.
+
+    Scans index for anchors containing old_id, emits promote events
+    with reason 'Renamed from X to Y', updates index in-place.
+    """
+    promote_events: list[CommentEvent] = []
+    today = date_type.today().isoformat()
+    comments_dir = repo_root / ".elspais" / "comments"
+
+    # Find all anchors that reference the old ID
+    old_prefix = old_id + "#"
+    matching_anchors = [
+        a for a in list(index._threads.keys()) if a == old_id or a.startswith(old_prefix)
+    ]
+
+    for old_anchor in matching_anchors:
+        # Compute new anchor
+        if old_anchor == old_id:
+            new_anchor = new_id
+        else:
+            fragment = old_anchor[len(old_id) :]  # includes the #
+            new_anchor = new_id + fragment
+
+        threads = list(index._threads.pop(old_anchor, []))
+        source_file = index._file_map.pop(old_anchor, None)
+        reason = f"Renamed from {old_id} to {new_id}"
+
+        for thread in threads:
+            evt = CommentEvent(
+                event="promote",
+                id=generate_comment_id(old_anchor, "system", today, new_anchor),
+                anchor=new_anchor,
+                author="system",
+                author_id="system",
+                date=today,
+                target=thread.root.id,
+                old_anchor=old_anchor,
+                new_anchor=new_anchor,
+                reason=reason,
+                from_file=source_file or "",
+            )
+            thread.promoted_from = old_anchor
+            thread.promotion_reason = reason
+            thread.anchor = new_anchor
+            index.add_thread(thread, source_file or "")
+            if source_file:
+                append_event(comments_dir / source_file, evt)
+            promote_events.append(evt)
+
+    return promote_events
