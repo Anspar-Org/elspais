@@ -166,3 +166,65 @@ AI agents need programmatic access to requirements data for tasks like coverage 
 
 *End* *MCP Server for AI-Driven Requirements Management* | **Hash**: 3ebc237a
 ---
+
+## REQ-d00226: Comment Data Models
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+## Assertions
+
+A. CommentEvent SHALL be a frozen dataclass with fields: event, id, anchor, author, author_id, date, text, parent, target, old_anchor, new_anchor, reason, from_file.
+
+B. CommentEvent optional fields SHALL default to empty string.
+
+C. CommentThread SHALL be a mutable dataclass with root, replies, anchor, resolved, promoted_from, and promotion_reason fields.
+
+D. CommentThread anchor SHALL default to the root event anchor when not explicitly provided.
+
+*End* *Comment Data Models* | **Hash**: dd5c745e
+
+## REQ-d00227: Comment Index
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+## Assertions
+
+A. CommentIndex SHALL provide an iterator-only query API: iter_threads, thread_count, has_threads, iter_orphaned, iter_all_anchors_for_node, source_file_for.
+
+B. CommentIndex iter_all_anchors_for_node SHALL match exact node_id and node_id#fragment patterns.
+
+C. CommentIndex SHALL support merge for federation following the TermDictionary pattern.
+
+*End* *Comment Index* | **Hash**: ff891bd9
+
+## REQ-d00228: Comment JSONL Storage
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+## Assertions
+
+A. Anchor parsing SHALL handle bare requirement IDs, assertion fragments, section fragments, and edge fragments.
+
+B. Comment ID generation SHALL produce format c-YYYYMMDD-6hexchars using utilities/hasher.py.
+
+C. JSONL load and append SHALL read/write CommentEvent records as one JSON object per line.
+
+D. Thread assembly SHALL group events by root, attach replies, apply resolve/promote events, and filter resolved threads.
+
+E. Comment file path resolution SHALL mirror repo structure under .elspais/comments/.
+
+*End* *Comment JSONL Storage* | **Hash**: b9f0e26c
+
+## REQ-d00229: Comment Promotion Engine
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+## Assertions
+
+A. Anchor validation SHALL check node existence, assertion existence, section existence, and edge existence against the live graph.
+
+B. Orphaned comment promotion SHALL walk parent hierarchy to find the nearest living ancestor, falling back to an orphaned file.
+
+C. Rename-triggered promotion SHALL update all anchors prefixed with the old ID and emit promote events with rename reason.
+
+*End* *Comment Promotion Engine* | **Hash**: d72378b4

@@ -4,6 +4,11 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Comment data models: `CommentEvent` (frozen dataclass) and `CommentThread` (mutable dataclass) in `graph/comments.py`
+- Requirements REQ-d00226 through REQ-d00229 for the comment/review system
+
 ## [0.108.6]
 
 ### Changed

@@ -114,6 +114,10 @@
 | REQ-d00223 | Term Health Checks                                            | prd-core.md             | 34da7dc1 |
 | REQ-d00224 | Glossary and Term Index Generators                            | prd-core.md             | f2da30fb |
 | REQ-d00225 | CLI Registration for Glossary and Term Index                  | prd-core.md             | d18fc2c9 |
+| REQ-d00226 | Comment Data Models                                           | prd-features.md         | dd5c745e |
+| REQ-d00227 | Comment Index                                                 | prd-features.md         | ff891bd9 |
+| REQ-d00228 | Comment JSONL Storage                                         | prd-features.md         | b9f0e26c |
+| REQ-d00229 | Comment Promotion Engine                                      | prd-features.md         | d72378b4 |
 
 ## User Journeys
 
