@@ -28,6 +28,7 @@ def _add_body_remainder(parent: GraphNode, body_text: str) -> None:
     edge = parent.link(remainder, EdgeKind.STRUCTURES)
     edge.metadata["render_order"] = 0.0
 
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixtures
 # ─────────────────────────────────────────────────────────────────────────────

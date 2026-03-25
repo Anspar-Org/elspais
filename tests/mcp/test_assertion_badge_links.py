@@ -66,9 +66,11 @@ class TestIterAssertionCoverageFiltered:
     def test_implements_filter_code_excludes_blanket_when_direct(self):
         """IMPLEMENTS + direct_only skips blanket edges."""
         req = _make_req_with_mixed_edges()
-        results = list(_iter_assertion_coverage(
-            req, NodeKind.CODE, edge_kinds={EdgeKind.IMPLEMENTS}, direct_only=True
-        ))
+        results = list(
+            _iter_assertion_coverage(
+                req, NodeKind.CODE, edge_kinds={EdgeKind.IMPLEMENTS}, direct_only=True
+            )
+        )
         node_ids = {node.id for node, _labels in results}
         assert "CODE-impl" in node_ids
         assert "CODE-blanket" not in node_ids
@@ -76,9 +78,11 @@ class TestIterAssertionCoverageFiltered:
     def test_implements_filter_returns_correct_labels(self):
         """Direct-only IMPLEMENTS returns only the targeted assertion labels."""
         req = _make_req_with_mixed_edges()
-        results = list(_iter_assertion_coverage(
-            req, NodeKind.CODE, edge_kinds={EdgeKind.IMPLEMENTS}, direct_only=True
-        ))
+        results = list(
+            _iter_assertion_coverage(
+                req, NodeKind.CODE, edge_kinds={EdgeKind.IMPLEMENTS}, direct_only=True
+            )
+        )
         for node, labels in results:
             if node.id == "CODE-impl":
                 assert labels == ["A"]
@@ -86,9 +90,11 @@ class TestIterAssertionCoverageFiltered:
     def test_refines_filter_returns_requirement_nodes(self):
         """REFINES filter with REQUIREMENT kind_filter returns refining REQs."""
         req = _make_req_with_mixed_edges()
-        results = list(_iter_assertion_coverage(
-            req, NodeKind.REQUIREMENT, edge_kinds={EdgeKind.REFINES}, direct_only=True
-        ))
+        results = list(
+            _iter_assertion_coverage(
+                req, NodeKind.REQUIREMENT, edge_kinds={EdgeKind.REFINES}, direct_only=True
+            )
+        )
         node_ids = {node.id for node, _labels in results}
         assert "REQ-child" in node_ids
         assert len(node_ids) == 1
@@ -96,9 +102,11 @@ class TestIterAssertionCoverageFiltered:
     def test_refines_filter_returns_correct_labels(self):
         """REFINES edges carry the correct assertion_targets."""
         req = _make_req_with_mixed_edges()
-        results = list(_iter_assertion_coverage(
-            req, NodeKind.REQUIREMENT, edge_kinds={EdgeKind.REFINES}, direct_only=True
-        ))
+        results = list(
+            _iter_assertion_coverage(
+                req, NodeKind.REQUIREMENT, edge_kinds={EdgeKind.REFINES}, direct_only=True
+            )
+        )
         for node, labels in results:
             if node.id == "REQ-child":
                 assert labels == ["B"]
@@ -106,9 +114,7 @@ class TestIterAssertionCoverageFiltered:
     def test_refines_filter_on_code_returns_nothing(self):
         """REFINES filter with CODE kind_filter returns nothing (REFINES targets REQs)."""
         req = _make_req_with_mixed_edges()
-        results = list(_iter_assertion_coverage(
-            req, NodeKind.CODE, edge_kinds={EdgeKind.REFINES}
-        ))
+        results = list(_iter_assertion_coverage(req, NodeKind.CODE, edge_kinds={EdgeKind.REFINES}))
         assert results == []
 
 

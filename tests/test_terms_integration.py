@@ -85,9 +85,9 @@ class TestTermsIntegration:
         """TraceGraph() has _terms attribute of type TermDictionary."""
         graph = TraceGraph(repo_root=Path("."))
         assert hasattr(graph, "_terms"), "TraceGraph must have _terms attribute"
-        assert isinstance(graph._terms, TermDictionary), (
-            f"_terms must be TermDictionary, got {type(graph._terms)}"
-        )
+        assert isinstance(
+            graph._terms, TermDictionary
+        ), f"_terms must be TermDictionary, got {type(graph._terms)}"
 
     def test_REQ_d00222_A_builder_creates_remainder_for_definition(self):
         """GraphBuilder.add_parsed_content with content_type='definition_block'
@@ -100,14 +100,13 @@ class TestTermsIntegration:
 
         # Find the REMAINDER node created for the definition
         remainder_nodes = list(graph.iter_by_kind(NodeKind.REMAINDER))
-        assert len(remainder_nodes) >= 1, (
-            "Expected at least one REMAINDER node for definition_block"
-        )
+        assert (
+            len(remainder_nodes) >= 1
+        ), "Expected at least one REMAINDER node for definition_block"
 
         # At least one should have content_type="definition_block"
         def_nodes = [
-            n for n in remainder_nodes
-            if n.get_field("content_type") == "definition_block"
+            n for n in remainder_nodes if n.get_field("content_type") == "definition_block"
         ]
         assert len(def_nodes) == 1, (
             f"Expected exactly one REMAINDER with content_type='definition_block', "
@@ -157,9 +156,9 @@ class TestTermsIntegration:
 
         entry = graph._terms.lookup("Audit Trail")
         assert entry is not None, "Term should be in _terms"
-        assert entry.defined_in == "file:spec/glossary.md", (
-            f"defined_in should be FILE node ID, got '{entry.defined_in}'"
-        )
+        assert (
+            entry.defined_in == "file:spec/glossary.md"
+        ), f"defined_in should be FILE node ID, got '{entry.defined_in}'"
 
     def test_REQ_d00222_B_defined_in_points_to_requirement(self):
         """For requirement-level definitions, defined_in is the requirement ID."""
@@ -196,6 +195,6 @@ class TestTermsIntegration:
 
         entry = graph._terms.lookup("Electronic Signature")
         assert entry is not None, "Term should be in _terms"
-        assert entry.defined_in == "REQ-p00001", (
-            f"defined_in should be requirement ID, got '{entry.defined_in}'"
-        )
+        assert (
+            entry.defined_in == "REQ-p00001"
+        ), f"defined_in should be requirement ID, got '{entry.defined_in}'"

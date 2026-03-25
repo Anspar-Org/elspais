@@ -512,7 +512,10 @@ A. The system SHALL do something.
 """
         # Compute expected hash from what reconstruct_body_text() would produce:
         # intro text (REMAINDER) + assertion text (ASSERTION)
-        reconstructed = "This is IMPORTANT intro text that should be included in hash.\nA. The system SHALL do something."
+        reconstructed = (
+            "This is IMPORTANT intro text that should be included in hash."
+            "\nA. The system SHALL do something."
+        )
         expected_hash = calculate_hash(reconstructed)
 
         spec_file = spec_dir / "requirements.md"

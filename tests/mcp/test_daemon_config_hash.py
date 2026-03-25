@@ -55,9 +55,7 @@ def test_compute_config_hash_includes_associate_configs(tmp_path: Path):
     assoc_config.write_text('[project]\nnamespace = "FOO"\n')
 
     local_path = tmp_path / ".elspais.local.toml"
-    local_path.write_text(
-        f'[associates.foo]\npath = "{assoc_dir}"\nnamespace = "FOO"\n'
-    )
+    local_path.write_text(f'[associates.foo]\npath = "{assoc_dir}"\nnamespace = "FOO"\n')
 
     h1 = compute_config_hash(config_path)
 

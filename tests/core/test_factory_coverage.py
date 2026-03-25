@@ -218,9 +218,7 @@ file_patterns = ["coverage.json"]
                 }
             }
         }
-        (tmp_path / "coverage.json").write_text(
-            json.dumps(cov_data), encoding="utf-8"
-        )
+        (tmp_path / "coverage.json").write_text(json.dumps(cov_data), encoding="utf-8")
 
         graph = build_graph(
             config_path=config_file,

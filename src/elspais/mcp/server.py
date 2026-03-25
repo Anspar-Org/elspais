@@ -669,6 +669,7 @@ def _matches_query(
 
     if field in ("body", "all"):
         from elspais.graph.render import reconstruct_body_text
+
         if node.kind == NodeKind.REQUIREMENT:
             body = reconstruct_body_text(node)
             if body and compiled_pattern.search(body):  # type: ignore[union-attr]

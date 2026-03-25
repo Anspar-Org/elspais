@@ -11,7 +11,6 @@ traceability graph from parsed content.
 from __future__ import annotations
 
 import itertools
-import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1095,6 +1094,7 @@ class TraceGraph:
             return compute_normalized_hash(assertions)
         else:
             from elspais.graph.render import reconstruct_body_text
+
             body = reconstruct_body_text(req_node)
             return calculate_hash(body)
 

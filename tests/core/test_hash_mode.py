@@ -227,7 +227,6 @@ class TestNormalizedTextMode:
             make_req(
                 "REQ-p00001",
                 assertions=assertions_clean,
-
             )
         )
         graph_clean = builder_clean.build()
@@ -237,7 +236,6 @@ class TestNormalizedTextMode:
             make_req(
                 "REQ-p00001",
                 assertions=assertions_trailing,
-
             )
         )
         graph_trailing = builder_trailing.build()
@@ -350,7 +348,9 @@ Introduction text for the requirement.
 A. The system SHALL validate input.
 B. The system SHALL log errors."""
 
-        sections = [{"heading": "preamble", "content": "Introduction text for the requirement.", "line": 3}]
+        sections = [
+            {"heading": "preamble", "content": "Introduction text for the requirement.", "line": 3}
+        ]
 
         def _build_with_sections(hash_mode: str) -> TraceGraph:
             builder = GraphBuilder(hash_mode=hash_mode)
@@ -403,15 +403,11 @@ B. The system SHALL log errors."""
         in normalized-text mode, regardless of other content differences.
         """
         builder1 = GraphBuilder(hash_mode="normalized-text")
-        builder1.add_parsed_content(
-            make_req("REQ-p00001", assertions=ASSERTIONS)
-        )
+        builder1.add_parsed_content(make_req("REQ-p00001", assertions=ASSERTIONS))
         graph1 = builder1.build()
 
         builder2 = GraphBuilder(hash_mode="normalized-text")
-        builder2.add_parsed_content(
-            make_req("REQ-p00001", assertions=ASSERTIONS)
-        )
+        builder2.add_parsed_content(make_req("REQ-p00001", assertions=ASSERTIONS))
         graph2 = builder2.build()
 
         parent1 = graph1.find_by_id("REQ-p00001")
@@ -438,7 +434,9 @@ B. The system SHALL log errors."""
         assertions = [{"label": "A", "text": "The system SHALL validate input."}]
 
         sections1 = [{"heading": "preamble", "content": "Introduction version 1.", "line": 2}]
-        sections2 = [{"heading": "preamble", "content": "Introduction version 2 (different).", "line": 2}]
+        sections2 = [
+            {"heading": "preamble", "content": "Introduction version 2 (different).", "line": 2}
+        ]
 
         builder1 = GraphBuilder(hash_mode="full-text")
         builder1.add_parsed_content(

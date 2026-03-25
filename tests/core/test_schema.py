@@ -124,17 +124,20 @@ class TestProtectedBranches:
     def test_default_protected_branches(self):
         """RulesConfig has default protected_branches."""
         from elspais.config.schema import RulesConfig
+
         rules = RulesConfig()
         assert rules.protected_branches == ["main", "master"]
 
     def test_custom_protected_branches(self):
         """RulesConfig accepts custom protected_branches with globs."""
         from elspais.config.schema import RulesConfig
+
         rules = RulesConfig(protected_branches=["main", "release/*"])
         assert rules.protected_branches == ["main", "release/*"]
 
     def test_config_version_is_4(self):
         """ElspaisConfig version bumped to 4."""
         from elspais.config.schema import ElspaisConfig
+
         cfg = ElspaisConfig()
         assert cfg.version == 4

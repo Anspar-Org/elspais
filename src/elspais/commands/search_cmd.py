@@ -122,6 +122,7 @@ def _regex_matches(node, field: str, pattern: re.Pattern) -> bool:
             text = node.get_label() or ""
         elif f == "body":
             from elspais.graph.render import reconstruct_body_text
+
             text = reconstruct_body_text(node) if node.kind == NodeKind.REQUIREMENT else ""
         elif f == "keywords":
             kws = node.get_field("keywords", []) or []

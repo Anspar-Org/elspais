@@ -232,12 +232,12 @@ A. First assertion
             f"No definition_block data found. content_types: "
             f"{[r.content_type for r in results]}"
         )
-        assert def_data.get("term") == "Electronic Record", (
-            f"Expected term='Electronic Record', got {def_data.get('term')!r}"
-        )
-        assert "combination" in def_data.get("definition", ""), (
-            f"Expected definition containing 'combination', got {def_data.get('definition')!r}"
-        )
+        assert (
+            def_data.get("term") == "Electronic Record"
+        ), f"Expected term='Electronic Record', got {def_data.get('term')!r}"
+        assert "combination" in def_data.get(
+            "definition", ""
+        ), f"Expected definition containing 'combination', got {def_data.get('definition')!r}"
 
     def test_REQ_d00221_B_collection_flag(self, resolver):
         """Definition with ': Collection: true' has collection=True in parsed_data."""
@@ -272,9 +272,9 @@ A. First assertion
             f"No definition_block data found. content_types: "
             f"{[r.content_type for r in results]}"
         )
-        assert def_data.get("collection") is True, (
-            f"Expected collection=True, got {def_data.get('collection')!r}"
-        )
+        assert (
+            def_data.get("collection") is True
+        ), f"Expected collection=True, got {def_data.get('collection')!r}"
 
     def test_REQ_d00221_B_indexed_flag(self, resolver):
         """Definition with ': Indexed: false' has indexed=False in parsed_data."""
@@ -309,9 +309,9 @@ A. First assertion
             f"No definition_block data found. content_types: "
             f"{[r.content_type for r in results]}"
         )
-        assert def_data.get("indexed") is False, (
-            f"Expected indexed=False, got {def_data.get('indexed')!r}"
-        )
+        assert (
+            def_data.get("indexed") is False
+        ), f"Expected indexed=False, got {def_data.get('indexed')!r}"
 
     def test_REQ_d00221_B_multiline_definition(self, resolver):
         """Definition with multiple ': ' lines has joined definition text."""
@@ -348,9 +348,9 @@ A. First assertion
             f"{[r.content_type for r in results]}"
         )
         definition_text = def_data.get("definition", "")
-        assert "combination" in definition_text, (
-            f"Expected 'combination' in definition, got {definition_text!r}"
-        )
-        assert "regulatory" in definition_text, (
-            f"Expected 'regulatory' in definition (multiline join), got {definition_text!r}"
-        )
+        assert (
+            "combination" in definition_text
+        ), f"Expected 'combination' in definition, got {definition_text!r}"
+        assert (
+            "regulatory" in definition_text
+        ), f"Expected 'regulatory' in definition (multiline join), got {definition_text!r}"

@@ -245,14 +245,10 @@ class TestRequirementRender:
             "implements_refs": [],
         }
 
-        a_node = GraphNode(
-            id="REQ-t00001-A", kind=NodeKind.ASSERTION, label="First assertion"
-        )
+        a_node = GraphNode(id="REQ-t00001-A", kind=NodeKind.ASSERTION, label="First assertion")
         a_node._content = {"label": "A"}
 
-        b_node = GraphNode(
-            id="REQ-t00001-B", kind=NodeKind.ASSERTION, label="Second assertion"
-        )
+        b_node = GraphNode(id="REQ-t00001-B", kind=NodeKind.ASSERTION, label="Second assertion")
         b_node._content = {"label": "B"}
 
         # Link B first (insertion order: B, A), but give A lower render_order
@@ -263,14 +259,10 @@ class TestRequirementRender:
 
         output = _render_requirement(req)
         lines = output.split("\n")
-        assertion_lines = [l for l in lines if l and l[0].isalpha() and ". " in l]
+        assertion_lines = [ln for ln in lines if ln and ln[0].isalpha() and ". " in ln]
 
-        assert assertion_lines[0].startswith("A."), (
-            f"Expected A first, got: {assertion_lines}"
-        )
-        assert assertion_lines[1].startswith("B."), (
-            f"Expected B second, got: {assertion_lines}"
-        )
+        assert assertion_lines[0].startswith("A."), f"Expected A first, got: {assertion_lines}"
+        assert assertion_lines[1].startswith("B."), f"Expected B second, got: {assertion_lines}"
 
     def test_REQ_d00131_B_requirement_with_sections(self):
         """Rendered requirement includes non-normative sections."""
@@ -730,12 +722,12 @@ class TestRenderRoundTrip:
         rendered = render_file(file_node)
 
         # The sub-headings must appear in their original format
-        assert "*Core Functionality*" in rendered, (
-            f"Italic sub-heading not preserved.\nRendered:\n{rendered}"
-        )
-        assert "**Data Management**" in rendered, (
-            f"Bold sub-heading not preserved.\nRendered:\n{rendered}"
-        )
+        assert (
+            "*Core Functionality*" in rendered
+        ), f"Italic sub-heading not preserved.\nRendered:\n{rendered}"
+        assert (
+            "**Data Management**" in rendered
+        ), f"Bold sub-heading not preserved.\nRendered:\n{rendered}"
         # Must NOT appear as ## headings
         assert "## Core Functionality" not in rendered
         assert "## Data Management" not in rendered
@@ -822,9 +814,7 @@ class TestFulltextHashFromStructuredChildren:
             # NO body_text field
         }
 
-        a_node = GraphNode(
-            id="REQ-t00001-A", kind=NodeKind.ASSERTION, label="Must do X"
-        )
+        a_node = GraphNode(id="REQ-t00001-A", kind=NodeKind.ASSERTION, label="Must do X")
         a_node._content = {"label": "A"}
         edge_a = req.link(a_node, EdgeKind.STRUCTURES)
         edge_a.metadata = {"render_order": 1.0}
