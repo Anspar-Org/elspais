@@ -1490,3 +1490,110 @@ class TestImplementsEdgeMetadata:
         edge = edges[0]
         assert edge.metadata.get("impl_start_line") == 5
         assert edge.metadata.get("impl_end_line") == 25
+
+
+class TestStructuresEdgeRenderOrder:
+    """Tests for render_order metadata on STRUCTURES edges."""
+
+    # Implements: REQ-d00131-B
+    def test_structures_edges_carry_render_order(self):
+        """STRUCTURES edges should have render_order metadata based on line number."""
+        req = make_requirement(
+            "REQ-p00001",
+            title="Requirement with assertions and remainder",
+            level="PRD",
+            assertions=[
+                {"label": "A", "text": "First assertion", "line": 5},
+                {"label": "B", "text": "Second assertion", "line": 10},
+            ],
+            source_path="spec/test.md",
+            start_line=1,
+            end_line=20,
+        )
+
+        graph = build_graph(req)
+
+        req_node = graph.find_by_id("REQ-p00001")
+        assert req_node is not None
+
+        # Get STRUCTURES edges from the requirement node
+        structures_edges = [
+            e
+            for e in req_node.iter_outgoing_edges()
+            if e.kind == EdgeKind.STRUCTURES
+        ]
+
+        # Should have at least 2 STRUCTURES children (assertions)
+        assert len(structures_edges) >= 2, (
+            f"Expected at least 2 STRUCTURES edges, got {len(structures_edges)}"
+        )
+
+        # Every STRUCTURES edge must have render_order in metadata
+        for edge in structures_edges:
+            assert "render_order" in edge.metadata, (
+                f"STRUCTURES edge to {edge.target.id} missing render_order metadata"
+            )
+            assert isinstance(edge.metadata["render_order"], float), (
+                f"render_order should be float, got {type(edge.metadata['render_order'])}"
+            )
+
+        # render_order values must be monotonically increasing
+        orders = [e.metadata["render_order"] for e in structures_edges]
+        for i in range(1, len(orders)):
+            assert orders[i] > orders[i - 1], (
+                f"render_order not monotonically increasing: {orders}"
+            )
+
+
+# Implements: REQ-d00131-B
+def test_add_assertion_sets_render_order():
+    """add_assertion() must set render_order on the new STRUCTURES edge."""
+    builder = GraphBuilder()
+    builder.add_parsed_content(
+        ParsedContent(
+            content_type="requirement",
+            parsed_data={
+                "id": "REQ-p00001",
+                "title": "Test Requirement",
+                "level": "PRD",
+                "status": "Active",
+                "assertions": [
+                    {"label": "A", "text": "First assertion"},
+                    {"label": "B", "text": "Second assertion"},
+                ],
+                "implements": [],
+                "refines": [],
+            },
+            start_line=1,
+            end_line=10,
+            raw_text="## REQ-p00001: Test Requirement",
+        )
+    )
+    graph = builder.build()
+
+    # Collect existing render_orders on STRUCTURES edges
+    req = graph.find_by_id("REQ-p00001")
+    existing_orders = []
+    for edge in req.iter_outgoing_edges():
+        if edge.kind == EdgeKind.STRUCTURES:
+            existing_orders.append(edge.metadata.get("render_order", 0.0))
+    max_existing = max(existing_orders) if existing_orders else 0.0
+
+    # Add a new assertion via the public API
+    graph.add_assertion("REQ-p00001", "ZZ", "New test assertion")
+
+    # Find the new STRUCTURES edge to the ZZ assertion
+    new_edge = None
+    for edge in req.iter_outgoing_edges():
+        if edge.kind == EdgeKind.STRUCTURES and edge.target.id == "REQ-p00001-ZZ":
+            new_edge = edge
+            break
+
+    assert new_edge is not None, "New assertion edge not found"
+    assert "render_order" in new_edge.metadata, (
+        "render_order missing from new STRUCTURES edge metadata"
+    )
+    assert new_edge.metadata["render_order"] > max_existing, (
+        f"New render_order {new_edge.metadata['render_order']} should be > "
+        f"max existing {max_existing}"
+    )

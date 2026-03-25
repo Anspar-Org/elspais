@@ -1389,7 +1389,14 @@ class TraceGraph:
 
         # Add to index and link to parent
         self._index[assertion_id] = assertion_node
-        parent.link(assertion_node, EdgeKind.STRUCTURES)
+        edge = parent.link(assertion_node, EdgeKind.STRUCTURES)
+
+        # Assign render_order after existing children
+        max_order = 0.0
+        for e in parent.iter_outgoing_edges():
+            if e.kind == EdgeKind.STRUCTURES and e is not edge:
+                max_order = max(max_order, e.metadata.get("render_order", 0.0))
+        edge.metadata = {"render_order": max_order + 1.0}
 
         # Update body_text to include new assertion
         body_text = parent.get_field("body_text", "")
@@ -2760,8 +2767,9 @@ class GraphBuilder:
 
         # Add children in document order (sorted by line number)
         children_with_lines.sort(key=lambda x: x[0])
-        for _line, child_node in children_with_lines:
-            node.link(child_node, EdgeKind.STRUCTURES)
+        for line_num, child_node in children_with_lines:
+            edge = node.link(child_node, EdgeKind.STRUCTURES)
+            edge.metadata = {"render_order": float(line_num)}
 
         # Mark node dirty for any condition that would change the file on save
         parse_dirty_reasons: list[str] = []

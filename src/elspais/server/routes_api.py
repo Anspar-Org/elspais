@@ -467,6 +467,8 @@ async def api_tree_data(request: Request) -> JSONResponse:
         return rp or "CORE"
 
     def _walk(node, depth: int, parent_id: str | None) -> None:
+        from elspais.graph.relations import EdgeKind
+
         if node.kind != NodeKind.REQUIREMENT:
             return
         visit_key = (node.id, parent_id or "__root__")
@@ -474,12 +476,15 @@ async def api_tree_data(request: Request) -> JSONResponse:
             return
         visited.add(visit_key)
 
-        assertions = []
-        for child in node.iter_children():
-            if child.kind == NodeKind.ASSERTION:
-                label = child.get_field("label", "")
+        assertion_data: list[tuple[float, str]] = []
+        for edge in node.iter_outgoing_edges():
+            if edge.kind == EdgeKind.STRUCTURES and edge.target.kind == NodeKind.ASSERTION:
+                label = edge.target.get_field("label", "")
+                order = edge.metadata.get("render_order", 0.0)
                 if label:
-                    assertions.append(label)
+                    assertion_data.append((order, label))
+        assertion_data.sort()  # Sort by render_order (first element)
+        assertions = [label for _, label in assertion_data]
 
         has_children = any(c.kind == NodeKind.REQUIREMENT for c in node.iter_children())
         is_changed = bool(node.get_metric("is_branch_changed", False))
@@ -500,7 +505,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
                 "status": (node.get_field("status") or "").upper(),
                 "depth": depth,
                 "parent_id": parent_id,
-                "assertions": sorted(assertions),
+                "assertions": assertions,
                 "has_children": has_children,
                 "is_leaf": not has_children,
                 "coverage": coverage,

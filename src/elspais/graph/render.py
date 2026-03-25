@@ -118,13 +118,26 @@ def _render_requirement(node: GraphNode) -> str:
         sat_str = ", ".join(satisfies_refs)
         lines.append(f"Satisfies: {sat_str}")
 
-    # Walk STRUCTURES children in document order (insertion order preserves
-    # line-number sorting done during build). Collect assertions for hashing
-    # while rendering sections in their original order.
+    # Walk STRUCTURES children sorted by render_order (set during build).
+    # Collect assertions for hashing while rendering sections in order.
     assertions: list[tuple[str, str]] = []
     in_assertions = False
 
-    for child in node.iter_children(edge_kinds={EdgeKind.STRUCTURES}):
+    # Collect STRUCTURES children with render_order for sorting
+    children_with_order: list[tuple[float, GraphNode]] = []
+    for edge in node.iter_outgoing_edges():
+        if edge.kind == EdgeKind.STRUCTURES:
+            order = edge.metadata.get("render_order", 0.0)
+            children_with_order.append((order, edge.target))
+
+    # Sort by render_order; fall back to insertion order if no edges found
+    if children_with_order:
+        children_with_order.sort(key=lambda x: x[0])
+        ordered_children = [child for _, child in children_with_order]
+    else:
+        ordered_children = list(node.iter_children(edge_kinds={EdgeKind.STRUCTURES}))
+
+    for child in ordered_children:
         if child.kind == NodeKind.ASSERTION:
             label = child.get_field("label") or ""
             text = child.get_label()

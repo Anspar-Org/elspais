@@ -232,6 +232,46 @@ class TestRequirementRender:
         assert "A. SHALL do X." in result
         assert "B. SHALL do Y." in result
 
+    # Implements: REQ-d00131-B
+    def test_render_requirement_sorts_by_render_order(self):
+        """_render_requirement() must sort STRUCTURES children by render_order."""
+        from elspais.graph.render import _render_requirement
+
+        req = GraphNode(id="REQ-t00001", kind=NodeKind.REQUIREMENT, label="Test Req")
+        req._content = {
+            "level": "dev",
+            "status": "Active",
+            "hash_mode": "normalized-text",
+            "implements_refs": [],
+        }
+
+        a_node = GraphNode(
+            id="REQ-t00001-A", kind=NodeKind.ASSERTION, label="First assertion"
+        )
+        a_node._content = {"label": "A"}
+
+        b_node = GraphNode(
+            id="REQ-t00001-B", kind=NodeKind.ASSERTION, label="Second assertion"
+        )
+        b_node._content = {"label": "B"}
+
+        # Link B first (insertion order: B, A), but give A lower render_order
+        edge_b = req.link(b_node, EdgeKind.STRUCTURES)
+        edge_b.metadata = {"render_order": 20.0}
+        edge_a = req.link(a_node, EdgeKind.STRUCTURES)
+        edge_a.metadata = {"render_order": 10.0}
+
+        output = _render_requirement(req)
+        lines = output.split("\n")
+        assertion_lines = [l for l in lines if l and l[0].isalpha() and ". " in l]
+
+        assert assertion_lines[0].startswith("A."), (
+            f"Expected A first, got: {assertion_lines}"
+        )
+        assert assertion_lines[1].startswith("B."), (
+            f"Expected B second, got: {assertion_lines}"
+        )
+
     def test_REQ_d00131_B_requirement_with_sections(self):
         """Rendered requirement includes non-normative sections."""
         from elspais.graph.render import render_node
