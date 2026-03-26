@@ -97,7 +97,7 @@ jobs:
     needs: [publish, update-homebrew]
     if: >-
       always()
-      && (needs.publish.result == 'success' || needs.publish.result == 'skipped')
+      && needs.publish.result == 'success'
       && needs.update-homebrew.result == 'success'
     permissions:
       contents: read
@@ -143,18 +143,12 @@ jobs:
           PR_TITLE: ${{ steps.pr.outputs.title }}
           PR_URL: ${{ steps.pr.outputs.url }}
           VERSION: ${{ steps.version.outputs.version }}
-          PYPI_SKIPPED: ${{ needs.publish.result == 'skipped' }}
           SERVER_URL: ${{ github.server_url }}
           REPOSITORY: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
         run: |
           RUN_URL="${SERVER_URL}/${REPOSITORY}/actions/runs/${RUN_ID}"
-
-          if [ "$PYPI_SKIPPED" = "true" ]; then
-            PUBLISHED="Homebrew update triggered"
-          else
-            PUBLISHED="Published to <https://pypi.org/project/elspais/${VERSION}/|PyPI>"
-          fi
+          PUBLISHED="Published to <https://pypi.org/project/elspais/${VERSION}/|PyPI>"
 
           if [ "$PR_FOUND" = "true" ]; then
             MSG=":white_check_mark: *elspais v${VERSION} released*\n\n${PUBLISHED}\n*PR:* <${PR_URL}|#${PR_NUM} ${PR_TITLE}>\n*Run:* <${RUN_URL}|View run>"
