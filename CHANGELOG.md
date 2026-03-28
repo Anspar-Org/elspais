@@ -6,6 +6,7 @@ All notable changes to elspais will be documented in this file.
 
 ### Added
 
+- Comment compaction: `elspais comments compact` CLI command strips resolved threads and collapses promote chains in JSONL files
 - Comment data models: `CommentEvent` (frozen dataclass) and `CommentThread` (mutable dataclass) in `graph/comments.py`
 - `CommentIndex` in-memory index with iterator-only query API in `graph/comments.py`
 - Comment JSONL I/O: `comment_store.py` with anchor parsing, ID generation, JSONL read/write, thread assembly, and index loading

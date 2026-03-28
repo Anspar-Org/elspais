@@ -370,3 +370,66 @@ def update_anchors_on_rename(
             promote_events.append(evt)
 
     return promote_events
+
+
+def compact_file(path: Path) -> int:
+    """Rewrite a JSONL comment file, stripping resolved threads and collapsing promote chains.
+
+    Resolved threads: all events belonging to a resolved thread (root comment,
+    replies, and the resolve event itself) are removed entirely.
+
+    Promote chains: when multiple promote events target the same comment,
+    only the final (last) promote is kept.
+
+    Returns the number of events removed.
+
+    Implements: REQ-d00235-A
+    """
+    events = load_events(path)
+    if not events:
+        return 0
+
+    original_count = len(events)
+
+    # Identify resolved thread root IDs
+    resolved_ids: set[str] = set()
+    for evt in events:
+        if evt.event == "resolve":
+            if evt.target:
+                resolved_ids.add(evt.target)
+
+    # Collect IDs belonging to resolved threads (root + replies + resolve events)
+    resolved_event_ids: set[str] = set()
+    for evt in events:
+        if evt.event == "comment" and evt.id in resolved_ids:
+            resolved_event_ids.add(evt.id)
+        elif evt.event == "reply" and evt.parent in resolved_ids:
+            resolved_event_ids.add(evt.id)
+        elif evt.event == "resolve" and evt.target in resolved_ids:
+            resolved_event_ids.add(evt.id)
+
+    # Strip resolved thread events
+    kept = [e for e in events if e.id not in resolved_event_ids]
+
+    # Collapse promote chains: for each target, keep only the last promote
+    last_promote: dict[str, int] = {}  # target -> last index in kept list
+    for i, evt in enumerate(kept):
+        if evt.event == "promote" and evt.target:
+            last_promote[evt.target] = i
+
+    final_indices = set(last_promote.values())
+    compacted = [
+        e
+        for i, e in enumerate(kept)
+        if not (e.event == "promote" and e.target and i not in final_indices)
+    ]
+
+    removed = original_count - len(compacted)
+    if removed > 0:
+        # Rewrite the file
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            for evt in compacted:
+                f.write(json.dumps(_event_to_dict(evt), separators=(",", ":")) + "\n")
+
+    return removed

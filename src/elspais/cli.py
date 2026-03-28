@@ -41,6 +41,8 @@ from elspais.commands.args import (
     BrokenArgs,
     ChangedArgs,
     ChecksArgs,
+    CommentsArgs,
+    CommentsCompactArgs,
     CompletionArgs,
     CompletionInstallArgs,
     CompletionUninstallArgs,
@@ -151,6 +153,7 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
         CompletionArgs: "completion",
         GlossaryArgs: "glossary",
         TermIndexArgs: "term-index",
+        CommentsArgs: "comments",
     }
     ns.command = _CMD_MAP.get(type(cmd), "")
 
@@ -217,6 +220,9 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
         if hasattr(cmd.action, "__dataclass_fields__"):
             for field in dataclasses.fields(cmd.action):
                 setattr(ns, field.name, getattr(cmd.action, field.name))
+    elif isinstance(cmd, CommentsArgs):
+        _COMMENTS_MAP = {CommentsCompactArgs: "compact"}
+        ns.comments_action = _COMMENTS_MAP.get(type(cmd.action), None)
 
     return ns
 
@@ -432,6 +438,10 @@ def main(argv: list[str] | None = None) -> int:
             from elspais.commands import glossary_cmd
 
             return glossary_cmd.run(args)
+        elif args.command == "comments":
+            from elspais.commands import comments_cmd
+
+            return comments_cmd.run(args)
         else:
             _print_help()
             return 1

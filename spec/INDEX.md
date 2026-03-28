@@ -123,6 +123,7 @@
 | REQ-d00232 | Comment UI Anchors and Margin Column                          | prd-features.md         | f25796bb |
 | REQ-d00233 | Comment Inline Threads and Comment Mode                       | prd-features.md         | 792d13ce |
 | REQ-d00234 | Lost Comments Card                                            | prd-features.md         | 7fc99c6a |
+| REQ-d00235 | Comment Compaction CLI                                        | prd-features.md         | f3547362 |
 
 ## User Journeys
 

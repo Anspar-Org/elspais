@@ -296,3 +296,15 @@ B. Comment mode SHALL be a one-shot mode entered via C key or toolbar button (Ed
 A. A Lost Comments card SHALL appear at the top of the card column when orphaned comments exist, fetched via /api/comments/orphaned on page load, showing original anchor context and edit-mode-only Resolve buttons.
 
 *End* *Lost Comments Card* | **Hash**: 7fc99c6a
+
+## REQ-d00235: Comment Compaction CLI
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+## Assertions
+
+A. compact_file SHALL rewrite JSONL files stripping resolved threads entirely and collapsing promote chains to keep only the final promote event, returning the count of removed events.
+
+B. The elspais comments compact CLI command SHALL glob .elspais/comments/**/*.json, call compact_file on each, and report total events removed.
+
+*End* *Comment Compaction CLI* | **Hash**: f3547362

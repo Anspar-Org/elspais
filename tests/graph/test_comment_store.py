@@ -11,6 +11,7 @@ from elspais.graph.comment_store import (
     append_event,
     assemble_threads,
     comment_file_for,
+    compact_file,
     generate_comment_id,
     load_comment_index,
     load_events,
@@ -483,3 +484,101 @@ class TestUpdateAnchorsOnRename:
         assert idx.has_threads("REQ-p00099")
         assert not idx.has_threads("REQ-p00001#A")
         assert not idx.has_threads("REQ-p00001")
+
+
+class TestCompactFile:
+    """Validates REQ-d00235-A: compact_file strips resolved and collapses promotes."""
+
+    def test_REQ_d00235_A_compact_removes_resolved(self, tmp_path):
+        """Resolved thread (comment + resolve) is stripped; active comment survives."""
+        path = tmp_path / "comments" / "spec.md.json"
+        c1 = CommentEvent(
+            event="comment",
+            id="c1",
+            anchor="REQ-p00001#A",
+            author="Alice",
+            author_id="a@x",
+            date="2026-03-20",
+            text="Q",
+        )
+        r1 = CommentEvent(
+            event="resolve",
+            id="r1",
+            anchor="REQ-p00001#A",
+            author="Bob",
+            author_id="b@x",
+            date="2026-03-21",
+            target="c1",
+        )
+        c2 = CommentEvent(
+            event="comment",
+            id="c2",
+            anchor="REQ-p00001#A",
+            author="Carol",
+            author_id="c@x",
+            date="2026-03-22",
+            text="Still open",
+        )
+        append_event(path, c1)
+        append_event(path, r1)
+        append_event(path, c2)
+
+        removed = compact_file(path)
+        assert removed == 2
+        remaining = load_events(path)
+        assert len(remaining) == 1
+        assert remaining[0].id == "c2"
+
+    def test_REQ_d00235_A_compact_collapses_promote_chains(self, tmp_path):
+        """Multiple promotes for the same target collapse to keep only the final one."""
+        path = tmp_path / "comments" / "spec.md.json"
+        c1 = CommentEvent(
+            event="comment",
+            id="c1",
+            anchor="REQ-p00001#D",
+            author="Alice",
+            author_id="a@x",
+            date="2026-03-20",
+            text="Q",
+        )
+        p1 = CommentEvent(
+            event="promote",
+            id="p1",
+            anchor="REQ-p00001",
+            author="system",
+            author_id="system",
+            date="2026-03-21",
+            target="c1",
+            old_anchor="REQ-p00001#D",
+            new_anchor="REQ-p00001",
+            reason="Assertion D deleted",
+        )
+        p2 = CommentEvent(
+            event="promote",
+            id="p2",
+            anchor="REQ-p00002",
+            author="system",
+            author_id="system",
+            date="2026-03-22",
+            target="c1",
+            old_anchor="REQ-p00001",
+            new_anchor="REQ-p00002",
+            reason="Node renamed",
+        )
+        append_event(path, c1)
+        append_event(path, p1)
+        append_event(path, p2)
+
+        removed = compact_file(path)
+        assert removed >= 1
+        remaining = load_events(path)
+        promotes = [e for e in remaining if e.event == "promote"]
+        assert len(promotes) <= 1
+        # The surviving promote should be the final one
+        if promotes:
+            assert promotes[0].id == "p2"
+
+    def test_REQ_d00235_A_compact_empty_file(self, tmp_path):
+        """compact_file on a non-existent path returns 0."""
+        path = tmp_path / "nonexistent" / "comments.json"
+        assert compact_file(path) == 0
