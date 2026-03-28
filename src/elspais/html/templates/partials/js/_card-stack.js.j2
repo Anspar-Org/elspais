@@ -173,8 +173,8 @@ function renderMarginIndicators(nodeId, threads) {
     });
 }
 
+// Implements: REQ-d00233-A
 function toggleCommentThread(anchor) {
-    // Placeholder — will be implemented in Task 8 (inline threads)
     var existing = document.querySelector('.comment-thread-inline[data-thread-anchor="' + anchor + '"]');
     if (existing) {
         existing.remove();
@@ -182,7 +182,6 @@ function toggleCommentThread(anchor) {
     }
     var el = document.querySelector('[data-anchor="' + anchor + '"]');
     if (!el) return;
-    // Find the nodeId from the nearest card
     var card = el.closest('.req-card');
     if (!card) return;
     var nodeId = card.getAttribute('data-anchor');
@@ -192,14 +191,152 @@ function toggleCommentThread(anchor) {
     container.className = 'comment-thread-inline';
     container.setAttribute('data-thread-anchor', anchor);
     threads[anchor].forEach(function(t) {
-        var div = document.createElement('div');
-        div.className = 'comment-thread-item';
-        div.innerHTML = '<span class="comment-author">' + escapeHtml(t.root.author) +
-            '</span> <span class="comment-date">' + escapeHtml(t.root.date) +
-            '</span><div class="comment-text">' + escapeHtml(t.root.text) + '</div>';
-        container.appendChild(div);
+        container.appendChild(buildThreadHtml(t, anchor, nodeId));
     });
     el.after(container);
+}
+
+function buildThreadHtml(thread, anchor, nodeId) {
+    var div = document.createElement('div');
+    div.className = 'comment-thread-item';
+    div.setAttribute('data-comment-id', thread.root.id);
+    // Root comment
+    var html = '<div class="comment-entry">';
+    html += '<span class="comment-author">' + escapeHtml(thread.root.author) + '</span>';
+    html += ' <span class="comment-date">' + escapeHtml(thread.root.date) + '</span>';
+    html += '<div class="comment-text">' + escapeHtml(thread.root.text) + '</div>';
+    html += '</div>';
+    // Replies
+    if (thread.replies && thread.replies.length > 0) {
+        thread.replies.forEach(function(r) {
+            html += '<div class="comment-entry comment-reply">';
+            html += '<span class="comment-author">' + escapeHtml(r.author) + '</span>';
+            html += ' <span class="comment-date">' + escapeHtml(r.date) + '</span>';
+            html += '<div class="comment-text">' + escapeHtml(r.text) + '</div>';
+            html += '</div>';
+        });
+    }
+    // Edit-mode-only controls: Resolve and Reply
+    html += '<div class="comment-actions edit-only">';
+    html += '<button class="comment-resolve-btn" onclick="resolveComment(\'' +
+        escapeAttr(thread.root.id) + '\', \'' + escapeAttr(anchor) + '\', \'' +
+        escapeAttr(nodeId) + '\')">Resolve</button>';
+    html += '<button class="comment-reply-btn" onclick="showReplyInput(this, \'' +
+        escapeAttr(thread.root.id) + '\', \'' + escapeAttr(anchor) + '\', \'' +
+        escapeAttr(nodeId) + '\')">Reply</button>';
+    html += '</div>';
+    div.innerHTML = html;
+    return div;
+}
+
+async function resolveComment(commentId, anchor, nodeId) {
+    var data = await apiFetch('/api/comment/resolve', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({comment_id: commentId})
+    });
+    if (data && data.success) {
+        // Remove thread from DOM
+        var threadEl = document.querySelector('.comment-thread-item[data-comment-id="' + commentId + '"]');
+        if (threadEl) threadEl.remove();
+        // Remove from cache
+        if (cardCommentData[nodeId] && cardCommentData[nodeId][anchor]) {
+            cardCommentData[nodeId][anchor] = cardCommentData[nodeId][anchor].filter(
+                function(t) { return t.root.id !== commentId; }
+            );
+        }
+        // Refresh margin indicators
+        renderMarginIndicators(nodeId, cardCommentData[nodeId] || {});
+        showToast('Comment resolved', 'success');
+    }
+}
+
+function showReplyInput(btn, parentId, anchor, nodeId) {
+    // Remove any existing reply input
+    var existing = btn.closest('.comment-thread-item').querySelector('.comment-reply-input');
+    if (existing) { existing.remove(); return; }
+    var inputDiv = document.createElement('div');
+    inputDiv.className = 'comment-reply-input';
+    inputDiv.innerHTML = '<textarea class="comment-input-text" placeholder="Write a reply..." rows="2"></textarea>' +
+        '<div class="comment-input-actions">' +
+        '<button class="comment-submit-btn" onclick="submitReply(this, \'' +
+        escapeAttr(parentId) + '\', \'' + escapeAttr(anchor) + '\', \'' +
+        escapeAttr(nodeId) + '\')">Reply</button>' +
+        '<button class="comment-cancel-btn" onclick="this.closest(\'.comment-reply-input\').remove()">Cancel</button>' +
+        '</div>';
+    btn.closest('.comment-thread-item').appendChild(inputDiv);
+    inputDiv.querySelector('textarea').focus();
+}
+
+async function submitReply(btn, parentId, anchor, nodeId) {
+    var textarea = btn.closest('.comment-reply-input').querySelector('textarea');
+    var text = textarea.value.trim();
+    if (!text) return;
+    var data = await apiFetch('/api/comment/reply', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({parent_id: parentId, text: text})
+    });
+    if (data && data.success) {
+        // Append reply to DOM
+        var threadItem = btn.closest('.comment-thread-item');
+        var replyDiv = document.createElement('div');
+        replyDiv.className = 'comment-entry comment-reply';
+        replyDiv.innerHTML = '<span class="comment-author">' + escapeHtml(data.comment.author) + '</span>' +
+            ' <span class="comment-date">' + escapeHtml(data.comment.date) + '</span>' +
+            '<div class="comment-text">' + escapeHtml(data.comment.text) + '</div>';
+        var actions = threadItem.querySelector('.comment-actions');
+        threadItem.insertBefore(replyDiv, actions);
+        // Remove input
+        btn.closest('.comment-reply-input').remove();
+        showToast('Reply added', 'success');
+    }
+}
+
+// Implements: REQ-d00233-B
+function showCommentInput(anchor, afterElement) {
+    // Remove any existing comment input
+    var existing = document.querySelector('.comment-new-input');
+    if (existing) existing.remove();
+    var inputDiv = document.createElement('div');
+    inputDiv.className = 'comment-new-input';
+    inputDiv.innerHTML = '<textarea class="comment-input-text" placeholder="Add a comment..." rows="3"></textarea>' +
+        '<div class="comment-input-actions">' +
+        '<button class="comment-submit-btn" onclick="submitNewComment(this, \'' +
+        escapeAttr(anchor) + '\')">Submit</button>' +
+        '<button class="comment-cancel-btn" onclick="this.closest(\'.comment-new-input\').remove()">Cancel</button>' +
+        '</div>';
+    afterElement.after(inputDiv);
+    inputDiv.querySelector('textarea').focus();
+    // Esc to cancel
+    inputDiv.querySelector('textarea').addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') { inputDiv.remove(); }
+    });
+}
+
+async function submitNewComment(btn, anchor) {
+    var textarea = btn.closest('.comment-new-input').querySelector('textarea');
+    var text = textarea.value.trim();
+    if (!text) return;
+    var data = await apiFetch('/api/comment/add', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({anchor: anchor, text: text})
+    });
+    if (data && data.success) {
+        // Remove input
+        btn.closest('.comment-new-input').remove();
+        // Find the card and reload comments
+        var el = document.querySelector('[data-anchor="' + anchor + '"]');
+        if (el) {
+            var card = el.closest('.req-card');
+            if (card) {
+                var nodeId = card.getAttribute('data-anchor');
+                loadCardComments(nodeId);
+            }
+        }
+        showToast('Comment added', 'success');
+    }
 }
 
 function buildAssertionHtml(nodeId, a, data) {

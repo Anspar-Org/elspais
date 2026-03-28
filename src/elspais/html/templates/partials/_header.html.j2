@@ -48,6 +48,14 @@
             <span>Edit Mode</span>
         </button>
 
+        <button class="btn btn-comment-mode" id="btn-comment-mode" onclick="toggleCommentMode()"
+                title="Add a comment (C)" style="display:none;"
+                data-help="Enter comment mode. Click any element to add a comment. Only available in Edit Mode.">
+            <svg viewBox="0 0 16 16" width="14" height="14" style="vertical-align:-2px;">
+                <path fill="currentColor" d="M2.5 1C1.7 1 1 1.7 1 2.5v8C1 11.3 1.7 12 2.5 12H5l3 3 3-3h2.5c.8 0 1.5-.7 1.5-1.5v-8C15 1.7 14.3 1 13.5 1h-11z"/>
+            </svg>
+        </button>
+
         <button class="btn" id="btn-undo" onclick="doUndo()" disabled title="Undo last change"
                 data-help="Undo the most recent in-memory mutation. Mutations are not saved to disk until you click Save.">
             Undo

@@ -1083,3 +1083,110 @@ a.assertion-test-link:hover {
     margin-top: 2px;
     color: #343a40;
 }
+
+/* ── Comment Mode (REQ-d00233-B) ─────────────────────────────────── */
+
+.comment-mode [data-anchor]:hover {
+    outline: 2px solid #0d6efd;
+    outline-offset: -1px;
+    cursor: pointer;
+}
+
+.comment-mode [data-anchor] {
+    cursor: pointer;
+}
+
+/* ── Inline Thread Controls (REQ-d00233-A) ────────────────────────── */
+
+.comment-entry {
+    margin-bottom: 4px;
+}
+
+.comment-reply {
+    margin-left: 16px;
+    padding-left: 8px;
+    border-left: 2px solid #dee2e6;
+}
+
+.comment-actions {
+    margin-top: 6px;
+    display: flex;
+    gap: 6px;
+}
+
+.comment-resolve-btn,
+.comment-reply-btn {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 3px;
+    background: #fff;
+    cursor: pointer;
+    color: #495057;
+}
+
+.comment-resolve-btn:hover { background: #f8d7da; border-color: #f5c6cb; }
+.comment-reply-btn:hover { background: #d1ecf1; border-color: #bee5eb; }
+
+/* Comment input (new comment and reply) */
+.comment-new-input,
+.comment-reply-input {
+    margin: 6px 0;
+    padding: 8px;
+    background: #fff;
+    border: 1px solid #0d6efd;
+    border-radius: 4px;
+}
+
+.comment-input-text {
+    width: 100%;
+    font-size: 0.8rem;
+    border: 1px solid #dee2e6;
+    border-radius: 3px;
+    padding: 6px;
+    resize: vertical;
+    font-family: inherit;
+}
+
+.comment-input-actions {
+    margin-top: 4px;
+    display: flex;
+    gap: 6px;
+}
+
+.comment-submit-btn {
+    font-size: 0.7rem;
+    padding: 3px 10px;
+    border: none;
+    border-radius: 3px;
+    background: #0d6efd;
+    color: #fff;
+    cursor: pointer;
+}
+
+.comment-submit-btn:hover { background: #0b5ed7; }
+
+.comment-cancel-btn {
+    font-size: 0.7rem;
+    padding: 3px 10px;
+    border: 1px solid #dee2e6;
+    border-radius: 3px;
+    background: #fff;
+    cursor: pointer;
+    color: #495057;
+}
+
+.comment-cancel-btn:hover { background: #f8f9fa; }
+
+/* Comment mode toolbar button */
+.btn-comment-mode {
+    padding: 4px 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+    color: #495057;
+}
+
+.btn-comment-mode:hover { background: #e9ecef; }
+.btn-comment-mode.active { background: #0d6efd; color: #fff; border-color: #0d6efd; }

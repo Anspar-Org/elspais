@@ -14,6 +14,7 @@ All notable changes to elspais will be documented in this file.
 - Comment graph integration: TraceGraph delegates (iter_comments, comment_count, has_comments, iter_orphaned_comments), FederatedGraph comment routing with anchor-based ownership, rename hooks for comment anchor consistency, and repo_root_for() write routing method
 - Comment API endpoints: POST /api/comment/add, /api/comment/reply, /api/comment/resolve; GET /api/comments, /api/comments/card, /api/comments/orphaned. Author resolved server-side via get_author_info.
 - Comment UI: data-anchor attributes on all commentable elements (cards, assertions, edges, sections, journeys) and comment margin column with speech bubble indicators fetched via /api/comments/card
+- Comment inline threads: full thread rendering with replies, Resolve/Reply controls (edit-mode-only), comment mode via C key or toolbar button for one-shot comment creation
 
 ## [0.108.6]
 

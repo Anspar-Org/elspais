@@ -274,3 +274,15 @@ A. All commentable DOM elements SHALL have data-anchor attributes: card header (
 B. A comment margin column SHALL render speech bubble icons with count badges for anchors that have comment threads, fetched via /api/comments/card when a card opens.
 
 *End* *Comment UI Anchors and Margin Column* | **Hash**: f25796bb
+
+## REQ-d00233: Comment Inline Threads and Comment Mode
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+## Assertions
+
+A. Inline thread rendering SHALL display author, date, text, replies, and edit-mode-only Resolve/Reply controls below the target element.
+
+B. Comment mode SHALL be a one-shot mode entered via C key or toolbar button (Edit Mode required), showing a textarea on click, posting via /api/comment/add, then exiting.
+
+*End* *Comment Inline Threads and Comment Mode* | **Hash**: 792d13ce
