@@ -261,6 +261,22 @@ class FederatedGraph:
             if entry and entry.graph:
                 yield from entry.graph.iter_comments_for_card(node_id)
 
+    def load_comments(self) -> None:
+        """Load comment indexes for all repos and run promotion.
+
+        Called at viewer startup and on graph refresh.
+        """
+        from elspais.graph.comment_store import (
+            load_comment_index,
+            promote_orphaned_comments,
+        )
+
+        for entry in self._repos.values():
+            if entry.graph:
+                idx = load_comment_index(entry.repo_root)
+                promote_orphaned_comments(idx, entry.graph, entry.repo_root)
+                entry.graph._comment_index = idx
+
     def comment_source_file(self, anchor: str) -> str | None:
         """Return the JSONL source file path for an anchor."""
         from elspais.graph.comment_store import parse_anchor

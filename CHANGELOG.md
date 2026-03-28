@@ -6,6 +6,7 @@ All notable changes to elspais will be documented in this file.
 
 ### Added
 
+- Comment loading at viewer startup: comments are loaded and promoted when the graph is built, on refresh, and on reload
 - Comment compaction: `elspais comments compact` CLI command strips resolved threads and collapses promote chains in JSONL files
 - Comment data models: `CommentEvent` (frozen dataclass) and `CommentThread` (mutable dataclass) in `graph/comments.py`
 - `CommentIndex` in-memory index with iterator-only query API in `graph/comments.py`

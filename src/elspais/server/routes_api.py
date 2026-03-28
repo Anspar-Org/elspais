@@ -1496,6 +1496,8 @@ async def api_reload(request: Request) -> JSONResponse:
             config=state.config,
             repo_root=state.repo_root,
         )
+        if hasattr(new_graph, "load_comments"):
+            new_graph.load_comments()
         state.graph = new_graph
         state.build_time = time.time()
         return JSONResponse({"success": True, "message": "Graph reloaded from disk"})
