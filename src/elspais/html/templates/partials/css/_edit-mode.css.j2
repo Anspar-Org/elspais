@@ -70,6 +70,7 @@ body.edit-mode .status-select {
     font-size: 0.75rem;
     font-weight: 600;
     background: var(--edit-select-bg);
+    color: var(--input-text);
     cursor: pointer;
     transition: border-color 0.15s;
 }
@@ -131,13 +132,13 @@ body.edit-mode .status-badge-wrapper {
     font-size: 0.95em;
     padding: 3px 10px;
     margin-right: 8px;
-    border: 1px solid var(--border-color, #ccc);
+    border: 1px solid var(--border-color);
     border-radius: 4px;
-    background: var(--bg-secondary, #f0f0f0);
+    background: var(--card-bg);
     cursor: pointer;
-    color: var(--text-primary, #333);
+    color: var(--input-text);
 }
-.btn-sync:hover { background: var(--bg-hover, #e0e0e0); }
+.btn-sync:hover { background: var(--card-header-hover-bg); }
 
 /* --- Multi-Badge Container --- */
 .branch-badges { display: inline-flex; align-items: center; gap: 4px; }

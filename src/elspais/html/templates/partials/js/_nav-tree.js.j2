@@ -380,12 +380,11 @@ function renderNavTree() {
 
         // Comment indicator: amber if direct, grey if inherited from hidden child
         var commentIcon = '';
-        if (row.has_comments) {
-            commentIcon = '<svg class="nav-tree-comment-icon direct" viewBox="0 0 16 16" width="10" height="10" title="Has comments">' +
-                '<path fill="currentColor" d="M2.5 1C1.7 1 1 1.7 1 2.5v8C1 11.3 1.7 12 2.5 12H5l3 3 3-3h2.5c.8 0 1.5-.7 1.5-1.5v-8C15 1.7 14.3 1 13.5 1h-11z"/></svg>';
-        } else if (row._has_child_comments) {
-            commentIcon = '<svg class="nav-tree-comment-icon inherited" viewBox="0 0 16 16" width="10" height="10" title="Child has comments">' +
-                '<path fill="currentColor" d="M2.5 1C1.7 1 1 1.7 1 2.5v8C1 11.3 1.7 12 2.5 12H5l3 3 3-3h2.5c.8 0 1.5-.7 1.5-1.5v-8C15 1.7 14.3 1 13.5 1h-11z"/></svg>';
+        var commentClass = row.has_comments ? 'direct' : (row._has_child_comments ? 'inherited' : '');
+        if (commentClass) {
+            commentIcon = '<span class="nav-tree-comment-icon ' + commentClass + '" title="' +
+                (commentClass === 'direct' ? 'Has comments' : 'Child has comments') +
+                '">&#x25A0;</span>';
         }
 
         html += '<div class="nav-tree-row' + selectedClass + dimClass + '" ' +

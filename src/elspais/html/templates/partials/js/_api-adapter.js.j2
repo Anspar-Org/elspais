@@ -7,8 +7,17 @@
 {% if mode == 'edit' %}
 // ── Edit mode: real API calls ──
 var _embeddedData = null;
+var _lastClickedButton = null;
+
+// Track the last button clicked for automatic busy state
+document.addEventListener('click', function(e) {
+    var btn = e.target.closest('button');
+    if (btn) _lastClickedButton = btn;
+}, true);
 
 async function apiFetch(url, options) {
+    var busyBtn = _lastClickedButton;
+    if (busyBtn) busyBtn.classList.add('busy');
     try {
         var resp = await fetch(url, options);
         var data = await resp.json();
@@ -20,6 +29,9 @@ async function apiFetch(url, options) {
     } catch (err) {
         showToast('Network error: ' + err.message, 'error');
         return null;
+    } finally {
+        if (busyBtn) busyBtn.classList.remove('busy');
+        _lastClickedButton = null;
     }
 }
 

@@ -2034,9 +2034,7 @@ window.addEventListener('beforeunload', function(e) {
     var dirtyBadge = document.getElementById('unsaved-badge');
     var hasMutations = dirtyBadge && !dirtyBadge.classList.contains('hidden') &&
                        parseInt(dirtyBadge.textContent, 10) > 0;
-    var uncommittedBadge = document.getElementById('uncommitted-badge');
-    var hasUncommitted = uncommittedBadge && !uncommittedBadge.classList.contains('hidden');
-    if (hasMutations || hasUncommitted) {
+    if (hasMutations) {
         e.preventDefault();
         e.returnValue = '';
     }

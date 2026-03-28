@@ -255,10 +255,7 @@ function renderMarginIndicators(nodeId, threads) {
             var gutter = document.createElement('span');
             gutter.className = 'comment-gutter';
             gutter.title = count + ' comment' + (count > 1 ? 's' : '') + ' — click to expand';
-            gutter.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12">' +
-                '<path fill="currentColor" d="M2.5 1C1.7 1 1 1.7 1 2.5v8C1 11.3 1.7 12 2.5 12H5l3 3 3-3h2.5c.8 0 1.5-.7 1.5-1.5v-8C15 1.7 14.3 1 13.5 1h-11z"/>' +
-                '</svg>' +
-                (count > 1 ? '<span class="comment-gutter-count">' + count + '</span>' : '');
+            gutter.textContent = count;
             gutter.onclick = function(e) {
                 e.stopPropagation();
                 toggleCommentThread(anchor);
@@ -410,6 +407,24 @@ function showCommentInput(anchor, afterElement) {
     if (existing) existing.remove();
     var prevTarget = document.querySelector('.comment-target');
     if (prevTarget) prevTarget.classList.remove('comment-target');
+
+    // Remember clicked element's position before DOM changes
+    var scrollContainer = document.getElementById('card-stack-body');
+    var elTopBefore = afterElement.getBoundingClientRect().top;
+
+    // Expand any existing comment threads on this anchor so user sees context
+    var card = afterElement.closest('.req-card');
+    if (card) {
+        var nodeId = (card.id || '').replace(/^card-/, '');
+        var threads = cardCommentData[nodeId];
+        if (threads && threads[anchor]) {
+            var existingThread = document.querySelector('.comment-thread-inline[data-thread-anchor="' + anchor + '"]');
+            if (!existingThread) {
+                toggleCommentThread(anchor);
+            }
+        }
+    }
+
     // Highlight the target element
     afterElement.classList.add('comment-target');
     var inputDiv = document.createElement('div');
@@ -421,6 +436,16 @@ function showCommentInput(anchor, afterElement) {
         '<button class="comment-cancel-btn" onclick="cancelCommentInput()">Cancel</button>' +
         '</div>';
     afterElement.after(inputDiv);
+
+    // Restore scroll so clicked element stays in the same visual position
+    if (scrollContainer) {
+        var elTopAfter = afterElement.getBoundingClientRect().top;
+        var drift = elTopAfter - elTopBefore;
+        if (Math.abs(drift) > 1) {
+            scrollContainer.scrollTop += drift;
+        }
+    }
+
     inputDiv.querySelector('textarea').focus();
     // Esc to cancel
     inputDiv.querySelector('textarea').addEventListener('keydown', function(e) {
@@ -560,7 +585,7 @@ function buildRemainderHtml(nodeId, rem, idx) {
         h += '<textarea class="edit-only remainder-text-edit" data-node-id="' + escapeAttr(remId) + '"' +
             ' data-original="' + escapeAttr(rem.text || '') + '"' +
             ' onblur="onRemainderTextBlur(this)"' +
-            ' style="width:100%;min-height:40px;font-size:0.8rem;border:1px solid #dee2e6;border-radius:4px;padding:6px;resize:vertical;background:#f8f9fa;">' +
+            ' style="width:100%;min-height:40px;font-size:0.8rem;border:1px solid var(--border-color);border-radius:4px;padding:6px;resize:vertical;background:var(--card-bg);color:var(--input-text);">' +
             escapeHtml(rem.text || '') + '</textarea>';
     }
     h += '</div>';
@@ -590,10 +615,10 @@ function buildCardHtml(nodeId, data, collapsed) {
     html += '<input type="text" class="edit-only req-card-title-edit" value="' + escapeAttr(data.title || '') + '"' +
         ' onclick="event.stopPropagation()" onblur="onTitleBlur(this)" data-node-id="' + nodeId + '"' +
         ' data-original="' + escapeAttr(data.title || '') + '"' +
-        ' style="font-size:0.9rem;font-weight:600;border:none;border-bottom:1px dashed #adb5bd;background:transparent;flex:1;outline:none;padding:1px 4px;">';
+        ' style="font-size:0.9rem;font-weight:600;border:none;border-bottom:1px dashed var(--border-color);background:transparent;color:var(--input-text);flex:1;outline:none;padding:1px 4px;">';
     html += '<button class="req-card-delete edit-only" ' +
         'onclick="event.stopPropagation(); onDeleteRequirement(\'' + nodeId + '\')" ' +
-        'title="Delete requirement">&#10005;</button>';
+        'title="Delete requirement">&#x1F5D1;</button>';
     html += '<button class="req-card-close" onclick="event.stopPropagation(); closeCard(\'' + nodeId + '\')" title="Close card">&times;</button>';
     html += '</div>';
 
@@ -686,7 +711,7 @@ function buildCardHtml(nodeId, data, collapsed) {
     html += '</div></div>';
 
     // Parents section (relationship editor in edit mode)
-    html += '<div class="card-section"><div class="card-section-label">Implements / Refines / Satisfies</div>';
+    html += '<div class="card-section"><div class="card-section-label">Outgoing Links</div>';
     html += '<div class="card-parents">';
     if (data.parents && data.parents.length > 0) {
         data.parents.forEach(function(p) {
@@ -770,7 +795,7 @@ function buildCardHtml(nodeId, data, collapsed) {
             html += '</div>';
         } else {
             html += '<div class="card-section"><div class="card-section-label">Assertions</div>';
-            html += '<div style="font-size:0.8rem;color:#adb5bd;">No assertions defined</div>';
+            html += '<div style="font-size:0.8rem;color:var(--secondary-text);">No assertions defined</div>';
             html += '<button class="card-add-assertion-btn edit-only" onclick="onAddAssertion(\'' + nodeId + '\')">+ Add Assertion</button>';
             html += '</div>';
         }
@@ -827,9 +852,9 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
     // Edit mode: inline title input
     html += '<input type="text" class="edit-only journey-title-edit" value="' + escapeAttr(data.title || '') + '"' +
         ' onclick="event.stopPropagation()" onblur="onJourneyTitleBlur(\'' + nodeId + '\', this)"' +
-        ' style="font-size:0.9rem;font-weight:600;border:none;border-bottom:1px dashed #adb5bd;background:transparent;flex:1;outline:none;">';
+        ' style="font-size:0.9rem;font-weight:600;border:none;border-bottom:1px dashed var(--border-color);background:transparent;color:var(--input-text);flex:1;outline:none;">';
     // Edit mode: delete journey
-    html += '<button class="edit-only journey-delete-btn" onclick="event.stopPropagation(); onDeleteJourney(\'' + nodeId + '\')" title="Delete journey">&times;</button>';
+    html += '<button class="edit-only journey-delete-btn" onclick="event.stopPropagation(); onDeleteJourney(\'' + nodeId + '\')" title="Delete journey">&#x1F5D1;</button>';
     html += '<button class="req-card-close" onclick="event.stopPropagation(); closeCard(\'' + nodeId + '\')" title="Close card">&times;</button>';
     html += '</div>';
 
@@ -854,7 +879,7 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
     html += '<span class="card-meta-value journey-field-view">' + escapeHtml(props.actor || '') + '</span>';
     html += '<input type="text" class="edit-only journey-field-edit" value="' + escapeAttr(props.actor || '') + '"' +
         ' data-field="actor" data-journey-id="' + nodeId + '" onblur="onJourneyFieldBlur(this)"' +
-        ' style="font-size:inherit;border:none;border-bottom:1px dashed #adb5bd;background:transparent;width:90%;outline:none;">';
+        ' style="font-size:inherit;border:none;border-bottom:1px dashed var(--border-color);background:transparent;color:var(--input-text);width:90%;outline:none;">';
     html += '</div>';
 
     // Goal — view + edit
@@ -863,7 +888,7 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
     html += '<span class="card-meta-value journey-field-view">' + escapeHtml(props.goal || '') + '</span>';
     html += '<input type="text" class="edit-only journey-field-edit" value="' + escapeAttr(props.goal || '') + '"' +
         ' data-field="goal" data-journey-id="' + nodeId + '" onblur="onJourneyFieldBlur(this)"' +
-        ' style="font-size:inherit;border:none;border-bottom:1px dashed #adb5bd;background:transparent;width:90%;outline:none;">';
+        ' style="font-size:inherit;border:none;border-bottom:1px dashed var(--border-color);background:transparent;color:var(--input-text);width:90%;outline:none;">';
     html += '</div>';
 
     if (props.descriptor) {
@@ -875,15 +900,15 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
 
     html += '</div></div>';
 
-    // Context (view + edit)
+    // Context (view + edit) — styled like remainder sections (Steps, Expected Outcome)
     if (props.context || editState.enabled) {
-        html += '<div class="card-section"><div class="card-section-label">Context</div>';
-        if (props.context) {
-            html += '<div class="journey-card-description journey-field-view">' + simpleMarkdown(props.context) + '</div>';
-        }
-        html += '<input type="text" class="edit-only journey-field-edit" value="' + escapeAttr(props.context || '') + '"' +
-            ' data-field="context" data-journey-id="' + nodeId + '" onblur="onJourneyFieldBlur(this)"' +
-            ' style="width:100%;font-size:0.8rem;border:1px solid #dee2e6;border-radius:4px;padding:4px;background:#f8f9fa;">';
+        html += '<div class="card-body-section-wrapper">';
+        html += '<div class="card-body-section-heading"><span>Context</span></div>';
+        html += '<div class="card-body-section-content journey-field-view">' + simpleMarkdown(props.context || '') + '</div>';
+        html += '<textarea class="edit-only journey-field-edit" data-field="context" data-journey-id="' + nodeId + '"' +
+            ' onblur="onJourneyFieldBlur(this)"' +
+            ' style="width:100%;min-height:40px;font-size:0.8rem;border:1px solid var(--border-color);border-radius:4px;padding:6px;resize:vertical;background:var(--card-bg);color:var(--input-text);">' +
+            escapeHtml(props.context || '') + '</textarea>';
         html += '</div>';
     }
 
@@ -914,16 +939,16 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
     });
     html += '</div>';
     html += '<button class="card-add-rel-btn edit-only" ' +
-        'onclick="onAddJourneyRef(\'' + nodeId + '\', this)">+ Add</button>';
+        'onclick="onAddJourneyRef(\'' + nodeId + '\', this)">+ Add Relationship</button>';
     html += '</div>';
 
     // Sections (view + edit)
     var sections = props.sections || [];
     html += '<div class="journey-sections" data-journey-id="' + nodeId + '">';
     sections.forEach(function(sec) {
-        html += '<div class="card-section journey-section" data-section-name="' + escapeAttr(sec.name) + '" data-anchor="' + nodeId + '#section:' + escapeAttr(sec.name) + '">';
+        html += '<div class="card-body-section-wrapper journey-section" data-section-name="' + escapeAttr(sec.name) + '" data-anchor="' + nodeId + '#section:' + escapeAttr(sec.name) + '">';
         // Section header — view + edit
-        html += '<div class="card-section-label journey-section-header">';
+        html += '<div class="card-body-section-heading journey-section-header">';
         html += '<span class="journey-section-name-view">' + escapeHtml(sec.name) + '</span>';
         html += '<input type="text" class="edit-only journey-section-name-edit" value="' + escapeAttr(sec.name) + '"' +
             ' data-journey-id="' + nodeId + '" data-original-name="' + escapeAttr(sec.name) + '"' +
@@ -931,10 +956,10 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
         html += '<button class="edit-only journey-section-delete" onclick="onDeleteJourneySection(\'' + nodeId + '\', \'' + escapeAttr(sec.name) + '\')" title="Delete section">&times;</button>';
         html += '</div>';
         // Section content — view + edit
-        html += '<div class="journey-card-description journey-section-content-view">' + simpleMarkdown(sec.content || '') + '</div>';
+        html += '<div class="card-body-section-content journey-section-content-view">' + simpleMarkdown(sec.content || '') + '</div>';
         html += '<textarea class="edit-only journey-section-content-edit" data-journey-id="' + nodeId + '"' +
             ' data-section-name="' + escapeAttr(sec.name) + '" onblur="onJourneySectionContentBlur(this)"' +
-            ' style="width:100%;min-height:40px;font-size:0.8rem;border:1px solid #dee2e6;border-radius:4px;padding:6px;resize:vertical;background:#f8f9fa;">' +
+            ' style="width:100%;min-height:40px;font-size:0.8rem;border:1px solid var(--border-color);border-radius:4px;padding:6px;resize:vertical;background:var(--card-bg);color:var(--input-text);">' +
             escapeHtml(sec.content || '') + '</textarea>';
         html += '</div>';
     });
@@ -1094,10 +1119,25 @@ function setAssertionBadgeMode(mode) {
     recolorCachedButtons();
 }
 
+var _linkStyleCycle = ['full', 'abbrev', 'dots'];
+var _linkStyleLabels = {full: 'Link Style: Full', abbrev: 'Link Style: Abbrv', dots: 'Link Style: Dot'};
+
+function cycleLinkStyle() {
+    var current = editState.assertionBadgeMode || 'abbrev';
+    var idx = _linkStyleCycle.indexOf(current);
+    var next = _linkStyleCycle[(idx + 1) % _linkStyleCycle.length];
+    editState.assertionBadgeMode = next;
+    var btn = document.getElementById('assertion-badge-mode-btn');
+    if (btn) btn.textContent = _linkStyleLabels[next];
+    renderCardStack();
+    recolorCachedButtons();
+    saveState();
+}
+
 function toggleCardViewMode() {
     editState.cardViewMode = editState.cardViewMode === 'compact' ? 'complete' : 'compact';
     var btn = document.getElementById('card-view-mode');
-    if (btn) btn.textContent = editState.cardViewMode === 'compact' ? 'Compact' : 'Complete';
+    if (btn) btn.textContent = (editState.cardViewMode === 'compact' ? 'Compact' : 'Complete') + ' Card View';
     renderCardStack();
     recolorCachedButtons();
     saveState();
