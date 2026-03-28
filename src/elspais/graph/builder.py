@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from elspais.graph.comment_store import update_anchors_on_rename
+from elspais.graph.comments import CommentIndex, CommentThread
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
 from elspais.graph.parsers import ParsedContent
@@ -65,6 +67,9 @@ class TraceGraph:
 
     # Implements: REQ-d00222-A
     _terms: TermDictionary = field(default_factory=TermDictionary, init=False)
+
+    # Implements: REQ-d00230-A
+    _comment_index: CommentIndex = field(default_factory=CommentIndex, init=False)
 
     # Mutation infrastructure
     _mutation_log: MutationLog = field(default_factory=MutationLog, init=False)
@@ -908,6 +913,9 @@ class TraceGraph:
                             child.set_id(new_assertion_id)
                             self._index[new_assertion_id] = child
 
+        # Implements: REQ-d00230-C
+        update_anchors_on_rename(self._comment_index, old_id, new_id, self.repo_root)
+
         self._mutation_log.append(entry)
         return entry
 
@@ -1241,6 +1249,11 @@ class TraceGraph:
 
         # Recompute parent hash
         self._recompute_requirement_hash(parent)
+
+        # Implements: REQ-d00230-C
+        old_anchor = f"{parent.id}#{old_label}"
+        new_anchor = f"{parent.id}#{new_label}"
+        update_anchors_on_rename(self._comment_index, old_anchor, new_anchor, self.repo_root)
 
         self._mutation_log.append(entry)
         return entry
@@ -2654,6 +2667,26 @@ class TraceGraph:
         )
         self._mutation_log.append(entry)
         return entry
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Comment Delegates (Implements: REQ-d00230-A)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def iter_comments(self, anchor: str) -> Iterator[CommentThread]:
+        """Yield comment threads for an anchor."""
+        return self._comment_index.iter_threads(anchor)
+
+    def comment_count(self, anchor: str) -> int:
+        """Count comment threads for an anchor."""
+        return self._comment_index.thread_count(anchor)
+
+    def has_comments(self, anchor: str) -> bool:
+        """Check if any comment threads exist for an anchor."""
+        return self._comment_index.has_threads(anchor)
+
+    def iter_orphaned_comments(self) -> Iterator[CommentThread]:
+        """Yield orphaned comment threads."""
+        return self._comment_index.iter_orphaned()
 
 
 class GraphBuilder:

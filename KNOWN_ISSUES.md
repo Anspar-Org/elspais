@@ -1,5 +1,23 @@
 # Known Issues
 
+[ ] checks : bug
+- No way to know which requirements have errors:
+  ✗ spec.format_rules: 2 format error(s) in 102 requirements
+  ⚠ spec.no_assertions: 2 requirement(s) have no assertions (not testable)
+
+[ ] chore: _generated files
+- set to read-only as (some) protection against people accidently editing them
+
+[ ] 'fix' command: bug
+- bug 1:
+- doesn't tell you why status=Active REQs are not auto-fixed
+- requires a message -m "reason for update"
+- bug 2:
+- should not be a noted change unless hash changed. 
+- e.g. changes to Rationale or whitespace changes will not change hash in 'normalized assertions' mode
+- bug 3:
+- -m "message" doesn't work
+
 [ ] mcp : bug
 - MCP refresh() should return error if unsaved changes
 - must use separate 'discard' command as a safety

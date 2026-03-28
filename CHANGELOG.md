@@ -11,6 +11,7 @@ All notable changes to elspais will be documented in this file.
 - Comment JSONL I/O: `comment_store.py` with anchor parsing, ID generation, JSONL read/write, thread assembly, and index loading
 - Promotion engine: anchor validation against live graph, orphan promotion to nearest ancestor, rename-triggered anchor updates
 - Requirements REQ-d00226 through REQ-d00229 for the comment/review system
+- Comment graph integration: TraceGraph delegates (iter_comments, comment_count, has_comments, iter_orphaned_comments), FederatedGraph comment routing with anchor-based ownership, rename hooks for comment anchor consistency, and repo_root_for() write routing method
 
 ## [0.108.6]
 

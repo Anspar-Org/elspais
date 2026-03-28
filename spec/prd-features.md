@@ -228,3 +228,19 @@ B. Orphaned comment promotion SHALL walk parent hierarchy to find the nearest li
 C. Rename-triggered promotion SHALL update all anchors prefixed with the old ID and emit promote events with rename reason.
 
 *End* *Comment Promotion Engine* | **Hash**: d72378b4
+
+## REQ-d00230: Comment Graph Integration
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+## Assertions
+
+A. TraceGraph SHALL expose comment delegate methods (iter_comments, comment_count, has_comments, iter_orphaned_comments) that delegate to the internal CommentIndex.
+
+B. FederatedGraph SHALL route comment queries to the owning repo's TraceGraph using anchor-based ownership lookup and aggregate orphaned comments across all repos.
+
+C. TraceGraph rename_node and rename_assertion SHALL call update_anchors_on_rename to keep comment anchors consistent after ID changes.
+
+D. FederatedGraph SHALL provide a repo_root_for(node_id) public method that returns the repo root Path for write routing.
+
+*End* *Comment Graph Integration* | **Hash**: 0eed8546

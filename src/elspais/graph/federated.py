@@ -20,6 +20,7 @@ from elspais.graph.relations import EdgeKind
 
 if TYPE_CHECKING:
     from elspais.graph.builder import TraceGraph
+    from elspais.graph.comments import CommentThread
     from elspais.graph.mutations import BrokenReference
 
 
@@ -190,6 +191,43 @@ class FederatedGraph:
         self._terms = merged
 
     # ─────────────────────────────────────────────────────────────────────────
+    # Comment Routing (Implements: REQ-d00230-B)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def iter_comments(self, anchor: str) -> Iterator[CommentThread]:
+        """Yield comment threads for an anchor, routed to owning repo."""
+        from elspais.graph.comment_store import parse_anchor
+
+        node_id = parse_anchor(anchor)[0]
+        repo_name = self._ownership.get(node_id)
+        if repo_name:
+            entry = self._repos.get(repo_name)
+            if entry and entry.graph:
+                yield from entry.graph.iter_comments(anchor)
+
+    def comment_count(self, anchor: str) -> int:
+        """Count comment threads for an anchor."""
+        from elspais.graph.comment_store import parse_anchor
+
+        node_id = parse_anchor(anchor)[0]
+        repo_name = self._ownership.get(node_id)
+        if repo_name:
+            entry = self._repos.get(repo_name)
+            if entry and entry.graph:
+                return entry.graph.comment_count(anchor)
+        return 0
+
+    def has_comments(self, anchor: str) -> bool:
+        """Check if any comment threads exist for an anchor."""
+        return self.comment_count(anchor) > 0
+
+    def iter_orphaned_comments(self) -> Iterator[CommentThread]:
+        """Yield orphaned comments aggregated across all repos."""
+        for entry in self._repos.values():
+            if entry.graph:
+                yield from entry.graph.iter_orphaned_comments()
+
+    # ─────────────────────────────────────────────────────────────────────────
     # Root Repo Convenience Properties
     # ─────────────────────────────────────────────────────────────────────────
 
@@ -273,6 +311,17 @@ class FederatedGraph:
         if repo_name is None:
             raise KeyError(f"Node '{node_id}' not found in any repo")
         return self._repos[repo_name]
+
+    # Implements: REQ-d00230-D
+    def repo_root_for(self, node_id: str) -> Path | None:
+        """Return the repo root Path for a node, or None if not found.
+
+        Used for write routing (e.g., determining where to write comment JSONL).
+        """
+        repo_name = self._ownership.get(node_id)
+        if repo_name is None:
+            return None
+        return self._repos[repo_name].repo_root
 
     # Implements: REQ-d00200-G
     def config_for(self, node_id: str) -> dict[str, Any] | None:
@@ -866,6 +915,21 @@ class FederatedGraph:
         """
         repo_name = self._ownership[node_id]
         result = self._graph_for(node_id).reconstruct_journey_body(node_id)
+        self._record_mutation(repo_name, result)
+        return result
+
+    def update_remainder(
+        self,
+        node_id: str,
+        text: str | None = None,
+        heading: str | None = None,
+    ) -> MutationEntry:
+        """Update text and/or heading of a REMAINDER node.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[node_id]
+        result = self._graph_for(node_id).update_remainder(node_id, text=text, heading=heading)
         self._record_mutation(repo_name, result)
         return result
 
