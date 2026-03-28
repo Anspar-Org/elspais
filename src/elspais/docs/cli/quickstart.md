@@ -28,8 +28,10 @@ assertions, every assertion is implemented, every implementation is tested.
 
 ## 1. Initialize Your Project
 
-    $ elspais init              # Creates .elspais.toml
-    $ elspais init --template   # Also creates an example requirement
+```shell
+elspais init              # Creates .elspais.toml
+elspais init --template   # Also creates an example requirement
+```
 
 ## 2. Write a Product Requirement
 
@@ -102,19 +104,25 @@ def test_password_uses_bcrypt():
 
 ## 6. Validate and Fix
 
-    $ elspais checks       # Verify traceability, find gaps
-    $ elspais fix          # Fix hashes and formatting
-    $ elspais gaps         # List requirements missing coverage
+```shell
+elspais checks       # Verify traceability, find gaps
+elspais fix          # Fix hashes and formatting
+elspais gaps         # List requirements missing coverage
+```
 
 ## 7. Explore the Traceability Graph
 
-    $ elspais viewer                   # Interactive HTML viewer (live server)
-    $ elspais viewer --static          # Interactive HTML viewer (static file)
-    $ elspais trace --format html -o trace.html  # Basic HTML traceability table
+```shell
+elspais viewer                   # Interactive HTML viewer (live server)
+elspais viewer --static          # Interactive HTML viewer (static file)
+elspais trace --format html -o trace.html  # Basic HTML traceability table
+```
 
 ## Next Steps
 
-    $ elspais docs format      # Full requirement format reference
-    $ elspais docs hierarchy   # PRD / OPS / DEV hierarchy rules
-    $ elspais docs checks      # Traceability verification details
-    $ elspais docs all         # Complete documentation
+```shell
+elspais docs format      # Full requirement format reference
+elspais docs hierarchy   # PRD / OPS / DEV hierarchy rules
+elspais docs checks      # Traceability verification details
+elspais docs all         # Complete documentation
+```
