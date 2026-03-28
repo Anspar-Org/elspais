@@ -6,18 +6,17 @@ All notable changes to elspais will be documented in this file.
 
 ### Added
 
-- Comment loading at viewer startup: comments are loaded and promoted when the graph is built, on refresh, and on reload
-- Comment compaction: `elspais comments compact` CLI command strips resolved threads and collapses promote chains in JSONL files
-- Comment data models: `CommentEvent` (frozen dataclass) and `CommentThread` (mutable dataclass) in `graph/comments.py`
-- `CommentIndex` in-memory index with iterator-only query API in `graph/comments.py`
-- Comment JSONL I/O: `comment_store.py` with anchor parsing, ID generation, JSONL read/write, thread assembly, and index loading
-- Promotion engine: anchor validation against live graph, orphan promotion to nearest ancestor, rename-triggered anchor updates
-- Requirements REQ-d00226 through REQ-d00229 for the comment/review system
-- Comment graph integration: TraceGraph delegates (iter_comments, comment_count, has_comments, iter_orphaned_comments), FederatedGraph comment routing with anchor-based ownership, rename hooks for comment anchor consistency, and repo_root_for() write routing method
-- Comment API endpoints: POST /api/comment/add, /api/comment/reply, /api/comment/resolve; GET /api/comments, /api/comments/card, /api/comments/orphaned. Author resolved server-side via get_author_info.
-- Comment UI: data-anchor attributes on all commentable elements (cards, assertions, edges, sections, journeys) and comment margin column with speech bubble indicators fetched via /api/comments/card
-- Comment inline threads: full thread rendering with replies, Resolve/Reply controls (edit-mode-only), comment mode via C key or toolbar button for one-shot comment creation
-- Lost Comments card: warning card at top of card stack showing orphaned comments with original anchor context, fetched on page load via /api/comments/orphaned
+- **Comment/review system** — threaded comments on requirements, assertions, edges, and body sections, persisted as append-only JSONL in `.elspais/comments/`
+  - Data layer: `CommentEvent` (frozen), `CommentThread`, `CommentIndex` with iterator-only API
+  - Storage: JSONL I/O, anchor parsing, thread assembly, comment ID generation via `comment_store.py`
+  - Promotion engine: validates anchors against live graph, promotes orphaned comments to nearest ancestor, updates anchors on rename
+  - Graph integration: TraceGraph/FederatedGraph delegates for comment queries, anchor-based routing, rename hooks
+  - API: POST `/api/comment/add`, `/reply`, `/resolve`; GET `/api/comments`, `/comments/card`, `/comments/orphaned` — author resolved server-side
+  - Viewer: `data-anchor` attributes on all commentable elements, margin column with speech bubble indicators, inline thread rendering with Reply/Resolve controls
+  - Comment mode: press `C` in Edit Mode or click toolbar button, then click any element to add a comment (one-shot)
+  - Lost Comments card: warning card for orphaned comments, shown at top of card stack on page load
+  - CLI: `elspais comments compact` strips resolved threads and collapses promote chains
+  - Comments loaded automatically at viewer startup, on refresh, and on reload
 
 ## [0.108.6]
 
