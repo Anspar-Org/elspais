@@ -12,6 +12,7 @@ All notable changes to elspais will be documented in this file.
 - Promotion engine: anchor validation against live graph, orphan promotion to nearest ancestor, rename-triggered anchor updates
 - Requirements REQ-d00226 through REQ-d00229 for the comment/review system
 - Comment graph integration: TraceGraph delegates (iter_comments, comment_count, has_comments, iter_orphaned_comments), FederatedGraph comment routing with anchor-based ownership, rename hooks for comment anchor consistency, and repo_root_for() write routing method
+- Comment API endpoints: POST /api/comment/add, /api/comment/reply, /api/comment/resolve; GET /api/comments, /api/comments/card, /api/comments/orphaned. Author resolved server-side via get_author_info.
 
 ## [0.108.6]
 

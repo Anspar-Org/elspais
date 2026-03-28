@@ -22,8 +22,14 @@ from elspais.server.middleware import APIErrorMiddleware, AutoRefreshMiddleware,
 from elspais.server.routes_api import (
     api_check_freshness,
     api_code_coverage,
+    api_comment_add,
+    api_comment_reply,
+    api_comment_resolve,
     api_dirty,
     api_file_content,
+    api_get_comments,
+    api_get_comments_card,
+    api_get_comments_orphaned,
     api_hierarchy,
     api_journey_files,
     api_mutate_assertion,
@@ -181,6 +187,14 @@ def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
         Route("/api/mutate/move-to-file", api_mutate_move_to_file, methods=["POST"]),
         Route("/api/mutate/rename-file", api_mutate_rename_file, methods=["POST"]),
         Route("/api/mutate/undo", api_mutate_undo, methods=["POST"]),
+        # Comment endpoints (read)
+        Route("/api/comments", api_get_comments),
+        Route("/api/comments/card", api_get_comments_card),
+        Route("/api/comments/orphaned", api_get_comments_orphaned),
+        # Comment endpoints (write)
+        Route("/api/comment/add", api_comment_add, methods=["POST"]),
+        Route("/api/comment/reply", api_comment_reply, methods=["POST"]),
+        Route("/api/comment/resolve", api_comment_resolve, methods=["POST"]),
         # Lifecycle
         Route("/api/shutdown", api_shutdown, methods=["POST"]),
         # Persistence

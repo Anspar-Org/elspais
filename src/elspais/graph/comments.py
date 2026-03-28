@@ -123,5 +123,34 @@ class CommentIndex:
             if anchor not in self._file_map:
                 self._file_map[anchor] = path
 
+    def find_thread(self, comment_id: str) -> tuple[str, CommentThread] | None:
+        """Find a thread containing a comment by its ID.
+
+        Searches root IDs and reply IDs. Returns (anchor, thread) or None.
+        """
+        for anchor, threads in self._threads.items():
+            for thread in threads:
+                if thread.root.id == comment_id:
+                    return anchor, thread
+                for reply in thread.replies:
+                    if reply.id == comment_id:
+                        return anchor, thread
+        return None
+
+    def remove_thread(self, comment_id: str) -> str | None:
+        """Remove a thread by its root comment ID.
+
+        Returns the anchor of the removed thread, or None if not found.
+        """
+        for anchor in list(self._threads):
+            threads = self._threads[anchor]
+            for i, thread in enumerate(threads):
+                if thread.root.id == comment_id:
+                    threads.pop(i)
+                    if not threads:
+                        del self._threads[anchor]
+                    return anchor
+        return None
+
     def __len__(self) -> int:
         return sum(len(ts) for ts in self._threads.values())

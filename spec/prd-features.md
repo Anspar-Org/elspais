@@ -244,3 +244,21 @@ C. TraceGraph rename_node and rename_assertion SHALL call update_anchors_on_rena
 D. FederatedGraph SHALL provide a repo_root_for(node_id) public method that returns the repo root Path for write routing.
 
 *End* *Comment Graph Integration* | **Hash**: 0eed8546
+
+## REQ-d00231: Comment API Endpoints
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+## Assertions
+
+A. POST /api/comment/add SHALL create a new comment event, persist it to the JSONL file, update the in-memory index, and return the created event. Missing text SHALL return 400.
+
+B. POST /api/comment/reply SHALL attach a reply event to an existing thread, persist it, and return the reply. Missing parent SHALL return 404.
+
+C. POST /api/comment/resolve SHALL remove a thread from the in-memory index, persist a resolve event, and return success. Missing comment SHALL return 404.
+
+D. GET /api/comments SHALL return serialized threads for a given anchor. GET /api/comments/card SHALL return threads grouped by anchor for all anchors of a node. GET /api/comments/orphaned SHALL return all orphaned threads.
+
+E. Author identity SHALL be resolved server-side via get_author_info using the changelog.id_source config, never from client input.
+
+*End* *Comment API Endpoints* | **Hash**: b8533d82

@@ -2688,6 +2688,35 @@ class TraceGraph:
         """Yield orphaned comment threads."""
         return self._comment_index.iter_orphaned()
 
+    def add_comment_thread(self, thread: CommentThread, source_file: str) -> None:
+        """Add a comment thread to the in-memory index."""
+        self._comment_index.add_thread(thread, source_file)
+
+    def find_comment_thread(self, comment_id: str) -> tuple[str, CommentThread] | None:
+        """Find a thread containing a comment by its ID.
+
+        Returns (anchor, thread) or None if not found.
+        """
+        return self._comment_index.find_thread(comment_id)
+
+    def remove_comment_thread(self, comment_id: str) -> str | None:
+        """Remove a thread by its root comment ID from the in-memory index.
+
+        Returns the anchor of the removed thread, or None if not found.
+        """
+        return self._comment_index.remove_thread(comment_id)
+
+    def iter_comments_for_card(self, node_id: str) -> Iterator[tuple[str, list[CommentThread]]]:
+        """Yield (anchor, threads) pairs for all anchors belonging to a node."""
+        for anchor in self._comment_index.iter_all_anchors_for_node(node_id):
+            threads = list(self._comment_index.iter_threads(anchor))
+            if threads:
+                yield anchor, threads
+
+    def comment_source_file(self, anchor: str) -> str | None:
+        """Return the JSONL source file path for an anchor."""
+        return self._comment_index.source_file_for(anchor)
+
 
 class GraphBuilder:
     """Builder for constructing TraceGraph from parsed content.

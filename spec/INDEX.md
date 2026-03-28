@@ -119,6 +119,7 @@
 | REQ-d00228 | Comment JSONL Storage                                         | prd-features.md         | b9f0e26c |
 | REQ-d00229 | Comment Promotion Engine                                      | prd-features.md         | d72378b4 |
 | REQ-d00230 | Comment Graph Integration                                     | prd-features.md         | 0eed8546 |
+| REQ-d00231 | Comment API Endpoints                                         | prd-features.md         | b8533d82 |
 
 ## User Journeys
 
