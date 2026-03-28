@@ -262,3 +262,15 @@ D. GET /api/comments SHALL return serialized threads for a given anchor. GET /ap
 E. Author identity SHALL be resolved server-side via get_author_info using the changelog.id_source config, never from client input.
 
 *End* *Comment API Endpoints* | **Hash**: b8533d82
+
+## REQ-d00232: Comment UI Anchors and Margin Column
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+## Assertions
+
+A. All commentable DOM elements SHALL have data-anchor attributes: card header (node ID), assertion rows (node#label), edge rows (node#edge:target), body sections (node#section:name), and journey equivalents.
+
+B. A comment margin column SHALL render speech bubble icons with count badges for anchors that have comment threads, fetched via /api/comments/card when a card opens.
+
+*End* *Comment UI Anchors and Margin Column* | **Hash**: f25796bb

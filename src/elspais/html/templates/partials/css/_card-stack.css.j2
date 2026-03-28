@@ -1000,3 +1000,86 @@ a.assertion-test-link:hover {
     color: var(--assertion-result-file-link-hover);
     text-decoration: underline;
 }
+
+/* ── Comment Margin Indicators (REQ-d00232-B) ────────────────────── */
+
+.comment-margin {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.comment-margin.has-comments {
+    cursor: pointer;
+    pointer-events: auto;
+    color: #6c757d;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+}
+
+.comment-margin.has-comments:hover {
+    opacity: 1;
+    color: #0d6efd;
+}
+
+.comment-icon {
+    display: block;
+}
+
+.comment-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: #0d6efd;
+    color: #fff;
+    font-size: 0.5rem;
+    font-weight: 700;
+    border-radius: 50%;
+    width: 12px;
+    height: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+/* Inline comment thread preview */
+.comment-thread-inline {
+    background: #f8f9fa;
+    border-left: 3px solid #0d6efd;
+    padding: 8px 10px;
+    margin: 4px 0;
+    font-size: 0.78rem;
+    border-radius: 0 4px 4px 0;
+}
+
+.comment-thread-item {
+    margin-bottom: 6px;
+}
+
+.comment-thread-item:last-child {
+    margin-bottom: 0;
+}
+
+.comment-author {
+    font-weight: 600;
+    color: #495057;
+}
+
+.comment-date {
+    color: #868e96;
+    font-size: 0.7rem;
+    margin-left: 6px;
+}
+
+.comment-text {
+    margin-top: 2px;
+    color: #343a40;
+}

@@ -120,6 +120,7 @@
 | REQ-d00229 | Comment Promotion Engine                                      | prd-features.md         | d72378b4 |
 | REQ-d00230 | Comment Graph Integration                                     | prd-features.md         | 0eed8546 |
 | REQ-d00231 | Comment API Endpoints                                         | prd-features.md         | b8533d82 |
+| REQ-d00232 | Comment UI Anchors and Margin Column                          | prd-features.md         | f25796bb |
 
 ## User Journeys
 

@@ -1,9 +1,13 @@
 // Implements: REQ-p00006-B
+// Implements: REQ-d00232-A, REQ-d00232-B
 // Partial: _card-stack.js.j2 — Card rendering, open/close
 
 // =====================================================================
 // Card Stack — Unified for all node kinds
 // =====================================================================
+
+// Comment data cache: nodeId -> { anchor: [thread, ...], ... }
+var cardCommentData = {};
 
 async function openCard(nodeId) {
     editState.focusNodeId = nodeId;
@@ -27,6 +31,8 @@ async function openCard(nodeId) {
     renderCardStack();
     // Prefetch coverage data so buttons are colored immediately
     if (data.kind === 'requirement') { prefetchCoverage(nodeId); }
+    // Fetch comment data for margin indicators
+    loadCardComments(nodeId);
     focusCard(nodeId);
     updateNavSelection();
     saveState();
@@ -124,12 +130,84 @@ function renderCardStack() {
     }
 }
 
+// =====================================================================
+// Comment Margin Indicators (REQ-d00232-B)
+// =====================================================================
+
+function loadCardComments(nodeId) {
+    apiFetch('/api/comments/card?node_id=' + encodeURIComponent(nodeId))
+        .then(function(data) {
+            if (data && data.success) {
+                cardCommentData[nodeId] = data.threads;
+                renderMarginIndicators(nodeId, data.threads);
+            }
+        });
+}
+
+function renderMarginIndicators(nodeId, threads) {
+    var cardEl = document.getElementById('card-' + nodeId);
+    if (!cardEl) return;
+    var anchored = cardEl.querySelectorAll('[data-anchor]');
+    anchored.forEach(function(el) {
+        var anchor = el.getAttribute('data-anchor');
+        // Remove any existing indicator
+        var existing = el.querySelector('.comment-margin');
+        if (existing) existing.remove();
+        // Add indicator
+        var indicator = document.createElement('div');
+        indicator.className = 'comment-margin';
+        var count = threads[anchor] ? threads[anchor].length : 0;
+        if (count > 0) {
+            indicator.classList.add('has-comments');
+            indicator.innerHTML = '<svg class="comment-icon" viewBox="0 0 16 16" width="12" height="12">' +
+                '<path fill="currentColor" d="M2.5 1C1.7 1 1 1.7 1 2.5v8C1 11.3 1.7 12 2.5 12H5l3 3 3-3h2.5c.8 0 1.5-.7 1.5-1.5v-8C15 1.7 14.3 1 13.5 1h-11z"/>' +
+                '</svg>' +
+                (count > 1 ? '<span class="comment-badge">' + count + '</span>' : '');
+            indicator.onclick = function(e) {
+                e.stopPropagation();
+                toggleCommentThread(anchor);
+            };
+        }
+        el.style.position = 'relative';
+        el.appendChild(indicator);
+    });
+}
+
+function toggleCommentThread(anchor) {
+    // Placeholder — will be implemented in Task 8 (inline threads)
+    var existing = document.querySelector('.comment-thread-inline[data-thread-anchor="' + anchor + '"]');
+    if (existing) {
+        existing.remove();
+        return;
+    }
+    var el = document.querySelector('[data-anchor="' + anchor + '"]');
+    if (!el) return;
+    // Find the nodeId from the nearest card
+    var card = el.closest('.req-card');
+    if (!card) return;
+    var nodeId = card.getAttribute('data-anchor');
+    var threads = cardCommentData[nodeId];
+    if (!threads || !threads[anchor]) return;
+    var container = document.createElement('div');
+    container.className = 'comment-thread-inline';
+    container.setAttribute('data-thread-anchor', anchor);
+    threads[anchor].forEach(function(t) {
+        var div = document.createElement('div');
+        div.className = 'comment-thread-item';
+        div.innerHTML = '<span class="comment-author">' + escapeHtml(t.root.author) +
+            '</span> <span class="comment-date">' + escapeHtml(t.root.date) +
+            '</span><div class="comment-text">' + escapeHtml(t.root.text) + '</div>';
+        container.appendChild(div);
+    });
+    el.after(container);
+}
+
 function buildAssertionHtml(nodeId, a, data) {
     var assertionId = a.id || '';
     var label = a.label || '';
     var text = a.text || '';
     var h = '';
-    h += '<div class="card-assertion-wrapper" data-assertion-id="' + assertionId + '">';
+    h += '<div class="card-assertion-wrapper" data-assertion-id="' + assertionId + '" data-anchor="' + nodeId + '#' + label + '">';
     h += '<div class="card-assertion">';
     h += '<span class="card-assertion-label">' + label + '</span>';
     h += '<span class="card-assertion-text editable-field" ' +
@@ -187,7 +265,7 @@ function buildRemainderHtml(nodeId, rem, idx) {
     var remId = rem.id || '';
     var isPreamble = (rem.heading === 'preamble');
     var isDefBlock = (rem.content_type === 'definition_block');
-    h += '<div class="card-body-section-wrapper" data-remainder-id="' + escapeAttr(remId) + '">';
+    h += '<div class="card-body-section-wrapper" data-remainder-id="' + escapeAttr(remId) + '" data-anchor="' + nodeId + '#section:' + escapeAttr(rem.heading || '') + '">';
     h += '<div class="card-body-section-heading">';
     if (!isDefBlock && !isPreamble) {
         h += '<span class="remainder-heading-view">' + escapeHtml(rem.heading) + '</span>';
@@ -231,7 +309,7 @@ function buildCardHtml(nodeId, data, collapsed) {
     const sourcePath = (data.source && data.source.path) || '';
     const sourceLine = (data.source && data.source.line) || 0;
 
-    let html = '<div class="req-card' + collapsedClass + focusedClass + '" id="card-' + nodeId + '">';
+    let html = '<div class="req-card' + collapsedClass + focusedClass + '" id="card-' + nodeId + '" data-anchor="' + nodeId + '">';
 
     // Header — with inline title editing
     html += '<div class="req-card-header" onclick="toggleCardCollapse(\'' + nodeId + '\')">';
@@ -343,7 +421,7 @@ function buildCardHtml(nodeId, data, collapsed) {
         data.parents.forEach(function(p) {
             const edgeKind = (p.edge_kind || 'implements').toLowerCase();
             const edgeKindDisplay = edgeKind.charAt(0).toUpperCase() + edgeKind.slice(1);
-            html += '<div class="card-parent-row">';
+            html += '<div class="card-parent-row" data-anchor="' + nodeId + '#edge:' + p.id + '">';
             // View-only kind badge
             html += '<span class="card-parent-kind view-only">' + edgeKindDisplay.toUpperCase() + '</span>';
             // Edit-only kind toggle
@@ -468,7 +546,7 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
     var sourcePath = (data.source && data.source.path) || '';
     var sourceLine = (data.source && data.source.line) || 1;
 
-    var html = '<div class="req-card journey-card' + collapsedClass + focusedClass + '" id="card-' + nodeId + '" data-journey-id="' + nodeId + '">';
+    var html = '<div class="req-card journey-card' + collapsedClass + focusedClass + '" id="card-' + nodeId + '" data-journey-id="' + nodeId + '" data-anchor="' + nodeId + '">';
 
     // Header — show journey ID + editable title
     html += '<div class="req-card-header" onclick="toggleCardCollapse(\'' + nodeId + '\')">';
@@ -572,7 +650,7 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
     var sections = props.sections || [];
     html += '<div class="journey-sections" data-journey-id="' + nodeId + '">';
     sections.forEach(function(sec) {
-        html += '<div class="card-section journey-section" data-section-name="' + escapeAttr(sec.name) + '">';
+        html += '<div class="card-section journey-section" data-section-name="' + escapeAttr(sec.name) + '" data-anchor="' + nodeId + '#section:' + escapeAttr(sec.name) + '">';
         // Section header — view + edit
         html += '<div class="card-section-label journey-section-header">';
         html += '<span class="journey-section-name-view">' + escapeHtml(sec.name) + '</span>';
