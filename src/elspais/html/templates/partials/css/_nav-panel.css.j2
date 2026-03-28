@@ -201,12 +201,36 @@
 }
 .nav-tree-action:hover { color: var(--input-text); }
 
-/* Comment indicator icons in tree */
-.nav-tree-comment-icon {
+/* Indicator slots — fixed-width columns to left of status badge */
+.nav-tree-indicators {
+    display: inline-flex;
+    align-items: center;
+    margin-left: auto;
     flex-shrink: 0;
-    margin-left: 2px;
-    font-size: 0.7rem;
-    line-height: 1;
 }
-.nav-tree-comment-icon.direct { color: #d4900a; }
-.nav-tree-comment-icon.inherited { color: #ccc; }
+
+.nav-tree-indicator {
+    display: inline-block;
+    width: 12px;
+    text-align: center;
+    font-size: 0.75rem;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+/* Comment indicator */
+.nav-tree-indicator.nav-tree-comment-icon.direct { color: #d4900a; }
+.nav-tree-indicator.nav-tree-comment-icon.inherited { color: #ccc; }
+
+/* Change indicators */
+.nav-tree-indicator.unsaved { color: #dc3545; }
+.nav-tree-indicator.uncommitted { color: #0d6efd; }
+.nav-tree-indicator.changed { color: #6c757d; }
+
+/* Compact status badge within tree rows */
+.nav-tree-row .status-badge {
+    font-size: 0.65rem;
+    padding: 1px 4px;
+    margin-left: 2px;
+    flex-shrink: 0;
+}

@@ -371,21 +371,23 @@ function renderNavTree() {
             var valTip = row[covTipMap[covMode] || 'validation_tip'] || '';
             var valClass = valColor ? ' val-' + valColor : '';
             var tipAttr = valTip ? ' data-tip="' + escapeHtml(valTip) + '"' : '';
-            statusBadge = '<span class="status-badge ' + statusLower + valClass + '"' + tipAttr + ' style="font-size:0.65rem;padding:1px 4px;margin-left:auto;">' + row.status;
-            if (row.is_unsaved) statusBadge += '<span class="change-indicator unsaved" title="Unsaved in-memory edit">&#x25CF;</span>';
-            if (row.is_uncommitted) statusBadge += '<span class="change-indicator uncommitted" title="Saved but not committed">&#x25C6;</span>';
-            if (row.is_changed) statusBadge += '<span class="change-indicator" title="Changed on this branch vs main">&#x25C6;</span>';
-            statusBadge += '</span>';
+            statusBadge = '<span class="status-badge ' + statusLower + valClass + '"' + tipAttr + '>' + row.status + '</span>';
         }
 
-        // Comment indicator: amber if direct, grey if inherited from hidden child
-        var commentIcon = '';
-        var commentClass = row.has_comments ? 'direct' : (row._has_child_comments ? 'inherited' : '');
-        if (commentClass) {
-            commentIcon = '<span class="nav-tree-comment-icon ' + commentClass + '" title="' +
-                (commentClass === 'direct' ? 'Has comments' : 'Child has comments') +
-                '">&#x25A0;</span>';
-        }
+        // Status indicators — each in a fixed-width slot to the left of the badge
+        var indicators = '';
+        indicators += '<span class="nav-tree-indicator' + (row.has_comments ? ' nav-tree-comment-icon direct' : (row._has_child_comments ? ' nav-tree-comment-icon inherited' : '')) + '"' +
+            (row.has_comments ? ' title="Has comments"' : (row._has_child_comments ? ' title="Child has comments"' : '')) +
+            '>' + (row.has_comments || row._has_child_comments ? '&#x1F5E9;' : '') + '</span>';
+        indicators += '<span class="nav-tree-indicator' + (row.is_unsaved ? ' unsaved' : '') + '"' +
+            (row.is_unsaved ? ' title="Unsaved in-memory edit"' : '') +
+            '>' + (row.is_unsaved ? '&#x25CF;' : '') + '</span>';
+        indicators += '<span class="nav-tree-indicator' + (row.is_uncommitted ? ' uncommitted' : '') + '"' +
+            (row.is_uncommitted ? ' title="Saved but not committed"' : '') +
+            '>' + (row.is_uncommitted ? '&#x25C6;' : '') + '</span>';
+        indicators += '<span class="nav-tree-indicator' + (row.is_changed ? ' changed' : '') + '"' +
+            (row.is_changed ? ' title="Changed on this branch vs main"' : '') +
+            '>' + (row.is_changed ? '&#x25C6;' : '') + '</span>';
 
         html += '<div class="nav-tree-row' + selectedClass + dimClass + '" ' +
             'data-id="' + row.id + '" ' +
@@ -399,7 +401,7 @@ function renderNavTree() {
             (levelClass ? '<span class="nav-tree-level ' + levelClass + '">' + row.level + '</span>' : '') +
             '<span class="nav-tree-id">' + shortId + '</span>' +
             '<span class="nav-tree-title">' + escapeHtml(row.title || '') + '</span>' +
-            commentIcon +
+            '<span class="nav-tree-indicators">' + indicators + '</span>' +
             statusBadge +
             '</div>';
     });

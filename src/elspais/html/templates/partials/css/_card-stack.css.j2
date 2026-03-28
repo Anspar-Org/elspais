@@ -1026,27 +1026,37 @@ a.assertion-test-link:hover {
 
 .comment-gutter {
     position: absolute;
-    left: -19px;
+    left: -27px;
     top: 50%;
     transform: translateY(-50%);
-    width: 14px;
-    height: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    background: #e8a317;
-    color: #000;
-    font-size: 0.65rem;
-    font-weight: 700;
-    border-radius: 3px;
-    line-height: 1;
+    color: #d4900a;
     z-index: 1;
-    transition: background 0.15s;
+    transition: opacity 0.15s;
+    opacity: 0.85;
 }
 
 .comment-gutter:hover {
-    background: #d4900a;
+    opacity: 1;
+}
+
+.comment-gutter-bubble {
+    font-size: 1.3rem;
+    line-height: 1;
+}
+
+.comment-gutter-count {
+    position: absolute;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #fff;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -55%);
+    text-shadow: 0 0 2px rgba(0,0,0,0.3);
 }
 
 /* ── Comment Target Highlight ────────────────────────────────────── */
