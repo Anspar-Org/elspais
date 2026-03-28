@@ -487,11 +487,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 editState.openCardOrder.reverse();
                 renderCardStack();
                 updateNavSelection();
-                // Prefetch coverage for restored requirement cards
+                // Prefetch coverage and comments for restored cards
                 editState.openCards.forEach(function(info, id) {
                     if (info.data && info.data.kind === 'requirement') {
                         prefetchCoverage(id);
                     }
+                    loadCardComments(id);
                 });
                 {% if mode == 'edit' %}
                 if (editState.enabled) {

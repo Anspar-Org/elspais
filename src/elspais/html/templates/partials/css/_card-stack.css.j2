@@ -1001,63 +1001,65 @@ a.assertion-test-link:hover {
     text-decoration: underline;
 }
 
-/* ── Comment Margin Indicators (REQ-d00232-B) ────────────────────── */
+/* ── Comment Gutter Indicators (REQ-d00232-B) ────────────────────── */
 
-.comment-margin {
+.has-comment-gutter {
+    border-left: 3px solid #e8a317 !important;
+    margin-left: 16px !important;
+}
+
+.comment-gutter-empty {
+    border-left: 3px solid #f0e0b0 !important;
+    margin-left: 16px !important;
+}
+
+.comment-gutter {
     position: absolute;
-    top: 2px;
-    right: 2px;
-    width: 16px;
-    height: 16px;
+    left: -18px;
+    top: 50%;
+    transform: translateY(-50%);
     display: flex;
     align-items: center;
-    justify-content: center;
-    pointer-events: none;
+    cursor: pointer;
+    color: #d4900a;
+    opacity: 0.85;
+    transition: opacity 0.15s;
     z-index: 1;
 }
 
-.comment-margin.has-comments {
-    cursor: pointer;
-    pointer-events: auto;
-    color: #6c757d;
-    opacity: 0.7;
-    transition: opacity 0.15s;
-}
-
-.comment-margin.has-comments:hover {
+.comment-gutter:hover {
     opacity: 1;
-    color: #0d6efd;
+    color: #b37a00;
 }
 
-.comment-icon {
+.comment-gutter svg {
     display: block;
 }
 
-.comment-badge {
-    position: absolute;
-    top: -4px;
-    right: -4px;
-    background: #0d6efd;
-    color: #fff;
-    font-size: 0.5rem;
+.comment-gutter-count {
+    font-size: 0.55rem;
     font-weight: 700;
-    border-radius: 50%;
-    width: 12px;
-    height: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    line-height: 1;
+    color: #d4900a;
+    margin-left: 1px;
+}
+
+/* ── Comment Target Highlight ────────────────────────────────────── */
+
+.comment-target {
+    outline: 3px solid #dc3545 !important;
+    outline-offset: -1px;
+    background-color: rgba(220, 53, 69, 0.05) !important;
 }
 
 /* Inline comment thread preview */
 .comment-thread-inline {
-    background: #f8f9fa;
-    border-left: 3px solid #0d6efd;
+    background: #fffdf5;
+    border-left: 3px solid #e8a317;
     padding: 8px 10px;
-    margin: 4px 0;
+    margin: 0;
+    margin-left: 16px;
     font-size: 0.78rem;
-    border-radius: 0 4px 4px 0;
+    border-radius: 0;
 }
 
 .comment-thread-item {
@@ -1087,13 +1089,14 @@ a.assertion-test-link:hover {
 /* ── Comment Mode (REQ-d00233-B) ─────────────────────────────────── */
 
 .comment-mode [data-anchor]:hover {
-    outline: 2px solid #0d6efd;
+    outline: 3px solid #0d6efd;
     outline-offset: -1px;
-    cursor: pointer;
+    background-color: rgba(13, 110, 253, 0.06) !important;
 }
 
-.comment-mode [data-anchor] {
-    cursor: pointer;
+.comment-mode,
+.comment-mode * {
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 16 16'%3E%3Cpath fill='%230d6efd' d='M2.5 1C1.7 1 1 1.7 1 2.5v8C1 11.3 1.7 12 2.5 12H5l3 3 3-3h2.5c.8 0 1.5-.7 1.5-1.5v-8C15 1.7 14.3 1 13.5 1h-11z'/%3E%3C/svg%3E") 8 8, pointer !important;
 }
 
 /* ── Inline Thread Controls (REQ-d00233-A) ────────────────────────── */

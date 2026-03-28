@@ -2731,8 +2731,7 @@ document.addEventListener('click', function(e) {
     if (!commentModeActive) return;
     var target = e.target.closest('[data-anchor]');
     if (!target) return;
-    // Don't capture clicks on buttons or inputs within the anchor element
-    if (e.target.closest('button, input, textarea, a, select')) return;
+    // In comment mode, capture ALL clicks on anchored elements — suppress default behavior
     e.preventDefault();
     e.stopPropagation();
     var anchor = target.getAttribute('data-anchor');

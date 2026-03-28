@@ -212,11 +212,22 @@ def validate_anchor(anchor: str, graph: TraceGraph) -> bool:
                 return True
         return False
     if frag_type == "section":
-        sections = node.get_field("sections", {})
-        return frag_value in sections
+        # Check REMAINDER children linked via STRUCTURES (real graph)
+        for child in node.iter_children(edge_kinds=_STRUCTURAL_EDGE_KINDS):
+            if child.kind.value == "remainder" and child.get_field("heading") == frag_value:
+                return True
+        # Fallback: check sections dict field (legacy/test graphs)
+        sections = node.get_field("sections", None)
+        if sections and frag_value in sections:
+            return True
+        return False
     if frag_type == "edge":
+        # Check both outgoing and incoming edges for the target node
         for edge in node.iter_outgoing_edges():
             if edge.target.id == frag_value:
+                return True
+        for edge in node.iter_incoming_edges():
+            if edge.source.id == frag_value:
                 return True
         return False
     return False

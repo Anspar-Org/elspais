@@ -502,6 +502,8 @@ async def api_tree_data(request: Request) -> JSONResponse:
         has_children = any(c.kind == NodeKind.REQUIREMENT for c in node.iter_children())
         is_changed = bool(node.get_metric("is_branch_changed", False))
         is_uncommitted = bool(node.get_metric("is_uncommitted", False))
+        # Comment presence: direct comments on this node or its sub-elements
+        _has_direct_comments = any(True for _ in g.iter_comments_for_card(node.id))
         tiers = compute_coverage_tiers(node, state.config)
         # Derive coverage tier from combined_color for filtering
         _cc = tiers.get("combined_color", "")
@@ -530,6 +532,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
                 "is_test_result": False,
                 "result_status": "",
                 "repo_prefix": _get_repo_prefix(node),
+                "has_comments": _has_direct_comments,
                 "source_file": node.get_field("source_file", ""),
                 "source_line": node.get_field("source_line", 0),
                 "validation_color": tiers.get("combined_color", ""),

@@ -9,6 +9,20 @@
 // Comment data cache: nodeId -> { anchor: [thread, ...], ... }
 var cardCommentData = {};
 
+function updateTreeCommentFlag(nodeId) {
+    // Update has_comments in cached treeData and re-render tree
+    var hasComments = cardCommentData[nodeId] &&
+        Object.keys(cardCommentData[nodeId]).length > 0;
+    if (editState.treeData) {
+        editState.treeData.forEach(function(row) {
+            if (row.id === nodeId) {
+                row.has_comments = hasComments;
+            }
+        });
+        renderNavTree();
+    }
+}
+
 async function openCard(nodeId) {
     editState.focusNodeId = nodeId;
     // If already open, just focus it
@@ -128,6 +142,13 @@ function renderCardStack() {
             el.contentEditable = 'true';
         });
     }
+
+    // Re-apply cached comment indicators after DOM rebuild
+    editState.openCardOrder.forEach(function(nodeId) {
+        if (cardCommentData[nodeId]) {
+            renderMarginIndicators(nodeId, cardCommentData[nodeId]);
+        }
+    });
 }
 
 // =====================================================================
@@ -218,29 +239,36 @@ function loadCardComments(nodeId) {
 function renderMarginIndicators(nodeId, threads) {
     var cardEl = document.getElementById('card-' + nodeId);
     if (!cardEl) return;
+    // Check if this card has any comments at all
+    var hasAnyComments = threads && Object.keys(threads).length > 0;
     var anchored = cardEl.querySelectorAll('[data-anchor]');
     anchored.forEach(function(el) {
         var anchor = el.getAttribute('data-anchor');
-        // Remove any existing indicator
-        var existing = el.querySelector('.comment-margin');
-        if (existing) existing.remove();
-        // Add indicator
-        var indicator = document.createElement('div');
-        indicator.className = 'comment-margin';
+        // Remove previous gutter state
+        el.classList.remove('has-comment-gutter', 'comment-gutter-empty');
+        var existingGutter = el.querySelector('.comment-gutter');
+        if (existingGutter) existingGutter.remove();
         var count = threads[anchor] ? threads[anchor].length : 0;
         if (count > 0) {
-            indicator.classList.add('has-comments');
-            indicator.innerHTML = '<svg class="comment-icon" viewBox="0 0 16 16" width="12" height="12">' +
+            el.classList.add('has-comment-gutter');
+            // Absolute-positioned icon in the left gutter area
+            var gutter = document.createElement('span');
+            gutter.className = 'comment-gutter';
+            gutter.title = count + ' comment' + (count > 1 ? 's' : '') + ' — click to expand';
+            gutter.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12">' +
                 '<path fill="currentColor" d="M2.5 1C1.7 1 1 1.7 1 2.5v8C1 11.3 1.7 12 2.5 12H5l3 3 3-3h2.5c.8 0 1.5-.7 1.5-1.5v-8C15 1.7 14.3 1 13.5 1h-11z"/>' +
                 '</svg>' +
-                (count > 1 ? '<span class="comment-badge">' + count + '</span>' : '');
-            indicator.onclick = function(e) {
+                (count > 1 ? '<span class="comment-gutter-count">' + count + '</span>' : '');
+            gutter.onclick = function(e) {
                 e.stopPropagation();
                 toggleCommentThread(anchor);
             };
+            el.style.position = 'relative';
+            el.appendChild(gutter);
+        } else if (hasAnyComments) {
+            // Empty gutter placeholder so all rows align
+            el.classList.add('comment-gutter-empty');
         }
-        el.style.position = 'relative';
-        el.appendChild(indicator);
     });
 }
 
@@ -255,7 +283,8 @@ function toggleCommentThread(anchor) {
     if (!el) return;
     var card = el.closest('.req-card');
     if (!card) return;
-    var nodeId = card.getAttribute('data-anchor');
+    var nodeId = (card.id || '').replace(/^card-/, '');
+    if (!nodeId) return;
     var threads = cardCommentData[nodeId];
     if (!threads || !threads[anchor]) return;
     var container = document.createElement('div');
@@ -307,17 +336,27 @@ async function resolveComment(commentId, anchor, nodeId) {
         body: JSON.stringify({comment_id: commentId})
     });
     if (data && data.success) {
-        // Remove thread from DOM
+        // Remove thread item from DOM; if it was the last one, remove the container too
         var threadEl = document.querySelector('.comment-thread-item[data-comment-id="' + commentId + '"]');
-        if (threadEl) threadEl.remove();
-        // Remove from cache
+        if (threadEl) {
+            var container = threadEl.closest('.comment-thread-inline');
+            threadEl.remove();
+            if (container && container.querySelectorAll('.comment-thread-item').length === 0) {
+                container.remove();
+            }
+        }
+        // Remove from cache; clean up empty anchor keys
         if (cardCommentData[nodeId] && cardCommentData[nodeId][anchor]) {
             cardCommentData[nodeId][anchor] = cardCommentData[nodeId][anchor].filter(
                 function(t) { return t.root.id !== commentId; }
             );
+            if (cardCommentData[nodeId][anchor].length === 0) {
+                delete cardCommentData[nodeId][anchor];
+            }
         }
-        // Refresh margin indicators
+        // Refresh margin indicators and tree
         renderMarginIndicators(nodeId, cardCommentData[nodeId] || {});
+        updateTreeCommentFlag(nodeId);
         showToast('Comment resolved', 'success');
     }
 }
@@ -366,23 +405,34 @@ async function submitReply(btn, parentId, anchor, nodeId) {
 
 // Implements: REQ-d00233-B
 function showCommentInput(anchor, afterElement) {
-    // Remove any existing comment input
+    // Remove any existing comment input and highlight
     var existing = document.querySelector('.comment-new-input');
     if (existing) existing.remove();
+    var prevTarget = document.querySelector('.comment-target');
+    if (prevTarget) prevTarget.classList.remove('comment-target');
+    // Highlight the target element
+    afterElement.classList.add('comment-target');
     var inputDiv = document.createElement('div');
     inputDiv.className = 'comment-new-input';
     inputDiv.innerHTML = '<textarea class="comment-input-text" placeholder="Add a comment..." rows="3"></textarea>' +
         '<div class="comment-input-actions">' +
         '<button class="comment-submit-btn" onclick="submitNewComment(this, \'' +
         escapeAttr(anchor) + '\')">Submit</button>' +
-        '<button class="comment-cancel-btn" onclick="this.closest(\'.comment-new-input\').remove()">Cancel</button>' +
+        '<button class="comment-cancel-btn" onclick="cancelCommentInput()">Cancel</button>' +
         '</div>';
     afterElement.after(inputDiv);
     inputDiv.querySelector('textarea').focus();
     // Esc to cancel
     inputDiv.querySelector('textarea').addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') { inputDiv.remove(); }
+        if (e.key === 'Escape') { cancelCommentInput(); }
     });
+}
+
+function cancelCommentInput() {
+    var input = document.querySelector('.comment-new-input');
+    if (input) input.remove();
+    var target = document.querySelector('.comment-target');
+    if (target) target.classList.remove('comment-target');
 }
 
 async function submitNewComment(btn, anchor) {
@@ -395,15 +445,28 @@ async function submitNewComment(btn, anchor) {
         body: JSON.stringify({anchor: anchor, text: text})
     });
     if (data && data.success) {
-        // Remove input
+        // Remove input and highlight
         btn.closest('.comment-new-input').remove();
-        // Find the card and reload comments
+        var target = document.querySelector('.comment-target');
+        if (target) target.classList.remove('comment-target');
+        // Find the card and reload comments, then show the thread
         var el = document.querySelector('[data-anchor="' + anchor + '"]');
         if (el) {
             var card = el.closest('.req-card');
             if (card) {
-                var nodeId = card.getAttribute('data-anchor');
-                loadCardComments(nodeId);
+                var nodeId = (card.id || '').replace(/^card-/, '');
+                // Reload comment data, then refresh indicators and show thread
+                var refreshed = await apiFetch('/api/comments/card?node_id=' + encodeURIComponent(nodeId));
+                if (refreshed && refreshed.success) {
+                    cardCommentData[nodeId] = refreshed.threads;
+                    renderMarginIndicators(nodeId, refreshed.threads);
+                    // Auto-expand the thread on the anchor we just commented on
+                    // Remove any existing inline thread first
+                    var existing = document.querySelector('.comment-thread-inline[data-thread-anchor="' + anchor + '"]');
+                    if (existing) existing.remove();
+                    toggleCommentThread(anchor);
+                }
+                updateTreeCommentFlag(nodeId);
             }
         }
         showToast('Comment added', 'success');
@@ -517,7 +580,7 @@ function buildCardHtml(nodeId, data, collapsed) {
     const sourcePath = (data.source && data.source.path) || '';
     const sourceLine = (data.source && data.source.line) || 0;
 
-    let html = '<div class="req-card' + collapsedClass + focusedClass + '" id="card-' + nodeId + '" data-anchor="' + nodeId + '">';
+    let html = '<div class="req-card' + collapsedClass + focusedClass + '" id="card-' + nodeId + '">';
 
     // Header — with inline title editing
     html += '<div class="req-card-header" onclick="toggleCardCollapse(\'' + nodeId + '\')">';
@@ -592,7 +655,7 @@ function buildCardHtml(nodeId, data, collapsed) {
             'title="Move to different file" style="font-size:0.65rem;">Move</button>' +
             '</span>';
     }
-    html += '<div class="card-section"><div class="card-section-label" style="display:flex;align-items:baseline;">Metadata' + reqSourceLink + '</div>';
+    html += '<div class="card-section" data-anchor="' + nodeId + '"><div class="card-section-label" style="display:flex;align-items:baseline;">Metadata' + reqSourceLink + '</div>';
     html += '<div class="card-meta">';
 
     // Level
@@ -754,7 +817,7 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
     var sourcePath = (data.source && data.source.path) || '';
     var sourceLine = (data.source && data.source.line) || 1;
 
-    var html = '<div class="req-card journey-card' + collapsedClass + focusedClass + '" id="card-' + nodeId + '" data-journey-id="' + nodeId + '" data-anchor="' + nodeId + '">';
+    var html = '<div class="req-card journey-card' + collapsedClass + focusedClass + '" id="card-' + nodeId + '" data-journey-id="' + nodeId + '">';
 
     // Header — show journey ID + editable title
     html += '<div class="req-card-header" onclick="toggleCardCollapse(\'' + nodeId + '\')">';
@@ -782,7 +845,7 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
             escapeHtml(sourcePath.split('/').pop()) + ':' + sourceLine + '</a>';
         sourceLink += '<button class="edit-only journey-move-btn" onclick="event.preventDefault(); onMoveToFile(\'' + nodeId + '\')" style="margin-left:4px;">Move</button>';
     }
-    html += '<div class="card-section"><div class="card-section-label" style="display:flex;align-items:baseline;">Metadata' + sourceLink + '</div>';
+    html += '<div class="card-section" data-anchor="' + nodeId + '"><div class="card-section-label" style="display:flex;align-items:baseline;">Metadata' + sourceLink + '</div>';
     html += '<div class="card-meta">';
 
     // Actor — view + edit
