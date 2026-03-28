@@ -122,6 +122,7 @@
 | REQ-d00231 | Comment API Endpoints                                         | prd-features.md         | b8533d82 |
 | REQ-d00232 | Comment UI Anchors and Margin Column                          | prd-features.md         | f25796bb |
 | REQ-d00233 | Comment Inline Threads and Comment Mode                       | prd-features.md         | 792d13ce |
+| REQ-d00234 | Lost Comments Card                                            | prd-features.md         | 7fc99c6a |
 
 ## User Journeys
 

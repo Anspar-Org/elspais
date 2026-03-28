@@ -356,6 +356,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadTreeData();  // loads tree data, updates header stats, renders nav tree
     initDividers();
     initSearch();
+    loadOrphanedComments();  // Show lost comments card if any exist
     {% if mode == 'edit' %}
     refreshDirtyCount();
     {% endif %}

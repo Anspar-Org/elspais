@@ -286,3 +286,13 @@ A. Inline thread rendering SHALL display author, date, text, replies, and edit-m
 B. Comment mode SHALL be a one-shot mode entered via C key or toolbar button (Edit Mode required), showing a textarea on click, posting via /api/comment/add, then exiting.
 
 *End* *Comment Inline Threads and Comment Mode* | **Hash**: 792d13ce
+
+## REQ-d00234: Lost Comments Card
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+## Assertions
+
+A. A Lost Comments card SHALL appear at the top of the card column when orphaned comments exist, fetched via /api/comments/orphaned on page load, showing original anchor context and edit-mode-only Resolve buttons.
+
+*End* *Lost Comments Card* | **Hash**: 7fc99c6a

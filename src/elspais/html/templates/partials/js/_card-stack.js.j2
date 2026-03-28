@@ -131,6 +131,77 @@ function renderCardStack() {
 }
 
 // =====================================================================
+// Lost Comments Card (Implements: REQ-d00234-A)
+// =====================================================================
+
+function loadOrphanedComments() {
+    apiFetch('/api/comments/orphaned').then(function(data) {
+        if (data && data.success && data.threads.length > 0) {
+            renderLostCommentsCard(data.threads);
+        } else {
+            // Remove existing lost comments card if no orphans
+            var existing = document.getElementById('lost-comments-card');
+            if (existing) existing.remove();
+        }
+    });
+}
+
+function renderLostCommentsCard(threads) {
+    var existing = document.getElementById('lost-comments-card');
+    if (existing) existing.remove();
+
+    var html = '<div class="req-card lost-comments-card" id="lost-comments-card">';
+    html += '<div class="req-card-header lost-comments-header">';
+    html += '<span class="lost-comments-icon">&#9888;</span>';
+    html += '<span class="lost-comments-title">Lost Comments (' + threads.length + ')</span>';
+    html += '<button class="req-card-close" onclick="document.getElementById(\'lost-comments-card\').remove()" title="Dismiss">&times;</button>';
+    html += '</div>';
+    html += '<div class="req-card-body">';
+    threads.forEach(function(t) {
+        html += '<div class="lost-comment-item">';
+        html += '<div class="lost-comment-origin">Originally on <code>' +
+            escapeHtml(t.anchor || t.root.anchor) + '</code> (deleted)</div>';
+        html += '<div class="comment-entry">';
+        html += '<span class="comment-author">' + escapeHtml(t.root.author) + '</span>';
+        html += ' <span class="comment-date">' + escapeHtml(t.root.date) + '</span>';
+        html += '<div class="comment-text">' + escapeHtml(t.root.text) + '</div>';
+        html += '</div>';
+        if (t.replies && t.replies.length > 0) {
+            t.replies.forEach(function(r) {
+                html += '<div class="comment-entry comment-reply">';
+                html += '<span class="comment-author">' + escapeHtml(r.author) + '</span>';
+                html += ' <span class="comment-date">' + escapeHtml(r.date) + '</span>';
+                html += '<div class="comment-text">' + escapeHtml(r.text) + '</div>';
+                html += '</div>';
+            });
+        }
+        html += '<div class="comment-actions edit-only">';
+        html += '<button class="comment-resolve-btn" onclick="resolveLostComment(\'' +
+            escapeAttr(t.root.id) + '\')">Resolve</button>';
+        html += '</div>';
+        html += '</div>';
+    });
+    html += '</div></div>';
+
+    var body = document.getElementById('card-stack-body');
+    if (body) {
+        body.insertAdjacentHTML('afterbegin', html);
+    }
+}
+
+async function resolveLostComment(commentId) {
+    var data = await apiFetch('/api/comment/resolve', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({comment_id: commentId})
+    });
+    if (data && data.success) {
+        showToast('Comment resolved', 'success');
+        loadOrphanedComments();
+    }
+}
+
+// =====================================================================
 // Comment Margin Indicators (REQ-d00232-B)
 // =====================================================================
 

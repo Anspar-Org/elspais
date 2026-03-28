@@ -15,6 +15,7 @@ All notable changes to elspais will be documented in this file.
 - Comment API endpoints: POST /api/comment/add, /api/comment/reply, /api/comment/resolve; GET /api/comments, /api/comments/card, /api/comments/orphaned. Author resolved server-side via get_author_info.
 - Comment UI: data-anchor attributes on all commentable elements (cards, assertions, edges, sections, journeys) and comment margin column with speech bubble indicators fetched via /api/comments/card
 - Comment inline threads: full thread rendering with replies, Resolve/Reply controls (edit-mode-only), comment mode via C key or toolbar button for one-shot comment creation
+- Lost Comments card: warning card at top of card stack showing orphaned comments with original anchor context, fetched on page load via /api/comments/orphaned
 
 ## [0.108.6]
 
