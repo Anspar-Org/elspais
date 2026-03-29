@@ -659,63 +659,6 @@ def check_broken_references(graph: FederatedGraph, config=None) -> HealthCheck:
     )
 
 
-def check_mistyped_references(graph: FederatedGraph) -> HealthCheck:
-    """Check for traceability edges whose target is the wrong node kind.
-
-    E.g. Implements: pointing to a TEST node instead of a REQUIREMENT
-    or ASSERTION. Only REQ and ASSERTION targets are valid for
-    traceability edges.
-    """
-    from elspais.graph import NodeKind
-    from elspais.graph.relations import EdgeKind
-
-    _TRACEABILITY_EDGES = {
-        EdgeKind.IMPLEMENTS,
-        EdgeKind.REFINES,
-        EdgeKind.VERIFIES,
-        EdgeKind.VALIDATES,
-        EdgeKind.SATISFIES,
-    }
-    _VALID_TARGETS = {NodeKind.REQUIREMENT, NodeKind.ASSERTION}
-
-    mistyped = []
-    for kind in (NodeKind.CODE, NodeKind.TEST, NodeKind.USER_JOURNEY):
-        for node in graph.nodes_by_kind(kind):
-            # Edge direction: parent (REQ/ASSERTION) -> child (CODE/TEST)
-            for parent in node.iter_parents(edge_kinds=_TRACEABILITY_EDGES):
-                if parent.kind not in _VALID_TARGETS:
-                    fn = node.file_node()
-                    mistyped.append(
-                        HealthFinding(
-                            message=(
-                                f"{node.id} -> {parent.id}: "
-                                f"traceability parent is {parent.kind.value} "
-                                f"(expected requirement or assertion)"
-                            ),
-                            file_path=fn.get_field("relative_path") if fn else None,
-                            line=node.get_field("parse_line"),
-                            node_id=node.id,
-                        )
-                    )
-
-    if mistyped:
-        return HealthCheck(
-            name="spec.mistyped_references",
-            passed=False,
-            message=f"{len(mistyped)} reference(s) target wrong node kind",
-            category="spec",
-            severity="warning",
-            findings=mistyped,
-        )
-
-    return HealthCheck(
-        name="spec.mistyped_references",
-        passed=True,
-        message="All references target valid node kinds",
-        category="spec",
-    )
-
-
 def check_spec_format_rules(
     graph: FederatedGraph, config: dict[str, Any], resolver: IdResolver | None = None
 ) -> HealthCheck:
@@ -1399,7 +1342,6 @@ def run_spec_checks(
         check_spec_files_parseable(graph),
         check_spec_no_duplicates(graph),
         check_broken_references(graph, config),
-        check_mistyped_references(graph),
         check_spec_hash_integrity(graph),
     ]
 

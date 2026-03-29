@@ -42,7 +42,6 @@ Configuration checks always run as part of traceability verification. For focuse
 | `spec.structural_orphans` | No nodes without a FILE ancestor (build bugs) |
 | `spec.broken_references` | No edges targeting non-existent nodes |
 | `spec.no_assertions` | Requirements with no assertions (not testable); default severity: warning |
-| `spec.mistyped_references` | Traceability edges targeting wrong node kinds (TEST, CODE, RESULT instead of REQUIREMENT/ASSERTION) |
 
 #### `spec.no_assertions` — Not Testable Requirements
 
@@ -74,13 +73,6 @@ no_assertions_severity = "info"   # or "warning" (default) or "error"
 Use `require_assertions = true` when you want assertions to be mandatory for all
 requirements. Use `no_assertions_severity` to tune the visibility of the advisory
 check that is always present.
-
-#### `spec.mistyped_references` — Wrong Target Node Kind
-
-The `spec.mistyped_references` check validates that traceability edges
-(Implements, Refines, Verifies, Validates, Satisfies) target only REQUIREMENT
-or ASSERTION nodes. If an edge somehow points to a TEST, CODE, or RESULT node,
-this check flags it as a build or authoring error.
 
 ### Code Reference Checks (`--code`)
 
