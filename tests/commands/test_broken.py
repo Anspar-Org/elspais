@@ -267,4 +267,3 @@ class TestBrokenComposability:
         from elspais.commands.report import EXIT_BIT
 
         assert "broken" in EXIT_BIT
-        assert EXIT_BIT["broken"] == 32

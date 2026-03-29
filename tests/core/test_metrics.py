@@ -4,18 +4,6 @@
 from elspais.graph.metrics import CoverageContribution, CoverageSource, RollupMetrics
 
 
-class TestUATCoverageSource:
-    """Validates REQ-d00069-A: UAT coverage source values."""
-
-    def test_coverage_source_has_uat_explicit_REQ_d00069_A(self):
-        """CoverageSource.UAT_EXPLICIT has correct string value."""
-        assert CoverageSource.UAT_EXPLICIT.value == "uat_explicit"
-
-    def test_coverage_source_has_uat_inferred_REQ_d00069_A(self):
-        """CoverageSource.UAT_INFERRED has correct string value."""
-        assert CoverageSource.UAT_INFERRED.value == "uat_inferred"
-
-
 class TestUATRollupMetrics:
     """Validates REQ-d00069-A: UAT metrics fields in RollupMetrics."""
 

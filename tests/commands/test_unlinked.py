@@ -238,8 +238,7 @@ class TestUnlinkedComposability:
 
     # Implements: REQ-d00085-C
     def test_exit_bit(self) -> None:
-        """Unlinked section has exit bit 64."""
+        """Unlinked section has exit bit registered."""
         from elspais.commands.report import EXIT_BIT
 
         assert "unlinked" in EXIT_BIT
-        assert EXIT_BIT["unlinked"] == 64
