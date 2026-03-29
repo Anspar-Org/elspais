@@ -84,6 +84,8 @@ B. The Flask template context SHALL include a `config_relationship_kinds` variab
 
 C. The Flask template context SHALL include a `config_statuses` variable containing allowed statuses from `ElspaisConfig.rules.format.allowed_statuses` when configured.
 
+D. `StatusRolesConfig` SHALL provide a `sort_by_role()` method that orders a list of status strings by role priority (active first, then provisional, aspirational, and retired last), preserving original order within each role group; unknown statuses SHALL be treated as active.
+
 *End* *Config-Driven Viewer UI Values* | **Hash**: b322b22e
 ---
 

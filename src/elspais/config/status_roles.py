@@ -104,3 +104,17 @@ class StatusRolesConfig:
             if role == StatusRole.RETIRED:
                 result.add(self._original_case.get(name_lower, name_lower.title()))
         return result
+
+    def sort_by_role(self, statuses: list[str]) -> list[str]:
+        """Sort statuses by role order: active, provisional, aspirational, retired.
+
+        Preserves original order within each role group.
+        Unknown statuses are treated as ACTIVE.
+        """
+        role_rank = {
+            StatusRole.ACTIVE: 0,
+            StatusRole.PROVISIONAL: 1,
+            StatusRole.ASPIRATIONAL: 2,
+            StatusRole.RETIRED: 3,
+        }
+        return sorted(statuses, key=lambda s: role_rank[self.role_of(s)])
