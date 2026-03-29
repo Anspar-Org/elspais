@@ -77,14 +77,12 @@ body {
             <span class="nav-tab-spacer"></span>
             <button class="nav-tree-action" onclick="expandAllTreeNodes()" title="Expand all">&#9660;</button>
             <button class="nav-tree-action" onclick="collapseAllTreeNodes()" title="Collapse all">&#9654;</button>
-            <select class="nav-tree-action" id="coverage-mode" onchange="setCoverageMode(this.value)" title="Coverage indicator mode" style="font-size:0.7rem;padding:1px 2px;">
-                <option value="all">Cov: All</option>
-                <option value="impl">Cov: Impl</option>
-                <option value="tested">Cov: Tested</option>
-                <option value="verified">Cov: Verified</option>
-                <option value="uat_cov">Cov: Validated</option>
-                <option value="uat_ver">Cov: Accepted</option>
-            </select>
+            <div class="view-mode-toggle" id="view-mode-toggle">
+                <button class="view-mode-btn active" data-mode="tree" onclick="setViewMode('tree')"
+                        title="Hierarchical tree view">Tree</button>
+                <button class="view-mode-btn" data-mode="flat" onclick="setViewMode('flat')"
+                        title="Flat list sorted by ID">Flat</button>
+            </div>
         </div>
         <div class="nav-tree-container" id="nav-tree-container">
             <div style="padding:20px;color:#adb5bd;text-align:center;font-size:0.85rem;">Loading tree...</div>
@@ -98,12 +96,8 @@ body {
     <div class="card-stack-panel" id="card-stack-panel">
         <div class="card-stack-header">
             <span id="card-stack-count">No cards open</span>
-            <select id="assertion-badge-mode" onchange="setAssertionBadgeMode(this.value)" title="Assertion badge display mode" style="font-size:0.7rem;padding:1px 2px;">
-                <option value="full">Badges: Full</option>
-                <option value="abbrev" selected>Badges: Abbrev</option>
-                <option value="dots">Badges: Dots</option>
-            </select>
-            <button id="card-view-mode" onclick="toggleCardViewMode()" title="Toggle compact/complete card view" style="padding:1px 6px;font-size:0.7rem;cursor:pointer;border:1px solid var(--border-color);border-radius:3px;background:var(--card-bg);color:var(--text-primary);">Compact</button>
+            <button id="assertion-badge-mode-btn" onclick="cycleLinkStyle()" title="Click to cycle link badge style" style="padding:1px 6px;font-size:0.7rem;cursor:pointer;border:1px solid var(--border-color);border-radius:3px;background:var(--card-bg);color:var(--input-text);">Link Style: Abbrv</button>
+            <button id="card-view-mode" onclick="toggleCardViewMode()" title="Toggle compact/complete card view" style="padding:1px 6px;font-size:0.7rem;cursor:pointer;border:1px solid var(--border-color);border-radius:3px;background:var(--card-bg);color:var(--input-text);">Compact Card View</button>
             <button class="btn edit-only" onclick="onAddRequirement()" style="padding:3px 8px;font-size:0.75rem;">+ REQ</button>
             <button class="btn edit-only" onclick="onAddJourney()" style="padding:3px 8px;font-size:0.75rem;">+ JNY</button>
             <button class="btn" onclick="closeAllCards()" style="padding:3px 8px;font-size:0.75rem;">Close All</button>
@@ -180,28 +174,14 @@ const editState = {
     treeData: [],
     collapsedTreeNodes: new Set(),
     searchDebounce: null,
-    activeFilters: {
-        levelPrd: false,
-        levelOps: false,
-        levelDev: false,
-        unsaved: false,
-        uncommitted: false,
-        changed: false,
-        main: false,
-        leaf: false,
-        hideFiltered: false,
-        hiddenRepos: [],
-        hiddenStatuses: new Set({{ default_hidden_statuses | map('lower') | list | tojson }})
-    },
     knownRepos: [],
-    filterCoverage: '',
     filterText: '',
     textMatchIds: null,
     fontSize: 14,
     theme: 'system',
     toolbarHidden: false,
     isMain: false,
-    coverageMode: 'all',
+    viewMode: 'tree',
     assertionBadgeMode: 'abbrev',
     cardViewMode: 'compact',
     focusNodeId: null
@@ -239,6 +219,7 @@ const editState = {
 {% include "partials/js/_edit-engine.js.j2" %}
 {% endif %}
 
+{% include "partials/js/_filter-group.js.j2" %}
 {% include "partials/js/_nav-tree.js.j2" %}
 {% include "partials/js/_card-stack.js.j2" %}
 {% include "partials/js/_help-mode.js.j2" %}
@@ -356,6 +337,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadTreeData();  // loads tree data, updates header stats, renders nav tree
     initDividers();
     initSearch();
+    loadOrphanedComments();  // Show lost comments card if any exist
     {% if mode == 'edit' %}
     refreshDirtyCount();
     {% endif %}
@@ -378,51 +360,19 @@ document.addEventListener('DOMContentLoaded', function() {
         if (saved.collapsedTreeNodes && Array.isArray(saved.collapsedTreeNodes)) {
             editState.collapsedTreeNodes = new Set(saved.collapsedTreeNodes);
         }
-        // Restore nav tree filters
-        if (saved.activeFilters) {
-            Object.assign(editState.activeFilters, saved.activeFilters);
-            // Restore hiddenStatuses as a Set (saved as array in cookie)
-            var defaultHiddenStatuses = {{ default_hidden_statuses | map('lower') | list | tojson }};
-            if (Array.isArray(editState.activeFilters.hiddenStatuses)) {
-                editState.activeFilters.hiddenStatuses = new Set(editState.activeFilters.hiddenStatuses);
-            } else if (!(editState.activeFilters.hiddenStatuses instanceof Set)) {
-                editState.activeFilters.hiddenStatuses = new Set(defaultHiddenStatuses);
+        // Restore FilterGroup state
+        if (saved.filterState) {
+            for (var gname in filterGroups) {
+                if (saved.filterState[gname]) {
+                    filterGroups[gname].restore(saved.filterState[gname]);
+                    filterGroups[gname].render();
+                }
             }
-            // Update header stat badge dimmed state (null-guard for elements)
-            var statPrd = document.getElementById('stat-prd');
-            var statOps = document.getElementById('stat-ops');
-            var statDev = document.getElementById('stat-dev');
-            var statMain = document.getElementById('stat-main');
-            if (statPrd) statPrd.classList.toggle('dimmed', !!editState.activeFilters.levelPrd);
-            if (statOps) statOps.classList.toggle('dimmed', !!editState.activeFilters.levelOps);
-            if (statDev) statDev.classList.toggle('dimmed', !!editState.activeFilters.levelDev);
-            if (statMain) statMain.classList.toggle('dimmed', !!editState.activeFilters.main);
-            // Ensure hiddenRepos is an array
-            if (!Array.isArray(editState.activeFilters.hiddenRepos)) {
-                editState.activeFilters.hiddenRepos = [];
+            // Restore show hidden parents
+            if (saved.filterState.showHiddenParents !== undefined) {
+                var showParentsCb = document.getElementById('toggle-show-parents');
+                if (showParentsCb) showParentsCb.checked = saved.filterState.showHiddenParents;
             }
-            // Update toolbar focus filter buttons (null-guard)
-            var btnUnsaved = document.getElementById('edit-btn-unsaved');
-            var btnUncommitted = document.getElementById('edit-btn-uncommitted');
-            var btnChanged = document.getElementById('edit-btn-changed');
-            if (btnUnsaved) btnUnsaved.classList.toggle('active', !!editState.activeFilters.unsaved);
-            if (btnUncommitted) btnUncommitted.classList.toggle('active', !!editState.activeFilters.uncommitted);
-            if (btnChanged) btnChanged.classList.toggle('active', !!editState.activeFilters.changed);
-            // Update checkboxes (null-guard)
-            var leafCb = document.getElementById('edit-toggle-leaf');
-            if (leafCb) leafCb.checked = !!editState.activeFilters.leaf;
-            // Sync status filter badge buttons with restored hiddenStatuses
-            document.querySelectorAll('.status-filter-btn').forEach(function(btn) {
-                var statusKey = btn.getAttribute('data-status');
-                btn.classList.toggle('on', !editState.activeFilters.hiddenStatuses.has(statusKey));
-            });
-            var hideFilteredCb = document.getElementById('edit-toggle-hide-filtered');
-            if (hideFilteredCb) hideFilteredCb.checked = !!editState.activeFilters.hideFiltered;
-        }
-        if (saved.filterCoverage) {
-            editState.filterCoverage = saved.filterCoverage;
-            var filterCovSel = document.getElementById('edit-filter-coverage');
-            if (filterCovSel) filterCovSel.value = saved.filterCoverage;
         }
         if (saved.filterText) {
             editState.filterText = saved.filterText;
@@ -458,7 +408,17 @@ document.addEventListener('DOMContentLoaded', function() {
         if (saved.cardViewMode) {
             editState.cardViewMode = saved.cardViewMode;
             var cvmBtn = document.getElementById('card-view-mode');
-            if (cvmBtn) cvmBtn.textContent = saved.cardViewMode === 'compact' ? 'Compact' : 'Complete';
+            if (cvmBtn) cvmBtn.textContent = (saved.cardViewMode === 'compact' ? 'Compact' : 'Complete') + ' Card View';
+        }
+        // Restore link style mode
+        if (saved.assertionBadgeMode) {
+            editState.assertionBadgeMode = saved.assertionBadgeMode;
+            var lsBtn = document.getElementById('assertion-badge-mode-btn');
+            if (lsBtn) lsBtn.textContent = _linkStyleLabels[saved.assertionBadgeMode] || 'Link Style: Abbrv';
+        }
+        // Restore view mode (flat/tree)
+        if (saved.viewMode) {
+            setViewMode(saved.viewMode);
         }
         // Restore panel widths
         if (saved.navPanelWidth) {
@@ -486,11 +446,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 editState.openCardOrder.reverse();
                 renderCardStack();
                 updateNavSelection();
-                // Prefetch coverage for restored requirement cards
+                // Prefetch coverage and comments for restored cards
                 editState.openCards.forEach(function(info, id) {
                     if (info.data && info.data.kind === 'requirement') {
                         prefetchCoverage(id);
                     }
+                    loadCardComments(id);
                 });
                 {% if mode == 'edit' %}
                 if (editState.enabled) {

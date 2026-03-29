@@ -105,6 +105,7 @@ class AppState:
         if config is None:
             config = get_config(start_path=repo_root, quiet=True)
         graph = build_graph(config=config, repo_root=repo_root)
+        graph.load_comments()
         return cls(
             graph=graph,
             repo_root=repo_root,
@@ -194,6 +195,7 @@ class AppState:
             config=self.config,
             repo_root=self.repo_root,
         )
+        self.graph.load_comments()
         self.build_time = time.time()
         self.snapshot_mtimes()
         # Propagate to MCP tools' _state dict (shared reference)

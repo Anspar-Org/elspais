@@ -3,6 +3,7 @@
 # REQ-p00005: Multi-Repository Requirements
 
 **Level**: prd | **Status**: Active | **Implements**: REQ-p00001
+**Refines**: REQ-p00001
 
 ## Rationale
 
@@ -166,3 +167,145 @@ AI agents need programmatic access to requirements data for tasks like coverage 
 
 *End* *MCP Server for AI-Driven Requirements Management* | **Hash**: 3ebc237a
 ---
+
+## REQ-d00226: Comment Data Models
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+## Assertions
+
+A. CommentEvent SHALL be a frozen dataclass with fields: event, id, anchor, author, author_id, date, text, parent, target, old_anchor, new_anchor, reason, from_file.
+
+B. CommentEvent optional fields SHALL default to empty string.
+
+C. CommentThread SHALL be a mutable dataclass with root, replies, anchor, resolved, promoted_from, and promotion_reason fields.
+
+D. CommentThread anchor SHALL default to the root event anchor when not explicitly provided.
+
+*End* *Comment Data Models* | **Hash**: dd5c745e
+
+## REQ-d00227: Comment Index
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+## Assertions
+
+A. CommentIndex SHALL provide an iterator-only query API: iter_threads, thread_count, has_threads, iter_orphaned, iter_all_anchors_for_node, source_file_for.
+
+B. CommentIndex iter_all_anchors_for_node SHALL match exact node_id and node_id#fragment patterns.
+
+C. CommentIndex SHALL support merge for federation following the TermDictionary pattern.
+
+*End* *Comment Index* | **Hash**: ff891bd9
+
+## REQ-d00228: Comment JSONL Storage
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+## Assertions
+
+A. Anchor parsing SHALL handle bare requirement IDs, assertion fragments, section fragments, and edge fragments.
+
+B. Comment ID generation SHALL produce format c-YYYYMMDD-6hexchars using utilities/hasher.py.
+
+C. JSONL load and append SHALL read/write CommentEvent records as one JSON object per line.
+
+D. Thread assembly SHALL group events by root, attach replies, apply resolve/promote events, and filter resolved threads.
+
+E. Comment file path resolution SHALL mirror repo structure under .elspais/comments/.
+
+*End* *Comment JSONL Storage* | **Hash**: b9f0e26c
+
+## REQ-d00229: Comment Promotion Engine
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+## Assertions
+
+A. Anchor validation SHALL check node existence, assertion existence, section existence, and edge existence against the live graph.
+
+B. Orphaned comment promotion SHALL walk parent hierarchy to find the nearest living ancestor, falling back to an orphaned file.
+
+C. Rename-triggered promotion SHALL update all anchors prefixed with the old ID and emit promote events with rename reason.
+
+*End* *Comment Promotion Engine* | **Hash**: d72378b4
+
+## REQ-d00230: Comment Graph Integration
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+## Assertions
+
+A. TraceGraph SHALL expose comment delegate methods (iter_comments, comment_count, has_comments, iter_orphaned_comments) that delegate to the internal CommentIndex.
+
+B. FederatedGraph SHALL route comment queries to the owning repo's TraceGraph using anchor-based ownership lookup and aggregate orphaned comments across all repos.
+
+C. TraceGraph rename_node and rename_assertion SHALL call update_anchors_on_rename to keep comment anchors consistent after ID changes.
+
+D. FederatedGraph SHALL provide a repo_root_for(node_id) public method that returns the repo root Path for write routing.
+
+*End* *Comment Graph Integration* | **Hash**: 0eed8546
+
+## REQ-d00231: Comment API Endpoints
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+## Assertions
+
+A. POST /api/comment/add SHALL create a new comment event, persist it to the JSONL file, update the in-memory index, and return the created event. Missing text SHALL return 400.
+
+B. POST /api/comment/reply SHALL attach a reply event to an existing thread, persist it, and return the reply. Missing parent SHALL return 404.
+
+C. POST /api/comment/resolve SHALL remove a thread from the in-memory index, persist a resolve event, and return success. Missing comment SHALL return 404.
+
+D. GET /api/comments SHALL return serialized threads for a given anchor. GET /api/comments/card SHALL return threads grouped by anchor for all anchors of a node. GET /api/comments/orphaned SHALL return all orphaned threads.
+
+E. Author identity SHALL be resolved server-side via get_author_info using the changelog.id_source config, never from client input.
+
+*End* *Comment API Endpoints* | **Hash**: b8533d82
+
+## REQ-d00232: Comment UI Anchors and Margin Column
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+## Assertions
+
+A. All commentable DOM elements SHALL have data-anchor attributes: card header (node ID), assertion rows (node#label), edge rows (node#edge:target), body sections (node#section:name), and journey equivalents.
+
+B. A comment margin column SHALL render speech bubble icons with count badges for anchors that have comment threads, fetched via /api/comments/card when a card opens.
+
+*End* *Comment UI Anchors and Margin Column* | **Hash**: f25796bb
+
+## REQ-d00233: Comment Inline Threads and Comment Mode
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+## Assertions
+
+A. Inline thread rendering SHALL display author, date, text, replies, and edit-mode-only Resolve/Reply controls below the target element.
+
+B. Comment mode SHALL be a one-shot mode entered via C key or toolbar button (Edit Mode required), showing a textarea on click, posting via /api/comment/add, then exiting.
+
+*End* *Comment Inline Threads and Comment Mode* | **Hash**: 792d13ce
+
+## REQ-d00234: Lost Comments Card
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+## Assertions
+
+A. A Lost Comments card SHALL appear at the top of the card column when orphaned comments exist, fetched via /api/comments/orphaned on page load, showing original anchor context and edit-mode-only Resolve buttons.
+
+*End* *Lost Comments Card* | **Hash**: 7fc99c6a
+
+## REQ-d00235: Comment Compaction CLI
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+## Assertions
+
+A. compact_file SHALL rewrite JSONL files stripping resolved threads entirely and collapsing promote chains to keep only the final promote event, returning the count of removed events.
+
+B. The elspais comments compact CLI command SHALL glob .elspais/comments/**/*.json, call compact_file on each, and report total events removed.
+
+*End* *Comment Compaction CLI* | **Hash**: f3547362

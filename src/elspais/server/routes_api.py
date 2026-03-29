@@ -1,5 +1,6 @@
 # Implements: REQ-p00006-B
 # Implements: REQ-d00010-A, REQ-d00010-F, REQ-d00010-G
+# Implements: REQ-d00231-A+B+C+D+E
 """Starlette REST API route handlers for /api/* endpoints.
 
 All logic delegates to pure functions in ``elspais.mcp.server``.
@@ -8,6 +9,7 @@ State is accessed via ``request.app.state.app_state`` (an AppState instance).
 from __future__ import annotations
 
 import time
+from datetime import date as date_type
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +17,13 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from elspais.graph import NodeKind
+from elspais.graph.comment_store import (
+    append_event,
+    comment_file_for,
+    generate_comment_id,
+    parse_anchor,
+)
+from elspais.graph.comments import CommentEvent, CommentThread
 from elspais.mcp.server import (
     _get_assertion_code_map,
     _get_assertion_refines_map,
@@ -47,6 +56,7 @@ from elspais.mcp.server import (
     _query_nodes,
     _undo_last_mutation,
 )
+from elspais.utilities.git import get_author_info
 
 
 def _st(request: Request) -> Any:
@@ -438,10 +448,10 @@ async def api_tree_data(request: Request) -> JSONResponse:
     for entry in g.mutation_log.iter_entries():
         if entry.target_id:
             unsaved_ids.add(entry.target_id)
-        # Also check before/after state for node_id (edge mutations)
+        # Also check before/after state for node_id, source_id, parent_id
         for st in (entry.before_state, entry.after_state):
             if st:
-                for key in ("node_id", "source_id"):
+                for key in ("node_id", "source_id", "parent_id"):
                     nid = st.get(key, "")
                     if nid:
                         unsaved_ids.add(nid)
@@ -492,6 +502,8 @@ async def api_tree_data(request: Request) -> JSONResponse:
         has_children = any(c.kind == NodeKind.REQUIREMENT for c in node.iter_children())
         is_changed = bool(node.get_metric("is_branch_changed", False))
         is_uncommitted = bool(node.get_metric("is_uncommitted", False))
+        # Comment presence: direct comments on this node or its sub-elements
+        _has_direct_comments = any(True for _ in g.iter_comments_for_card(node.id))
         tiers = compute_coverage_tiers(node, state.config)
         # Derive coverage tier from combined_color for filtering
         _cc = tiers.get("combined_color", "")
@@ -520,6 +532,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
                 "is_test_result": False,
                 "result_status": "",
                 "repo_prefix": _get_repo_prefix(node),
+                "has_comments": _has_direct_comments,
                 "source_file": node.get_field("source_file", ""),
                 "source_line": node.get_field("source_line", 0),
                 "validation_color": tiers.get("combined_color", ""),
@@ -1486,8 +1499,235 @@ async def api_reload(request: Request) -> JSONResponse:
             config=state.config,
             repo_root=state.repo_root,
         )
+        if hasattr(new_graph, "load_comments"):
+            new_graph.load_comments()
         state.graph = new_graph
         state.build_time = time.time()
         return JSONResponse({"success": True, "message": "Graph reloaded from disk"})
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Comment Endpoints (Implements: REQ-d00231)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _thread_to_dict(thread: CommentThread) -> dict:
+    """Serialize a CommentThread for JSON response."""
+    return {
+        "root": {
+            "id": thread.root.id,
+            "event": thread.root.event,
+            "anchor": thread.root.anchor,
+            "author": thread.root.author,
+            "author_id": thread.root.author_id,
+            "date": thread.root.date,
+            "text": thread.root.text,
+        },
+        "replies": [
+            {
+                "id": r.id,
+                "event": r.event,
+                "anchor": r.anchor,
+                "author": r.author,
+                "author_id": r.author_id,
+                "date": r.date,
+                "text": r.text,
+                "parent": r.parent,
+            }
+            for r in thread.replies
+        ],
+        "anchor": thread.anchor,
+        "resolved": thread.resolved,
+        "promoted_from": thread.promoted_from,
+        "promotion_reason": thread.promotion_reason,
+    }
+
+
+def _event_to_response_dict(evt: CommentEvent) -> dict:
+    """Serialize a CommentEvent for write-endpoint response."""
+    d: dict[str, str] = {
+        "id": evt.id,
+        "event": evt.event,
+        "anchor": evt.anchor,
+        "author": evt.author,
+        "author_id": evt.author_id,
+        "date": evt.date,
+        "text": evt.text,
+    }
+    if evt.parent:
+        d["parent"] = evt.parent
+    return d
+
+
+def _resolve_author(state: Any) -> dict[str, str]:
+    """Resolve author identity from config (REQ-d00231-E)."""
+    return get_author_info(state.config.get("changelog", {}).get("id_source", "gh"))
+
+
+def _resolve_jsonl_path(state: Any, node_id: str) -> Path | None:
+    """Resolve the JSONL file path for a node's comments."""
+    graph = state.graph
+    node = graph.find_by_id(node_id)
+    if node is None:
+        return None
+    file_node = node.file_node()
+    rel_path = file_node.get_field("relative_path", "") if file_node else node_id
+    repo_root = graph.repo_root_for(node_id) or state.repo_root
+    return comment_file_for(repo_root, rel_path)
+
+
+# Implements: REQ-d00231-A
+async def api_comment_add(request: Request) -> JSONResponse:
+    """POST /api/comment/add — add a new comment."""
+    state = _st(request)
+    payload = await request.json()
+    anchor = payload.get("anchor", "")
+    text = payload.get("text", "")
+    if not text:
+        return JSONResponse({"success": False, "error": "text required"}, status_code=400)
+    if not anchor:
+        return JSONResponse({"success": False, "error": "anchor required"}, status_code=400)
+
+    author_info = _resolve_author(state)
+    today = date_type.today().isoformat()
+    comment_id = generate_comment_id(anchor, author_info["id"], today, text)
+    evt = CommentEvent(
+        event="comment",
+        id=comment_id,
+        anchor=anchor,
+        author=author_info["name"],
+        author_id=author_info["id"],
+        date=today,
+        text=text,
+    )
+
+    node_id = parse_anchor(anchor)[0]
+    jsonl_path = _resolve_jsonl_path(state, node_id)
+    if jsonl_path is None:
+        return JSONResponse(
+            {"success": False, "error": f"node {node_id} not found"},
+            status_code=404,
+        )
+    append_event(jsonl_path, evt)
+
+    # Update in-memory index
+    thread = CommentThread(root=evt)
+    # jsonl_path is always under {repo_root}/.elspais/comments/ per comment_file_for
+    source_rel = str(jsonl_path)
+    state.graph.add_comment_thread(node_id, thread, source_rel)
+
+    return JSONResponse({"success": True, "comment": _event_to_response_dict(evt)})
+
+
+# Implements: REQ-d00231-B
+async def api_comment_reply(request: Request) -> JSONResponse:
+    """POST /api/comment/reply — reply to an existing comment."""
+    state = _st(request)
+    payload = await request.json()
+    parent_id = payload.get("parent_id", "")
+    text = payload.get("text", "")
+    if not text:
+        return JSONResponse({"success": False, "error": "text required"}, status_code=400)
+    if not parent_id:
+        return JSONResponse({"success": False, "error": "parent_id required"}, status_code=400)
+
+    result = state.graph.find_comment_thread(parent_id)
+    if result is None:
+        return JSONResponse({"success": False, "error": "parent not found"}, status_code=404)
+    parent_anchor, parent_thread = result
+
+    author_info = _resolve_author(state)
+    today = date_type.today().isoformat()
+    reply_id = generate_comment_id(parent_anchor, author_info["id"], today, text)
+    evt = CommentEvent(
+        event="reply",
+        id=reply_id,
+        anchor=parent_anchor,
+        author=author_info["name"],
+        author_id=author_info["id"],
+        date=today,
+        text=text,
+        parent=parent_id,
+    )
+
+    node_id = parse_anchor(parent_anchor)[0]
+    jsonl_path = _resolve_jsonl_path(state, node_id)
+    if jsonl_path is None:
+        return JSONResponse(
+            {"success": False, "error": f"node {node_id} not found"},
+            status_code=404,
+        )
+    append_event(jsonl_path, evt)
+
+    # Update in-memory thread
+    parent_thread.replies.append(evt)
+
+    return JSONResponse({"success": True, "comment": _event_to_response_dict(evt)})
+
+
+# Implements: REQ-d00231-C
+async def api_comment_resolve(request: Request) -> JSONResponse:
+    """POST /api/comment/resolve — resolve (dismiss) a comment thread."""
+    state = _st(request)
+    payload = await request.json()
+    comment_id = payload.get("comment_id", "")
+    if not comment_id:
+        return JSONResponse({"success": False, "error": "comment_id required"}, status_code=400)
+
+    found_anchor = state.graph.remove_comment_thread(comment_id)
+    if not found_anchor:
+        return JSONResponse({"success": False, "error": "comment not found"}, status_code=404)
+
+    author_info = _resolve_author(state)
+    today = date_type.today().isoformat()
+    resolve_id = generate_comment_id(found_anchor, author_info["id"], today, "resolve")
+    evt = CommentEvent(
+        event="resolve",
+        id=resolve_id,
+        anchor=found_anchor,
+        author=author_info["name"],
+        author_id=author_info["id"],
+        date=today,
+        target=comment_id,
+    )
+
+    node_id = parse_anchor(found_anchor)[0]
+    jsonl_path = _resolve_jsonl_path(state, node_id)
+    if jsonl_path is not None:
+        append_event(jsonl_path, evt)
+
+    return JSONResponse({"success": True})
+
+
+# Implements: REQ-d00231-D
+async def api_get_comments(request: Request) -> JSONResponse:
+    """GET /api/comments?anchor=... — get threads for an anchor."""
+    state = _st(request)
+    anchor = request.query_params.get("anchor", "")
+    if not anchor:
+        return JSONResponse({"success": False, "error": "anchor required"}, status_code=400)
+    threads = list(state.graph.iter_comments(anchor))
+    return JSONResponse({"success": True, "threads": [_thread_to_dict(t) for t in threads]})
+
+
+# Implements: REQ-d00231-D
+async def api_get_comments_card(request: Request) -> JSONResponse:
+    """GET /api/comments/card?node_id=... — all comments for a card."""
+    state = _st(request)
+    node_id = request.query_params.get("node_id", "")
+    if not node_id:
+        return JSONResponse({"success": False, "error": "node_id required"}, status_code=400)
+    result: dict[str, list] = {}
+    for anchor, threads in state.graph.iter_comments_for_card(node_id):
+        result[anchor] = [_thread_to_dict(t) for t in threads]
+    return JSONResponse({"success": True, "threads": result})
+
+
+# Implements: REQ-d00231-D
+async def api_get_comments_orphaned(request: Request) -> JSONResponse:
+    """GET /api/comments/orphaned — all orphaned comments."""
+    state = _st(request)
+    orphaned = list(state.graph.iter_orphaned_comments())
+    return JSONResponse({"success": True, "threads": [_thread_to_dict(t) for t in orphaned]})

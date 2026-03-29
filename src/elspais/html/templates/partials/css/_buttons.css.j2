@@ -24,6 +24,16 @@
     cursor: not-allowed;
 }
 
+/* Undo button: purple when active, clearly distinct from disabled */
+#btn-undo:not(:disabled) {
+    background: #9b59b6;
+    border-color: #8e44ad;
+    color: #fff;
+}
+#btn-undo:not(:disabled):hover {
+    background: #8e44ad;
+}
+
 .btn-primary {
     background: var(--btn-primary-bg);
     color: var(--btn-primary-text);

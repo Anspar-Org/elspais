@@ -233,31 +233,30 @@ class TestHTMLGeneratorCoverage:
 
     # Implements: REQ-p00006-B
     def test_coverage_values(self, sample_graph):
-        """Coverage filter dropdown has None/Partial/Full options."""
+        """Coverage filter buttons have None/Partial/Full options."""
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate()
         # Implements: REQ-p00006-A
 
-        # Assert the specific coverage filter dropdown and its options
-        assert 'id="edit-filter-coverage"' in result
-        assert '<option value="none">None</option>' in result
-        assert '<option value="partial">Partial</option>' in result
-        assert '<option value="full">Full</option>' in result
+        # Assert the unified coverage filter buttons (replaced dropdown)
+        assert 'data-group="coverage" data-key="none"' in result
+        assert 'data-group="coverage" data-key="partial"' in result
+        assert 'data-group="coverage" data-key="full"' in result
 
 
 class TestHTMLGeneratorFiltering:
     """Tests for filtering features."""
 
     def test_REQ_d00052_A_includes_toolbar_filter_controls(self, sample_graph):
-        """Includes toolbar status badge buttons and coverage dropdown."""
+        """Includes toolbar filter group buttons for status and coverage."""
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate()
 
-        # Status badge buttons and coverage dropdown
-        assert "status-filter-group" in result
-        assert "edit-filter-coverage" in result
+        # Status filter buttons and coverage filter buttons (unified FilterGroup system)
+        assert "status-filter-buttons" in result
+        assert 'data-group="coverage"' in result
 
     def test_REQ_d00052_D_includes_toolbar_git_filter_buttons(self, sample_graph):
         """Includes toolbar git filter buttons."""
@@ -265,19 +264,20 @@ class TestHTMLGeneratorFiltering:
 
         result = generator.generate()
 
-        # Level/status column filters replaced by toolbar git filter buttons
-        assert "edit-btn-uncommitted" in result
+        # Unified FilterGroup git buttons
+        assert 'data-group="git" data-key="uncommitted"' in result
         # Implements: REQ-p00006-B
-        assert "edit-btn-changed" in result
+        assert 'data-group="git" data-key="changed"' in result
 
-    def test_REQ_d00052_E_includes_leaf_toggle_checkbox(self, sample_graph):
-        """Includes leaf-only toggle checkbox in toolbar."""
+    def test_REQ_d00052_E_includes_hierarchy_filter_buttons(self, sample_graph):
+        """Includes hierarchy filter buttons in toolbar (replaced leaf toggle)."""
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate()
 
-        # Only leaf toggle remains; deprecated toggle removed
-        assert "edit-toggle-leaf" in result
+        # Hierarchy filter group replaced leaf-only checkbox
+        assert 'data-group="hierarchy" data-key="root"' in result
+        assert 'data-group="hierarchy" data-key="leaf"' in result
 
 
 class TestHTMLGeneratorTopics:

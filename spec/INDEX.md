@@ -99,7 +99,7 @@
 | REQ-d00208 | JSON Schema Export for IDE Autocomplete                       | dev-graph-config.md     | 2b82ef02 |
 | REQ-d00209 | Schema-Driven Init Template Generation                        | dev-graph-config.md     | 44aeb496 |
 | REQ-d00210 | Documentation Drift Detection                                 | dev-graph-config.md     | eb94434a |
-| REQ-d00211 | Config-Driven Viewer UI Values                                | dev-graph-config.md     | b322b22e |
+| REQ-d00211 | Config-Driven Viewer UI Values                                | dev-graph-config.md     | a9cc41d2 |
 | REQ-d00212 | Config Schema v3 Models                                       | dev-graph-config.md     | 0cee5e84 |
 | REQ-d00213 | Version Check and Update Notification                         | dev-cli.md              | 56b62d01 |
 | REQ-d00214 | MCP Server Install/Uninstall CLI Commands                     | dev-mcp-tools.md        | f1518d2c |
@@ -114,6 +114,16 @@
 | REQ-d00223 | Term Health Checks                                            | prd-core.md             | 34da7dc1 |
 | REQ-d00224 | Glossary and Term Index Generators                            | prd-core.md             | f2da30fb |
 | REQ-d00225 | CLI Registration for Glossary and Term Index                  | prd-core.md             | d18fc2c9 |
+| REQ-d00226 | Comment Data Models                                           | prd-features.md         | dd5c745e |
+| REQ-d00227 | Comment Index                                                 | prd-features.md         | ff891bd9 |
+| REQ-d00228 | Comment JSONL Storage                                         | prd-features.md         | b9f0e26c |
+| REQ-d00229 | Comment Promotion Engine                                      | prd-features.md         | d72378b4 |
+| REQ-d00230 | Comment Graph Integration                                     | prd-features.md         | 0eed8546 |
+| REQ-d00231 | Comment API Endpoints                                         | prd-features.md         | b8533d82 |
+| REQ-d00232 | Comment UI Anchors and Margin Column                          | prd-features.md         | f25796bb |
+| REQ-d00233 | Comment Inline Threads and Comment Mode                       | prd-features.md         | 792d13ce |
+| REQ-d00234 | Lost Comments Card                                            | prd-features.md         | 7fc99c6a |
+| REQ-d00235 | Comment Compaction CLI                                        | prd-features.md         | f3547362 |
 
 ## User Journeys
 

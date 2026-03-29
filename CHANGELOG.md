@@ -4,6 +4,20 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Comment/review system** — threaded comments on requirements, assertions, edges, and body sections, persisted as append-only JSONL in `.elspais/comments/`
+  - Data layer: `CommentEvent` (frozen), `CommentThread`, `CommentIndex` with iterator-only API
+  - Storage: JSONL I/O, anchor parsing, thread assembly, comment ID generation via `comment_store.py`
+  - Promotion engine: validates anchors against live graph, promotes orphaned comments to nearest ancestor, updates anchors on rename
+  - Graph integration: TraceGraph/FederatedGraph delegates for comment queries, anchor-based routing, rename hooks
+  - API: POST `/api/comment/add`, `/reply`, `/resolve`; GET `/api/comments`, `/comments/card`, `/comments/orphaned` — author resolved server-side
+  - Viewer: `data-anchor` attributes on all commentable elements, margin column with speech bubble indicators, inline thread rendering with Reply/Resolve controls
+  - Comment mode: press `C` in Edit Mode or click toolbar button, then click any element to add a comment (one-shot)
+  - Lost Comments card: warning card for orphaned comments, shown at top of card stack on page load
+  - CLI: `elspais comments compact` strips resolved threads and collapses promote chains
+  - Comments loaded automatically at viewer startup, on refresh, and on reload
+
 ## [0.108.6]
 
 ### Changed

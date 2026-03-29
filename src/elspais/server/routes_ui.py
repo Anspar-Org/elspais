@@ -66,9 +66,9 @@ async def index(request: Request):
         stats = gen._compute_stats()
         journeys = gen._collect_journeys()
         stats.journey_count = len(journeys)
-        statuses = sorted(gen._collect_unique_values("status"))
-        topics = sorted(gen._collect_unique_values("topic"))
         roles = get_status_roles(state.config)
+        statuses = roles.sort_by_role(list(gen._collect_unique_values("status")))
+        topics = sorted(gen._collect_unique_values("topic"))
         default_hidden = roles.default_hidden_statuses()
 
         viewer_cfg = _extract_viewer_config(state.config)

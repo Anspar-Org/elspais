@@ -81,3 +81,41 @@ class TestStatusRolesConfig:
         assert "Superseded" in hidden
         assert "Draft" not in hidden
         assert "Roadmap" not in hidden
+
+
+class TestSortByRole:
+    """Validates REQ-d00211-D: sort_by_role orders statuses by role priority."""
+
+    # Implements: REQ-d00211-D
+    def test_sort_by_role_orders_active_first(self):
+        """Active statuses appear before provisional, aspirational, retired."""
+        cfg = StatusRolesConfig(
+            {
+                "Active": StatusRole.ACTIVE,
+                "Draft": StatusRole.PROVISIONAL,
+                "Deprecated": StatusRole.RETIRED,
+                "Proposed": StatusRole.PROVISIONAL,
+                "Roadmap": StatusRole.ASPIRATIONAL,
+            }
+        )
+        result = cfg.sort_by_role(["Deprecated", "Roadmap", "Draft", "Active", "Proposed"])
+        assert result == ["Active", "Draft", "Proposed", "Roadmap", "Deprecated"]
+
+    # Implements: REQ-d00211-D
+    def test_sort_by_role_preserves_order_within_role(self):
+        """Within a single role group, original list order is preserved."""
+        cfg = StatusRolesConfig(
+            {
+                "Draft": StatusRole.PROVISIONAL,
+                "Proposed": StatusRole.PROVISIONAL,
+            }
+        )
+        result = cfg.sort_by_role(["Proposed", "Draft"])
+        assert result == ["Proposed", "Draft"]
+
+    # Implements: REQ-d00211-D
+    def test_sort_by_role_unknown_status_treated_as_active(self):
+        """Unknown statuses default to ACTIVE role, so they sort first."""
+        cfg = StatusRolesConfig({"Draft": StatusRole.PROVISIONAL})
+        result = cfg.sort_by_role(["Draft", "Custom"])
+        assert result == ["Custom", "Draft"]

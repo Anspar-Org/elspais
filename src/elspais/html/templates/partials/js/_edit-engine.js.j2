@@ -130,6 +130,9 @@ function _activateEditMode() {
     document.querySelectorAll('.card-assertion-text').forEach(function(el) {
         el.contentEditable = 'true';
     });
+    // Show comment mode button
+    var commentBtn = document.getElementById('btn-comment-mode');
+    if (commentBtn) commentBtn.style.display = '';
     saveState();
 }
 
@@ -140,6 +143,13 @@ function _deactivateEditMode() {
     document.querySelectorAll('.card-assertion-text').forEach(function(el) {
         el.contentEditable = 'false';
     });
+    // Hide comment mode button and exit comment mode if active
+    var commentBtn = document.getElementById('btn-comment-mode');
+    if (commentBtn) { commentBtn.style.display = 'none'; commentBtn.classList.remove('active'); }
+    if (typeof commentModeActive !== 'undefined' && commentModeActive) {
+        commentModeActive = false;
+        document.body.classList.remove('comment-mode');
+    }
     saveState();
 }
 
@@ -318,6 +328,8 @@ async function doGitSync() {
     if (result && result.success) {
         showToast(result.message || 'Synced', 'success');
         refreshBranchStatus();
+        loadTreeData();
+        refreshAllOpenCards();
     } else {
         showErrorModal('Sync failed', (result && result.error) || 'Unknown error');
         refreshBranchStatus();
@@ -1272,6 +1284,7 @@ async function doSave() {
     if (result && result.success) {
         showToast('Saved to disk', 'success');
         refreshFileViewer();
+        loadTreeData();
     }
     // Even if it returns 501 (not yet implemented), display message
     if (result && result.message) {
@@ -1827,6 +1840,7 @@ function _openCheckpointModal() {
                     showToast('Checkpoint created', 'success');
                     refreshBranchStatus();
                     refreshDirtyCount();
+                    loadTreeData();
                 } else {
                     overlay.remove();
                     showErrorModal('Checkpoint failed', (result && result.error) || 'Unknown error');
@@ -1960,6 +1974,7 @@ function initShareSlider() {
                 if (result && result.success) {
                     showToast('Pushed to origin/' + (result.branch || ''), 'success');
                     refreshBranchStatus();
+                    loadTreeData();
                 } else {
                     showErrorModal('Push failed', (result && result.error) || 'Unknown error');
                 }
@@ -2024,9 +2039,7 @@ window.addEventListener('beforeunload', function(e) {
     var dirtyBadge = document.getElementById('unsaved-badge');
     var hasMutations = dirtyBadge && !dirtyBadge.classList.contains('hidden') &&
                        parseInt(dirtyBadge.textContent, 10) > 0;
-    var uncommittedBadge = document.getElementById('uncommitted-badge');
-    var hasUncommitted = uncommittedBadge && !uncommittedBadge.classList.contains('hidden');
-    if (hasMutations || hasUncommitted) {
+    if (hasMutations) {
         e.preventDefault();
         e.returnValue = '';
     }
@@ -2670,3 +2683,65 @@ function _showAddJourneyModal(files) {
         });
     });
 }
+
+// =====================================================================
+// Comment Mode (Implements: REQ-d00233-B)
+// =====================================================================
+
+var commentModeActive = false;
+
+function toggleCommentMode() {
+    if (!editState.enabled) {
+        showToast('Enable Edit Mode first', 'warning');
+        return;
+    }
+    commentModeActive = !commentModeActive;
+    var btn = document.getElementById('btn-comment-mode');
+    if (commentModeActive) {
+        document.body.classList.add('comment-mode');
+        if (btn) btn.classList.add('active');
+        showToast('Click any element to add a comment. Press Esc to cancel.', 'info');
+    } else {
+        document.body.classList.remove('comment-mode');
+        if (btn) btn.classList.remove('active');
+    }
+}
+
+// C key shortcut — only when edit mode active, no input focused
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'c' && editState.enabled &&
+        !e.ctrlKey && !e.metaKey && !e.altKey &&
+        document.activeElement.tagName !== 'INPUT' &&
+        document.activeElement.tagName !== 'TEXTAREA' &&
+        document.activeElement.contentEditable !== 'true') {
+        e.preventDefault();
+        toggleCommentMode();
+    }
+    // Esc exits comment mode
+    if (e.key === 'Escape' && commentModeActive) {
+        commentModeActive = false;
+        document.body.classList.remove('comment-mode');
+        var btn = document.getElementById('btn-comment-mode');
+        if (btn) btn.classList.remove('active');
+        // Remove any pending comment input
+        var existing = document.querySelector('.comment-new-input');
+        if (existing) existing.remove();
+    }
+});
+
+// One-shot click handler for comment mode
+document.addEventListener('click', function(e) {
+    if (!commentModeActive) return;
+    var target = e.target.closest('[data-anchor]');
+    if (!target) return;
+    // In comment mode, capture ALL clicks on anchored elements — suppress default behavior
+    e.preventDefault();
+    e.stopPropagation();
+    var anchor = target.getAttribute('data-anchor');
+    showCommentInput(anchor, target);
+    // Exit comment mode (one-shot)
+    commentModeActive = false;
+    document.body.classList.remove('comment-mode');
+    var btn = document.getElementById('btn-comment-mode');
+    if (btn) btn.classList.remove('active');
+}, true);

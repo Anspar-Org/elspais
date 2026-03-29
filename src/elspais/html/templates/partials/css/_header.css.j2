@@ -63,6 +63,9 @@
 .stat-badge.prd { background: var(--level-prd-bg); color: var(--level-prd-text); }
 .stat-badge.ops { background: var(--level-ops-bg); color: var(--level-ops-text); }
 .stat-badge.dev { background: var(--level-dev-bg); color: var(--level-dev-text); }
+/* Level/repo badges: dim when filter-btn .on is removed (filter is hiding that level) */
+.stat-badge.filter-btn:not(.on) { opacity: 0.3; }
+.stat-badge.filter-btn:not(.on):hover { opacity: 0.5; }
 .stat-badge.main { background: var(--stat-main-bg); color: white; }
 .stat-badge.tests { background: var(--stat-tests-bg); color: var(--stat-tests-text); }
 .stat-badge.results { background: var(--stat-results-bg); color: white; }

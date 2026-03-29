@@ -1,9 +1,27 @@
 // Implements: REQ-p00006-B
+// Implements: REQ-d00232-A, REQ-d00232-B
 // Partial: _card-stack.js.j2 — Card rendering, open/close
 
 // =====================================================================
 // Card Stack — Unified for all node kinds
 // =====================================================================
+
+// Comment data cache: nodeId -> { anchor: [thread, ...], ... }
+var cardCommentData = {};
+
+function updateTreeCommentFlag(nodeId) {
+    // Update has_comments in cached treeData and re-render tree
+    var hasComments = cardCommentData[nodeId] &&
+        Object.keys(cardCommentData[nodeId]).length > 0;
+    if (editState.treeData) {
+        editState.treeData.forEach(function(row) {
+            if (row.id === nodeId) {
+                row.has_comments = hasComments;
+            }
+        });
+        renderNavTree();
+    }
+}
 
 async function openCard(nodeId) {
     editState.focusNodeId = nodeId;
@@ -27,6 +45,8 @@ async function openCard(nodeId) {
     renderCardStack();
     // Prefetch coverage data so buttons are colored immediately
     if (data.kind === 'requirement') { prefetchCoverage(nodeId); }
+    // Fetch comment data for margin indicators
+    loadCardComments(nodeId);
     focusCard(nodeId);
     updateNavSelection();
     saveState();
@@ -122,6 +142,360 @@ function renderCardStack() {
             el.contentEditable = 'true';
         });
     }
+
+    // Re-apply cached comment indicators after DOM rebuild
+    editState.openCardOrder.forEach(function(nodeId) {
+        if (cardCommentData[nodeId]) {
+            renderMarginIndicators(nodeId, cardCommentData[nodeId]);
+        }
+    });
+}
+
+// =====================================================================
+// Lost Comments Card (Implements: REQ-d00234-A)
+// =====================================================================
+
+function loadOrphanedComments() {
+    apiFetch('/api/comments/orphaned').then(function(data) {
+        if (data && data.success && data.threads.length > 0) {
+            renderLostCommentsCard(data.threads);
+        } else {
+            // Remove existing lost comments card if no orphans
+            var existing = document.getElementById('lost-comments-card');
+            if (existing) existing.remove();
+        }
+    });
+}
+
+function renderLostCommentsCard(threads) {
+    var existing = document.getElementById('lost-comments-card');
+    if (existing) existing.remove();
+
+    var html = '<div class="req-card lost-comments-card" id="lost-comments-card">';
+    html += '<div class="req-card-header lost-comments-header">';
+    html += '<span class="lost-comments-icon">&#9888;</span>';
+    html += '<span class="lost-comments-title">Lost Comments (' + threads.length + ')</span>';
+    html += '<button class="req-card-close" onclick="document.getElementById(\'lost-comments-card\').remove()" title="Dismiss">&times;</button>';
+    html += '</div>';
+    html += '<div class="req-card-body">';
+    threads.forEach(function(t) {
+        html += '<div class="lost-comment-item">';
+        html += '<div class="lost-comment-origin">Originally on <code>' +
+            escapeHtml(t.anchor || t.root.anchor) + '</code> (deleted)</div>';
+        html += '<div class="comment-entry">';
+        html += '<span class="comment-author">' + escapeHtml(t.root.author) + '</span>';
+        html += ' <span class="comment-date">' + escapeHtml(t.root.date) + '</span>';
+        html += '<div class="comment-text">' + escapeHtml(t.root.text) + '</div>';
+        html += '</div>';
+        if (t.replies && t.replies.length > 0) {
+            t.replies.forEach(function(r) {
+                html += '<div class="comment-entry comment-reply">';
+                html += '<span class="comment-author">' + escapeHtml(r.author) + '</span>';
+                html += ' <span class="comment-date">' + escapeHtml(r.date) + '</span>';
+                html += '<div class="comment-text">' + escapeHtml(r.text) + '</div>';
+                html += '</div>';
+            });
+        }
+        html += '<div class="comment-actions edit-only">';
+        html += '<button class="comment-resolve-btn" onclick="resolveLostComment(\'' +
+            escapeAttr(t.root.id) + '\')">Resolve</button>';
+        html += '</div>';
+        html += '</div>';
+    });
+    html += '</div></div>';
+
+    var body = document.getElementById('card-stack-body');
+    if (body) {
+        body.insertAdjacentHTML('afterbegin', html);
+    }
+}
+
+async function resolveLostComment(commentId) {
+    var data = await apiFetch('/api/comment/resolve', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({comment_id: commentId})
+    });
+    if (data && data.success) {
+        showToast('Comment resolved', 'success');
+        loadOrphanedComments();
+    }
+}
+
+// =====================================================================
+// Comment Margin Indicators (REQ-d00232-B)
+// =====================================================================
+
+function loadCardComments(nodeId) {
+    apiFetch('/api/comments/card?node_id=' + encodeURIComponent(nodeId))
+        .then(function(data) {
+            if (data && data.success) {
+                cardCommentData[nodeId] = data.threads;
+                renderMarginIndicators(nodeId, data.threads);
+            }
+        });
+}
+
+function renderMarginIndicators(nodeId, threads) {
+    var cardEl = document.getElementById('card-' + nodeId);
+    if (!cardEl) return;
+    // Check if this card has any comments at all
+    var hasAnyComments = threads && Object.keys(threads).length > 0;
+    var anchored = cardEl.querySelectorAll('[data-anchor]');
+    anchored.forEach(function(el) {
+        var anchor = el.getAttribute('data-anchor');
+        // Remove previous gutter state
+        el.classList.remove('has-comment-gutter', 'comment-gutter-empty');
+        var existingGutter = el.querySelector('.comment-gutter');
+        if (existingGutter) existingGutter.remove();
+        var count = threads[anchor] ? threads[anchor].length : 0;
+        if (count > 0) {
+            el.classList.add('has-comment-gutter');
+            // Absolute-positioned icon in the left gutter area
+            var gutter = document.createElement('span');
+            gutter.className = 'comment-gutter';
+            gutter.title = count + ' comment' + (count > 1 ? 's' : '') + ' — click to expand';
+            gutter.innerHTML = '<span class="comment-gutter-bubble">\uD83D\uDDE9</span><span class="comment-gutter-count">' + count + '</span>';
+            gutter.onclick = function(e) {
+                e.stopPropagation();
+                toggleCommentThread(anchor);
+            };
+            el.style.position = 'relative';
+            el.appendChild(gutter);
+        } else if (hasAnyComments) {
+            // Empty gutter placeholder so all rows align
+            el.classList.add('comment-gutter-empty');
+        }
+    });
+}
+
+// Implements: REQ-d00233-A
+function toggleCommentThread(anchor) {
+    var existing = document.querySelector('.comment-thread-inline[data-thread-anchor="' + anchor + '"]');
+    if (existing) {
+        existing.remove();
+        return;
+    }
+    var el = document.querySelector('[data-anchor="' + anchor + '"]');
+    if (!el) return;
+    var card = el.closest('.req-card');
+    if (!card) return;
+    var nodeId = (card.id || '').replace(/^card-/, '');
+    if (!nodeId) return;
+    var threads = cardCommentData[nodeId];
+    if (!threads || !threads[anchor]) return;
+    var container = document.createElement('div');
+    container.className = 'comment-thread-inline';
+    container.setAttribute('data-thread-anchor', anchor);
+    threads[anchor].forEach(function(t) {
+        container.appendChild(buildThreadHtml(t, anchor, nodeId));
+    });
+    el.after(container);
+}
+
+function buildThreadHtml(thread, anchor, nodeId) {
+    var div = document.createElement('div');
+    div.className = 'comment-thread-item';
+    div.setAttribute('data-comment-id', thread.root.id);
+    // Root comment
+    var html = '<div class="comment-entry">';
+    html += '<span class="comment-author">' + escapeHtml(thread.root.author) + '</span>';
+    html += ' <span class="comment-date">' + escapeHtml(thread.root.date) + '</span>';
+    html += '<div class="comment-text">' + escapeHtml(thread.root.text) + '</div>';
+    html += '</div>';
+    // Replies
+    if (thread.replies && thread.replies.length > 0) {
+        thread.replies.forEach(function(r) {
+            html += '<div class="comment-entry comment-reply">';
+            html += '<span class="comment-author">' + escapeHtml(r.author) + '</span>';
+            html += ' <span class="comment-date">' + escapeHtml(r.date) + '</span>';
+            html += '<div class="comment-text">' + escapeHtml(r.text) + '</div>';
+            html += '</div>';
+        });
+    }
+    // Edit-mode-only controls: Resolve and Reply
+    html += '<div class="comment-actions edit-only">';
+    html += '<button class="comment-resolve-btn" onclick="resolveComment(\'' +
+        escapeAttr(thread.root.id) + '\', \'' + escapeAttr(anchor) + '\', \'' +
+        escapeAttr(nodeId) + '\')">Resolve</button>';
+    html += '<button class="comment-reply-btn" onclick="showReplyInput(this, \'' +
+        escapeAttr(thread.root.id) + '\', \'' + escapeAttr(anchor) + '\', \'' +
+        escapeAttr(nodeId) + '\')">Reply</button>';
+    html += '</div>';
+    div.innerHTML = html;
+    return div;
+}
+
+async function resolveComment(commentId, anchor, nodeId) {
+    var data = await apiFetch('/api/comment/resolve', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({comment_id: commentId})
+    });
+    if (data && data.success) {
+        // Remove thread item from DOM; if it was the last one, remove the container too
+        var threadEl = document.querySelector('.comment-thread-item[data-comment-id="' + commentId + '"]');
+        if (threadEl) {
+            var container = threadEl.closest('.comment-thread-inline');
+            threadEl.remove();
+            if (container && container.querySelectorAll('.comment-thread-item').length === 0) {
+                container.remove();
+            }
+        }
+        // Remove from cache; clean up empty anchor keys
+        if (cardCommentData[nodeId] && cardCommentData[nodeId][anchor]) {
+            cardCommentData[nodeId][anchor] = cardCommentData[nodeId][anchor].filter(
+                function(t) { return t.root.id !== commentId; }
+            );
+            if (cardCommentData[nodeId][anchor].length === 0) {
+                delete cardCommentData[nodeId][anchor];
+            }
+        }
+        // Refresh margin indicators and tree
+        renderMarginIndicators(nodeId, cardCommentData[nodeId] || {});
+        updateTreeCommentFlag(nodeId);
+        showToast('Comment resolved', 'success');
+    }
+}
+
+function showReplyInput(btn, parentId, anchor, nodeId) {
+    // Remove any existing reply input
+    var existing = btn.closest('.comment-thread-item').querySelector('.comment-reply-input');
+    if (existing) { existing.remove(); return; }
+    var inputDiv = document.createElement('div');
+    inputDiv.className = 'comment-reply-input';
+    inputDiv.innerHTML = '<textarea class="comment-input-text" placeholder="Write a reply..." rows="2"></textarea>' +
+        '<div class="comment-input-actions">' +
+        '<button class="comment-submit-btn" onclick="submitReply(this, \'' +
+        escapeAttr(parentId) + '\', \'' + escapeAttr(anchor) + '\', \'' +
+        escapeAttr(nodeId) + '\')">Reply</button>' +
+        '<button class="comment-cancel-btn" onclick="this.closest(\'.comment-reply-input\').remove()">Cancel</button>' +
+        '</div>';
+    btn.closest('.comment-thread-item').appendChild(inputDiv);
+    inputDiv.querySelector('textarea').focus();
+}
+
+async function submitReply(btn, parentId, anchor, nodeId) {
+    var textarea = btn.closest('.comment-reply-input').querySelector('textarea');
+    var text = textarea.value.trim();
+    if (!text) return;
+    var data = await apiFetch('/api/comment/reply', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({parent_id: parentId, text: text})
+    });
+    if (data && data.success) {
+        // Append reply to DOM
+        var threadItem = btn.closest('.comment-thread-item');
+        var replyDiv = document.createElement('div');
+        replyDiv.className = 'comment-entry comment-reply';
+        replyDiv.innerHTML = '<span class="comment-author">' + escapeHtml(data.comment.author) + '</span>' +
+            ' <span class="comment-date">' + escapeHtml(data.comment.date) + '</span>' +
+            '<div class="comment-text">' + escapeHtml(data.comment.text) + '</div>';
+        var actions = threadItem.querySelector('.comment-actions');
+        threadItem.insertBefore(replyDiv, actions);
+        // Remove input
+        btn.closest('.comment-reply-input').remove();
+        showToast('Reply added', 'success');
+    }
+}
+
+// Implements: REQ-d00233-B
+function showCommentInput(anchor, afterElement) {
+    // Remove any existing comment input and highlight
+    var existing = document.querySelector('.comment-new-input');
+    if (existing) existing.remove();
+    var prevTarget = document.querySelector('.comment-target');
+    if (prevTarget) prevTarget.classList.remove('comment-target');
+
+    // Remember clicked element's position before DOM changes
+    var scrollContainer = document.getElementById('card-stack-body');
+    var elTopBefore = afterElement.getBoundingClientRect().top;
+
+    // Expand any existing comment threads on this anchor so user sees context
+    var card = afterElement.closest('.req-card');
+    if (card) {
+        var nodeId = (card.id || '').replace(/^card-/, '');
+        var threads = cardCommentData[nodeId];
+        if (threads && threads[anchor]) {
+            var existingThread = document.querySelector('.comment-thread-inline[data-thread-anchor="' + anchor + '"]');
+            if (!existingThread) {
+                toggleCommentThread(anchor);
+            }
+        }
+    }
+
+    // Highlight the target element
+    afterElement.classList.add('comment-target');
+    var inputDiv = document.createElement('div');
+    inputDiv.className = 'comment-new-input';
+    inputDiv.innerHTML = '<textarea class="comment-input-text" placeholder="Add a comment..." rows="3"></textarea>' +
+        '<div class="comment-input-actions">' +
+        '<button class="comment-submit-btn" onclick="submitNewComment(this, \'' +
+        escapeAttr(anchor) + '\')">Submit</button>' +
+        '<button class="comment-cancel-btn" onclick="cancelCommentInput()">Cancel</button>' +
+        '</div>';
+    afterElement.after(inputDiv);
+
+    // Restore scroll so clicked element stays in the same visual position
+    if (scrollContainer) {
+        var elTopAfter = afterElement.getBoundingClientRect().top;
+        var drift = elTopAfter - elTopBefore;
+        if (Math.abs(drift) > 1) {
+            scrollContainer.scrollTop += drift;
+        }
+    }
+
+    inputDiv.querySelector('textarea').focus();
+    // Esc to cancel
+    inputDiv.querySelector('textarea').addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') { cancelCommentInput(); }
+    });
+}
+
+function cancelCommentInput() {
+    var input = document.querySelector('.comment-new-input');
+    if (input) input.remove();
+    var target = document.querySelector('.comment-target');
+    if (target) target.classList.remove('comment-target');
+}
+
+async function submitNewComment(btn, anchor) {
+    var textarea = btn.closest('.comment-new-input').querySelector('textarea');
+    var text = textarea.value.trim();
+    if (!text) return;
+    var data = await apiFetch('/api/comment/add', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({anchor: anchor, text: text})
+    });
+    if (data && data.success) {
+        // Remove input and highlight
+        btn.closest('.comment-new-input').remove();
+        var target = document.querySelector('.comment-target');
+        if (target) target.classList.remove('comment-target');
+        // Find the card and reload comments, then show the thread
+        var el = document.querySelector('[data-anchor="' + anchor + '"]');
+        if (el) {
+            var card = el.closest('.req-card');
+            if (card) {
+                var nodeId = (card.id || '').replace(/^card-/, '');
+                // Reload comment data, then refresh indicators and show thread
+                var refreshed = await apiFetch('/api/comments/card?node_id=' + encodeURIComponent(nodeId));
+                if (refreshed && refreshed.success) {
+                    cardCommentData[nodeId] = refreshed.threads;
+                    renderMarginIndicators(nodeId, refreshed.threads);
+                    // Auto-expand the thread on the anchor we just commented on
+                    // Remove any existing inline thread first
+                    var existing = document.querySelector('.comment-thread-inline[data-thread-anchor="' + anchor + '"]');
+                    if (existing) existing.remove();
+                    toggleCommentThread(anchor);
+                }
+                updateTreeCommentFlag(nodeId);
+            }
+        }
+        showToast('Comment added', 'success');
+    }
 }
 
 function buildAssertionHtml(nodeId, a, data) {
@@ -129,7 +503,7 @@ function buildAssertionHtml(nodeId, a, data) {
     var label = a.label || '';
     var text = a.text || '';
     var h = '';
-    h += '<div class="card-assertion-wrapper" data-assertion-id="' + assertionId + '">';
+    h += '<div class="card-assertion-wrapper" data-assertion-id="' + assertionId + '" data-anchor="' + nodeId + '#' + label + '">';
     h += '<div class="card-assertion">';
     h += '<span class="card-assertion-label">' + label + '</span>';
     h += '<span class="card-assertion-text editable-field" ' +
@@ -187,7 +561,7 @@ function buildRemainderHtml(nodeId, rem, idx) {
     var remId = rem.id || '';
     var isPreamble = (rem.heading === 'preamble');
     var isDefBlock = (rem.content_type === 'definition_block');
-    h += '<div class="card-body-section-wrapper" data-remainder-id="' + escapeAttr(remId) + '">';
+    h += '<div class="card-body-section-wrapper" data-remainder-id="' + escapeAttr(remId) + '" data-anchor="' + nodeId + '#section:' + escapeAttr(rem.heading || '') + '">';
     h += '<div class="card-body-section-heading">';
     if (!isDefBlock && !isPreamble) {
         h += '<span class="remainder-heading-view">' + escapeHtml(rem.heading) + '</span>';
@@ -211,7 +585,7 @@ function buildRemainderHtml(nodeId, rem, idx) {
         h += '<textarea class="edit-only remainder-text-edit" data-node-id="' + escapeAttr(remId) + '"' +
             ' data-original="' + escapeAttr(rem.text || '') + '"' +
             ' onblur="onRemainderTextBlur(this)"' +
-            ' style="width:100%;min-height:40px;font-size:0.8rem;border:1px solid #dee2e6;border-radius:4px;padding:6px;resize:vertical;background:#f8f9fa;">' +
+            ' style="width:100%;min-height:120px;font-size:0.8rem;border:1px solid var(--border-color);border-radius:4px;padding:6px;resize:vertical;background:var(--card-bg);color:var(--input-text);">' +
             escapeHtml(rem.text || '') + '</textarea>';
     }
     h += '</div>';
@@ -241,10 +615,10 @@ function buildCardHtml(nodeId, data, collapsed) {
     html += '<input type="text" class="edit-only req-card-title-edit" value="' + escapeAttr(data.title || '') + '"' +
         ' onclick="event.stopPropagation()" onblur="onTitleBlur(this)" data-node-id="' + nodeId + '"' +
         ' data-original="' + escapeAttr(data.title || '') + '"' +
-        ' style="font-size:0.9rem;font-weight:600;border:none;border-bottom:1px dashed #adb5bd;background:transparent;flex:1;outline:none;padding:1px 4px;">';
+        ' style="font-size:0.9rem;font-weight:600;border:none;border-bottom:1px dashed var(--border-color);background:transparent;color:var(--input-text);flex:1;outline:none;padding:1px 4px;">';
     html += '<button class="req-card-delete edit-only" ' +
         'onclick="event.stopPropagation(); onDeleteRequirement(\'' + nodeId + '\')" ' +
-        'title="Delete requirement">&#10005;</button>';
+        'title="Delete requirement">&#x1F5D1;</button>';
     html += '<button class="req-card-close" onclick="event.stopPropagation(); closeCard(\'' + nodeId + '\')" title="Close card">&times;</button>';
     html += '</div>';
 
@@ -306,7 +680,7 @@ function buildCardHtml(nodeId, data, collapsed) {
             'title="Move to different file" style="font-size:0.65rem;">Move</button>' +
             '</span>';
     }
-    html += '<div class="card-section"><div class="card-section-label" style="display:flex;align-items:baseline;">Metadata' + reqSourceLink + '</div>';
+    html += '<div class="card-section" data-anchor="' + nodeId + '"><div class="card-section-label" style="display:flex;align-items:baseline;">Metadata' + reqSourceLink + '</div>';
     html += '<div class="card-meta">';
 
     // Level
@@ -337,13 +711,13 @@ function buildCardHtml(nodeId, data, collapsed) {
     html += '</div></div>';
 
     // Parents section (relationship editor in edit mode)
-    html += '<div class="card-section"><div class="card-section-label">Implements / Refines / Satisfies</div>';
+    html += '<div class="card-section"><div class="card-section-label">Outgoing Links</div>';
     html += '<div class="card-parents">';
     if (data.parents && data.parents.length > 0) {
         data.parents.forEach(function(p) {
             const edgeKind = (p.edge_kind || 'implements').toLowerCase();
             const edgeKindDisplay = edgeKind.charAt(0).toUpperCase() + edgeKind.slice(1);
-            html += '<div class="card-parent-row">';
+            html += '<div class="card-parent-row" data-anchor="' + nodeId + '#edge:' + p.id + '">';
             // View-only kind badge
             html += '<span class="card-parent-kind view-only">' + edgeKindDisplay.toUpperCase() + '</span>';
             // Edit-only kind toggle
@@ -421,7 +795,7 @@ function buildCardHtml(nodeId, data, collapsed) {
             html += '</div>';
         } else {
             html += '<div class="card-section"><div class="card-section-label">Assertions</div>';
-            html += '<div style="font-size:0.8rem;color:#adb5bd;">No assertions defined</div>';
+            html += '<div style="font-size:0.8rem;color:var(--secondary-text);">No assertions defined</div>';
             html += '<button class="card-add-assertion-btn edit-only" onclick="onAddAssertion(\'' + nodeId + '\')">+ Add Assertion</button>';
             html += '</div>';
         }
@@ -478,9 +852,9 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
     // Edit mode: inline title input
     html += '<input type="text" class="edit-only journey-title-edit" value="' + escapeAttr(data.title || '') + '"' +
         ' onclick="event.stopPropagation()" onblur="onJourneyTitleBlur(\'' + nodeId + '\', this)"' +
-        ' style="font-size:0.9rem;font-weight:600;border:none;border-bottom:1px dashed #adb5bd;background:transparent;flex:1;outline:none;">';
+        ' style="font-size:0.9rem;font-weight:600;border:none;border-bottom:1px dashed var(--border-color);background:transparent;color:var(--input-text);flex:1;outline:none;">';
     // Edit mode: delete journey
-    html += '<button class="edit-only journey-delete-btn" onclick="event.stopPropagation(); onDeleteJourney(\'' + nodeId + '\')" title="Delete journey">&times;</button>';
+    html += '<button class="edit-only journey-delete-btn" onclick="event.stopPropagation(); onDeleteJourney(\'' + nodeId + '\')" title="Delete journey">&#x1F5D1;</button>';
     html += '<button class="req-card-close" onclick="event.stopPropagation(); closeCard(\'' + nodeId + '\')" title="Close card">&times;</button>';
     html += '</div>';
 
@@ -496,7 +870,7 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
             escapeHtml(sourcePath.split('/').pop()) + ':' + sourceLine + '</a>';
         sourceLink += '<button class="edit-only journey-move-btn" onclick="event.preventDefault(); onMoveToFile(\'' + nodeId + '\')" style="margin-left:4px;">Move</button>';
     }
-    html += '<div class="card-section"><div class="card-section-label" style="display:flex;align-items:baseline;">Metadata' + sourceLink + '</div>';
+    html += '<div class="card-section" data-anchor="' + nodeId + '"><div class="card-section-label" style="display:flex;align-items:baseline;">Metadata' + sourceLink + '</div>';
     html += '<div class="card-meta">';
 
     // Actor — view + edit
@@ -505,7 +879,7 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
     html += '<span class="card-meta-value journey-field-view">' + escapeHtml(props.actor || '') + '</span>';
     html += '<input type="text" class="edit-only journey-field-edit" value="' + escapeAttr(props.actor || '') + '"' +
         ' data-field="actor" data-journey-id="' + nodeId + '" onblur="onJourneyFieldBlur(this)"' +
-        ' style="font-size:inherit;border:none;border-bottom:1px dashed #adb5bd;background:transparent;width:90%;outline:none;">';
+        ' style="font-size:inherit;border:none;border-bottom:1px dashed var(--border-color);background:transparent;color:var(--input-text);width:90%;outline:none;">';
     html += '</div>';
 
     // Goal — view + edit
@@ -514,7 +888,7 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
     html += '<span class="card-meta-value journey-field-view">' + escapeHtml(props.goal || '') + '</span>';
     html += '<input type="text" class="edit-only journey-field-edit" value="' + escapeAttr(props.goal || '') + '"' +
         ' data-field="goal" data-journey-id="' + nodeId + '" onblur="onJourneyFieldBlur(this)"' +
-        ' style="font-size:inherit;border:none;border-bottom:1px dashed #adb5bd;background:transparent;width:90%;outline:none;">';
+        ' style="font-size:inherit;border:none;border-bottom:1px dashed var(--border-color);background:transparent;color:var(--input-text);width:90%;outline:none;">';
     html += '</div>';
 
     if (props.descriptor) {
@@ -526,15 +900,15 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
 
     html += '</div></div>';
 
-    // Context (view + edit)
+    // Context (view + edit) — styled like remainder sections (Steps, Expected Outcome)
     if (props.context || editState.enabled) {
-        html += '<div class="card-section"><div class="card-section-label">Context</div>';
-        if (props.context) {
-            html += '<div class="journey-card-description journey-field-view">' + simpleMarkdown(props.context) + '</div>';
-        }
-        html += '<input type="text" class="edit-only journey-field-edit" value="' + escapeAttr(props.context || '') + '"' +
-            ' data-field="context" data-journey-id="' + nodeId + '" onblur="onJourneyFieldBlur(this)"' +
-            ' style="width:100%;font-size:0.8rem;border:1px solid #dee2e6;border-radius:4px;padding:4px;background:#f8f9fa;">';
+        html += '<div class="card-body-section-wrapper">';
+        html += '<div class="card-body-section-heading"><span>Context</span></div>';
+        html += '<div class="card-body-section-content journey-field-view">' + simpleMarkdown(props.context || '') + '</div>';
+        html += '<textarea class="edit-only journey-field-edit" data-field="context" data-journey-id="' + nodeId + '"' +
+            ' onblur="onJourneyFieldBlur(this)"' +
+            ' style="width:100%;min-height:120px;font-size:0.8rem;border:1px solid var(--border-color);border-radius:4px;padding:6px;resize:vertical;background:var(--card-bg);color:var(--input-text);">' +
+            escapeHtml(props.context || '') + '</textarea>';
         html += '</div>';
     }
 
@@ -565,16 +939,16 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
     });
     html += '</div>';
     html += '<button class="card-add-rel-btn edit-only" ' +
-        'onclick="onAddJourneyRef(\'' + nodeId + '\', this)">+ Add</button>';
+        'onclick="onAddJourneyRef(\'' + nodeId + '\', this)">+ Add Relationship</button>';
     html += '</div>';
 
     // Sections (view + edit)
     var sections = props.sections || [];
     html += '<div class="journey-sections" data-journey-id="' + nodeId + '">';
     sections.forEach(function(sec) {
-        html += '<div class="card-section journey-section" data-section-name="' + escapeAttr(sec.name) + '">';
+        html += '<div class="card-body-section-wrapper journey-section" data-section-name="' + escapeAttr(sec.name) + '" data-anchor="' + nodeId + '#section:' + escapeAttr(sec.name) + '">';
         // Section header — view + edit
-        html += '<div class="card-section-label journey-section-header">';
+        html += '<div class="card-body-section-heading journey-section-header">';
         html += '<span class="journey-section-name-view">' + escapeHtml(sec.name) + '</span>';
         html += '<input type="text" class="edit-only journey-section-name-edit" value="' + escapeAttr(sec.name) + '"' +
             ' data-journey-id="' + nodeId + '" data-original-name="' + escapeAttr(sec.name) + '"' +
@@ -582,10 +956,10 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
         html += '<button class="edit-only journey-section-delete" onclick="onDeleteJourneySection(\'' + nodeId + '\', \'' + escapeAttr(sec.name) + '\')" title="Delete section">&times;</button>';
         html += '</div>';
         // Section content — view + edit
-        html += '<div class="journey-card-description journey-section-content-view">' + simpleMarkdown(sec.content || '') + '</div>';
+        html += '<div class="card-body-section-content journey-section-content-view">' + simpleMarkdown(sec.content || '') + '</div>';
         html += '<textarea class="edit-only journey-section-content-edit" data-journey-id="' + nodeId + '"' +
             ' data-section-name="' + escapeAttr(sec.name) + '" onblur="onJourneySectionContentBlur(this)"' +
-            ' style="width:100%;min-height:40px;font-size:0.8rem;border:1px solid #dee2e6;border-radius:4px;padding:6px;resize:vertical;background:#f8f9fa;">' +
+            ' style="width:100%;min-height:120px;font-size:0.8rem;border:1px solid var(--border-color);border-radius:4px;padding:6px;resize:vertical;background:var(--card-bg);color:var(--input-text);">' +
             escapeHtml(sec.content || '') + '</textarea>';
         html += '</div>';
     });
@@ -745,10 +1119,25 @@ function setAssertionBadgeMode(mode) {
     recolorCachedButtons();
 }
 
+var _linkStyleCycle = ['full', 'abbrev', 'dots'];
+var _linkStyleLabels = {full: 'Link Style: Full', abbrev: 'Link Style: Abbrv', dots: 'Link Style: Dot'};
+
+function cycleLinkStyle() {
+    var current = editState.assertionBadgeMode || 'abbrev';
+    var idx = _linkStyleCycle.indexOf(current);
+    var next = _linkStyleCycle[(idx + 1) % _linkStyleCycle.length];
+    editState.assertionBadgeMode = next;
+    var btn = document.getElementById('assertion-badge-mode-btn');
+    if (btn) btn.textContent = _linkStyleLabels[next];
+    renderCardStack();
+    recolorCachedButtons();
+    saveState();
+}
+
 function toggleCardViewMode() {
     editState.cardViewMode = editState.cardViewMode === 'compact' ? 'complete' : 'compact';
     var btn = document.getElementById('card-view-mode');
-    if (btn) btn.textContent = editState.cardViewMode === 'compact' ? 'Compact' : 'Complete';
+    if (btn) btn.textContent = (editState.cardViewMode === 'compact' ? 'Compact' : 'Complete') + ' Card View';
     renderCardStack();
     recolorCachedButtons();
     saveState();

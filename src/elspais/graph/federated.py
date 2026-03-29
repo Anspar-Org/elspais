@@ -20,6 +20,7 @@ from elspais.graph.relations import EdgeKind
 
 if TYPE_CHECKING:
     from elspais.graph.builder import TraceGraph
+    from elspais.graph.comments import CommentThread
     from elspais.graph.mutations import BrokenReference
 
 
@@ -190,6 +191,105 @@ class FederatedGraph:
         self._terms = merged
 
     # ─────────────────────────────────────────────────────────────────────────
+    # Comment Routing (Implements: REQ-d00230-B)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def iter_comments(self, anchor: str) -> Iterator[CommentThread]:
+        """Yield comment threads for an anchor, routed to owning repo."""
+        from elspais.graph.comment_store import parse_anchor
+
+        node_id = parse_anchor(anchor)[0]
+        repo_name = self._ownership.get(node_id)
+        if repo_name:
+            entry = self._repos.get(repo_name)
+            if entry and entry.graph:
+                yield from entry.graph.iter_comments(anchor)
+
+    def comment_count(self, anchor: str) -> int:
+        """Count comment threads for an anchor."""
+        from elspais.graph.comment_store import parse_anchor
+
+        node_id = parse_anchor(anchor)[0]
+        repo_name = self._ownership.get(node_id)
+        if repo_name:
+            entry = self._repos.get(repo_name)
+            if entry and entry.graph:
+                return entry.graph.comment_count(anchor)
+        return 0
+
+    def has_comments(self, anchor: str) -> bool:
+        """Check if any comment threads exist for an anchor."""
+        return self.comment_count(anchor) > 0
+
+    def iter_orphaned_comments(self) -> Iterator[CommentThread]:
+        """Yield orphaned comments aggregated across all repos."""
+        for entry in self._repos.values():
+            if entry.graph:
+                yield from entry.graph.iter_orphaned_comments()
+
+    def add_comment_thread(self, node_id: str, thread: CommentThread, source_file: str) -> None:
+        """Add a comment thread to the correct repo's in-memory index."""
+        repo_name = self._ownership.get(node_id)
+        if repo_name:
+            entry = self._repos.get(repo_name)
+            if entry and entry.graph:
+                entry.graph.add_comment_thread(thread, source_file)
+
+    def find_comment_thread(self, comment_id: str) -> tuple[str, CommentThread] | None:
+        """Find a thread by comment ID across all repos."""
+        for entry in self._repos.values():
+            if entry.graph:
+                result = entry.graph.find_comment_thread(comment_id)
+                if result:
+                    return result
+        return None
+
+    def remove_comment_thread(self, comment_id: str) -> str | None:
+        """Remove a thread by comment ID from the correct repo's index."""
+        for entry in self._repos.values():
+            if entry.graph:
+                anchor = entry.graph.remove_comment_thread(comment_id)
+                if anchor:
+                    return anchor
+        return None
+
+    def iter_comments_for_card(self, node_id: str) -> Iterator[tuple[str, list[CommentThread]]]:
+        """Yield (anchor, threads) for all anchors belonging to a node."""
+        repo_name = self._ownership.get(node_id)
+        if repo_name:
+            entry = self._repos.get(repo_name)
+            if entry and entry.graph:
+                yield from entry.graph.iter_comments_for_card(node_id)
+
+    def load_comments(self) -> None:
+        """Load comment indexes for all repos and run promotion.
+
+        Called at viewer startup and on graph refresh.
+        """
+        from elspais.graph.comment_store import (
+            load_comment_index,
+            promote_orphaned_comments,
+        )
+
+        for entry in self._repos.values():
+            if entry.graph:
+                idx = load_comment_index(entry.repo_root)
+                promote_orphaned_comments(idx, entry.graph, entry.repo_root)
+                entry.graph._comment_index = idx
+
+    def comment_source_file(self, anchor: str) -> str | None:
+        """Return the JSONL source file path for an anchor."""
+        from elspais.graph.comment_store import parse_anchor
+
+        node_id = parse_anchor(anchor)[0]
+        repo_name = self._ownership.get(node_id)
+        if repo_name:
+            entry = self._repos.get(repo_name)
+            if entry and entry.graph:
+                return entry.graph.comment_source_file(anchor)
+        return None
+
+    # ─────────────────────────────────────────────────────────────────────────
     # Root Repo Convenience Properties
     # ─────────────────────────────────────────────────────────────────────────
 
@@ -273,6 +373,17 @@ class FederatedGraph:
         if repo_name is None:
             raise KeyError(f"Node '{node_id}' not found in any repo")
         return self._repos[repo_name]
+
+    # Implements: REQ-d00230-D
+    def repo_root_for(self, node_id: str) -> Path | None:
+        """Return the repo root Path for a node, or None if not found.
+
+        Used for write routing (e.g., determining where to write comment JSONL).
+        """
+        repo_name = self._ownership.get(node_id)
+        if repo_name is None:
+            return None
+        return self._repos[repo_name].repo_root
 
     # Implements: REQ-d00200-G
     def config_for(self, node_id: str) -> dict[str, Any] | None:
@@ -866,6 +977,21 @@ class FederatedGraph:
         """
         repo_name = self._ownership[node_id]
         result = self._graph_for(node_id).reconstruct_journey_body(node_id)
+        self._record_mutation(repo_name, result)
+        return result
+
+    def update_remainder(
+        self,
+        node_id: str,
+        text: str | None = None,
+        heading: str | None = None,
+    ) -> MutationEntry:
+        """Update text and/or heading of a REMAINDER node.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[node_id]
+        result = self._graph_for(node_id).update_remainder(node_id, text=text, heading=heading)
         self._record_mutation(repo_name, result)
         return result
 

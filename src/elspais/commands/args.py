@@ -261,6 +261,19 @@ class GlossaryArgs:
 
 
 @dataclasses.dataclass
+class CommentsCompactArgs:
+    """Compact comment JSONL files (strip resolved, collapse promotes)."""
+
+
+@dataclasses.dataclass
+class CommentsArgs:
+    """Comment management commands."""
+
+    action: Annotated[CommentsCompactArgs, tyro.conf.subcommand("compact")]
+    """Comment subcommand to execute."""
+
+
+@dataclasses.dataclass
 class TermIndexArgs:
     """Generate term index and collection manifests from defined terms."""
 
@@ -895,6 +908,7 @@ Command = (
     | Annotated[CompletionArgs, tyro.conf.subcommand("completion")]
     | Annotated[GlossaryArgs, tyro.conf.subcommand("glossary")]
     | Annotated[TermIndexArgs, tyro.conf.subcommand("term-index")]
+    | Annotated[CommentsArgs, tyro.conf.subcommand("comments")]
 )
 
 
@@ -947,6 +961,7 @@ COMMAND_GROUPS: dict[str, str] = {
     "link": "Authoring",
     "glossary": "Authoring",
     "term-index": "Authoring",
+    "comments": "Authoring",
     "viewer": "Viewing",
     "graph": "Viewing",
     "init": "Configuration",

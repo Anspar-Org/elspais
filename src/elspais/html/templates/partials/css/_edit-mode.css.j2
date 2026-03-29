@@ -70,6 +70,7 @@ body.edit-mode .status-select {
     font-size: 0.75rem;
     font-weight: 600;
     background: var(--edit-select-bg);
+    color: var(--input-text);
     cursor: pointer;
     transition: border-color 0.15s;
 }
@@ -114,8 +115,9 @@ body.edit-mode .status-badge-wrapper {
     border-radius: 4px;
     font-size: 0.85em;
     font-family: monospace;
-    background: var(--bg-secondary, #f0f0f0);
-    border: 1px solid var(--border-color, #ccc);
+    background: var(--card-bg);
+    color: var(--input-text);
+    border: 1px solid var(--border-color);
     margin-right: 8px;
 }
 .branch-status-dot {
@@ -131,13 +133,13 @@ body.edit-mode .status-badge-wrapper {
     font-size: 0.95em;
     padding: 3px 10px;
     margin-right: 8px;
-    border: 1px solid var(--border-color, #ccc);
+    border: 1px solid var(--border-color);
     border-radius: 4px;
-    background: var(--bg-secondary, #f0f0f0);
+    background: var(--card-bg);
     cursor: pointer;
-    color: var(--text-primary, #333);
+    color: var(--input-text);
 }
-.btn-sync:hover { background: var(--bg-hover, #e0e0e0); }
+.btn-sync:hover { background: var(--card-header-hover-bg); }
 
 /* --- Multi-Badge Container --- */
 .branch-badges { display: inline-flex; align-items: center; gap: 4px; }
@@ -147,22 +149,23 @@ body.edit-mode .status-badge-wrapper {
 .monorepo-toggle { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 13px; }
 .monorepo-reason { color: var(--text-secondary, #888); font-size: 12px; }
 .repo-tab-bar { display: flex; gap: 4px; flex-wrap: wrap; }
-.repo-tab { padding: 4px 10px; border: 1px solid var(--border-color, #ddd); border-radius: 4px; background: transparent; cursor: pointer; font-size: 12px; color: var(--text-primary, #333); }
+.repo-tab { padding: 4px 10px; border: 1px solid var(--border-color); border-radius: 4px; background: transparent; cursor: pointer; font-size: 12px; color: var(--input-text); }
 .repo-tab.active { background: var(--accent-color, #2563eb); color: white; border-color: var(--accent-color, #2563eb); }
 .repo-tab:disabled { cursor: default; }
 
 /* --- Branch Picker Modal --- */
 
 .branch-badge:hover {
-    background: var(--bg-hover, #e0e0e0);
+    background: var(--card-header-hover-bg);
 }
 
 .branch-list-container {
     max-height: 300px;
     overflow-y: auto;
-    border: 1px solid var(--border-color, #ccc);
+    border: 1px solid var(--border-color);
     border-radius: 4px;
     margin-top: 8px;
+    background: var(--card-bg);
 }
 
 .branch-list-heading {
@@ -170,7 +173,7 @@ body.edit-mode .status-badge-wrapper {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: var(--text-secondary, #888);
+    color: var(--secondary-text);
     padding: 8px 10px 4px;
     margin: 0;
 }
@@ -183,20 +186,21 @@ body.edit-mode .status-badge-wrapper {
     display: flex;
     align-items: center;
     gap: 8px;
+    color: var(--input-text);
 }
 
 .branch-list-item:hover {
-    background: var(--bg-hover, #f0f0f0);
+    background: var(--card-header-hover-bg);
 }
 
 .branch-list-item.current {
-    background: var(--bg-secondary, #e8e8e8);
+    background: var(--card-header-bg);
     font-weight: 600;
     cursor: default;
 }
 
 .branch-list-item.current:hover {
-    background: var(--bg-secondary, #e8e8e8);
+    background: var(--card-header-bg);
 }
 
 .branch-list-item .branch-remote-tag {
@@ -218,16 +222,21 @@ body.edit-mode .status-badge-wrapper {
     z-index: 10000;
 }
 .modal-dialog {
-    background: var(--bg-primary, #fff); border-radius: 8px; padding: 24px;
-    min-width: 360px; max-width: 480px; box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    background: var(--card-bg); color: var(--input-text); border-radius: 8px; padding: 24px;
+    min-width: 360px; max-width: 85vw; width: 640px;
+    max-height: 85vh; overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    border: 1px solid var(--border-color);
+    scrollbar-color: var(--border-color) var(--card-bg);
 }
-.modal-title { font-size: 1.1em; font-weight: 600; margin-bottom: 16px; }
-.modal-label { display: block; font-size: 0.9em; margin-bottom: 4px; color: var(--text-secondary, #666); }
+.modal-title { font-size: 1.1em; font-weight: 600; margin-bottom: 16px; color: var(--input-text); }
+.modal-label { display: block; font-size: 0.9em; margin-bottom: 4px; color: var(--secondary-text); }
 .modal-input {
-    width: 100%; padding: 8px; border: 1px solid var(--border-color, #ccc);
+    width: 100%; padding: 8px; border: 1px solid var(--border-color);
     border-radius: 4px; font-family: monospace; font-size: 0.95em; box-sizing: border-box;
+    background: var(--card-bg); color: var(--input-text);
 }
-.modal-input:focus { outline: 2px solid var(--color-primary, #3b82f6); }
+.modal-input:focus { outline: 2px solid var(--primary); }
 .modal-error { color: #ef4444; font-size: 0.85em; margin-top: 8px; }
 .modal-error.hidden { display: none; }
 .modal-actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
@@ -235,20 +244,22 @@ body.edit-mode .status-badge-wrapper {
 /* --- Push Modal File List --- */
 
 .modal-file-list {
-    max-height: 120px; overflow-y: auto;
-    border: 1px solid var(--border-color, #ccc); border-radius: 4px; padding: 4px;
+    max-height: 50vh; overflow-y: auto;
+    border: 1px solid var(--border-color); border-radius: 4px; padding: 4px;
+    background: var(--card-bg); color: var(--input-text);
+    scrollbar-color: var(--border-color) var(--card-bg);
 }
-.modal-file { font-family: monospace; font-size: 0.85em; padding: 2px 6px; }
-.modal-file.muted { color: var(--text-secondary, #999); }
+.modal-file { font-family: monospace; font-size: 0.85em; padding: 2px 6px; color: var(--input-text); }
+.modal-file.muted { color: var(--secondary-text); }
 .modal-file-checkbox {
     display: block; font-family: monospace; font-size: 0.85em;
-    padding: 3px 6px; cursor: pointer; border-radius: 3px;
+    padding: 3px 6px; cursor: pointer; border-radius: 3px; color: var(--input-text);
 }
-.modal-file-checkbox:hover { background: rgba(255,255,255,0.05); }
-.modal-file-checkbox input[type="checkbox"] { margin-right: 6px; vertical-align: middle; }
+.modal-file-checkbox:hover { background: var(--card-header-hover-bg); }
+.modal-file-checkbox input[type="checkbox"] { margin-right: 6px; vertical-align: middle; accent-color: var(--primary); }
 .modal-file-group-label {
     font-size: 0.75em; text-transform: uppercase; letter-spacing: 0.05em;
-    color: var(--text-secondary, #888); padding: 2px 6px;
+    color: var(--secondary-text); padding: 2px 6px;
 }
 
 /* --- Add REQ/JNY Modal --- */
@@ -261,23 +272,23 @@ body.edit-mode .status-badge-wrapper {
     padding: 3px 6px;
     cursor: pointer;
     border-radius: 3px;
-    color: var(--text-primary, #333);
+    color: var(--input-text);
 }
-.modal-file-option:hover { background: var(--row-hover, rgba(0,0,0,0.05)); }
-.modal-file-option input[type="radio"] { margin-right: 6px; vertical-align: middle; }
+.modal-file-option:hover { background: var(--card-header-hover-bg); }
+.modal-file-option input[type="radio"] { margin-right: 6px; vertical-align: middle; accent-color: var(--primary); }
 .modal-id-display {
     font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
     font-size: 1em;
     font-weight: 600;
     padding: 6px 8px;
-    background: var(--bg-secondary, #f5f5f5);
-    border: 1px solid var(--border-color, #ccc);
+    background: var(--card-header-bg);
+    border: 1px solid var(--border-color);
     border-radius: 4px;
-    color: var(--text-primary, #333);
+    color: var(--input-text);
 }
 .modal-primary-btn {
     padding: 8px 20px;
-    background: var(--color-primary, #3b82f6);
+    background: var(--primary);
     color: #fff;
     border: none;
     border-radius: 4px;
@@ -288,14 +299,14 @@ body.edit-mode .status-badge-wrapper {
 .modal-primary-btn:hover { opacity: 0.9; }
 .modal-cancel-btn {
     padding: 8px 20px;
-    background: none;
-    color: var(--text-secondary, #666);
-    border: 1px solid var(--border-color, #ccc);
+    background: var(--card-bg);
+    color: var(--input-text);
+    border: 1px solid var(--border-color);
     border-radius: 4px;
     font-size: 0.9em;
     cursor: pointer;
 }
-.modal-cancel-btn:hover { background: var(--row-hover, rgba(0,0,0,0.05)); }
+.modal-cancel-btn:hover { background: var(--card-header-hover-bg); }
 
 /* --- Error Modal --- */
 

@@ -1,6 +1,12 @@
 /* Implements: REQ-p00006-B */
 /* Partial: _card-stack.css.j2 — Card stack panel and requirement cards */
 
+/* Scrollbar theming for textareas and overflow areas */
+.req-card textarea,
+.req-card .card-body-section-content {
+    scrollbar-color: var(--border-color) var(--card-bg);
+}
+
 /* --- Card Stack (Center) --- */
 
 .card-stack-panel {
@@ -590,9 +596,9 @@ body.edit-mode .view-only {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: var(--card-section-label);
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--input-text);
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
@@ -612,7 +618,7 @@ body.edit-mode .view-only {
 
 .card-body-section-content {
     font-size: 0.8rem;
-    color: var(--text-primary);
+    color: var(--input-text);
     line-height: 1.6;
     white-space: pre-wrap;
     margin-top: 4px;
@@ -635,7 +641,7 @@ body.edit-mode .view-only {
 
 .journey-card-description {
     font-size: 0.8rem;
-    color: var(--journey-card-description);
+    color: var(--input-text);
     line-height: 1.6;
     white-space: pre-wrap;
 }
@@ -724,9 +730,21 @@ body.edit-mode .view-only {
 
 .remainder-heading-edit {
     font-size: 0.75rem;
-    border: 1px solid #dee2e6;
+    border: 1px solid var(--border-color);
     border-radius: 4px;
     padding: 2px 6px;
+    background: var(--card-bg);
+    color: var(--input-text);
+}
+
+/* Theme all edit-mode inputs and textareas in cards */
+.journey-section-name-edit,
+.journey-section-content-edit,
+.journey-field-edit,
+.remainder-text-edit {
+    background: var(--card-bg) !important;
+    color: var(--input-text) !important;
+    border-color: var(--border-color) !important;
 }
 
 .card-add-section-btn {
@@ -999,4 +1017,261 @@ a.assertion-test-link:hover {
 .assertion-result-file-link:hover {
     color: var(--assertion-result-file-link-hover);
     text-decoration: underline;
+}
+
+/* ── Comment Gutter Indicators (REQ-d00232-B) ────────────────────── */
+
+.has-comment-gutter {
+    border-left: 3px solid #e8a317 !important;
+    margin-left: 16px !important;
+}
+
+.comment-gutter-empty {
+    margin-left: 16px !important;
+}
+
+.comment-gutter {
+    position: absolute;
+    left: -27px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #d4900a;
+    z-index: 1;
+    transition: opacity 0.15s;
+    opacity: 0.85;
+}
+
+.comment-gutter:hover {
+    opacity: 1;
+}
+
+.comment-gutter-bubble {
+    font-size: 1.3rem;
+    line-height: 1;
+}
+
+.comment-gutter-count {
+    position: absolute;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #fff;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -55%);
+    text-shadow: 0 0 2px rgba(0,0,0,0.3);
+}
+
+/* ── Comment Target Highlight ────────────────────────────────────── */
+
+.comment-target {
+    outline: 3px solid #dc3545 !important;
+    outline-offset: -1px;
+    background-color: rgba(220, 53, 69, 0.05) !important;
+}
+
+/* Inline comment thread preview */
+.comment-thread-inline {
+    background: var(--card-bg);
+    border-left: 3px solid #e8a317;
+    padding: 8px 10px;
+    margin: 0;
+    margin-left: 16px;
+    font-size: 0.78rem;
+    border-radius: 0;
+}
+
+.comment-thread-item {
+    margin-bottom: 6px;
+}
+
+.comment-thread-item:last-child {
+    margin-bottom: 0;
+}
+
+.comment-author {
+    font-weight: 600;
+    color: var(--input-text);
+}
+
+.comment-date {
+    color: var(--secondary-text);
+    font-size: 0.7rem;
+    margin-left: 6px;
+}
+
+.comment-text {
+    margin-top: 2px;
+    color: var(--input-text);
+}
+
+/* ── Comment Mode (REQ-d00233-B) ─────────────────────────────────── */
+
+.comment-mode [data-anchor]:hover {
+    outline: 3px solid #0d6efd;
+    outline-offset: -1px;
+    background-color: rgba(13, 110, 253, 0.06) !important;
+}
+
+.comment-mode,
+.comment-mode * {
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 20 20'%3E%3Cpath fill='%23adb5bd' d='M3 1.5C2 1.5 1.2 2.3 1.2 3.2v9.6c0 1 .8 1.7 1.8 1.7H6l4 4 4-4h3c1 0 1.8-.8 1.8-1.7V3.2c0-1-.8-1.7-1.8-1.7H3z'/%3E%3Ctext x='10' y='10.5' text-anchor='middle' font-size='5.5' font-weight='700' font-family='sans-serif' fill='%23333'%3EESC%3C/text%3E%3C/svg%3E") 10 10, pointer !important;
+}
+
+.comment-mode [data-anchor],
+.comment-mode [data-anchor] * {
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 16 16'%3E%3Cpath fill='%230d6efd' d='M2.5 1C1.7 1 1 1.7 1 2.5v8C1 11.3 1.7 12 2.5 12H5l3 3 3-3h2.5c.8 0 1.5-.7 1.5-1.5v-8C15 1.7 14.3 1 13.5 1h-11z'/%3E%3C/svg%3E") 8 8, pointer !important;
+}
+
+/* ── Inline Thread Controls (REQ-d00233-A) ────────────────────────── */
+
+.comment-entry {
+    margin-bottom: 4px;
+}
+
+.comment-reply {
+    margin-left: 16px;
+    padding-left: 8px;
+    border-left: 2px solid var(--border-color);
+}
+
+.comment-actions {
+    margin-top: 6px;
+    display: flex;
+    gap: 6px;
+}
+
+.comment-resolve-btn,
+.comment-reply-btn {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    background: var(--card-bg);
+    cursor: pointer;
+    color: var(--input-text);
+}
+
+.comment-resolve-btn:hover { background: #f8d7da; color: #842029; }
+.comment-reply-btn:hover { background: #d1ecf1; color: #0c5460; }
+
+/* Comment input (new comment and reply) */
+.comment-new-input,
+.comment-reply-input {
+    margin: 6px 0;
+    padding: 8px;
+    background: var(--card-bg);
+    border: 1px solid #e8a317;
+    border-radius: 4px;
+}
+
+.comment-input-text {
+    width: 100%;
+    font-size: 0.8rem;
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    padding: 6px;
+    resize: vertical;
+    font-family: inherit;
+    background: var(--card-bg);
+    color: var(--input-text);
+}
+
+.comment-input-actions {
+    margin-top: 4px;
+    display: flex;
+    gap: 6px;
+}
+
+.comment-submit-btn {
+    font-size: 0.7rem;
+    padding: 3px 10px;
+    border: none;
+    border-radius: 3px;
+    background: #0d6efd;
+    color: #fff;
+    cursor: pointer;
+}
+
+.comment-submit-btn:hover { background: #0b5ed7; }
+
+.comment-cancel-btn {
+    font-size: 0.7rem;
+    padding: 3px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    background: var(--card-bg);
+    cursor: pointer;
+    color: var(--input-text);
+}
+
+.comment-cancel-btn:hover { background: var(--card-header-hover-bg); }
+
+/* Busy state for buttons hitting the API */
+.busy {
+    opacity: 0.5;
+    pointer-events: none;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* Comment mode toolbar button */
+.btn-comment-mode {
+    padding: 4px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--card-bg);
+    cursor: pointer;
+    color: var(--input-text);
+}
+
+.btn-comment-mode:hover { background: var(--card-header-hover-bg); }
+.btn-comment-mode.active { background: #0d6efd; color: #fff; border-color: #0d6efd; }
+
+/* ── Lost Comments Card (REQ-d00234-A) ───────────────────────────── */
+
+.lost-comments-card {
+    border-color: #e8a317;
+    background: var(--card-bg);
+}
+
+.lost-comments-header {
+    background: var(--card-header-bg);
+    border-bottom: 1px solid #e8a317;
+}
+
+.lost-comments-icon {
+    color: #e8a317;
+    font-size: 1.1rem;
+    margin-right: 6px;
+}
+
+.lost-comments-title {
+    font-weight: 600;
+    color: #e8a317;
+    flex: 1;
+}
+
+.lost-comment-item {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.lost-comment-item:last-child {
+    border-bottom: none;
+}
+
+.lost-comment-origin {
+    font-size: 0.72rem;
+    color: #856404;
+    margin-bottom: 4px;
+}
+
+.lost-comment-origin code {
+    background: var(--card-header-bg);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 0.7rem;
 }

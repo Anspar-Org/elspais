@@ -1,5 +1,23 @@
 # Known Issues
 
+[ ] checks : bug
+- No way to know which requirements have errors:
+  ✗ spec.format_rules: 2 format error(s) in 102 requirements
+  ⚠ spec.no_assertions: 2 requirement(s) have no assertions (not testable)
+
+[ ] chore: _generated files
+- set to read-only as (some) protection against people accidently editing them
+
+[ ] 'fix' command: bug
+- bug 1:
+- doesn't tell you why status=Active REQs are not auto-fixed
+- requires a message -m "reason for update"
+- bug 2:
+- should not be a noted change unless hash changed. 
+- e.g. changes to Rationale or whitespace changes will not change hash in 'normalized assertions' mode
+- bug 3:
+- -m "message" doesn't work
+
 [ ] mcp : bug
 - MCP refresh() should return error if unsaved changes
 - must use separate 'discard' command as a safety
@@ -314,3 +332,73 @@
 - Rename spec/ files more sensibly  and consistently
 - Renumber REQs to follow a pre-fix-per-file convention (not enforced, just for convenience)
 - The file mutators should be renumbering easy- just make sure it also catches the code and test file references, not just REQ/JNY refs.
+
+[ ] viewer : refactor — Unify REQ and JNY card rendering
+- buildCardHtml() and buildJourneyCardHtml() share most of their structure but are separate functions with duplicated code
+- Extract a shared buildCardBase() that renders common parts: header, file link, coverage badges, outgoing links, body sections
+- REQ-specific: assertions, coverage dimension badges, hash
+- JNY-specific: actor/goal/topic metadata fields
+- Add Validates coverage badge to JNY cards (roll-up data + expandable source links, same as REQ)
+- Remove "METADATA" heading (noise) — move file link to header line with badges
+- Approach: stay in JS (cards are client-rendered from API JSON), factor shared structure into common function
+- API optimization: /api/node/ returns ~97% unused data for card rendering (e.g. REQ-p00002: 296 children but card uses 20; 263 links unused entirely — coverage comes from separate endpoints). The card needs only assertions, remainders, child REQ IDs, and parent edges. Tests, code, journeys, keywords, and transitive links are waste. Fix: filter children/links in the serializer, or use /api/requirement/ (which is already lean) and enrich it with the missing fields (remainders, assertion_links, coverage_dimensions)
+
+[ ] Exemplar-2 : Major Project — Requirement quality and organization
+- Exemplar-1 was about achieving 100% REQ coverage. Now the REQs themselves need to make sense.
+- Problem: assertions are too coarse. E.g. REQ-p00002-A ("validate format against configurable patterns and rules") has 91 tests — tests for config parsing, TOML roundtrips, health output, pattern matching, etc. all lumped under one assertion.
+- Goal: each assertion should be specific enough that 2-10 tests cover it (depending on complexity/edge cases). Broad assertions should be refined into more specific child requirements using Refines edges.
+- Go through all REQs and JNYs and reorganize:
+  - Split coarse assertions into specific sub-requirements (use Refines)
+  - Ensure test-to-assertion mapping is meaningful (a test should clearly be about that assertion)
+  - Organize the hierarchy so PRD -> OPS -> DEV decomposition is clean
+  - Check that JNY Validates edges target the right level of specificity
+- Adopt the style-guide.md REQs from hht_diary as a standard template:
+  - Include in `elspais init` template generation so new repos get a baseline for how to write REQs
+  - User can edit/delete them, but they establish conventions if the user doesn't have their own
+  - Covers: assertion granularity, naming conventions, hierarchy rules, when to use Refines vs Implements
+
+[ ] feature : Action-type Requirements
+- Current requirement types are functional/declarative ("the system SHALL..."). Need support for Action-type requirements that describe procedures, workflows, or operational steps (e.g. "the operator SHALL perform X when Y occurs")
+- Actions have different traceability semantics: they may be validated by journeys rather than verified by tests
+- Design needed: how actions differ from standard requirements in the data model, rendering, and coverage
+
+[ ] feature : Exemplar project template for `elspais init`
+- A minimal mock project installable via `elspais init --example` (or similar) that demonstrates every aspect of elspais and traceability
+- NOT a complete project — just 1-2 concrete examples of each concept:
+  - 2-3 PRD requirements with proper hierarchy (PRD -> OPS -> DEV using Implements/Refines)
+  - 1 cross-cutting concern using Satisfies (e.g. a security or compliance template)
+  - 2-3 user journeys with Validates edges targeting specific assertions
+  - 1-2 action-type requirements (when supported)
+  - Defined terms with proper definition-list syntax
+  - Reference documentation section
+  - A few test files with Verifies markers showing the naming convention
+  - A code file with Implements markers
+  - Example .elspais.toml with common configuration patterns
+- Purpose: new users can see a working example instead of reading abstract documentation
+- The mock project should live in tests/fixtures/ and double as the canonical test fixture (see test efficiency issue below)
+
+[ ] chore : Test fixture consolidation
+- Currently tests create ad-hoc spec files, graphs, and configs on-the-fly in each test or conftest
+- This is fragile (fixtures diverge from real graph behavior) and wasteful (hundreds of tiny temp setups)
+- Instead: define a set of canonical fixtures
+  - A "standard fixture" with known REQs, JNYs, assertions, edges, code refs, test refs, and defined terms
+  - Tests query/assert against this fixture rather than building throwaway graphs
+  - Parametrize tests where variations are needed (e.g. different config options applied to the same fixture)
+  - multiple fixtures for testing different config settings, error handling, etc.
+  - one of the fixtures should be the 'exemplar' project template
+- Benefits: faster tests (fewer graph builds), more realistic coverage (tests run against a real-shaped graph), easier to maintain (one fixture to update, not hundreds of inline setups)
+
+[ ] viewer : refactor — Unified filter system redesign
+- All filters should use the same convention: solid = visible, outlined = hidden
+- Shift+click or Ctrl+click = "solo" — turn off all others in the same group (like Solo on an audio mixer)
+- Filter groups (AND between groups, OR within group):
+  1. **Git state**: Unsaved, Uncommitted, Changed, Unchanged — colored to match tree indicators
+  2. **Status**: Active, Draft, Deprecated, Proposed (and any custom statuses)
+  3. **Hierarchy**: Root, Internal, Leaf — replaces the "Leaf Only" checkbox
+  4. **Coverage**: None, Partial, Full — replace the select dropdown with buttons
+  5. **Search**: text filter input, with "Show hidden parents" toggle (replaces "Hide Filtered", default on, reversed meaning)
+- Unavailable buttons (zero matching items) are greyed out and unclickable
+- When all buttons in a group are off, that group effectively hides everything — warn or prevent this
+- Coverage buttons need the same solid/outlined treatment as other groups
+- "Hide Filtered" checkbox renamed to "Show hidden parents" with reversed default (on by default)
+- Each group should be visually separated in the toolbar

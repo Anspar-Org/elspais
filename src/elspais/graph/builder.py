@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from elspais.graph.comment_store import update_anchors_on_rename
+from elspais.graph.comments import CommentIndex, CommentThread
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
 from elspais.graph.parsers import ParsedContent
@@ -65,6 +67,9 @@ class TraceGraph:
 
     # Implements: REQ-d00222-A
     _terms: TermDictionary = field(default_factory=TermDictionary, init=False)
+
+    # Implements: REQ-d00230-A
+    _comment_index: CommentIndex = field(default_factory=CommentIndex, init=False)
 
     # Mutation infrastructure
     _mutation_log: MutationLog = field(default_factory=MutationLog, init=False)
@@ -908,6 +913,9 @@ class TraceGraph:
                             child.set_id(new_assertion_id)
                             self._index[new_assertion_id] = child
 
+        # Implements: REQ-d00230-C
+        update_anchors_on_rename(self._comment_index, old_id, new_id, self.repo_root)
+
         self._mutation_log.append(entry)
         return entry
 
@@ -1241,6 +1249,11 @@ class TraceGraph:
 
         # Recompute parent hash
         self._recompute_requirement_hash(parent)
+
+        # Implements: REQ-d00230-C
+        old_anchor = f"{parent.id}#{old_label}"
+        new_anchor = f"{parent.id}#{new_label}"
+        update_anchors_on_rename(self._comment_index, old_anchor, new_anchor, self.repo_root)
 
         self._mutation_log.append(entry)
         return entry
@@ -2654,6 +2667,55 @@ class TraceGraph:
         )
         self._mutation_log.append(entry)
         return entry
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Comment Delegates (Implements: REQ-d00230-A)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def iter_comments(self, anchor: str) -> Iterator[CommentThread]:
+        """Yield comment threads for an anchor."""
+        return self._comment_index.iter_threads(anchor)
+
+    def comment_count(self, anchor: str) -> int:
+        """Count comment threads for an anchor."""
+        return self._comment_index.thread_count(anchor)
+
+    def has_comments(self, anchor: str) -> bool:
+        """Check if any comment threads exist for an anchor."""
+        return self._comment_index.has_threads(anchor)
+
+    def iter_orphaned_comments(self) -> Iterator[CommentThread]:
+        """Yield orphaned comment threads."""
+        return self._comment_index.iter_orphaned()
+
+    def add_comment_thread(self, thread: CommentThread, source_file: str) -> None:
+        """Add a comment thread to the in-memory index."""
+        self._comment_index.add_thread(thread, source_file)
+
+    def find_comment_thread(self, comment_id: str) -> tuple[str, CommentThread] | None:
+        """Find a thread containing a comment by its ID.
+
+        Returns (anchor, thread) or None if not found.
+        """
+        return self._comment_index.find_thread(comment_id)
+
+    def remove_comment_thread(self, comment_id: str) -> str | None:
+        """Remove a thread by its root comment ID from the in-memory index.
+
+        Returns the anchor of the removed thread, or None if not found.
+        """
+        return self._comment_index.remove_thread(comment_id)
+
+    def iter_comments_for_card(self, node_id: str) -> Iterator[tuple[str, list[CommentThread]]]:
+        """Yield (anchor, threads) pairs for all anchors belonging to a node."""
+        for anchor in self._comment_index.iter_all_anchors_for_node(node_id):
+            threads = list(self._comment_index.iter_threads(anchor))
+            if threads:
+                yield anchor, threads
+
+    def comment_source_file(self, anchor: str) -> str | None:
+        """Return the JSONL source file path for an anchor."""
+        return self._comment_index.source_file_for(anchor)
 
 
 class GraphBuilder:
