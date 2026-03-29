@@ -63,3 +63,9 @@ Compliance requires complete audit trails for FDA 21 CFR Part 11.
 
 *End* *Audit Logging* | **Hash**: f2c44ef9
 ---
+
+## Design Notes
+
+These requirements are derived from the FDA 21 CFR Part 11 compliance framework
+and HIPAA Security Rule. The authentication requirements specifically address
+the electronic signature provisions.
