@@ -449,10 +449,18 @@ function renderNavTree() {
                 : '';
             // Indicators (same as tree mode)
             var flind = '';
-            flind += '<span class="nav-tree-indicator' + (flrow.has_comments ? ' nav-tree-comment-icon direct' : '') + '">' + (flrow.has_comments ? '&#x1F5E9;' : '') + '</span>';
-            flind += '<span class="nav-tree-indicator' + (flrow.is_unsaved ? ' unsaved' : '') + '">' + (flrow.is_unsaved ? '&#x25CF;' : '') + '</span>';
-            flind += '<span class="nav-tree-indicator' + (flrow.is_uncommitted ? ' uncommitted' : '') + '">' + (flrow.is_uncommitted ? '&#x25C6;' : '') + '</span>';
-            flind += '<span class="nav-tree-indicator' + (flrow.is_changed ? ' changed' : '') + '">' + (flrow.is_changed ? '&#x25C6;' : '') + '</span>';
+            flind += '<span class="nav-tree-indicator' + (flrow.has_comments ? ' nav-tree-comment-icon direct' : '') + '"' +
+                (flrow.has_comments ? ' title="Has comments"' : '') +
+                '>' + (flrow.has_comments ? '&#x1F5E9;' : '') + '</span>';
+            flind += '<span class="nav-tree-indicator' + (flrow.is_unsaved ? ' unsaved' : '') + '"' +
+                (flrow.is_unsaved ? ' title="Unsaved in-memory edit"' : '') +
+                '>' + (flrow.is_unsaved ? '&#x25CF;' : '') + '</span>';
+            flind += '<span class="nav-tree-indicator' + (flrow.is_uncommitted ? ' uncommitted' : '') + '"' +
+                (flrow.is_uncommitted ? ' title="Saved but not committed"' : '') +
+                '>' + (flrow.is_uncommitted ? '&#x25C6;' : '') + '</span>';
+            flind += '<span class="nav-tree-indicator' + (flrow.is_changed ? ' changed' : '') + '"' +
+                (flrow.is_changed ? ' title="Changed on this branch vs main"' : '') +
+                '>' + (flrow.is_changed ? '&#x25C6;' : '') + '</span>';
             flatHtml += '<div class="nav-tree-row' + flSelected + '" ' +
                 'data-id="' + flrow.id + '" ' +
                 'data-kind="requirement" ' +
