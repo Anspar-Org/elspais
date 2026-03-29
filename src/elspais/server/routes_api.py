@@ -766,6 +766,15 @@ async def api_run_gaps(request: Request) -> JSONResponse:
     return JSONResponse(compute_gaps(state.graph, state.config, params))
 
 
+async def api_run_errors(request: Request) -> JSONResponse:
+    """GET /api/run/errors - Spec format violations and missing assertions."""
+    from elspais.commands.errors import compute_errors
+
+    state = _st(request)
+    params = dict(request.query_params)
+    return JSONResponse(compute_errors(state.graph, state.config, params))
+
+
 async def api_run_unlinked(request: Request) -> JSONResponse:
     """GET /api/run/unlinked - Unlinked test and code nodes."""
     from elspais.commands.unlinked import compute_unlinked

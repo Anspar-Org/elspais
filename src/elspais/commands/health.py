@@ -1597,45 +1597,131 @@ def check_code_coverage(
 
 
 def check_unlinked_code(graph: FederatedGraph) -> HealthCheck:
-    """Check for CODE nodes not linked to any requirement."""
+    """Check for code files with no traceability markers.
+
+    Finds FILE nodes of type CODE that were scanned but contain no
+    CODE child nodes (i.e. no Implements: or Verifies: comments found).
+    """
     from elspais.graph import NodeKind
+    from elspais.graph.GraphNode import FileType
+    from elspais.graph.relations import EdgeKind
 
-    unlinked = []
-    for node in graph.iter_unlinked(NodeKind.CODE):
-        file_n = node.file_node()
-        unlinked.append(
-            {
-                "id": node.id,
-                "file": file_n.get_field("relative_path") if file_n else "unknown",
-                "line": node.get_field("parse_line"),
-            }
+    unlinked_files = []
+    for file_node in graph.iter_roots(NodeKind.FILE):
+        if file_node.get_field("file_type") != FileType.CODE:
+            continue
+        has_code_child = any(
+            child.kind == NodeKind.CODE
+            for child in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
         )
+        if not has_code_child:
+            unlinked_files.append(file_node.get_field("relative_path") or file_node.id)
 
-    if unlinked:
+    if unlinked_files:
         findings = [
             HealthFinding(
-                message=f"Unlinked code: {u['id']}",
-                file_path=u["file"],
-                line=u["line"],
-                node_id=u["id"],
+                message=f"No traceability markers: {f}",
+                file_path=f,
             )
-            for u in unlinked
+            for f in sorted(unlinked_files)
         ]
         return HealthCheck(
             name="code.unlinked",
             passed=False,
-            message=f"{len(unlinked)} code references not linked to any requirement",
+            message=f"{len(unlinked_files)} code file(s) with no traceability markers",
             category="code",
             severity="info",
-            details={"count": len(unlinked), "unlinked": [u["id"] for u in unlinked[:20]]},
+            details={"count": len(unlinked_files), "files": sorted(unlinked_files)[:20]},
             findings=findings,
         )
 
     return HealthCheck(
         name="code.unlinked",
         passed=True,
-        message="All code references linked to requirements",
+        message="All code files have traceability markers",
         category="code",
+    )
+
+
+def _check_status_references(
+    graph: FederatedGraph,
+    source_kind: Any,  # NodeKind enum value
+    role: StatusRole,
+    severity: str,
+    exclude_status: set[str] | None = None,
+) -> HealthCheck:
+    """Check for source nodes referencing requirements of a given status role.
+
+    When --status promotes a status to active-like, it's removed from
+    exclude_status. We mirror that: statuses NOT in exclude_status are
+    treated as active and skip this check.
+
+    Args:
+        graph: The federated traceability graph.
+        source_kind: NodeKind.CODE or NodeKind.TEST.
+        role: The StatusRole to flag (RETIRED, PROVISIONAL, ASPIRATIONAL).
+        severity: Check severity level (info/warning/error).
+        exclude_status: Statuses currently excluded from coverage.
+    """
+    from elspais.config import get_status_roles
+    from elspais.graph import NodeKind
+    from elspais.graph.relations import EdgeKind
+
+    roles_cfg = get_status_roles({})
+    category = "code" if source_kind == NodeKind.CODE else "tests"
+    check_name = f"{category}.{role.value}_references"
+
+    _TRACEABILITY_EDGES = {EdgeKind.IMPLEMENTS, EdgeKind.VERIFIES, EdgeKind.VALIDATES}
+
+    findings: list[HealthFinding] = []
+    for node in graph.nodes_by_kind(source_kind):
+        # Edge direction: REQ/ASSERTION -> CODE/TEST (parent links child)
+        # So from CODE/TEST, look at incoming edges (parents)
+        for parent in node.iter_parents(edge_kinds=_TRACEABILITY_EDGES):
+            # Walk to the requirement (parent may be an assertion)
+            req = parent
+            if req.kind == NodeKind.ASSERTION:
+                for p in req.iter_parents():
+                    if p.kind == NodeKind.REQUIREMENT:
+                        req = p
+                        break
+            if req.kind != NodeKind.REQUIREMENT:
+                continue
+            req_status = req.status
+            # If this status was promoted by --status, skip it
+            if exclude_status and req_status and req_status not in exclude_status:
+                continue
+            if roles_cfg.role_of(req_status) != role:
+                continue
+            fn = node.file_node()
+            findings.append(
+                HealthFinding(
+                    message=(
+                        f"{node.id} references {req.id} "
+                        f"(status={req_status}, role={role.value})"
+                    ),
+                    file_path=fn.get_field("relative_path") if fn else None,
+                    line=node.get_field("parse_line"),
+                    node_id=node.id,
+                )
+            )
+
+    role_label = role.value
+    if findings:
+        return HealthCheck(
+            name=check_name,
+            passed=False,
+            message=f"{len(findings)} {category} reference(s) to {role_label} requirements",
+            category=category,
+            severity=severity,
+            findings=findings,
+        )
+
+    return HealthCheck(
+        name=check_name,
+        passed=True,
+        message=f"No {category} references to {role_label} requirements",
+        category=category,
     )
 
 
@@ -1647,9 +1733,21 @@ def run_code_checks(
     """Run all code reference health checks."""
     from elspais.graph import NodeKind
 
+    typed_config = _validate_config(config or {})
+    ref_sev = typed_config.rules.references
+
     checks = [
         check_code_coverage(graph, exclude_status=exclude_status),
         check_unlinked_code(graph),
+        _check_status_references(
+            graph, NodeKind.CODE, StatusRole.RETIRED, ref_sev.retired, exclude_status
+        ),
+        _check_status_references(
+            graph, NodeKind.CODE, StatusRole.PROVISIONAL, ref_sev.provisional, exclude_status
+        ),
+        _check_status_references(
+            graph, NodeKind.CODE, StatusRole.ASPIRATIONAL, ref_sev.aspirational, exclude_status
+        ),
     ]
 
     # Add code_tested dimension only when line coverage data is present
@@ -1813,44 +1911,48 @@ def check_uat_coverage(
 
 
 def check_unlinked_tests(graph: FederatedGraph) -> HealthCheck:
-    """Check for TEST nodes not linked to any requirement."""
+    """Check for test files with no traceability markers.
+
+    Finds FILE nodes of type TEST that were scanned but contain no
+    TEST child nodes (i.e. no REQ-xxx patterns or Verifies: comments found).
+    """
     from elspais.graph import NodeKind
+    from elspais.graph.GraphNode import FileType
+    from elspais.graph.relations import EdgeKind
 
-    unlinked = []
-    for node in graph.iter_unlinked(NodeKind.TEST):
-        file_n = node.file_node()
-        unlinked.append(
-            {
-                "id": node.id,
-                "file": file_n.get_field("relative_path") if file_n else "unknown",
-                "line": node.get_field("parse_line"),
-            }
+    unlinked_files = []
+    for file_node in graph.iter_roots(NodeKind.FILE):
+        if file_node.get_field("file_type") != FileType.TEST:
+            continue
+        has_test_child = any(
+            child.kind == NodeKind.TEST
+            for child in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
         )
+        if not has_test_child:
+            unlinked_files.append(file_node.get_field("relative_path") or file_node.id)
 
-    if unlinked:
+    if unlinked_files:
         findings = [
             HealthFinding(
-                message=f"Unlinked test: {u['id']}",
-                file_path=u["file"],
-                line=u["line"],
-                node_id=u["id"],
+                message=f"No traceability markers: {f}",
+                file_path=f,
             )
-            for u in unlinked
+            for f in sorted(unlinked_files)
         ]
         return HealthCheck(
             name="tests.unlinked",
             passed=False,
-            message=f"{len(unlinked)} tests not linked to any requirement",
+            message=f"{len(unlinked_files)} test file(s) with no traceability markers",
             category="tests",
             severity="info",
-            details={"count": len(unlinked), "unlinked": [u["id"] for u in unlinked[:20]]},
+            details={"count": len(unlinked_files), "files": sorted(unlinked_files)[:20]},
             findings=findings,
         )
 
     return HealthCheck(
         name="tests.unlinked",
         passed=True,
-        message="All tests linked to requirements",
+        message="All test files have traceability markers",
         category="tests",
     )
 
@@ -1963,11 +2065,25 @@ def run_test_checks(
     graph: FederatedGraph, exclude_status: set[str] | None = None, config: dict | None = None
 ) -> list[HealthCheck]:
     """Run all test file health checks."""
+    from elspais.graph import NodeKind
+
+    typed_config = _validate_config(config or {})
+    ref_sev = typed_config.rules.references
+
     return [
         check_test_coverage(graph, exclude_status=exclude_status, config=config),
         check_dimension_coverage(graph, "verified", exclude_status=exclude_status, config=config),
         check_unlinked_tests(graph),
         check_test_results(graph, config=config),
+        _check_status_references(
+            graph, NodeKind.TEST, StatusRole.RETIRED, ref_sev.retired, exclude_status
+        ),
+        _check_status_references(
+            graph, NodeKind.TEST, StatusRole.PROVISIONAL, ref_sev.provisional, exclude_status
+        ),
+        _check_status_references(
+            graph, NodeKind.TEST, StatusRole.ASPIRATIONAL, ref_sev.aspirational, exclude_status
+        ),
     ]
 
 
@@ -2326,8 +2442,8 @@ def _format_report(
 _FOLLOWUP_COMMANDS: dict[str, str] = {
     "spec.hash_integrity": "elspais fix",
     "spec.needs_rewrite": "elspais fix",
-    "spec.format_rules": "elspais checks --spec --format json",
-    "spec.no_assertions": "elspais gaps",
+    "spec.format_rules": "elspais errors",
+    "spec.no_assertions": "elspais errors",
     "spec.index_current": "elspais fix",
     "spec.no_duplicates": "elspais checks --spec --format json",
     "spec.implements_resolve": "elspais broken",

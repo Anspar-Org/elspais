@@ -38,6 +38,14 @@ def _extract_viewer_config(config: dict[str, Any]) -> dict[str, Any]:
     config_statuses: list[str] = []
     if typed.rules.format.allowed_statuses:
         config_statuses = list(typed.rules.format.allowed_statuses)
+    elif typed.rules.format.status_roles:
+        # Derive from status_roles when allowed_statuses not explicitly set
+        for statuses in typed.rules.format.status_roles.values():
+            if isinstance(statuses, list):
+                config_statuses.extend(statuses)
+            elif isinstance(statuses, str):
+                config_statuses.append(statuses)
+        config_statuses.sort()
 
     return {
         "config_types": config_types,

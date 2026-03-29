@@ -1,22 +1,27 @@
 # Known Issues
 
-[ ] checks : bug
-- No way to know which requirements have errors:
-  ✗ spec.format_rules: 2 format error(s) in 102 requirements
-  ⚠ spec.no_assertions: 2 requirement(s) have no assertions (not testable)
+[ ] checks - chore
+- add all missing config.toml fields, even if they are the same as the defaults
+- ensure init template is complete and uptodate
+- add new checks descriptions to docs
+
+[ ] daemon: bug - timeout
+- daemon should timeout and shutdown after N minutes, unless there are unsaved changes
+- currently, some MCP daemons are peristing for many hours after their spawners are shut down
+
+[ ] viewer : bug
+- text-box edit fields lost their default-height of 120px. They default to far too narrow boxes.
+
+[x] checks : bug
+- Fixed: New `elspais errors` command shows specific requirements with format violations and missing assertions. `elspais checks` now points to `elspais errors` as the follow-up command.
 
 [ ] chore: _generated files
 - set to read-only as (some) protection against people accidently editing them
 
-[ ] 'fix' command: bug
-- bug 1:
-- doesn't tell you why status=Active REQs are not auto-fixed
-- requires a message -m "reason for update"
-- bug 2:
-- should not be a noted change unless hash changed. 
-- e.g. changes to Rationale or whitespace changes will not change hash in 'normalized assertions' mode
-- bug 3:
-- -m "message" doesn't work
+[x] 'fix' command: bug
+- bug 1: Fixed — error message now explains that [changelog] hash_current is enabled and Draft/Deprecated requirements update without a message
+- bug 2: Fixed — N/A hash sentinel for unhashable content; REFORMATTED vs FIXED labeling; only succeeded fixes reported
+- bug 3: Fixed — global fix mode defers Active REQs with changelog enforcement, shows per-REQ guidance
 
 [ ] mcp : bug
 - MCP refresh() should return error if unsaved changes

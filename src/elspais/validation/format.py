@@ -279,6 +279,9 @@ def validate_requirement_format(
 def get_format_rules_config(config: dict[str, Any]) -> FormatRulesConfig:
     """Get FormatRulesConfig from configuration dictionary.
 
+    If allowed_statuses is empty but status_roles is defined, computes
+    allowed_statuses from the union of all status role lists.
+
     Args:
         config: Full configuration dictionary from get_config()
 
@@ -287,4 +290,13 @@ def get_format_rules_config(config: dict[str, Any]) -> FormatRulesConfig:
     """
     typed_config = _validate_config(config)
     rules_data = typed_config.rules.format.model_dump()
-    return FormatRulesConfig.from_dict(rules_data)
+    fmt = FormatRulesConfig.from_dict(rules_data)
+
+    # Derive allowed_statuses from status_roles when not explicitly set
+    if not fmt.allowed_statuses and rules_data.get("status_roles"):
+        from elspais.config import get_status_roles
+
+        roles = get_status_roles(config)
+        fmt.allowed_statuses = sorted(roles._original_case.values())
+
+    return fmt

@@ -71,6 +71,9 @@ namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
+
+[changelog]
+hash_current = false
 """
     )
 

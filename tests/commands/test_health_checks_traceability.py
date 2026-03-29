@@ -20,7 +20,6 @@ from elspais.config import _merge_configs, config_defaults, get_config
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import FileType, GraphNode, NodeKind
-from elspais.graph.relations import EdgeKind
 
 from ..core.graph_test_helpers import (
     build_graph,
@@ -90,10 +89,14 @@ class TestCheckStructuralOrphans:
 
 
 class TestCheckUnlinkedTests:
-    """Tests for check_unlinked_tests()."""
+    """Tests for check_unlinked_tests() — file-level semantics.
 
-    def test_REQ_d00085_all_tests_linked_passes(self) -> None:
-        """When all TEST nodes validate a requirement, the check passes."""
+    Unlinked means a TEST-type FILE was scanned but contains no TEST
+    child nodes (no traceability markers found).
+    """
+
+    def test_REQ_d00085_all_test_files_have_markers_passes(self) -> None:
+        """When all test files contain traceability markers, the check passes."""
         graph = build_graph(
             make_requirement("REQ-p00001", title="Feature", level="PRD"),
             make_test_ref(
@@ -107,8 +110,8 @@ class TestCheckUnlinkedTests:
         assert check.passed
         assert check.name == "tests.unlinked"
 
-    def test_REQ_d00085_unlinked_test_has_info_severity(self) -> None:
-        """A TEST with FILE parent but no requirement link is unlinked — severity info."""
+    def test_REQ_d00085_unlinked_test_file_has_info_severity(self) -> None:
+        """A TEST file with no TEST child nodes is unlinked — severity info."""
         graph = build_graph(
             make_requirement("REQ-p00001", title="Feature", level="PRD"),
             make_test_ref(
@@ -117,37 +120,39 @@ class TestCheckUnlinkedTests:
                 start_line=1,
                 end_line=5,
             ),
-            make_test_ref(
-                verifies=[],
-                source_path="tests/test_unlinked.py",
-                start_line=1,
-                end_line=5,
-            ),
         )
+        # Add a TEST-type FILE with no TEST children
+        empty_file = GraphNode(
+            id="file:tests/test_empty.py", kind=NodeKind.FILE, label="test_empty.py"
+        )
+        empty_file.set_field("file_type", FileType.TEST)
+        empty_file.set_field("relative_path", "tests/test_empty.py")
+        graph._index["file:tests/test_empty.py"] = empty_file
+        graph._roots.append(empty_file)
+
         check = check_unlinked_tests(graph)
         assert not check.passed
         assert check.severity == "info"
         assert check.name == "tests.unlinked"
         assert len(check.findings) >= 1
-        # The count should reflect exactly 1 unlinked test
         assert check.details.get("count", 0) >= 1
 
     def test_REQ_d00085_unlinked_test_findings_have_file_path(self) -> None:
-        """Findings for unlinked tests include file_path and node_id."""
-        graph = build_graph(
-            make_test_ref(
-                verifies=[],
-                source_path="tests/test_orphan.py",
-                start_line=1,
-                end_line=5,
-            ),
+        """Findings for unlinked test files include file_path."""
+        graph = TraceGraph()
+        empty_file = GraphNode(
+            id="file:tests/test_orphan.py", kind=NodeKind.FILE, label="test_orphan.py"
         )
+        empty_file.set_field("file_type", FileType.TEST)
+        empty_file.set_field("relative_path", "tests/test_orphan.py")
+        graph._index["file:tests/test_orphan.py"] = empty_file
+        graph._roots.append(empty_file)
+
         check = check_unlinked_tests(graph)
         assert not check.passed
         assert len(check.findings) >= 1
         finding = check.findings[0]
         assert isinstance(finding, HealthFinding)
-        assert finding.node_id is not None
         assert finding.file_path is not None
 
 
@@ -157,10 +162,14 @@ class TestCheckUnlinkedTests:
 
 
 class TestCheckUnlinkedCode:
-    """Tests for check_unlinked_code()."""
+    """Tests for check_unlinked_code() — file-level semantics.
 
-    def test_REQ_d00085_all_code_linked_passes(self) -> None:
-        """When all CODE nodes implement a requirement, the check passes."""
+    Unlinked means a CODE-type FILE was scanned but contains no CODE
+    child nodes (no traceability markers found).
+    """
+
+    def test_REQ_d00085_all_code_files_have_markers_passes(self) -> None:
+        """When all code files contain traceability markers, the check passes."""
         graph = build_graph(
             make_requirement("REQ-p00001", title="Feature", level="PRD"),
             make_code_ref(
@@ -174,8 +183,8 @@ class TestCheckUnlinkedCode:
         assert check.passed
         assert check.name == "code.unlinked"
 
-    def test_REQ_d00085_unlinked_code_has_info_severity(self) -> None:
-        """A CODE node with FILE parent but no requirement link — severity info."""
+    def test_REQ_d00085_unlinked_code_file_has_info_severity(self) -> None:
+        """A CODE file with no CODE child nodes is unlinked — severity info."""
         graph = build_graph(
             make_requirement("REQ-p00001", title="Feature", level="PRD"),
             make_code_ref(
@@ -185,18 +194,12 @@ class TestCheckUnlinkedCode:
                 end_line=5,
             ),
         )
-        # Manually add an unlinked CODE node under a FILE parent
-        file_node = GraphNode(id="file:src/unlinked.py", kind=NodeKind.FILE, label="unlinked.py")
-        file_node.set_field("file_type", FileType.CODE)
-        file_node.set_field("relative_path", "src/unlinked.py")
-        graph._index["file:src/unlinked.py"] = file_node
-
-        code_node = GraphNode(
-            id="code:src/unlinked.py:1", kind=NodeKind.CODE, label="Unlinked Code"
-        )
-        code_node.set_field("parse_line", 1)
-        file_node.link(code_node, EdgeKind.CONTAINS)
-        graph._index["code:src/unlinked.py:1"] = code_node
+        # Add a CODE-type FILE with no CODE children
+        empty_file = GraphNode(id="file:src/unlinked.py", kind=NodeKind.FILE, label="unlinked.py")
+        empty_file.set_field("file_type", FileType.CODE)
+        empty_file.set_field("relative_path", "src/unlinked.py")
+        graph._index["file:src/unlinked.py"] = empty_file
+        graph._roots.append(empty_file)
 
         check = check_unlinked_code(graph)
         assert not check.passed
@@ -206,24 +209,19 @@ class TestCheckUnlinkedCode:
         assert check.details.get("count", 0) >= 1
 
     def test_REQ_d00085_unlinked_code_findings_have_file_path(self) -> None:
-        """Findings for unlinked code include file_path and node_id."""
+        """Findings for unlinked code files include file_path."""
         graph = TraceGraph()
-        file_node = GraphNode(id="file:src/orphan.py", kind=NodeKind.FILE, label="orphan.py")
-        file_node.set_field("file_type", FileType.CODE)
-        file_node.set_field("relative_path", "src/orphan.py")
-        graph._index["file:src/orphan.py"] = file_node
-
-        code_node = GraphNode(id="code:src/orphan.py:1", kind=NodeKind.CODE, label="Orphan Code")
-        code_node.set_field("parse_line", 1)
-        file_node.link(code_node, EdgeKind.CONTAINS)
-        graph._index["code:src/orphan.py:1"] = code_node
+        empty_file = GraphNode(id="file:src/orphan.py", kind=NodeKind.FILE, label="orphan.py")
+        empty_file.set_field("file_type", FileType.CODE)
+        empty_file.set_field("relative_path", "src/orphan.py")
+        graph._index["file:src/orphan.py"] = empty_file
+        graph._roots.append(empty_file)
 
         check = check_unlinked_code(graph)
         assert not check.passed
         assert len(check.findings) >= 1
         finding = check.findings[0]
         assert isinstance(finding, HealthFinding)
-        assert finding.node_id is not None
         assert finding.file_path is not None
 
 

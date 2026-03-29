@@ -126,6 +126,7 @@ def run(args: argparse.Namespace) -> int:
     errors = []
     warnings = []
     fixable = []  # Issues that can be auto-fixed
+    deferred = []  # Issues needing per-REQ intervention (e.g. changelog message)
 
     # REQ-d00080-E: For core projects with associates, check paths are valid
     # Implements: REQ-d00202-A, REQ-d00212-K
@@ -261,6 +262,8 @@ def run(args: argparse.Namespace) -> int:
                     fixable.append(issue)
             elif stored_hash != computed_hash:
                 # Hash mismatch - integrity failure, fixable
+                is_active = (node.status or "").lower() == "active"
+                changelog_enforce = _typed_vc.changelog.hash_current
                 issue = {
                     "rule": "hash.mismatch",
                     "id": node.id,
@@ -275,7 +278,28 @@ def run(args: argparse.Namespace) -> int:
                 }
                 errors.append(issue)
                 if issue["file"]:
-                    fixable.append(issue)
+                    if is_active and changelog_enforce and fix_mode:
+                        # Defer: changelog message required per-REQ
+                        deferred.append(issue)
+                    else:
+                        fixable.append(issue)
+        elif stored_hash and stored_hash != "N/A":
+            # Stored hash exists but no hashable content — fixable to N/A
+            issue = {
+                "rule": "hash.unhashable",
+                "id": node.id,
+                "message": f"Requirement {node.id} has stored hash "
+                f"but no hashable content (update to N/A)",
+                "fixable": True,
+                "fix_type": "hash",
+                "computed_hash": "N/A",
+                "file": (node.file_node().get_field("absolute_path") if node.file_node() else None),
+            }
+            errors.append(issue)
+            if issue["file"]:
+                fixable.append(issue)
+        elif stored_hash == "N/A":
+            pass  # N/A sentinel with no hashable content — valid
         elif not stored_hash:
             # No hashable content and no hash
             warnings.append(
@@ -348,7 +372,7 @@ def run(args: argparse.Namespace) -> int:
     # Handle --fix mode
     fixed_count = 0
     if fix_mode and fixable:
-        fixed_count = _apply_fixes(fixable, dry_run)
+        fixed_count, fixed_indices = _apply_fixes(fixable, dry_run)
 
     # Count requirements
     req_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.REQUIREMENT))
@@ -373,6 +397,7 @@ def run(args: argparse.Namespace) -> int:
             "valid": len(errors) == 0,
             "errors": errors,
             "warnings": warnings,
+            "deferred": deferred,
             "requirements_count": req_count,
             "fixed_count": fixed_count if fix_mode else 0,
         }
@@ -397,11 +422,32 @@ def run(args: argparse.Namespace) -> int:
         # Separate fixed issues from remaining errors/warnings
         if fix_mode and not dry_run:
             fixed_ids = {(f["id"], f["rule"]) for f in fixable}
-            unfixed_errors = [e for e in errors if (e["id"], e["rule"]) not in fixed_ids]
+            deferred_ids = {(d["id"], d["rule"]) for d in deferred}
+            unfixed_errors = [
+                e
+                for e in errors
+                if (e["id"], e["rule"]) not in fixed_ids
+                and (e["id"], e["rule"]) not in deferred_ids
+            ]
             unfixed_warnings = [w for w in warnings if not w.get("fixable")]
             # Show what was fixed (informational, not alarming)
-            for f in fixable:
-                print(f"FIXED [{f['rule']}] {f['id']}: {f['message']}")
+            _COSMETIC_FIX_TYPES = {"assertion_spacing", "list_spacing"}
+            for idx, f in enumerate(fixable):
+                if idx not in fixed_indices:
+                    continue
+                label = "REFORMATTED" if f.get("fix_type") in _COSMETIC_FIX_TYPES else "FIXED"
+                print(f"{label} [{f['rule']}] {f['id']}: {f['message']}")
+            # Show deferred items that need per-REQ intervention
+            if deferred:
+                print(
+                    f"\nDEFERRED ({len(deferred)} — changelog message required):",
+                    file=sys.stderr,
+                )
+                for d in deferred:
+                    print(
+                        f'  {d["id"]}  hash mismatch' f' — run: elspais fix {d["id"]} -m "reason"',
+                        file=sys.stderr,
+                    )
         else:
             unfixed_errors = errors
             unfixed_warnings = [w for w in warnings if not w.get("fixable") or not fix_mode]
@@ -519,7 +565,7 @@ def _fix_list_spacing(file_path: Path) -> int:
     return inserted
 
 
-def _apply_fixes(fixable: list[dict], dry_run: bool) -> int:
+def _apply_fixes(fixable: list[dict], dry_run: bool) -> tuple[int, set[int]]:
     """Apply fixes to spec files.
 
     Args:
@@ -527,16 +573,17 @@ def _apply_fixes(fixable: list[dict], dry_run: bool) -> int:
         dry_run: If True, don't actually modify files.
 
     Returns:
-        Number of issues fixed.
+        Tuple of (number of issues fixed, set of indices that succeeded).
     """
     if dry_run:
-        return 0
+        return 0, set()
 
     from elspais.mcp.file_mutations import add_status_to_file, update_hash_in_file
 
     fixed = 0
+    succeeded: set[int] = set()
     spacing_fixed_files: set[str] = set()
-    for issue in fixable:
+    for idx, issue in enumerate(fixable):
         fix_type = issue.get("fix_type")
         file_path = issue.get("file")
 
@@ -552,6 +599,7 @@ def _apply_fixes(fixable: list[dict], dry_run: bool) -> int:
             )
             if error is None:
                 fixed += 1
+                succeeded.add(idx)
             else:
                 print(f"Warning: {error}", file=sys.stderr)
 
@@ -564,6 +612,7 @@ def _apply_fixes(fixable: list[dict], dry_run: bool) -> int:
             )
             if error is None:
                 fixed += 1
+                succeeded.add(idx)
             else:
                 print(f"Warning: {error}", file=sys.stderr)
 
@@ -573,6 +622,8 @@ def _apply_fixes(fixable: list[dict], dry_run: bool) -> int:
                 spacing_fixed_files.add(file_path)
                 inserted = _fix_assertion_spacing(Path(file_path))
                 fixed += inserted
+                if inserted:
+                    succeeded.add(idx)
 
         elif fix_type == "list_spacing":
             # Fix list items missing preceding blank line — deduplicate per file
@@ -580,5 +631,7 @@ def _apply_fixes(fixable: list[dict], dry_run: bool) -> int:
                 spacing_fixed_files.add(file_path)
                 inserted = _fix_list_spacing(Path(file_path))
                 fixed += inserted
+                if inserted:
+                    succeeded.add(idx)
 
-    return fixed
+    return fixed, succeeded

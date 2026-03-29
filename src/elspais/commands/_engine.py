@@ -102,10 +102,44 @@ def _try_daemon(
     # 1. Try existing server (viewer or daemon — both use daemon.json)
     port = _get_daemon_port()
     if port:
-        result = _try_port(port, endpoint, params, "GET")
-        if result is not None:
-            source = _build_daemon_source(port)
-            return result, source
+        # Version check: warn on stale daemon, skip if safe
+        from elspais import __version__
+        from elspais.mcp.daemon import get_daemon_info
+
+        info = get_daemon_info(repo_root)
+        daemon_version = info.get("version") if info else None
+        version_mismatch = bool(daemon_version and daemon_version != __version__)
+
+        if version_mismatch:
+            # Check if daemon has unsaved mutations before skipping
+            dirty = _try_port(port, "/api/dirty", {}, "GET")
+            has_unsaved = dirty is not None and dirty.get("dirty", False)
+            if has_unsaved:
+                # Use stale daemon — can't restart without losing work
+                import sys
+
+                print(
+                    f"Warning: daemon version {daemon_version} != CLI {__version__}"
+                    " (unsaved changes prevent restart)",
+                    file=sys.stderr,
+                )
+            else:
+                # Safe to restart — no unsaved work
+                from elspais.mcp.daemon import stop_daemon
+
+                stop_daemon(repo_root)
+                port = None
+
+        if port:
+            result = _try_port(port, endpoint, params, "GET")
+            if result is not None:
+                source = _build_daemon_source(port)
+                if version_mismatch:
+                    source["version_mismatch"] = {
+                        "daemon": daemon_version,
+                        "cli": __version__,
+                    }
+                return result, source
 
     # 2. Auto-start daemon if allowed
     try:

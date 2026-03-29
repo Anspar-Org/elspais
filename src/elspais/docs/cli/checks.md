@@ -79,15 +79,49 @@ check that is always present.
 | Check | Description |
 |-------|-------------|
 | `code.coverage` | Code coverage statistics (informational) |
-| `code.unlinked` | Code references not linked to any requirement |
+| `code.unlinked` | Code files with no traceability markers (no `# Implements:` or `# Verifies:` comments); severity: info |
+| `code.retired_references` | Code referencing requirements with retired status (Deprecated, Superseded, Rejected); default severity: warning |
+| `code.provisional_references` | Code referencing requirements with provisional status (Draft, Proposed); default severity: info |
+| `code.aspirational_references` | Code referencing requirements with aspirational status (Roadmap, Future, Idea); default severity: info |
 
 ### Test Mapping Checks (`--tests`)
 
 | Check | Description |
 |-------|-------------|
 | `tests.coverage` | Test coverage statistics with rollup (informational) |
-| `tests.unlinked` | Tests not linked to any requirement |
+| `tests.unlinked` | Test files with no traceability markers (no REQ-xxx patterns or `Verifies` comments); severity: info |
 | `tests.results` | Test pass/fail status from JUnit XML or pytest JSON results |
+| `tests.retired_references` | Tests referencing requirements with retired status (Deprecated, Superseded, Rejected); default severity: warning |
+| `tests.provisional_references` | Tests referencing requirements with provisional status (Draft, Proposed); default severity: info |
+| `tests.aspirational_references` | Tests referencing requirements with aspirational status (Roadmap, Future, Idea); default severity: info |
+
+#### Reference Status Checks — Retired, Provisional, Aspirational
+
+The `*.retired_references`, `*.provisional_references`, and
+`*.aspirational_references` checks (for both `code` and `tests` categories)
+flag traceability links that target requirements whose status suggests the
+reference may be stale or premature:
+
+- **Retired** (Deprecated, Superseded, Rejected) — the requirement is no
+  longer valid; code or tests referencing it may need cleanup.
+- **Provisional** (Draft, Proposed) — the requirement is not yet approved;
+  references are premature but may be intentional during development.
+- **Aspirational** (Roadmap, Future, Idea) — the requirement is planned
+  but not committed; references are informational.
+
+**`--status` interaction:** Using `--status Draft` promotes Draft requirements
+to active-like status, so `code.provisional_references` and
+`tests.provisional_references` will not flag Draft references when
+`--status Draft` is used.
+
+**Configuration** — adjust severity via `[rules.references]` in `.elspais.toml`:
+
+```toml
+[rules.references]
+retired = "warning"       # info | warning | error
+provisional = "info"      # info | warning | error
+aspirational = "info"     # info | warning | error
+```
 
 ### UAT Checks
 
@@ -393,6 +427,39 @@ Produces [SARIF v2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.
 Run `elspais checks --help` for the full list of flags.  Options are
 defined in `commands/args.py:ChecksArgs` — that dataclass is the single
 source of truth for flag names and descriptions.
+
+## Error Drill-Down
+
+When `spec.format_rules` or `spec.no_assertions` fails, `elspais checks` directs
+you to `elspais errors` for requirement-level detail:
+
+```bash
+elspais errors                     # Show all spec errors
+elspais errors --format markdown   # Markdown table output
+elspais errors --format json       # JSON output
+elspais errors --status Draft      # Include Draft requirements
+elspais errors -o errors.txt       # Write to file
+```
+
+**Example output (text format):**
+
+```text
+FORMAT ERRORS (2):
+  REQ-d00003           missing_body: Requirement has no body text  spec/dev-spec.md:45
+  REQ-p00002           missing_title: Requirement has no title     spec/prd-spec.md:12
+
+NO ASSERTIONS (2):
+  REQ-o00005           no_assertions: No assertions — not testable  spec/ops-spec.md:30
+  REQ-p00010           no_assertions: No assertions — not testable  spec/prd-spec.md:88
+```
+
+**Options:**
+
+  `--format {text,markdown,json}`  Output format (default: text)
+  `--status STATUS`                Include additional statuses (repeatable)
+  `-o, --output PATH`              Write output to file instead of stdout
+
+**Performance:** Uses daemon-first execution like other drill-down commands.
 
 ## Gap Listings
 

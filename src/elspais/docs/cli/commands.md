@@ -22,6 +22,7 @@ Verify requirements traceability across configuration, spec files, code, and tes
   $ elspais checks --format json       # JSON output
 
 To auto-fix issues, use: `elspais fix`
+To see specific errors, use: `elspais errors`
 
 **Options:**
 
@@ -33,6 +34,24 @@ To auto-fix issues, use: `elspais fix`
   `--skip-passing-details`     Hide details for passing checks (default)
   `--include-passing-details`  Show full details for passing checks
   `-v, --verbose`  Show additional details
+
+## errors
+
+List spec format violations and requirements with no assertions.
+
+  $ elspais errors                     # Show all spec errors
+  $ elspais errors --format markdown   # Markdown table
+  $ elspais errors --format json       # JSON output
+  $ elspais errors --status Draft      # Include Draft requirements
+  $ elspais errors -o errors.txt       # Write to file
+
+**Options:**
+
+  `--format {text,markdown,json}`  Output format (default: text)
+  `--status STATUS`                Include additional statuses (repeatable)
+  `-o, --output PATH`              Write output to file instead of stdout
+
+Follow-up from `elspais checks` when `spec.format_rules` or `spec.no_assertions` fails.
 
 ## fix
 

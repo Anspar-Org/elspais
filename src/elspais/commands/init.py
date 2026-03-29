@@ -152,6 +152,20 @@ _SECTION_COMMENTS: dict[str, str] = {
         "# aspirational: future/planning - excluded from coverage and analysis\n"
         "# retired: concluded - excluded from everything"
     ),
+    "rules.coverage": (
+        "Coverage severity tiers per dimension (ok/info/warning/error)\n"
+        "# full_direct: all assertions covered by direct references\n"
+        "# full_indirect: covered via parent/child rollup only\n"
+        "# partial: some assertions covered, some not\n"
+        "# none: no coverage at all\n"
+        "# failing: has coverage but test results show failures"
+    ),
+    "rules.references": (
+        "Severity for code/test references to non-active requirements\n"
+        "# retired: code/tests referencing Deprecated/Superseded/Rejected REQs\n"
+        "# provisional: code/tests referencing Draft/Proposed REQs\n"
+        "# aspirational: code/tests referencing Roadmap/Future/Idea REQs"
+    ),
     "changelog": "Changelog enforcement",
     "keywords": "Keyword extraction settings",
     "validation": "Hash and validation settings",
@@ -210,7 +224,6 @@ _CORE_OVERRIDES: dict[str, Any] = {
             "require_rationale": False,
             "require_assertions": True,
             "require_status": True,
-            "allowed_statuses": ["Active", "Draft", "Deprecated", "Superseded"],
             "status_roles": {
                 "active": ["Active"],
                 "provisional": ["Draft", "Proposed"],
@@ -341,8 +354,9 @@ _OPTIONAL_FIELD_INJECTIONS: list[tuple[str, list[str]]] = [
     ),
     # rules.format
     (
-        'allowed_statuses = ["Active"',
+        "require_status = true",
         [
+            '# allowed_statuses = ["Active", "Draft"]  # Override status_roles-derived list',
             "# content_rules = []            # Content validation rules",
         ],
     ),

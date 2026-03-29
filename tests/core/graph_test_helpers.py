@@ -403,7 +403,15 @@ def build_graph(
         if source_path and source_path not in file_nodes:
             file_id = f"file:{source_path}"
             file_node = GraphNode(id=file_id, kind=NodeKind.FILE, label=Path(source_path).name)
-            file_node.set_field("file_type", FileType.SPEC)
+            # Infer FileType from content type
+            ct = content.content_type
+            if ct == "test_ref":
+                ft = FileType.TEST
+            elif ct == "code_ref":
+                ft = FileType.CODE
+            else:
+                ft = FileType.SPEC
+            file_node.set_field("file_type", ft)
             file_node.set_field("relative_path", source_path)
             file_node.set_field("absolute_path", str(Path(repo_root or ".") / source_path))
             file_node.set_field("repo", None)

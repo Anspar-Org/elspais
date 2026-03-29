@@ -135,6 +135,20 @@ class BrokenArgs:
 
 
 @dataclasses.dataclass
+class ErrorsArgs:
+    """List spec format violations and requirements with no assertions."""
+
+    format: Literal["text", "markdown", "json"] = "text"
+    """Output format."""
+
+    status: list[str] | None = None
+    """Statuses to include (default: Active)."""
+
+    output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
+    """Write output to file instead of stdout."""
+
+
+@dataclasses.dataclass
 class UnlinkedArgs:
     """List test and code nodes not linked to any requirement."""
 
@@ -881,6 +895,7 @@ Command = (
     | Annotated[UntestedArgs, tyro.conf.subcommand("untested")]
     | Annotated[UnvalidatedArgs, tyro.conf.subcommand("unvalidated")]
     | Annotated[FailingArgs, tyro.conf.subcommand("failing")]
+    | Annotated[ErrorsArgs, tyro.conf.subcommand("errors")]
     | Annotated[BrokenArgs, tyro.conf.subcommand("broken")]
     | Annotated[UnlinkedArgs, tyro.conf.subcommand("unlinked")]
     | Annotated[DoctorArgs, tyro.conf.subcommand("doctor")]
@@ -951,6 +966,7 @@ COMMAND_GROUPS: dict[str, str] = {
     "untested": "Gaps & Issues",
     "unvalidated": "Gaps & Issues",
     "failing": "Gaps & Issues",
+    "errors": "Gaps & Issues",
     "broken": "Gaps & Issues",
     "unlinked": "Gaps & Issues",
     "search": "Reports",

@@ -3,7 +3,7 @@
 # Tip: Create .elspais.local.toml alongside this file for developer-local
 # overrides (e.g. associate paths). It is deep-merged and gitignored.
 
-version = 3
+version = 4
 
 # Project identity
 
@@ -81,7 +81,14 @@ run_meta_file = ".results/test-run-meta.json"
 directories = [".results"]
 file_patterns = ["coverage.json"]
 
+[scanning.journey]
+directories = ["spec"]
+file_patterns = ["*.md"]
+
 # Validation rules
+
+[rules]
+protected_branches = ["main", "master"]
 
 [rules.hierarchy]
 allow_circular = false
@@ -92,13 +99,54 @@ require_hash = true
 require_rationale = false
 require_assertions = true
 require_status = true
-allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
 
 [rules.format.status_roles]
 active = ["Active"]
 provisional = ["Draft", "Proposed"]
 aspirational = ["Roadmap", "Future"]
 retired = ["Deprecated", "Superseded"]
+
+# Coverage severity tiers per dimension (ok/info/warning/error)
+[rules.coverage.implemented]
+full_direct = "ok"
+full_indirect = "info"
+partial = "warning"
+none = "error"
+failing = "error"
+
+[rules.coverage.tested]
+full_direct = "ok"
+full_indirect = "info"
+partial = "warning"
+none = "error"
+failing = "error"
+
+[rules.coverage.verified]
+full_direct = "ok"
+full_indirect = "info"
+partial = "warning"
+none = "warning"
+failing = "error"
+
+[rules.coverage.uat_coverage]
+full_direct = "ok"
+full_indirect = "info"
+partial = "info"
+none = "info"
+failing = "error"
+
+[rules.coverage.uat_verified]
+full_direct = "ok"
+full_indirect = "info"
+partial = "info"
+none = "info"
+failing = "error"
+
+# Severity for code/test references to non-active requirements
+[rules.references]
+retired = "warning"
+provisional = "info"
+aspirational = "info"
 
 # Changelog enforcement
 
@@ -132,6 +180,13 @@ min_length = 3
 [validation]
 hash_mode = "normalized-text"
 allow_unresolved_cross_repo = false
+
+# Defined terms
+[terms]
+output_dir = "spec/_generated"
+duplicate_severity = "error"
+undefined_severity = "warning"
+unmarked_severity = "warning"
 
 # Output settings
 
