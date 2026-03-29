@@ -386,6 +386,81 @@ function renderNavTree() {
         return;
     }
 
+    // ── FLAT MODE ──────────────────────────────────────────────────────────
+    if (editState.viewMode === 'flat' && activeTab === 'req') {
+        var hasTextFilter = editState.textMatchIds !== null;
+        var flatRows = filteredRows.slice();
+
+        // Apply all FilterGroup filters
+        var flatFiltered = [];
+        for (var fi = 0; fi < flatRows.length; fi++) {
+            var fr = flatRows[fi];
+            var fmatch = true;
+            for (var fgname in filterGroups) {
+                if (!filterGroups[fgname].matches(fr)) { fmatch = false; break; }
+            }
+            if (fmatch && hasTextFilter && !editState.textMatchIds.has(fr.id)) fmatch = false;
+            if (fmatch) flatFiltered.push(fr);
+        }
+
+        // Sort by ID
+        flatFiltered.sort(function(a, b) {
+            return (a.id || '').localeCompare(b.id || '');
+        });
+
+        // Update counter
+        var flatCounterEl = document.getElementById('edit-counter');
+        if (flatCounterEl) {
+            var hasAnyFilter = hasTextFilter;
+            if (!hasAnyFilter) {
+                for (var fgn in filterGroups) {
+                    var ffg = filterGroups[fgn];
+                    for (var fbi = 0; fbi < ffg.buttons.length; fbi++) {
+                        if (!ffg._on.has(ffg.buttons[fbi].key) && (ffg._available.get(ffg.buttons[fbi].key) || 0) > 0) {
+                            hasAnyFilter = true; break;
+                        }
+                    }
+                    if (hasAnyFilter) break;
+                }
+            }
+            flatCounterEl.textContent = hasAnyFilter ? (flatFiltered.length + ' / ' + filteredRows.length) : '';
+        }
+        updateCounterTooltip();
+
+        if (flatFiltered.length === 0) {
+            container.innerHTML = '<div style="padding:20px;color:#adb5bd;text-align:center;font-size:0.85rem;">No matching requirements</div>';
+            return;
+        }
+
+        var flatHtml = '';
+        for (var fli = 0; fli < flatFiltered.length; fli++) {
+            var flrow = flatFiltered[fli];
+            var flSelected = editState.openCards.has(flrow.id) ? ' selected' : '';
+            var fllevelClass = flrow.level ? flrow.level.toLowerCase() : '';
+            var flshortId = flrow.id.replace('REQ-', '');
+            var flvalColor = flrow.validation_color || '';
+            var flvalTip = flrow.validation_tip || '';
+            var flvalClass = flvalColor ? ' val-' + flvalColor : '';
+            var fltipAttr = flvalTip ? ' data-tip="' + escapeHtml(flvalTip) + '"' : '';
+            var flstatusBadge = flrow.status
+                ? '<span class="status-badge ' + flrow.status.toLowerCase() + flvalClass + '"' + fltipAttr + '>' + flrow.status + '</span>'
+                : '';
+            flatHtml += '<div class="nav-tree-row' + flSelected + '" ' +
+                'data-id="' + flrow.id + '" ' +
+                'data-kind="requirement" ' +
+                'onclick="openCard(\'' + flrow.id + '\')">' +
+                '<button class="nav-tree-toggle leaf" onclick="event.stopPropagation();"></button>' +
+                (fllevelClass ? '<span class="nav-tree-level ' + fllevelClass + '">' + flrow.level + '</span>' : '') +
+                '<span class="nav-tree-id">' + flshortId + '</span>' +
+                '<span class="nav-tree-title">' + escapeHtml(flrow.title || '') + '</span>' +
+                flstatusBadge +
+                '</div>';
+        }
+        container.innerHTML = flatHtml;
+        return;
+    }
+    // ── END FLAT MODE ──────────────────────────────────────────────────────
+
     // Apply filters via FilterGroup
     const totalBeforeFilter = filteredRows.length;
     const hasTextFilter = editState.textMatchIds !== null;
@@ -551,23 +626,12 @@ function renderNavTree() {
         const levelClass = row.level ? row.level.toLowerCase() : '';
         const shortId = row.id.replace('REQ-', '');
 
-        // Status badge — color driven by coverage mode selector
+        // Status badge — color driven by combined (all) coverage
         var statusBadge = '';
         if (row.status) {
             var statusLower = row.status.toLowerCase();
-            var covColorMap = {
-                'all': 'validation_color', 'impl': 'impl_color',
-                'tested': 'tested_color', 'verified': 'verified_color',
-                'uat_cov': 'uat_cov_color', 'uat_ver': 'uat_ver_color'
-            };
-            var covTipMap = {
-                'all': 'validation_tip', 'impl': 'impl_tip',
-                'tested': 'tested_tip', 'verified': 'verified_tip',
-                'uat_cov': 'uat_cov_tip', 'uat_ver': 'uat_ver_tip'
-            };
-            var covMode = editState.coverageMode || 'all';
-            var valColor = row[covColorMap[covMode] || 'validation_color'] || '';
-            var valTip = row[covTipMap[covMode] || 'validation_tip'] || '';
+            var valColor = row.validation_color || '';
+            var valTip = row.validation_tip || '';
             var valClass = valColor ? ' val-' + valColor : '';
             var tipAttr = valTip ? ' data-tip="' + escapeHtml(valTip) + '"' : '';
             statusBadge = '<span class="status-badge ' + statusLower + valClass + '"' + tipAttr + '>' + row.status + '</span>';
@@ -753,7 +817,11 @@ function expandAllTreeNodes() {
     saveState();
 }
 
-function setCoverageMode(mode) {
-    editState.coverageMode = mode;
+function setViewMode(mode) {
+    editState.viewMode = mode;
+    document.querySelectorAll('.view-mode-btn').forEach(function(btn) {
+        btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
+    });
     renderNavTree();
+    saveState();
 }
