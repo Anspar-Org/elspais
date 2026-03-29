@@ -204,3 +204,17 @@ def sample_config_dict() -> dict:
             },
         },
     }
+
+
+@pytest.fixture(scope="session")
+def canonical_graph():
+    """Build the hht-like fixture graph once per session.
+
+    Returns the primary TraceGraph (not FederatedGraph) for direct use
+    in tests that only need to read graph state.
+    """
+    from elspais.graph.factory import build_graph
+
+    root = FIXTURES_DIR / "hht-like"
+    federated = build_graph(repo_root=root)
+    return federated._repos[federated._root_repo].graph
