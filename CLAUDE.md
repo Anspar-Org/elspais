@@ -94,6 +94,18 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 **Marking tests**: Use `@pytest.mark.e2e` on tests that spawn external processes (elspais CLI, claude CLI, act, MCP subprocess). Use `@pytest.mark.browser` on Playwright tests.
 **Claude Code caveat**: The `test_e2e_install_and_uninstall` test (claude MCP install) is auto-skipped inside Claude Code sessions (`CLAUDECODE=1`) because the claude CLI hijacks pytest's file descriptors.
 
+### Test-Writing Conventions
+
+**Prefer the canonical graph**: Use the `canonical_graph` session fixture for read-only assertions instead of building ad-hoc graphs with `build_graph()` or `make_requirement()`. Use `canonical_federated_graph` when you need the FederatedGraph (e.g., trace rendering). Only create custom graphs when testing features not in the hht-like fixture (invalid inputs, specific config variations).
+
+**Use incremental classes for mutation tests**: Mark with `@pytest.mark.incremental`, use the `mutable_graph` fixture. Assert after each mutation step. The fixture undoes all mutations on teardown via the undo log — no disk I/O for reset.
+
+**No tautology tests**: Don't assert constants, factory return values, or type-system guarantees. Tests must exercise behavior — if the test can't fail due to a code change, it's not testing anything.
+
+**Parametrize variants, don't duplicate**: If testing the same behavior across formats/configs, use `@pytest.mark.parametrize` with the shared fixture. Don't write separate test methods for each format.
+
+**E2E: reuse MCP servers**: The `mcp` fixture in `test_mcp_e2e.py` is module-scoped. Don't start a new server per test class unless the project config differs.
+
 ## Master Plan Workflow
 
 **IMPORTANT**: After `/clear` or at the start of a new session, check `MASTER_PLAN.md` for queued issues.
