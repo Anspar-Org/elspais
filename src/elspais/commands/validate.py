@@ -372,7 +372,7 @@ def run(args: argparse.Namespace) -> int:
     # Handle --fix mode
     fixed_count = 0
     if fix_mode and fixable:
-        fixed_count = _apply_fixes(fixable, dry_run)
+        fixed_count, fixed_indices = _apply_fixes(fixable, dry_run)
 
     # Count requirements
     req_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.REQUIREMENT))
@@ -431,8 +431,12 @@ def run(args: argparse.Namespace) -> int:
             ]
             unfixed_warnings = [w for w in warnings if not w.get("fixable")]
             # Show what was fixed (informational, not alarming)
-            for f in fixable:
-                print(f"FIXED [{f['rule']}] {f['id']}: {f['message']}")
+            _COSMETIC_FIX_TYPES = {"assertion_spacing", "list_spacing"}
+            for idx, f in enumerate(fixable):
+                if idx not in fixed_indices:
+                    continue
+                label = "REFORMATTED" if f.get("fix_type") in _COSMETIC_FIX_TYPES else "FIXED"
+                print(f"{label} [{f['rule']}] {f['id']}: {f['message']}")
             # Show deferred items that need per-REQ intervention
             if deferred:
                 print(
@@ -561,7 +565,7 @@ def _fix_list_spacing(file_path: Path) -> int:
     return inserted
 
 
-def _apply_fixes(fixable: list[dict], dry_run: bool) -> int:
+def _apply_fixes(fixable: list[dict], dry_run: bool) -> tuple[int, set[int]]:
     """Apply fixes to spec files.
 
     Args:
@@ -569,16 +573,17 @@ def _apply_fixes(fixable: list[dict], dry_run: bool) -> int:
         dry_run: If True, don't actually modify files.
 
     Returns:
-        Number of issues fixed.
+        Tuple of (number of issues fixed, set of indices that succeeded).
     """
     if dry_run:
-        return 0
+        return 0, set()
 
     from elspais.mcp.file_mutations import add_status_to_file, update_hash_in_file
 
     fixed = 0
+    succeeded: set[int] = set()
     spacing_fixed_files: set[str] = set()
-    for issue in fixable:
+    for idx, issue in enumerate(fixable):
         fix_type = issue.get("fix_type")
         file_path = issue.get("file")
 
@@ -594,6 +599,7 @@ def _apply_fixes(fixable: list[dict], dry_run: bool) -> int:
             )
             if error is None:
                 fixed += 1
+                succeeded.add(idx)
             else:
                 print(f"Warning: {error}", file=sys.stderr)
 
@@ -606,6 +612,7 @@ def _apply_fixes(fixable: list[dict], dry_run: bool) -> int:
             )
             if error is None:
                 fixed += 1
+                succeeded.add(idx)
             else:
                 print(f"Warning: {error}", file=sys.stderr)
 
@@ -615,6 +622,8 @@ def _apply_fixes(fixable: list[dict], dry_run: bool) -> int:
                 spacing_fixed_files.add(file_path)
                 inserted = _fix_assertion_spacing(Path(file_path))
                 fixed += inserted
+                if inserted:
+                    succeeded.add(idx)
 
         elif fix_type == "list_spacing":
             # Fix list items missing preceding blank line — deduplicate per file
@@ -622,5 +631,7 @@ def _apply_fixes(fixable: list[dict], dry_run: bool) -> int:
                 spacing_fixed_files.add(file_path)
                 inserted = _fix_list_spacing(Path(file_path))
                 fixed += inserted
+                if inserted:
+                    succeeded.add(idx)
 
-    return fixed
+    return fixed, succeeded
