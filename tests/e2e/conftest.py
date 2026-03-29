@@ -107,7 +107,7 @@ def build_fixture_project(
     from tests.e2e.helpers import base_config, write_config
 
     config = base_config(**(config_overrides or {}))
-    write_config(root, config)
+    write_config(root / ".elspais.toml", config)
 
     for files in [spec_files, code_files, test_files, extra_files]:
         if files:
