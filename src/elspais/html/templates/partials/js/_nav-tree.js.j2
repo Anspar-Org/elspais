@@ -1,4 +1,151 @@
-// Partial: _nav-tree.js.j2 — Nav tree rendering, tabs, header stats
+// Partial: _nav-tree.js.j2 — Nav tree rendering, tabs, header stats, FilterGroup integration
+
+// =====================================================================
+// FilterGroup Instances
+// =====================================================================
+
+var filterGroups = {};
+
+filterGroups.git = new FilterGroup({
+    name: 'git',
+    container: document.getElementById('edit-toolbar'),
+    buttons: [
+        {key: 'unsaved', label: 'Unsaved'},
+        {key: 'uncommitted', label: 'Uncommitted'},
+        {key: 'changed', label: 'Changed'},
+        {key: 'unchanged', label: 'Unchanged'},
+    ],
+    defaultOn: new Set(['unsaved', 'uncommitted', 'changed', 'unchanged']),
+    sensitiveEvents: new Set(['save', 'commit', 'refresh', 'branch-change']),
+    countFn: function(key, rows) {
+        var count = 0;
+        for (var i = 0; i < rows.length; i++) {
+            var r = rows[i];
+            if (key === 'unsaved' && r.is_unsaved) count++;
+            else if (key === 'uncommitted' && r.is_uncommitted) count++;
+            else if (key === 'changed' && r.is_changed) count++;
+            else if (key === 'unchanged' && !r.is_unsaved && !r.is_uncommitted && !r.is_changed) count++;
+        }
+        return count;
+    },
+    matchFn: function(row) {
+        var keys = new Set();
+        if (row.is_unsaved) keys.add('unsaved');
+        if (row.is_uncommitted) keys.add('uncommitted');
+        if (row.is_changed) keys.add('changed');
+        if (!row.is_unsaved && !row.is_uncommitted && !row.is_changed) keys.add('unchanged');
+        return keys;
+    },
+    onChange: function() { renderNavTree(); saveState(); },
+});
+
+filterGroups.hierarchy = new FilterGroup({
+    name: 'hierarchy',
+    container: document.getElementById('edit-toolbar'),
+    buttons: [
+        {key: 'root', label: 'Root'},
+        {key: 'internal', label: 'Internal'},
+        {key: 'leaf', label: 'Leaf'},
+    ],
+    defaultOn: new Set(['root', 'internal', 'leaf']),
+    sensitiveEvents: new Set(['mutation-structure', 'refresh']),
+    countFn: function(key, rows) {
+        var count = 0;
+        for (var i = 0; i < rows.length; i++) {
+            var r = rows[i];
+            if (key === 'root' && r.depth === 0) count++;
+            else if (key === 'leaf' && r.is_leaf) count++;
+            else if (key === 'internal' && r.depth > 0 && !r.is_leaf) count++;
+        }
+        return count;
+    },
+    matchFn: function(row) {
+        if (row.depth === 0) return 'root';
+        if (row.is_leaf) return 'leaf';
+        return 'internal';
+    },
+    onChange: function() { renderNavTree(); saveState(); },
+});
+
+filterGroups.status = new FilterGroup({
+    name: 'status',
+    container: document.getElementById('status-filter-buttons'),
+    buttons: [
+        {% for status in statuses %}
+        {key: '{{ status | lower }}', label: '{{ status }}'},
+        {% endfor %}
+    ],
+    defaultOn: new Set([
+        {% for status in statuses %}
+        {% if status not in default_hidden_statuses %}'{{ status | lower }}',{% endif %}
+        {% endfor %}
+    ]),
+    sensitiveEvents: new Set(['mutation-status', 'refresh']),
+    countFn: function(key, rows) {
+        var count = 0;
+        for (var i = 0; i < rows.length; i++) {
+            if ((rows[i].status || '').toLowerCase() === key) count++;
+        }
+        return count;
+    },
+    matchFn: function(row) { return (row.status || '').toLowerCase(); },
+    onChange: function() { renderNavTree(); saveState(); },
+});
+
+filterGroups.coverage = new FilterGroup({
+    name: 'coverage',
+    container: document.getElementById('edit-toolbar'),
+    buttons: [
+        {key: 'none', label: 'None'},
+        {key: 'partial', label: 'Partial'},
+        {key: 'full', label: 'Full'},
+    ],
+    defaultOn: new Set(['none', 'partial', 'full']),
+    sensitiveEvents: new Set(['mutation-edge', 'refresh']),
+    countFn: function(key, rows) {
+        var count = 0;
+        for (var i = 0; i < rows.length; i++) {
+            if ((rows[i].coverage || 'none') === key) count++;
+        }
+        return count;
+    },
+    matchFn: function(row) { return row.coverage || 'none'; },
+    onChange: function() { renderNavTree(); saveState(); },
+});
+
+// =====================================================================
+// Smart Recompute
+// =====================================================================
+
+function onFilterEvent(eventType) {
+    for (var gname in filterGroups) {
+        if (filterGroups[gname].sensitiveEvents.has(eventType)) {
+            filterGroups[gname].recompute(editState.treeData || []);
+        }
+    }
+    updateCounterTooltip();
+}
+
+function updateCounterTooltip() {
+    var lines = [];
+    for (var gname in filterGroups) {
+        var hidden = filterGroups[gname].hiddenSummary(editState.treeData || []);
+        for (var i = 0; i < hidden.length; i++) {
+            lines.push(hidden[i].label + ': ' + hidden[i].count);
+        }
+    }
+    var el = document.getElementById('edit-counter');
+    if (el) el.title = lines.join('\n') || 'No filters active';
+}
+
+// =====================================================================
+// Show Hidden Parents Toggle
+// =====================================================================
+
+function toggleShowHiddenParents() {
+    renderNavTree();
+    saveState();
+}
 
 // =====================================================================
 // Header Stats
@@ -30,6 +177,31 @@ function updateHeaderStats() {
     document.getElementById('stat-ops').textContent = 'OPS: ' + counts.ops;
     document.getElementById('stat-dev').textContent = 'DEV: ' + counts.dev;
     document.getElementById('stat-main').textContent = 'Core: ' + counts.main;
+
+    // Initialize level FilterGroup (in header)
+    if (!filterGroups.level) {
+        filterGroups.level = new FilterGroup({
+            name: 'level',
+            container: document.getElementById('header-stats'),
+            buttons: [
+                {key: 'prd', label: 'PRD'},
+                {key: 'ops', label: 'OPS'},
+                {key: 'dev', label: 'DEV'},
+            ],
+            defaultOn: new Set(['prd', 'ops', 'dev']),
+            sensitiveEvents: new Set(['refresh']),
+            countFn: function(key, rows) {
+                var count = 0;
+                for (var i = 0; i < rows.length; i++) {
+                    if (rows[i].level === key.toUpperCase()) count++;
+                }
+                return count;
+            },
+            matchFn: function(row) { return (row.level || '').toLowerCase(); },
+            onChange: function() { renderNavTree(); saveState(); },
+        });
+    }
+    filterGroups.level.recompute(rows);
 
     // Fetch test/result counts from /api/status (informational badges)
     apiFetch('/api/status').then(function(data) {
@@ -66,6 +238,19 @@ function updateHeaderStats() {
         editState.knownRepos = repoPrefixes;
         if (repoPrefixes.length === 0) {
             if (sep) sep.style.display = 'none';
+            // Initialize empty repo group
+            if (!filterGroups.repo) {
+                filterGroups.repo = new FilterGroup({
+                    name: 'repo',
+                    container: container,
+                    buttons: [],
+                    defaultOn: new Set(),
+                    sensitiveEvents: new Set(['refresh']),
+                    countFn: function() { return 0; },
+                    matchFn: function() { return 'main'; },
+                    onChange: function() { renderNavTree(); saveState(); },
+                });
+            }
             return;
         }
         if (sep) sep.style.display = '';
@@ -75,21 +260,41 @@ function updateHeaderStats() {
             var displayName = fullName ? fullName.charAt(0).toUpperCase() + fullName.slice(1) : code;
             var count = repoCounts[code];
             var badge = document.createElement('span');
-            badge.className = 'stat-badge repo';
+            badge.className = 'stat-badge repo filter-btn on';
             badge.id = 'stat-repo-' + code;
-            badge.title = 'Click to hide ' + displayName + ' requirements';
+            badge.title = 'Click to toggle ' + displayName + ' requirements (Shift+click to solo)';
             badge.textContent = displayName + ': ' + count;
+            badge.setAttribute('data-group', 'repo');
+            badge.setAttribute('data-key', code.toLowerCase());
             badge.setAttribute('data-repo', code);
             badge.onclick = (function(repoCode) {
-                return function() { toggleRepoFilter(repoCode); };
+                return function(event) {
+                    if (filterGroups.repo) filterGroups.repo.handleClick(repoCode.toLowerCase(), event);
+                };
             })(code);
-            // Restore dimmed state if filter is active
-            if (editState.activeFilters.hiddenRepos &&
-                editState.activeFilters.hiddenRepos.indexOf(code) >= 0) {
-                badge.classList.add('dimmed');
-            }
             container.appendChild(badge);
         }
+
+        // Initialize or recreate repo FilterGroup
+        filterGroups.repo = new FilterGroup({
+            name: 'repo',
+            container: container,
+            buttons: repoPrefixes.map(function(code) {
+                return {key: code.toLowerCase(), label: code};
+            }),
+            defaultOn: new Set(repoPrefixes.map(function(c) { return c.toLowerCase(); })),
+            sensitiveEvents: new Set(['refresh']),
+            countFn: function(key, rows) {
+                var count = 0;
+                for (var i = 0; i < rows.length; i++) {
+                    if ((rows[i].repo_prefix || '').toLowerCase() === key) count++;
+                }
+                return count;
+            },
+            matchFn: function(row) { return (row.repo_prefix || 'main').toLowerCase(); },
+            onChange: function() { renderNavTree(); saveState(); },
+        });
+        filterGroups.repo.recompute(rows);
     });
 }
 
@@ -121,35 +326,8 @@ async function loadTreeData() {
     if (!data) return;
     editState.treeData = data;
     updateHeaderStats();
+    onFilterEvent('refresh');
     renderNavTree();
-    updateGitFilterAvailability();
-}
-
-function updateGitFilterAvailability() {
-    var rows = editState.treeData || [];
-    var hasUnsaved = rows.some(function(r) { return r.is_unsaved; });
-    var hasUncommitted = rows.some(function(r) { return r.is_uncommitted; });
-    var hasChanged = rows.some(function(r) { return r.is_changed; });
-    var hasUnchanged = rows.some(function(r) { return !r.is_unsaved && !r.is_uncommitted && !r.is_changed; });
-    var filters = [
-        { id: 'edit-btn-unsaved', key: 'unsaved', has: hasUnsaved },
-        { id: 'edit-btn-uncommitted', key: 'uncommitted', has: hasUncommitted },
-        { id: 'edit-btn-changed', key: 'changed', has: hasChanged },
-        { id: 'edit-btn-unchanged', key: 'unchanged', has: hasUnchanged }
-    ];
-    filters.forEach(function(f) {
-        var btn = document.getElementById(f.id);
-        if (!btn) return;
-        if (f.has) {
-            btn.disabled = false;
-            btn.classList.remove('unavailable');
-        } else {
-            btn.disabled = true;
-            btn.classList.add('unavailable');
-            btn.classList.add('on');  // Reset to "on" (visible) when no items match
-            editState.activeFilters[f.key] = false;
-        }
-    });
 }
 
 function renderNavTree() {
@@ -208,26 +386,30 @@ function renderNavTree() {
         return;
     }
 
-    // Apply edit-mode filters
+    // Apply filters via FilterGroup
     const totalBeforeFilter = filteredRows.length;
-    const af = editState.activeFilters;
-    var hiddenRepos = af.hiddenRepos || [];
     const hasTextFilter = editState.textMatchIds !== null;
-    const hasActiveFilter = af.levelPrd || af.levelOps || af.levelDev ||
-        af.unsaved || af.uncommitted || af.changed || af.unchanged || af.main || af.leaf ||
-        af.hiddenStatuses.size > 0 ||
-        hiddenRepos.length > 0 ||
-        editState.filterCoverage !== '' ||
-        hasTextFilter;
+
+    // Determine if any filter is actually narrowing the result set
+    var hasActiveFilter = hasTextFilter;
+    for (var gname in filterGroups) {
+        var fg = filterGroups[gname];
+        // A group is actively filtering if not all available keys are on
+        for (var bi = 0; bi < fg.buttons.length; bi++) {
+            if (!fg._on.has(fg.buttons[bi].key) && (fg._available.get(fg.buttons[bi].key) || 0) > 0) {
+                hasActiveFilter = true;
+                break;
+            }
+        }
+        if (hasActiveFilter) break;
+    }
 
     // Track which rows are direct filter matches (vs ancestor context)
     var matchSet = null;
     var directMatchCount = 0;
 
     if (hasActiveFilter) {
-        // Build parent-index map: for each row index, find its parent row index
-        // (nearest preceding row whose id matches this row's parent_id).
-        // This handles DAG flattening where the same ID appears multiple times.
+        // Build parent-index map
         var parentIdx = new Array(filteredRows.length);
         for (var i = 0; i < filteredRows.length; i++) {
             parentIdx[i] = -1;
@@ -240,53 +422,42 @@ function renderNavTree() {
                 }
             }
         }
-        // First pass: mark row indices that directly match the filter
+        // First pass: mark row indices that directly match all filters
         var matchIndices = new Set();
         for (var i = 0; i < filteredRows.length; i++) {
             var r = filteredRows[i];
-            // Level filters (when active, HIDE that level)
-            if (af.levelPrd && r.level === 'PRD') continue;
-            if (af.levelOps && r.level === 'OPS') continue;
-            if (af.levelDev && r.level === 'DEV') continue;
-            // Associated repo filters (hide specific repos)
-            if (hiddenRepos.length > 0 && r.is_associated &&
-                r.repo_prefix && hiddenRepos.indexOf(r.repo_prefix) >= 0) continue;
-            // Git filters (when active, HIDE matching items)
-            if (af.unsaved && r.is_unsaved) continue;
-            if (af.uncommitted && r.is_uncommitted) continue;
-            if (af.changed && r.is_changed) continue;
-            if (af.unchanged && !r.is_unsaved && !r.is_uncommitted && !r.is_changed) continue;
-            // Core filter (hide core/non-associated items)
-            if (af.main && !r.is_associated) continue;
-            // Leaf only
-            if (af.leaf && !r.is_leaf) continue;
-            // Hide statuses (badge buttons)
-            if (af.hiddenStatuses.size > 0 && r.status && af.hiddenStatuses.has(r.status.toLowerCase())) continue;
-            // Coverage dropdown
-            if (editState.filterCoverage && r.coverage !== editState.filterCoverage) continue;
+            var match = true;
+
+            // Check all filter groups (AND between groups)
+            for (var gname in filterGroups) {
+                if (!filterGroups[gname].matches(r)) { match = false; break; }
+            }
+
             // Text filter (intersect with search API results)
-            if (hasTextFilter && !editState.textMatchIds.has(r.id)) continue;
-            matchIndices.add(i);
+            if (match && hasTextFilter && !editState.textMatchIds.has(r.id)) match = false;
+
+            if (match) matchIndices.add(i);
         }
         directMatchCount = matchIndices.size;
+
         // Second pass: include ancestors of matching rows to preserve tree structure
-        var allVisible = new Set(matchIndices);
-        for (var i = 0; i < filteredRows.length; i++) {
-            if (matchIndices.has(i)) {
-                var pi = parentIdx[i];
-                while (pi >= 0) {
-                    if (allVisible.has(pi)) break;  // already included
-                    allVisible.add(pi);
-                    pi = parentIdx[pi];
+        var showParents = true;
+        var showParentsCb = document.getElementById('toggle-show-parents');
+        if (showParentsCb) showParents = showParentsCb.checked;
+
+        if (showParents) {
+            var allVisible = new Set(matchIndices);
+            for (var i = 0; i < filteredRows.length; i++) {
+                if (matchIndices.has(i)) {
+                    var pi = parentIdx[i];
+                    while (pi >= 0) {
+                        if (allVisible.has(pi)) break;
+                        allVisible.add(pi);
+                        pi = parentIdx[pi];
+                    }
                 }
             }
-        }
-        // When hideFiltered is active, only show direct matches (no dimmed ancestors)
-        if (af.hideFiltered) {
-            matchSet = null;  // no dimming needed — non-matches are hidden
-            filteredRows = filteredRows.filter(function(r, idx) { return matchIndices.has(idx); });
-        } else {
-            // Build a set of original indices for matched rows (for dimming context-only rows)
+            // Build matchSet for dimming context-only rows
             matchSet = new Set();
             var finalIdx = 0;
             for (var i = 0; i < filteredRows.length; i++) {
@@ -296,6 +467,10 @@ function renderNavTree() {
                 }
             }
             filteredRows = filteredRows.filter(function(r, idx) { return allVisible.has(idx); });
+        } else {
+            // No parent inclusion — only show direct matches
+            matchSet = null;
+            filteredRows = filteredRows.filter(function(r, idx) { return matchIndices.has(idx); });
         }
     }
 
@@ -308,6 +483,7 @@ function renderNavTree() {
             counterEl.textContent = '';
         }
     }
+    updateCounterTooltip();
 
     if (hasActiveFilter && directMatchCount === 0) {
         container.innerHTML = '<div style="padding:20px;color:#adb5bd;text-align:center;font-size:0.85rem;">No matching requirements</div>';
@@ -315,7 +491,6 @@ function renderNavTree() {
     }
 
     // Pre-compute which rows have visible children in the filtered set.
-    // This prevents showing an expand icon when all children are filtered out.
     var rowsWithVisibleChildren = new Set();
     for (var vi = 0; vi < filteredRows.length; vi++) {
         if (filteredRows[vi].parent_id) {
@@ -329,21 +504,17 @@ function renderNavTree() {
         }
     }
 
-    // Propagate comment indicators upward: if a hidden child has comments,
-    // mark the nearest visible ancestor with _has_child_comments
-    // Process bottom-up so deeper nodes propagate to shallower ones
+    // Propagate comment indicators upward
     for (var ci = filteredRows.length - 1; ci >= 0; ci--) {
         var crow = filteredRows[ci];
         var crowHasComments = crow.has_comments || crow._has_child_comments;
         if (!crowHasComments) continue;
-        // If this row is hidden (ancestor collapsed), propagate up
         if (crow.depth > 0 && isAncestorCollapsed(crow, filteredRows, matchSet, ci)) {
-            // Find nearest visible ancestor
             for (var pi = ci - 1; pi >= 0; pi--) {
                 if (filteredRows[pi].depth < crow.depth) {
                     filteredRows[pi]._has_child_comments = true;
                     if (!isAncestorCollapsed(filteredRows[pi], filteredRows, matchSet, pi)) {
-                        break; // found visible ancestor
+                        break;
                     }
                 }
             }
@@ -384,7 +555,6 @@ function renderNavTree() {
         var statusBadge = '';
         if (row.status) {
             var statusLower = row.status.toLowerCase();
-            // Pick color/tip based on coverage mode
             var covColorMap = {
                 'all': 'validation_color', 'impl': 'impl_color',
                 'tested': 'tested_color', 'verified': 'verified_color',
@@ -403,7 +573,7 @@ function renderNavTree() {
             statusBadge = '<span class="status-badge ' + statusLower + valClass + '"' + tipAttr + '>' + row.status + '</span>';
         }
 
-        // Status indicators — each in a fixed-width slot to the left of the badge
+        // Status indicators
         var indicators = '';
         indicators += '<span class="nav-tree-indicator' + (row.has_comments ? ' nav-tree-comment-icon direct' : (row._has_child_comments ? ' nav-tree-comment-icon inherited' : '')) + '"' +
             (row.has_comments ? ' title="Has comments"' : (row._has_child_comments ? ' title="Child has comments"' : '')) +
@@ -449,13 +619,10 @@ function renderNavTree() {
 
 function isAncestorCollapsed(row, allRows, matchSet, rowIdx) {
     if (!row.parent_id) return false;
-    // Walk up the parent chain, searching backward from current position
-    // to find the correct parent instance (DAG nodes may appear multiple times).
     var parentId = row.parent_id;
     var searchFrom = (rowIdx !== undefined) ? rowIdx : allRows.length;
     var expectedDepth = row.depth - 1;
     while (parentId) {
-        // Find nearest preceding row with matching id and depth
         var pIdx = -1;
         for (var i = searchFrom - 1; i >= 0; i--) {
             if (allRows[i].id === parentId && allRows[i].depth === expectedDepth) {
@@ -463,15 +630,8 @@ function isAncestorCollapsed(row, allRows, matchSet, rowIdx) {
                 break;
             }
         }
-        if (pIdx < 0) {
-            // Parent was filtered out — its collapse state is irrelevant.
-            // We can't walk further since we don't know its parent_id.
-            break;
-        }
+        if (pIdx < 0) break;
         if (editState.collapsedTreeNodes.has(parentId)) {
-            // If filters are active and the collapsed ancestor is a context-only
-            // (dimmed) row, don't honor the collapse — the user wants to see
-            // the matching children even if the ancestor was previously collapsed.
             if (matchSet && !matchSet.has(pIdx)) {
                 searchFrom = pIdx;
                 parentId = allRows[pIdx].parent_id;
@@ -503,88 +663,6 @@ function switchNavTab(kind) {
     document.querySelectorAll('.nav-tab').forEach(function(tab) {
         tab.classList.toggle('active', tab.dataset.kind === kind);
     });
-    renderNavTree();
-    saveState();
-}
-
-// =====================================================================
-// Edit-Mode Filters
-// =====================================================================
-
-function toggleEditLevelFilter(key) {
-    editState.activeFilters[key] = !editState.activeFilters[key];
-    // Toggle dimmed state on header stat badge
-    var badgeMap = { levelPrd: 'stat-prd', levelOps: 'stat-ops', levelDev: 'stat-dev' };
-    var badge = document.getElementById(badgeMap[key]);
-    if (badge) badge.classList.toggle('dimmed', editState.activeFilters[key]);
-    applyEditFilters();
-}
-
-// Git filter buttons: same convention as status filters — .on = visible, no .on = hidden
-function toggleGitFilter(key) {
-    // Toggle: when .on is removed, items are hidden
-    var btnMap = { unsaved: 'edit-btn-unsaved', uncommitted: 'edit-btn-uncommitted', changed: 'edit-btn-changed' };
-    var btn = btnMap[key] ? document.getElementById(btnMap[key]) : null;
-    var isCurrentlyOn = btn && btn.classList.contains('on');
-    // When turning OFF (hiding), set the filter to exclude those items
-    // When turning ON (showing), clear the filter
-    editState.activeFilters[key] = isCurrentlyOn;  // true = hide these items
-    if (btn) btn.classList.toggle('on', !isCurrentlyOn);
-    applyEditFilters();
-}
-
-function toggleEditFilter(key) {
-    editState.activeFilters[key] = !editState.activeFilters[key];
-    // Update stat badge state for core filter (dimmed = hiding associated)
-    if (key === 'main') {
-        var mainBadge = document.getElementById('stat-main');
-        if (mainBadge) mainBadge.classList.toggle('dimmed', editState.activeFilters.main);
-    }
-    // Update checkbox state for toggles
-    var checkMap = {
-        leaf: 'edit-toggle-leaf',
-    };
-    if (checkMap[key]) {
-        var cb = document.getElementById(checkMap[key]);
-        if (cb) cb.checked = editState.activeFilters[key];
-    }
-    applyEditFilters();
-}
-
-function toggleRepoFilter(repoCode) {
-    if (!editState.activeFilters.hiddenRepos) {
-        editState.activeFilters.hiddenRepos = [];
-    }
-    var idx = editState.activeFilters.hiddenRepos.indexOf(repoCode);
-    if (idx >= 0) {
-        editState.activeFilters.hiddenRepos.splice(idx, 1);
-    } else {
-        editState.activeFilters.hiddenRepos.push(repoCode);
-    }
-    // Update badge dimmed state
-    var badge = document.getElementById('stat-repo-' + repoCode);
-    if (badge) badge.classList.toggle('dimmed', idx < 0);
-    applyEditFilters();
-}
-
-function toggleStatusFilter(status) {
-    var key = status.toLowerCase();
-    if (editState.activeFilters.hiddenStatuses.has(key)) {
-        editState.activeFilters.hiddenStatuses.delete(key);
-    } else {
-        editState.activeFilters.hiddenStatuses.add(key);
-    }
-    // Sync badge button: .on = showing (not in hiddenStatuses)
-    var btn = document.getElementById('status-filter-' + key);
-    if (btn) btn.classList.toggle('on', !editState.activeFilters.hiddenStatuses.has(key));
-    renderNavTree();
-    saveState();
-}
-
-function applyEditFilters() {
-    // Sync dropdown values to state
-    var covSel = document.getElementById('edit-filter-coverage');
-    if (covSel) editState.filterCoverage = covSel.value;
     renderNavTree();
     saveState();
 }
@@ -628,41 +706,26 @@ function onTreeTextFilter() {
     }, 250);
 }
 
-function clearEditFilters() {
-    // Reset all filter state
-    var defaultHidden = {{ default_hidden_statuses | map('lower') | list | tojson }};
-    editState.activeFilters = {
-        levelPrd: false, levelOps: false, levelDev: false,
-        unsaved: false, uncommitted: false, changed: false, main: false, leaf: false,
-        hideFiltered: false,
-        hiddenRepos: [],
-        hiddenStatuses: new Set(defaultHidden)
-    };
-    editState.filterCoverage = '';
+// =====================================================================
+// Clear All Filters
+// =====================================================================
+
+function clearAllFilters() {
+    for (var gname in filterGroups) {
+        filterGroups[gname].reset();
+    }
     editState.filterText = '';
     editState.textMatchIds = null;
     var textInput = document.getElementById('edit-filter-text');
     if (textInput) textInput.value = '';
+    var showParentsCb = document.getElementById('toggle-show-parents');
+    if (showParentsCb) showParentsCb.checked = true;
+    // Re-activate filter toggle button
+    var ftb = document.getElementById('filter-toggle-btn');
+    if (ftb && !editState.toolbarHidden) ftb.classList.add('active');
     // Reset header stat badge states
     document.querySelectorAll('.stat-badge').forEach(function(b) {
         b.classList.remove('dimmed');
-        b.classList.remove('active');
-    });
-    // Re-activate filter toggle button (toolbar is still visible after clear)
-    var ftb = document.getElementById('filter-toggle-btn');
-    if (ftb && !editState.toolbarHidden) ftb.classList.add('active');
-    // Reset toolbar buttons
-    document.querySelectorAll('#edit-toolbar .btn-group .btn').forEach(function(b) { b.classList.remove('active'); });
-    var covSel = document.getElementById('edit-filter-coverage');
-    if (covSel) covSel.value = '';
-    var leafCb = document.getElementById('edit-toggle-leaf');
-    if (leafCb) leafCb.checked = false;
-    var hideFilteredCb = document.getElementById('edit-toggle-hide-filtered');
-    if (hideFilteredCb) hideFilteredCb.checked = false;
-    // Reset status filter badge buttons to default state
-    document.querySelectorAll('.status-filter-btn').forEach(function(btn) {
-        var statusKey = btn.getAttribute('data-status');
-        btn.classList.toggle('on', defaultHidden.indexOf(statusKey) < 0);
     });
     renderNavTree();
     saveState();

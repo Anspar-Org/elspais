@@ -1,87 +1,138 @@
-/* Partial: _toolbar.css.j2 — Toolbar controls */
+/* Partial: _toolbar.css.j2 — Unified toolbar controls */
 
+/* Layout */
 .toolbar {
     background: var(--panel-bg);
     border-bottom: 1px solid var(--border-color);
     padding: 12px 24px;
     display: flex;
-    flex-wrap: wrap;
     gap: 12px;
-    align-items: center;
-}
-
-.btn-group {
-    display: flex;
-    border: 1px solid var(--border-light);
-    border-radius: 4px;
+    align-items: stretch;
+    transition: max-height 0.2s ease, padding 0.2s ease, opacity 0.2s ease;
+    max-height: 200px;
     overflow: hidden;
 }
 
-.btn-group .btn {
-    border: none;
-    border-right: 1px solid var(--border-light);
-    background: var(--panel-bg);
-    padding: 8px 16px;
-    cursor: pointer;
-    font-size: 0.875rem;
-    color: var(--input-text);
-    transition: background 0.15s;
+.toolbar.toolbar-hidden {
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    opacity: 0;
+    border-bottom: none;
 }
 
-.btn-group .btn:last-child {
-    border-right: none;
-}
-
-.btn-group .btn:hover {
-    background: var(--body-bg);
-}
-
-.btn-group .btn.active {
-    background: var(--primary);
-    color: white;
-}
-/* Git filter buttons — same pattern as status-filter-btn */
-.status-filter-btn[data-status="unsaved"]     { border-color: #dc3545; color: #dc3545; }
-.status-filter-btn[data-status="uncommitted"] { border-color: #0d6efd; color: #0d6efd; }
-.status-filter-btn[data-status="changed"]     { border-color: #6c757d; color: #6c757d; }
-
-.status-filter-btn.on[data-status="unsaved"]     { background: #dc3545; border-color: #dc3545; color: #fff; }
-.status-filter-btn.on[data-status="uncommitted"] { background: #0d6efd; border-color: #0d6efd; color: #fff; }
-.status-filter-btn.on[data-status="changed"]     { background: #6c757d; border-color: #6c757d; color: #fff; }
-
-.status-filter-btn[data-status="unchanged"]     { border-color: var(--secondary-text); color: var(--secondary-text); }
-.status-filter-btn.on[data-status="unchanged"]  { background: var(--secondary-text); border-color: var(--secondary-text); color: #fff; }
-
-.status-filter-btn.unavailable {
-    border-color: var(--border-color) !important;
-    color: var(--border-color) !important;
-    background: transparent !important;
-    cursor: default;
-    opacity: 0.5;
-}
-
-.toggle-group {
+.toolbar-search {
     display: flex;
-    gap: 16px;
-    align-items: center;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 220px;
+    max-width: 280px;
 }
 
-.toggle-item {
+.toolbar-divider {
+    border-left: 1px solid var(--border-light);
+    align-self: stretch;
+}
+
+.toolbar-filters {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+}
+
+.toolbar-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.filter-group {
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 0.875rem;
-    color: var(--input-text);
-    cursor: pointer;
 }
 
-.toggle-item input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-    cursor: pointer;
-    accent-color: var(--primary);
+.filter-group-label {
+    color: var(--secondary-text);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    white-space: nowrap;
 }
 
+.filter-group-buttons {
+    display: flex;
+    gap: 2px;
+}
+
+/* Filter buttons — base (outlined = hidden) */
+.filter-btn {
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    cursor: pointer;
+    border: 1px solid transparent;
+    background: transparent;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    user-select: none;
+}
+
+.filter-btn:hover { opacity: 0.85; }
+
+/* Unavailable (dimmed) */
+.filter-btn.unavailable {
+    opacity: 0.35;
+    cursor: default;
+    pointer-events: none;
+}
+
+/* Shake animation for last-button protection */
+@keyframes filter-btn-shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-2px); }
+    75% { transform: translateX(2px); }
+}
+.filter-btn-shake {
+    animation: filter-btn-shake 0.3s ease;
+}
+
+/* Per-group per-key colors */
+/* Git */
+.filter-btn[data-group="git"][data-key="unsaved"]     { border-color: #dc3545; color: #dc3545; }
+.filter-btn.on[data-group="git"][data-key="unsaved"]   { background: #dc3545; border-color: #dc3545; color: #fff; }
+.filter-btn[data-group="git"][data-key="uncommitted"]  { border-color: #0d6efd; color: #0d6efd; }
+.filter-btn.on[data-group="git"][data-key="uncommitted"]{ background: #0d6efd; border-color: #0d6efd; color: #fff; }
+.filter-btn[data-group="git"][data-key="changed"]      { border-color: #6c757d; color: #6c757d; }
+.filter-btn.on[data-group="git"][data-key="changed"]    { background: #6c757d; border-color: #6c757d; color: #fff; }
+.filter-btn[data-group="git"][data-key="unchanged"]    { border-color: var(--secondary-text); color: var(--secondary-text); }
+.filter-btn.on[data-group="git"][data-key="unchanged"]  { background: var(--secondary-text); border-color: var(--secondary-text); color: #fff; }
+
+/* Status — use existing CSS variables */
+.filter-btn[data-group="status"][data-key="draft"]       { border-color: var(--status-draft-text); color: var(--status-draft-text); }
+.filter-btn.on[data-group="status"][data-key="draft"]     { background: var(--status-draft-bg); border-color: var(--status-draft-bg); }
+.filter-btn[data-group="status"][data-key="active"]      { border-color: var(--status-active-text); color: var(--status-active-text); }
+.filter-btn.on[data-group="status"][data-key="active"]    { background: var(--status-active-bg); border-color: var(--status-active-bg); }
+.filter-btn[data-group="status"][data-key="deprecated"]  { border-color: var(--status-deprecated-text); color: var(--status-deprecated-text); }
+.filter-btn.on[data-group="status"][data-key="deprecated"]{ background: var(--status-deprecated-bg); border-color: var(--status-deprecated-bg); }
+.filter-btn[data-group="status"][data-key="proposed"]    { border-color: var(--status-proposed-text); color: var(--status-proposed-text); }
+.filter-btn.on[data-group="status"][data-key="proposed"]  { background: var(--status-proposed-bg); border-color: var(--status-proposed-bg); }
+
+/* Hierarchy */
+.filter-btn[data-group="hierarchy"]     { border-color: #6f42c1; color: #6f42c1; }
+.filter-btn.on[data-group="hierarchy"]   { background: #6f42c1; border-color: #6f42c1; color: #fff; }
+
+/* Coverage */
+.filter-btn[data-group="coverage"][data-key="none"]    { border-color: #dc3545; color: #dc3545; }
+.filter-btn.on[data-group="coverage"][data-key="none"]  { background: #dc3545; border-color: #dc3545; color: #fff; }
+.filter-btn[data-group="coverage"][data-key="partial"] { border-color: #ffc107; color: #ffc107; }
+.filter-btn.on[data-group="coverage"][data-key="partial"]{ background: #ffc107; border-color: #ffc107; color: #000; }
+.filter-btn[data-group="coverage"][data-key="full"]    { border-color: #198754; color: #198754; }
+.filter-btn.on[data-group="coverage"][data-key="full"]  { background: #198754; border-color: #198754; color: #fff; }
+
+/* Toolbar actions (Clear + counter) */
 .toolbar-actions {
     display: flex;
     gap: 8px;
@@ -89,6 +140,7 @@
     align-items: center;
 }
 
+/* General buttons */
 .btn {
     padding: 8px 16px;
     border: 1px solid var(--border-light);
@@ -113,52 +165,7 @@
     color: var(--secondary-text);
 }
 
-/* Status filter badge buttons (filled=on/showing, outline=off/hidden) */
-.status-filter-group {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-}
-
-.status-filter-btn {
-    padding: 3px 10px;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
-    user-select: none;
-    border: 1px solid transparent;
-    background: transparent;
-}
-
-/* Outline (off/hidden) — status-specific border+text colors */
-.status-filter-btn[data-status="draft"]       { border-color: var(--status-draft-text);      color: var(--status-draft-text); }
-.status-filter-btn[data-status="active"]      { border-color: var(--status-active-text);     color: var(--status-active-text); }
-.status-filter-btn[data-status="deprecated"]  { border-color: var(--status-deprecated-text); color: var(--status-deprecated-text); }
-.status-filter-btn[data-status="proposed"]    { border-color: var(--status-proposed-text);   color: var(--status-proposed-text); }
-
-/* Filled (on/showing) — use status badge bg+text colors */
-.status-filter-btn.on[data-status="draft"]       { background: var(--status-draft-bg);      border-color: var(--status-draft-bg); }
-.status-filter-btn.on[data-status="active"]      { background: var(--status-active-bg);     border-color: var(--status-active-bg); }
-.status-filter-btn.on[data-status="deprecated"]  { background: var(--status-deprecated-bg); border-color: var(--status-deprecated-bg); }
-.status-filter-btn.on[data-status="proposed"]    { background: var(--status-proposed-bg);   border-color: var(--status-proposed-bg); }
-
-.status-filter-btn:hover { opacity: 0.85; }
-
-/* Filter dropdown (shared by toolbar) */
-.filter-select {
-    padding: 6px 8px;
-    border: 1px solid var(--border-light);
-    border-radius: 4px;
-    font-size: 0.875rem;
-    color: var(--input-text);
-    background: var(--panel-bg);
-    cursor: pointer;
-}
-
-/* Text filter input */
+/* Text filter input (now textarea) */
 .filter-text-input {
     padding: 6px 10px;
     border: 1px solid var(--border-light);
@@ -166,9 +173,10 @@
     font-size: 0.875rem;
     color: var(--input-text);
     background: var(--panel-bg);
-    min-width: 180px;
-    flex: 1;
-    max-width: 320px;
+    resize: none;
+    font-family: inherit;
+    width: 100%;
+    box-sizing: border-box;
 }
 .filter-text-input:focus {
     outline: none;
@@ -188,16 +196,18 @@
     opacity: 0.7;
 }
 
-/* Hideable toolbar */
-.toolbar {
-    transition: max-height 0.2s ease, padding 0.2s ease, opacity 0.2s ease;
-    max-height: 100px;
-    overflow: hidden;
+/* Show hidden parents toggle (inline label under search) */
+.toggle-inline {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.75rem;
+    color: var(--secondary-text);
+    cursor: pointer;
 }
-.toolbar.toolbar-hidden {
-    max-height: 0;
-    padding-top: 0;
-    padding-bottom: 0;
-    opacity: 0;
-    border-bottom: none;
+.toggle-inline input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
+    accent-color: var(--primary);
 }

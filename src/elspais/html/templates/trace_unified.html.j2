@@ -176,21 +176,7 @@ const editState = {
     treeData: [],
     collapsedTreeNodes: new Set(),
     searchDebounce: null,
-    activeFilters: {
-        levelPrd: false,
-        levelOps: false,
-        levelDev: false,
-        unsaved: false,
-        uncommitted: false,
-        changed: false,
-        main: false,
-        leaf: false,
-        hideFiltered: false,
-        hiddenRepos: [],
-        hiddenStatuses: new Set({{ default_hidden_statuses | map('lower') | list | tojson }})
-    },
     knownRepos: [],
-    filterCoverage: '',
     filterText: '',
     textMatchIds: null,
     fontSize: 14,
@@ -235,6 +221,7 @@ const editState = {
 {% include "partials/js/_edit-engine.js.j2" %}
 {% endif %}
 
+{% include "partials/js/_filter-group.js.j2" %}
 {% include "partials/js/_nav-tree.js.j2" %}
 {% include "partials/js/_card-stack.js.j2" %}
 {% include "partials/js/_help-mode.js.j2" %}
@@ -375,51 +362,19 @@ document.addEventListener('DOMContentLoaded', function() {
         if (saved.collapsedTreeNodes && Array.isArray(saved.collapsedTreeNodes)) {
             editState.collapsedTreeNodes = new Set(saved.collapsedTreeNodes);
         }
-        // Restore nav tree filters
-        if (saved.activeFilters) {
-            Object.assign(editState.activeFilters, saved.activeFilters);
-            // Restore hiddenStatuses as a Set (saved as array in cookie)
-            var defaultHiddenStatuses = {{ default_hidden_statuses | map('lower') | list | tojson }};
-            if (Array.isArray(editState.activeFilters.hiddenStatuses)) {
-                editState.activeFilters.hiddenStatuses = new Set(editState.activeFilters.hiddenStatuses);
-            } else if (!(editState.activeFilters.hiddenStatuses instanceof Set)) {
-                editState.activeFilters.hiddenStatuses = new Set(defaultHiddenStatuses);
+        // Restore FilterGroup state
+        if (saved.filterState) {
+            for (var gname in filterGroups) {
+                if (saved.filterState[gname]) {
+                    filterGroups[gname].restore(saved.filterState[gname]);
+                    filterGroups[gname].render();
+                }
             }
-            // Update header stat badge dimmed state (null-guard for elements)
-            var statPrd = document.getElementById('stat-prd');
-            var statOps = document.getElementById('stat-ops');
-            var statDev = document.getElementById('stat-dev');
-            var statMain = document.getElementById('stat-main');
-            if (statPrd) statPrd.classList.toggle('dimmed', !!editState.activeFilters.levelPrd);
-            if (statOps) statOps.classList.toggle('dimmed', !!editState.activeFilters.levelOps);
-            if (statDev) statDev.classList.toggle('dimmed', !!editState.activeFilters.levelDev);
-            if (statMain) statMain.classList.toggle('dimmed', !!editState.activeFilters.main);
-            // Ensure hiddenRepos is an array
-            if (!Array.isArray(editState.activeFilters.hiddenRepos)) {
-                editState.activeFilters.hiddenRepos = [];
+            // Restore show hidden parents
+            if (saved.filterState.showHiddenParents !== undefined) {
+                var showParentsCb = document.getElementById('toggle-show-parents');
+                if (showParentsCb) showParentsCb.checked = saved.filterState.showHiddenParents;
             }
-            // Update toolbar focus filter buttons (null-guard)
-            var btnUnsaved = document.getElementById('edit-btn-unsaved');
-            var btnUncommitted = document.getElementById('edit-btn-uncommitted');
-            var btnChanged = document.getElementById('edit-btn-changed');
-            if (btnUnsaved) btnUnsaved.classList.toggle('active', !!editState.activeFilters.unsaved);
-            if (btnUncommitted) btnUncommitted.classList.toggle('active', !!editState.activeFilters.uncommitted);
-            if (btnChanged) btnChanged.classList.toggle('active', !!editState.activeFilters.changed);
-            // Update checkboxes (null-guard)
-            var leafCb = document.getElementById('edit-toggle-leaf');
-            if (leafCb) leafCb.checked = !!editState.activeFilters.leaf;
-            // Sync status filter badge buttons with restored hiddenStatuses
-            document.querySelectorAll('.status-filter-btn').forEach(function(btn) {
-                var statusKey = btn.getAttribute('data-status');
-                btn.classList.toggle('on', !editState.activeFilters.hiddenStatuses.has(statusKey));
-            });
-            var hideFilteredCb = document.getElementById('edit-toggle-hide-filtered');
-            if (hideFilteredCb) hideFilteredCb.checked = !!editState.activeFilters.hideFiltered;
-        }
-        if (saved.filterCoverage) {
-            editState.filterCoverage = saved.filterCoverage;
-            var filterCovSel = document.getElementById('edit-filter-coverage');
-            if (filterCovSel) filterCovSel.value = saved.filterCoverage;
         }
         if (saved.filterText) {
             editState.filterText = saved.filterText;

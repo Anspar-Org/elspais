@@ -1,59 +1,86 @@
-{# Partial: _toolbar.html.j2 — Unified filter toolbar (both modes) #}
+{# Partial: _toolbar.html.j2 — Unified filter toolbar #}
 {# Implements: REQ-p00006-A, REQ-p00006-B #}
 
 <div class="toolbar" id="edit-toolbar">
-    <!-- Text Filter (first, so it's always above the tree) -->
-    <input type="text" class="filter-text-input" id="edit-filter-text"
-           placeholder="Filter tree... (e.g. auth OR password)"
-           oninput="onTreeTextFilter()"
-           title="Filter the tree view: space=AND, OR, -exclude, =exact, &quot;phrase&quot;">
-
-    <!-- Git Filters -->
-    <div class="btn-group" role="group">
-        <button class="status-filter-btn on" id="edit-btn-unsaved" data-status="unsaved" onclick="toggleGitFilter('unsaved')"
-                title="Toggle visibility of requirements with pending in-memory edits">Unsaved</button>
-        <button class="status-filter-btn on" id="edit-btn-uncommitted" data-status="uncommitted" onclick="toggleGitFilter('uncommitted')"
-                title="Toggle visibility of requirements saved but not yet committed">Uncommitted</button>
-        <button class="status-filter-btn on" id="edit-btn-changed" data-status="changed" onclick="toggleGitFilter('changed')"
-                title="Toggle visibility of requirements changed on this branch vs main">Changed</button>
-        <button class="status-filter-btn on" id="edit-btn-unchanged" data-status="unchanged" onclick="toggleGitFilter('unchanged')"
-                title="Toggle visibility of requirements with no changes">Unchanged</button>
-    </div>
-
-    <!-- Status filter badges (filled=showing, outline=hidden) -->
-    <div class="status-filter-group" id="status-filter-group">
-        {% for status in statuses %}
-        <button class="status-filter-btn{% if status not in default_hidden_statuses %} on{% endif %}"
-                id="status-filter-{{ status | lower }}"
-                data-status="{{ status | lower }}"
-                onclick="toggleStatusFilter('{{ status }}')"
-                title="Toggle {{ status }} requirements">{{ status }}</button>
-        {% endfor %}
-    </div>
-
-    <!-- Coverage dropdown -->
-    <select class="filter-select" id="edit-filter-coverage" onchange="applyEditFilters()" title="Filter by coverage">
-        <option value="">Cov: All</option>
-        <option value="none">None</option>
-        <option value="partial">Partial</option>
-        <option value="full">Full</option>
-    </select>
-
-    <!-- Toggles -->
-    <div class="toggle-group">
-        <label class="toggle-item">
-            <input type="checkbox" id="edit-toggle-leaf" onchange="toggleEditFilter('leaf')">
-            <span>Leaf Only</span>
-        </label>
-        <label class="toggle-item">
-            <input type="checkbox" id="edit-toggle-hide-filtered" onchange="toggleEditFilter('hideFiltered')">
-            <span>Hide Filtered</span>
+    <!-- Left: Search spanning both rows -->
+    <div class="toolbar-search">
+        <textarea class="filter-text-input" id="edit-filter-text"
+                  placeholder="Filter tree... (space=AND, OR, -exclude, =exact, &quot;phrase&quot;)"
+                  oninput="onTreeTextFilter()" rows="2"
+                  title="Filter the tree view"></textarea>
+        <label class="toggle-inline">
+            <input type="checkbox" id="toggle-show-parents" checked
+                   onchange="toggleShowHiddenParents()">
+            <span>Show hidden parents</span>
         </label>
     </div>
 
-    <!-- Actions -->
-    <div class="toolbar-actions">
-        <button class="btn" onclick="clearEditFilters()" title="Clear all filters">Clear</button>
-        <span class="counter" id="edit-counter"></span>
+    <div class="toolbar-divider"></div>
+
+    <!-- Right: Filter groups in two rows -->
+    <div class="toolbar-filters">
+        <div class="toolbar-row">
+            <!-- Git group -->
+            <div class="filter-group" data-group="git">
+                <span class="filter-group-label">Git</span>
+                <div class="filter-group-buttons">
+                    <button class="filter-btn on" data-group="git" data-key="unsaved"
+                            onclick="filterGroups.git.handleClick('unsaved', event)">Unsaved</button>
+                    <button class="filter-btn on" data-group="git" data-key="uncommitted"
+                            onclick="filterGroups.git.handleClick('uncommitted', event)">Uncommitted</button>
+                    <button class="filter-btn on" data-group="git" data-key="changed"
+                            onclick="filterGroups.git.handleClick('changed', event)">Changed</button>
+                    <button class="filter-btn on" data-group="git" data-key="unchanged"
+                            onclick="filterGroups.git.handleClick('unchanged', event)">Unchanged</button>
+                </div>
+            </div>
+
+            <!-- Hierarchy group -->
+            <div class="filter-group" data-group="hierarchy">
+                <span class="filter-group-label">Hierarchy</span>
+                <div class="filter-group-buttons">
+                    <button class="filter-btn on" data-group="hierarchy" data-key="root"
+                            onclick="filterGroups.hierarchy.handleClick('root', event)">Root</button>
+                    <button class="filter-btn on" data-group="hierarchy" data-key="internal"
+                            onclick="filterGroups.hierarchy.handleClick('internal', event)">Internal</button>
+                    <button class="filter-btn on" data-group="hierarchy" data-key="leaf"
+                            onclick="filterGroups.hierarchy.handleClick('leaf', event)">Leaf</button>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="toolbar-actions">
+                <button class="btn" onclick="clearAllFilters()" title="Clear all filters">Clear</button>
+                <span class="counter" id="edit-counter" title=""></span>
+            </div>
+        </div>
+
+        <div class="toolbar-row">
+            <!-- Status group (buttons generated from sorted config) -->
+            <div class="filter-group" data-group="status">
+                <span class="filter-group-label">Status</span>
+                <div class="filter-group-buttons" id="status-filter-buttons">
+                    {% for status in statuses %}
+                    <button class="filter-btn{% if status not in default_hidden_statuses %} on{% endif %}"
+                            data-group="status" data-key="{{ status | lower }}"
+                            onclick="filterGroups.status.handleClick('{{ status | lower }}', event)"
+                            title="Toggle {{ status }} requirements">{{ status }}</button>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Coverage group -->
+            <div class="filter-group" data-group="coverage">
+                <span class="filter-group-label">Coverage</span>
+                <div class="filter-group-buttons">
+                    <button class="filter-btn on" data-group="coverage" data-key="none"
+                            onclick="filterGroups.coverage.handleClick('none', event)">None</button>
+                    <button class="filter-btn on" data-group="coverage" data-key="partial"
+                            onclick="filterGroups.coverage.handleClick('partial', event)">Partial</button>
+                    <button class="filter-btn on" data-group="coverage" data-key="full"
+                            onclick="filterGroups.coverage.handleClick('full', event)">Full</button>
+                </div>
+            </div>
+        </div>
     </div>
 </div>

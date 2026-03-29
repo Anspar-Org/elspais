@@ -6,11 +6,11 @@
     <div class="header-left">
         <h1 class="header-title">Elspais <span class="version-badge">v{{ version }}</span> <span class="repo-name-badge">{{ repo_name }}</span></h1>
         <div class="header-stats" id="header-stats">
-            <span class="stat-badge prd" id="stat-prd" onclick="toggleEditLevelFilter('levelPrd')" title="Click to hide PRD requirements">PRD: --</span>
-            <span class="stat-badge ops" id="stat-ops" onclick="toggleEditLevelFilter('levelOps')" title="Click to hide OPS requirements">OPS: --</span>
-            <span class="stat-badge dev" id="stat-dev" onclick="toggleEditLevelFilter('levelDev')" title="Click to hide DEV requirements">DEV: --</span>
+            <span class="stat-badge prd filter-btn on" id="stat-prd" data-group="level" data-key="prd" onclick="if(filterGroups.level)filterGroups.level.handleClick('prd',event)" title="Click to toggle PRD (Shift+click to solo)">PRD: --</span>
+            <span class="stat-badge ops filter-btn on" id="stat-ops" data-group="level" data-key="ops" onclick="if(filterGroups.level)filterGroups.level.handleClick('ops',event)" title="Click to toggle OPS (Shift+click to solo)">OPS: --</span>
+            <span class="stat-badge dev filter-btn on" id="stat-dev" data-group="level" data-key="dev" onclick="if(filterGroups.level)filterGroups.level.handleClick('dev',event)" title="Click to toggle DEV (Shift+click to solo)">DEV: --</span>
             <span class="stat-sep">|</span>
-            <span class="stat-badge main" id="stat-main" onclick="toggleEditFilter('main')" title="Click to hide core requirements">Core: --</span>
+            <span class="stat-badge main" id="stat-main" title="Core requirement count">Core: --</span>
             <span class="stat-sep">|</span>
             <span class="stat-badge tests" id="stat-tests" style="display:none;" title="Test count (from graph)">Tests: --</span>
             <span class="stat-badge results" id="stat-results" style="display:none;" title="Result count (from graph)">Results: --</span>

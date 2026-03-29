@@ -1,0 +1,162 @@
+/**
+ * FilterGroup — unified toggle/solo/dim filter group abstraction.
+ *
+ * Usage:
+ *   const group = new FilterGroup({ name, container, buttons, defaultOn,
+ *       sensitiveEvents, countFn, matchFn, onChange });
+ *   group.render();
+ *
+ * Interaction:
+ *   Click = toggle one button on/off (last-on protected)
+ *   Shift+click = solo (or unsolo if already soloed)
+ *
+ * State:
+ *   _on: Set<string> — keys currently "on" (visible)
+ *   _available: Map<string, number> — count per key; 0 = dimmed
+ *   _soloKey: string|null — currently soloed key for unsolo detection
+ */
+class FilterGroup {
+    constructor({ name, container, buttons, defaultOn, sensitiveEvents, countFn, matchFn, onChange }) {
+        this.name = name;
+        this.container = container;
+        this.buttons = buttons;           // [{key, label, color, borderColor}]
+        this.defaultOn = new Set(defaultOn);
+        this.sensitiveEvents = sensitiveEvents; // Set<string>
+        this.countFn = countFn;           // (key, treeData) => number
+        this.matchFn = matchFn;           // (row) => string | Set<string>
+        this.onChange = onChange;          // callback
+        this._on = new Set(defaultOn);
+        this._available = new Map();
+        this._soloKey = null;
+    }
+
+    toggle(key) {
+        // Skip if dimmed (unavailable) — but allow if recompute hasn't run yet
+        if (this._available.size > 0 && (this._available.get(key) || 0) === 0) return;
+        if (this._on.has(key)) {
+            // Don't allow turning off the last button
+            if (this._on.size <= 1) {
+                this._flashButton(key);
+                return;
+            }
+            this._on.delete(key);
+        } else {
+            this._on.add(key);
+        }
+        this._soloKey = null;
+        this.render();
+        this.onChange();
+    }
+
+    solo(key) {
+        // Skip if dimmed (unavailable) — but allow if recompute hasn't run yet
+        if (this._available.size > 0 && (this._available.get(key) || 0) === 0) return;
+        if (this._soloKey === key) {
+            // Unsolo: restore all available buttons to on
+            for (var i = 0; i < this.buttons.length; i++) {
+                if (this._available.get(this.buttons[i].key) > 0) {
+                    this._on.add(this.buttons[i].key);
+                }
+            }
+            this._soloKey = null;
+        } else {
+            // Solo: turn off everything except this key
+            this._on.clear();
+            this._on.add(key);
+            this._soloKey = key;
+        }
+        this.render();
+        this.onChange();
+    }
+
+    isOn(key) {
+        return this._on.has(key);
+    }
+
+    matches(row) {
+        var value = this.matchFn(row);
+        if (value instanceof Set) {
+            // Multi-value group (e.g. git): passes if any key intersects _on
+            for (var k of value) {
+                if (this._on.has(k)) return true;
+            }
+            return false;
+        }
+        return this._on.has(value);
+    }
+
+    isAvailable(key) {
+        return (this._available.get(key) || 0) > 0;
+    }
+
+    recompute(treeData) {
+        this._available.clear();
+        for (var i = 0; i < this.buttons.length; i++) {
+            this._available.set(this.buttons[i].key, this.countFn(this.buttons[i].key, treeData));
+        }
+        // Keys stay in _on even when unavailable — dimming handles the UX.
+        // This preserves user intent across data changes (e.g., branch switch
+        // temporarily removes all Draft items, then they reappear).
+        this.render();
+    }
+
+    reset() {
+        this._on = new Set(this.defaultOn);
+        this._soloKey = null;
+        this.render();
+    }
+
+    serialize() {
+        return { on: Array.from(this._on) };
+    }
+
+    restore(saved) {
+        if (saved && Array.isArray(saved.on)) {
+            this._on = new Set(saved.on);
+        }
+    }
+
+    hiddenSummary(treeData) {
+        // Returns array of {label, count} for buttons that are OFF and have items
+        var result = [];
+        for (var i = 0; i < this.buttons.length; i++) {
+            var btn = this.buttons[i];
+            if (!this._on.has(btn.key)) {
+                var count = this._available.get(btn.key) || 0;
+                if (count > 0) {
+                    result.push({ label: btn.label, count: count });
+                }
+            }
+        }
+        return result;
+    }
+
+    render() {
+        if (!this.container) return;
+        var els = this.container.querySelectorAll('.filter-btn[data-group="' + this.name + '"]');
+        var self = this;
+        var hasData = self._available.size > 0;
+        els.forEach(function(el) {
+            var key = el.getAttribute('data-key');
+            el.classList.toggle('on', self._on.has(key));
+            // Only mark unavailable after recompute has run (hasData),
+            // otherwise buttons flash dimmed during initial load
+            el.classList.toggle('unavailable', hasData && (self._available.get(key) || 0) === 0);
+        });
+    }
+
+    _flashButton(key) {
+        var el = this.container.querySelector('.filter-btn[data-group="' + this.name + '"][data-key="' + key + '"]');
+        if (!el) return;
+        el.classList.add('filter-btn-shake');
+        setTimeout(function() { el.classList.remove('filter-btn-shake'); }, 300);
+    }
+
+    handleClick(key, event) {
+        if (event && event.shiftKey) {
+            this.solo(key);
+        } else {
+            this.toggle(key);
+        }
+    }
+}

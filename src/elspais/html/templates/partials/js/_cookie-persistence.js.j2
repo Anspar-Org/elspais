@@ -4,9 +4,19 @@
 
 const COOKIE_NAME = 'elspais_trace_state';
 const COOKIE_DAYS = 30;
-const COOKIE_VERSION = 13;  // v13: card view mode (compact/complete)
+const COOKIE_VERSION = 14;  // v14: FilterGroup-based filter state
 
 function saveState() {
+    // Serialize filter groups
+    var filterState = {};
+    if (typeof filterGroups !== 'undefined') {
+        for (var gname in filterGroups) {
+            filterState[gname] = filterGroups[gname].serialize();
+        }
+    }
+    var showParentsCb = document.getElementById('toggle-show-parents');
+    filterState.showHiddenParents = showParentsCb ? showParentsCb.checked : true;
+
     const stateToSave = {
         _v: COOKIE_VERSION,
         editEnabled: editState.enabled,
@@ -14,10 +24,7 @@ function saveState() {
         activeNavTab: editState.activeNavTab,
         collapsedTreeNodes: Array.from(editState.collapsedTreeNodes),
         collapsedCards: [],
-        activeFilters: Object.assign({}, editState.activeFilters, {
-            hiddenStatuses: Array.from(editState.activeFilters.hiddenStatuses)
-        }),
-        filterCoverage: editState.filterCoverage,
+        filterState: filterState,
         fontSize: editState.fontSize,
         theme: editState.theme,
         toolbarHidden: editState.toolbarHidden,
@@ -30,6 +37,8 @@ function saveState() {
     editState.openCards.forEach(function(info, id) {
         if (info.collapsed) stateToSave.collapsedCards.push(id);
     });
+    // Persist filterText
+    if (editState.filterText) stateToSave.filterText = editState.filterText;
     var expires = new Date(Date.now() + COOKIE_DAYS * 864e5).toUTCString();
     document.cookie = COOKIE_NAME + '=' + encodeURIComponent(JSON.stringify(stateToSave)) +
         '; expires=' + expires + '; path=/; SameSite=Lax';
