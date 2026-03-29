@@ -110,15 +110,18 @@
 .filter-btn[data-group="git"][data-key="unchanged"]    { border-color: var(--secondary-text); color: var(--secondary-text); }
 .filter-btn.on[data-group="git"][data-key="unchanged"]  { background: var(--secondary-text); border-color: var(--secondary-text); color: #fff; }
 
-/* Status — use existing CSS variables */
-.filter-btn[data-group="status"][data-key="draft"]       { border-color: var(--status-draft-text); color: var(--status-draft-text); }
-.filter-btn.on[data-group="status"][data-key="draft"]     { background: var(--status-draft-bg); border-color: var(--status-draft-bg); }
-.filter-btn[data-group="status"][data-key="active"]      { border-color: var(--status-active-text); color: var(--status-active-text); }
-.filter-btn.on[data-group="status"][data-key="active"]    { background: var(--status-active-bg); border-color: var(--status-active-bg); }
-.filter-btn[data-group="status"][data-key="deprecated"]  { border-color: var(--status-deprecated-text); color: var(--status-deprecated-text); }
-.filter-btn.on[data-group="status"][data-key="deprecated"]{ background: var(--status-deprecated-bg); border-color: var(--status-deprecated-bg); }
-.filter-btn[data-group="status"][data-key="proposed"]    { border-color: var(--status-proposed-text); color: var(--status-proposed-text); }
-.filter-btn.on[data-group="status"][data-key="proposed"]  { background: var(--status-proposed-bg); border-color: var(--status-proposed-bg); }
+/* Status — use bg color for both outlined and filled (text colors are white, invisible on light bg) */
+.filter-btn[data-group="status"][data-key="draft"]       { border-color: var(--status-draft-bg); color: var(--status-draft-bg); }
+.filter-btn.on[data-group="status"][data-key="draft"]     { background: var(--status-draft-bg); border-color: var(--status-draft-bg); color: var(--status-draft-text); }
+.filter-btn[data-group="status"][data-key="active"]      { border-color: var(--status-active-bg); color: var(--status-active-bg); }
+.filter-btn.on[data-group="status"][data-key="active"]    { background: var(--status-active-bg); border-color: var(--status-active-bg); color: var(--status-active-text); }
+.filter-btn[data-group="status"][data-key="deprecated"]  { border-color: var(--status-deprecated-bg); color: var(--status-deprecated-bg); }
+.filter-btn.on[data-group="status"][data-key="deprecated"]{ background: var(--status-deprecated-bg); border-color: var(--status-deprecated-bg); color: var(--status-deprecated-text); }
+.filter-btn[data-group="status"][data-key="proposed"]    { border-color: var(--status-proposed-bg); color: var(--status-proposed-bg); }
+.filter-btn.on[data-group="status"][data-key="proposed"]  { background: var(--status-proposed-bg); border-color: var(--status-proposed-bg); color: var(--status-proposed-text); }
+/* Catch-all for custom/unknown statuses */
+.filter-btn[data-group="status"]                         { border-color: var(--secondary-text); color: var(--secondary-text); }
+.filter-btn.on[data-group="status"]                       { background: var(--secondary-text); border-color: var(--secondary-text); color: #fff; }
 
 /* Hierarchy */
 .filter-btn[data-group="hierarchy"]     { border-color: #6f42c1; color: #6f42c1; }
