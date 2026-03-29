@@ -386,7 +386,7 @@ else
     echo -e "${BLUE}Running full test suite...${NC}"
     echo ""
 
-    if ! pytest tests/ -m "" --tb=short -q --junitxml="$CACHE_DIR/test-results.xml" \
+    if ! pytest tests/ -m "" --tb=line --junitxml="$CACHE_DIR/test-results.xml" \
         --cov=src/elspais --cov-context=test --cov-report=json:"$CACHE_DIR/coverage.json" --cov-report= 2>&1; then
         VALIDATION_FAILED=true
         rm -f "$UNIT_CACHE" "$E2E_CACHE"

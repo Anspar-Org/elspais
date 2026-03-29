@@ -43,6 +43,12 @@ class TestFullProjectLifecycle:
         init = run_elspais("init", cwd=tmp_path)
         assert init.returncode == 0
 
+        # 1b. Disable changelog enforcement for this test (Active REQs defer otherwise)
+        config_path = tmp_path / ".elspais.toml"
+        config_text = config_path.read_text()
+        config_text = config_text.replace("hash_current = true", "hash_current = false")
+        config_path.write_text(config_text)
+
         # 2. Create spec directory and requirement
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir(exist_ok=True)
