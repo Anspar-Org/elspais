@@ -386,9 +386,11 @@ function renderNavTree() {
         return;
     }
 
+    // Text filter flag (shared by flat and tree modes)
+    var hasTextFilter = editState.textMatchIds !== null;
+
     // ── FLAT MODE ──────────────────────────────────────────────────────────
     if (editState.viewMode === 'flat' && activeTab === 'req') {
-        var hasTextFilter = editState.textMatchIds !== null;
         var flatRows = filteredRows.slice();
 
         // Apply all FilterGroup filters
@@ -463,7 +465,6 @@ function renderNavTree() {
 
     // Apply filters via FilterGroup
     const totalBeforeFilter = filteredRows.length;
-    const hasTextFilter = editState.textMatchIds !== null;
 
     // Determine if any filter is actually narrowing the result set
     var hasActiveFilter = hasTextFilter;

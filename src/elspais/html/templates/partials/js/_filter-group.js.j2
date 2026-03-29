@@ -74,6 +74,8 @@ class FilterGroup {
     }
 
     matches(row) {
+        // Groups with no buttons are effectively disabled (always pass)
+        if (this.buttons.length === 0) return true;
         var value = this.matchFn(row);
         if (value instanceof Set) {
             // Multi-value group (e.g. git): passes if any key intersects _on
