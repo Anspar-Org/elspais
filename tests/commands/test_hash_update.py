@@ -72,6 +72,9 @@ namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
+
+[changelog]
+hash_current = false
 """
     )
 
@@ -496,6 +499,9 @@ directories = ["spec"]
 
 [validation]
 hash_mode = "full-text"
+
+[changelog]
+hash_current = false
 """
         )
 
@@ -610,6 +616,9 @@ directories = ["spec"]
 
 [validation]
 hash_mode = "full-text"
+
+[changelog]
+hash_current = false
 """
         )
 

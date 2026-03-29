@@ -223,7 +223,9 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
             if not message:
                 print(
                     f"Error: Active requirement {req_id} requires a changelog"
-                    ' message (-m "reason")',
+                    ' message (-m "reason")\n'
+                    "       [changelog] hash_current is enabled;"
+                    " Draft/Deprecated requirements update without a message.",
                     file=sys.stderr,
                 )
                 return 1

@@ -126,6 +126,7 @@ def run(args: argparse.Namespace) -> int:
     errors = []
     warnings = []
     fixable = []  # Issues that can be auto-fixed
+    deferred = []  # Issues needing per-REQ intervention (e.g. changelog message)
 
     # REQ-d00080-E: For core projects with associates, check paths are valid
     # Implements: REQ-d00202-A, REQ-d00212-K
@@ -261,6 +262,8 @@ def run(args: argparse.Namespace) -> int:
                     fixable.append(issue)
             elif stored_hash != computed_hash:
                 # Hash mismatch - integrity failure, fixable
+                is_active = (node.status or "").lower() == "active"
+                changelog_enforce = _typed_vc.changelog.hash_current
                 issue = {
                     "rule": "hash.mismatch",
                     "id": node.id,
@@ -275,7 +278,11 @@ def run(args: argparse.Namespace) -> int:
                 }
                 errors.append(issue)
                 if issue["file"]:
-                    fixable.append(issue)
+                    if is_active and changelog_enforce and fix_mode:
+                        # Defer: changelog message required per-REQ
+                        deferred.append(issue)
+                    else:
+                        fixable.append(issue)
         elif stored_hash and stored_hash != "N/A":
             # Stored hash exists but no hashable content — fixable to N/A
             issue = {
@@ -390,6 +397,7 @@ def run(args: argparse.Namespace) -> int:
             "valid": len(errors) == 0,
             "errors": errors,
             "warnings": warnings,
+            "deferred": deferred,
             "requirements_count": req_count,
             "fixed_count": fixed_count if fix_mode else 0,
         }
@@ -414,11 +422,28 @@ def run(args: argparse.Namespace) -> int:
         # Separate fixed issues from remaining errors/warnings
         if fix_mode and not dry_run:
             fixed_ids = {(f["id"], f["rule"]) for f in fixable}
-            unfixed_errors = [e for e in errors if (e["id"], e["rule"]) not in fixed_ids]
+            deferred_ids = {(d["id"], d["rule"]) for d in deferred}
+            unfixed_errors = [
+                e
+                for e in errors
+                if (e["id"], e["rule"]) not in fixed_ids
+                and (e["id"], e["rule"]) not in deferred_ids
+            ]
             unfixed_warnings = [w for w in warnings if not w.get("fixable")]
             # Show what was fixed (informational, not alarming)
             for f in fixable:
                 print(f"FIXED [{f['rule']}] {f['id']}: {f['message']}")
+            # Show deferred items that need per-REQ intervention
+            if deferred:
+                print(
+                    f"\nDEFERRED ({len(deferred)} — changelog message required):",
+                    file=sys.stderr,
+                )
+                for d in deferred:
+                    print(
+                        f'  {d["id"]}  hash mismatch' f' — run: elspais fix {d["id"]} -m "reason"',
+                        file=sys.stderr,
+                    )
         else:
             unfixed_errors = errors
             unfixed_warnings = [w for w in warnings if not w.get("fixable") or not fix_mode]
