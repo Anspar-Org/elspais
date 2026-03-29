@@ -119,9 +119,9 @@ def _call_tool_all(proc, name: str, arguments: dict, msg_id: int = 2) -> list:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def mcp():
-    """Start an MCP server, perform the initialize handshake, and yield it."""
+    """Start a single MCP server for the entire module, shared across all test classes."""
     proc = subprocess.Popen(
         [_ELSPAIS, "mcp", "serve"],
         stdin=subprocess.PIPE,
