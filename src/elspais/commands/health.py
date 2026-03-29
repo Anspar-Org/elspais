@@ -2326,8 +2326,8 @@ def _format_report(
 _FOLLOWUP_COMMANDS: dict[str, str] = {
     "spec.hash_integrity": "elspais fix",
     "spec.needs_rewrite": "elspais fix",
-    "spec.format_rules": "elspais checks --spec --format json",
-    "spec.no_assertions": "elspais gaps",
+    "spec.format_rules": "elspais errors",
+    "spec.no_assertions": "elspais errors",
     "spec.index_current": "elspais fix",
     "spec.no_duplicates": "elspais checks --spec --format json",
     "spec.implements_resolve": "elspais broken",

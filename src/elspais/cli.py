@@ -58,6 +58,7 @@ from elspais.commands.args import (
     DocsArgs,
     DoctorArgs,
     EditArgs,
+    ErrorsArgs,
     ExampleArgs,
     FailingArgs,
     FixArgs,
@@ -126,6 +127,7 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
         UntestedArgs: "untested",
         UnvalidatedArgs: "unvalidated",
         FailingArgs: "failing",
+        ErrorsArgs: "errors",
         BrokenArgs: "broken",
         UnlinkedArgs: "unlinked",
         DoctorArgs: "doctor",
@@ -375,6 +377,10 @@ def main(argv: list[str] | None = None) -> int:
             from elspais.commands import gaps
 
             return gaps.run(args)
+        elif args.command == "errors":
+            from elspais.commands import errors
+
+            return errors.run(args)
         elif args.command == "broken":
             from elspais.commands import broken
 

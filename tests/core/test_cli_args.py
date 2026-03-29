@@ -26,6 +26,7 @@ from elspais.commands.args import (
     DocsArgs,
     DoctorArgs,
     EditArgs,
+    ErrorsArgs,
     ExampleArgs,
     FailingArgs,
     FixArgs,
@@ -105,6 +106,7 @@ class TestCliArgsDataclasses:
             UntestedArgs,
             UnvalidatedArgs,
             FailingArgs,
+            ErrorsArgs,
             BrokenArgs,
             UnlinkedArgs,
             SearchArgs,
@@ -113,7 +115,7 @@ class TestCliArgsDataclasses:
             CommentsArgs,
         }
         assert base_types == expected
-        assert len(args) == 34
+        assert len(args) == 35
 
     def test_REQ_p00001_A_health_args_defaults(self) -> None:
         """ChecksArgs defaults are correct."""
@@ -262,6 +264,7 @@ class TestCliArgsDataclasses:
             UntestedArgs,
             UnvalidatedArgs,
             FailingArgs,
+            ErrorsArgs,
             BrokenArgs,
             UnlinkedArgs,
             GlobalArgs,
