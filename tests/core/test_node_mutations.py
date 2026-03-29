@@ -558,3 +558,63 @@ class TestMultipleMutations:
         assert len(undone) == 3
         assert len(graph.mutation_log) == 0
         assert graph.find_by_id("REQ-p00001").get_label() == "Test Requirement"
+
+
+@pytest.mark.incremental
+class TestNodeMutationChain:
+    """Incremental chain: add a requirement, modify it, then undo all steps.
+
+    Chain: add REQ-p99901 under REQ-p00002 → update title → change status
+    → undo status → undo title → undo add.  Uses mutable_graph so the
+    canonical graph is fully restored by the fixture teardown.
+
+    Step 1 (add) stores the node count for later verification; steps 2-5
+    build on the node that step 1 created.
+    """
+
+    # Implements: REQ-o00062-A
+    def test_step_1_add_requirement(self, mutable_graph):
+        """Add a new requirement as a child of REQ-p00002."""
+        self.__class__._node_count_before = mutable_graph.node_count()
+        mutable_graph.add_requirement(
+            req_id="REQ-p99901",
+            title="Chain Test Requirement",
+            level="DEV",
+            parent_id="REQ-p00002",
+        )
+        node = mutable_graph.find_by_id("REQ-p99901")
+        assert node is not None
+        assert node.get_label() == "Chain Test Requirement"
+        assert node.get_field("status") == "Draft"
+
+    # Implements: REQ-o00062-A
+    def test_step_2_update_title(self, mutable_graph):
+        """Update the title of the newly added requirement."""
+        mutable_graph.update_title("REQ-p99901", "Renamed Chain Test")
+        node = mutable_graph.find_by_id("REQ-p99901")
+        assert node.get_label() == "Renamed Chain Test"
+
+    # Implements: REQ-o00062-A
+    def test_step_3_change_status(self, mutable_graph):
+        """Change the status of the requirement to Active."""
+        mutable_graph.change_status("REQ-p99901", "Active")
+        node = mutable_graph.find_by_id("REQ-p99901")
+        assert node.get_field("status") == "Active"
+        assert len(mutable_graph.mutation_log) == 3
+
+    # Implements: REQ-o00062-G
+    def test_step_4_undo_status(self, mutable_graph):
+        """Undo the status change — requirement goes back to Draft."""
+        mutable_graph.undo_last()
+        node = mutable_graph.find_by_id("REQ-p99901")
+        assert node.get_field("status") == "Draft"
+        assert len(mutable_graph.mutation_log) == 2
+
+    # Implements: REQ-o00062-G
+    def test_step_5_undo_title_and_add(self, mutable_graph):
+        """Undo title update and the initial add — graph fully restored."""
+        mutable_graph.undo_last()  # undo update_title
+        mutable_graph.undo_last()  # undo add_requirement
+        assert mutable_graph.find_by_id("REQ-p99901") is None
+        assert mutable_graph.node_count() == self.__class__._node_count_before
+        assert len(mutable_graph.mutation_log) == 0
