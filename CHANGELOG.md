@@ -18,6 +18,19 @@ All notable changes to elspais will be documented in this file.
   - CLI: `elspais comments compact` strips resolved threads and collapses promote chains
   - Comments loaded automatically at viewer startup, on refresh, and on reload
 
+## [0.112.34]
+
+### Added
+
+- **`elspais errors` command** — drill-down from `elspais checks` showing specific requirements with format rule violations and missing assertions. Supports `--format text|markdown|json`, `--status`, and `-o` output file.
+
+### Fixed
+
+- **N/A hash sentinel** — unhashable content (e.g. requirements with no assertions in normalized-assertions hash mode) now receives an `N/A` hash instead of raising an error or producing a misleading value.
+- **Active REQ changelog enforcement explanation** — `elspais fix` error message now explains that `[changelog] hash_current` is enabled and that Draft/Deprecated requirements update without requiring a message.
+- **Global fix defers Active REQs with changelog** — global fix mode defers Active requirements that have changelog enforcement enabled, showing per-REQ guidance instead of silently skipping them.
+- **REFORMATTED vs FIXED labeling** — `elspais fix` output now distinguishes formatting-only changes (REFORMATTED) from hash-changing fixes (FIXED), and only reports succeeded fixes.
+
 ## [0.108.6]
 
 ### Changed

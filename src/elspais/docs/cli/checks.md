@@ -394,6 +394,39 @@ Run `elspais checks --help` for the full list of flags.  Options are
 defined in `commands/args.py:ChecksArgs` — that dataclass is the single
 source of truth for flag names and descriptions.
 
+## Error Drill-Down
+
+When `spec.format_rules` or `spec.no_assertions` fails, `elspais checks` directs
+you to `elspais errors` for requirement-level detail:
+
+```bash
+elspais errors                     # Show all spec errors
+elspais errors --format markdown   # Markdown table output
+elspais errors --format json       # JSON output
+elspais errors --status Draft      # Include Draft requirements
+elspais errors -o errors.txt       # Write to file
+```
+
+**Example output (text format):**
+
+```text
+FORMAT ERRORS (2):
+  REQ-d00003           missing_body: Requirement has no body text  spec/dev-spec.md:45
+  REQ-p00002           missing_title: Requirement has no title     spec/prd-spec.md:12
+
+NO ASSERTIONS (2):
+  REQ-o00005           no_assertions: No assertions — not testable  spec/ops-spec.md:30
+  REQ-p00010           no_assertions: No assertions — not testable  spec/prd-spec.md:88
+```
+
+**Options:**
+
+  `--format {text,markdown,json}`  Output format (default: text)
+  `--status STATUS`                Include additional statuses (repeatable)
+  `-o, --output PATH`              Write output to file instead of stdout
+
+**Performance:** Uses daemon-first execution like other drill-down commands.
+
 ## Gap Listings
 
 Use standalone gap commands or compose them with checks:
