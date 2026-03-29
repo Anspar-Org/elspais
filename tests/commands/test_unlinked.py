@@ -1,5 +1,9 @@
 # Verifies: REQ-d00085
-"""Tests for unlinked nodes mini-report command."""
+"""Tests for unlinked files mini-report command.
+
+Unlinked = scanned code/test FILE with no traceability markers found
+(no CODE/TEST child nodes).
+"""
 from __future__ import annotations
 
 import argparse
@@ -17,47 +21,48 @@ from elspais.commands.unlinked import (
 from elspais.graph import EdgeKind, NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph
-from elspais.graph.GraphNode import GraphNode
+from elspais.graph.GraphNode import FileType, GraphNode
 
 
 def _make_graph(
     *,
-    unlinked_tests: int = 0,
-    unlinked_code: int = 0,
-    linked_tests: int = 0,
+    unlinked_test_files: int = 0,
+    unlinked_code_files: int = 0,
+    linked_test_files: int = 0,
 ) -> FederatedGraph:
-    """Build a FederatedGraph with the requested unlinked/linked nodes."""
+    """Build a FederatedGraph with file-level unlinked/linked semantics."""
     tg = TraceGraph()
 
-    file_node = GraphNode(id="file:tests/test_foo.py", kind=NodeKind.FILE)
-    file_node.set_field("relative_path", "tests/test_foo.py")
-    tg._index[file_node.id] = file_node
+    # Unlinked TEST files (FILE nodes of type TEST with no TEST children)
+    for i in range(unlinked_test_files):
+        f = GraphNode(id=f"file:tests/test_empty_{i}.py", kind=NodeKind.FILE)
+        f.set_field("file_type", FileType.TEST)
+        f.set_field("relative_path", f"tests/test_empty_{i}.py")
+        tg._index[f.id] = f
+        tg._roots.append(f)
 
-    # Unlinked TEST nodes (FILE parent, no traceability edge)
-    for i in range(unlinked_tests):
-        t = GraphNode(id=f"test::test_foo_{i}", kind=NodeKind.TEST)
-        tg._index[t.id] = t
-        file_node.link(t, EdgeKind.CONTAINS)
+    # Unlinked CODE files (FILE nodes of type CODE with no CODE children)
+    for i in range(unlinked_code_files):
+        f = GraphNode(id=f"file:src/empty_{i}.py", kind=NodeKind.FILE)
+        f.set_field("file_type", FileType.CODE)
+        f.set_field("relative_path", f"src/empty_{i}.py")
+        tg._index[f.id] = f
+        tg._roots.append(f)
 
-    # Unlinked CODE nodes
-    code_file = GraphNode(id="file:src/foo.py", kind=NodeKind.FILE)
-    code_file.set_field("relative_path", "src/foo.py")
-    tg._index[code_file.id] = code_file
-
-    for i in range(unlinked_code):
-        c = GraphNode(id=f"code::foo_func_{i}", kind=NodeKind.CODE)
-        tg._index[c.id] = c
-        code_file.link(c, EdgeKind.CONTAINS)
-
-    # Linked TEST nodes (FILE parent + VERIFIES edge to a REQUIREMENT)
-    if linked_tests:
+    # Linked TEST files (FILE of type TEST with TEST child + VERIFIES edge)
+    if linked_test_files:
         req = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
         tg._index[req.id] = req
         tg._roots.append(req)
-        for i in range(linked_tests):
+        for i in range(linked_test_files):
+            f = GraphNode(id=f"file:tests/test_linked_{i}.py", kind=NodeKind.FILE)
+            f.set_field("file_type", FileType.TEST)
+            f.set_field("relative_path", f"tests/test_linked_{i}.py")
+            tg._index[f.id] = f
+            tg._roots.append(f)
             t = GraphNode(id=f"test::test_linked_{i}", kind=NodeKind.TEST)
             tg._index[t.id] = t
-            file_node.link(t, EdgeKind.CONTAINS)
+            f.link(t, EdgeKind.CONTAINS)
             req.link(t, EdgeKind.VERIFIES)
 
     return FederatedGraph.from_single(tg, config=None, repo_root=Path("."))
@@ -79,27 +84,25 @@ class TestCollectUnlinked:
 
     # Implements: REQ-d00085-A
     def test_returns_empty_when_all_linked(self) -> None:
-        """All linked nodes produce empty collections."""
-        graph = _make_graph(linked_tests=2)
+        """All linked files produce empty collections."""
+        graph = _make_graph(linked_test_files=2)
         data = collect_unlinked(graph)
         assert data.tests == []
         assert data.code == []
 
     # Implements: REQ-d00085-A
-    def test_returns_unlinked_test_nodes(self) -> None:
-        """Unlinked TEST nodes are collected."""
-        graph = _make_graph(unlinked_tests=2)
+    def test_returns_unlinked_test_files(self) -> None:
+        """Test files with no markers are collected."""
+        graph = _make_graph(unlinked_test_files=2)
         data = collect_unlinked(graph)
         assert len(data.tests) == 2
-        assert data.tests[0].file == "tests/test_foo.py"
 
     # Implements: REQ-d00085-A
-    def test_returns_unlinked_code_nodes(self) -> None:
-        """Unlinked CODE nodes are collected."""
-        graph = _make_graph(unlinked_code=3)
+    def test_returns_unlinked_code_files(self) -> None:
+        """Code files with no markers are collected."""
+        graph = _make_graph(unlinked_code_files=3)
         data = collect_unlinked(graph)
         assert len(data.code) == 3
-        assert data.code[0].file == "src/foo.py"
 
 
 # ---- Text rendering tests ----
@@ -116,24 +119,24 @@ class TestRenderUnlinkedText:
 
     # Implements: REQ-d00085-E
     def test_shows_counts_when_populated(self) -> None:
-        """Unlinked nodes show counts by kind."""
+        """Unlinked files show counts by kind."""
         data = UnlinkedData(
             tests=[
-                UnlinkedEntry("test::t1", "tests/test_a.py", 10, "t1"),
-                UnlinkedEntry("test::t2", "tests/test_a.py", 20, "t2"),
+                UnlinkedEntry("file:tests/test_a.py", "tests/test_a.py"),
+                UnlinkedEntry("file:tests/test_b.py", "tests/test_b.py"),
             ],
-            code=[UnlinkedEntry("code::c1", "src/foo.py", 5, "c1")],
+            code=[UnlinkedEntry("file:src/foo.py", "src/foo.py")],
         )
         output = render_unlinked_text(data)
         assert "(3)" in output
-        assert "Tests (2)" in output
-        assert "Code (1)" in output
+        assert "Test files (2)" in output
+        assert "Code files (1)" in output
 
     # Implements: REQ-d00085-E
     def test_label_present(self) -> None:
-        """Output contains the UNLINKED NODES label."""
+        """Output contains the UNLINKED FILES label."""
         output = render_unlinked_text(UnlinkedData())
-        assert "UNLINKED NODES" in output
+        assert "UNLINKED FILES" in output
 
 
 # ---- Markdown rendering tests ----
@@ -144,29 +147,29 @@ class TestRenderUnlinkedMarkdown:
 
     # Implements: REQ-d00085-E
     def test_empty_shows_no_unlinked(self) -> None:
-        """No unlinked nodes shows informative message."""
+        """No unlinked files shows informative message."""
         output = render_unlinked_markdown(UnlinkedData())
-        assert "No unlinked nodes found" in output
+        assert "No unlinked files found" in output
 
     # Implements: REQ-d00085-E
     def test_shows_table_when_populated(self) -> None:
-        """Unlinked nodes render as markdown table."""
+        """Unlinked files render as markdown table."""
         data = UnlinkedData(
-            tests=[UnlinkedEntry("test::t1", "tests/test_a.py", 10, "t1")],
+            tests=[UnlinkedEntry("file:tests/test_a.py", "tests/test_a.py")],
         )
         output = render_unlinked_markdown(data)
-        assert "| File | Count |" in output
+        assert "| File |" in output
         assert "tests/test_a.py" in output
 
     # Implements: REQ-d00085-E
     def test_heading_with_count(self) -> None:
         """Heading includes total count."""
         data = UnlinkedData(
-            tests=[UnlinkedEntry("test::t1", "tests/test_a.py", 10, "t1")],
-            code=[UnlinkedEntry("code::c1", "src/foo.py", 5, "c1")],
+            tests=[UnlinkedEntry("file:tests/test_a.py", "tests/test_a.py")],
+            code=[UnlinkedEntry("file:src/foo.py", "src/foo.py")],
         )
         output = render_unlinked_markdown(data)
-        assert "## UNLINKED NODES (2)" in output
+        assert "## UNLINKED FILES (2)" in output
 
 
 # ---- render_section tests ----
@@ -178,7 +181,7 @@ class TestRenderSection:
     # Implements: REQ-d00085-E
     def test_json_format(self) -> None:
         """JSON format produces valid JSON with test/code keys."""
-        graph = _make_graph(unlinked_tests=1, unlinked_code=1)
+        graph = _make_graph(unlinked_test_files=1, unlinked_code_files=1)
         output, _exit_code = render_section(graph, None, _make_args(format="json"))
         parsed = json.loads(output)
         assert "tests" in parsed
@@ -188,15 +191,15 @@ class TestRenderSection:
 
     # Implements: REQ-d00085-C
     def test_exit_code_0_when_no_unlinked(self) -> None:
-        """Exit code is 0 when no unlinked nodes."""
-        graph = _make_graph(linked_tests=1)
+        """Exit code is 0 when no unlinked files."""
+        graph = _make_graph(linked_test_files=1)
         _output, exit_code = render_section(graph, None, _make_args())
         assert exit_code == 0
 
     # Implements: REQ-d00085-C
     def test_exit_code_1_when_unlinked(self) -> None:
-        """Exit code is 1 when unlinked nodes exist."""
-        graph = _make_graph(unlinked_tests=1)
+        """Exit code is 1 when unlinked files exist."""
+        graph = _make_graph(unlinked_test_files=1)
         _output, exit_code = render_section(graph, None, _make_args())
         assert exit_code == 1
 

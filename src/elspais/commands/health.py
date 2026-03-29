@@ -659,6 +659,65 @@ def check_broken_references(graph: FederatedGraph, config=None) -> HealthCheck:
     )
 
 
+def check_mistyped_references(graph: FederatedGraph) -> HealthCheck:
+    """Check for traceability edges whose target is the wrong node kind.
+
+    E.g. Implements: pointing to a TEST node instead of a REQUIREMENT
+    or ASSERTION. Only REQ and ASSERTION targets are valid for
+    traceability edges.
+    """
+    from elspais.graph import NodeKind
+    from elspais.graph.relations import EdgeKind
+
+    _TRACEABILITY_EDGES = {
+        EdgeKind.IMPLEMENTS,
+        EdgeKind.REFINES,
+        EdgeKind.VERIFIES,
+        EdgeKind.VALIDATES,
+        EdgeKind.SATISFIES,
+    }
+    _VALID_TARGETS = {NodeKind.REQUIREMENT, NodeKind.ASSERTION}
+
+    mistyped = []
+    for kind in (NodeKind.CODE, NodeKind.TEST, NodeKind.USER_JOURNEY):
+        for node in graph.nodes_by_kind(kind):
+            for edge in node.iter_outgoing_edges():
+                if edge.kind not in _TRACEABILITY_EDGES:
+                    continue
+                target = edge.target
+                if target.kind not in _VALID_TARGETS:
+                    fn = node.file_node()
+                    mistyped.append(
+                        HealthFinding(
+                            message=(
+                                f"{node.id} -> {target.id}: "
+                                f"{edge.kind.value} targets {target.kind.value} "
+                                f"(expected requirement or assertion)"
+                            ),
+                            file_path=fn.get_field("relative_path") if fn else None,
+                            line=node.get_field("parse_line"),
+                            node_id=node.id,
+                        )
+                    )
+
+    if mistyped:
+        return HealthCheck(
+            name="spec.mistyped_references",
+            passed=False,
+            message=f"{len(mistyped)} reference(s) target wrong node kind",
+            category="spec",
+            severity="warning",
+            findings=mistyped,
+        )
+
+    return HealthCheck(
+        name="spec.mistyped_references",
+        passed=True,
+        message="All references target valid node kinds",
+        category="spec",
+    )
+
+
 def check_spec_format_rules(
     graph: FederatedGraph, config: dict[str, Any], resolver: IdResolver | None = None
 ) -> HealthCheck:
@@ -1342,6 +1401,7 @@ def run_spec_checks(
         check_spec_files_parseable(graph),
         check_spec_no_duplicates(graph),
         check_broken_references(graph, config),
+        check_mistyped_references(graph),
         check_spec_hash_integrity(graph),
     ]
 
@@ -1597,44 +1657,48 @@ def check_code_coverage(
 
 
 def check_unlinked_code(graph: FederatedGraph) -> HealthCheck:
-    """Check for CODE nodes not linked to any requirement."""
+    """Check for code files with no traceability markers.
+
+    Finds FILE nodes of type CODE that were scanned but contain no
+    CODE child nodes (i.e. no Implements: or Verifies: comments found).
+    """
     from elspais.graph import NodeKind
+    from elspais.graph.GraphNode import FileType
+    from elspais.graph.relations import EdgeKind
 
-    unlinked = []
-    for node in graph.iter_unlinked(NodeKind.CODE):
-        file_n = node.file_node()
-        unlinked.append(
-            {
-                "id": node.id,
-                "file": file_n.get_field("relative_path") if file_n else "unknown",
-                "line": node.get_field("parse_line"),
-            }
+    unlinked_files = []
+    for file_node in graph.iter_roots(NodeKind.FILE):
+        if file_node.get_field("file_type") != FileType.CODE:
+            continue
+        has_code_child = any(
+            child.kind == NodeKind.CODE
+            for child in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
         )
+        if not has_code_child:
+            unlinked_files.append(file_node.get_field("relative_path") or file_node.id)
 
-    if unlinked:
+    if unlinked_files:
         findings = [
             HealthFinding(
-                message=f"Unlinked code: {u['id']}",
-                file_path=u["file"],
-                line=u["line"],
-                node_id=u["id"],
+                message=f"No traceability markers: {f}",
+                file_path=f,
             )
-            for u in unlinked
+            for f in sorted(unlinked_files)
         ]
         return HealthCheck(
             name="code.unlinked",
             passed=False,
-            message=f"{len(unlinked)} code references not linked to any requirement",
+            message=f"{len(unlinked_files)} code file(s) with no traceability markers",
             category="code",
             severity="info",
-            details={"count": len(unlinked), "unlinked": [u["id"] for u in unlinked[:20]]},
+            details={"count": len(unlinked_files), "files": sorted(unlinked_files)[:20]},
             findings=findings,
         )
 
     return HealthCheck(
         name="code.unlinked",
         passed=True,
-        message="All code references linked to requirements",
+        message="All code files have traceability markers",
         category="code",
     )
 
@@ -1813,44 +1877,48 @@ def check_uat_coverage(
 
 
 def check_unlinked_tests(graph: FederatedGraph) -> HealthCheck:
-    """Check for TEST nodes not linked to any requirement."""
+    """Check for test files with no traceability markers.
+
+    Finds FILE nodes of type TEST that were scanned but contain no
+    TEST child nodes (i.e. no REQ-xxx patterns or Verifies: comments found).
+    """
     from elspais.graph import NodeKind
+    from elspais.graph.GraphNode import FileType
+    from elspais.graph.relations import EdgeKind
 
-    unlinked = []
-    for node in graph.iter_unlinked(NodeKind.TEST):
-        file_n = node.file_node()
-        unlinked.append(
-            {
-                "id": node.id,
-                "file": file_n.get_field("relative_path") if file_n else "unknown",
-                "line": node.get_field("parse_line"),
-            }
+    unlinked_files = []
+    for file_node in graph.iter_roots(NodeKind.FILE):
+        if file_node.get_field("file_type") != FileType.TEST:
+            continue
+        has_test_child = any(
+            child.kind == NodeKind.TEST
+            for child in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
         )
+        if not has_test_child:
+            unlinked_files.append(file_node.get_field("relative_path") or file_node.id)
 
-    if unlinked:
+    if unlinked_files:
         findings = [
             HealthFinding(
-                message=f"Unlinked test: {u['id']}",
-                file_path=u["file"],
-                line=u["line"],
-                node_id=u["id"],
+                message=f"No traceability markers: {f}",
+                file_path=f,
             )
-            for u in unlinked
+            for f in sorted(unlinked_files)
         ]
         return HealthCheck(
             name="tests.unlinked",
             passed=False,
-            message=f"{len(unlinked)} tests not linked to any requirement",
+            message=f"{len(unlinked_files)} test file(s) with no traceability markers",
             category="tests",
             severity="info",
-            details={"count": len(unlinked), "unlinked": [u["id"] for u in unlinked[:20]]},
+            details={"count": len(unlinked_files), "files": sorted(unlinked_files)[:20]},
             findings=findings,
         )
 
     return HealthCheck(
         name="tests.unlinked",
         passed=True,
-        message="All tests linked to requirements",
+        message="All test files have traceability markers",
         category="tests",
     )
 

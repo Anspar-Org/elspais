@@ -1,4 +1,8 @@
-"""Unlinked nodes mini-report -- composable section."""
+"""Unlinked files mini-report -- composable section.
+
+Lists code and test files that were scanned but contain no traceability
+markers (no Implements:, Verifies:, or REQ-xxx patterns found).
+"""
 
 from __future__ import annotations
 
@@ -8,71 +12,61 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from elspais.graph import NodeKind
+from elspais.graph.GraphNode import FileType
+from elspais.graph.relations import EdgeKind
+
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
-
-from elspais.graph import NodeKind
 
 
 @dataclass
 class UnlinkedEntry:
-    """A single unlinked node."""
+    """A file with no traceability markers."""
 
     node_id: str
     file: str
-    line: int
-    label: str  # human-friendly name (func_name or short id)
+    line: int = 0
+    label: str = ""
 
 
 @dataclass
 class UnlinkedData:
-    """Collected unlinked nodes grouped by kind."""
+    """Collected unlinked files grouped by kind."""
 
     tests: list[UnlinkedEntry] = field(default_factory=list)
     code: list[UnlinkedEntry] = field(default_factory=list)
 
 
-def _node_label(node_id: str) -> str:
-    """Extract a human-friendly label from a node ID.
-
-    test:path::Class::func -> Class::func
-    test:path::func -> func
-    code:path::func -> func
-    """
-    if "::" in node_id:
-        return node_id.split("::", 1)[1]
-    return node_id
-
-
 def collect_unlinked(graph: FederatedGraph) -> UnlinkedData:
-    """Collect unlinked TEST and CODE nodes from the graph."""
+    """Find code and test files with no traceability markers.
+
+    Scans FILE nodes of type CODE/TEST and checks whether they contain
+    any CODE/TEST child nodes (which are created when the parser finds
+    Implements:/Verifies:/REQ-xxx markers). Files with no such children
+    have no traceability coverage.
+    """
     data = UnlinkedData()
 
-    for node in graph.iter_unlinked(NodeKind.TEST):
-        file_node = node.file_node()
-        rel_path = file_node.get_field("relative_path") if file_node else "unknown"
-        line = node.get_field("parse_line") or 0
-        data.tests.append(
-            UnlinkedEntry(
-                node_id=node.id,
-                file=rel_path,
-                line=line,
-                label=_node_label(node.id),
-            )
-        )
+    for file_node in graph.iter_roots(NodeKind.FILE):
+        file_type = file_node.get_field("file_type")
+        rel_path = file_node.get_field("relative_path") or file_node.id
 
-    for node in graph.iter_unlinked(NodeKind.CODE):
-        file_node = node.file_node()
-        rel_path = file_node.get_field("relative_path") if file_node else "unknown"
-        line = node.get_field("parse_line") or 0
-        data.code.append(
-            UnlinkedEntry(
-                node_id=node.id,
-                file=rel_path,
-                line=line,
-                label=_node_label(node.id),
+        if file_type == FileType.TEST:
+            has_child = any(
+                child.kind == NodeKind.TEST
+                for child in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
             )
-        )
+            if not has_child:
+                data.tests.append(UnlinkedEntry(node_id=file_node.id, file=rel_path))
+
+        elif file_type == FileType.CODE:
+            has_child = any(
+                child.kind == NodeKind.CODE
+                for child in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
+            )
+            if not has_child:
+                data.code.append(UnlinkedEntry(node_id=file_node.id, file=rel_path))
 
     return data
 
@@ -81,19 +75,11 @@ def collect_unlinked(graph: FederatedGraph) -> UnlinkedData:
 # Rendering
 # =============================================================================
 
-_LABEL = "UNLINKED NODES"
-
-
-def _by_file(items: list[UnlinkedEntry]) -> dict[str, list[UnlinkedEntry]]:
-    """Group entries by file path, sorted by file then line."""
-    grouped: dict[str, list[UnlinkedEntry]] = {}
-    for entry in sorted(items, key=lambda e: (e.file, e.line, e.node_id)):
-        grouped.setdefault(entry.file, []).append(entry)
-    return grouped
+_LABEL = "UNLINKED FILES"
 
 
 def render_unlinked_text(data: UnlinkedData, *, verbose: bool = False) -> str:
-    """Render unlinked nodes as plain text."""
+    """Render unlinked files as plain text."""
     total = len(data.tests) + len(data.code)
     if total == 0:
         return f"\n{_LABEL}: none"
@@ -101,62 +87,42 @@ def render_unlinked_text(data: UnlinkedData, *, verbose: bool = False) -> str:
     lines = [f"\n{_LABEL} ({total}):"]
 
     if data.tests:
-        lines.append(f"\n  Tests ({len(data.tests)}):")
-        for file_path, entries in _by_file(data.tests).items():
-            lines.append(f"    {file_path}: {len(entries)}")
-            if verbose:
-                for e in entries:
-                    lines.append(f"      L{e.line}: {e.label}")
+        lines.append(f"\n  Test files ({len(data.tests)}):")
+        for entry in sorted(data.tests, key=lambda e: e.file):
+            lines.append(f"    {entry.file}")
 
     if data.code:
-        lines.append(f"\n  Code ({len(data.code)}):")
-        for file_path, entries in _by_file(data.code).items():
-            lines.append(f"    {file_path}: {len(entries)}")
-            if verbose:
-                for e in entries:
-                    lines.append(f"      L{e.line}: {e.label}")
+        lines.append(f"\n  Code files ({len(data.code)}):")
+        for entry in sorted(data.code, key=lambda e: e.file):
+            lines.append(f"    {entry.file}")
 
     return "\n".join(lines)
 
 
 def render_unlinked_markdown(data: UnlinkedData, *, verbose: bool = False) -> str:
-    """Render unlinked nodes as markdown."""
+    """Render unlinked files as markdown."""
     total = len(data.tests) + len(data.code)
     if total == 0:
-        return f"## {_LABEL}\n\nNo unlinked nodes found."
+        return f"## {_LABEL}\n\nNo unlinked files found."
 
     lines = [f"## {_LABEL} ({total})", ""]
 
     if data.tests:
-        lines.append(f"### Tests ({len(data.tests)})")
+        lines.append(f"### Test files ({len(data.tests)})")
         lines.append("")
-        if verbose:
-            lines.append("| File | Line | Function |")
-            lines.append("|------|------|----------|")
-            for file_path, entries in _by_file(data.tests).items():
-                for e in entries:
-                    lines.append(f"| {file_path} | {e.line} | `{e.label}` |")
-        else:
-            lines.append("| File | Count |")
-            lines.append("|------|-------|")
-            for file_path, entries in _by_file(data.tests).items():
-                lines.append(f"| {file_path} | {len(entries)} |")
+        lines.append("| File |")
+        lines.append("|------|")
+        for entry in sorted(data.tests, key=lambda e: e.file):
+            lines.append(f"| {entry.file} |")
         lines.append("")
 
     if data.code:
-        lines.append(f"### Code ({len(data.code)})")
+        lines.append(f"### Code files ({len(data.code)})")
         lines.append("")
-        if verbose:
-            lines.append("| File | Line | Function |")
-            lines.append("|------|------|----------|")
-            for file_path, entries in _by_file(data.code).items():
-                for e in entries:
-                    lines.append(f"| {file_path} | {e.line} | `{e.label}` |")
-        else:
-            lines.append("| File | Count |")
-            lines.append("|------|-------|")
-            for file_path, entries in _by_file(data.code).items():
-                lines.append(f"| {file_path} | {len(entries)} |")
+        lines.append("| File |")
+        lines.append("|------|")
+        for entry in sorted(data.code, key=lambda e: e.file):
+            lines.append(f"| {entry.file} |")
 
     return "\n".join(lines)
 
@@ -166,16 +132,30 @@ def render_unlinked_markdown(data: UnlinkedData, *, verbose: bool = False) -> st
 # =============================================================================
 
 
+def _serialize(data: UnlinkedData) -> dict[str, Any]:
+    """Serialize UnlinkedData to a JSON-compatible dict."""
+    return {
+        "tests": {
+            "count": len(data.tests),
+            "files": [e.file for e in sorted(data.tests, key=lambda e: e.file)],
+        },
+        "code": {
+            "count": len(data.code),
+            "files": [e.file for e in sorted(data.code, key=lambda e: e.file)],
+        },
+    }
+
+
 def render_section(
     graph: FederatedGraph,
     config: dict[str, Any] | None,
     args: argparse.Namespace,
 ) -> tuple[str, int]:
-    """Render unlinked nodes section.
+    """Render unlinked files section.
 
     Returns:
         Tuple of (rendered output string, exit code).
-        Exit code is 0 when no unlinked nodes, non-zero otherwise.
+        Exit code is 0 when no unlinked files, non-zero otherwise.
     """
     data = collect_unlinked(graph)
     total = len(data.tests) + len(data.code)
@@ -183,23 +163,7 @@ def render_section(
     verbose = getattr(args, "verbose", False)
 
     if fmt == "json":
-        result: dict[str, Any] = {
-            "tests": {
-                "count": len(data.tests),
-                "by_file": {
-                    fp: [{"id": e.node_id, "line": e.line, "label": e.label} for e in entries]
-                    for fp, entries in _by_file(data.tests).items()
-                },
-            },
-            "code": {
-                "count": len(data.code),
-                "by_file": {
-                    fp: [{"id": e.node_id, "line": e.line, "label": e.label} for e in entries]
-                    for fp, entries in _by_file(data.code).items()
-                },
-            },
-        }
-        return json.dumps(result, indent=2), 1 if total else 0
+        return json.dumps(_serialize(data), indent=2), 1 if total else 0
 
     if fmt == "markdown":
         return render_unlinked_markdown(data, verbose=verbose), 1 if total else 0
@@ -215,51 +179,16 @@ def render_section(
 def _unlinked_data_from_dict(data: dict[str, Any]) -> UnlinkedData:
     """Reconstruct UnlinkedData from a JSON dict returned by the daemon."""
     ud = UnlinkedData()
-    for fp, entries in data.get("tests", {}).get("by_file", {}).items():
-        for e in entries:
-            ud.tests.append(
-                UnlinkedEntry(
-                    node_id=e["id"],
-                    file=fp,
-                    line=e.get("line", 0),
-                    label=e.get("label", ""),
-                )
-            )
-    for fp, entries in data.get("code", {}).get("by_file", {}).items():
-        for e in entries:
-            ud.code.append(
-                UnlinkedEntry(
-                    node_id=e["id"],
-                    file=fp,
-                    line=e.get("line", 0),
-                    label=e.get("label", ""),
-                )
-            )
+    for f in data.get("tests", {}).get("files", []):
+        ud.tests.append(UnlinkedEntry(node_id=f"file:{f}", file=f))
+    for f in data.get("code", {}).get("files", []):
+        ud.code.append(UnlinkedEntry(node_id=f"file:{f}", file=f))
     return ud
 
 
 def compute_unlinked(graph: FederatedGraph, config: dict, params: dict[str, str]) -> dict:
-    """Engine-compatible wrapper around collect_unlinked.
-
-    Returns the same dict shape as the API endpoint.
-    """
-    data = collect_unlinked(graph)
-    return {
-        "tests": {
-            "count": len(data.tests),
-            "by_file": {
-                fp: [{"id": e.node_id, "line": e.line, "label": e.label} for e in entries]
-                for fp, entries in _by_file(data.tests).items()
-            },
-        },
-        "code": {
-            "count": len(data.code),
-            "by_file": {
-                fp: [{"id": e.node_id, "line": e.line, "label": e.label} for e in entries]
-                for fp, entries in _by_file(data.code).items()
-            },
-        },
-    }
+    """Engine-compatible wrapper around collect_unlinked."""
+    return _serialize(collect_unlinked(graph))
 
 
 def run(args: argparse.Namespace) -> int:

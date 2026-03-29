@@ -1,5 +1,8 @@
 # Known Issues
 
+[ ] viewer : bug
+- text-box edit fields lost their default-height of 120px. They default to far too narrow boxes.
+
 [x] checks : bug
 - Fixed: New `elspais errors` command shows specific requirements with format violations and missing assertions. `elspais checks` now points to `elspais errors` as the follow-up command.
 
