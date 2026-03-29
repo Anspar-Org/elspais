@@ -10,12 +10,14 @@
 
     <!-- Git Filters -->
     <div class="btn-group" role="group">
-        <button class="btn" id="edit-btn-unsaved" onclick="toggleEditFilter('unsaved')"
-                title="Show only requirements with pending in-memory edits (not yet saved to disk)">Unsaved</button>
-        <button class="btn" id="edit-btn-uncommitted" onclick="toggleEditFilter('uncommitted')"
-                title="Show only requirements saved to disk but not yet git-committed">Uncommitted</button>
-        <button class="btn" id="edit-btn-changed" onclick="toggleEditFilter('changed')"
-                title="Show only requirements changed on this branch compared to main">Changed</button>
+        <button class="status-filter-btn on" id="edit-btn-unsaved" data-status="unsaved" onclick="toggleGitFilter('unsaved')"
+                title="Toggle visibility of requirements with pending in-memory edits">Unsaved</button>
+        <button class="status-filter-btn on" id="edit-btn-uncommitted" data-status="uncommitted" onclick="toggleGitFilter('uncommitted')"
+                title="Toggle visibility of requirements saved but not yet committed">Uncommitted</button>
+        <button class="status-filter-btn on" id="edit-btn-changed" data-status="changed" onclick="toggleGitFilter('changed')"
+                title="Toggle visibility of requirements changed on this branch vs main">Changed</button>
+        <button class="status-filter-btn on" id="edit-btn-unchanged" data-status="unchanged" onclick="toggleGitFilter('unchanged')"
+                title="Toggle visibility of requirements with no changes">Unchanged</button>
     </div>
 
     <!-- Status filter badges (filled=showing, outline=hidden) -->

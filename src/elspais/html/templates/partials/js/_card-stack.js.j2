@@ -585,7 +585,7 @@ function buildRemainderHtml(nodeId, rem, idx) {
         h += '<textarea class="edit-only remainder-text-edit" data-node-id="' + escapeAttr(remId) + '"' +
             ' data-original="' + escapeAttr(rem.text || '') + '"' +
             ' onblur="onRemainderTextBlur(this)"' +
-            ' style="width:100%;min-height:40px;font-size:0.8rem;border:1px solid var(--border-color);border-radius:4px;padding:6px;resize:vertical;background:var(--card-bg);color:var(--input-text);">' +
+            ' style="width:100%;min-height:120px;font-size:0.8rem;border:1px solid var(--border-color);border-radius:4px;padding:6px;resize:vertical;background:var(--card-bg);color:var(--input-text);">' +
             escapeHtml(rem.text || '') + '</textarea>';
     }
     h += '</div>';
@@ -907,7 +907,7 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
         html += '<div class="card-body-section-content journey-field-view">' + simpleMarkdown(props.context || '') + '</div>';
         html += '<textarea class="edit-only journey-field-edit" data-field="context" data-journey-id="' + nodeId + '"' +
             ' onblur="onJourneyFieldBlur(this)"' +
-            ' style="width:100%;min-height:40px;font-size:0.8rem;border:1px solid var(--border-color);border-radius:4px;padding:6px;resize:vertical;background:var(--card-bg);color:var(--input-text);">' +
+            ' style="width:100%;min-height:120px;font-size:0.8rem;border:1px solid var(--border-color);border-radius:4px;padding:6px;resize:vertical;background:var(--card-bg);color:var(--input-text);">' +
             escapeHtml(props.context || '') + '</textarea>';
         html += '</div>';
     }
@@ -959,7 +959,7 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
         html += '<div class="card-body-section-content journey-section-content-view">' + simpleMarkdown(sec.content || '') + '</div>';
         html += '<textarea class="edit-only journey-section-content-edit" data-journey-id="' + nodeId + '"' +
             ' data-section-name="' + escapeAttr(sec.name) + '" onblur="onJourneySectionContentBlur(this)"' +
-            ' style="width:100%;min-height:40px;font-size:0.8rem;border:1px solid var(--border-color);border-radius:4px;padding:6px;resize:vertical;background:var(--card-bg);color:var(--input-text);">' +
+            ' style="width:100%;min-height:120px;font-size:0.8rem;border:1px solid var(--border-color);border-radius:4px;padding:6px;resize:vertical;background:var(--card-bg);color:var(--input-text);">' +
             escapeHtml(sec.content || '') + '</textarea>';
         html += '</div>';
     });

@@ -40,6 +40,25 @@
     background: var(--primary);
     color: white;
 }
+/* Git filter buttons — same pattern as status-filter-btn */
+.status-filter-btn[data-status="unsaved"]     { border-color: #dc3545; color: #dc3545; }
+.status-filter-btn[data-status="uncommitted"] { border-color: #0d6efd; color: #0d6efd; }
+.status-filter-btn[data-status="changed"]     { border-color: #6c757d; color: #6c757d; }
+
+.status-filter-btn.on[data-status="unsaved"]     { background: #dc3545; border-color: #dc3545; color: #fff; }
+.status-filter-btn.on[data-status="uncommitted"] { background: #0d6efd; border-color: #0d6efd; color: #fff; }
+.status-filter-btn.on[data-status="changed"]     { background: #6c757d; border-color: #6c757d; color: #fff; }
+
+.status-filter-btn[data-status="unchanged"]     { border-color: var(--secondary-text); color: var(--secondary-text); }
+.status-filter-btn.on[data-status="unchanged"]  { background: var(--secondary-text); border-color: var(--secondary-text); color: #fff; }
+
+.status-filter-btn.unavailable {
+    border-color: var(--border-color) !important;
+    color: var(--border-color) !important;
+    background: transparent !important;
+    cursor: default;
+    opacity: 0.5;
+}
 
 .toggle-group {
     display: flex;

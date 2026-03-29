@@ -387,3 +387,18 @@
   - multiple fixtures for testing different config settings, error handling, etc.
   - one of the fixtures should be the 'exemplar' project template
 - Benefits: faster tests (fewer graph builds), more realistic coverage (tests run against a real-shaped graph), easier to maintain (one fixture to update, not hundreds of inline setups)
+
+[ ] viewer : refactor — Unified filter system redesign
+- All filters should use the same convention: solid = visible, outlined = hidden
+- Shift+click or Ctrl+click = "solo" — turn off all others in the same group (like Solo on an audio mixer)
+- Filter groups (AND between groups, OR within group):
+  1. **Git state**: Unsaved, Uncommitted, Changed, Unchanged — colored to match tree indicators
+  2. **Status**: Active, Draft, Deprecated, Proposed (and any custom statuses)
+  3. **Hierarchy**: Root, Internal, Leaf — replaces the "Leaf Only" checkbox
+  4. **Coverage**: None, Partial, Full — replace the select dropdown with buttons
+  5. **Search**: text filter input, with "Show hidden parents" toggle (replaces "Hide Filtered", default on, reversed meaning)
+- Unavailable buttons (zero matching items) are greyed out and unclickable
+- When all buttons in a group are off, that group effectively hides everything — warn or prevent this
+- Coverage buttons need the same solid/outlined treatment as other groups
+- "Hide Filtered" checkbox renamed to "Show hidden parents" with reversed default (on by default)
+- Each group should be visually separated in the toolbar

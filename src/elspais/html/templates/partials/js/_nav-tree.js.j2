@@ -122,6 +122,34 @@ async function loadTreeData() {
     editState.treeData = data;
     updateHeaderStats();
     renderNavTree();
+    updateGitFilterAvailability();
+}
+
+function updateGitFilterAvailability() {
+    var rows = editState.treeData || [];
+    var hasUnsaved = rows.some(function(r) { return r.is_unsaved; });
+    var hasUncommitted = rows.some(function(r) { return r.is_uncommitted; });
+    var hasChanged = rows.some(function(r) { return r.is_changed; });
+    var hasUnchanged = rows.some(function(r) { return !r.is_unsaved && !r.is_uncommitted && !r.is_changed; });
+    var filters = [
+        { id: 'edit-btn-unsaved', key: 'unsaved', has: hasUnsaved },
+        { id: 'edit-btn-uncommitted', key: 'uncommitted', has: hasUncommitted },
+        { id: 'edit-btn-changed', key: 'changed', has: hasChanged },
+        { id: 'edit-btn-unchanged', key: 'unchanged', has: hasUnchanged }
+    ];
+    filters.forEach(function(f) {
+        var btn = document.getElementById(f.id);
+        if (!btn) return;
+        if (f.has) {
+            btn.disabled = false;
+            btn.classList.remove('unavailable');
+        } else {
+            btn.disabled = true;
+            btn.classList.add('unavailable');
+            btn.classList.add('on');  // Reset to "on" (visible) when no items match
+            editState.activeFilters[f.key] = false;
+        }
+    });
 }
 
 function renderNavTree() {
@@ -186,7 +214,7 @@ function renderNavTree() {
     var hiddenRepos = af.hiddenRepos || [];
     const hasTextFilter = editState.textMatchIds !== null;
     const hasActiveFilter = af.levelPrd || af.levelOps || af.levelDev ||
-        af.unsaved || af.uncommitted || af.changed || af.main || af.leaf ||
+        af.unsaved || af.uncommitted || af.changed || af.unchanged || af.main || af.leaf ||
         af.hiddenStatuses.size > 0 ||
         hiddenRepos.length > 0 ||
         editState.filterCoverage !== '' ||
@@ -223,10 +251,11 @@ function renderNavTree() {
             // Associated repo filters (hide specific repos)
             if (hiddenRepos.length > 0 && r.is_associated &&
                 r.repo_prefix && hiddenRepos.indexOf(r.repo_prefix) >= 0) continue;
-            // Focus filters (when active, SHOW only matching)
-            if (af.unsaved && !r.is_unsaved) continue;
-            if (af.uncommitted && !r.is_uncommitted) continue;
-            if (af.changed && !r.is_changed) continue;
+            // Git filters (when active, HIDE matching items)
+            if (af.unsaved && r.is_unsaved) continue;
+            if (af.uncommitted && r.is_uncommitted) continue;
+            if (af.changed && r.is_changed) continue;
+            if (af.unchanged && !r.is_unsaved && !r.is_uncommitted && !r.is_changed) continue;
             // Core filter (hide core/non-associated items)
             if (af.main && !r.is_associated) continue;
             // Leaf only
@@ -491,14 +520,21 @@ function toggleEditLevelFilter(key) {
     applyEditFilters();
 }
 
+// Git filter buttons: same convention as status filters — .on = visible, no .on = hidden
+function toggleGitFilter(key) {
+    // Toggle: when .on is removed, items are hidden
+    var btnMap = { unsaved: 'edit-btn-unsaved', uncommitted: 'edit-btn-uncommitted', changed: 'edit-btn-changed' };
+    var btn = btnMap[key] ? document.getElementById(btnMap[key]) : null;
+    var isCurrentlyOn = btn && btn.classList.contains('on');
+    // When turning OFF (hiding), set the filter to exclude those items
+    // When turning ON (showing), clear the filter
+    editState.activeFilters[key] = isCurrentlyOn;  // true = hide these items
+    if (btn) btn.classList.toggle('on', !isCurrentlyOn);
+    applyEditFilters();
+}
+
 function toggleEditFilter(key) {
     editState.activeFilters[key] = !editState.activeFilters[key];
-    // Update button state for git filters
-    var btnMap = { unsaved: 'edit-btn-unsaved', uncommitted: 'edit-btn-uncommitted', changed: 'edit-btn-changed' };
-    if (btnMap[key]) {
-        var btn = document.getElementById(btnMap[key]);
-        if (btn) btn.classList.toggle('active', editState.activeFilters[key]);
-    }
     // Update stat badge state for core filter (dimmed = hiding associated)
     if (key === 'main') {
         var mainBadge = document.getElementById('stat-main');

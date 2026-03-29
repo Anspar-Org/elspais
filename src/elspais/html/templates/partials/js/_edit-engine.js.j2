@@ -328,6 +328,8 @@ async function doGitSync() {
     if (result && result.success) {
         showToast(result.message || 'Synced', 'success');
         refreshBranchStatus();
+        loadTreeData();
+        refreshAllOpenCards();
     } else {
         showErrorModal('Sync failed', (result && result.error) || 'Unknown error');
         refreshBranchStatus();
@@ -1282,6 +1284,7 @@ async function doSave() {
     if (result && result.success) {
         showToast('Saved to disk', 'success');
         refreshFileViewer();
+        loadTreeData();
     }
     // Even if it returns 501 (not yet implemented), display message
     if (result && result.message) {
@@ -1837,6 +1840,7 @@ function _openCheckpointModal() {
                     showToast('Checkpoint created', 'success');
                     refreshBranchStatus();
                     refreshDirtyCount();
+                    loadTreeData();
                 } else {
                     overlay.remove();
                     showErrorModal('Checkpoint failed', (result && result.error) || 'Unknown error');
@@ -1970,6 +1974,7 @@ function initShareSlider() {
                 if (result && result.success) {
                     showToast('Pushed to origin/' + (result.branch || ''), 'success');
                     refreshBranchStatus();
+                    loadTreeData();
                 } else {
                     showErrorModal('Push failed', (result && result.error) || 'Unknown error');
                 }

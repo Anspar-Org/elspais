@@ -1,6 +1,12 @@
 /* Implements: REQ-p00006-B */
 /* Partial: _card-stack.css.j2 — Card stack panel and requirement cards */
 
+/* Scrollbar theming for textareas and overflow areas */
+.req-card textarea,
+.req-card .card-body-section-content {
+    scrollbar-color: var(--border-color) var(--card-bg);
+}
+
 /* --- Card Stack (Center) --- */
 
 .card-stack-panel {

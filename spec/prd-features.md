@@ -3,6 +3,7 @@
 # REQ-p00005: Multi-Repository Requirements
 
 **Level**: prd | **Status**: Active | **Implements**: REQ-p00001
+**Refines**: REQ-p00001
 
 ## Rationale
 
