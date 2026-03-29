@@ -224,7 +224,6 @@ _CORE_OVERRIDES: dict[str, Any] = {
             "require_rationale": False,
             "require_assertions": True,
             "require_status": True,
-            "allowed_statuses": ["Active", "Draft", "Deprecated", "Superseded"],
             "status_roles": {
                 "active": ["Active"],
                 "provisional": ["Draft", "Proposed"],
@@ -355,8 +354,9 @@ _OPTIONAL_FIELD_INJECTIONS: list[tuple[str, list[str]]] = [
     ),
     # rules.format
     (
-        'allowed_statuses = ["Active"',
+        "require_status = true",
         [
+            '# allowed_statuses = ["Active", "Draft"]  # Override status_roles-derived list',
             "# content_rules = []            # Content validation rules",
         ],
     ),
