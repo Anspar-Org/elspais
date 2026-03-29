@@ -276,6 +276,23 @@ def run(args: argparse.Namespace) -> int:
                 errors.append(issue)
                 if issue["file"]:
                     fixable.append(issue)
+        elif stored_hash and stored_hash != "N/A":
+            # Stored hash exists but no hashable content — fixable to N/A
+            issue = {
+                "rule": "hash.unhashable",
+                "id": node.id,
+                "message": f"Requirement {node.id} has stored hash "
+                f"but no hashable content (update to N/A)",
+                "fixable": True,
+                "fix_type": "hash",
+                "computed_hash": "N/A",
+                "file": (node.file_node().get_field("absolute_path") if node.file_node() else None),
+            }
+            errors.append(issue)
+            if issue["file"]:
+                fixable.append(issue)
+        elif stored_hash == "N/A":
+            pass  # N/A sentinel with no hashable content — valid
         elif not stored_hash:
             # No hashable content and no hash
             warnings.append(

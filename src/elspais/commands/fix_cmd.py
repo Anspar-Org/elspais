@@ -169,11 +169,33 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
         return 1
 
     computed = compute_hash_for_node(node, hash_mode)
-    if not computed:
-        print(f"No hashable content for {req_id}")
-        return 0
-
     stored = node.hash
+
+    # No hashable content — use N/A sentinel
+    if not computed:
+        if stored == "N/A":
+            print(f"{req_id} hash is already up to date (N/A — no normative content)")
+            return 0
+
+        # Implements: REQ-p00004-A
+        _fn = node.file_node()
+        if _fn is None:
+            print(f"Error: No source file for {req_id}", file=sys.stderr)
+            return 1
+
+        file_path = Path(_fn.get_field("absolute_path"))
+
+        if dry_run:
+            print(f"Would update {req_id}: {stored or '(none)'} -> N/A")
+            return 0
+
+        error = update_hash_in_file(file_path=file_path, req_id=req_id, new_hash="N/A")
+        if error is None:
+            print(f"Updated {req_id}: {stored or '(none)'} -> N/A (no normative content)")
+            return 0
+        else:
+            print(f"Error: {error}", file=sys.stderr)
+            return 1
     status = (node.status or "").lower()
     is_active = status == "active"
 
