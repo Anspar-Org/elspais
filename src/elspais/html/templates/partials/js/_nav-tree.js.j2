@@ -447,14 +447,20 @@ function renderNavTree() {
             var flstatusBadge = flrow.status
                 ? '<span class="status-badge ' + flrow.status.toLowerCase() + flvalClass + '"' + fltipAttr + '>' + flrow.status + '</span>'
                 : '';
+            // Indicators (same as tree mode)
+            var flind = '';
+            flind += '<span class="nav-tree-indicator' + (flrow.has_comments ? ' nav-tree-comment-icon direct' : '') + '">' + (flrow.has_comments ? '&#x1F5E9;' : '') + '</span>';
+            flind += '<span class="nav-tree-indicator' + (flrow.is_unsaved ? ' unsaved' : '') + '">' + (flrow.is_unsaved ? '&#x25CF;' : '') + '</span>';
+            flind += '<span class="nav-tree-indicator' + (flrow.is_uncommitted ? ' uncommitted' : '') + '">' + (flrow.is_uncommitted ? '&#x25C6;' : '') + '</span>';
+            flind += '<span class="nav-tree-indicator' + (flrow.is_changed ? ' changed' : '') + '">' + (flrow.is_changed ? '&#x25C6;' : '') + '</span>';
             flatHtml += '<div class="nav-tree-row' + flSelected + '" ' +
                 'data-id="' + flrow.id + '" ' +
                 'data-kind="requirement" ' +
                 'onclick="openCard(\'' + flrow.id + '\')">' +
-                '<button class="nav-tree-toggle leaf" onclick="event.stopPropagation();"></button>' +
                 (fllevelClass ? '<span class="nav-tree-level ' + fllevelClass + '">' + flrow.level + '</span>' : '') +
                 '<span class="nav-tree-id">' + flshortId + '</span>' +
                 '<span class="nav-tree-title">' + escapeHtml(flrow.title || '') + '</span>' +
+                '<span class="nav-tree-indicators">' + flind + '</span>' +
                 flstatusBadge +
                 '</div>';
         }
