@@ -86,10 +86,10 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 
 **Test tiers** (configured in `pyproject.toml`):
 
-- `pytest` — runs unit/integration tests only (~12s). This is the default during development.
-- `pytest -m e2e` — runs e2e subprocess tests only (CLI commands, MCP protocol, CI workflows).
+- `pytest` — runs unit/integration tests only (~26s). This is the default during development.
+- `pytest -m e2e` — runs e2e subprocess tests only (~143s). CLI commands, MCP protocol, CI workflows.
 - `pytest -m "e2e or browser"` — runs all slow tests.
-- `pytest -m ""` — runs everything (unit + e2e + browser). **Run before `git push`.**
+- `pytest -m ""` — runs everything (unit + e2e + browser, ~182s). **Run before `git push`.**
 
 **Marking tests**: Use `@pytest.mark.e2e` on tests that spawn external processes (elspais CLI, claude CLI, act, MCP subprocess). Use `@pytest.mark.browser` on Playwright tests.
 **Claude Code caveat**: The `test_e2e_install_and_uninstall` test (claude MCP install) is auto-skipped inside Claude Code sessions (`CLAUDECODE=1`) because the claude CLI hijacks pytest's file descriptors.
@@ -103,6 +103,8 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 **No tautology tests**: Don't assert constants, factory return values, or type-system guarantees. Tests must exercise behavior — if the test can't fail due to a code change, it's not testing anything.
 
 **Parametrize variants, don't duplicate**: If testing the same behavior across formats/configs, use `@pytest.mark.parametrize` with the shared fixture. Don't write separate test methods for each format.
+
+**E2E fixture structure**: E2E tests are organized into 6 shared fixture files (test_e2e_global, test_e2e_standard, test_e2e_fda_numeric, test_e2e_named_custom, test_e2e_jira_edge, test_e2e_associated) plus test_e2e_special for unique setups. Each fixture builds one project with a daemon, and tests run sequentially against it. When adding new e2e tests, add them to the appropriate fixture file rather than creating a new file with its own project setup. Config dimensions (ID patterns, assertion labels, hierarchy rules) are crossed efficiently across fixtures.
 
 **E2E: reuse MCP servers**: The `mcp` fixture in `test_mcp_e2e.py` is module-scoped. Don't start a new server per test class unless the project config differs.
 
