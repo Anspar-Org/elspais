@@ -102,10 +102,23 @@ def _try_daemon(
     # 1. Try existing server (viewer or daemon — both use daemon.json)
     port = _get_daemon_port()
     if port:
-        result = _try_port(port, endpoint, params, "GET")
-        if result is not None:
-            source = _build_daemon_source(port)
-            return result, source
+        # Version check: skip stale daemon
+        from elspais import __version__
+        from elspais.mcp.daemon import get_daemon_info
+
+        info = get_daemon_info(repo_root)
+        daemon_version = info.get("version") if info else None
+        if daemon_version and daemon_version != __version__:
+            # Stale daemon — stop it and fall through to auto-start
+            from elspais.mcp.daemon import stop_daemon
+
+            stop_daemon(repo_root)
+            port = None
+        else:
+            result = _try_port(port, endpoint, params, "GET")
+            if result is not None:
+                source = _build_daemon_source(port)
+                return result, source
 
     # 2. Auto-start daemon if allowed
     try:
