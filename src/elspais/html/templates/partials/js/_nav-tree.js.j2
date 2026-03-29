@@ -405,6 +405,14 @@ function renderNavTree() {
             if (fmatch) flatFiltered.push(fr);
         }
 
+        // Deduplicate by ID (DAG nodes can appear multiple times in tree data)
+        var flatSeen = {};
+        flatFiltered = flatFiltered.filter(function(r) {
+            if (flatSeen[r.id]) return false;
+            flatSeen[r.id] = true;
+            return true;
+        });
+
         // Sort by ID
         flatFiltered.sort(function(a, b) {
             return (a.id || '').localeCompare(b.id || '');

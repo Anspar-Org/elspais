@@ -448,10 +448,10 @@ async def api_tree_data(request: Request) -> JSONResponse:
     for entry in g.mutation_log.iter_entries():
         if entry.target_id:
             unsaved_ids.add(entry.target_id)
-        # Also check before/after state for node_id (edge mutations)
+        # Also check before/after state for node_id, source_id, parent_id
         for st in (entry.before_state, entry.after_state):
             if st:
-                for key in ("node_id", "source_id"):
+                for key in ("node_id", "source_id", "parent_id"):
                     nid = st.get(key, "")
                     if nid:
                         unsaved_ids.add(nid)
