@@ -152,6 +152,20 @@ _SECTION_COMMENTS: dict[str, str] = {
         "# aspirational: future/planning - excluded from coverage and analysis\n"
         "# retired: concluded - excluded from everything"
     ),
+    "rules.coverage": (
+        "Coverage severity tiers per dimension (ok/info/warning/error)\n"
+        "# full_direct: all assertions covered by direct references\n"
+        "# full_indirect: covered via parent/child rollup only\n"
+        "# partial: some assertions covered, some not\n"
+        "# none: no coverage at all\n"
+        "# failing: has coverage but test results show failures"
+    ),
+    "rules.references": (
+        "Severity for code/test references to non-active requirements\n"
+        "# retired: code/tests referencing Deprecated/Superseded/Rejected REQs\n"
+        "# provisional: code/tests referencing Draft/Proposed REQs\n"
+        "# aspirational: code/tests referencing Roadmap/Future/Idea REQs"
+    ),
     "changelog": "Changelog enforcement",
     "keywords": "Keyword extraction settings",
     "validation": "Hash and validation settings",

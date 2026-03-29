@@ -1,5 +1,10 @@
 # Known Issues
 
+[ ] checks - chore
+- add all missing config.toml fields, even if they are the same as the defaults
+- ensure init template is complete and uptodate
+- add new checks descriptions to docs
+
 [ ] daemon: bug - timeout
 - daemon should timeout and shutdown after N minutes, unless there are unsaved changes
 - currently, some MCP daemons are peristing for many hours after their spawners are shut down

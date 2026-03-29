@@ -42,6 +42,7 @@ Configuration checks always run as part of traceability verification. For focuse
 | `spec.structural_orphans` | No nodes without a FILE ancestor (build bugs) |
 | `spec.broken_references` | No edges targeting non-existent nodes |
 | `spec.no_assertions` | Requirements with no assertions (not testable); default severity: warning |
+| `spec.mistyped_references` | Traceability edges targeting wrong node kinds (TEST, CODE, RESULT instead of REQUIREMENT/ASSERTION) |
 
 #### `spec.no_assertions` — Not Testable Requirements
 
@@ -74,20 +75,61 @@ Use `require_assertions = true` when you want assertions to be mandatory for all
 requirements. Use `no_assertions_severity` to tune the visibility of the advisory
 check that is always present.
 
+#### `spec.mistyped_references` — Wrong Target Node Kind
+
+The `spec.mistyped_references` check validates that traceability edges
+(Implements, Refines, Verifies, Validates, Satisfies) target only REQUIREMENT
+or ASSERTION nodes. If an edge somehow points to a TEST, CODE, or RESULT node,
+this check flags it as a build or authoring error.
+
 ### Code Reference Checks (`--code`)
 
 | Check | Description |
 |-------|-------------|
 | `code.coverage` | Code coverage statistics (informational) |
-| `code.unlinked` | Code references not linked to any requirement |
+| `code.unlinked` | Code files with no traceability markers (no `# Implements:` or `# Verifies:` comments); severity: info |
+| `code.retired_references` | Code referencing requirements with retired status (Deprecated, Superseded, Rejected); default severity: warning |
+| `code.provisional_references` | Code referencing requirements with provisional status (Draft, Proposed); default severity: info |
+| `code.aspirational_references` | Code referencing requirements with aspirational status (Roadmap, Future, Idea); default severity: info |
 
 ### Test Mapping Checks (`--tests`)
 
 | Check | Description |
 |-------|-------------|
 | `tests.coverage` | Test coverage statistics with rollup (informational) |
-| `tests.unlinked` | Tests not linked to any requirement |
+| `tests.unlinked` | Test files with no traceability markers (no REQ-xxx patterns or `Verifies` comments); severity: info |
 | `tests.results` | Test pass/fail status from JUnit XML or pytest JSON results |
+| `tests.retired_references` | Tests referencing requirements with retired status (Deprecated, Superseded, Rejected); default severity: warning |
+| `tests.provisional_references` | Tests referencing requirements with provisional status (Draft, Proposed); default severity: info |
+| `tests.aspirational_references` | Tests referencing requirements with aspirational status (Roadmap, Future, Idea); default severity: info |
+
+#### Reference Status Checks — Retired, Provisional, Aspirational
+
+The `*.retired_references`, `*.provisional_references`, and
+`*.aspirational_references` checks (for both `code` and `tests` categories)
+flag traceability links that target requirements whose status suggests the
+reference may be stale or premature:
+
+- **Retired** (Deprecated, Superseded, Rejected) — the requirement is no
+  longer valid; code or tests referencing it may need cleanup.
+- **Provisional** (Draft, Proposed) — the requirement is not yet approved;
+  references are premature but may be intentional during development.
+- **Aspirational** (Roadmap, Future, Idea) — the requirement is planned
+  but not committed; references are informational.
+
+**`--status` interaction:** Using `--status Draft` promotes Draft requirements
+to active-like status, so `code.provisional_references` and
+`tests.provisional_references` will not flag Draft references when
+`--status Draft` is used.
+
+**Configuration** — adjust severity via `[rules.references]` in `.elspais.toml`:
+
+```toml
+[rules.references]
+retired = "warning"       # info | warning | error
+provisional = "info"      # info | warning | error
+aspirational = "info"     # info | warning | error
+```
 
 ### UAT Checks
 
