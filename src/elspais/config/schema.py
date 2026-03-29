@@ -96,10 +96,19 @@ class CoverageConfig(_StrictModel):
     uat_verified: CoverageSeverityConfig = Field(default_factory=_uat_severity)
 
 
+class ReferenceSeverityConfig(_StrictModel):
+    """Severity levels for status-based reference checks."""
+
+    retired: str = "warning"
+    provisional: str = "info"
+    aspirational: str = "info"
+
+
 class RulesConfig(_StrictModel):
     hierarchy: HierarchyConfig = Field(default_factory=HierarchyConfig)
     format: FormatConfig = Field(default_factory=FormatConfig)
     coverage: CoverageConfig = Field(default_factory=CoverageConfig)
+    references: ReferenceSeverityConfig = Field(default_factory=ReferenceSeverityConfig)
     content_rules: list[str] | None = None
     protected_branches: list[str] = Field(default=["main", "master"])
 

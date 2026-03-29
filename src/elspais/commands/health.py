@@ -681,17 +681,15 @@ def check_mistyped_references(graph: FederatedGraph) -> HealthCheck:
     mistyped = []
     for kind in (NodeKind.CODE, NodeKind.TEST, NodeKind.USER_JOURNEY):
         for node in graph.nodes_by_kind(kind):
-            for edge in node.iter_outgoing_edges():
-                if edge.kind not in _TRACEABILITY_EDGES:
-                    continue
-                target = edge.target
-                if target.kind not in _VALID_TARGETS:
+            # Edge direction: parent (REQ/ASSERTION) -> child (CODE/TEST)
+            for parent in node.iter_parents(edge_kinds=_TRACEABILITY_EDGES):
+                if parent.kind not in _VALID_TARGETS:
                     fn = node.file_node()
                     mistyped.append(
                         HealthFinding(
                             message=(
-                                f"{node.id} -> {target.id}: "
-                                f"{edge.kind.value} targets {target.kind.value} "
+                                f"{node.id} -> {parent.id}: "
+                                f"traceability parent is {parent.kind.value} "
                                 f"(expected requirement or assertion)"
                             ),
                             file_path=fn.get_field("relative_path") if fn else None,
@@ -1703,6 +1701,88 @@ def check_unlinked_code(graph: FederatedGraph) -> HealthCheck:
     )
 
 
+def _check_status_references(
+    graph: FederatedGraph,
+    source_kind: Any,  # NodeKind enum value
+    role: StatusRole,
+    severity: str,
+    exclude_status: set[str] | None = None,
+) -> HealthCheck:
+    """Check for source nodes referencing requirements of a given status role.
+
+    When --status promotes a status to active-like, it's removed from
+    exclude_status. We mirror that: statuses NOT in exclude_status are
+    treated as active and skip this check.
+
+    Args:
+        graph: The federated traceability graph.
+        source_kind: NodeKind.CODE or NodeKind.TEST.
+        role: The StatusRole to flag (RETIRED, PROVISIONAL, ASPIRATIONAL).
+        severity: Check severity level (info/warning/error).
+        exclude_status: Statuses currently excluded from coverage.
+    """
+    from elspais.config import get_status_roles
+    from elspais.graph import NodeKind
+    from elspais.graph.relations import EdgeKind
+
+    roles_cfg = get_status_roles({})
+    category = "code" if source_kind == NodeKind.CODE else "tests"
+    check_name = f"{category}.{role.value}_references"
+
+    _TRACEABILITY_EDGES = {EdgeKind.IMPLEMENTS, EdgeKind.VERIFIES, EdgeKind.VALIDATES}
+
+    findings: list[HealthFinding] = []
+    for node in graph.nodes_by_kind(source_kind):
+        # Edge direction: REQ/ASSERTION -> CODE/TEST (parent links child)
+        # So from CODE/TEST, look at incoming edges (parents)
+        for parent in node.iter_parents(edge_kinds=_TRACEABILITY_EDGES):
+            # Walk to the requirement (parent may be an assertion)
+            req = parent
+            if req.kind == NodeKind.ASSERTION:
+                for p in req.iter_parents():
+                    if p.kind == NodeKind.REQUIREMENT:
+                        req = p
+                        break
+            if req.kind != NodeKind.REQUIREMENT:
+                continue
+            req_status = req.status
+            # If this status was promoted by --status, skip it
+            if exclude_status and req_status and req_status not in exclude_status:
+                continue
+            if roles_cfg.role_of(req_status) != role:
+                continue
+            fn = node.file_node()
+            findings.append(
+                HealthFinding(
+                    message=(
+                        f"{node.id} references {req.id} "
+                        f"(status={req_status}, role={role.value})"
+                    ),
+                    file_path=fn.get_field("relative_path") if fn else None,
+                    line=node.get_field("parse_line"),
+                    node_id=node.id,
+                )
+            )
+
+    role_label = role.value
+    if findings:
+        return HealthCheck(
+            name=check_name,
+            passed=False,
+            message=f"{len(findings)} {category} reference(s) to {role_label} requirements",
+            category=category,
+            severity=severity,
+            findings=findings,
+        )
+
+    return HealthCheck(
+        name=check_name,
+        passed=True,
+        message=f"No {category} references to {role_label} requirements",
+        category=category,
+    )
+
+
 def run_code_checks(
     graph: FederatedGraph,
     exclude_status: set[str] | None = None,
@@ -1711,9 +1791,21 @@ def run_code_checks(
     """Run all code reference health checks."""
     from elspais.graph import NodeKind
 
+    typed_config = _validate_config(config or {})
+    ref_sev = typed_config.rules.references
+
     checks = [
         check_code_coverage(graph, exclude_status=exclude_status),
         check_unlinked_code(graph),
+        _check_status_references(
+            graph, NodeKind.CODE, StatusRole.RETIRED, ref_sev.retired, exclude_status
+        ),
+        _check_status_references(
+            graph, NodeKind.CODE, StatusRole.PROVISIONAL, ref_sev.provisional, exclude_status
+        ),
+        _check_status_references(
+            graph, NodeKind.CODE, StatusRole.ASPIRATIONAL, ref_sev.aspirational, exclude_status
+        ),
     ]
 
     # Add code_tested dimension only when line coverage data is present
@@ -2031,11 +2123,25 @@ def run_test_checks(
     graph: FederatedGraph, exclude_status: set[str] | None = None, config: dict | None = None
 ) -> list[HealthCheck]:
     """Run all test file health checks."""
+    from elspais.graph import NodeKind
+
+    typed_config = _validate_config(config or {})
+    ref_sev = typed_config.rules.references
+
     return [
         check_test_coverage(graph, exclude_status=exclude_status, config=config),
         check_dimension_coverage(graph, "verified", exclude_status=exclude_status, config=config),
         check_unlinked_tests(graph),
         check_test_results(graph, config=config),
+        _check_status_references(
+            graph, NodeKind.TEST, StatusRole.RETIRED, ref_sev.retired, exclude_status
+        ),
+        _check_status_references(
+            graph, NodeKind.TEST, StatusRole.PROVISIONAL, ref_sev.provisional, exclude_status
+        ),
+        _check_status_references(
+            graph, NodeKind.TEST, StatusRole.ASPIRATIONAL, ref_sev.aspirational, exclude_status
+        ),
     ]
 
 

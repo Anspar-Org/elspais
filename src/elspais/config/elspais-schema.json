@@ -723,6 +723,29 @@
       "title": "ProjectConfig",
       "type": "object"
     },
+    "ReferenceSeverityConfig": {
+      "additionalProperties": false,
+      "description": "Severity levels for status-based reference checks.",
+      "properties": {
+        "retired": {
+          "default": "warning",
+          "title": "Retired",
+          "type": "string"
+        },
+        "provisional": {
+          "default": "info",
+          "title": "Provisional",
+          "type": "string"
+        },
+        "aspirational": {
+          "default": "info",
+          "title": "Aspirational",
+          "type": "string"
+        }
+      },
+      "title": "ReferenceSeverityConfig",
+      "type": "object"
+    },
     "ResultScanningConfig": {
       "additionalProperties": false,
       "properties": {
@@ -774,6 +797,9 @@
         },
         "coverage": {
           "$ref": "#/$defs/CoverageConfig"
+        },
+        "references": {
+          "$ref": "#/$defs/ReferenceSeverityConfig"
         },
         "content_rules": {
           "anyOf": [

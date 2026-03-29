@@ -1,5 +1,9 @@
 # Known Issues
 
+[ ] daemon: bug - timeout
+- daemon should timeout and shutdown after N minutes, unless there are unsaved changes
+- currently, some MCP daemons are peristing for many hours after their spawners are shut down
+
 [ ] viewer : bug
 - text-box edit fields lost their default-height of 120px. They default to far too narrow boxes.
 
