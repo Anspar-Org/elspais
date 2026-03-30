@@ -108,6 +108,19 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 
 **E2E: reuse MCP servers**: The `mcp` fixture in `test_mcp_e2e.py` is module-scoped. Don't start a new server per test class unless the project config differs.
 
+**E2E: choosing the right fixture file**: Match your test to an existing fixture by config needs:
+- `test_e2e_global` — runs against REPO_ROOT (self-validation, CLI smoke tests, global MCP)
+- `test_e2e_standard` — standard IDs (REQ-p/o/d), uppercase assertions, 3-tier hierarchy, testing+code enabled
+- `test_e2e_fda_numeric` — FDA-style IDs (PRD-/OPS-/DEV-), numeric-0 assertions, custom statuses, require_rationale
+- `test_e2e_named_custom` — named-component IDs, numeric-1 assertions, custom hierarchy, SHALL=false, comma separator
+- `test_e2e_jira_edge` — Jira-style variable-length IDs, zero-padded assertions, status_roles, complex dirs, env overrides
+- `test_e2e_associated` — multi-repo with associates (standard core + FDA associate)
+- `test_e2e_special` — tests needing truly unique setup (init, lifecycle from scratch, specific error states)
+
+**E2E: ordering within a fixture**: Read-only tests go first (health, summary, trace, analysis). Mutation tests (fix, config set, edit) go after. MCP tests go last. If your test mutates disk, add it after existing mutations — later tests expect the mutated state.
+
+**E2E: when to create a new fixture file**: Only if you need a config combination that conflicts with ALL existing fixtures. Before creating a new file, check if you can add your config option to an existing fixture without breaking its other tests.
+
 ## Master Plan Workflow
 
 **IMPORTANT**: After `/clear` or at the start of a new session, check `MASTER_PLAN.md` for queued issues.
