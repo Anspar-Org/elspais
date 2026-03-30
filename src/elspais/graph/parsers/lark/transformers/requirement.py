@@ -41,7 +41,7 @@ _GOAL_RE = re.compile(r"\*\*Goal\*\*:[ \t]*(?P<goal>.+?)(?:\n|$)")
 _VALIDATES_RE = re.compile(r"^Validates:[ \t]*(?P<validates>.+?)$", re.MULTILINE)
 
 # Changelog entry pattern
-_CHANGELOG_ENTRY_RE = re.compile(r"^- (.+?) \| (\S+) \| (.+?) \| (.+?) \((.+?)\) \| (.+)$")
+_CHANGELOG_ENTRY_RE = re.compile(r"^- (.+?) \| (\S+) \| (.+?) \| (.+?) \(<(.+?)>\) \| (.+)$")
 
 # Values that mean "no references"
 _NO_REF_VALUES = {"-", "null", "none", "x", "X", "N/A", "n/a"}

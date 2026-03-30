@@ -462,7 +462,7 @@ A. The system SHALL do X.
 
 ## Changelog
 
-- 2026-02-15 | bf63eda5 | CUR-1200 | Bob (b@b.org) | First version
+- 2026-02-15 | bf63eda5 | CUR-1200 | Bob (<b@b.org>) | First version
 
 *End* *Test Req* | **Hash**: abcdef12
 ---
@@ -497,7 +497,7 @@ class TestAddChangelogEntry:
         # Section was created
         assert "## Changelog" in content
         # Entry is present with correct format
-        assert "- 2026-03-06 | abcdef12 | CUR-1234 | Alice (a@b.org) | Refined A" in content
+        assert "- 2026-03-06 | abcdef12 | CUR-1234 | Alice (<a@b.org>) | Refined A" in content
         # Changelog appears between assertions and End marker
         changelog_pos = content.index("## Changelog")
         assertion_pos = content.index("A. The system SHALL do X.")
@@ -514,8 +514,8 @@ class TestAddChangelogEntry:
 
         content = spec.read_text(encoding="utf-8")
         # Both entries present
-        new_entry = "- 2026-03-06 | abcdef12 | CUR-1234 | Alice (a@b.org) | Refined A"
-        old_entry = "- 2026-02-15 | bf63eda5 | CUR-1200 | Bob (b@b.org) | First version"
+        new_entry = "- 2026-03-06 | abcdef12 | CUR-1234 | Alice (<a@b.org>) | Refined A"
+        old_entry = "- 2026-02-15 | bf63eda5 | CUR-1200 | Bob (<b@b.org>) | First version"
         assert new_entry in content
         assert old_entry in content
         # New entry appears before old entry

@@ -22,13 +22,13 @@ The name derives from Terry Pratchett's "L-Space"—the dimension where all libr
 
 A. The tool SHALL provide command-line validation of requirement documents stored as Markdown files.
 
-B. The tool SHALL generate traceability matrices showing requirement relationships.
+B. The tool SHALL generate *Traceability* matrices showing requirement relationships.
 
 C. The tool SHALL detect changes to requirements using content hashing and git integration.
 
 D. [DEPRECATED]
 
-*End* *Requirements Management Tool* | **Hash**: d94ef7d7
+*End* *Requirements Management Tool* | **Hash**: ce489de6
 ---
 
 # REQ-p00002: Requirements Validation
@@ -43,9 +43,9 @@ Automated validation catches these issues early, before they propagate into desi
 
 The validation system enforces:
 
-- **Format compliance**: Headers, metadata, assertion sections, and hash footers follow the canonical grammar
+- **Format compliance**: Headers, metadata, *Assertion* sections, and hash footers follow the canonical grammar
 - **Hierarchy integrity**: Child requirements correctly reference parents; no circular dependencies
-- **Traceability completeness**: All requirements are reachable from root-level product requirements
+- ****Traceability** completeness**: All requirements are reachable from root-level product requirements
 - **Content freshness**: Hashes match current content; changes are intentional
 
 ## Assertions
@@ -56,6 +56,10 @@ B. The tool SHALL detect and report hierarchy violations including circular depe
 
 C. The tool SHALL verify content hashes match requirement body text.
 
+## Changelog
+
+- 2026-03-30 | e8f0e4eb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+
 *End* *Requirements Validation* | **Hash**: e8f0e4eb
 ---
 
@@ -65,9 +69,9 @@ C. The tool SHALL verify content hashes match requirement body text.
 
 ## Rationale
 
-Regulatory submissions and internal reviews require evidence that high-level product requirements flow down to detailed specifications and test coverage. A traceability matrix provides this view—showing which detailed requirements implement which product requirements, and which tests verify which specifications.
+Regulatory submissions and internal reviews require evidence that high-level product requirements flow down to detailed specifications and test coverage. A *Traceability* matrix provides this view—showing which detailed requirements implement which product requirements, and which tests verify which specifications.
 
-Manual maintenance of traceability matrices is error-prone and quickly becomes stale. Automated generation from the `Implements:` metadata in requirement documents ensures the matrix always reflects the current state of the requirements baseline.
+Manual maintenance of *Traceability* matrices is error-prone and quickly becomes stale. Automated generation from the `Implements:` metadata in requirement documents ensures the matrix always reflects the current state of the requirements baseline.
 
 Multiple output formats serve different audiences:
 
@@ -77,11 +81,11 @@ Multiple output formats serve different audiences:
 
 ## Assertions
 
-A. The tool SHALL generate traceability matrices in Markdown, HTML, and CSV formats.
+A. The tool SHALL generate *Traceability* matrices in Markdown, HTML, and CSV formats.
 
-B. The tool SHALL derive traceability from `Implements:` metadata without manual matrix maintenance.
+B. The tool SHALL derive *Traceability* from `Implements:` metadata without manual matrix maintenance.
 
-*End* *Traceability Matrix Generation* | **Hash**: b935bd53
+*End* *Traceability Matrix Generation* | **Hash**: 6a3a9426
 ---
 
 # REQ-p00004: Change Detection and Auditability
@@ -145,7 +149,7 @@ The testing strategy follows a pyramid:
 
 ## Assertions
 
-A. The project SHALL maintain unit tests for all core modules with assertion-linked test names.
+A. The project SHALL maintain unit tests for all core modules with *Assertion*-linked test names.
 
 B. The project SHALL maintain end-to-end tests that invoke the CLI as a subprocess and verify command output, exit codes, and file artifacts.
 
@@ -157,7 +161,7 @@ E. The project SHALL include MCP protocol tests that verify tool invocation, sea
 
 F. All tests marked `@pytest.mark.e2e` SHALL invoke the `elspais` CLI as a subprocess. Tests that call internal Python functions or submodules directly SHALL NOT be marked e2e; they are unit or integration tests.
 
-*End* *Automated Testing* | **Hash**: 3fc90ebc
+*End* *Automated Testing* | **Hash**: 962216d8
 ---
 
 ## REQ-p00061: Requirement Decomposition Rules
@@ -185,7 +189,7 @@ C. Multiple requirements MAY exist at the same Level each declaring a relationsh
 
 UAT documentation review requires formal PDF output with professional formatting. A single compiled document with table of contents, per-requirement page breaks, and a topic index enables offline review, regulatory submission, and stakeholder sign-off. Currently, spec files exist only as Markdown with no PDF generation pipeline.
 
-The `elspais pdf` command compiles requirement spec files into a professional PDF using Pandoc and LaTeX. Python assembles a clean Markdown document from the traceability graph; a custom LaTeX template controls formatting; Pandoc handles Markdown-to-LaTeX conversion.
+The `elspais pdf` command compiles requirement spec files into a professional PDF using Pandoc and LaTeX. Python assembles a clean Markdown document from the *Traceability* graph; a custom LaTeX template controls formatting; Pandoc handles Markdown-to-LaTeX conversion.
 
 ## Assertions
 
@@ -260,7 +264,7 @@ D. `GraphBuilder` SHALL accept a `namespace` parameter (str, default "") and set
 
 A. `check_term_duplicates()` SHALL return a `HealthCheck` reporting duplicate term definitions across all namespaces, using the configured `duplicate_severity`.
 
-B. `check_undefined_terms()` SHALL return a `HealthCheck` for `*token*`/`**token**` references that do not match any defined term and are not known structural patterns, using the configured `undefined_severity`.
+B. `check_undefined_terms()` SHALL return a `HealthCheck` for `*token*`/`**token**` references that do not match any *Defined Term* and are not known structural patterns, using the configured `undefined_severity`.
 
 C. `check_unmarked_usage()` SHALL return a `HealthCheck` for whole-word case-insensitive matches of indexed terms in prose that lack `*...*` or `**...**` markup, using the configured `unmarked_severity`. Only terms with `indexed=True` SHALL be checked.
 
@@ -270,7 +274,7 @@ E. A `run_term_checks(graph, config)` aggregator SHALL call `check_term_duplicat
 
 F. `check_unmarked_usage()` SHALL produce distinct messages for wrong-marking references (e.g., "Wrong markup for 'term' (uses __, should use configured style)") versus plain unmarked references (e.g., "Unmarked usage of 'term'").
 
-*End* *Term Health Checks* | **Hash**: 82c10ca8
+*End* *Term Health Checks* | **Hash**: 0d96cc34
 
 ## REQ-d00224: Glossary and Term Index Generators
 
@@ -348,13 +352,13 @@ E. Terms with `indexed=False` SHALL be scanned for marked and wrong-marking refe
 
 A. `scan_graph(terms, nodes, namespace, markup_styles, exclude_files)` SHALL populate `TermEntry.references` by scanning graph nodes for term occurrences.
 
-B. REQUIREMENT, ASSERTION, REMAINDER (excluding `definition_block`), and JOURNEY nodes SHALL be scanned using their full text content.
+B. REQUIREMENT, *Assertion*, REMAINDER (excluding `definition_block`), and JOURNEY nodes SHALL be scanned using their full text content.
 
 C. CODE and TEST nodes SHALL be scanned via comment extraction only (not raw source code), to avoid false positives on variable names and string literals.
 
 D. Files matching any `exclude_files` glob pattern SHALL be skipped during scanning.
 
-*End* *Graph-Wide Term Scan* | **Hash**: 655f284e
+*End* *Graph-Wide Term Scan* | **Hash**: d3a202d4
 
 ## REQ-d00239: Federated Graph Term Scanner Pass
 
@@ -394,7 +398,7 @@ D. `run_term_checks()` SHALL call all six term checks (`duplicates`, `undefined`
 
 ## Assertions
 
-A. `check_no_traceability(unlinked_files, severity)` SHALL return a `HealthCheck` reporting code and test files with no traceability markers. Default severity: `"warning"`. When `severity="off"`, return passed/info.
+A. `check_no_traceability(unlinked_files, severity)` SHALL return a `HealthCheck` reporting code and test files with no *Traceability* markers. Default severity: `"warning"`. When `severity="off"`, return passed/info.
 
 B. The check SHALL be wired into `run_code_checks()` using `graph.iter_unlinked()` to find CODE/TEST nodes not linked to any requirement.
 
@@ -404,4 +408,4 @@ C. Severity SHALL be read from `[rules.format] no_traceability_severity` (defaul
 
 - 2026-03-29 | 6e481d63 | - | Michael Lewis (<michael@anspar.org>) | Initial creation
 
-*End* *Code No-Traceability Health Check* | **Hash**: 6e481d63
+*End* *Code No-Traceability Health Check* | **Hash**: e1272219

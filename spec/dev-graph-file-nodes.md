@@ -4,7 +4,7 @@
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00050
 
-The graph data model SHALL support FILE nodes and file-aware edge kinds for representing source file structure in the traceability graph.
+The graph data model SHALL support FILE nodes and file-aware edge kinds for representing source file structure in the *Traceability* graph.
 
 ## Assertions
 
@@ -21,6 +21,10 @@ E. `Edge` dataclass SHALL have a `metadata: dict[str, Any]` field defaulting to 
 ## Rationale
 
 FILE nodes are the foundation for representing source files as first-class graph participants. The new edge kinds (STRUCTURES, DEFINES, YIELDS) enable domain-internal hierarchy, virtual node provenance, and test-result linking. Edge metadata carries mutable annotations (line ranges, render order) without affecting edge identity.
+
+## Changelog
+
+- 2026-03-30 | 664d3990 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
 *End* *FILE Node Data Model* | **Hash**: 664d3990
 ---
@@ -68,13 +72,13 @@ D. `GraphBuilder.add_parsed_content()` SHALL accept an optional `file_node` para
 
 E. CONTAINS edge metadata SHALL include `start_line` (int), `end_line` (int or None), and `render_order` (float, sequential from 0.0).
 
-F. ASSERTION and requirement-level REMAINDER nodes SHALL NOT receive CONTAINS edges from FILE; they are reached via STRUCTURES edges from their parent REQUIREMENT.
+F. *Assertion* and requirement-level REMAINDER nodes SHALL NOT receive CONTAINS edges from FILE; they are reached via STRUCTURES edges from their parent REQUIREMENT.
 
 G. RemainderParser SHALL be mandatory for SPEC, JOURNEY, CODE, and TEST file types, ensuring every line is claimed by some parser.
 
 H. RemainderParser SHALL NOT be registered for RESULT file types.
 
-I. FILE nodes SHALL be additive: existing graph behavior (traceability, coverage, root/orphan detection) SHALL remain unaffected.
+I. FILE nodes SHALL be additive: existing graph behavior (*Traceability*, coverage, root/orphan detection) SHALL remain unaffected.
 
 J. Template instantiation (`_instantiate_satisfies_templates()`) SHALL create DEFINES edges from the declaring requirement's FILE node to each INSTANCE node in the cloned subtree.
 
@@ -86,7 +90,11 @@ L. `file_node()` SHALL return None for INSTANCE nodes. To find the originating f
 
 FILE nodes make source files first-class graph participants. Creating them in factory.py (which knows the file path and type) rather than the deserializer maintains separation of concerns. CONTAINS edges with line-range metadata enable file-level operations. RemainderParser ensures complete line coverage for text-based files. DEFINES edges from FILE to INSTANCE nodes establish provenance for virtual nodes created by template instantiation.
 
-*End* *FILE Node Creation in Build Pipeline* | **Hash**: 166358a3
+## Changelog
+
+- 2026-03-30 | 7742f15f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+
+*End* *FILE Node Creation in Build Pipeline* | **Hash**: 7742f15f
 ---
 
 ## REQ-d00129: SourceLocation Removal and Consumer Migration
@@ -155,9 +163,9 @@ Each domain NodeKind SHALL have a render function that produces its text represe
 
 A. Each `NodeKind` SHALL have a `render()` function that returns its text representation as a string, dispatched by kind.
 
-B. `REQUIREMENT` render SHALL produce the full requirement block: header line (`## REQ-xxx: Title`), metadata line, body text, `## Assertions` heading with assertion lines from STRUCTURES children, non-normative sections from STRUCTURES children, and `*End*` marker with hash.
+B. `REQUIREMENT` render SHALL produce the full requirement block: header line (`## REQ-xxx: Title`), metadata line, body text, `## Assertions` heading with *Assertion* lines from STRUCTURES children, non-normative sections from STRUCTURES children, and `*End*` marker with hash.
 
-C. `ASSERTION` nodes SHALL be rendered by their parent REQUIREMENT's render function, not independently. Calling render on an ASSERTION directly SHALL raise `ValueError`.
+C. `ASSERTION` nodes SHALL be rendered by their parent REQUIREMENT's render function, not independently. Calling render on an *Assertion* directly SHALL raise `ValueError`.
 
 D. `REMAINDER` render SHALL return its raw text verbatim, preserving all whitespace and content exactly as parsed.
 
@@ -171,13 +179,17 @@ H. `TEST_RESULT` render SHALL raise `ValueError` as test results are read-only a
 
 I. Rendering a FILE node SHALL walk its CONTAINS children sorted by `render_order` edge metadata, call render on each, and concatenate the results with appropriate line separators to produce the complete file content.
 
-J. Requirement hash computation SHALL use order-independent assertion hashing: compute each assertion's normalized text hash individually, sort the hashes lexicographically, then hash the sorted collection into the requirement's final hash.
+J. Requirement hash computation SHALL use order-independent *Assertion* hashing: compute each *Assertion*'s normalized text hash individually, sort the hashes lexicographically, then hash the sorted collection into the requirement's final hash.
 
 ## Rationale
 
-The render protocol is the inverse of parsing: each node kind knows how to serialize itself back to text. This enables the graph to reconstruct files from its internal state, which is the foundation for render-based persistence. Order-independent assertion hashing ensures that assertion reordering does not trigger false change-detection flags.
+The render protocol is the inverse of parsing: each node kind knows how to serialize itself back to text. This enables the graph to reconstruct files from its internal state, which is the foundation for render-based persistence. Order-independent *Assertion* hashing ensures that *Assertion* reordering does not trigger false change-detection flags.
 
-*End* *Render Protocol for Graph Nodes* | **Hash**: cc025b1a
+## Changelog
+
+- 2026-03-30 | c004c62e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+
+*End* *Render Protocol for Graph Nodes* | **Hash**: c004c62e
 ---
 
 ## REQ-d00132: Render-Based Save Operation
@@ -215,7 +227,7 @@ The system SHALL pass a comprehensive end-to-end scenario test that exercises al
 
 ## Assertions
 
-A. The scenario test SHALL exercise at least 50 mutation operations across all mutation types (status, title, assertion CRUD, edge CRUD, requirement CRUD, undo) in a single deterministic run.
+A. The scenario test SHALL exercise at least 50 mutation operations across all mutation types (status, title, *Assertion* CRUD, edge CRUD, requirement CRUD, undo) in a single deterministic run.
 
 B. The scenario test SHALL build a starting fixture with at least 6 requirements across all three levels (PRD, OPS, DEV) with proper hierarchy and assertions.
 
@@ -231,5 +243,9 @@ F. The scenario test SHALL exercise undo operations at various points and verify
 
 A single large scenario test that exercises the full mutation API in a realistic sequence provides confidence that mutation operations compose correctly and that the render-save-reload pipeline is faithful. This complements the existing per-mutation-type unit tests with a holistic integration test.
 
-*End* *Comprehensive Mutation Round-Trip Scenario Test* | **Hash**: 4772cbb4
+## Changelog
+
+- 2026-03-30 | be52daed | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+
+*End* *Comprehensive Mutation Round-Trip Scenario Test* | **Hash**: be52daed
 ---
