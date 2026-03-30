@@ -33,24 +33,22 @@ def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
 def run(args: argparse.Namespace) -> int:
     """Run the fix command.
 
-    - fix (no req_id): validate --fix for all fixable issues
-    - fix REQ-xxx:     targeted hash update for a single requirement
+    Single pipeline: build graph -> detect dirty -> add changelog -> render_save.
+    No second graph build, no validate pass.
+
+    - fix (no req_id): fix all fixable issues in one pass
+    - fix REQ-xxx:     targeted fix for a single requirement
     """
     target_req_id = getattr(args, "req_id", None)
 
     if target_req_id:
         return _fix_single(args, target_req_id)
 
-    from elspais.commands import validate
-
     dry_run = getattr(args, "dry_run", False)
 
-    # Fix parse-dirty nodes (e.g. duplicate refs) via render_save before
-    # running validate, so hash mismatches caused by dirty nodes are resolved
-    # in one pass rather than two.
+    # Single-pass fix: build graph, detect dirty nodes, add changelog
+    # entries, render_save to disk.
     _fix_parse_dirty(args, dry_run)
-
-    validate.run(_make_validate_args(args))
 
     # Fix stale INDEX.md if present
     _fix_index(args, dry_run)
@@ -59,14 +57,7 @@ def run(args: argparse.Namespace) -> int:
     # Generate glossary and term index if terms are defined
     _fix_terms(args, dry_run)
 
-    if dry_run:
-        return 0
-
-    # Re-validate to get the true exit code after fixes are applied
-    recheck = _make_validate_args(args)
-    recheck.fix = False
-    recheck.quiet = True
-    return validate.run(recheck)
+    return 0
 
 
 _REASON_LABELS: dict[str, str] = {
@@ -236,11 +227,11 @@ def _add_drift_changelog_entries(
 
 
 def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> None:
-    """Rewrite files that contain parse-dirty requirements.
+    """Single-pass fix: build graph, detect all fixable issues, render to disk.
 
-    Uses render_save() so the rendered output is canonical: one Implements/
-    Refines line, deduplicated refs, recomputed hash, canonical term forms.
-    Adds changelog entries for Active requirements when changelog is enabled.
+    Uses _detect_fixable() for comprehensive detection (parse dirty, hash
+    mismatch, changelog drift, missing changelog) and render_save() for
+    canonical output.
     """
     from elspais.config import get_config
     from elspais.graph import NodeKind
@@ -262,44 +253,26 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> None:
 
     typed_config = _validate_config(config)
     changelog_enforce = typed_config.changelog.hash_current
+    hash_mode = getattr(graph, "hash_mode", "full-text")
 
-    dirty_nodes = [
-        node
-        for node in graph.nodes_by_kind(NodeKind.REQUIREMENT)
-        if node.get_field("parse_dirty")
-        and any(r != "stale_hash" for r in (node.get_field("parse_dirty_reasons") or []))
-    ]
+    # Detect all fixable issues using the unified detection function
+    fixable_nodes: list[tuple[Any, list[str]]] = []  # (node, reasons)
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        reasons = _detect_fixable(node, hash_mode, changelog_enforce)
+        if reasons:
+            fixable_nodes.append((node, reasons))
 
-    # Also pick up Active nodes with changelog hash drift
-    drift_nodes = []
-    if changelog_enforce:
-        dirty_ids = {n.id for n in dirty_nodes}
-        for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-            if node.id in dirty_ids:
-                continue
-            if (node.status or "").lower() != "active":
-                continue
-            cl = node.get_field("changelog") or []
-            if not cl:
-                continue
-            latest_hash = cl[0].get("hash", "")
-            stored = node.hash or ""
-            if latest_hash and stored and latest_hash != stored:
-                drift_nodes.append(node)
-
-    if not dirty_nodes and not drift_nodes:
+    if not fixable_nodes:
+        req_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.REQUIREMENT))
+        print(f"Validated {req_count} requirements")
         return
 
     # Report what will be / was fixed
-    for node in dirty_nodes:
-        reasons = node.get_field("parse_dirty_reasons") or []
-        prefix = "Would fix" if dry_run else "Fixing"
+    prefix = "Would fix" if dry_run else "Fixing"
+    for node, reasons in fixable_nodes:
         for r in reasons:
-            if r == "stale_hash":
-                continue
             if r == "non_canonical_term":
                 repls = node.get_field("term_replacements") or []
-                # Deduplicate replacements
                 seen: set[tuple[str, str]] = set()
                 for old_form, new_form in repls:
                     if (old_form, new_form) not in seen:
@@ -308,16 +281,30 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> None:
             else:
                 print(f"{prefix} {node.id}: {_REASON_LABELS.get(r, r)}")
 
-    prefix = "Would fix" if dry_run else "Fixing"
-    for node in drift_nodes:
-        print(f"{prefix} {node.id}: sync changelog hash")
-
     if dry_run:
         return
+
+    # Separate nodes by fix type for changelog entries
+    dirty_nodes = [
+        n
+        for n, reasons in fixable_nodes
+        if any(r not in ("changelog_drift", "missing_changelog") for r in reasons)
+    ]
+    drift_nodes = [
+        n for n, reasons in fixable_nodes if "changelog_drift" in reasons and n not in dirty_nodes
+    ]
 
     # Add auto-fix changelog entries before render_save
     _add_autofix_changelog_entries(graph, dirty_nodes, config)
     _add_drift_changelog_entries(graph, drift_nodes, config)
+
+    # Mark all fixable nodes dirty so render_save picks up their files
+    for node, reasons in fixable_nodes:
+        node._content["parse_dirty"] = True
+        node._content.setdefault("parse_dirty_reasons", [])
+        for r in reasons:
+            if r not in node._content["parse_dirty_reasons"]:
+                node._content["parse_dirty_reasons"].append(r)
 
     result = render_save(graph, repo_root=repo_root)
     saved = result.get("saved_count", 0)
@@ -326,24 +313,8 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> None:
         for f in files:
             print(f"Rewrote {f}")
 
-
-def _make_validate_args(args: argparse.Namespace) -> argparse.Namespace:
-    """Build a validate-compatible args namespace from fix args."""
-    return argparse.Namespace(
-        # Shared CLI args
-        spec_dir=getattr(args, "spec_dir", None),
-        config=getattr(args, "config", None),
-        quiet=getattr(args, "quiet", False),
-        verbose=getattr(args, "verbose", False),
-        # Validate mode
-        mode=getattr(args, "mode", "combined"),
-        json=False,
-        export=False,
-        skip_rule=None,
-        # Fix mode — always on
-        fix=True,
-        dry_run=getattr(args, "dry_run", False),
-    )
+    req_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.REQUIREMENT))
+    print(f"Validated {req_count} requirements")
 
 
 def _fix_single(args: argparse.Namespace, req_id: str) -> int:

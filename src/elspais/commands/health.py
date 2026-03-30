@@ -1551,6 +1551,103 @@ def run_term_checks(
     ]
 
 
+# Implements: REQ-d00202-A
+def check_associate_paths(
+    config: dict[str, Any],
+    repo_root: Path,
+) -> HealthCheck:
+    """Validate that configured associate paths exist and contain spec files."""
+    from elspais.config import get_associates_config
+
+    associates = get_associates_config(config)
+    if not associates:
+        return HealthCheck(
+            name="config.associate_paths",
+            passed=True,
+            message="No associates configured",
+            category="config",
+            severity="info",
+        )
+
+    findings: list[HealthFinding] = []
+    for assoc_name, assoc_info in associates.items():
+        path_str = assoc_info["path"]
+        p = Path(path_str)
+        if not p.is_absolute():
+            p = repo_root / p
+        if not p.exists():
+            findings.append(
+                HealthFinding(
+                    message=f"Associate '{assoc_name}' path does not exist: {path_str}",
+                    node_id=assoc_name,
+                    severity="error",
+                )
+            )
+        else:
+            from elspais.associates import discover_associate_from_path
+
+            disc_result = discover_associate_from_path(p)
+            if isinstance(disc_result, str):
+                findings.append(
+                    HealthFinding(
+                        message=f"Associate '{assoc_name}' is misconfigured: {disc_result}",
+                        node_id=assoc_name,
+                        severity="error",
+                    )
+                )
+            else:
+                assoc_spec_dir = p / disc_result.spec_path
+                if not assoc_spec_dir.exists() or not any(assoc_spec_dir.glob("*.md")):
+                    findings.append(
+                        HealthFinding(
+                            message=(
+                                f"Associate '{assoc_name}' has no spec files"
+                                f" in {disc_result.spec_path}"
+                            ),
+                            node_id=assoc_name,
+                            severity="error",
+                        )
+                    )
+
+    if findings:
+        return HealthCheck(
+            name="config.associate_paths",
+            passed=False,
+            message=f"{len(findings)} associate path issue(s)",
+            category="config",
+            findings=findings,
+        )
+    return HealthCheck(
+        name="config.associate_paths",
+        passed=True,
+        message=f"All {len(associates)} associate path(s) valid",
+        category="config",
+    )
+
+
+def check_no_requirements(graph: FederatedGraph) -> HealthCheck:
+    """Flag when no requirements are found — likely a config issue."""
+    from elspais.graph import NodeKind
+
+    req_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.REQUIREMENT))
+    if req_count == 0:
+        return HealthCheck(
+            name="config.no_requirements",
+            passed=False,
+            message=(
+                "No requirements found. Check that spec directories"
+                " contain valid requirement files."
+            ),
+            category="config",
+        )
+    return HealthCheck(
+        name="config.no_requirements",
+        passed=True,
+        message=f"Found {req_count} requirements",
+        category="config",
+    )
+
+
 # Implements: REQ-d00204-A, REQ-d00204-B, REQ-d00204-F
 def run_spec_checks(
     graph: FederatedGraph,
@@ -1579,7 +1676,16 @@ def run_spec_checks(
             retired_ids.add(node.id)
 
     # --- Non-config-sensitive checks: run once on full federation ---
+    # Determine repo_root from the first repo entry
+    _repo_root = Path.cwd()
+    for _entry in graph.iter_repos():
+        if _entry.repo_root:
+            _repo_root = _entry.repo_root
+            break
+
     checks: list[HealthCheck] = [
+        check_no_requirements(graph),
+        check_associate_paths(config, _repo_root),
         check_spec_files_parseable(graph),
         check_spec_no_duplicates(graph),
         check_broken_references(graph, config),
