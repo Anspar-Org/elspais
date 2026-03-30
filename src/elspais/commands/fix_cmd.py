@@ -128,6 +128,36 @@ def _detect_fixable(node, hash_mode: str, changelog_enforce: bool) -> list[str]:
     return reasons
 
 
+def _get_author(config: dict[str, Any]) -> dict[str, str] | None:
+    """Look up author info from config. Returns None on failure."""
+    from elspais.utilities.git import get_author_info
+
+    typed_config = _validate_config(config)
+    id_source = typed_config.changelog.id_source
+    try:
+        return get_author_info(id_source)
+    except ValueError:
+        return None
+
+
+def _make_changelog_entry(
+    hash_value: str,
+    reason: str,
+    author: dict[str, str],
+) -> dict[str, str]:
+    """Create a single changelog entry dict."""
+    from datetime import date
+
+    return {
+        "date": date.today().isoformat(),
+        "hash": hash_value,
+        "change_order": "-",
+        "author_name": author["name"],
+        "author_id": author["id"],
+        "reason": reason,
+    }
+
+
 def _add_autofix_changelog_entries(
     graph,  # noqa: ANN001 — FederatedGraph
     dirty_nodes: list,
@@ -139,19 +169,14 @@ def _add_autofix_changelog_entries(
     adds a changelog entry with an auto-generated reason describing
     the fix.  Returns the number of entries added.
     """
-    from datetime import date
-
     typed_config = _validate_config(config)
     if not typed_config.changelog.hash_current:
         return 0
 
     from elspais.graph.render import compute_hash_for_node
-    from elspais.utilities.git import get_author_info
 
-    id_source = typed_config.changelog.id_source
-    try:
-        author = get_author_info(id_source)
-    except ValueError:
+    author = _get_author(config)
+    if author is None:
         return 0
 
     hash_mode = getattr(graph, "hash_mode", "full-text")
@@ -172,17 +197,8 @@ def _add_autofix_changelog_entries(
             parts = ["update hash"]
         reason = "Auto-fix: " + ", ".join(parts)
 
-        # Hash reflects what render_save will produce
         computed = compute_hash_for_node(node, hash_mode) or "N/A"
-
-        entry = {
-            "date": date.today().isoformat(),
-            "hash": computed,
-            "change_order": "-",
-            "author_name": author["name"],
-            "author_id": author["id"],
-            "reason": reason,
-        }
+        entry = _make_changelog_entry(computed, reason, author)
         graph.add_changelog_entry(node.id, entry)
         added += 1
 
@@ -200,28 +216,14 @@ def _add_drift_changelog_entries(
     stored End marker hash (e.g. after a format migration), adds a new
     changelog entry with the current hash.  Returns the count added.
     """
-    from datetime import date
-
-    from elspais.utilities.git import get_author_info
-
-    typed_config = _validate_config(config)
-    id_source = typed_config.changelog.id_source
-    try:
-        author = get_author_info(id_source)
-    except ValueError:
+    author = _get_author(config)
+    if author is None:
         return 0
 
     added = 0
     for node in drift_nodes:
         stored = node.hash or ""
-        entry = {
-            "date": date.today().isoformat(),
-            "hash": stored,
-            "change_order": "-",
-            "author_name": author["name"],
-            "author_id": author["id"],
-            "reason": "Auto-fix: sync changelog hash",
-        }
+        entry = _make_changelog_entry(stored, "Auto-fix: sync changelog hash", author)
         graph.add_changelog_entry(node.id, entry)
         # Mark dirty so render_save picks up the file
         node._content["parse_dirty"] = True
@@ -352,8 +354,6 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
     requirement.  This ensures canonical term forms, correct hashes,
     and deduplicated references — all through one render path.
     """
-    from datetime import date
-
     from elspais.config import get_config
     from elspais.graph import NodeKind
     from elspais.graph.factory import build_graph
@@ -461,23 +461,12 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
         else:
             reason = "Adding missing Changelog section"
 
-        from elspais.utilities.git import get_author_info
-
-        id_source = typed_config.changelog.id_source
-        try:
-            author = get_author_info(id_source)
-        except ValueError as e:
-            print(f"Error: {e}", file=sys.stderr)
+        author = _get_author(config)
+        if author is None:
+            print("Error: Could not determine author info", file=sys.stderr)
             return 1
 
-        cl_entry = {
-            "date": date.today().isoformat(),
-            "hash": effective_hash,
-            "change_order": "-",
-            "author_name": author["name"],
-            "author_id": author["id"],
-            "reason": reason,
-        }
+        cl_entry = _make_changelog_entry(effective_hash, reason, author)
         graph.add_changelog_entry(req_id, cl_entry)
 
     # Always mark the target node dirty so render_save picks up its file.
@@ -513,8 +502,6 @@ def _ensure_changelog_section(
 
     Returns 0 on success or if section already exists.
     """
-    from datetime import date
-
     content = file_path.read_text(encoding="utf-8")
 
     # Check if this requirement block already has a ## Changelog section
@@ -544,25 +531,14 @@ def _ensure_changelog_section(
         return 0
 
     # Auto-add with default message
-    from elspais.utilities.git import get_author_info
     from elspais.utilities.spec_writer import add_changelog_entry
 
-    _tc = _validate_config(config)
-    id_source = _tc.changelog.id_source
-    try:
-        author = get_author_info(id_source)
-    except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
+    author = _get_author(config)
+    if author is None:
+        print("Error: Could not determine author info", file=sys.stderr)
         return 1
 
-    entry = {
-        "date": date.today().isoformat(),
-        "hash": current_hash,
-        "change_order": "-",
-        "author_name": author["name"],
-        "author_id": author["id"],
-        "reason": "Adding missing Changelog section",
-    }
+    entry = _make_changelog_entry(current_hash, "Adding missing Changelog section", author)
     cl_error = add_changelog_entry(file_path, req_id, entry)
     if cl_error:
         print(f"Error: {cl_error}", file=sys.stderr)
