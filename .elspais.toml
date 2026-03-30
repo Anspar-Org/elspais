@@ -99,6 +99,7 @@ require_hash = true
 require_rationale = false
 require_assertions = true
 require_status = true
+no_traceability_severity = "info"
 
 [rules.format.status_roles]
 active = ["Active"]
@@ -194,6 +195,7 @@ unmarked = "warning"
 unused = "warning"
 bad_definition = "error"
 collection_empty = "warning"
+canonical_form = "info"
 
 # Output settings
 
