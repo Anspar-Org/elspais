@@ -1795,6 +1795,7 @@ async def api_term(request: Request) -> JSONResponse:
             "namespace": ref.namespace,
             "marked": ref.marked,
             "line": ref.line,
+            "canonical": ref.is_canonical(entry.term),
         }
         # For assertion nodes, include parent requirement ID
         if node and node.kind == NodeKind.ASSERTION:

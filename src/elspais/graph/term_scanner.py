@@ -249,6 +249,11 @@ def scan_text_for_terms(
                 lineno = text[:span_start].count("\n") + 1 + line_offset
                 claimed_spans.append((span_start, span_end))
 
+                # Extract the inner term text (strip delimiters)
+                matched = m.group(0)
+                dlen = len(delim)
+                inner = matched[dlen:-dlen]
+
                 if delim in styles_set:
                     # Implements: REQ-d00237-B
                     ref = TermRef(
@@ -257,6 +262,8 @@ def scan_text_for_terms(
                         marked=True,
                         wrong_marking="",
                         line=lineno,
+                        surface_form=inner,
+                        delimiter=delim,
                     )
                 else:
                     # Implements: REQ-d00237-C
@@ -266,6 +273,8 @@ def scan_text_for_terms(
                         marked=False,
                         wrong_marking=delim,
                         line=lineno,
+                        surface_form=inner,
+                        delimiter=delim,
                     )
                 results.append(ref)
                 entry.references.append(ref)
@@ -289,6 +298,8 @@ def scan_text_for_terms(
                 marked=False,
                 wrong_marking="",
                 line=lineno,
+                surface_form=m.group(0),
+                delimiter="",
             )
             results.append(ref)
             entry.references.append(ref)
@@ -342,6 +353,144 @@ def _extract_file_comments(file_node) -> list[tuple[str, int]] | None:  # noqa: 
     return comments or None
 
 
+_CODE_SPAN_RE = re.compile(r"`[^`]+`")
+
+
+def _canonicalize_text(
+    text: str, td: TermDictionary, markup_style: str, styles_set: set[str]
+) -> str:
+    """Replace non-canonical term forms in *text* with canonical form.
+
+    Preserves content inside backtick code spans.
+    Returns the modified text (or original if no changes).
+    """
+    # Find all code spans to protect them from replacement
+    protected: list[tuple[int, int]] = [(m.start(), m.end()) for m in _CODE_SPAN_RE.finditer(text)]
+
+    def _in_code_span(start: int, end: int) -> bool:
+        return any(ps <= start and end <= pe for ps, pe in protected)
+
+    # Track spans already claimed by emphasis matches
+    claimed: list[tuple[int, int]] = []
+
+    for entry in td.iter_all():
+        if not entry.indexed:
+            continue
+        term = entry.term
+        canonical = f"{markup_style}{term}{markup_style}"
+
+        # Phase 1: fix emphasis-wrapped forms (wrong casing or wrong delimiter)
+        for delim in _ALL_EMPHASIS_DELIMITERS:
+            pat = _build_emphasis_pattern(delim, term)
+            new_text = []
+            last_end = 0
+            for m in pat.finditer(text):
+                if _in_code_span(m.start(), m.end()):
+                    claimed.append((m.start(), m.end()))
+                    continue
+                inner = m.group(0)[len(delim) : -len(delim)]
+                if delim in styles_set and inner == term:
+                    # Already canonical — claim but don't replace
+                    claimed.append((m.start(), m.end()))
+                    continue
+                new_text.append(text[last_end : m.start()])
+                new_text.append(canonical)
+                claimed.append((m.start(), m.start() + len(canonical)))
+                last_end = m.end()
+            if new_text:
+                new_text.append(text[last_end:])
+                text = "".join(new_text)
+                # Recompute protected spans after text mutation
+                protected = [(m.start(), m.end()) for m in _CODE_SPAN_RE.finditer(text)]
+
+        # Phase 2: fix unmarked occurrences (skip claimed and code spans)
+        word_pat = re.compile(r"\b" + re.escape(term) + r"\b", re.IGNORECASE)
+        new_text = []
+        last_end = 0
+        for m in word_pat.finditer(text):
+            if _in_code_span(m.start(), m.end()):
+                continue
+            if any(not (m.end() <= cs or m.start() >= ce) for cs, ce in claimed):
+                continue
+            new_text.append(text[last_end : m.start()])
+            new_text.append(canonical)
+            last_end = m.end()
+        if new_text:
+            new_text.append(text[last_end:])
+            text = "".join(new_text)
+            protected = [(m.start(), m.end()) for m in _CODE_SPAN_RE.finditer(text)]
+
+    return text
+
+
+def canonicalize_node_terms(
+    node,  # noqa: ANN001
+    td: TermDictionary,
+    markup_style: str,
+    markup_styles: list[str] | None = None,
+) -> bool:
+    """Canonicalize term forms in a spec node's text.
+
+    Modifies the node's text in-place and sets ``parse_dirty`` if changed.
+    Returns True if the node was modified.
+    """
+    styles_set = set(markup_styles or _DEFAULT_MARKUP_STYLES)
+    kind = node.kind
+
+    if kind == NodeKind.ASSERTION:
+        old = node.get_label() or ""
+        if not old:
+            return False
+        new = _canonicalize_text(old, td, markup_style, styles_set)
+        if new != old:
+            node.set_label(new)
+            _mark_req_dirty(node, "non_canonical_term")
+            return True
+    elif kind == NodeKind.REMAINDER:
+        if node.get_field("content_type") == "definition_block":
+            return False
+        old = node.get_field("text") or ""
+        if not old:
+            return False
+        new = _canonicalize_text(old, td, markup_style, styles_set)
+        if new != old:
+            node.set_field("text", new)
+            _mark_req_dirty(node, "non_canonical_term")
+            return True
+    elif kind == NodeKind.USER_JOURNEY:
+        old = node.get_field("body") or ""
+        if not old:
+            return False
+        new = _canonicalize_text(old, td, markup_style, styles_set)
+        if new != old:
+            node.set_field("body", new)
+            # Journey nodes are top-level, mark their own file dirty
+            fn = node.file_node()
+            if fn:
+                fn._content.setdefault("parse_dirty", True)
+            return True
+    # REQUIREMENT titles are in headings — skip canonicalization
+    return False
+
+
+def _mark_req_dirty(node, reason: str) -> None:  # noqa: ANN001
+    """Walk up to the parent REQUIREMENT and mark it parse_dirty."""
+    from elspais.graph.relations import EdgeKind
+
+    # For ASSERTION/REMAINDER, the parent REQ is via STRUCTURES edge
+    for parent in node.iter_parents(edge_kinds={EdgeKind.STRUCTURES}):
+        if parent.kind == NodeKind.REQUIREMENT:
+            parent._content.setdefault("parse_dirty", False)
+            if not parent._content["parse_dirty"]:
+                parent._content["parse_dirty"] = True
+                parent._content.setdefault("parse_dirty_reasons", [])
+            reasons = parent._content.get("parse_dirty_reasons", [])
+            if reason not in reasons:
+                reasons.append(reason)
+                parent._content["parse_dirty_reasons"] = reasons
+            return
+
+
 def _should_exclude(rel_path: str, patterns: list[str]) -> bool:
     """Check if *rel_path* matches any exclusion glob pattern."""
     # Implements: REQ-d00238-D
@@ -358,11 +507,15 @@ def scan_graph(
     namespace: str,
     markup_styles: list[str] | None = None,
     exclude_files: list[str] | None = None,
+    canonicalize: bool = False,
 ) -> None:
     """Scan graph nodes for term occurrences and populate references.
 
     Mutates ``TermEntry.references`` in *terms* with discovered
     :class:`TermRef` instances.
+
+    If *canonicalize* is True, also fixes non-canonical term forms in spec
+    node text and marks affected requirements as ``parse_dirty``.
     """
     if len(terms) == 0:
         return
@@ -428,6 +581,20 @@ def scan_graph(
                 line_offset=file_lineno - 1,
                 markup_styles=markup_styles,
             )
+
+    # Post-scan: canonicalize term forms in spec nodes and mark dirty
+    if canonicalize:
+        preferred = (markup_styles or _DEFAULT_MARKUP_STYLES)[0]
+        canon_kinds = [NodeKind.ASSERTION, NodeKind.REMAINDER, NodeKind.USER_JOURNEY]
+        for kind in canon_kinds:
+            for node in graph.iter_by_kind(kind):
+                if _is_excluded(node, excl):
+                    continue
+                if kind == NodeKind.REMAINDER:
+                    file_n = node.file_node()
+                    if file_n and file_n.get_field("file_type") in _CODE_FILE_TYPES:
+                        continue
+                canonicalize_node_terms(node, terms, preferred, markup_styles)
 
 
 def _is_excluded(node, excl: list[str]) -> bool:  # noqa: ANN001

@@ -1464,6 +1464,65 @@ def check_term_collection_empty(
     )
 
 
+def check_term_canonical_form(
+    entries: list,
+    severity: str = "warning",
+) -> HealthCheck:
+    """Check that term references use canonical form (correct markup + casing)."""
+    if severity == "off":
+        return HealthCheck(
+            name="terms.canonical_form",
+            passed=True,
+            message="Canonical form check skipped (severity=off)",
+            category="terms",
+            severity="info",
+        )
+
+    findings = []
+    for entry in entries:
+        canonical = entry.term
+        for ref in entry.references:
+            if not ref.surface_form:
+                continue
+            if ref.is_canonical(canonical):
+                continue
+            # Non-canonical: wrong casing, wrong/missing markup, or both
+            reasons = []
+            if ref.surface_form != canonical:
+                reasons.append(f"'{ref.surface_form}' should be '{canonical}'")
+            if not ref.marked:
+                if ref.wrong_marking:
+                    reasons.append(f"uses '{ref.wrong_marking}' markup")
+                else:
+                    reasons.append("unmarked")
+            detail = "; ".join(reasons)
+            findings.append(
+                HealthFinding(
+                    message=f"Non-canonical term ref: {detail} ({ref.node_id}:{ref.line})",
+                    node_id=ref.node_id,
+                    line=ref.line,
+                )
+            )
+
+    if not findings:
+        return HealthCheck(
+            name="terms.canonical_form",
+            passed=True,
+            message="All term references use canonical form",
+            category="terms",
+            severity=severity,
+        )
+
+    return HealthCheck(
+        name="terms.canonical_form",
+        passed=False,
+        message=f"{len(findings)} non-canonical term reference(s)",
+        category="terms",
+        severity=severity,
+        findings=findings,
+    )
+
+
 # Implements: REQ-d00223-E, REQ-d00240-D
 def run_term_checks(
     graph: FederatedGraph, config: dict[str, Any] | None = None
@@ -1488,6 +1547,7 @@ def run_term_checks(
         check_term_unused(entries, severity=sev.unused),
         check_term_bad_definition(entries, severity=sev.bad_definition),
         check_term_collection_empty(entries, severity=sev.collection_empty),
+        check_term_canonical_form(entries, severity=sev.canonical_form),
     ]
 
 

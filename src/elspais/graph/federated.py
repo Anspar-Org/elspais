@@ -197,7 +197,9 @@ class FederatedGraph:
         """Run term scanner across all repos using the merged dictionary.
 
         Uses per-repo config for markup_styles and exclude_files so that
-        cross-repo term references resolve correctly.
+        cross-repo term references resolve correctly.  Always canonicalizes
+        term forms in spec node text and marks affected files dirty so that
+        ``render_save`` produces canonical output.
         """
         from elspais.graph.term_scanner import scan_graph
 
@@ -212,6 +214,7 @@ class FederatedGraph:
                 namespace=entry.name,
                 markup_styles=terms_cfg.get("markup_styles"),
                 exclude_files=terms_cfg.get("exclude_files"),
+                canonicalize=True,
             )
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -694,6 +697,16 @@ class FederatedGraph:
         """
         repo_name = self._ownership[node_id]
         result = self._graph_for(node_id).change_status(node_id, new_status)
+        self._record_mutation(repo_name, result)
+        return result
+
+    def add_changelog_entry(self, node_id: str, changelog_entry: dict[str, str]) -> MutationEntry:
+        """Add a changelog entry to a requirement.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[node_id]
+        result = self._graph_for(node_id).add_changelog_entry(node_id, changelog_entry)
         self._record_mutation(repo_name, result)
         return result
 

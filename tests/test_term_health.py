@@ -490,7 +490,7 @@ class TestRunTermChecks:
 
     # Implements: REQ-d00223-E
     def test_REQ_d00223_E_run_term_checks_off_severity_skips(self):
-        """severity='off' produces passed/info checks for all six."""
+        """severity='off' produces passed/info checks for all seven."""
         entry_a = TermEntry(
             term="Widget",
             definition="A thing.",
@@ -510,6 +510,7 @@ class TestRunTermChecks:
                     "unused": "off",
                     "bad_definition": "off",
                     "collection_empty": "off",
+                    "canonical_form": "off",
                 },
             },
         }
@@ -582,8 +583,8 @@ class TestRunTermChecks:
             assert check.passed is True
 
     # Implements: REQ-d00240-D
-    def test_REQ_d00240_D_run_term_checks_returns_six_checks(self):
-        """run_term_checks returns all 6 HealthCheck items."""
+    def test_REQ_d00240_D_run_term_checks_returns_seven_checks(self):
+        """run_term_checks returns all 7 HealthCheck items."""
         config = {
             "terms": {
                 "severity": {
@@ -593,6 +594,7 @@ class TestRunTermChecks:
                     "unused": "warning",
                     "bad_definition": "error",
                     "collection_empty": "warning",
+                    "canonical_form": "warning",
                 },
             },
         }
@@ -600,7 +602,7 @@ class TestRunTermChecks:
 
         result = run_term_checks(graph, config)
 
-        assert len(result) == 6
+        assert len(result) == 7
         names = {check.name for check in result}
         assert names == {
             "terms.duplicates",
@@ -609,6 +611,7 @@ class TestRunTermChecks:
             "terms.unused",
             "terms.bad_definition",
             "terms.collection_empty",
+            "terms.canonical_form",
         }
 
 

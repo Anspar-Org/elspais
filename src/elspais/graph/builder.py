@@ -406,6 +406,8 @@ class TraceGraph:
             self._undo_add_remainder(entry)
         elif op == "delete_remainder":
             self._undo_delete_remainder(entry)
+        elif op == "add_changelog_entry":
+            self._undo_add_changelog_entry(entry)
         # Unknown operations are silently ignored (forward compatibility)
 
     def _undo_rename_node(self, entry: MutationEntry) -> None:
@@ -978,6 +980,55 @@ class TraceGraph:
         node.set_field("status", new_status)
         self._mutation_log.append(entry)
         return entry
+
+    def add_changelog_entry(
+        self,
+        node_id: str,
+        changelog_entry: dict[str, str],
+    ) -> MutationEntry:
+        """Add a changelog entry to a requirement.
+
+        Creates the changelog list if it doesn't exist.  Prepends the entry
+        (newest first).
+
+        Args:
+            node_id: The requirement node ID.
+            changelog_entry: Dict with keys: date, hash, change_order,
+                author_name, author_id, reason.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If node_id is not found.
+            ValueError: If node is not a REQUIREMENT.
+        """
+        if node_id not in self._index:
+            raise KeyError(f"Node '{node_id}' not found")
+
+        node = self._index[node_id]
+        if node.kind != NodeKind.REQUIREMENT:
+            raise ValueError(f"Node '{node_id}' is not a requirement")
+
+        old_changelog = list(node.get_field("changelog") or [])
+        new_changelog = [changelog_entry] + old_changelog
+
+        entry = MutationEntry(
+            operation="add_changelog_entry",
+            target_id=node_id,
+            before_state={"changelog": old_changelog},
+            after_state={"changelog": new_changelog, "entry": changelog_entry},
+        )
+
+        node.set_field("changelog", new_changelog)
+        self._mutation_log.append(entry)
+        return entry
+
+    def _undo_add_changelog_entry(self, entry: MutationEntry) -> None:
+        """Undo an add_changelog_entry operation."""
+        node_id = entry.target_id
+        if node_id in self._index:
+            self._index[node_id].set_field("changelog", entry.before_state.get("changelog", []))
 
     def add_requirement(
         self,

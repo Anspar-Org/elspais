@@ -69,12 +69,83 @@ def run(args: argparse.Namespace) -> int:
     return validate.run(recheck)
 
 
+_REASON_LABELS: dict[str, str] = {
+    "non_canonical_term": "canonicalize term forms",
+    "duplicate_refs": "deduplicate Implements/Refines references",
+    "stale_hash": "update hash",
+    "fix_single": "fix requirement",
+}
+
+
+def _add_autofix_changelog_entries(
+    graph,  # noqa: ANN001 — FederatedGraph
+    dirty_nodes: list,
+    config: dict[str, Any],
+) -> int:
+    """Add changelog entries for auto-fixed requirements.
+
+    For each dirty Active requirement (when changelog is enabled),
+    adds a changelog entry with an auto-generated reason describing
+    the fix.  Returns the number of entries added.
+    """
+    from datetime import date
+
+    typed_config = _validate_config(config)
+    if not typed_config.changelog.hash_current:
+        return 0
+
+    from elspais.commands.validate import compute_hash_for_node
+    from elspais.utilities.git import get_author_info
+
+    id_source = typed_config.changelog.id_source
+    try:
+        author = get_author_info(id_source)
+    except ValueError:
+        return 0
+
+    hash_mode = getattr(graph, "hash_mode", "full-text")
+    added = 0
+
+    for node in dirty_nodes:
+        status = (node.get_field("status") or "").lower()
+        if status != "active":
+            continue
+
+        reasons = node.get_field("parse_dirty_reasons") or []
+        if not reasons:
+            continue
+
+        # Build a human-readable reason from dirty reasons
+        parts = [_REASON_LABELS.get(r, r) for r in reasons if r != "stale_hash"]
+        if not parts:
+            parts = ["update hash"]
+        reason = "Auto-fix: " + ", ".join(parts)
+
+        # Hash reflects what render_save will produce
+        computed = compute_hash_for_node(node, hash_mode) or "N/A"
+
+        entry = {
+            "date": date.today().isoformat(),
+            "hash": computed,
+            "change_order": "-",
+            "author_name": author["name"],
+            "author_id": author["id"],
+            "reason": reason,
+        }
+        graph.add_changelog_entry(node.id, entry)
+        added += 1
+
+    return added
+
+
 def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> None:
-    """Rewrite files that contain parse-dirty requirements (e.g. duplicate refs).
+    """Rewrite files that contain parse-dirty requirements.
 
     Uses render_save() so the rendered output is canonical: one Implements/
-    Refines line, deduplicated refs, recomputed hash.
+    Refines line, deduplicated refs, recomputed hash, canonical term forms.
+    Adds changelog entries for Active requirements when changelog is enabled.
     """
+    from elspais.config import get_config
     from elspais.graph import NodeKind
     from elspais.graph.factory import build_graph
     from elspais.graph.render import render_save
@@ -83,6 +154,7 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> None:
     config_path = getattr(args, "config", None)
     repo_root = getattr(args, "git_root", None) or Path.cwd()
 
+    config = get_config(config_path)
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
@@ -92,7 +164,10 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> None:
     )
 
     dirty_nodes = [
-        node for node in graph.nodes_by_kind(NodeKind.REQUIREMENT) if node.get_field("parse_dirty")
+        node
+        for node in graph.nodes_by_kind(NodeKind.REQUIREMENT)
+        if node.get_field("parse_dirty")
+        and any(r != "stale_hash" for r in (node.get_field("parse_dirty_reasons") or []))
     ]
     if not dirty_nodes:
         return
@@ -103,9 +178,12 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> None:
             print(f"Would rewrite {node.id}: {', '.join(reasons)}")
         return
 
+    # Add auto-fix changelog entries before render_save
+    _add_autofix_changelog_entries(graph, dirty_nodes, config)
+
     result = render_save(graph, repo_root=repo_root)
     for file_path in result.get("written", []):
-        print(f"Rewrote {file_path} (duplicate refs removed)")
+        print(f"Rewrote {file_path}")
 
 
 def _make_validate_args(args: argparse.Namespace) -> argparse.Namespace:
@@ -128,14 +206,20 @@ def _make_validate_args(args: argparse.Namespace) -> argparse.Namespace:
 
 
 def _fix_single(args: argparse.Namespace, req_id: str) -> int:
-    """Fix hash for a single requirement using shared utilities."""
+    """Fix a single requirement via the render pipeline.
+
+    Builds the graph (which canonicalizes terms and marks dirty nodes),
+    then uses render_save to re-render the file containing the target
+    requirement.  This ensures canonical term forms, correct hashes,
+    and deduplicated references — all through one render path.
+    """
     from datetime import date
 
     from elspais.commands.validate import compute_hash_for_node
     from elspais.config import get_config
     from elspais.graph import NodeKind
     from elspais.graph.factory import build_graph
-    from elspais.utilities.spec_writer import add_changelog_entry, update_hash_in_file
+    from elspais.graph.render import render_save
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
@@ -171,66 +255,55 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
     computed = compute_hash_for_node(node, hash_mode)
     stored = node.hash
 
-    # No hashable content — use N/A sentinel
-    if not computed:
-        if stored == "N/A":
-            print(f"{req_id} hash is already up to date (N/A — no normative content)")
-            return 0
-
-        # Implements: REQ-p00004-A
-        _fn = node.file_node()
-        if _fn is None:
-            print(f"Error: No source file for {req_id}", file=sys.stderr)
-            return 1
-
-        file_path = Path(_fn.get_field("absolute_path"))
-
-        if dry_run:
-            print(f"Would update {req_id}: {stored or '(none)'} -> N/A")
-            return 0
-
-        error = update_hash_in_file(file_path=file_path, req_id=req_id, new_hash="N/A")
-        if error is None:
-            print(f"Updated {req_id}: {stored or '(none)'} -> N/A (no normative content)")
-            return 0
-        else:
-            print(f"Error: {error}", file=sys.stderr)
-            return 1
-    status = (node.status or "").lower()
-    is_active = status == "active"
-
-    # Implements: REQ-d00129-D
     _fn = node.file_node()
     if _fn is None:
         print(f"Error: No source file for {req_id}", file=sys.stderr)
         return 1
 
-    file_path = Path(_fn.get_field("absolute_path"))
+    # Check if the node's file is already dirty (e.g. from term canonicalization)
+    is_dirty = node.get_field("parse_dirty") or False
+    dirty_reasons = node.get_field("parse_dirty_reasons") or []
+    # Hash changed if computed differs from stored.  N/A sentinel for no assertions.
+    effective_hash = computed or "N/A"
+    hash_changed = stored != effective_hash
+    status = (node.status or "").lower()
+    is_active = status == "active"
 
-    # If hash is current, check for missing Changelog section on Active reqs
-    if stored == computed:
-        if is_active and changelog_enforce:
-            return _ensure_changelog_section(file_path, req_id, computed, config, dry_run)
-        print(f"{req_id} hash is already up to date")
+    # Any change (dirty or hash mismatch) warrants a changelog entry
+    something_to_fix = is_dirty or hash_changed
+    # Also check for missing changelog section on Active reqs
+    existing_changelog = node.get_field("changelog") or []
+    needs_new_section = is_active and changelog_enforce and not existing_changelog
+
+    if not something_to_fix and not needs_new_section:
+        print(f"{req_id} is already up to date")
         return 0
 
-    # Hash mismatch — need to update
-    if is_active and changelog_enforce:
-        # Require a changelog message for Active requirements
-        if message is None:
-            if sys.stdin.isatty():
-                message = input(f"Changelog reason for {req_id}: ").strip()
-            if not message:
-                print(
-                    f"Error: Active requirement {req_id} requires a changelog"
-                    ' message (-m "reason")\n'
-                    "       [changelog] hash_current is enabled;"
-                    " Draft/Deprecated requirements update without a message.",
-                    file=sys.stderr,
-                )
-                return 1
+    if dry_run:
+        changes = []
+        if hash_changed:
+            changes.append(f"hash {stored or '(none)'} -> {effective_hash}")
+        for r in dirty_reasons:
+            if r != "stale_hash":
+                changes.append(_REASON_LABELS.get(r, r))
+        if needs_new_section and not something_to_fix:
+            changes.append("add missing changelog section")
+        print(f"Would fix {req_id}: {', '.join(changes) or 'no changes'}")
+        return 0
 
-        # Resolve author info
+    # Add changelog entry when changelog is enabled for Active reqs
+    if is_active and changelog_enforce:
+        # Use explicit message if provided, otherwise auto-generate
+        if message:
+            reason = message
+        elif something_to_fix:
+            parts = [_REASON_LABELS.get(r, r) for r in dirty_reasons if r != "stale_hash"]
+            if hash_changed and not parts:
+                parts = ["update hash"]
+            reason = "Auto-fix: " + ", ".join(parts) if parts else "Auto-fix: update hash"
+        else:
+            reason = "Adding missing Changelog section"
+
         from elspais.utilities.git import get_author_info
 
         id_source = typed_config.changelog.id_source
@@ -240,38 +313,36 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
             print(f"Error: {e}", file=sys.stderr)
             return 1
 
-        if dry_run:
-            print(f"Would update {req_id}: {stored or '(none)'} -> {computed}")
-            return 0
-
-        # Add changelog entry before updating hash
-        change_order = "-"
-        entry = {
+        cl_entry = {
             "date": date.today().isoformat(),
-            "hash": computed,
-            "change_order": change_order,
+            "hash": effective_hash,
+            "change_order": "-",
             "author_name": author["name"],
             "author_id": author["id"],
-            "reason": message,
+            "reason": reason,
         }
-        cl_error = add_changelog_entry(file_path, req_id, entry)
-        if cl_error:
-            print(f"Error adding changelog: {cl_error}", file=sys.stderr)
-            return 1
+        graph.add_changelog_entry(req_id, cl_entry)
 
-    else:
-        # Draft/Deprecated — update hash silently
-        if dry_run:
-            print(f"Would update {req_id}: {stored or '(none)'} -> {computed}")
-            return 0
+    # Always mark the target node dirty so render_save picks up its file.
+    # "fix_single" overrides the stale_hash filter in _find_dirty_files.
+    node._content["parse_dirty"] = True
+    node._content.setdefault("parse_dirty_reasons", [])
+    if "fix_single" not in node._content["parse_dirty_reasons"]:
+        node._content["parse_dirty_reasons"].append("fix_single")
 
-    error = update_hash_in_file(file_path=file_path, req_id=req_id, new_hash=computed)
-    if error is None:
-        print(f"Updated {req_id}: {stored or '(none)'} -> {computed}")
-        return 0
-    else:
-        print(f"Error: {error}", file=sys.stderr)
+    result = render_save(graph, repo_root=repo_root)
+    if result.get("errors"):
+        for err in result["errors"]:
+            print(f"Error: {err}", file=sys.stderr)
         return 1
+
+    saved = result.get("saved_count", 0)
+    if saved > 0:
+        rel = _fn.get_field("relative_path") or req_id
+        print(f"Fixed {req_id} in {rel}")
+    else:
+        print(f"{req_id} is already up to date")
+    return 0
 
 
 def _ensure_changelog_section(

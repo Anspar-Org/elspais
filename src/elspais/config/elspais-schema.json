@@ -988,6 +988,11 @@
           "default": "warning",
           "title": "Collection Empty",
           "type": "string"
+        },
+        "canonical_form": {
+          "default": "warning",
+          "title": "Canonical Form",
+          "type": "string"
         }
       },
       "title": "TermsSeverityConfig",

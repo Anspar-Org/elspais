@@ -237,6 +237,7 @@ class TermsSeverityConfig(_StrictModel):
     unused: str = "warning"
     bad_definition: str = "error"
     collection_empty: str = "warning"
+    canonical_form: str = "warning"
 
 
 # Implements: REQ-d00212-L

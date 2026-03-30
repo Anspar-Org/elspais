@@ -1938,13 +1938,22 @@ async function openTermCard(termKey) {
     var data = await apiFetch('/api/term/' + encodeURIComponent(termKey));
     if (!data) return;
 
-    editState.openCards.set(cardId, { data: data, collapsed: false, kind: 'term' });
+    editState.openCards.set(cardId, { data: data, collapsed: false, kind: 'term', refsCollapsed: data.references && data.references.length > 20 });
     editState.openCardOrder = editState.openCardOrder.filter(function(id) { return id !== cardId; });
     editState.openCardOrder.unshift(cardId);
 
     renderCardStack();
     focusCard(cardId);
     updateNavSelection();
+    saveState();
+}
+
+function toggleTermRefs(cardId) {
+    var cardState = editState.openCards.get(cardId);
+    if (!cardState) return;
+    cardState.refsCollapsed = !cardState.refsCollapsed;
+    var el = document.getElementById('term-refs-' + cardId);
+    if (el) el.style.display = cardState.refsCollapsed ? 'none' : 'block';
     saveState();
 }
 
@@ -1991,9 +2000,16 @@ function buildTermCardHtml(cardId, data, collapsed) {
     var refs = data.references || [];
     var refSectionId = 'term-refs-' + escapeAttr(cardId);
     html += '<div class="card-section term-references">';
-    html += '<div class="card-section-label" style="cursor:pointer;user-select:none;" onclick="var el=document.getElementById(\'' + refSectionId + '\');el.style.display=el.style.display===\'none\'?\'block\':\'none\'">';
+    var refsHidden = false;
+    var cardState = editState.openCards.get(cardId);
+    if (cardState && cardState.refsCollapsed !== undefined) {
+        refsHidden = cardState.refsCollapsed;
+    } else {
+        refsHidden = refs.length > 20;
+    }
+    html += '<div class="card-section-label" style="cursor:pointer;user-select:none;" onclick="toggleTermRefs(\'' + escapeAttr(cardId) + '\')">';
     html += '<span style="font-size:0.7rem;margin-right:4px;">&#9660;</span>References (' + refs.length + ')</div>';
-    html += '<div id="' + refSectionId + '"' + (refs.length > 20 ? ' style="display:none"' : '') + '>';
+    html += '<div id="' + refSectionId + '"' + (refsHidden ? ' style="display:none"' : '') + '>';
     if (refs.length === 0) {
         html += '<div style="padding:8px;color:var(--secondary-text);font-size:0.8rem;font-style:italic;">No references resolved yet</div>';
     } else {
@@ -2028,15 +2044,16 @@ function buildTermCardHtml(cardId, data, collapsed) {
         for (var ri = 0; ri < nonFileRefs.length; ri++) {
             var ref = nonFileRefs[ri];
             var nid = ref.node_id;
+            var ncClass = ref.canonical === false ? ' term-ref-noncanonical' : '';
             if (ref.parent_req_id) {
                 var assertLabel = nid.substring(ref.parent_req_id.length + 1);
-                html += '<a class="term-ref-chip" href="#" onclick="event.preventDefault();openCardAndFlash(\'' + escapeAttr(ref.parent_req_id) + '\',[\'' + escapeAttr(assertLabel) + '\'])"';
+                html += '<a class="term-ref-chip' + ncClass + '" href="#" onclick="event.preventDefault();openCardAndFlash(\'' + escapeAttr(ref.parent_req_id) + '\',[\'' + escapeAttr(assertLabel) + '\'])"';
                 html += ' title="' + escapeAttr(nid + (ref.node_title ? ' - ' + ref.node_title : '') + ' L' + ref.line) + '">';
                 html += escapeHtml(nid);
                 html += '<sub>' + ref.line + '</sub>';
                 html += '</a>';
             } else {
-                html += '<a class="term-ref-chip" href="#" onclick="event.preventDefault();openCard(\'' + escapeAttr(nid) + '\')"';
+                html += '<a class="term-ref-chip' + ncClass + '" href="#" onclick="event.preventDefault();openCard(\'' + escapeAttr(nid) + '\')"';
                 html += ' title="' + escapeAttr(nid + (ref.node_title ? ' - ' + ref.node_title : '') + ' L' + ref.line) + '">';
                 html += escapeHtml(nid);
                 html += '<sub>' + ref.line + '</sub>';
@@ -2052,7 +2069,8 @@ function buildTermCardHtml(cardId, data, collapsed) {
             html += escapeHtml(fp) + '</span>';
             for (var li = 0; li < lines.length; li++) {
                 var ln = lines[li].line;
-                html += '<a class="term-ref-file-line" href="#" onclick="event.preventDefault();showSource(\'' + escapeAttr(fp) + '\',' + ln + ')"';
+                var lnNcClass = lines[li].ref && lines[li].ref.canonical === false ? ' term-ref-noncanonical' : '';
+                html += '<a class="term-ref-file-line' + lnNcClass + '" href="#" onclick="event.preventDefault();showSource(\'' + escapeAttr(fp) + '\',' + ln + ')"';
                 html += ' title="' + escapeAttr(fp + ':' + ln) + '">';
                 html += ln + '</a>';
                 if (li < lines.length - 1) html += ', ';

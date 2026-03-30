@@ -665,7 +665,7 @@ def test_REQ_d00240_A_run_term_checks_aggregator_with_populated_terms():
     result = run_term_checks(fake_graph, config)
 
     assert isinstance(result, list)
-    assert len(result) == 6
+    assert len(result) == 7
 
     # The unused check should fail (Gadget has no references)
     unused_check = [c for c in result if c.name == "terms.unused"]

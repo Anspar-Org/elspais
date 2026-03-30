@@ -216,13 +216,28 @@ def _render_requirement(node: GraphNode) -> str:
                     lines.append(content)
                     lines.append("")
 
+    # Changelog section (rendered from structured data, not from a REMAINDER child)
+    changelog = node.get_field("changelog") or []
+    if changelog:
+        in_assertions = False
+        if lines and lines[-1] != "":
+            lines.append("")
+        lines.append("## Changelog")
+        lines.append("")
+        for entry in changelog:
+            lines.append(
+                f"- {entry['date']} | {entry['hash']} | {entry['change_order']}"
+                f" | {entry['author_name']} ({entry['author_id']}) | {entry['reason']}"
+            )
+        lines.append("")
+
     # Compute hash using configured mode (DRY: utilities/hasher.py)
     hash_mode = node.get_field("hash_mode") or "normalized-text"
     if hash_mode == "full-text":
         body = reconstruct_body_text(node)
-        hash_val = calculate_hash(body)
+        hash_val = calculate_hash(body) if body.strip() else "N/A"
     else:
-        hash_val = compute_normalized_hash(assertions)
+        hash_val = compute_normalized_hash(assertions) if assertions else "N/A"
 
     # End marker (separator is a REMAINDER node, not part of the requirement)
     lines.append(f"*End* *{title}* | **Hash**: {hash_val}")

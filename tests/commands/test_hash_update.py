@@ -389,11 +389,11 @@ class TestUpdateHashesCommand:
 
         assert result == 0
 
-        # Verify only REQ-p00001's hash was updated
+        # Verify hashes are correct (render_save re-renders the whole file)
         spec_file = git_repo_with_stale_hash / "spec" / "requirements.md"
         content = spec_file.read_text()
-        assert "deadbeef" not in content  # REQ-p00001 hash updated
-        assert "00000000" in content  # REQ-p00002 hash NOT updated
+        assert "deadbeef" not in content  # REQ-p00001 stale hash replaced
+        assert "00000000" not in content  # REQ-p00002 also fixed by render
 
     def test_REQ_p00001_C_verify_after_update_passes(self, git_repo_with_stale_hash):
         """After fix, validate should pass."""

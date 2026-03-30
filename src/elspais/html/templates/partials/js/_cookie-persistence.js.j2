@@ -34,9 +34,11 @@ function saveState() {
         navPanelWidth: document.getElementById('nav-panel').style.width || null,
         fileViewerWidth: document.getElementById('file-viewer-panel').style.width || null
     };
-    // Track which cards are collapsed
+    // Track which cards are collapsed (card body and refs section)
+    stateToSave.refsCollapsedCards = [];
     editState.openCards.forEach(function(info, id) {
         if (info.collapsed) stateToSave.collapsedCards.push(id);
+        if (info.refsCollapsed) stateToSave.refsCollapsedCards.push(id);
     });
     // Persist filterText
     if (editState.filterText) stateToSave.filterText = editState.filterText;

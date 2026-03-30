@@ -119,17 +119,16 @@ def _make_validate_args(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class TestFixActiveChangelogErrorMessage:
-    """Tests for fix command error messaging with changelog enforcement.
+class TestFixActiveChangelogAutoMessage:
+    """Tests for fix command auto-generated changelog with enforcement.
 
-    Validates REQ-p00004-A: fix command explains why a changelog message
-    is required for Active requirements.
+    Validates that auto-fixes generate changelog entries automatically
+    when no -m flag is provided, rather than failing.
     """
 
-    def test_REQ_p00004_A_error_mentions_hash_current(self, tmp_path, capsys):
+    def test_REQ_p00004_A_autofix_generates_changelog(self, tmp_path, capsys):
         """When an Active requirement needs a hash update and no -m message
-        is provided, the error should mention 'hash_current' to explain
-        why a message is required.
+        is provided, the fix should succeed with an auto-generated reason.
         """
         project = _make_project(tmp_path, REQ_ACTIVE_WRONG_HASH)
         args = _make_fix_args(project, "REQ-d00001")
@@ -143,20 +142,18 @@ class TestFixActiveChangelogErrorMessage:
         finally:
             os.chdir(old_cwd)
 
-        assert result == 1, "Should fail when no changelog message provided"
+        assert result == 0, "Auto-fix should succeed with auto-generated reason"
 
-        captured = capsys.readouterr()
-        assert (
-            "hash_current" in captured.err
-        ), f"Error should mention 'hash_current' config option, got: {captured.err!r}"
+        spec_file = project / "spec" / "requirements.md"
+        content = spec_file.read_text()
+        assert "## Changelog" in content, "Changelog section should be added"
+        assert "Auto-fix:" in content, "Auto-generated reason should be present"
 
-    def test_REQ_p00004_A_error_mentions_draft_deprecated(self, tmp_path, capsys):
-        """When an Active requirement needs a hash update and no -m message
-        is provided, the error should mention that Draft/Deprecated
-        requirements update without a message.
-        """
+    def test_REQ_p00004_A_explicit_message_overrides_autofix(self, tmp_path, capsys):
+        """When -m is provided, it overrides the auto-generated reason."""
         project = _make_project(tmp_path, REQ_ACTIVE_WRONG_HASH)
         args = _make_fix_args(project, "REQ-d00001")
+        args.message = "Manual update reason"
 
         from elspais.commands.fix_cmd import run
 
@@ -167,12 +164,11 @@ class TestFixActiveChangelogErrorMessage:
         finally:
             os.chdir(old_cwd)
 
-        assert result == 1, "Should fail when no changelog message provided"
+        assert result == 0
 
-        captured = capsys.readouterr()
-        assert (
-            "Draft/Deprecated" in captured.err
-        ), f"Error should mention 'Draft/Deprecated', got: {captured.err!r}"
+        spec_file = project / "spec" / "requirements.md"
+        content = spec_file.read_text()
+        assert "Manual update reason" in content
 
 
 # ─────────────────────────────────────────────────────────────────────────────
