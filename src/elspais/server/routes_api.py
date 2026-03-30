@@ -1789,15 +1789,27 @@ async def api_term(request: Request) -> JSONResponse:
     for ref in entry.references:
         node = state.graph.find_by_id(ref.node_id)
         node_title = node.get_field("title") if node else ""
-        refs.append(
-            {
-                "node_id": ref.node_id,
-                "node_title": node_title or "",
-                "namespace": ref.namespace,
-                "marked": ref.marked,
-                "line": ref.line,
-            }
-        )
+        ref_data: dict = {
+            "node_id": ref.node_id,
+            "node_title": node_title or "",
+            "namespace": ref.namespace,
+            "marked": ref.marked,
+            "line": ref.line,
+        }
+        # For assertion nodes, include parent requirement ID
+        if node and node.kind == NodeKind.ASSERTION:
+            for parent in node.iter_parents():
+                if parent.kind == NodeKind.REQUIREMENT:
+                    ref_data["parent_req_id"] = parent.id
+                    break
+        # For file-like nodes, include relative path for file viewer linking
+        if node and node.kind == NodeKind.FILE:
+            ref_data["file_path"] = node.get_field("relative_path") or ""
+        elif node and node.kind in (NodeKind.REMAINDER, NodeKind.CODE, NodeKind.TEST):
+            file_n = node.file_node()
+            if file_n:
+                ref_data["file_path"] = file_n.get_field("relative_path") or ""
+        refs.append(ref_data)
     return JSONResponse(
         {
             "term": entry.term,

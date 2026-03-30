@@ -19,7 +19,7 @@ from elspais.commands.health import (
 )
 from elspais.graph import NodeKind
 from elspais.graph.builder import GraphBuilder, TraceGraph
-from elspais.graph.GraphNode import GraphNode
+from elspais.graph.GraphNode import FileType, GraphNode
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.term_scanner import scan_graph
 from elspais.graph.terms import TermDictionary, TermEntry, TermRef
@@ -356,14 +356,21 @@ def _mock_file_node_simple(relative_path, file_type="SPEC"):
     )
 
 
-def _mock_graph(nodes_by_kind):
+def _mock_graph(nodes_by_kind, file_roots=None):
     """Create a minimal mock TraceGraph."""
     graph = MagicMock()
 
     def iter_by_kind(kind):
         return iter(nodes_by_kind.get(kind, []))
 
+    def iter_roots(kind=None):
+        roots = file_roots or []
+        if kind is not None:
+            return iter(r for r in roots if r.kind == kind)
+        return iter(roots)
+
     graph.iter_by_kind.side_effect = iter_by_kind
+    graph.iter_roots.side_effect = iter_roots
     return graph
 
 
@@ -673,7 +680,7 @@ def test_REQ_d00240_A_run_term_checks_aggregator_with_populated_terms():
 
 
 # Implements: REQ-d00238-B
-def test_REQ_d00238_B_code_comments_only_in_pipeline():
+def test_REQ_d00238_B_code_comments_only_in_pipeline(tmp_path):
     """Integration: CODE nodes only scan comments, not identifiers."""
     td = TermDictionary()
     td.add(
@@ -686,27 +693,26 @@ def test_REQ_d00238_B_code_comments_only_in_pipeline():
         )
     )
 
-    file_node = _mock_file_node_simple("src/main.py")
-    file_node.get_field.side_effect = lambda k: {
-        "relative_path": "src/main.py",
-        "file_type": "CODE",
-    }.get(k)
-
-    # Code node with Widget in a comment AND in code
-    code_node = _mock_node(
-        NodeKind.CODE,
-        "code:src/main.py:1",
-        fields={"raw_text": "widget = create()\n# The Widget handles rendering\n"},
+    # Write a real Python file so extract_comments can tokenize/parse it
+    py_file = tmp_path / "main.py"
+    py_file.write_text("widget = create()\n# The Widget handles rendering\n")
+    file_node = _mock_node(
+        NodeKind.FILE,
+        "file:src/main.py",
+        fields={
+            "relative_path": "src/main.py",
+            "absolute_path": str(py_file),
+            "file_type": FileType.CODE,
+        },
     )
-    code_node.file_node.return_value = file_node
 
-    graph = _mock_graph({NodeKind.CODE: [code_node]})
+    graph = _mock_graph({}, file_roots=[file_node])
     scan_graph(td, graph, namespace="main")
 
     entry = td.lookup("widget")
     assert entry is not None
     # Should find reference from comment only, not from code identifier
     assert len(entry.references) == 1
-    assert entry.references[0].node_id == "code:src/main.py:1"
+    assert entry.references[0].node_id == "file:src/main.py"
     # The reference is from a comment (plain text), so unmarked
     assert entry.references[0].marked is False

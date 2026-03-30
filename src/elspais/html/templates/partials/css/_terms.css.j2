@@ -125,6 +125,58 @@
     color: var(--primary);
 }
 
+.term-ref-chip {
+    display: inline-block;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-size: 0.72rem;
+    color: var(--primary);
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+    margin-right: 5em;
+}
+
+.term-ref-chip:hover {
+    text-decoration: underline;
+}
+
+.term-ref-chip sub {
+    font-size: 0.55rem;
+    color: var(--secondary-text);
+    margin-left: 1px;
+}
+
+.term-ref-file {
+    color: var(--secondary-text);
+    font-style: italic;
+    margin-right: 0.5em;
+    cursor: default;
+}
+
+.term-ref-file:hover {
+    text-decoration: none;
+}
+
+.term-ref-file-group {
+    display: block;
+    line-height: 1.8;
+}
+
+.term-ref-file-line {
+    display: inline;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-size: 0.72rem;
+    color: var(--primary);
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+    margin-right: 0.3em;
+}
+
+.term-ref-file-line:hover {
+    text-decoration: underline;
+}
+
 /* Implements: REQ-d00245-A, REQ-d00245-B */
 /* Inline term highlighting in card bodies */
 

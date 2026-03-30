@@ -59,7 +59,7 @@ skip = ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"]
 directories = ["spec"]
 file_patterns = ["*.md"]
 skip_files = ["README.md", "requirements-format.md", "INDEX.md"]
-skip_dirs = ["roadmap"]
+skip_dirs = ["roadmap", "_generated"]
 
 [scanning.code]
 directories = ["src", ".github/workflows"]

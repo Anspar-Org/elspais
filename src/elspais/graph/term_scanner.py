@@ -7,7 +7,6 @@ Implements: REQ-d00238
 
 from __future__ import annotations
 
-import ast
 import io
 import os
 import re
@@ -19,7 +18,7 @@ if TYPE_CHECKING:
     from elspais.graph.terms import TermDictionary
     from elspais.graph.TraceGraph import TraceGraph
 
-from elspais.graph.GraphNode import NodeKind
+from elspais.graph.GraphNode import FileType, NodeKind
 from elspais.graph.terms import TermRef
 
 # -- Language extension maps ---------------------------------------------------
@@ -123,10 +122,9 @@ def extract_comments(source: str, ext: str) -> list[tuple[str, int]]:
 
 # Implements: REQ-d00236-B
 def _extract_python_comments(source: str) -> list[tuple[str, int]]:
-    """Use *tokenize* for ``#`` comments and *ast* for docstrings."""
+    """Use *tokenize* to extract ``#`` comments only (not docstrings or strings)."""
     results: list[tuple[str, int]] = []
 
-    # --- # comments via tokenize ---
     try:
         tokens = tokenize.generate_tokens(io.StringIO(source).readline)
         for tok_type, tok_string, start, _end, _line in tokens:
@@ -135,27 +133,8 @@ def _extract_python_comments(source: str) -> list[tuple[str, int]]:
                 text = tok_string.lstrip("#").strip()
                 if text:
                     results.append((text, start[0]))
-    except tokenize.TokenizeError:
+    except tokenize.TokenError:
         pass
-
-    # --- docstrings via ast ---
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        return results
-
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-            docstring = ast.get_docstring(node, clean=False)
-            if docstring:
-                # Line number of the docstring is the first statement's line
-                body = node.body
-                if (
-                    body
-                    and isinstance(body[0], ast.Expr)
-                    and isinstance(body[0].value, ast.Constant)
-                ):
-                    results.append((docstring, body[0].lineno))
 
     results.sort(key=lambda x: x[1])
     return results
@@ -341,24 +320,26 @@ def _get_node_text(node) -> str | None:  # noqa: ANN001
     return None
 
 
-def _get_code_comment_text(node) -> str | None:  # noqa: ANN001
-    """Extract comment text from CODE/TEST nodes via comment extraction.
+def _extract_file_comments(file_node) -> list[tuple[str, int]] | None:  # noqa: ANN001
+    """Extract comments from a FILE node's source on disk.
 
-    Returns the concatenated comment text, or ``None`` if no comments.
+    Reads the full file so that ``tokenize`` receives valid Python
+    (or other language) source.  Returns a list of
+    ``(comment_text, file_line_number)`` pairs, or ``None``.
     """
     # Implements: REQ-d00238-C
-    raw = node.get_field("raw_text")
-    if not raw:
+    abs_path = file_node.get_field("absolute_path")
+    rel_path = file_node.get_field("relative_path") or ""
+    if not abs_path:
         return None
-    file_n = node.file_node()
-    if file_n is None:
-        return None
-    rel_path = file_n.get_field("relative_path") or ""
     ext = os.path.splitext(rel_path)[1]
-    comments = extract_comments(raw, ext)
-    if not comments:
+    try:
+        with open(abs_path, encoding="utf-8", errors="replace") as f:
+            source = f.read()
+    except OSError:
         return None
-    return "\n".join(text for text, _line in comments)
+    comments = extract_comments(source, ext)
+    return comments or None
 
 
 def _should_exclude(rel_path: str, patterns: list[str]) -> bool:
@@ -388,7 +369,11 @@ def scan_graph(
 
     excl = exclude_files or []
 
-    # Spec-like nodes: scan full text
+    # Code/test file types: scan comments only (not code or string literals)
+    _CODE_FILE_TYPES = frozenset({FileType.CODE, FileType.TEST})
+
+    # Spec-like nodes: scan full text with file-relative line offset.
+    # Skip REMAINDER nodes from code/test files (handled below per-FILE).
     spec_kinds = [
         NodeKind.REQUIREMENT,
         NodeKind.ASSERTION,
@@ -399,30 +384,50 @@ def scan_graph(
         for node in graph.iter_by_kind(kind):
             if _is_excluded(node, excl):
                 continue
+            # Skip REMAINDER nodes from code/test files
+            if kind == NodeKind.REMAINDER:
+                file_n = node.file_node()
+                if file_n and file_n.get_field("file_type") in _CODE_FILE_TYPES:
+                    continue
             text = _get_node_text(node)
             if text:
+                # For REMAINDER sections, content_line points to where the
+                # text body starts (after heading + blank lines).  For other
+                # node kinds, parse_line is correct.
+                if kind == NodeKind.REMAINDER:
+                    node_start = node.get_field("content_line") or node.get_field("parse_line") or 0
+                else:
+                    node_start = node.get_field("parse_line") or 0
+                offset = max(node_start - 1, 0)
                 scan_text_for_terms(
                     text,
                     terms,
                     node.id,
                     namespace,
+                    line_offset=offset,
                     markup_styles=markup_styles,
                 )
 
-    # Code/test nodes: comments only
-    for kind in (NodeKind.CODE, NodeKind.TEST):
-        for node in graph.iter_by_kind(kind):
-            if _is_excluded(node, excl):
-                continue
-            comment_text = _get_code_comment_text(node)
-            if comment_text:
-                scan_text_for_terms(
-                    comment_text,
-                    terms,
-                    node.id,
-                    namespace,
-                    markup_styles=markup_styles,
-                )
+    # Code/test FILE nodes: read the whole file once and scan its comments.
+    # This gives tokenize/ast valid source, producing accurate line numbers.
+    for file_node in graph.iter_roots(NodeKind.FILE):
+        if file_node.get_field("file_type") not in _CODE_FILE_TYPES:
+            continue
+        if _is_excluded(file_node, excl):
+            continue
+        comments = _extract_file_comments(file_node)
+        if not comments:
+            continue
+        file_id = file_node.id
+        for comment_text, file_lineno in comments:
+            scan_text_for_terms(
+                comment_text,
+                terms,
+                file_id,
+                namespace,
+                line_offset=file_lineno - 1,
+                markup_styles=markup_styles,
+            )
 
 
 def _is_excluded(node, excl: list[str]) -> bool:  # noqa: ANN001

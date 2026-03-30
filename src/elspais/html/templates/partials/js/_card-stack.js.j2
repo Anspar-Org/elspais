@@ -1987,43 +1987,81 @@ function buildTermCardHtml(cardId, data, collapsed) {
     }
     html += '</div></div>';
 
-    // References section
+    // References section (collapsible)
     var refs = data.references || [];
-    html += '<div class="card-section term-references"><div class="card-section-label">References (' + refs.length + ')</div>';
+    var refSectionId = 'term-refs-' + escapeAttr(cardId);
+    html += '<div class="card-section term-references">';
+    html += '<div class="card-section-label" style="cursor:pointer;user-select:none;" onclick="var el=document.getElementById(\'' + refSectionId + '\');el.style.display=el.style.display===\'none\'?\'block\':\'none\'">';
+    html += '<span style="font-size:0.7rem;margin-right:4px;">&#9660;</span>References (' + refs.length + ')</div>';
+    html += '<div id="' + refSectionId + '"' + (refs.length > 20 ? ' style="display:none"' : '') + '>';
     if (refs.length === 0) {
         html += '<div style="padding:8px;color:var(--secondary-text);font-size:0.8rem;font-style:italic;">No references resolved yet</div>';
     } else {
-        // Group by namespace
-        var byNs = {};
+        // Separate file refs from non-file refs, group file refs by path
+        var fileGroups = {};  // file_path -> [{line, fp}]
+        var fileGroupOrder = [];
+        var nonFileRefs = [];
         for (var ri = 0; ri < refs.length; ri++) {
-            var ns = refs[ri].namespace || 'default';
-            if (!byNs[ns]) byNs[ns] = [];
-            byNs[ns].push(refs[ri]);
-        }
-        var nsKeys = Object.keys(byNs).sort();
-        for (var ni = 0; ni < nsKeys.length; ni++) {
-            var nsName = nsKeys[ni];
-            if (nsKeys.length > 1) {
-                html += '<div style="padding:4px 8px;font-size:0.7rem;font-weight:600;color:var(--secondary-text);text-transform:uppercase;">' + escapeHtml(nsName) + '</div>';
-            }
-            var nsRefs = byNs[nsName];
-            for (var rj = 0; rj < nsRefs.length; rj++) {
-                var ref = nsRefs[rj];
-                var markedClass = ref.marked ? ' term-ref-marked' : '';
-                html += '<div class="term-ref-row' + markedClass + '" onclick="openCard(\'' + escapeAttr(ref.node_id) + '\')">';
-                html += '<span class="term-ref-id">' + escapeHtml(ref.node_id) + '</span>';
-                if (ref.node_title) {
-                    html += '<span class="term-ref-title">' + escapeHtml(ref.node_title) + '</span>';
-                }
-                html += '<span class="term-ref-line">L' + ref.line + '</span>';
-                if (ref.marked) {
-                    html += '<span class="term-ref-badge">marked</span>';
-                }
-                html += '</div>';
+            var ref = refs[ri];
+            var nid = ref.node_id;
+            var filePath = ref.file_path;
+            var fileMatch = nid.match(/^(?:rem|code|test|file):(.+?)(?::(\d+))?$/);
+            if (fileMatch || filePath) {
+                var fp = filePath || fileMatch[1];
+                if (!fileGroups[fp]) { fileGroups[fp] = []; fileGroupOrder.push(fp); }
+                fileGroups[fp].push({ line: ref.line || 1, ref: ref });
+            } else {
+                nonFileRefs.push(ref);
             }
         }
+        // Sort non-file refs by node_id then line number numerically
+        nonFileRefs.sort(function(a, b) {
+            if (a.node_id < b.node_id) return -1;
+            if (a.node_id > b.node_id) return 1;
+            return (a.line || 0) - (b.line || 0);
+        });
+        // Sort file groups by path
+        fileGroupOrder.sort();
+
+        html += '<div class="term-ref-compact" style="padding:6px 8px;line-height:1.8;">';
+        // Non-file refs (requirements, assertions, journeys)
+        for (var ri = 0; ri < nonFileRefs.length; ri++) {
+            var ref = nonFileRefs[ri];
+            var nid = ref.node_id;
+            if (ref.parent_req_id) {
+                var assertLabel = nid.substring(ref.parent_req_id.length + 1);
+                html += '<a class="term-ref-chip" href="#" onclick="event.preventDefault();openCardAndFlash(\'' + escapeAttr(ref.parent_req_id) + '\',[\'' + escapeAttr(assertLabel) + '\'])"';
+                html += ' title="' + escapeAttr(nid + (ref.node_title ? ' - ' + ref.node_title : '') + ' L' + ref.line) + '">';
+                html += escapeHtml(nid);
+                html += '<sub>' + ref.line + '</sub>';
+                html += '</a>';
+            } else {
+                html += '<a class="term-ref-chip" href="#" onclick="event.preventDefault();openCard(\'' + escapeAttr(nid) + '\')"';
+                html += ' title="' + escapeAttr(nid + (ref.node_title ? ' - ' + ref.node_title : '') + ' L' + ref.line) + '">';
+                html += escapeHtml(nid);
+                html += '<sub>' + ref.line + '</sub>';
+                html += '</a>';
+            }
+        }
+        // File refs grouped by path: each on its own line, path once then line numbers as links
+        for (var fi = 0; fi < fileGroupOrder.length; fi++) {
+            var fp = fileGroupOrder[fi];
+            var lines = fileGroups[fp].slice().sort(function(a, b) { return a.line - b.line; });
+            html += '<div class="term-ref-file-group">';
+            html += '<span class="term-ref-chip term-ref-file" style="cursor:default;">';
+            html += escapeHtml(fp) + '</span>';
+            for (var li = 0; li < lines.length; li++) {
+                var ln = lines[li].line;
+                html += '<a class="term-ref-file-line" href="#" onclick="event.preventDefault();showSource(\'' + escapeAttr(fp) + '\',' + ln + ')"';
+                html += ' title="' + escapeAttr(fp + ':' + ln) + '">';
+                html += ln + '</a>';
+                if (li < lines.length - 1) html += ', ';
+            }
+            html += '</div>';
+        }
+        html += '</div>';
     }
-    html += '</div>';
+    html += '</div></div>';
 
     html += '</div>'; // end req-card-body
     html += '</div>'; // end req-card

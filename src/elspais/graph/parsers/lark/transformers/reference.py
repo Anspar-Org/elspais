@@ -211,12 +211,9 @@ class ReferenceTransformer:
                     )
 
         # Emit remainder blocks for unclaimed lines.
-        # For code/test files, merge all unclaimed lines into a single remainder
-        # (coarse grouping). Spec files need line-precise grouping for round-trip
-        # rendering, but code/test files only need remainders preserved for
-        # potential future reference rewriting.
-        coarse = self.content_type in ("code_ref", "test_ref")
-        self._flush_remainder(other_lines, results, coarse=coarse)
+        # Fine-grained grouping ensures each remainder is contiguous, which
+        # keeps line numbers accurate for term reference scanning.
+        self._flush_remainder(other_lines, results)
 
         return results
 

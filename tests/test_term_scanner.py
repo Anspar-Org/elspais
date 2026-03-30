@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from elspais.graph.GraphNode import NodeKind
+from elspais.graph.GraphNode import FileType, NodeKind
 from elspais.graph.term_scanner import extract_comments, scan_graph, scan_text_for_terms
 from elspais.graph.terms import TermDictionary, TermEntry, TermRef
 
@@ -45,28 +45,23 @@ def test_REQ_d00236_B_python_hash_comments():
     assert ("second comment", 4) in texts
 
 
-def test_REQ_d00236_B_python_docstring_function():
+def test_REQ_d00236_B_python_docstring_not_extracted():
+    """Docstrings are NOT extracted — only # comments are scanned for term refs."""
     source = 'def foo():\n    """This is a docstring."""\n    pass\n'
     result = extract_comments(source, ".py")
     texts = [t for t, _ in result]
-    assert any("This is a docstring" in t for t in texts)
+    assert not any("This is a docstring" in t for t in texts)
 
-
-def test_REQ_d00236_B_python_docstring_class():
     source = 'class Foo:\n    """Class docstring."""\n    pass\n'
     result = extract_comments(source, ".py")
     texts = [t for t, _ in result]
-    assert any("Class docstring" in t for t in texts)
+    assert not any("Class docstring" in t for t in texts)
 
-
-def test_REQ_d00236_B_python_docstring_module():
     source = '"""Module-level docstring."""\nimport os\n'
     result = extract_comments(source, ".py")
     texts = [t for t, _ in result]
-    assert any("Module-level docstring" in t for t in texts)
+    assert not any("Module-level docstring" in t for t in texts)
 
-
-def test_REQ_d00236_B_python_multiline_docstring():
     source = (
         "def bar():\n"
         '    """First line.\n'
@@ -77,7 +72,7 @@ def test_REQ_d00236_B_python_multiline_docstring():
     )
     result = extract_comments(source, ".py")
     texts = [t for t, _ in result]
-    assert any("First line" in t and "Second paragraph" in t for t in texts)
+    assert not any("First line" in t for t in texts)
 
 
 def test_REQ_d00236_B_python_string_literal_not_extracted():
@@ -421,14 +416,21 @@ def _mock_file_node(relative_path, file_type="SPEC"):
     )
 
 
-def _mock_graph(nodes_by_kind):
+def _mock_graph(nodes_by_kind, file_roots=None):
     """Create a minimal mock TraceGraph."""
     graph = MagicMock()
 
     def iter_by_kind(kind):
         return iter(nodes_by_kind.get(kind, []))
 
+    def iter_roots(kind=None):
+        roots = file_roots or []
+        if kind is not None:
+            return iter(r for r in roots if r.kind == kind)
+        return iter(roots)
+
     graph.iter_by_kind.side_effect = iter_by_kind
+    graph.iter_roots.side_effect = iter_roots
     return graph
 
 
@@ -546,41 +548,44 @@ def test_REQ_d00238_B_user_journey_body_scanned():
 # -- REQ-d00238-C: CODE and TEST nodes use comment extraction only ------------
 
 
-def test_REQ_d00238_C_code_comment_found():
+def test_REQ_d00238_C_code_comment_found(tmp_path):
     td = _make_td(("widget", True))
-    file_node = _mock_file_node("src/main.py")
-    file_node.get_field.side_effect = lambda k: {
-        "relative_path": "src/main.py",
-        "file_type": "CODE",
-    }.get(k)
-    code_node = _mock_node(
-        NodeKind.CODE,
-        "code:src/main.py:1",
-        fields={"raw_text": "x = 1\n# widget handler\ny = 2\n"},
+    # Write a real Python file so extract_comments can tokenize/parse it
+    py_file = tmp_path / "main.py"
+    py_file.write_text("x = 1\n# widget handler\ny = 2\n")
+    file_node = _mock_node(
+        NodeKind.FILE,
+        "file:src/main.py",
+        fields={
+            "relative_path": "src/main.py",
+            "absolute_path": str(py_file),
+            "file_type": FileType.CODE,
+        },
     )
-    code_node.file_node.return_value = file_node
-    graph = _mock_graph({NodeKind.CODE: [code_node]})
+    graph = _mock_graph({}, file_roots=[file_node])
 
     scan_graph(td, graph, namespace="main")
 
     entry = td.lookup("widget")
-    assert any(r.node_id == "code:src/main.py:1" for r in entry.references)
+    assert any(r.node_id == "file:src/main.py" for r in entry.references)
+    # Line number should be 2 (the comment line)
+    assert entry.references[0].line == 2
 
 
-def test_REQ_d00238_C_code_non_comment_not_found():
+def test_REQ_d00238_C_code_non_comment_not_found(tmp_path):
     td = _make_td(("widget", True))
-    file_node = _mock_file_node("src/main.py")
-    file_node.get_field.side_effect = lambda k: {
-        "relative_path": "src/main.py",
-        "file_type": "CODE",
-    }.get(k)
-    code_node = _mock_node(
-        NodeKind.CODE,
-        "code:src/main.py:1",
-        fields={"raw_text": "widget = 1\nresult = widget + 2\n"},
+    py_file = tmp_path / "main.py"
+    py_file.write_text("widget = 1\nresult = widget + 2\n")
+    file_node = _mock_node(
+        NodeKind.FILE,
+        "file:src/main.py",
+        fields={
+            "relative_path": "src/main.py",
+            "absolute_path": str(py_file),
+            "file_type": FileType.CODE,
+        },
     )
-    code_node.file_node.return_value = file_node
-    graph = _mock_graph({NodeKind.CODE: [code_node]})
+    graph = _mock_graph({}, file_roots=[file_node])
 
     scan_graph(td, graph, namespace="main")
 

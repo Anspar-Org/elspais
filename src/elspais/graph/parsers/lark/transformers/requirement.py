@@ -403,16 +403,21 @@ class RequirementTransformer:
 
         # Collect content lines from content_line nodes
         content_lines: list[str] = []
+        first_content_line: int | None = None
         for child in node.children[1:]:
             if isinstance(child, Tree) and child.data == "content_line":
                 for token in child.children:
                     if isinstance(token, Token) and token.type == "TEXT":
                         content_lines.append(str(token))
+                        if first_content_line is None:
+                            first_content_line = token.line  # type: ignore[attr-defined]
                         break
                 else:
                     content_lines.append("")  # blank line
             elif isinstance(child, Token) and child.type == "TEXT":
                 content_lines.append(str(child))
+                if first_content_line is None:
+                    first_content_line = child.line  # type: ignore[attr-defined]
 
         content = "\n".join(content_lines).strip()
         if not content:
@@ -422,6 +427,7 @@ class RequirementTransformer:
             "heading": heading,
             "content": content,
             "line": line_num,
+            "content_line": first_content_line or line_num + 1,
         }
 
     # ------------------------------------------------------------------

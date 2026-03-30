@@ -2961,6 +2961,7 @@ class GraphBuilder:
                 "order": idx,
                 "parse_line": section_line,
                 "parse_end_line": None,
+                "content_line": section.get("content_line", section_line),
             }
             # Preserve heading style for assertion sub-headings (* ** _)
             if "heading_style" in section:
