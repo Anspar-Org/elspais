@@ -73,8 +73,59 @@ _REASON_LABELS: dict[str, str] = {
     "non_canonical_term": "canonicalize term forms",
     "duplicate_refs": "deduplicate Implements/Refines references",
     "stale_hash": "update hash",
+    "hash_mismatch": "update hash",
+    "changelog_drift": "sync changelog hash",
+    "missing_changelog": "add missing changelog section",
+    "assertion_spacing": "fix assertion spacing",
+    "list_spacing": "fix list spacing",
     "fix_single": "fix requirement",
 }
+
+
+def _detect_fixable(node, hash_mode: str, changelog_enforce: bool) -> list[str]:  # noqa: ANN001
+    """Detect all fixable conditions on a requirement node.
+
+    Returns a list of reason strings describing what needs fixing.
+    Empty list means the node is clean.
+
+    Checks:
+    - parse_dirty reasons (term canonicalization, spacing, duplicate refs)
+    - hash mismatch (computed vs stored End marker hash)
+    - changelog hash drift (latest entry hash != stored hash)
+    - missing changelog section (Active req with enforcement, no entries)
+    """
+    from elspais.graph.render import compute_hash_for_node
+
+    reasons: list[str] = []
+
+    # 1. Parse-dirty reasons from builder (excluding stale_hash which is
+    #    superseded by our own hash_mismatch check)
+    if node.get_field("parse_dirty"):
+        for r in node.get_field("parse_dirty_reasons") or []:
+            if r != "stale_hash":
+                reasons.append(r)
+
+    # 2. Hash mismatch
+    stored = node.hash or ""
+    computed = compute_hash_for_node(node, hash_mode)
+    effective = computed or "N/A"
+    if stored and stored != effective:
+        reasons.append("hash_mismatch")
+
+    # 3. Changelog checks (Active reqs with changelog enforcement only)
+    status = (node.status or "").lower()
+    if status == "active" and changelog_enforce:
+        changelog = node.get_field("changelog") or []
+        if not changelog:
+            # Missing changelog section
+            reasons.append("missing_changelog")
+        else:
+            # Changelog hash drift
+            latest_hash = changelog[0].get("hash", "")
+            if latest_hash and stored and latest_hash != stored:
+                reasons.append("changelog_drift")
+
+    return reasons
 
 
 def _add_autofix_changelog_entries(
