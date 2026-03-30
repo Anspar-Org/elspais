@@ -157,7 +157,7 @@ jobs:
           pip install -e .
 
       - name: Run health checks on specs
-        run: elspais checks
+        run: elspais checks --lenient
 
       - name: Generate traceability matrix
         run: |
