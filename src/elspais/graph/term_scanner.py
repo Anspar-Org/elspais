@@ -390,12 +390,18 @@ def _canonicalize_text(
                     continue
                 inner = m.group(0)[len(delim) : -len(delim)]
                 if delim in styles_set and inner == term:
-                    # Already canonical — claim but don't replace
+                    # Correct casing + valid delimiter — no change needed
                     claimed.append((m.start(), m.end()))
                     continue
+                if delim in styles_set:
+                    # Valid delimiter, wrong casing — fix casing, keep delimiter
+                    replacement = f"{delim}{term}{delim}"
+                else:
+                    # Invalid delimiter — replace with canonical (first style)
+                    replacement = canonical
                 new_text.append(text[last_end : m.start()])
-                new_text.append(canonical)
-                claimed.append((m.start(), m.start() + len(canonical)))
+                new_text.append(replacement)
+                claimed.append((m.start(), m.start() + len(replacement)))
                 last_end = m.end()
             if new_text:
                 new_text.append(text[last_end:])
