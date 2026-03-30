@@ -12,7 +12,7 @@
 #   - elspais fix (regenerate INDEX.md, KNOWN_ISSUES.md)
 #
 # To install this hook:
-#   git config core.hooksPath .githooks
+#   make setup   (or: git config core.hooksPath .githooks)
 #
 # To bypass (NOT RECOMMENDED):
 #   git commit --no-verify
