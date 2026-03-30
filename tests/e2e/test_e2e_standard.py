@@ -382,8 +382,15 @@ class TestIdempotency:
     """Running same command twice produces identical results."""
 
     def test_health_idempotent(self, project):
-        r1 = run_elspais("checks", "--format", "json", "--lenient", cwd=project)
-        r2 = run_elspais("checks", "--format", "json", "--lenient", cwd=project)
+        # Use --spec-dir to bypass daemon caching (daemon graph build
+        # canonicalizes terms in-memory, causing non-deterministic counts)
+        spec_dir = str(project / "spec")
+        r1 = run_elspais(
+            "checks", "--spec-dir", spec_dir, "--format", "json", "--lenient", cwd=project
+        )
+        r2 = run_elspais(
+            "checks", "--spec-dir", spec_dir, "--format", "json", "--lenient", cwd=project
+        )
         assert r1.returncode == r2.returncode
         assert r1.stdout == r2.stdout
 

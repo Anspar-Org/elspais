@@ -1565,7 +1565,7 @@ def check_associate_paths(
             name="config.associate_paths",
             passed=True,
             message="No associates configured",
-            category="config",
+            category="spec",
             severity="info",
         )
 
@@ -1614,14 +1614,14 @@ def check_associate_paths(
             name="config.associate_paths",
             passed=False,
             message=f"{len(findings)} associate path issue(s)",
-            category="config",
+            category="spec",
             findings=findings,
         )
     return HealthCheck(
         name="config.associate_paths",
         passed=True,
         message=f"All {len(associates)} associate path(s) valid",
-        category="config",
+        category="spec",
     )
 
 
@@ -1638,13 +1638,14 @@ def check_no_requirements(graph: FederatedGraph) -> HealthCheck:
                 "No requirements found. Check that spec directories"
                 " contain valid requirement files."
             ),
-            category="config",
+            category="spec",
+            severity="warning",
         )
     return HealthCheck(
         name="config.no_requirements",
         passed=True,
         message=f"Found {req_count} requirements",
-        category="config",
+        category="spec",
     )
 
 
