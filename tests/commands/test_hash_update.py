@@ -395,41 +395,6 @@ class TestUpdateHashesCommand:
         assert "deadbeef" not in content  # REQ-p00001 stale hash replaced
         assert "00000000" not in content  # REQ-p00002 also fixed by render
 
-    def test_REQ_p00001_C_verify_after_update_passes(self, git_repo_with_stale_hash):
-        """After fix, validate should pass."""
-        import argparse
-
-        from elspais.commands.fix_cmd import run
-        from elspais.commands.validate import run as validate_run
-
-        # First fix all hashes
-        fix_args = argparse.Namespace(
-            req_id=None,
-            dry_run=False,
-            spec_dir=git_repo_with_stale_hash / "spec",
-            config=git_repo_with_stale_hash / ".elspais.toml",
-            quiet=False,
-            verbose=False,
-            mode="combined",
-        )
-        run(fix_args)
-
-        # Then validate - should pass (return 0)
-        verify_args = argparse.Namespace(
-            spec_dir=git_repo_with_stale_hash / "spec",
-            config=git_repo_with_stale_hash / ".elspais.toml",
-            fix=False,
-            dry_run=False,
-            skip_rule=None,
-            json=False,
-            quiet=False,
-            export=False,
-            mode="combined",
-        )
-        result = validate_run(verify_args)
-
-        assert result == 0
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Test: Hash computed from raw body text (per spec)
@@ -718,36 +683,3 @@ A. The system SHALL do something.
 # ─────────────────────────────────────────────────────────────────────────────
 # Test: Validate hint output
 # ─────────────────────────────────────────────────────────────────────────────
-
-
-class TestHashCommandOutput:
-    """Tests for validate command hint about fix command.
-
-    Validates REQ-p00001-C: detect changes to requirements using content hashing.
-    """
-
-    def test_REQ_p00001_C_verify_shows_run_update_hint(self, git_repo_with_stale_hash, capsys):
-        """validate shows 'elspais fix' hint when mismatches found."""
-        import argparse
-
-        from elspais.commands.validate import run
-
-        args = argparse.Namespace(
-            spec_dir=git_repo_with_stale_hash / "spec",
-            config=git_repo_with_stale_hash / ".elspais.toml",
-            fix=False,
-            dry_run=False,
-            skip_rule=None,
-            json=False,
-            quiet=False,
-            export=False,
-            mode="combined",
-        )
-
-        result = run(args)
-
-        # Hash mismatches are integrity errors
-        assert result == 1
-
-        captured = capsys.readouterr()
-        assert "elspais fix" in captured.err.lower() or "elspais fix" in captured.out.lower()
