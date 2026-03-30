@@ -3054,6 +3054,16 @@ class GraphBuilder:
         parse_dirty_reasons: list[str] = []
         if data.get("has_redundant_refs"):
             parse_dirty_reasons.append("duplicate_refs")
+        # Check for consecutive assertions without blank-line separators
+        assertions_data = data.get("assertions", [])
+        if len(assertions_data) >= 2:
+            for i in range(len(assertions_data) - 1):
+                a_line = assertions_data[i].get("line", 0)
+                a_lines = len(assertions_data[i].get("text", "").split("\n"))
+                b_line = assertions_data[i + 1].get("line", 0)
+                if b_line <= a_line + a_lines:
+                    parse_dirty_reasons.append("assertion_spacing")
+                    break
         stored_hash = data.get("hash")
         if stored_hash:
             from elspais.graph.render import compute_hash_for_node
