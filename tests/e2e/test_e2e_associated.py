@@ -23,7 +23,6 @@ import pytest
 
 from .helpers import (
     Requirement,
-    associate_config,
     base_config,
     build_associate,
     build_project,
@@ -276,9 +275,7 @@ class TestAssociateListCommand:
         result = run_elspais("associate", "--list", cwd=core)
         assert result.returncode == 0
         output = result.stdout.lower()
-        assert (
-            "alpha" in output or "alp" in output
-        ), f"Expected alpha in output: {result.stdout}"
+        assert "alpha" in output or "alp" in output, f"Expected alpha in output: {result.stdout}"
 
 
 # ---------------------------------------------------------------------------
@@ -372,9 +369,7 @@ class TestAssociateAutoDiscovery:
 
         # Run associate --all — may or may not find it; must not crash
         result = run_elspais("associate", "--all", cwd=core_root)
-        assert result.returncode in (0, 1), (
-            f"associate --all crashed unexpectedly: {result.stderr}"
-        )
+        assert result.returncode in (0, 1), f"associate --all crashed unexpectedly: {result.stderr}"
 
 
 # ---------------------------------------------------------------------------
@@ -719,6 +714,7 @@ class TestAssociateUnlink:
 
         result = run_elspais("associate", "--unlink", "removable", cwd=core_root)
         # May succeed or warn — should not crash
-        assert result.returncode in (0, 1), (
-            f"associate --unlink returned unexpected code: {result.returncode}\n{result.stderr}"
-        )
+        assert result.returncode in (
+            0,
+            1,
+        ), f"associate --unlink returned unexpected code: {result.returncode}\n{result.stderr}"

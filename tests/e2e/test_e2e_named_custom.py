@@ -29,7 +29,6 @@ import shutil
 import pytest
 
 from .conftest import (
-    build_fixture_project,
     ensure_fixture_daemon,
 )
 from .helpers import (

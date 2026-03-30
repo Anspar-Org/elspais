@@ -18,7 +18,6 @@ from .helpers import (
     base_config,
     build_project,
     run_elspais,
-    write_js_code,
 )
 
 pytestmark = [
@@ -229,7 +228,7 @@ class TestSkipDirsMultiSegment:
         _build_jira_project(tmp_path)
         result = run_elspais("summary", "--format", "json", cwd=tmp_path)
         assert result.returncode == 0, f"summary failed: {result.stderr}"
-        data = json.loads(result.stdout)
+        json.loads(result.stdout)  # validate JSON
         # PROJ-99 (in drafts/) and PROJ-98 (in archive/) must be excluded
         # The trace output should NOT contain the excluded IDs
         trace = run_elspais("trace", "--format", "json", cwd=tmp_path)
@@ -274,9 +273,9 @@ class TestZeroPaddedNumericAssertions:
         _build_jira_project(tmp_path)
         # PROJ-3 has 3 assertions labeled 00, 01, 02
         result = run_elspais("checks", "--lenient", cwd=tmp_path)
-        assert result.returncode == 0, (
-            f"health failed with zero-padded assertions: {result.stderr}\n{result.stdout}"
-        )
+        assert (
+            result.returncode == 0
+        ), f"health failed with zero-padded assertions: {result.stderr}\n{result.stdout}"
 
 
 # ---------------------------------------------------------------------------
@@ -361,7 +360,7 @@ class TestLargeHierarchy:
 
 @pytest.mark.e2e
 class TestTestingConfig:
-    """Config: testing_enabled=True, test_dirs=['verification'], patterns=[verify_*.py, *_verify.py]."""
+    """Custom testing config: verification dir, verify_*.py patterns."""
 
     def test_custom_test_dirs(self, tmp_path):
         _build_jira_project(tmp_path)
@@ -390,7 +389,7 @@ class TestComplexDirectoryStructure:
         #   PROJ-6 (Active, spec/approved) = 3
         # PROJ-2 (Draft), PROJ-4 (Deprecated), PROJ-5 (Proposed) excluded by status_roles
         # PROJ-99 (drafts/), PROJ-98 (archive/) excluded by skip_dirs
-        assert total == 3, f"Expected 3 active reqs (skipped dirs + non-active excluded), got {total}"
+        assert total == 3, f"Expected 3 active reqs (skip_dirs + non-active excluded), got {total}"
 
 
 # ---------------------------------------------------------------------------
@@ -436,9 +435,9 @@ class TestAllowStructuralOrphansConfig:
             (c for c in data["checks"] if c["name"] == "spec.structural_orphans"), None
         )
         if orphan_check:
-            assert orphan_check["passed"], (
-                f"Orphan check should pass with allow_structural_orphans=True: {orphan_check}"
-            )
+            assert orphan_check[
+                "passed"
+            ], f"Orphan check should pass with allow_structural_orphans=True: {orphan_check}"
 
     def test_orphan_check_runs_when_disallowed(self, tmp_path):
         """When allow_structural_orphans=False, orphan check should run (not be skipped)."""
