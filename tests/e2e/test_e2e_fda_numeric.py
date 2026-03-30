@@ -1,5 +1,5 @@
 # Verifies: REQ-p00002, REQ-p00003, REQ-p00004, REQ-p00060, REQ-d00080, REQ-d00085-A
-"""FDA-style IDs + numeric assertions e2e tests — module-scoped fixture with daemon acceleration.
+"""FDA-style IDs + numeric assertions e2e tests — on-disk fixture with daemon acceleration.
 
 Tests FDA-style ID patterns (PRD-00001, OPS-00001, DEV-00001), numeric-0
 assertion labels, custom allowed_statuses, require_rationale, and the fix
@@ -7,10 +7,11 @@ command against an FDA-style project.
 
 Groups:
   1. Read-only CLI tests (health, summary, trace)
-  2. Mutation tests (fix corrects FDA hashes)
-  3. MCP query tests (search, get_requirement, hierarchy)
-  4. Config variation tests (require_rationale, status filtering)
+  2. Config variation tests (require_rationale, status filtering)
+  3. Term health checks
+  4. MCP query tests (search, get_requirement, hierarchy)
   5. MCP numeric assertion mutation test
+  6. CLI mutation tests (fix, incremental)
 """
 
 from __future__ import annotations
@@ -23,11 +24,8 @@ import subprocess
 import pytest
 
 from .conftest import (
-    build_fixture_project,
     ensure_fixture_daemon,
-)
-from .helpers import (
-    Requirement,
+    load_fixture,
     run_elspais,
 )
 
@@ -41,129 +39,15 @@ pytestmark = [
 
 
 # ---------------------------------------------------------------------------
-# Fixture project content
-# ---------------------------------------------------------------------------
-
-# FDA-style config overrides
-_FDA_CONFIG_OVERRIDES = {
-    "name": "e2e-fda-numeric",
-    "canonical": "{type}-{component}",
-    "types": {
-        "PRD": {"level": 1},
-        "OPS": {"level": 2},
-        "DEV": {"level": 3},
-    },
-    "allowed_implements": ["DEV -> OPS, PRD", "OPS -> PRD", "PRD -> PRD"],
-    "label_style": "numeric",
-    "labels_sequential": True,
-    "allowed_statuses": ["Active", "Draft", "Review", "Archived"],
-    "allow_structural_orphans": True,
-}
-
-# PRD-00001 — Active with rationale, numeric assertions
-_RATIONALE_TEXT = "Required for regulatory compliance with FDA 21 CFR Part 11."
-
-_PRD_00001 = Requirement(
-    "PRD-00001",
-    "Regulatory Compliance",
-    "PRD",
-    status="Active",
-    assertions=[
-        ("0", "The system SHALL comply with FDA 21 CFR Part 11."),
-        ("1", "The system SHALL maintain audit trails."),
-    ],
-    rationale=_RATIONALE_TEXT,
-)
-
-# PRD-00002 — Review status
-_PRD_00002 = Requirement(
-    "PRD-00002",
-    "Data Integrity",
-    "PRD",
-    status="Review",
-    assertions=[
-        ("0", "The system SHALL validate all data inputs."),
-        ("1", "The system SHALL reject malformed records."),
-    ],
-    rationale="Needed for GxP data integrity requirements.",
-)
-
-# OPS-00001 — Active, implements PRD-00001
-_OPS_00001 = Requirement(
-    "OPS-00001",
-    "Compliance Monitoring",
-    "OPS",
-    status="Active",
-    implements="PRD-00001",
-    assertions=[
-        ("0", "Operations SHALL monitor compliance status daily."),
-    ],
-    rationale="Operational oversight of compliance posture.",
-)
-
-# DEV-00001 — Archived, implements OPS-00001
-_DEV_00001 = Requirement(
-    "DEV-00001",
-    "Audit Logger",
-    "DEV",
-    status="Archived",
-    implements="OPS-00001",
-    assertions=[
-        ("0", "The module SHALL log all data modifications."),
-        ("1", "The module SHALL include timestamps in ISO 8601 format."),
-        ("2", "The module SHALL sign audit entries cryptographically."),
-    ],
-)
-
-
-def _build_spec_content(reqs: list[Requirement]) -> str:
-    """Render multiple requirements to spec file content."""
-    return "\n".join(r.render() for r in reqs)
-
-
-def _build_wrong_hash_prd_spec() -> str:
-    """Build prd-regulatory.md with an intentionally wrong hash for fix testing."""
-    return (
-        "# PRD-00001: Regulation\n\n"
-        "**Level**: PRD | **Status**: Active\n\n"
-        "## Assertions\n\n"
-        "A. The system SHALL comply.\n\n"
-        "*End* *Regulation* | **Hash**: XXXXXXXX\n---\n"
-    )
-
-
-def _build_wrong_hash_dev_spec() -> str:
-    """Build dev-impl.md with intentionally wrong hash for fix testing."""
-    return (
-        "# DEV-00001: Implementation\n\n"
-        "**Level**: DEV | **Status**: Active | **Implements**: PRD-00001\n\n"
-        "## Assertions\n\n"
-        "A. The module SHALL implement compliance.\n\n"
-        "*End* *Implementation* | **Hash**: XXXXXXXX\n---\n"
-    )
-
-
-# ---------------------------------------------------------------------------
 # Module-scoped fixture
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture(scope="module")
 def project(tmp_path_factory):
-    """Build the FDA-numeric project once for the entire module."""
+    """Copy e2e-fda-numeric fixture to /tmp, init git, start daemon."""
     root = tmp_path_factory.mktemp("e2e_fda_numeric")
-
-    spec_files = {
-        "spec/prd-core.md": _build_spec_content([_PRD_00001, _PRD_00002]),
-        "spec/ops-compliance.md": _build_spec_content([_OPS_00001]),
-        "spec/dev-audit.md": _build_spec_content([_DEV_00001]),
-    }
-
-    build_fixture_project(
-        root,
-        config_overrides=_FDA_CONFIG_OVERRIDES,
-        spec_files=spec_files,
-    )
+    load_fixture("e2e-fda-numeric", root)
     ensure_fixture_daemon(root)
     return root
 
@@ -238,57 +122,69 @@ class TestCustomStatuses:
 
 
 # ---------------------------------------------------------------------------
-# Group 2: Mutation tests (fix)
+# Group 2: Config variation tests
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.e2e
-class TestFixFDAStyle:
-    """Fix command with FDA-style IDs — ported from TestFixFDAStyle."""
+class TestRequireRationale:
+    """Config: require_rationale=True — fixture already has rationale on all reqs."""
 
-    def test_fix_corrects_fda_hashes(self, tmp_path):
-        """Fix corrects wrong hashes in FDA-style project."""
-        from .helpers import base_config, build_project
+    def test_rationale_required_present(self, project):
+        result = run_elspais("checks", "--lenient", cwd=project)
+        assert result.returncode == 0, f"health failed: {result.stdout}"
 
-        cfg = base_config(
-            name="fix-fda",
-            canonical="{type}-{component}",
-            types={
-                "PRD": {"level": 1},
-                "DEV": {"level": 3},
-            },
-            allowed_implements=["DEV -> PRD"],
-        )
-        build_project(tmp_path, cfg, spec_files={})
 
-        prd_spec = tmp_path / "spec" / "prd-regs.md"
-        prd_spec.parent.mkdir(parents=True, exist_ok=True)
-        prd_spec.write_text(_build_wrong_hash_prd_spec())
-        dev_spec = tmp_path / "spec" / "dev-impl.md"
-        dev_spec.write_text(_build_wrong_hash_dev_spec())
+@pytest.mark.e2e
+class TestStatusFiltering:
+    """Health and summary handle Review/Archived requirements — uses shared fixture."""
 
-        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
-        subprocess.run(
-            ["git", "commit", "-m", "add fda"],
-            cwd=tmp_path,
-            capture_output=True,
-        )
+    def test_statuses_accepted_by_health(self, project):
+        # PRD-00002 is Review, DEV-00001 is Archived — both should be valid
+        health = run_elspais("checks", "--lenient", cwd=project)
+        assert health.returncode == 0
 
-        fix = run_elspais("fix", cwd=tmp_path)
-        assert fix.returncode == 0, f"fix failed: {fix.stderr}"
-
-        # Verify hashes were corrected
-        prd_content = prd_spec.read_text()
-        assert "XXXXXXXX" not in prd_content, "PRD hash was not corrected by fix"
-        match = re.search(r"\*\*Hash\*\*:\s*([0-9a-f]{8})", prd_content)
-        assert match, "No valid 8-char hex hash found in PRD file after fix"
-
-        health = run_elspais("checks", "--lenient", cwd=tmp_path)
-        assert health.returncode == 0, f"health failed after fix: {health.stderr}"
+    def test_summary_default_active_only(self, project):
+        """Default summary (Active only) should show >= 1."""
+        summary = run_elspais("summary", "--format", "json", cwd=project)
+        data = json.loads(summary.stdout)
+        total = sum(lv.get("total", 0) for lv in data.get("levels", []))
+        assert total >= 1  # At least 1 Active
 
 
 # ---------------------------------------------------------------------------
-# Group 3: MCP query tests
+# Group 3: Term health checks
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.e2e
+class TestFDATermChecks:
+    """Term health checks with alternate severity config."""
+
+    def test_term_checks_present(self, project):
+        result = run_elspais("checks", "--format", "json", "--lenient", cwd=project)
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        check_names = {c["name"] for c in data.get("checks", [])}
+        assert "terms.duplicates" in check_names
+
+    def test_off_severity_checks_pass(self, project):
+        """Checks with severity='off' always pass."""
+        result = run_elspais("checks", "--format", "json", "--lenient", cwd=project)
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        checks = {c["name"]: c for c in data.get("checks", [])}
+        for name in ("terms.undefined", "terms.unmarked", "terms.collection_empty"):
+            if name in checks:
+                assert checks[name]["passed"], f"{name} should pass with severity=off"
+
+    def test_glossary_command(self, project):
+        result = run_elspais("glossary", "--format", "json", cwd=project)
+        assert result.returncode == 0
+
+
+# ---------------------------------------------------------------------------
+# Group 4: MCP query tests
 # ---------------------------------------------------------------------------
 
 
@@ -339,128 +235,67 @@ class TestMCPFDAStyle:
 
 
 # ---------------------------------------------------------------------------
-# Group 4: Config variation tests
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.e2e
-class TestRequireRationale:
-    """Config: require_rationale=True — ported from TestRequireRationale."""
-
-    def test_rationale_required_present(self, tmp_path):
-        from .helpers import base_config, build_project
-
-        cfg = base_config(name="rationale-required", allow_structural_orphans=True)
-        cfg["rules"]["format"]["require_rationale"] = True
-        prd = Requirement(
-            "REQ-p00001",
-            "Rationalized",
-            "PRD",
-            assertions=[("A", "The system SHALL have rationale.")],
-            rationale="This is needed for compliance reasons.",
-        )
-        build_project(tmp_path, cfg, spec_files={"spec/prd.md": [prd]})
-
-        # Fix hashes first
-        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
-        subprocess.run(["git", "commit", "-m", "add"], cwd=tmp_path, capture_output=True)
-        run_elspais("fix", cwd=tmp_path)
-
-        result = run_elspais("checks", "--lenient", cwd=tmp_path)
-        assert result.returncode == 0, f"health failed: {result.stdout}"
-
-
-@pytest.mark.e2e
-class TestStatusFiltering:
-    """Health and summary handle Deprecated/Superseded requirements — ported from source."""
-
-    def test_deprecated_excluded_from_summary(self, tmp_path):
-        from .helpers import base_config, build_project
-
-        cfg = base_config(name="status-filter", allow_structural_orphans=True)
-        active = Requirement(
-            "REQ-p00001",
-            "Active Feature",
-            "PRD",
-            assertions=[("A", "The system SHALL be active.")],
-        )
-        deprecated = Requirement(
-            "REQ-p00002",
-            "Deprecated Feature",
-            "PRD",
-            status="Deprecated",
-            assertions=[("A", "The system SHALL be deprecated.")],
-        )
-        build_project(
-            tmp_path,
-            cfg,
-            spec_files={"spec/prd.md": [active, deprecated]},
-        )
-
-        # Health should pass (both statuses allowed)
-        health = run_elspais("checks", "--lenient", cwd=tmp_path)
-        assert health.returncode == 0
-
-        # Summary default (Active only) should show >= 1
-        summary = run_elspais("summary", "--format", "json", cwd=tmp_path)
-        data = json.loads(summary.stdout)
-        total = sum(lv.get("total", 0) for lv in data.get("levels", []))
-        assert total >= 1  # At least 1 Active
-
-
-# ---------------------------------------------------------------------------
 # Group 5: MCP numeric assertion mutation
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.e2e
 class TestMCPNumericAssertions:
-    """MCP tools work with numeric assertion labels — ported from TestMCPNumericAssertions."""
+    """MCP tools work with numeric assertion labels — uses shared fixture."""
 
-    def test_mcp_numeric_assertions(self, tmp_path):
+    def test_mcp_numeric_assertions(self, project):
         pytest.importorskip("mcp")
-        from .helpers import base_config, build_project, mcp_call, start_mcp, stop_mcp
+        from .helpers import mcp_call, start_mcp, stop_mcp
 
-        cfg = base_config(
-            name="mcp-numeric",
-            label_style="numeric",
-            allow_structural_orphans=True,
-        )
-        prd = Requirement(
-            "REQ-p00001",
-            "Numeric MCP",
-            "PRD",
-            assertions=[
-                ("0", "The system SHALL do zero."),
-                ("1", "The system SHALL do one."),
-                ("2", "The system SHALL do two."),
-            ],
-        )
-        build_project(tmp_path, cfg, spec_files={"spec/prd.md": [prd]})
-
-        proc = start_mcp(tmp_path)
+        proc = start_mcp(project)
         try:
-            req = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00001"})
-            assert req["id"] == "REQ-p00001"
+            req = mcp_call(proc, "get_requirement", {"req_id": "PRD-00001"})
+            assert req["id"] == "PRD-00001"
             labels = [a.get("label", "") for a in req.get("assertions", [])]
             assert "0" in labels
             assert "1" in labels
-            assert "2" in labels
 
             # Add another numeric assertion
             mcp_call(
                 proc,
                 "mutate_add_assertion",
                 {
-                    "req_id": "REQ-p00001",
-                    "label": "3",
-                    "text": "The system SHALL do three.",
+                    "req_id": "PRD-00001",
+                    "label": "2",
+                    "text": "The system SHALL do two.",
                 },
             )
 
             # Verify it was added
-            req2 = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00001"})
+            req2 = mcp_call(proc, "get_requirement", {"req_id": "PRD-00001"})
             labels2 = [a.get("label", "") for a in req2.get("assertions", [])]
-            assert "3" in labels2
+            assert "2" in labels2
         finally:
             stop_mcp(proc)
+
+
+# ---------------------------------------------------------------------------
+# Group 6: CLI mutation tests (incremental, placed last)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.e2e
+@pytest.mark.incremental
+class TestFDACLIMutations:
+    """Sequential CLI mutations on the FDA fixture."""
+
+    def test_01_fix_corrects_wrong_hash(self, project):
+        """Fix corrects XXXXXXXX hash in prd-wrong-hash.md."""
+        subprocess.run(["git", "add", "."], cwd=project, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "pre-fix"], cwd=project, capture_output=True)
+
+        result = run_elspais("fix", cwd=project)
+        assert result.returncode == 0, f"fix failed: {result.stderr}"
+        content = (project / "spec/prd-wrong-hash.md").read_text()
+        assert "XXXXXXXX" not in content
+        match = re.search(r"\*\*Hash\*\*:\s*([0-9a-f]{8})", content)
+        assert match, "No valid 8-char hex hash found in PRD file after fix"
+
+    def test_02_health_after_fix(self, project):
+        result = run_elspais("checks", "--lenient", cwd=project)
+        assert result.returncode == 0, f"health failed after fix: {result.stderr}"

@@ -32,6 +32,27 @@ def _chain_self_and_ancestors(node: GraphNode) -> Iterator[GraphNode]:
     return itertools.chain([node], node.ancestors())
 
 
+def _canonicalize_list_spacing(text: str) -> str:
+    """Insert blank lines before list items that follow non-blank, non-list lines.
+
+    Pandoc requires a blank line before the first list item.
+    Returns the text with canonical spacing (unchanged if already correct).
+    """
+    lines = text.split("\n")
+    result: list[str] = []
+    for i, line in enumerate(lines):
+        if (
+            line.lstrip().startswith("- ")
+            and i > 0
+            and result
+            and result[-1].strip()
+            and not result[-1].lstrip().startswith("- ")
+        ):
+            result.append("")
+        result.append(line)
+    return "\n".join(result)
+
+
 # Implements: REQ-d00071-C
 # Default satellite kinds: children of these types don't count as "meaningful"
 # for determining root vs orphan status. Configurable via [graph].satellite_kinds.
@@ -406,6 +427,8 @@ class TraceGraph:
             self._undo_add_remainder(entry)
         elif op == "delete_remainder":
             self._undo_delete_remainder(entry)
+        elif op == "add_changelog_entry":
+            self._undo_add_changelog_entry(entry)
         # Unknown operations are silently ignored (forward compatibility)
 
     def _undo_rename_node(self, entry: MutationEntry) -> None:
@@ -978,6 +1001,55 @@ class TraceGraph:
         node.set_field("status", new_status)
         self._mutation_log.append(entry)
         return entry
+
+    def add_changelog_entry(
+        self,
+        node_id: str,
+        changelog_entry: dict[str, str],
+    ) -> MutationEntry:
+        """Add a changelog entry to a requirement.
+
+        Creates the changelog list if it doesn't exist.  Prepends the entry
+        (newest first).
+
+        Args:
+            node_id: The requirement node ID.
+            changelog_entry: Dict with keys: date, hash, change_order,
+                author_name, author_id, reason.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: If node_id is not found.
+            ValueError: If node is not a REQUIREMENT.
+        """
+        if node_id not in self._index:
+            raise KeyError(f"Node '{node_id}' not found")
+
+        node = self._index[node_id]
+        if node.kind != NodeKind.REQUIREMENT:
+            raise ValueError(f"Node '{node_id}' is not a requirement")
+
+        old_changelog = list(node.get_field("changelog") or [])
+        new_changelog = [changelog_entry] + old_changelog
+
+        entry = MutationEntry(
+            operation="add_changelog_entry",
+            target_id=node_id,
+            before_state={"changelog": old_changelog},
+            after_state={"changelog": new_changelog, "entry": changelog_entry},
+        )
+
+        node.set_field("changelog", new_changelog)
+        self._mutation_log.append(entry)
+        return entry
+
+    def _undo_add_changelog_entry(self, entry: MutationEntry) -> None:
+        """Undo an add_changelog_entry operation."""
+        node_id = entry.target_id
+        if node_id in self._index:
+            self._index[node_id].set_field("changelog", entry.before_state.get("changelog", []))
 
     def add_requirement(
         self,
@@ -2737,6 +2809,7 @@ class GraphBuilder:
         3. Post-construction, all access should use get_field()/set_field()
     """
 
+    # Implements: REQ-d00222-D
     def __init__(
         self,
         repo_root: Path | None = None,
@@ -2744,6 +2817,7 @@ class GraphBuilder:
         satellite_kinds: list[str] | None = None,
         multi_assertion_separator: str = "+",
         resolver: Any | None = None,
+        namespace: str = "",
     ) -> None:
         """Initialize the graph builder.
 
@@ -2759,9 +2833,11 @@ class GraphBuilder:
             resolver: IdResolver instance for multi-assertion expansion.
                 When provided, uses resolver.parse()/expand()/render_canonical()
                 instead of string splitting.
+            namespace: Repository namespace for TermEntry attribution.
         """
         self.repo_root = repo_root or Path.cwd()
         self.hash_mode = hash_mode
+        self._namespace = namespace
         self._multi_assertion_separator = multi_assertion_separator
         self._resolver = resolver
         if satellite_kinds is not None:
@@ -2943,9 +3019,15 @@ class GraphBuilder:
         # Create REMAINDER child nodes from non-normative sections
         # Each section (preamble, Rationale, Notes, etc.) becomes its own node
         # so that the requirement can be reconstructed from the graph.
+        _has_list_spacing_fix = False
         for idx, section in enumerate(data.get("sections", [])):
             section_id = f"{req_id}:section:{idx}"
             section_line = section.get("line", content.start_line)
+            section_text = section["content"]
+            canonical_text = _canonicalize_list_spacing(section_text)
+            if canonical_text != section_text:
+                _has_list_spacing_fix = True
+                section_text = canonical_text
             section_node = GraphNode(
                 id=section_id,
                 kind=NodeKind.REMAINDER,
@@ -2953,10 +3035,11 @@ class GraphBuilder:
             )
             section_node._content = {
                 "heading": section["heading"],
-                "text": section["content"],
+                "text": section_text,
                 "order": idx,
                 "parse_line": section_line,
                 "parse_end_line": None,
+                "content_line": section.get("content_line", section_line),
             }
             # Preserve heading style for assertion sub-headings (* ** _)
             if "heading_style" in section:
@@ -2998,9 +3081,21 @@ class GraphBuilder:
         parse_dirty_reasons: list[str] = []
         if data.get("has_redundant_refs"):
             parse_dirty_reasons.append("duplicate_refs")
+        # Check for consecutive assertions without blank-line separators
+        assertions_data = data.get("assertions", [])
+        if len(assertions_data) >= 2:
+            for i in range(len(assertions_data) - 1):
+                a_line = assertions_data[i].get("line", 0)
+                a_lines = len(assertions_data[i].get("text", "").split("\n"))
+                b_line = assertions_data[i + 1].get("line", 0)
+                if b_line <= a_line + a_lines:
+                    parse_dirty_reasons.append("assertion_spacing")
+                    break
+        if _has_list_spacing_fix:
+            parse_dirty_reasons.append("list_spacing")
         stored_hash = data.get("hash")
         if stored_hash:
-            from elspais.commands.validate import compute_hash_for_node
+            from elspais.graph.render import compute_hash_for_node
 
             computed = compute_hash_for_node(node, self.hash_mode)
             if computed and stored_hash != computed:
@@ -3748,6 +3843,7 @@ class GraphBuilder:
                 indexed=data.get("indexed", True),
                 defined_in=defined_in,
                 defined_at_line=data.get("line", 0),
+                namespace=self._namespace,
             )
             graph._terms.add(entry)
 

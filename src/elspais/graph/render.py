@@ -59,6 +59,38 @@ def reconstruct_body_text(node: GraphNode) -> str:
     return "\n".join(parts)
 
 
+def compute_hash_for_node(node: GraphNode, hash_mode: str) -> str | None:
+    """Compute the content hash for a requirement node.
+
+    Supports two modes (per spec/requirements-spec.md Hash Definition):
+    - full-text: hash every line between header and footer (body_text)
+    - normalized-text: hash normalized assertion text only
+
+    Args:
+        node: The requirement GraphNode.
+        hash_mode: Hash calculation mode ("full-text" or "normalized-text").
+
+    Returns:
+        Computed hash string, or None if no hashable content.
+    """
+    if hash_mode == "normalized-text":
+        assertions = []
+        for child in node.iter_children():
+            if child.kind == NodeKind.ASSERTION:
+                label = child.get_field("label", "")
+                text = child.get_label() or ""
+                if label and text:
+                    assertions.append((label, text))
+        if not assertions:
+            return None
+        return compute_normalized_hash(assertions)
+    else:
+        body = reconstruct_body_text(node)
+        if not body:
+            return None
+        return calculate_hash(body)
+
+
 def render_node(node: GraphNode) -> str:
     """Render a graph node back to its text representation.
 
@@ -216,13 +248,29 @@ def _render_requirement(node: GraphNode) -> str:
                     lines.append(content)
                     lines.append("")
 
+    # Changelog section (rendered from structured data, not from a REMAINDER child)
+    changelog = node.get_field("changelog") or []
+    if changelog:
+        in_assertions = False
+        if lines and lines[-1] != "":
+            lines.append("")
+        lines.append("## Changelog")
+        lines.append("")
+        for entry in changelog:
+            author_id = entry["author_id"]
+            lines.append(
+                f"- {entry['date']} | {entry['hash']} | {entry['change_order']}"
+                f" | {entry['author_name']} ({author_id}) | {entry['reason']}"
+            )
+        lines.append("")
+
     # Compute hash using configured mode (DRY: utilities/hasher.py)
     hash_mode = node.get_field("hash_mode") or "normalized-text"
     if hash_mode == "full-text":
         body = reconstruct_body_text(node)
-        hash_val = calculate_hash(body)
+        hash_val = calculate_hash(body) if body.strip() else "N/A"
     else:
-        hash_val = compute_normalized_hash(assertions)
+        hash_val = compute_normalized_hash(assertions) if assertions else "N/A"
 
     # End marker (separator is a REMAINDER node, not part of the requirement)
     lines.append(f"*End* *{title}* | **Hash**: {hash_val}")

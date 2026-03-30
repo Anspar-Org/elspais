@@ -172,6 +172,8 @@ class FederatedGraph:
         self._federated_log._bind_repos(self._repos)
         # Implements: REQ-d00222-C
         self._merge_terms()
+        # Implements: REQ-d00239-A
+        self._scan_terms()
 
     # ─────────────────────────────────────────────────────────────────────────
     # Terms Federation
@@ -189,6 +191,31 @@ class FederatedGraph:
                 dupes = merged.merge(entry.graph._terms)
                 self._term_duplicates.extend(dupes)
         self._terms = merged
+
+    # Implements: REQ-d00239-A, REQ-d00239-B
+    def _scan_terms(self) -> None:
+        """Run term scanner across all repos using the merged dictionary.
+
+        Uses per-repo config for markup_styles and exclude_files so that
+        cross-repo term references resolve correctly.  Always canonicalizes
+        term forms in spec node text and marks affected files dirty so that
+        ``render_save`` produces canonical output.
+        """
+        from elspais.graph.term_scanner import scan_graph
+
+        for entry in self._repos.values():
+            if entry.graph is None:
+                continue
+            config = entry.config or {}
+            terms_cfg = config.get("terms", {})
+            scan_graph(
+                self._terms,
+                entry.graph,
+                namespace=entry.name,
+                markup_styles=terms_cfg.get("markup_styles"),
+                exclude_files=terms_cfg.get("exclude_files"),
+                canonicalize=True,
+            )
 
     # ─────────────────────────────────────────────────────────────────────────
     # Comment Routing (Implements: REQ-d00230-B)
@@ -670,6 +697,16 @@ class FederatedGraph:
         """
         repo_name = self._ownership[node_id]
         result = self._graph_for(node_id).change_status(node_id, new_status)
+        self._record_mutation(repo_name, result)
+        return result
+
+    def add_changelog_entry(self, node_id: str, changelog_entry: dict[str, str]) -> MutationEntry:
+        """Add a changelog entry to a requirement.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[node_id]
+        result = self._graph_for(node_id).add_changelog_entry(node_id, changelog_entry)
         self._record_mutation(repo_name, result)
         return result
 

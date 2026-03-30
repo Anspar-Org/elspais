@@ -410,6 +410,7 @@ def build_graph(
         satellite_kinds=satellite_kinds,
         multi_assertion_separator=str(mas),
         resolver=default_resolver,
+        namespace=typed_config.project.namespace,
     )
 
     # Get ignore configuration for code/test scanning (main project only)

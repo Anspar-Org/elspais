@@ -14,7 +14,7 @@ B. No module SHALL directly instantiate TraceGraph except TraceGraphBuilder.
 
 C. TraceGraphBuilder SHALL handle all relationship linking (implements, refines, addresses, satisfies, instance).
 
-D. TraceGraphBuilder SHALL create assertion nodes as children of requirement nodes.
+D. TraceGraphBuilder SHALL create *Assertion* nodes as children of requirement nodes.
 
 E. TraceGraphBuilder SHALL support optional TODO node creation for lossless reconstruction.
 
@@ -22,7 +22,7 @@ E. TraceGraphBuilder SHALL support optional TODO node creation for lossless reco
 
 Centralizing graph construction ensures consistent hierarchy building, cycle detection, and validation across all entry points.
 
-*End* *Graph Builder as Single Entry Point* | **Hash**: e3a0add2
+*End* *Graph Builder as Single Entry Point* | **Hash**: 65d2ad6a
 ---
 
 ## REQ-o00051: Composable Annotation Design
@@ -63,12 +63,12 @@ Separating iteration from annotation enables:
 
 ## Rationale
 
-Automated CI/CD checks ensure that requirement traceability, code quality, and security standards are maintained on every change to the codebase. Without automated enforcement, manual reviews are prone to oversight and do not scale.
+Automated CI/CD checks ensure that requirement *Traceability*, code quality, and security standards are maintained on every change to the codebase. Without automated enforcement, manual reviews are prone to oversight and do not scale.
 
 The pipeline validates at three levels:
 
 - **Quality gates**: Automated test suite and linting prevent regressions
-- **Traceability gates**: PR titles and commit messages must reference Linear tickets and requirements, maintaining the audit trail from code change to requirement
+- ****Traceability** gates**: PR titles and commit messages must reference Linear tickets and requirements, maintaining the audit trail from code change to requirement
 - **Security gates**: Secret scanning and dependency vulnerability auditing prevent accidental exposure or use of known-vulnerable libraries
 
 These checks are required status checks on the main branch, preventing merges that do not meet the standards.
@@ -79,15 +79,19 @@ A. The CI pipeline SHALL run the full test suite across supported Python version
 
 B. The CI pipeline SHALL run static analysis (linting) to enforce code quality standards.
 
-C. The CI pipeline SHALL validate requirement format and generate traceability artifacts by running elspais against its own spec files.
+C. The CI pipeline SHALL validate requirement format and generate *Traceability* artifacts by running elspais against its own spec files.
 
 D. The CI pipeline SHALL scan for leaked secrets in the git history using gitleaks.
 
 E. The CI pipeline SHALL audit dependencies for known security vulnerabilities.
 
-F. The PR validation pipeline SHALL require a Linear ticket reference ([CUR-XXX]) in PR titles to maintain commit traceability through squash merges.
+F. The PR validation pipeline SHALL require a Linear ticket reference ([CUR-XXX]) in PR titles to maintain commit *Traceability* through squash merges.
 
 G. The PR validation pipeline SHALL require both ticket (CUR-XXX) and requirement (REQ-XXXXX) references in commit messages.
 
-*End* *CI/CD Pipeline Enforcement* | **Hash**: 909c62a1
+## Changelog
+
+- 2026-03-30 | 315accce | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+
+*End* *CI/CD Pipeline Enforcement* | **Hash**: 315accce
 ---

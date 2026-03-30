@@ -983,9 +983,12 @@ def change_reference_type(
 
 def _format_changelog_entry(entry: dict[str, str]) -> str:
     """Format a changelog entry dict into a markdown line."""
+    author_id = entry["author_id"]
+    if "@" in author_id and not author_id.startswith("<"):
+        author_id = f"<{author_id}>"
     return (
         f"- {entry['date']} | {entry['hash']} | {entry['change_order']}"
-        f" | {entry['author_name']} ({entry['author_id']}) | {entry['reason']}"
+        f" | {entry['author_name']} ({author_id}) | {entry['reason']}"
     )
 
 

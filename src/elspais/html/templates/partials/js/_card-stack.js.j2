@@ -121,6 +121,8 @@ function renderCardStack() {
         var kind = info.kind || 'requirement';
         if (kind === 'journey') {
             html += buildJourneyCardHtml(nodeId, info.data, info.collapsed);
+        } else if (kind === 'term') {
+            html += buildTermCardHtml(nodeId, info.data, info.collapsed);
         } else if (kind === 'requirement') {
             html += buildCardHtml(nodeId, info.data, info.collapsed);
         } else {
@@ -580,7 +582,7 @@ function buildRemainderHtml(nodeId, rem, idx) {
     }
     h += '</div>';
     h += '<div class="card-body-section-content remainder-text-view" id="body-section-content-' + nodeId + '-' + idx + '">' +
-        simpleMarkdown(rem.text || '') + '</div>';
+        simpleMarkdown(rem.text || '', true) + '</div>';
     if (!isDefBlock) {
         h += '<textarea class="edit-only remainder-text-edit" data-node-id="' + escapeAttr(remId) + '"' +
             ' data-original="' + escapeAttr(rem.text || '') + '"' +
@@ -904,7 +906,7 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
     if (props.context || editState.enabled) {
         html += '<div class="card-body-section-wrapper">';
         html += '<div class="card-body-section-heading"><span>Context</span></div>';
-        html += '<div class="card-body-section-content journey-field-view">' + simpleMarkdown(props.context || '') + '</div>';
+        html += '<div class="card-body-section-content journey-field-view">' + simpleMarkdown(props.context || '', true) + '</div>';
         html += '<textarea class="edit-only journey-field-edit" data-field="context" data-journey-id="' + nodeId + '"' +
             ' onblur="onJourneyFieldBlur(this)"' +
             ' style="width:100%;min-height:120px;font-size:0.8rem;border:1px solid var(--border-color);border-radius:4px;padding:6px;resize:vertical;background:var(--card-bg);color:var(--input-text);">' +
@@ -956,7 +958,7 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
         html += '<button class="edit-only journey-section-delete" onclick="onDeleteJourneySection(\'' + nodeId + '\', \'' + escapeAttr(sec.name) + '\')" title="Delete section">&times;</button>';
         html += '</div>';
         // Section content — view + edit
-        html += '<div class="card-body-section-content journey-section-content-view">' + simpleMarkdown(sec.content || '') + '</div>';
+        html += '<div class="card-body-section-content journey-section-content-view">' + simpleMarkdown(sec.content || '', true) + '</div>';
         html += '<textarea class="edit-only journey-section-content-edit" data-journey-id="' + nodeId + '"' +
             ' data-section-name="' + escapeAttr(sec.name) + '" onblur="onJourneySectionContentBlur(this)"' +
             ' style="width:100%;min-height:120px;font-size:0.8rem;border:1px solid var(--border-color);border-radius:4px;padding:6px;resize:vertical;background:var(--card-bg);color:var(--input-text);">' +
@@ -1051,7 +1053,8 @@ function buildGenericCardHtml(nodeId, data, collapsed) {
 // Simple Markdown Renderer (for journey body text)
 // =====================================================================
 
-function simpleMarkdown(text) {
+// Implements: REQ-d00245-A
+function simpleMarkdown(text, annotateTerms) {
     // Escape HTML first, then add minimal formatting
     var lines = text.split('\n');
     var result = [];
@@ -1067,8 +1070,56 @@ function simpleMarkdown(text) {
         line = line.replace(/^(\s*)-\s+/, '$1&bull; ');
         result.push(line);
     }
-    return result.join('\n');
+    var output = result.join('\n');
+
+    // Term annotation pass (after markdown transforms)
+    if (annotateTerms && editState.termsLookup && Object.keys(editState.termsLookup).length > 0) {
+        if (!editState.termsRegex) {
+            _buildTermsRegex();
+        }
+        if (editState.termsRegex) {
+            output = output.replace(editState.termsRegex, function(match) {
+                var key = match.toLowerCase();
+                var entry = editState.termsLookup[key];
+                if (!entry) return match;
+                var tip = entry.definition_short || entry.definition || '';
+                if (tip.length > 80) tip = tip.substring(0, 80) + '...';
+                return '<span class="defined-term" data-term-key="' + escapeAttr(key) +
+                    '" data-tip="' + escapeAttr(tip) + '">' + match + '</span>';
+            });
+        }
+    }
+
+    return output;
 }
+
+function _buildTermsRegex() {
+    var keys = Object.keys(editState.termsLookup);
+    if (keys.length === 0) { editState.termsRegex = null; return; }
+    // Sort longest-first to avoid partial matches
+    keys.sort(function(a, b) { return b.length - a.length; });
+    // Escape regex special chars and build alternation
+    var escaped = keys.map(function(k) {
+        return k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    });
+    // Word-boundary anchored, case-insensitive
+    editState.termsRegex = new RegExp('\\b(' + escaped.join('|') + ')\\b', 'gi');
+}
+
+// Implements: REQ-d00245-B — delegated click handler for .defined-term spans
+document.addEventListener('DOMContentLoaded', function() {
+    var body = document.getElementById('card-stack-body');
+    if (body) {
+        body.addEventListener('click', function(e) {
+            var span = e.target.closest('.defined-term');
+            if (span) {
+                e.preventDefault();
+                var key = span.getAttribute('data-term-key');
+                if (key) openTermCard(key);
+            }
+        });
+    }
+});
 
 // =====================================================================
 // Coverage Prefetch — color buttons on card open
@@ -1869,4 +1920,169 @@ function _flashAssertions(reqId, assertLinkKey) {
             }
         }, 400);
     }, 50);
+}
+
+// =====================================================================
+// Term Cards (Implements: REQ-d00244-A, REQ-d00244-B, REQ-d00244-C)
+// =====================================================================
+
+async function openTermCard(termKey) {
+    var cardId = 'term:' + termKey.toLowerCase();
+    editState.focusNodeId = cardId;
+
+    if (editState.openCards.has(cardId)) {
+        focusCard(cardId);
+        return;
+    }
+
+    var data = await apiFetch('/api/term/' + encodeURIComponent(termKey));
+    if (!data) return;
+
+    editState.openCards.set(cardId, { data: data, collapsed: false, kind: 'term', refsCollapsed: data.references && data.references.length > 20 });
+    editState.openCardOrder = editState.openCardOrder.filter(function(id) { return id !== cardId; });
+    editState.openCardOrder.unshift(cardId);
+
+    renderCardStack();
+    focusCard(cardId);
+    updateNavSelection();
+    saveState();
+}
+
+function toggleTermRefs(cardId) {
+    var cardState = editState.openCards.get(cardId);
+    if (!cardState) return;
+    cardState.refsCollapsed = !cardState.refsCollapsed;
+    var el = document.getElementById('term-refs-' + cardId);
+    if (el) el.style.display = cardState.refsCollapsed ? 'none' : 'block';
+    saveState();
+}
+
+function buildTermCardHtml(cardId, data, collapsed) {
+    var collapsedClass = collapsed ? ' collapsed' : '';
+    var focusedClass = editState.openCardOrder[0] === cardId ? ' focused' : '';
+    var termName = escapeHtml(data.term || '');
+    var collectionBadge = data.collection ? ' <span class="term-collection-badge">Collection</span>' : '';
+
+    var html = '<div class="req-card term-card' + collapsedClass + focusedClass + '" id="card-' + escapeAttr(cardId) + '">';
+
+    // Header (read-only, no edit controls)
+    html += '<div class="req-card-header" onclick="toggleCardCollapse(\'' + escapeAttr(cardId) + '\')">';
+    html += '<span class="req-card-expand">&#9660;</span>';
+    html += '<span class="req-card-id" style="color:var(--secondary-text);">Term</span>';
+    html += '<span class="req-card-title-display">' + termName + collectionBadge + '</span>';
+    html += '<button class="req-card-close" onclick="event.stopPropagation(); closeCard(\'' + escapeAttr(cardId) + '\')" title="Close card">&times;</button>';
+    html += '</div>';
+
+    // Body
+    html += '<div class="req-card-body">';
+
+    // Definition section
+    html += '<div class="card-section"><div class="card-section-label">Definition</div>';
+    html += '<div class="term-definition">' + simpleMarkdown(data.definition || '') + '</div>';
+    html += '</div>';
+
+    // Source section
+    html += '<div class="card-section"><div class="card-section-label">Source</div>';
+    html += '<div class="card-meta">';
+    if (data.defined_in) {
+        html += '<div class="card-meta-item"><span class="card-meta-key">Defined in:</span>';
+        html += '<a class="card-meta-value" href="#" onclick="event.preventDefault(); openCard(\'' + escapeAttr(data.defined_in) + '\')">' + escapeHtml(data.defined_in) + '</a>';
+        html += '</div>';
+    }
+    if (data.namespace) {
+        html += '<div class="card-meta-item"><span class="card-meta-key">Namespace:</span>';
+        html += '<span class="card-meta-value">' + escapeHtml(data.namespace) + '</span>';
+        html += '</div>';
+    }
+    html += '</div></div>';
+
+    // References section (collapsible)
+    var refs = data.references || [];
+    var refSectionId = 'term-refs-' + escapeAttr(cardId);
+    html += '<div class="card-section term-references">';
+    var refsHidden = false;
+    var cardState = editState.openCards.get(cardId);
+    if (cardState && cardState.refsCollapsed !== undefined) {
+        refsHidden = cardState.refsCollapsed;
+    } else {
+        refsHidden = refs.length > 20;
+    }
+    html += '<div class="card-section-label" style="cursor:pointer;user-select:none;" onclick="toggleTermRefs(\'' + escapeAttr(cardId) + '\')">';
+    html += '<span style="font-size:0.7rem;margin-right:4px;">&#9660;</span>References (' + refs.length + ')</div>';
+    html += '<div id="' + refSectionId + '"' + (refsHidden ? ' style="display:none"' : '') + '>';
+    if (refs.length === 0) {
+        html += '<div style="padding:8px;color:var(--secondary-text);font-size:0.8rem;font-style:italic;">No references resolved yet</div>';
+    } else {
+        // Separate file refs from non-file refs, group file refs by path
+        var fileGroups = {};  // file_path -> [{line, fp}]
+        var fileGroupOrder = [];
+        var nonFileRefs = [];
+        for (var ri = 0; ri < refs.length; ri++) {
+            var ref = refs[ri];
+            var nid = ref.node_id;
+            var filePath = ref.file_path;
+            var fileMatch = nid.match(/^(?:rem|code|test|file):(.+?)(?::(\d+))?$/);
+            if (fileMatch || filePath) {
+                var fp = filePath || fileMatch[1];
+                if (!fileGroups[fp]) { fileGroups[fp] = []; fileGroupOrder.push(fp); }
+                fileGroups[fp].push({ line: ref.line || 1, ref: ref });
+            } else {
+                nonFileRefs.push(ref);
+            }
+        }
+        // Sort non-file refs by node_id then line number numerically
+        nonFileRefs.sort(function(a, b) {
+            if (a.node_id < b.node_id) return -1;
+            if (a.node_id > b.node_id) return 1;
+            return (a.line || 0) - (b.line || 0);
+        });
+        // Sort file groups by path
+        fileGroupOrder.sort();
+
+        html += '<div class="term-ref-compact" style="padding:6px 8px;line-height:1.8;">';
+        // Non-file refs (requirements, assertions, journeys)
+        for (var ri = 0; ri < nonFileRefs.length; ri++) {
+            var ref = nonFileRefs[ri];
+            var nid = ref.node_id;
+            var ncClass = ref.canonical === false ? ' term-ref-noncanonical' : '';
+            if (ref.parent_req_id) {
+                var assertLabel = nid.substring(ref.parent_req_id.length + 1);
+                html += '<a class="term-ref-chip' + ncClass + '" href="#" onclick="event.preventDefault();openCardAndFlash(\'' + escapeAttr(ref.parent_req_id) + '\',[\'' + escapeAttr(assertLabel) + '\'])"';
+                html += ' title="' + escapeAttr(nid + (ref.node_title ? ' - ' + ref.node_title : '') + ' L' + ref.line) + '">';
+                html += escapeHtml(nid);
+                html += '<sub>' + ref.line + '</sub>';
+                html += '</a>';
+            } else {
+                html += '<a class="term-ref-chip' + ncClass + '" href="#" onclick="event.preventDefault();openCard(\'' + escapeAttr(nid) + '\')"';
+                html += ' title="' + escapeAttr(nid + (ref.node_title ? ' - ' + ref.node_title : '') + ' L' + ref.line) + '">';
+                html += escapeHtml(nid);
+                html += '<sub>' + ref.line + '</sub>';
+                html += '</a>';
+            }
+        }
+        // File refs grouped by path: each on its own line, path once then line numbers as links
+        for (var fi = 0; fi < fileGroupOrder.length; fi++) {
+            var fp = fileGroupOrder[fi];
+            var lines = fileGroups[fp].slice().sort(function(a, b) { return a.line - b.line; });
+            html += '<div class="term-ref-file-group">';
+            html += '<span class="term-ref-chip term-ref-file" style="cursor:default;">';
+            html += escapeHtml(fp) + '</span>';
+            for (var li = 0; li < lines.length; li++) {
+                var ln = lines[li].line;
+                var lnNcClass = lines[li].ref && lines[li].ref.canonical === false ? ' term-ref-noncanonical' : '';
+                html += '<a class="term-ref-file-line' + lnNcClass + '" href="#" onclick="event.preventDefault();showSource(\'' + escapeAttr(fp) + '\',' + ln + ')"';
+                html += ' title="' + escapeAttr(fp + ':' + ln) + '">';
+                html += ln + '</a>';
+                if (li < lines.length - 1) html += ', ';
+            }
+            html += '</div>';
+        }
+        html += '</div>';
+    }
+    html += '</div></div>';
+
+    html += '</div>'; // end req-card-body
+    html += '</div>'; // end req-card
+
+    return html;
 }

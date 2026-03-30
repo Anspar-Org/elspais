@@ -1292,9 +1292,15 @@ def check_unmarked_usage(
 
     findings = []
     for item in unmarked:
+        # Implements: REQ-d00223-F
+        wrong = item.get("wrong_marking", "")
+        if wrong:
+            msg = f"Wrong markup for '{item['term']}' " f"(uses {wrong}) in {item['node_id']}"
+        else:
+            msg = f"Unmarked usage of '{item['term']}' in {item['node_id']}"
         findings.append(
             HealthFinding(
-                message=f"Unmarked usage of '{item['term']}' in {item['node_id']}",
+                message=msg,
                 node_id=item.get("node_id"),
                 line=item.get("line"),
             )
@@ -1307,6 +1313,339 @@ def check_unmarked_usage(
         category="terms",
         severity=severity,
         findings=findings,
+    )
+
+
+# Implements: REQ-d00240-A
+def check_term_unused(
+    entries: list,
+    severity: str = "warning",
+) -> HealthCheck:
+    """Check for defined terms with zero references."""
+    if severity == "off":
+        return HealthCheck(
+            name="terms.unused",
+            passed=True,
+            message="Unused term check skipped (severity=off)",
+            category="terms",
+            severity="info",
+        )
+
+    findings = []
+    for entry in entries:
+        if not entry.references:
+            findings.append(
+                HealthFinding(
+                    message=(
+                        f"Unused defined term '{entry.term}' "
+                        f"(defined in {entry.defined_in}:{entry.defined_at_line})"
+                    ),
+                    node_id=entry.defined_in,
+                    line=entry.defined_at_line,
+                )
+            )
+
+    if not findings:
+        return HealthCheck(
+            name="terms.unused",
+            passed=True,
+            message="No unused defined terms",
+            category="terms",
+            severity=severity,
+        )
+
+    return HealthCheck(
+        name="terms.unused",
+        passed=False,
+        message=f"{len(findings)} unused defined term(s)",
+        category="terms",
+        severity=severity,
+        findings=findings,
+    )
+
+
+_MIN_DEFINITION_LENGTH = 10
+
+
+# Implements: REQ-d00240-B
+def check_term_bad_definition(
+    entries: list,
+    severity: str = "error",
+) -> HealthCheck:
+    """Check for terms with blank or trivially short definitions."""
+    if severity == "off":
+        return HealthCheck(
+            name="terms.bad_definition",
+            passed=True,
+            message="Bad definition check skipped (severity=off)",
+            category="terms",
+            severity="info",
+        )
+
+    findings = []
+    for entry in entries:
+        stripped = entry.definition.strip() if entry.definition else ""
+        if len(stripped) < _MIN_DEFINITION_LENGTH:
+            findings.append(
+                HealthFinding(
+                    message=(
+                        f"Term '{entry.term}' has empty/trivial definition "
+                        f"({entry.defined_in}:{entry.defined_at_line})"
+                    ),
+                    node_id=entry.defined_in,
+                    line=entry.defined_at_line,
+                )
+            )
+
+    if not findings:
+        return HealthCheck(
+            name="terms.bad_definition",
+            passed=True,
+            message="No bad term definitions",
+            category="terms",
+            severity=severity,
+        )
+
+    return HealthCheck(
+        name="terms.bad_definition",
+        passed=False,
+        message=f"{len(findings)} bad term definition(s)",
+        category="terms",
+        severity=severity,
+        findings=findings,
+    )
+
+
+# Implements: REQ-d00240-C
+def check_term_collection_empty(
+    entries: list,
+    severity: str = "warning",
+) -> HealthCheck:
+    """Check for collection terms with zero references."""
+    if severity == "off":
+        return HealthCheck(
+            name="terms.collection_empty",
+            passed=True,
+            message="Collection empty check skipped (severity=off)",
+            category="terms",
+            severity="info",
+        )
+
+    findings = []
+    for entry in entries:
+        if entry.collection and not entry.references:
+            findings.append(
+                HealthFinding(
+                    message=(
+                        f"Collection term '{entry.term}' has no references "
+                        f"({entry.defined_in}:{entry.defined_at_line})"
+                    ),
+                    node_id=entry.defined_in,
+                    line=entry.defined_at_line,
+                )
+            )
+
+    if not findings:
+        return HealthCheck(
+            name="terms.collection_empty",
+            passed=True,
+            message="No empty collection terms",
+            category="terms",
+            severity=severity,
+        )
+
+    return HealthCheck(
+        name="terms.collection_empty",
+        passed=False,
+        message=f"{len(findings)} empty collection term(s)",
+        category="terms",
+        severity=severity,
+        findings=findings,
+    )
+
+
+def check_term_canonical_form(
+    entries: list,
+    severity: str = "warning",
+) -> HealthCheck:
+    """Check that term references use canonical form (correct markup + casing)."""
+    if severity == "off":
+        return HealthCheck(
+            name="terms.canonical_form",
+            passed=True,
+            message="Canonical form check skipped (severity=off)",
+            category="terms",
+            severity="info",
+        )
+
+    findings = []
+    for entry in entries:
+        canonical = entry.term
+        for ref in entry.references:
+            if not ref.surface_form:
+                continue
+            if ref.is_canonical(canonical):
+                continue
+            # Non-canonical: wrong casing, wrong/missing markup, or both
+            reasons = []
+            if ref.surface_form != canonical:
+                reasons.append(f"'{ref.surface_form}' should be '{canonical}'")
+            if not ref.marked:
+                if ref.wrong_marking:
+                    reasons.append(f"uses '{ref.wrong_marking}' markup")
+                else:
+                    reasons.append("unmarked")
+            detail = "; ".join(reasons)
+            findings.append(
+                HealthFinding(
+                    message=f"Non-canonical term ref: {detail} ({ref.node_id}:{ref.line})",
+                    node_id=ref.node_id,
+                    line=ref.line,
+                )
+            )
+
+    if not findings:
+        return HealthCheck(
+            name="terms.canonical_form",
+            passed=True,
+            message="All term references use canonical form",
+            category="terms",
+            severity=severity,
+        )
+
+    return HealthCheck(
+        name="terms.canonical_form",
+        passed=False,
+        message=f"{len(findings)} non-canonical term reference(s)",
+        category="terms",
+        severity=severity,
+        findings=findings,
+    )
+
+
+# Implements: REQ-d00223-E, REQ-d00240-D
+def run_term_checks(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> list[HealthCheck]:
+    """Run all term health checks."""
+    typed_config = _validate_config(config or {})
+    sev = typed_config.terms.severity
+
+    # Extract data from graph
+    duplicates = getattr(graph, "_term_duplicates", [])
+    terms = getattr(graph, "_terms", None)
+    entries = list(terms.iter_all()) if terms else []
+
+    # undefined and unmarked data come from reference scanning
+    undefined: list[dict] = []
+    unmarked: list[dict] = []
+
+    return [
+        check_term_duplicates(duplicates, severity=sev.duplicate),
+        check_undefined_terms(undefined, severity=sev.undefined),
+        check_unmarked_usage(unmarked, severity=sev.unmarked),
+        check_term_unused(entries, severity=sev.unused),
+        check_term_bad_definition(entries, severity=sev.bad_definition),
+        check_term_collection_empty(entries, severity=sev.collection_empty),
+        check_term_canonical_form(entries, severity=sev.canonical_form),
+    ]
+
+
+# Implements: REQ-d00202-A
+def check_associate_paths(
+    config: dict[str, Any],
+    repo_root: Path,
+) -> HealthCheck:
+    """Validate that configured associate paths exist and contain spec files."""
+    from elspais.config import get_associates_config
+
+    associates = get_associates_config(config)
+    if not associates:
+        return HealthCheck(
+            name="config.associate_paths",
+            passed=True,
+            message="No associates configured",
+            category="spec",
+            severity="info",
+        )
+
+    findings: list[HealthFinding] = []
+    for assoc_name, assoc_info in associates.items():
+        path_str = assoc_info["path"]
+        p = Path(path_str)
+        if not p.is_absolute():
+            p = repo_root / p
+        if not p.exists():
+            findings.append(
+                HealthFinding(
+                    message=f"Associate '{assoc_name}' path does not exist: {path_str}",
+                    node_id=assoc_name,
+                    severity="error",
+                )
+            )
+        else:
+            from elspais.associates import discover_associate_from_path
+
+            disc_result = discover_associate_from_path(p)
+            if isinstance(disc_result, str):
+                findings.append(
+                    HealthFinding(
+                        message=f"Associate '{assoc_name}' is misconfigured: {disc_result}",
+                        node_id=assoc_name,
+                        severity="error",
+                    )
+                )
+            else:
+                assoc_spec_dir = p / disc_result.spec_path
+                if not assoc_spec_dir.exists() or not any(assoc_spec_dir.glob("*.md")):
+                    findings.append(
+                        HealthFinding(
+                            message=(
+                                f"Associate '{assoc_name}' has no spec files"
+                                f" in {disc_result.spec_path}"
+                            ),
+                            node_id=assoc_name,
+                            severity="error",
+                        )
+                    )
+
+    if findings:
+        return HealthCheck(
+            name="config.associate_paths",
+            passed=False,
+            message=f"{len(findings)} associate path issue(s)",
+            category="spec",
+            findings=findings,
+        )
+    return HealthCheck(
+        name="config.associate_paths",
+        passed=True,
+        message=f"All {len(associates)} associate path(s) valid",
+        category="spec",
+    )
+
+
+def check_no_requirements(graph: FederatedGraph) -> HealthCheck:
+    """Flag when no requirements are found — likely a config issue."""
+    from elspais.graph import NodeKind
+
+    req_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.REQUIREMENT))
+    if req_count == 0:
+        return HealthCheck(
+            name="config.no_requirements",
+            passed=False,
+            message=(
+                "No requirements found. Check that spec directories"
+                " contain valid requirement files."
+            ),
+            category="spec",
+            severity="warning",
+        )
+    return HealthCheck(
+        name="config.no_requirements",
+        passed=True,
+        message=f"Found {req_count} requirements",
+        category="spec",
     )
 
 
@@ -1338,7 +1677,16 @@ def run_spec_checks(
             retired_ids.add(node.id)
 
     # --- Non-config-sensitive checks: run once on full federation ---
+    # Determine repo_root from the first repo entry
+    _repo_root = Path.cwd()
+    for _entry in graph.iter_repos():
+        if _entry.repo_root:
+            _repo_root = _entry.repo_root
+            break
+
     checks: list[HealthCheck] = [
+        check_no_requirements(graph),
+        check_associate_paths(config, _repo_root),
         check_spec_files_parseable(graph),
         check_spec_no_duplicates(graph),
         check_broken_references(graph, config),
@@ -1725,6 +2073,47 @@ def _check_status_references(
     )
 
 
+# Implements: REQ-d00241-A
+def check_no_traceability(
+    unlinked_files: list[str],
+    severity: str = "warning",
+) -> HealthCheck:
+    """Check for code/test files with no traceability markers."""
+    if severity == "off":
+        return HealthCheck(
+            name="code.no_traceability",
+            passed=True,
+            message="No traceability check skipped (severity=off)",
+            category="code",
+            severity="info",
+        )
+
+    if not unlinked_files:
+        return HealthCheck(
+            name="code.no_traceability",
+            passed=True,
+            message="All code/test files have traceability markers",
+            category="code",
+            severity=severity,
+        )
+
+    findings = [
+        HealthFinding(
+            message=f"No traceability markers in {path}",
+        )
+        for path in unlinked_files
+    ]
+
+    return HealthCheck(
+        name="code.no_traceability",
+        passed=False,
+        message=f"{len(unlinked_files)} file(s) without traceability markers",
+        category="code",
+        severity=severity,
+        findings=findings,
+    )
+
+
 def run_code_checks(
     graph: FederatedGraph,
     exclude_status: set[str] | None = None,
@@ -1761,6 +2150,18 @@ def run_code_checks(
                 graph, "code_tested", exclude_status=exclude_status, config=config
             )
         )
+
+    # Implements: REQ-d00241-B, REQ-d00241-C
+    no_trace_sev = typed_config.rules.format.no_traceability_severity or "warning"
+    unlinked_files = []
+    for kind in (NodeKind.CODE, NodeKind.TEST):
+        for node in graph.iter_unlinked(kind):
+            file_n = node.file_node()
+            if file_n:
+                rel = file_n.get_field("relative_path")
+                if rel:
+                    unlinked_files.append(rel)
+    checks.append(check_no_traceability(unlinked_files, severity=no_trace_sev))
 
     return checks
 
@@ -2140,6 +2541,8 @@ def render_section(
             report.add(check)
         for check in run_uat_checks(graph, exclude_status=exclude_status, config=raw_config):
             report.add(check)
+        for check in run_term_checks(graph, config=raw_config):
+            report.add(check)
 
     output = _format_report(report, args)
     lenient = getattr(args, "lenient", False)
@@ -2213,6 +2616,11 @@ def compute_checks(
     # UAT checks
     if run_all or tests_only:
         for check in run_uat_checks(graph, exclude_status=exclude_status, config=config):
+            report.add(check)
+
+    # Term checks
+    if run_all:
+        for check in run_term_checks(graph, config=config):
             report.add(check)
 
     return report.to_dict(lenient=lenient)

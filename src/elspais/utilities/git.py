@@ -386,8 +386,10 @@ def get_git_changes(
     try:
         with temporary_worktree(repo_root, base_ref) as worktree_path:
             committed_locations = get_req_locations_from_graph(worktree_path)
-    except subprocess.CalledProcessError:
-        # Worktree creation failed (e.g., no commits yet), fall back to empty
+    except (subprocess.CalledProcessError, ValueError):
+        # Worktree creation failed (e.g., no commits yet) or config parse
+        # error (e.g., committed config uses old schema version), fall back
+        # to empty
         pass
 
     return GitChangeInfo(

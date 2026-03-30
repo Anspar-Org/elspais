@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import subprocess
 from pathlib import Path
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -71,6 +72,20 @@ def _make_project(
     req_file = spec_dir / filename
     req_file.write_text(req_content)
 
+    # Init git repo with author config so get_author_info works in CI
+    env = {**os.environ, "GIT_DIR": "", "GIT_WORK_TREE": ""}
+    env.pop("GIT_DIR", None)
+    env.pop("GIT_WORK_TREE", None)
+    subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, env=env, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"], cwd=tmp_path, env=env, capture_output=True
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"], cwd=tmp_path, env=env, capture_output=True
+    )
+    subprocess.run(["git", "add", "."], cwd=tmp_path, env=env, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, env=env, capture_output=True)
+
     return tmp_path
 
 
@@ -93,43 +108,21 @@ def _make_fix_args(
     )
 
 
-def _make_validate_args(
-    project: Path,
-    *,
-    fix: bool = False,
-    dry_run: bool = False,
-    json_output: bool = False,
-) -> argparse.Namespace:
-    """Build an argparse.Namespace matching what validate.run expects."""
-    return argparse.Namespace(
-        spec_dir=project / "spec",
-        config=project / ".elspais.toml",
-        fix=fix,
-        dry_run=dry_run,
-        skip_rule=None,
-        json=json_output,
-        quiet=False,
-        export=False,
-        mode="combined",
-    )
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Bug 1: Active REQ error message doesn't explain why
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class TestFixActiveChangelogErrorMessage:
-    """Tests for fix command error messaging with changelog enforcement.
+class TestFixActiveChangelogAutoMessage:
+    """Tests for fix command auto-generated changelog with enforcement.
 
-    Validates REQ-p00004-A: fix command explains why a changelog message
-    is required for Active requirements.
+    Validates that auto-fixes generate changelog entries automatically
+    when no -m flag is provided, rather than failing.
     """
 
-    def test_REQ_p00004_A_error_mentions_hash_current(self, tmp_path, capsys):
+    def test_REQ_p00004_A_autofix_generates_changelog(self, tmp_path, capsys):
         """When an Active requirement needs a hash update and no -m message
-        is provided, the error should mention 'hash_current' to explain
-        why a message is required.
+        is provided, the fix should succeed with an auto-generated reason.
         """
         project = _make_project(tmp_path, REQ_ACTIVE_WRONG_HASH)
         args = _make_fix_args(project, "REQ-d00001")
@@ -143,122 +136,30 @@ class TestFixActiveChangelogErrorMessage:
         finally:
             os.chdir(old_cwd)
 
-        assert result == 1, "Should fail when no changelog message provided"
-
-        captured = capsys.readouterr()
-        assert (
-            "hash_current" in captured.err
-        ), f"Error should mention 'hash_current' config option, got: {captured.err!r}"
-
-    def test_REQ_p00004_A_error_mentions_draft_deprecated(self, tmp_path, capsys):
-        """When an Active requirement needs a hash update and no -m message
-        is provided, the error should mention that Draft/Deprecated
-        requirements update without a message.
-        """
-        project = _make_project(tmp_path, REQ_ACTIVE_WRONG_HASH)
-        args = _make_fix_args(project, "REQ-d00001")
-
-        from elspais.commands.fix_cmd import run
-
-        old_cwd = os.getcwd()
-        os.chdir(project)
-        try:
-            result = run(args)
-        finally:
-            os.chdir(old_cwd)
-
-        assert result == 1, "Should fail when no changelog message provided"
-
-        captured = capsys.readouterr()
-        assert (
-            "Draft/Deprecated" in captured.err
-        ), f"Error should mention 'Draft/Deprecated', got: {captured.err!r}"
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Bug 3: Global fix mode defers Active REQs with changelog enforcement
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-class TestValidateFixDefersActiveChangelog:
-    """Tests for validate --fix deferring Active REQs needing changelog.
-
-    Validates REQ-p00002-C: global fix mode defers Active requirements
-    with hash mismatches when changelog enforcement is on.
-    """
-
-    def test_REQ_p00002_C_deferred_section_in_output(self, tmp_path, capsys):
-        """When running validate with fix=True and an Active requirement
-        has a hash mismatch with changelog enforcement, the output should
-        show a DEFERRED section.
-        """
-        project = _make_project(tmp_path, REQ_ACTIVE_WRONG_HASH)
-        args = _make_validate_args(project, fix=True)
-
-        from elspais.commands.validate import run
-
-        run(args)
-
-        captured = capsys.readouterr()
-        assert (
-            "DEFERRED" in captured.err
-        ), f"Output should contain 'DEFERRED' section, got stderr: {captured.err!r}"
-
-    def test_REQ_p00002_C_deferred_shows_per_req_command(self, tmp_path, capsys):
-        """The DEFERRED output should show per-REQ fix commands with -m flag."""
-        project = _make_project(tmp_path, REQ_ACTIVE_WRONG_HASH)
-        args = _make_validate_args(project, fix=True)
-
-        from elspais.commands.validate import run
-
-        run(args)
-
-        captured = capsys.readouterr()
-        assert (
-            "elspais fix REQ-d00001 -m" in captured.err
-        ), f"Output should show per-REQ fix command, got stderr: {captured.err!r}"
-
-    def test_REQ_p00002_C_deferred_does_not_change_hash(self, tmp_path, capsys):
-        """When a hash mismatch is deferred, the file should NOT be modified."""
-        project = _make_project(tmp_path, REQ_ACTIVE_WRONG_HASH)
-        args = _make_validate_args(project, fix=True)
+        assert result == 0, "Auto-fix should succeed with auto-generated reason"
 
         spec_file = project / "spec" / "requirements.md"
-        original_content = spec_file.read_text()
+        content = spec_file.read_text()
+        assert "## Changelog" in content, "Changelog section should be added"
+        assert "Auto-fix:" in content, "Auto-generated reason should be present"
 
-        from elspais.commands.validate import run
-
-        run(args)
-
-        after_content = spec_file.read_text()
-        assert (
-            after_content == original_content
-        ), "File should not be modified when hash fix is deferred"
-
-    def test_REQ_p00002_C_deferred_in_json_output(self, tmp_path, capsys):
-        """The JSON output should include a 'deferred' array with the
-        deferred issue details.
-        """
-        import json
-        from io import StringIO
-        from unittest.mock import patch
-
+    def test_REQ_p00004_A_explicit_message_overrides_autofix(self, tmp_path, capsys):
+        """When -m is provided, it overrides the auto-generated reason."""
         project = _make_project(tmp_path, REQ_ACTIVE_WRONG_HASH)
-        args = _make_validate_args(project, fix=True, json_output=True)
+        args = _make_fix_args(project, "REQ-d00001")
+        args.message = "Manual update reason"
 
-        captured_stdout = StringIO()
-        with patch("sys.stdout", captured_stdout):
-            from elspais.commands.validate import run
+        from elspais.commands.fix_cmd import run
 
-            run(args)
+        old_cwd = os.getcwd()
+        os.chdir(project)
+        try:
+            result = run(args)
+        finally:
+            os.chdir(old_cwd)
 
-        output = json.loads(captured_stdout.getvalue())
-        assert "deferred" in output, "JSON output should have 'deferred' key"
-        assert (
-            len(output["deferred"]) >= 1
-        ), f"Should have at least 1 deferred issue, got: {output['deferred']}"
+        assert result == 0
 
-        deferred_ids = [d["id"] for d in output["deferred"]]
-        assert (
-            "REQ-d00001" in deferred_ids
-        ), f"REQ-d00001 should be in deferred list, got: {deferred_ids}"
+        spec_file = project / "spec" / "requirements.md"
+        content = spec_file.read_text()
+        assert "Manual update reason" in content

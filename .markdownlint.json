@@ -43,6 +43,10 @@
   // across editors and does not affect content.
   "MD047": false,
 
+  // Bare URLs: Disabled because changelog entries use bare email addresses
+  // intentionally (angle-bracketed emails become mailto autolinks).
+  "MD034": false,
+
   // Table column style: Disabled because pipe spacing style is a preference
   // and does not affect rendering or readability.
   "MD060": false

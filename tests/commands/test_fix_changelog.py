@@ -109,13 +109,13 @@ class TestFixChangelog:
 
     @patch("sys.stdin")
     @patch("elspais.utilities.git.get_author_info", return_value=MOCK_AUTHOR)
-    def test_REQ_p00004_A_fix_active_req_requires_message(
+    def test_REQ_p00004_A_fix_active_req_autogenerates_message(
         self, mock_author, mock_stdin, tmp_path: Path
     ):
-        """Fix an Active req with stale hash but no -m flag and non-interactive
-        stdin should fail and NOT update the file.
+        """Fix an Active req with stale hash but no -m flag auto-generates
+        a changelog reason.
 
-        Validates REQ-p00004-A: changelog message is mandatory for Active reqs.
+        Auto-fixes produce auto-generated reasons; explicit -m is optional.
         """
         mock_stdin.isatty.return_value = False
 
@@ -131,13 +131,15 @@ class TestFixChangelog:
         finally:
             os.chdir(old_cwd)
 
-        # Should fail — no changelog message provided
-        assert result != 0
+        # Should succeed — auto-fix generates its own reason
+        assert result == 0
 
-        # File should NOT be modified
+        # File should be updated with auto-generated changelog
         spec_file = project / "spec" / "requirements.md"
         content = spec_file.read_text()
-        assert "00000000" in content, "Hash should remain unchanged when message is missing"
+        assert "00000000" not in content, "Stale hash should be replaced"
+        assert "## Changelog" in content, "Changelog section should be added"
+        assert "Auto-fix:" in content, "Auto-generated reason should be present"
 
     @patch("elspais.utilities.git.get_author_info", return_value=MOCK_AUTHOR)
     def test_REQ_p00004_A_fix_active_req_with_message(self, mock_author, tmp_path: Path):
@@ -218,9 +220,9 @@ class TestFixChangelog:
         # Step 1: Create project and compute the correct hash
         project = _make_project(tmp_path, ACTIVE_REQ_STALE_HASH)
 
-        from elspais.commands.validate import compute_hash_for_node
         from elspais.graph import NodeKind
         from elspais.graph.factory import build_graph
+        from elspais.graph.render import compute_hash_for_node
 
         graph = build_graph(
             spec_dirs=[project / "spec"],

@@ -60,7 +60,7 @@ The MCP server SHALL provide mutation tools for in-memory graph modifications wi
 
 A. Node mutations SHALL include: rename, update_title, change_status, add_requirement, delete_requirement.
 
-B. Assertion mutations SHALL include: add_assertion, update_assertion, delete_assertion, rename_assertion.
+B. *Assertion* mutations SHALL include: add_assertion, update_assertion, delete_assertion, rename_assertion.
 
 C. Edge mutations SHALL include: add_edge, change_edge_kind, change_edge_targets, delete_edge, fix_broken_reference.
 
@@ -76,7 +76,11 @@ G. `undo_last_mutation()` and `undo_to_mutation(id)` SHALL reverse mutations usi
 
 In-memory mutations enable AI agents to draft requirement changes that can be reviewed before persisting. The undo system provides safety for exploratory editing.
 
-*End* *MCP Graph Mutation Tools* | **Hash**: 064271fb
+## Changelog
+
+- 2026-03-30 | ef63f424 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+
+*End* *MCP Graph Mutation Tools* | **Hash**: ef63f424
 ---
 
 ## REQ-o00063: MCP File Mutation Tools
@@ -101,15 +105,19 @@ F. After file mutations, `refresh_graph()` SHALL be called to synchronize the in
 
 G. `modify_title(req_id, new_title)` SHALL modify a requirement's title text in its spec file.
 
-H. `modify_assertion_text(req_id, label, new_text)` SHALL modify the text of an existing assertion in its spec file.
+H. `modify_assertion_text(req_id, label, new_text)` SHALL modify the text of an existing *Assertion* in its spec file.
 
-I. `add_assertion(req_id, label, text)` SHALL add a new assertion to a requirement in its spec file.
+I. `add_assertion(req_id, label, text)` SHALL add a new *Assertion* to a requirement in its spec file.
 
 ## Rationale
 
 File mutations persist changes to the authoritative spec files. Git safety branches provide rollback capability for destructive operations.
 
-*End* *MCP File Mutation Tools* | **Hash**: dee88649
+## Changelog
+
+- 2026-03-30 | 291497b8 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+
+*End* *MCP File Mutation Tools* | **Hash**: 291497b8
 ---
 
 ## REQ-o00064: MCP Test Coverage Analysis Tools
@@ -124,7 +132,7 @@ A. `get_test_coverage(req_id)` SHALL return TEST nodes that reference the requir
 
 B. `get_uncovered_assertions(req_id=None)` SHALL identify assertions with no TEST node references.
 
-C. `find_assertions_by_keywords(keywords, match_all)` SHALL search assertion text for keyword matches.
+C. `find_assertions_by_keywords(keywords, match_all)` SHALL search *Assertion* text for keyword matches.
 
 D. Coverage tools SHALL consume graph edges directly without caching or recomputation.
 
@@ -134,7 +142,11 @@ E. Coverage tools SHALL support filtering by requirement ID or scanning all requ
 
 AI agents performing requirement analysis need to understand test coverage and identify gaps. These tools enable systematic coverage improvement workflows like those in Phase 7 of the master plan.
 
-*End* *MCP Test Coverage Analysis Tools* | **Hash**: 82d8f37e
+## Changelog
+
+- 2026-03-30 | e7fd1b43 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+
+*End* *MCP Test Coverage Analysis Tools* | **Hash**: e7fd1b43
 ---
 
 ## REQ-o00065: Agent-Assisted Link Suggestion
@@ -159,7 +171,11 @@ F. The suggestion engine SHALL support applying suggestions by inserting `# Impl
 
 ## Rationale
 
-Teams need to not just see what's unlinked but act on it efficiently. Combining existing building blocks (import analyzer, test-code linker, keyword search) into a scoring pipeline enables AI agents and humans to close traceability gaps systematically.
+Teams need to not just see what's unlinked but act on it efficiently. Combining existing building blocks (import analyzer, test-code linker, keyword search) into a scoring pipeline enables AI agents and humans to close *Traceability* gaps systematically.
+
+## Changelog
+
+- 2026-03-30 | 17851ae2 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Agent-Assisted Link Suggestion* | **Hash**: 17851ae2
 ---
@@ -255,7 +271,7 @@ A. `scoped_search(query, scope_id, direction, field, regex, include_assertions, 
 
 B. The tool SHALL restrict search results to nodes reachable from the scope node in the specified direction, including the scope node itself.
 
-C. When `include_assertions=True`, the tool SHALL also match against assertion text and include `matched_assertions` metadata on matching parent requirements.
+C. When `include_assertions=True`, the tool SHALL also match against *Assertion* text and include `matched_assertions` metadata on matching parent requirements.
 
 D. The tool SHALL return an error when the scope_id is not found in the graph.
 
@@ -265,7 +281,11 @@ E. The tool SHALL reuse `_matches_query()` for field/regex matching logic, maint
 
 Agents exploring requirements for a ticket need to search within a relevant subgraph rather than the entire graph, which produces too many unrelated matches.
 
-*End* *MCP Scoped Search Tool* | **Hash**: e1cb96d9
+## Changelog
+
+- 2026-03-30 | 7f1e6589 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+
+*End* *MCP Scoped Search Tool* | **Hash**: 7f1e6589
 ---
 
 ## REQ-o00071: MCP Discover Requirements Tool

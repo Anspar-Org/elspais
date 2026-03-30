@@ -10,13 +10,21 @@ from dataclasses import dataclass, field
 
 
 @dataclass
+# Implements: REQ-d00220-E
 class TermRef:
     """A reference to a defined term found in prose text."""
 
-    node_id: str  # enclosing element (REQ, ASSERTION, REMAINDER)
+    node_id: str  # enclosing element (REQ, ASSERTION, REMAINDER, FILE)
     namespace: str  # repo where the reference occurs
     marked: bool  # True = *term*/**term**, False = plain text
     line: int  # for error reporting
+    wrong_marking: str = ""  # e.g. "__" when markup_styles are ["*", "**"]
+    surface_form: str = ""  # the actual text matched (e.g. "traceability")
+    delimiter: str = ""  # the emphasis delimiter used (e.g. "*", "**", "")
+
+    def is_canonical(self, canonical_term: str) -> bool:
+        """Check if this ref uses canonical form (correct markup + casing)."""
+        return self.marked and self.surface_form == canonical_term
 
 
 @dataclass

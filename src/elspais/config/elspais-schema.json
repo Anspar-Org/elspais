@@ -494,6 +494,18 @@
           ],
           "default": null,
           "title": "No Assertions Severity"
+        },
+        "no_traceability_severity": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "No Traceability Severity"
         }
       },
       "title": "FormatConfig",
@@ -922,23 +934,68 @@
           "title": "Output Dir",
           "type": "string"
         },
-        "duplicate_severity": {
-          "default": "error",
-          "title": "Duplicate Severity",
-          "type": "string"
+        "markup_styles": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Markup Styles",
+          "type": "array"
         },
-        "undefined_severity": {
-          "default": "warning",
-          "title": "Undefined Severity",
-          "type": "string"
+        "exclude_files": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Exclude Files",
+          "type": "array"
         },
-        "unmarked_severity": {
-          "default": "warning",
-          "title": "Unmarked Severity",
-          "type": "string"
+        "severity": {
+          "$ref": "#/$defs/TermsSeverityConfig"
         }
       },
       "title": "TermsConfig",
+      "type": "object"
+    },
+    "TermsSeverityConfig": {
+      "additionalProperties": false,
+      "description": "Severity levels for defined-terms health checks.",
+      "properties": {
+        "duplicate": {
+          "default": "error",
+          "title": "Duplicate",
+          "type": "string"
+        },
+        "undefined": {
+          "default": "warning",
+          "title": "Undefined",
+          "type": "string"
+        },
+        "unmarked": {
+          "default": "warning",
+          "title": "Unmarked",
+          "type": "string"
+        },
+        "unused": {
+          "default": "warning",
+          "title": "Unused",
+          "type": "string"
+        },
+        "bad_definition": {
+          "default": "error",
+          "title": "Bad Definition",
+          "type": "string"
+        },
+        "collection_empty": {
+          "default": "warning",
+          "title": "Collection Empty",
+          "type": "string"
+        },
+        "canonical_form": {
+          "default": "warning",
+          "title": "Canonical Form",
+          "type": "string"
+        }
+      },
+      "title": "TermsSeverityConfig",
       "type": "object"
     },
     "TestScanningConfig": {

@@ -22,13 +22,13 @@ The name derives from Terry Pratchett's "L-Space"—the dimension where all libr
 
 A. The tool SHALL provide command-line validation of requirement documents stored as Markdown files.
 
-B. The tool SHALL generate traceability matrices showing requirement relationships.
+B. The tool SHALL generate *Traceability* matrices showing requirement relationships.
 
 C. The tool SHALL detect changes to requirements using content hashing and git integration.
 
 D. [DEPRECATED]
 
-*End* *Requirements Management Tool* | **Hash**: d94ef7d7
+*End* *Requirements Management Tool* | **Hash**: ce489de6
 ---
 
 # REQ-p00002: Requirements Validation
@@ -43,9 +43,9 @@ Automated validation catches these issues early, before they propagate into desi
 
 The validation system enforces:
 
-- **Format compliance**: Headers, metadata, assertion sections, and hash footers follow the canonical grammar
+- **Format compliance**: Headers, metadata, *Assertion* sections, and hash footers follow the canonical grammar
 - **Hierarchy integrity**: Child requirements correctly reference parents; no circular dependencies
-- **Traceability completeness**: All requirements are reachable from root-level product requirements
+- ****Traceability** completeness**: All requirements are reachable from root-level product requirements
 - **Content freshness**: Hashes match current content; changes are intentional
 
 ## Assertions
@@ -56,6 +56,10 @@ B. The tool SHALL detect and report hierarchy violations including circular depe
 
 C. The tool SHALL verify content hashes match requirement body text.
 
+## Changelog
+
+- 2026-03-30 | e8f0e4eb | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+
 *End* *Requirements Validation* | **Hash**: e8f0e4eb
 ---
 
@@ -65,9 +69,9 @@ C. The tool SHALL verify content hashes match requirement body text.
 
 ## Rationale
 
-Regulatory submissions and internal reviews require evidence that high-level product requirements flow down to detailed specifications and test coverage. A traceability matrix provides this view—showing which detailed requirements implement which product requirements, and which tests verify which specifications.
+Regulatory submissions and internal reviews require evidence that high-level product requirements flow down to detailed specifications and test coverage. A *Traceability* matrix provides this view—showing which detailed requirements implement which product requirements, and which tests verify which specifications.
 
-Manual maintenance of traceability matrices is error-prone and quickly becomes stale. Automated generation from the `Implements:` metadata in requirement documents ensures the matrix always reflects the current state of the requirements baseline.
+Manual maintenance of *Traceability* matrices is error-prone and quickly becomes stale. Automated generation from the `Implements:` metadata in requirement documents ensures the matrix always reflects the current state of the requirements baseline.
 
 Multiple output formats serve different audiences:
 
@@ -77,11 +81,11 @@ Multiple output formats serve different audiences:
 
 ## Assertions
 
-A. The tool SHALL generate traceability matrices in Markdown, HTML, and CSV formats.
+A. The tool SHALL generate *Traceability* matrices in Markdown, HTML, and CSV formats.
 
-B. The tool SHALL derive traceability from `Implements:` metadata without manual matrix maintenance.
+B. The tool SHALL derive *Traceability* from `Implements:` metadata without manual matrix maintenance.
 
-*End* *Traceability Matrix Generation* | **Hash**: b935bd53
+*End* *Traceability Matrix Generation* | **Hash**: 6a3a9426
 ---
 
 # REQ-p00004: Change Detection and Auditability
@@ -145,7 +149,7 @@ The testing strategy follows a pyramid:
 
 ## Assertions
 
-A. The project SHALL maintain unit tests for all core modules with assertion-linked test names.
+A. The project SHALL maintain unit tests for all core modules with *Assertion*-linked test names.
 
 B. The project SHALL maintain end-to-end tests that invoke the CLI as a subprocess and verify command output, exit codes, and file artifacts.
 
@@ -157,7 +161,7 @@ E. The project SHALL include MCP protocol tests that verify tool invocation, sea
 
 F. All tests marked `@pytest.mark.e2e` SHALL invoke the `elspais` CLI as a subprocess. Tests that call internal Python functions or submodules directly SHALL NOT be marked e2e; they are unit or integration tests.
 
-*End* *Automated Testing* | **Hash**: 3fc90ebc
+*End* *Automated Testing* | **Hash**: 962216d8
 ---
 
 ## REQ-p00061: Requirement Decomposition Rules
@@ -185,7 +189,7 @@ C. Multiple requirements MAY exist at the same Level each declaring a relationsh
 
 UAT documentation review requires formal PDF output with professional formatting. A single compiled document with table of contents, per-requirement page breaks, and a topic index enables offline review, regulatory submission, and stakeholder sign-off. Currently, spec files exist only as Markdown with no PDF generation pipeline.
 
-The `elspais pdf` command compiles requirement spec files into a professional PDF using Pandoc and LaTeX. Python assembles a clean Markdown document from the traceability graph; a custom LaTeX template controls formatting; Pandoc handles Markdown-to-LaTeX conversion.
+The `elspais pdf` command compiles requirement spec files into a professional PDF using Pandoc and LaTeX. Python assembles a clean Markdown document from the *Traceability* graph; a custom LaTeX template controls formatting; Pandoc handles Markdown-to-LaTeX conversion.
 
 ## Assertions
 
@@ -218,7 +222,11 @@ C. `TermDictionary.iter_indexed()` SHALL yield only entries where `indexed` is `
 
 D. `TermDictionary.merge()` SHALL combine two dictionaries and return a list of `(TermEntry, TermEntry)` pairs for duplicate terms detected across namespaces.
 
-*End* *TermDictionary Data Model* | **Hash**: 31915ae3
+E. `TermRef` SHALL have a `wrong_marking` field (str, default "") that records the incorrect emphasis delimiter used (e.g., `"__"` when the configured markup_styles are `["*", "**"]`). When non-empty, `marked` SHALL be `False`.
+
+*End* *TermDictionary Data Model* | **Hash**: 0d0fd97c
+
+<!-- markdownlint-disable MD038 -->
 
 ## REQ-d00221: Grammar Extension for Definition Blocks
 
@@ -244,7 +252,9 @@ B. The `defined_in` field of each `TermEntry` SHALL point to the nearest REQUIRE
 
 C. `FederatedGraph` SHALL merge per-repo `_terms` dictionaries into a single federated `TermDictionary`, detecting cross-namespace duplicates.
 
-*End* *TraceGraph Terms and GraphBuilder Integration* | **Hash**: 2e76a3f2
+D. `GraphBuilder` SHALL accept a `namespace` parameter (str, default "") and set `TermEntry.namespace` from it during term creation.
+
+*End* *TraceGraph Terms and GraphBuilder Integration* | **Hash**: 96b5223f
 
 ## REQ-d00223: Term Health Checks
 
@@ -254,13 +264,17 @@ C. `FederatedGraph` SHALL merge per-repo `_terms` dictionaries into a single fed
 
 A. `check_term_duplicates()` SHALL return a `HealthCheck` reporting duplicate term definitions across all namespaces, using the configured `duplicate_severity`.
 
-B. `check_undefined_terms()` SHALL return a `HealthCheck` for `*token*`/`**token**` references that do not match any defined term and are not known structural patterns, using the configured `undefined_severity`.
+B. `check_undefined_terms()` SHALL return a `HealthCheck` for `*token*`/`**token**` references that do not match any *Defined Term* and are not known structural patterns, using the configured `undefined_severity`.
 
 C. `check_unmarked_usage()` SHALL return a `HealthCheck` for whole-word case-insensitive matches of indexed terms in prose that lack `*...*` or `**...**` markup, using the configured `unmarked_severity`. Only terms with `indexed=True` SHALL be checked.
 
 D. When any severity is set to `"off"`, the corresponding check SHALL be skipped and return a passed HealthCheck with severity `"info"`.
 
-*End* *Term Health Checks* | **Hash**: 34da7dc1
+E. A `run_term_checks(graph, config)` aggregator SHALL call `check_term_duplicates`, `check_undefined_terms`, and `check_unmarked_usage` with data extracted from `graph._terms` and `graph._term_duplicates`, reading severity from `config["terms"]["severity"]`. It SHALL be wired into `render_section()` and `compute_checks()`.
+
+F. `check_unmarked_usage()` SHALL produce distinct messages for wrong-marking references (e.g., "Wrong markup for 'term' (uses __, should use configured style)") versus plain unmarked references (e.g., "Unmarked usage of 'term'").
+
+*End* *Term Health Checks* | **Hash**: 0d96cc34
 
 ## REQ-d00224: Glossary and Term Index Generators
 
@@ -289,3 +303,110 @@ A. `GlossaryArgs` and `TermIndexArgs` dataclasses SHALL be defined in `commands/
 B. `elspais fix` SHALL call glossary and term-index generation after existing fix operations when the graph has defined terms.
 
 *End* *CLI Registration for Glossary and Term Index* | **Hash**: d18fc2c9
+
+## REQ-d00236: Comment Extraction Utilities
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. `extract_comments(source, ext)` SHALL return a `list[tuple[str, int]]` of (comment_text, line_number) pairs extracted from source code text based on file extension.
+
+B. For Python files (`.py`), the extractor SHALL use `tokenize` to extract `#` line comments and `ast` to extract docstrings, ignoring string literals that are not docstrings.
+
+C. For slash-comment languages (`.js`, `.ts`, `.jsx`, `.tsx`, `.java`, `.c`, `.h`, `.cpp`, `.go`, `.rs`, `.dart`), the extractor SHALL extract `//` line comments and `/* */` block comments.
+
+D. For hash-comment languages (`.rb`, `.sh`, `.bash`, `.yaml`, `.yml`), the extractor SHALL extract `#` line comments.
+
+E. For dash-comment languages (`.sql`, `.lua`), the extractor SHALL extract `--` line comments.
+
+F. For markup languages (`.html`, `.xml`, `.svg`), the extractor SHALL extract `<!-- -->` comments.
+
+G. For file extensions with no known comment style, `extract_comments()` SHALL return an empty list.
+
+*End* *Comment Extraction Utilities* | **Hash**: 499123f1
+
+## REQ-d00237: Term Reference Scanner Core
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. `scan_text_for_terms(text, td, node_id, namespace, line_offset, markup_styles)` SHALL return a `list[TermRef]` classifying each term occurrence as marked, wrong-marking, or unmarked.
+
+B. For each configured `markup_style` in `markup_styles`, the scanner SHALL detect terms wrapped in that delimiter as `marked=True, wrong_marking=""`.
+
+C. For Markdown emphasis delimiters (`*`, `**`, `__`, `_`) NOT in `markup_styles`, the scanner SHALL detect wrapped terms as `marked=False` with `wrong_marking` set to the delimiter used.
+
+D. For terms with `indexed=True`, the scanner SHALL perform whole-word case-insensitive matching for unmarked (plain text) occurrences, excluding positions already matched as marked or wrong-marking.
+
+E. Terms with `indexed=False` SHALL be scanned for marked and wrong-marking references only; unmarked scanning SHALL be skipped.
+
+*End* *Term Reference Scanner Core* | **Hash**: 63cb874b
+
+## REQ-d00238: Graph-Wide Term Scan
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. `scan_graph(terms, nodes, namespace, markup_styles, exclude_files)` SHALL populate `TermEntry.references` by scanning graph nodes for term occurrences.
+
+B. REQUIREMENT, *Assertion*, REMAINDER (excluding `definition_block`), and JOURNEY nodes SHALL be scanned using their full text content.
+
+C. CODE and TEST nodes SHALL be scanned via comment extraction only (not raw source code), to avoid false positives on variable names and string literals.
+
+D. Files matching any `exclude_files` glob pattern SHALL be skipped during scanning.
+
+*End* *Graph-Wide Term Scan* | **Hash**: d3a202d4
+
+## REQ-d00239: Federated Graph Term Scanner Pass
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. After `FederatedGraph._merge_terms()`, the scanner SHALL run across all repos using the merged `TermDictionary` so that cross-repo term references resolve correctly.
+
+B. Each repo's scan SHALL use its own config for `markup_styles` and `exclude_files`.
+
+*End* *Federated Graph Term Scanner Pass* | **Hash**: 7d9a30c4
+
+## REQ-d00240: New Term Health Checks
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. `check_term_unused(entries, severity)` SHALL return a `HealthCheck` reporting defined terms with zero references. Default severity: `"warning"`. When `severity="off"`, return passed/info.
+
+B. `check_term_bad_definition(entries, severity)` SHALL return a `HealthCheck` reporting terms with blank or trivially short (less than 10 characters) definition text. Default severity: `"error"`. When `severity="off"`, return passed/info.
+
+C. `check_term_collection_empty(entries, severity)` SHALL return a `HealthCheck` reporting collection terms (`collection=True`) with zero references. Default severity: `"warning"`. When `severity="off"`, return passed/info.
+
+D. `run_term_checks()` SHALL call all six term checks (`duplicates`, `undefined`, `unmarked`, `unused`, `bad_definition`, `collection_empty`) with severity from `config["terms"]["severity"]`.
+
+## Changelog
+
+- 2026-03-29 | 9788814d | - | Michael Lewis (michael@anspar.org) | Initial creation
+
+*End* *New Term Health Checks* | **Hash**: 9788814d
+
+## REQ-d00241: Code No-Traceability Health Check
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. `check_no_traceability(unlinked_files, severity)` SHALL return a `HealthCheck` reporting code and test files with no *Traceability* markers. Default severity: `"warning"`. When `severity="off"`, return passed/info.
+
+B. The check SHALL be wired into `run_code_checks()` using `graph.iter_unlinked()` to find CODE/TEST nodes not linked to any requirement.
+
+C. Severity SHALL be read from `[rules.format] no_traceability_severity` (default `"warning"` if None).
+
+## Changelog
+
+- 2026-03-30 | e1272219 | - | Michael Lewis (michael@anspar.org) | Auto-fix: sync changelog hash
+- 2026-03-29 | 6e481d63 | - | Michael Lewis (michael@anspar.org) | Initial creation
+
+*End* *Code No-Traceability Health Check* | **Hash**: e1272219

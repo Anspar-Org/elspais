@@ -41,7 +41,7 @@ _GOAL_RE = re.compile(r"\*\*Goal\*\*:[ \t]*(?P<goal>.+?)(?:\n|$)")
 _VALIDATES_RE = re.compile(r"^Validates:[ \t]*(?P<validates>.+?)$", re.MULTILINE)
 
 # Changelog entry pattern
-_CHANGELOG_ENTRY_RE = re.compile(r"^- (.+?) \| (\S+) \| (.+?) \| (.+?) \((.+?)\) \| (.+)$")
+_CHANGELOG_ENTRY_RE = re.compile(r"^- (.+?) \| (\S+) \| (.+?) \| (.+?) \(<?(.+?)>?\) \| (.+)$")
 
 # Values that mean "no references"
 _NO_REF_VALUES = {"-", "null", "none", "x", "X", "N/A", "n/a"}
@@ -222,7 +222,9 @@ class RequirementTransformer:
         raw_text = self._reconstruct_raw_text(node)
 
         # Build preamble section from body_lines (text before first ## section)
-        preamble_content = "\n".join(ln for ln in body_lines if ln.strip()).strip()
+        # Preserve internal blank lines (significant for list spacing) but strip
+        # leading/trailing blank lines.
+        preamble_content = "\n".join(body_lines).strip()
         if preamble_content:
             sections.insert(
                 0,
@@ -403,16 +405,21 @@ class RequirementTransformer:
 
         # Collect content lines from content_line nodes
         content_lines: list[str] = []
+        first_content_line: int | None = None
         for child in node.children[1:]:
             if isinstance(child, Tree) and child.data == "content_line":
                 for token in child.children:
                     if isinstance(token, Token) and token.type == "TEXT":
                         content_lines.append(str(token))
+                        if first_content_line is None:
+                            first_content_line = token.line  # type: ignore[attr-defined]
                         break
                 else:
                     content_lines.append("")  # blank line
             elif isinstance(child, Token) and child.type == "TEXT":
                 content_lines.append(str(child))
+                if first_content_line is None:
+                    first_content_line = child.line  # type: ignore[attr-defined]
 
         content = "\n".join(content_lines).strip()
         if not content:
@@ -422,6 +429,7 @@ class RequirementTransformer:
             "heading": heading,
             "content": content,
             "line": line_num,
+            "content_line": first_content_line or line_num + 1,
         }
 
     # ------------------------------------------------------------------

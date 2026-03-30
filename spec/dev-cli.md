@@ -31,7 +31,7 @@ The previous `validate` command's responsibilities are absorbed by `health`. Ref
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00001
 
-Multi-assertion references allow compact notation for referencing multiple assertions of the same requirement. A dedicated separator character (distinct from ID separators) joins assertion labels after the first: `REQ-p00001-A+B+C` expands to individual assertion references `REQ-p00001-A`, `REQ-p00001-B`, `REQ-p00001-C`.
+Multi-*Assertion* references allow compact notation for referencing multiple assertions of the same requirement. A dedicated separator character (distinct from ID separators) joins *Assertion* labels after the first: `REQ-p00001-A+B+C` expands to individual *Assertion* references `REQ-p00001-A`, `REQ-p00001-B`, `REQ-p00001-C`.
 
 ## Assertions
 
@@ -39,21 +39,25 @@ A. The `multi_assertion_separator` key SHALL be available in `[references.defaul
 
 B. The default value of `multi_assertion_separator` SHALL be `"+"`.
 
-C. Config validation SHALL reject configurations where the multi-assertion separator character appears in the `separators` list.
+C. Config validation SHALL reject configurations where the multi-*Assertion* separator character appears in the `separators` list.
 
 D. Expansion SHALL occur in the graph builder's link resolution, applying uniformly to all parser types (requirement, code, test, result).
 
-E. The expansion pattern SHALL derive from the configured assertion label pattern and multi-assertion separator.
+E. The expansion pattern SHALL derive from the configured *Assertion* label pattern and multi-*Assertion* separator.
 
 F. When `multi_assertion_separator` is empty or `false`, expansion SHALL be disabled.
 
-G. A reference containing no multi-assertion separator character SHALL pass through unchanged.
+G. A reference containing no multi-*Assertion* separator character SHALL pass through unchanged.
 
 ## Rationale
 
-The previous implementation hardcoded expansion in RequirementParser only, using a regex that assumed uppercase letter labels and hyphen separators. This created silent failures when code comments (`# Implements: REQ-x-A-B-C`) and test names (`test_REQ_x_A_B_C`) were not expanded. A dedicated separator character eliminates ambiguity regardless of the configured assertion label style (uppercase, numeric, alphanumeric).
+The previous implementation hardcoded expansion in RequirementParser only, using a regex that assumed uppercase letter labels and hyphen separators. This created silent failures when code comments (`# Implements: REQ-x-A-B-C`) and test names (`test_REQ_x_A_B_C`) were not expanded. A dedicated separator character eliminates ambiguity regardless of the configured *Assertion* label style (uppercase, numeric, alphanumeric).
 
-*End* *Multi-Assertion Reference Expansion* | **Hash**: 2474ef93
+## Changelog
+
+- 2026-03-30 | 313fe52b | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+
+*End* *Multi-Assertion Reference Expansion* | **Hash**: 313fe52b
 ---
 
 ## REQ-d00082: Unified Reference Configuration
@@ -93,7 +97,7 @@ Different projects use different ID conventions, comment styles, and directory s
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00003
 
-The `trace` command SHALL generate traceability output from the requirement graph, supporting multiple output formats with configurable column presets and detail levels.
+The `trace` command SHALL generate *Traceability* output from the requirement graph, supporting multiple output formats with configurable column presets and detail levels.
 
 ## Assertions
 
@@ -103,13 +107,17 @@ B. The command SHALL support column presets (`--preset minimal|standard|full`) c
 
 C. The command SHALL support independent detail flags (`--body`, `--assertions`, `--tests`) that control whether expanded rows appear beneath each requirement, orthogonal to column presets.
 
-D. Coverage columns SHALL show per-requirement assertion-level coverage: Implemented (assertions with code refs, direct or transitive), Validated (assertions with test refs), Passing (validated assertions whose tests pass), each displayed as N/M (%).
+D. Coverage columns SHALL show per-requirement *Assertion*-level coverage: Implemented (assertions with code refs, direct or transitive), Validated (assertions with test refs), Passing (validated assertions whose tests pass), each displayed as N/M (%).
 
 ## Rationale
 
-A JSON graph output mode enables programmatic consumption of the full traceability graph with git-aware change tracking, supporting dashboard integrations and automated analysis pipelines. Column presets and detail flags are independent axes of control: a user may want a compact table with full coverage columns, or a minimal table with expanded assertion rows.
+A JSON graph output mode enables programmatic consumption of the full *Traceability* graph with git-aware change tracking, supporting dashboard integrations and automated analysis pipelines. Column presets and detail flags are independent axes of control: a user may want a compact table with full coverage columns, or a minimal table with expanded *Assertion* rows.
 
-*End* *Trace Command* | **Hash**: f8d407a5
+## Changelog
+
+- 2026-03-30 | f8f0e0f2 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+
+*End* *Trace Command* | **Hash**: f8f0e0f2
 ---
 
 ## REQ-d00085: Unified Report Composition
@@ -151,13 +159,13 @@ Report-producing commands (`health`, `trace`, `coverage`, `changed`) currently e
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00003
 
-The `coverage` section SHALL produce a coverage report showing implementation, validation, and test-passing status at the requirement and assertion level.
+The `coverage` section SHALL produce a coverage report showing implementation, validation, and test-passing status at the requirement and *Assertion* level.
 
 ## Assertions
 
 A. The report SHALL group requirements by level (PRD, OPS, DEV) and show counts and percentages of requirements with code references, test references, and passing tests.
 
-B. The report SHALL compute per-requirement assertion coverage: implemented (assertions with `Implements:` code refs, direct or transitive), validated (assertions with test refs), and passing (validated assertions whose tests pass).
+B. The report SHALL compute per-requirement *Assertion* coverage: implemented (assertions with `Implements:` code refs, direct or transitive), validated (assertions with test refs), and passing (validated assertions whose tests pass).
 
 C. The report SHALL support `text`, `markdown`, `json`, and `csv` output formats.
 
@@ -167,7 +175,11 @@ D. The report SHALL use existing graph aggregate functions and annotator data ra
 
 Coverage data is already computed during graph construction but is only surfaced through the interactive viewer or the underpowered `analyze coverage` text output. A dedicated coverage section with multi-format support enables CI badge generation, PR comment summaries, and developer-facing markdown reports.
 
-*End* *Coverage Report Section* | **Hash**: 12e1ecaf
+## Changelog
+
+- 2026-03-30 | 2fd4ab13 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+
+*End* *Coverage Report Section* | **Hash**: 2fd4ab13
 ---
 
 ## REQ-d00073: Link Suggestion CLI Command
@@ -213,7 +225,7 @@ D. The module SHALL compute uncovered dependent counts by walking descendants an
 
 E. The module SHALL produce a composite score by normalizing each metric to 0.0-1.0 and applying configurable weights (default 0.3 centrality, 0.2 fan-in, 0.2 neighborhood, 0.3 uncovered).
 
-F. The module SHALL filter nodes by `NodeKind`, defaulting to REQUIREMENT and ASSERTION, with ASSERTION nodes included in computation but excluded from ranked output.
+F. The module SHALL filter nodes by `NodeKind`, defaulting to REQUIREMENT and *Assertion*, with *Assertion* nodes included in computation but excluded from ranked output.
 
 G. The module SHALL rank actionable leaf nodes by summing the composite scores of their ancestors, surfacing the most impactful uncovered work items.
 
@@ -221,7 +233,11 @@ G. The module SHALL rank actionable leaf nodes by summing the composite scores o
 
 In a large requirements DAG, naive metrics like descendant count always favor the root node. PageRank centrality naturally handles DAGs and rewards cross-cutting dependencies. Combined with fan-in (how many independent areas depend on a node) and coverage gaps, this enables evidence-based prioritization of foundational work.
 
-*End* *Graph Analysis Engine* | **Hash**: 26d62350
+## Changelog
+
+- 2026-03-30 | 86bb619b | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+
+*End* *Graph Analysis Engine* | **Hash**: 86bb619b
 ---
 
 ## REQ-d00125: Analysis CLI Command

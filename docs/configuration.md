@@ -183,17 +183,22 @@ file_patterns = ["*.md"]
 # Where generated glossary/index files go (relative to repo root)
 output_dir = "spec/_generated"
 
-# Severity for duplicate definitions (same term defined twice)
-# "error" | "warning" | "off"
-duplicate_severity = "error"
+# Which markdown emphasis delimiters count as "marked" term references
+# Default: ["*", "**"] (italic and bold)
+markup_styles = ["*", "**"]
 
-# Severity for undefined terms (*bold*/*italic* with no definition)
-# "error" | "warning" | "off"
-undefined_severity = "warning"
+# Glob patterns to skip during term reference scanning
+exclude_files = []
 
-# Severity for unmarked usage of indexed terms in prose
-# "error" | "warning" | "off"
-unmarked_severity = "warning"
+# Severity levels for defined-terms health checks
+# Each value is "error" | "warning" | "off"
+[terms.severity]
+duplicate = "error"           # same term defined in two locations
+undefined = "warning"         # bold/italic token with no definition
+unmarked = "warning"          # known term used without markup
+unused = "warning"            # defined term never referenced
+bad_definition = "error"      # malformed definition block
+collection_empty = "warning"  # collection term with no references
 
 #──────────────────────────────────────────────────────────────────────────────
 # OUTPUT - Output formats and directory
@@ -271,6 +276,10 @@ require_assertions = true
 # (flags requirements with zero assertions as not testable)
 # Values: "info" | "warning" (default) | "error"
 no_assertions_severity = "warning"
+
+# Severity for code/test files with no traceability markers
+# (Implements:, Verifies:, Validates:). null = use check default ("warning")
+# no_traceability_severity = "warning"
 
 # Allowed status values
 allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]

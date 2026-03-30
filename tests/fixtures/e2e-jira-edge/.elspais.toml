@@ -1,0 +1,56 @@
+version = 3
+cli_ttl = 2
+
+[project]
+name = "jira-edge"
+namespace = "PROJ"
+
+[levels.req]
+rank = 1
+letter = "r"
+implements = ["req"]
+
+[scanning.spec]
+directories = ["spec/active", "spec/approved"]
+skip_dirs = ["drafts", "archive"]
+
+[scanning.code]
+directories = ["src"]
+
+[scanning.test]
+enabled = true
+directories = ["verification"]
+file_patterns = ["verify_*.py", "*_verify.py"]
+
+[id-patterns]
+canonical = "{namespace}-{component}"
+
+[id-patterns.component]
+style = "numeric"
+digits = 0
+leading_zeros = false
+
+[id-patterns.assertions]
+label_style = "numeric"
+max_count = 26
+zero_pad = true
+
+[rules.hierarchy]
+allow_structural_orphans = true
+
+[rules.format]
+require_hash = true
+require_assertions = true
+require_status = true
+allowed_statuses = ["Active", "Draft", "Proposed", "Deprecated"]
+
+[rules.format.status_roles]
+active = ["Active"]
+provisional = ["Draft", "Proposed"]
+retired = ["Deprecated"]
+
+[changelog]
+hash_current = false
+
+[references]
+comment_styles = ["#", "//"]

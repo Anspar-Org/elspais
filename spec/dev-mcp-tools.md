@@ -78,7 +78,7 @@ A. SHALL use `graph.get_node(req_id)` for O(1) lookup.
 
 B. SHALL return node fields: id, title, level, status, hash, body.
 
-C. SHALL return assertions by iterating `node.iter_children()` filtered by NodeKind.ASSERTION.
+C. SHALL return assertions by iterating `node.iter_children()` filtered by NodeKind.*Assertion*.
 
 D. SHALL return relationships by iterating `node.iter_outgoing_edges()`.
 
@@ -90,7 +90,11 @@ F. SHALL return 404-equivalent error for non-existent requirements.
 
 Single-requirement lookup is the most common operation. O(1) access via graph index is essential.
 
-*End* *Requirement Detail Tool Implementation* | **Hash**: 51985ec1
+## Changelog
+
+- 2026-03-30 | 6e01fc33 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+
+*End* *Requirement Detail Tool Implementation* | **Hash**: 6e01fc33
 ---
 
 ## REQ-d00063: Hierarchy Navigation Tool Implementation
@@ -209,9 +213,9 @@ A. SHALL accept optional `req_id` parameter; when None, scan all requirements.
 
 B. SHALL iterate assertions using `graph.nodes_by_kind(NodeKind.ASSERTION)`.
 
-C. SHALL check each assertion for incoming edges from TEST nodes.
+C. SHALL check each *Assertion* for incoming edges from TEST nodes.
 
-D. SHALL return assertion details: id, text, label, parent requirement context.
+D. SHALL return *Assertion* details: id, text, label, parent requirement context.
 
 E. SHALL return parent requirement id and title for context.
 
@@ -221,14 +225,18 @@ F. SHALL limit results to prevent unbounded response sizes.
 
 Finding uncovered assertions enables systematic test coverage improvement across the project.
 
-*End* *Uncovered Assertions Tool Implementation* | **Hash**: 7044d63d
+## Changelog
+
+- 2026-03-30 | 4884d7cb | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+
+*End* *Uncovered Assertions Tool Implementation* | **Hash**: 4884d7cb
 ---
 
 ## REQ-d00068: Assertion Keyword Search Tool Implementation
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00064-C
 
-The `find_assertions_by_keywords()` tool SHALL search assertion text for keyword matches.
+The `find_assertions_by_keywords()` tool SHALL search *Assertion* text for keyword matches.
 
 ## Assertions
 
@@ -236,19 +244,23 @@ A. SHALL accept `keywords` list parameter with search terms.
 
 B. SHALL accept `match_all` boolean; True requires all keywords, False requires any keyword.
 
-C. SHALL search assertion text (the SHALL statement content) for keyword matches.
+C. SHALL search *Assertion* text (the SHALL statement content) for keyword matches.
 
-D. SHALL return assertion id, text, label, and parent requirement context.
+D. SHALL return *Assertion* id, text, label, and parent requirement context.
 
 E. SHALL perform case-insensitive matching by default.
 
-F. SHALL complement `find_by_keywords()` which searches requirement titles, not assertion text.
+F. SHALL complement `find_by_keywords()` which searches requirement titles, not *Assertion* text.
 
 ## Rationale
 
-Assertion keyword search enables AI agents to find assertions related to specific concepts when linking tests to requirements.
+*Assertion* keyword search enables AI agents to find assertions related to specific concepts when linking tests to requirements.
 
-*End* *Assertion Keyword Search Tool Implementation* | **Hash**: c9d5ad87
+## Changelog
+
+- 2026-03-30 | a9b8dff2 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+
+*End* *Assertion Keyword Search Tool Implementation* | **Hash**: a9b8dff2
 ---
 
 ## REQ-d00074: MCP Link Suggestion Tools
@@ -286,7 +298,7 @@ A. Subtree collection SHALL perform BFS traversal with depth tracking and a visi
 
 B. Coverage summaries SHALL include total, covered, and percentage values, reusing existing coverage computation.
 
-C. Markdown format SHALL render indented headings with assertion bullets and coverage stats.
+C. Markdown format SHALL render indented headings with *Assertion* bullets and coverage stats.
 
 D. Flat format SHALL return root_id, nodes, edges, and stats as a JSON-safe structure.
 
@@ -300,7 +312,11 @@ G. The implementation SHALL NOT modify Graph, GraphTrace, or GraphBuilder struct
 
 BFS with depth tracking and kind filtering provides the flexible subtree extraction that `GraphNode.walk()` alone cannot deliver, while staying in the MCP layer.
 
-*End* *Subtree Extraction Implementation* | **Hash**: 769a6d75
+## Changelog
+
+- 2026-03-30 | 5ba55cf2 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+
+*End* *Subtree Extraction Implementation* | **Hash**: 5ba55cf2
 ---
 
 ## REQ-d00076: Cursor Protocol Implementation
@@ -373,7 +389,7 @@ B. The scope set SHALL include scope_id itself and use a visited set to prevent 
 
 C. Scoped search SHALL iterate only REQUIREMENT nodes within the scope set, reusing the standard matching logic.
 
-D. When `include_assertions=True`, the helper SHALL check assertion text of each in-scope requirement and attach `matched_assertions` metadata when assertions match.
+D. When `include_assertions=True`, the helper SHALL check *Assertion* text of each in-scope requirement and attach `matched_assertions` metadata when assertions match.
 
 E. The helper SHALL return serialized results in the same format as `_search()`, plus `scope_id` and `direction` metadata.
 
@@ -383,7 +399,11 @@ F. The MCP tool wrapper SHALL delegate to the helper, performing only parameter 
 
 Separating scope collection from search logic enables reuse of `_collect_scope_ids` by other tools and the cursor protocol.
 
-*End* *Scoped Search Implementation* | **Hash**: b41ea5f2
+## Changelog
+
+- 2026-03-30 | 27a8b0c4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+
+*End* *Scoped Search Implementation* | **Hash**: 27a8b0c4
 ---
 
 ## REQ-d00079: Discover Requirements Implementation
@@ -419,7 +439,7 @@ MCP tools SHALL be aware of FILE nodes without exposing them where they do not b
 
 A. Subtree extraction starting from a FILE node SHALL walk CONTAINS edges, producing the file's physical contents view.
 
-B. Subtree extraction starting from a REQUIREMENT node SHALL walk domain edges (IMPLEMENTS, REFINES, STRUCTURES), producing the requirement's traceability view.
+B. Subtree extraction starting from a REQUIREMENT node SHALL walk domain edges (IMPLEMENTS, REFINES, STRUCTURES), producing the requirement's *Traceability* view.
 
 C. `_SUBTREE_KIND_DEFAULTS` SHALL include a `NodeKind.FILE` entry that maps to `{NodeKind.REQUIREMENT, NodeKind.ASSERTION, NodeKind.REMAINDER}` for FILE root traversal.
 
@@ -427,13 +447,17 @@ D. `_search()` SHALL NOT return FILE nodes in search results for requirement que
 
 E. `_get_graph_status()` SHALL include FILE node counts in its `node_counts` dict (already satisfied by iterating all NodeKind values).
 
-F. MCP serialization of requirement and assertion nodes SHALL produce identical `file` and `line` fields as before the FILE node migration, using `file_node()` and `parse_line`.
+F. MCP serialization of requirement and *Assertion* nodes SHALL produce identical `file` and `line` fields as before the FILE node migration, using `file_node()` and `parse_line`.
 
 ## Rationale
 
 FILE nodes are structural infrastructure. They enhance the graph's completeness but should not pollute requirement-focused query results. Filtered traversal via edge_kinds ensures `get_subtree()` produces the right view depending on the starting node's kind.
 
-*End* *MCP FILE Node Integration* | **Hash**: 73606d1d
+## Changelog
+
+- 2026-03-30 | ae564dae | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+
+*End* *MCP FILE Node Integration* | **Hash**: ae564dae
 ---
 
 ## REQ-d00205: MCP Federation Support
@@ -448,7 +472,7 @@ A. `get_workspace_info()` SHALL include federation details when multiple repos a
 
 B. `refresh_graph()` SHALL sync `_state["config"]` with the rebuilt federation's root repo config to prevent config staleness.
 
-C. Node-specific config operations (assertion target normalization, edge mutation config) SHALL use `graph.config_for(node_id)` instead of global `_state["config"]`.
+C. Node-specific config operations (*Assertion* target normalization, edge mutation config) SHALL use `graph.config_for(node_id)` instead of global `_state["config"]`.
 
 D. Global operations (workspace info, agent instructions, project summary) SHALL continue to use root repo config from `_state["config"]`.
 
@@ -456,7 +480,11 @@ D. Global operations (workspace info, agent instructions, project summary) SHALL
 
 Without federation-aware config access, all MCP operations use the root repo's config regardless of which repo a node belongs to. Per-repo config access ensures correct ID pattern resolution and changelog settings for multi-repo operations. Federation info in workspace queries helps AI agents understand the multi-repo topology.
 
-*End* *MCP Federation Support* | **Hash**: ccc0ca12
+## Changelog
+
+- 2026-03-30 | 4f16dfc7 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+
+*End* *MCP Federation Support* | **Hash**: 4f16dfc7
 ---
 
 ## REQ-d00214: MCP Server Install/Uninstall CLI Commands

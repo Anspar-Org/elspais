@@ -7,11 +7,10 @@ Consolidated from:
   - test_e2e_edge_cases.py TestAssociateUnlink, TestMultiAssociateHealth,
     TestMCPAssociatedSubtree
 
-Multi-repo fixture layout:
-  - core:  standard IDs (REQ-p/o/d), uppercase assertions
-  - alpha: standard IDs, namespace "ALPHA"
-  - beta:  FDA-style IDs (PRD-/DEV- pattern unused here, uses REQ-BET prefix),
-           numeric assertions
+On-disk fixture layout (tests/fixtures/e2e-associated/):
+  - core:  standard IDs (REQ-p/o/d), uppercase assertions, associates=[alpha,beta]
+  - alpha: standard IDs, prefix ALP, uppercase assertions
+  - beta:  standard IDs, prefix BET, numeric assertions
 """
 
 from __future__ import annotations
@@ -21,12 +20,16 @@ import shutil
 
 import pytest
 
+from .conftest import (
+    ensure_fixture_daemon,
+    load_associated_fixture,
+    run_elspais,
+)
 from .helpers import (
     Requirement,
     base_config,
     build_associate,
     build_project,
-    run_elspais,
 )
 
 pytestmark = [
@@ -39,171 +42,28 @@ pytestmark = [
 
 
 # ---------------------------------------------------------------------------
-# Shared fixture builders
+# Shared module fixtures
 # ---------------------------------------------------------------------------
 
 
-def _build_core_alpha(tmp_path):
-    """Build core + one associate (alpha) with standard IDs and uppercase assertions."""
-    core_root = tmp_path / "core"
-    alpha_root = tmp_path / "alpha"
-
-    core_cfg = base_config(
-        name="core-project",
-        associated_enabled=True,
-        label_style="uppercase",
-    )
-    core_cfg["associates"] = {"paths": ["../alpha"]}
-
-    core_prd1 = Requirement(
-        "REQ-p00001",
-        "Core Auth",
-        "PRD",
-        assertions=[
-            ("A", "The system SHALL authenticate users."),
-            ("B", "The system SHALL support SSO."),
-        ],
-    )
-    core_prd2 = Requirement(
-        "REQ-p00002",
-        "Core Data",
-        "PRD",
-        assertions=[
-            ("A", "The system SHALL persist data reliably."),
-        ],
-    )
-    core_dev1 = Requirement(
-        "REQ-d00001",
-        "Auth Module",
-        "DEV",
-        implements="REQ-p00001",
-        assertions=[("A", "The module SHALL implement bcrypt hashing.")],
-    )
-    core_dev2 = Requirement(
-        "REQ-d00002",
-        "Data Module",
-        "DEV",
-        implements="REQ-p00002",
-        assertions=[("A", "The module SHALL use PostgreSQL.")],
-    )
-    build_project(
-        core_root,
-        core_cfg,
-        spec_files={
-            "spec/prd-core.md": [core_prd1, core_prd2],
-            "spec/dev-core.md": [core_dev1, core_dev2],
-        },
-    )
-
-    # Alpha associate: standard IDs, namespace ALPHA, uppercase assertions
-    alpha_dev1 = Requirement(
-        "REQ-ALP-d00001",
-        "Alpha Auth Impl",
-        "DEV",
-        implements="REQ-p00001",
-        assertions=[("A", "Alpha SHALL implement core auth.")],
-    )
-    alpha_dev2 = Requirement(
-        "REQ-ALP-d00002",
-        "Alpha Data Impl",
-        "DEV",
-        implements="REQ-p00002",
-        assertions=[("A", "Alpha SHALL implement core data layer.")],
-    )
-    build_associate(
-        alpha_root,
-        "alpha",
-        "ALP",
-        "../core",
-        spec_files={
-            "spec/dev-alpha.md": [alpha_dev1, alpha_dev2],
-        },
-        config_overrides={
-            "id-patterns": {"assertions": {"label_style": "uppercase"}},
-        },
-        init_git=True,
-    )
-
-    return core_root, alpha_root
+@pytest.fixture(scope="module")
+def project(tmp_path_factory):
+    """Copy e2e-associated fixture to /tmp, git init each repo, start daemon on core."""
+    root = tmp_path_factory.mktemp("e2e_associated")
+    core = load_associated_fixture(root)
+    ensure_fixture_daemon(core)
+    return core
 
 
-def _build_core_alpha_beta(tmp_path):
-    """Build core + alpha (uppercase) + beta (numeric assertions)."""
-    core_root = tmp_path / "core"
-    alpha_root = tmp_path / "alpha"
-    beta_root = tmp_path / "beta"
+@pytest.fixture(scope="module")
+def mcp_server(project):
+    """Start an MCP server for the associated project."""
+    pytest.importorskip("mcp")
+    from .helpers import start_mcp, stop_mcp
 
-    core_cfg = base_config(
-        name="multi-assoc-core",
-        associated_enabled=True,
-    )
-    core_cfg["associates"] = {"paths": ["../alpha", "../beta"]}
-    core_prd = Requirement(
-        "REQ-p00001",
-        "Core Platform",
-        "PRD",
-        assertions=[
-            ("A", "The platform SHALL support multiple tenants."),
-            ("B", "The platform SHALL isolate tenant data."),
-        ],
-    )
-    build_project(
-        core_root,
-        core_cfg,
-        spec_files={"spec/prd-platform.md": [core_prd]},
-    )
-
-    # Alpha: standard uppercase assertions
-    alpha_prd = Requirement(
-        "REQ-ALP-p00001",
-        "Alpha Customization",
-        "PRD",
-        assertions=[("A", "Alpha tenant SHALL have custom dashboard.")],
-    )
-    build_associate(
-        alpha_root,
-        "alpha",
-        "ALP",
-        "../core",
-        spec_files={"spec/prd-alpha.md": [alpha_prd]},
-        init_git=True,
-    )
-
-    # Beta: PRD with numeric assertions (FDA-style numeric labels)
-    beta_prd = Requirement(
-        "REQ-BET-p00001",
-        "Beta Compliance",
-        "PRD",
-        assertions=[
-            ("0", "Beta system SHALL satisfy requirement zero."),
-            ("1", "Beta system SHALL satisfy requirement one."),
-        ],
-    )
-    beta_dev = Requirement(
-        "REQ-BET-d00001",
-        "Beta Implementation",
-        "DEV",
-        implements="REQ-BET-p00001",
-        assertions=[
-            ("0", "Beta module SHALL implement requirement zero."),
-        ],
-    )
-    build_associate(
-        beta_root,
-        "beta",
-        "BET",
-        "../core",
-        spec_files={
-            "spec/prd-beta.md": [beta_prd],
-            "spec/dev-beta.md": [beta_dev],
-        },
-        config_overrides={
-            "id-patterns": {"assertions": {"label_style": "numeric"}},
-        },
-        init_git=True,
-    )
-
-    return core_root, alpha_root, beta_root
+    proc = start_mcp(project)
+    yield proc
+    stop_mcp(proc)
 
 
 # ---------------------------------------------------------------------------
@@ -214,14 +74,12 @@ def _build_core_alpha_beta(tmp_path):
 class TestCoreWithOneAssociate:
     """Core project with one associated repo."""
 
-    def test_health_passes(self, tmp_path):
-        core, _ = _build_core_alpha(tmp_path)
-        result = run_elspais("checks", "--lenient", cwd=core)
+    def test_health_passes(self, project):
+        result = run_elspais("checks", "--lenient", cwd=project)
         assert result.returncode == 0, f"health failed: {result.stderr}\n{result.stdout}"
 
-    def test_summary_includes_associate_reqs(self, tmp_path):
-        core, _ = _build_core_alpha(tmp_path)
-        result = run_elspais("summary", "--format", "json", cwd=core)
+    def test_summary_includes_associate_reqs(self, project):
+        result = run_elspais("summary", "--format", "json", cwd=project)
         assert result.returncode == 0
         data = json.loads(result.stdout)
         levels = data.get("levels", [])
@@ -229,9 +87,8 @@ class TestCoreWithOneAssociate:
         # Core has 4 reqs (p00001, p00002, d00001, d00002)
         assert total >= 4, f"Expected at least 4 requirements (core), got {total}"
 
-    def test_trace_includes_core_ids(self, tmp_path):
-        core, _ = _build_core_alpha(tmp_path)
-        result = run_elspais("trace", "--format", "json", cwd=core)
+    def test_trace_includes_core_ids(self, project):
+        result = run_elspais("trace", "--format", "json", cwd=project)
         assert result.returncode == 0
         output = result.stdout
         assert "REQ-p00001" in output
@@ -246,19 +103,17 @@ class TestCoreWithOneAssociate:
 class TestCoreWithTwoAssociates:
     """Core project with two associated repos."""
 
-    def test_health_passes(self, tmp_path):
-        core, _, _ = _build_core_alpha_beta(tmp_path)
-        result = run_elspais("checks", "--lenient", cwd=core)
+    def test_health_passes(self, project):
+        result = run_elspais("checks", "--lenient", cwd=project)
         assert result.returncode == 0, f"health failed: {result.stderr}\n{result.stdout}"
 
-    def test_summary_counts_all(self, tmp_path):
-        core, _, _ = _build_core_alpha_beta(tmp_path)
-        result = run_elspais("summary", "--format", "json", cwd=core)
+    def test_summary_counts_all(self, project):
+        result = run_elspais("summary", "--format", "json", cwd=project)
         assert result.returncode == 0
         data = json.loads(result.stdout)
         levels = data.get("levels", [])
         total = sum(lv.get("total", 0) for lv in levels)
-        # Core: 1 PRD, Alpha: 1 PRD, Beta: 1 PRD + 1 DEV = at least 1 total
+        # Core: 2 PRD + 2 DEV, Alpha: 2 DEV, Beta: 1 PRD + 1 DEV = at least 1 total
         assert total >= 1
 
 
@@ -270,9 +125,8 @@ class TestCoreWithTwoAssociates:
 class TestAssociateListCommand:
     """Associate --list shows linked repos."""
 
-    def test_associate_list(self, tmp_path):
-        core, _ = _build_core_alpha(tmp_path)
-        result = run_elspais("associate", "--list", cwd=core)
+    def test_associate_list(self, project):
+        result = run_elspais("associate", "--list", cwd=project)
         assert result.returncode == 0
         output = result.stdout.lower()
         assert "alpha" in output or "alp" in output, f"Expected alpha in output: {result.stdout}"
@@ -286,14 +140,12 @@ class TestAssociateListCommand:
 class TestAssociateNumericAssertions:
     """Core with uppercase assertions, associate with numeric assertions."""
 
-    def test_health_passes_mixed_assertions(self, tmp_path):
-        core, _, _ = _build_core_alpha_beta(tmp_path)
-        result = run_elspais("checks", "--lenient", cwd=core)
+    def test_health_passes_mixed_assertions(self, project):
+        result = run_elspais("checks", "--lenient", cwd=project)
         assert result.returncode == 0, f"health failed: {result.stderr}\n{result.stdout}"
 
-    def test_trace_shows_both_repos(self, tmp_path):
-        core, _, _ = _build_core_alpha_beta(tmp_path)
-        result = run_elspais("trace", "--format", "json", cwd=core)
+    def test_trace_shows_both_repos(self, project):
+        result = run_elspais("trace", "--format", "json", cwd=project)
         assert result.returncode == 0
         # Core PRD should always be present
         assert "REQ-p00001" in result.stdout
@@ -307,21 +159,20 @@ class TestAssociateNumericAssertions:
 class TestCrossRepoImplements:
     """Associate DEV implements core PRD."""
 
-    def test_health_passes_cross_repo(self, tmp_path):
+    def test_health_passes_cross_repo(self, project):
         # alpha DEV reqs implement core PRD reqs
-        core, _ = _build_core_alpha(tmp_path)
-        result = run_elspais("checks", "--lenient", cwd=core)
+        result = run_elspais("checks", "--lenient", cwd=project)
         assert result.returncode == 0, f"health failed: {result.stderr}\n{result.stdout}"
 
-    def test_trace_shows_cross_repo_link(self, tmp_path):
-        core, _ = _build_core_alpha(tmp_path)
-        result = run_elspais("trace", "--format", "json", cwd=core)
+    def test_trace_shows_cross_repo_link(self, project):
+        result = run_elspais("trace", "--format", "json", cwd=project)
         assert result.returncode == 0
         assert "REQ-p00001" in result.stdout
 
 
 # ---------------------------------------------------------------------------
 # Test: Associate auto-discovery (from TestAssociateAutoDiscovery)
+# Unique layout — keeps per-test build.
 # ---------------------------------------------------------------------------
 
 
@@ -380,32 +231,27 @@ class TestAssociateAutoDiscovery:
 class TestMCPWithAssociates:
     """MCP server with core + associate project."""
 
-    def test_mcp_search_finds_associate_reqs(self, tmp_path):
-        pytest.importorskip("mcp")
-        from .helpers import mcp_call, mcp_call_all, start_mcp, stop_mcp
+    def test_mcp_search_finds_associate_reqs(self, project, mcp_server):
+        from .helpers import mcp_call, mcp_call_all
 
-        core, _ = _build_core_alpha(tmp_path)
-        proc = start_mcp(core)
-        try:
-            # Search for core requirement
-            results = mcp_call_all(proc, "search", {"query": "Auth"})
-            assert len(results) >= 1
-            ids = [r.get("id", "") for r in results]
-            assert any("p00001" in i for i in ids)
+        # Search for core requirement
+        results = mcp_call_all(mcp_server, "search", {"query": "Auth"})
+        assert len(results) >= 1
+        ids = [r.get("id", "") for r in results]
+        assert any("p00001" in i for i in ids)
 
-            # Get project summary
-            summary = mcp_call(proc, "get_project_summary", {})
-            assert isinstance(summary, dict)
+        # Get project summary
+        summary = mcp_call(mcp_server, "get_project_summary", {})
+        assert isinstance(summary, dict)
 
-            # Navigate hierarchy
-            hier = mcp_call(proc, "get_hierarchy", {"req_id": "REQ-d00001"})
-            assert "ancestors" in hier
-        finally:
-            stop_mcp(proc)
+        # Navigate hierarchy
+        hier = mcp_call(mcp_server, "get_hierarchy", {"req_id": "REQ-d00001"})
+        assert "ancestors" in hier
 
 
 # ---------------------------------------------------------------------------
 # Test: Associate with FDA-style IDs (from TestAssociateFDAStyle)
+# Unique layout — keeps per-test build.
 # ---------------------------------------------------------------------------
 
 
@@ -465,67 +311,24 @@ class TestAssociateFDAStyle:
 class TestMCPAssociatedWorkflow:
     """Full MCP workflow with core + associate."""
 
-    def test_mcp_associate_workflow(self, tmp_path):
-        pytest.importorskip("mcp")
-        from .helpers import mcp_call, mcp_call_all, start_mcp, stop_mcp
+    def test_mcp_associate_workflow(self, project, mcp_server):
+        from .helpers import mcp_call, mcp_call_all
 
-        core_root = tmp_path / "core"
-        assoc_root = tmp_path / "partner"
+        # 1. Get status
+        status = mcp_call(mcp_server, "get_graph_status", {})
+        assert isinstance(status, dict)
 
-        core_cfg = base_config(
-            name="mcp-assoc-core",
-            associated_enabled=True,
-        )
-        core_cfg["associates"] = {"paths": ["../partner"]}
-        core_prd = Requirement(
-            "REQ-p00001",
-            "Core MCP Feature",
-            "PRD",
-            assertions=[
-                ("A", "The system SHALL work via MCP."),
-                ("B", "The system SHALL support associates."),
-            ],
-        )
-        build_project(
-            core_root,
-            core_cfg,
-            spec_files={"spec/prd.md": [core_prd]},
-        )
+        # 2. Search
+        results = mcp_call_all(mcp_server, "search", {"query": "Auth"})
+        assert len(results) >= 1
 
-        assoc_prd = Requirement(
-            "REQ-PAR-p00001",
-            "Partner Feature",
-            "PRD",
-            assertions=[("A", "Partner SHALL customize core.")],
-        )
-        build_associate(
-            assoc_root,
-            "partner",
-            "PAR",
-            "../core",
-            spec_files={"spec/prd.md": [assoc_prd]},
-            init_git=True,
-        )
+        # 3. Get core requirement
+        req = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00001"})
+        assert req["id"] == "REQ-p00001"
 
-        proc = start_mcp(core_root)
-        try:
-            # 1. Get status
-            status = mcp_call(proc, "get_graph_status", {})
-            assert isinstance(status, dict)
-
-            # 2. Search
-            results = mcp_call_all(proc, "search", {"query": "feature"})
-            assert len(results) >= 1
-
-            # 3. Get core requirement
-            req = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00001"})
-            assert req["id"] == "REQ-p00001"
-
-            # 4. Get summary
-            summary = mcp_call(proc, "get_project_summary", {})
-            assert isinstance(summary, dict)
-        finally:
-            stop_mcp(proc)
+        # 4. Get summary
+        summary = mcp_call(mcp_server, "get_project_summary", {})
+        assert isinstance(summary, dict)
 
 
 # ---------------------------------------------------------------------------
@@ -534,55 +337,10 @@ class TestMCPAssociatedWorkflow:
 
 
 class TestMultiAssociateHealth:
-    """Health check with complex multi-associate setup (3 associates)."""
+    """Health check with multi-associate setup (core + alpha + beta)."""
 
-    def test_three_associates(self, tmp_path):
-        core = tmp_path / "core"
-        a1 = tmp_path / "alpha"
-        a2 = tmp_path / "beta"
-        a3 = tmp_path / "gamma"
-
-        core_cfg = base_config(name="multi3-core", associated_enabled=True)
-        core_cfg["associates"] = {"paths": ["../alpha", "../beta", "../gamma"]}
-        build_project(
-            core,
-            core_cfg,
-            spec_files={
-                "spec/prd.md": [
-                    Requirement(
-                        "REQ-p00001",
-                        "Core PRD",
-                        "PRD",
-                        assertions=[("A", "The system SHALL be core.")],
-                    )
-                ],
-            },
-        )
-
-        for name, prefix, root in [
-            ("alpha", "ALP", a1),
-            ("beta", "BET", a2),
-            ("gamma", "GAM", a3),
-        ]:
-            build_associate(
-                root,
-                name,
-                prefix,
-                "../core",
-                spec_files={
-                    "spec/prd.md": [
-                        Requirement(
-                            f"REQ-{prefix}-p00001",
-                            f"{name.title()} PRD",
-                            "PRD",
-                            assertions=[("A", f"{name.title()} SHALL customize.")],
-                        )
-                    ],
-                },
-                init_git=True,
-            )
-
-        health = run_elspais("checks", "--lenient", cwd=core)
+    def test_three_repos(self, project):
+        health = run_elspais("checks", "--lenient", cwd=project)
         assert health.returncode == 0
 
 
@@ -594,127 +352,32 @@ class TestMultiAssociateHealth:
 class TestMCPAssociatedSubtree:
     """MCP subtree extraction with associated repos."""
 
-    def test_subtree_with_associate(self, tmp_path):
-        pytest.importorskip("mcp")
-        from .helpers import mcp_call, start_mcp, stop_mcp
+    def test_subtree_with_associate(self, project, mcp_server):
+        from .helpers import mcp_call
 
-        core = tmp_path / "core"
-        assoc = tmp_path / "partner"
-
-        core_cfg = base_config(name="subtree-assoc", associated_enabled=True)
-        core_cfg["associates"] = {"paths": ["../partner"]}
-        build_project(
-            core,
-            core_cfg,
-            spec_files={
-                "spec/prd.md": [
-                    Requirement(
-                        "REQ-p00001",
-                        "Core PRD",
-                        "PRD",
-                        assertions=[("A", "Core SHALL exist."), ("B", "Core SHALL subtree.")],
-                    )
-                ],
-                "spec/dev.md": [
-                    Requirement(
-                        "REQ-d00001",
-                        "Core DEV",
-                        "DEV",
-                        implements="REQ-p00001",
-                        assertions=[("A", "Module SHALL exist.")],
-                    )
-                ],
+        result = mcp_call(
+            mcp_server,
+            "get_subtree",
+            {
+                "root_id": "REQ-p00001",
+                "format": "flat",
             },
         )
-
-        build_associate(
-            assoc,
-            "partner",
-            "PAR",
-            "../core",
-            spec_files={
-                "spec/dev.md": [
-                    Requirement(
-                        "REQ-PAR-d00001",
-                        "Partner DEV",
-                        "DEV",
-                        implements="REQ-p00001",
-                        assertions=[("A", "Partner SHALL implement.")],
-                    )
-                ],
-            },
-            init_git=True,
-        )
-
-        proc = start_mcp(core)
-        try:
-            result = mcp_call(
-                proc,
-                "get_subtree",
-                {
-                    "root_id": "REQ-p00001",
-                    "format": "flat",
-                },
-            )
-            assert isinstance(result, dict)
-            nodes = result.get("nodes", [])
-            node_ids = [n.get("id", "") for n in nodes]
-            assert "REQ-p00001" in node_ids
-        finally:
-            stop_mcp(proc)
+        assert isinstance(result, dict)
+        nodes = result.get("nodes", [])
+        node_ids = [n.get("id", "") for n in nodes]
+        assert "REQ-p00001" in node_ids
 
 
 # ---------------------------------------------------------------------------
-# Test: Associate --unlink removes a link (from TestAssociateUnlink)
-# NOTE: This test mutates config — kept last.
+# Mutation tests — run LAST, after all read-only tests above.
 # ---------------------------------------------------------------------------
 
 
-class TestAssociateUnlink:
-    """Associate --unlink removes a link from core config."""
+@pytest.mark.incremental
+class TestAssociatedMutations:
+    """Sequential mutations on the associated fixture."""
 
-    def test_unlink_associate(self, tmp_path):
-        core_root = tmp_path / "core"
-        assoc_root = tmp_path / "removable"
-
-        core_cfg = base_config(name="unlink-core", associated_enabled=True)
-        core_cfg["associates"] = {"paths": ["../removable"]}
-        build_project(
-            core_root,
-            core_cfg,
-            spec_files={
-                "spec/prd.md": [
-                    Requirement(
-                        "REQ-p00001",
-                        "Unlink Test",
-                        "PRD",
-                        assertions=[("A", "The system SHALL unlink.")],
-                    ),
-                ],
-            },
-        )
-
-        build_associate(
-            assoc_root,
-            "removable",
-            "REM",
-            "../core",
-            spec_files={
-                "spec/prd.md": [
-                    Requirement(
-                        "REQ-REM-p00001",
-                        "Removable",
-                        "PRD",
-                        assertions=[("A", "Removable SHALL be unlinked.")],
-                    ),
-                ],
-            },
-            init_git=True,
-        )
-
-        result = run_elspais("associate", "--unlink", "removable", cwd=core_root)
-        # May succeed or warn — should not crash
-        assert result.returncode in (
-            0,
-            1,
-        ), f"associate --unlink returned unexpected code: {result.returncode}\n{result.stderr}"
+    def test_01_unlink_associate(self, project):
+        result = run_elspais("associate", "--unlink", "beta", cwd=project)
+        assert result.returncode in (0, 1)

@@ -558,7 +558,7 @@ def _add_changelog_for_active_mutations(
     """Add changelog entries for mutated Active requirements after save."""
     from datetime import date
 
-    from elspais.commands.validate import compute_hash_for_node
+    from elspais.graph.render import compute_hash_for_node
     from elspais.utilities.git import get_author_info
     from elspais.utilities.spec_writer import add_changelog_entry
 
