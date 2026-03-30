@@ -92,7 +92,7 @@ Single-requirement lookup is the most common operation. O(1) access via graph in
 
 ## Changelog
 
-- 2026-03-30 | 6e01fc33 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | 6e01fc33 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Requirement Detail Tool Implementation* | **Hash**: 6e01fc33
 ---
@@ -227,7 +227,7 @@ Finding uncovered assertions enables systematic test coverage improvement across
 
 ## Changelog
 
-- 2026-03-30 | 4884d7cb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | 4884d7cb | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Uncovered Assertions Tool Implementation* | **Hash**: 4884d7cb
 ---
@@ -258,7 +258,7 @@ F. SHALL complement `find_by_keywords()` which searches requirement titles, not 
 
 ## Changelog
 
-- 2026-03-30 | a9b8dff2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | a9b8dff2 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Assertion Keyword Search Tool Implementation* | **Hash**: a9b8dff2
 ---
@@ -314,7 +314,7 @@ BFS with depth tracking and kind filtering provides the flexible subtree extract
 
 ## Changelog
 
-- 2026-03-30 | 5ba55cf2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | 5ba55cf2 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Subtree Extraction Implementation* | **Hash**: 5ba55cf2
 ---
@@ -401,7 +401,7 @@ Separating scope collection from search logic enables reuse of `_collect_scope_i
 
 ## Changelog
 
-- 2026-03-30 | 27a8b0c4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | 27a8b0c4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Scoped Search Implementation* | **Hash**: 27a8b0c4
 ---
@@ -455,7 +455,7 @@ FILE nodes are structural infrastructure. They enhance the graph's completeness 
 
 ## Changelog
 
-- 2026-03-30 | ae564dae | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | ae564dae | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *MCP FILE Node Integration* | **Hash**: ae564dae
 ---
@@ -482,7 +482,7 @@ Without federation-aware config access, all MCP operations use the root repo's c
 
 ## Changelog
 
-- 2026-03-30 | 4f16dfc7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | 4f16dfc7 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *MCP Federation Support* | **Hash**: 4f16dfc7
 ---

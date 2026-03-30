@@ -358,11 +358,11 @@ _CODE_SPAN_RE = re.compile(r"`[^`]+`")
 
 def _canonicalize_text(
     text: str, td: TermDictionary, markup_style: str, styles_set: set[str]
-) -> str:
+) -> tuple[str, list[tuple[str, str]]]:
     """Replace non-canonical term forms in *text* with canonical form.
 
     Preserves content inside backtick code spans.
-    Returns the modified text (or original if no changes).
+    Returns ``(modified_text, [(old_form, new_form), ...])``.
     """
     # Find all code spans to protect them from replacement
     protected: list[tuple[int, int]] = [(m.start(), m.end()) for m in _CODE_SPAN_RE.finditer(text)]
@@ -372,6 +372,7 @@ def _canonicalize_text(
 
     # Track spans already claimed by emphasis matches
     claimed: list[tuple[int, int]] = []
+    replacements: list[tuple[str, str]] = []  # (old_form, new_form)
 
     for entry in td.iter_all():
         if not entry.indexed:
@@ -399,10 +400,13 @@ def _canonicalize_text(
                 else:
                     # Invalid delimiter — replace with canonical (first style)
                     replacement = canonical
+                old_form = m.group(0)
                 new_text.append(text[last_end : m.start()])
                 new_text.append(replacement)
                 claimed.append((m.start(), m.start() + len(replacement)))
                 last_end = m.end()
+                if old_form != replacement:
+                    replacements.append((old_form, replacement))
             if new_text:
                 new_text.append(text[last_end:])
                 text = "".join(new_text)
@@ -418,15 +422,18 @@ def _canonicalize_text(
                 continue
             if any(not (m.end() <= cs or m.start() >= ce) for cs, ce in claimed):
                 continue
+            old_form = m.group(0)
             new_text.append(text[last_end : m.start()])
             new_text.append(canonical)
             last_end = m.end()
+            if old_form != canonical:
+                replacements.append((old_form, canonical))
         if new_text:
             new_text.append(text[last_end:])
             text = "".join(new_text)
             protected = [(m.start(), m.end()) for m in _CODE_SPAN_RE.finditer(text)]
 
-    return text
+    return text, replacements
 
 
 def canonicalize_node_terms(
@@ -447,10 +454,10 @@ def canonicalize_node_terms(
         old = node.get_label() or ""
         if not old:
             return False
-        new = _canonicalize_text(old, td, markup_style, styles_set)
-        if new != old:
+        new, repls = _canonicalize_text(old, td, markup_style, styles_set)
+        if repls:
             node.set_label(new)
-            _mark_req_dirty(node, "non_canonical_term")
+            _mark_req_dirty(node, "non_canonical_term", repls)
             return True
     elif kind == NodeKind.REMAINDER:
         if node.get_field("content_type") == "definition_block":
@@ -458,17 +465,17 @@ def canonicalize_node_terms(
         old = node.get_field("text") or ""
         if not old:
             return False
-        new = _canonicalize_text(old, td, markup_style, styles_set)
-        if new != old:
+        new, repls = _canonicalize_text(old, td, markup_style, styles_set)
+        if repls:
             node.set_field("text", new)
-            _mark_req_dirty(node, "non_canonical_term")
+            _mark_req_dirty(node, "non_canonical_term", repls)
             return True
     elif kind == NodeKind.USER_JOURNEY:
         old = node.get_field("body") or ""
         if not old:
             return False
-        new = _canonicalize_text(old, td, markup_style, styles_set)
-        if new != old:
+        new, repls = _canonicalize_text(old, td, markup_style, styles_set)
+        if repls:
             node.set_field("body", new)
             # Journey nodes are top-level, mark their own file dirty
             fn = node.file_node()
@@ -479,7 +486,9 @@ def canonicalize_node_terms(
     return False
 
 
-def _mark_req_dirty(node, reason: str) -> None:  # noqa: ANN001
+def _mark_req_dirty(
+    node, reason: str, replacements: list[tuple[str, str]] | None = None  # noqa: ANN001
+) -> None:
     """Walk up to the parent REQUIREMENT and mark it parse_dirty."""
     from elspais.graph.relations import EdgeKind
 
@@ -494,6 +503,10 @@ def _mark_req_dirty(node, reason: str) -> None:  # noqa: ANN001
             if reason not in reasons:
                 reasons.append(reason)
                 parent._content["parse_dirty_reasons"] = reasons
+            if replacements:
+                existing = parent._content.get("term_replacements", [])
+                existing.extend(replacements)
+                parent._content["term_replacements"] = existing
             return
 
 

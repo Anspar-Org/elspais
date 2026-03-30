@@ -172,18 +172,36 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> None:
     if not dirty_nodes:
         return
 
+    # Report what will be / was fixed
+    for node in dirty_nodes:
+        reasons = node.get_field("parse_dirty_reasons") or []
+        prefix = "Would fix" if dry_run else "Fixing"
+        for r in reasons:
+            if r == "stale_hash":
+                continue
+            if r == "non_canonical_term":
+                repls = node.get_field("term_replacements") or []
+                # Deduplicate replacements
+                seen: set[tuple[str, str]] = set()
+                for old_form, new_form in repls:
+                    if (old_form, new_form) not in seen:
+                        seen.add((old_form, new_form))
+                        print(f"{prefix} {node.id}: canonicalize term {old_form} -> {new_form}")
+            else:
+                print(f"{prefix} {node.id}: {_REASON_LABELS.get(r, r)}")
+
     if dry_run:
-        for node in dirty_nodes:
-            reasons = node.get_field("parse_dirty_reasons") or []
-            print(f"Would rewrite {node.id}: {', '.join(reasons)}")
         return
 
     # Add auto-fix changelog entries before render_save
     _add_autofix_changelog_entries(graph, dirty_nodes, config)
 
     result = render_save(graph, repo_root=repo_root)
-    for file_path in result.get("written", []):
-        print(f"Rewrote {file_path}")
+    saved = result.get("saved_count", 0)
+    if saved:
+        files = result.get("files_modified", [])
+        for f in files:
+            print(f"Rewrote {f}")
 
 
 def _make_validate_args(args: argparse.Namespace) -> argparse.Namespace:
@@ -280,15 +298,23 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
         return 0
 
     if dry_run:
-        changes = []
+        prefix = "Would fix"
         if hash_changed:
-            changes.append(f"hash {stored or '(none)'} -> {effective_hash}")
+            print(f"{prefix} {req_id}: hash {stored or '(none)'} -> {effective_hash}")
         for r in dirty_reasons:
-            if r != "stale_hash":
-                changes.append(_REASON_LABELS.get(r, r))
+            if r == "stale_hash":
+                continue
+            if r == "non_canonical_term":
+                repls = node.get_field("term_replacements") or []
+                seen: set[tuple[str, str]] = set()
+                for old_form, new_form in repls:
+                    if (old_form, new_form) not in seen:
+                        seen.add((old_form, new_form))
+                        print(f"{prefix} {req_id}: canonicalize term {old_form} -> {new_form}")
+            else:
+                print(f"{prefix} {req_id}: {_REASON_LABELS.get(r, r)}")
         if needs_new_section and not something_to_fix:
-            changes.append("add missing changelog section")
-        print(f"Would fix {req_id}: {', '.join(changes) or 'no changes'}")
+            print(f"{prefix} {req_id}: add missing changelog section")
         return 0
 
     # Add changelog entry when changelog is enabled for Active reqs

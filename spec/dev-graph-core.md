@@ -159,7 +159,7 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* 
 
 ## Changelog
 
-- 2026-03-30 | e9b5c3f1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | e9b5c3f1 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Indirect Coverage Source* | **Hash**: e9b5c3f1
 ---
@@ -188,7 +188,7 @@ Users need both a strict *Traceability* view (only *Assertion*-targeted tests co
 
 ## Changelog
 
-- 2026-03-30 | 3e5b1766 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | 3e5b1766 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Indirect Coverage Toggle Display* | **Hash**: 3e5b1766
 ---
@@ -215,7 +215,7 @@ Currently, all parentless REQUIREMENTs and all USER_JOURNEYs are unconditionally
 
 ## Changelog
 
-- 2026-03-30 | 4bd239f1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | 4bd239f1 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Unified Root vs Orphan Classification* | **Hash**: 4bd239f1
 ---
@@ -240,7 +240,7 @@ The core engine composes existing building blocks into a scoring pipeline. Each 
 
 ## Changelog
 
-- 2026-03-30 | 95f09aea | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | 95f09aea | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Link Suggestion Core Engine* | **Hash**: 95f09aea
 ---
@@ -263,7 +263,7 @@ E. Keyword collection SHALL return a sorted, deduplicated list of all keywords a
 
 ## Changelog
 
-- 2026-03-30 | ebe57660 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | ebe57660 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Keyword Extraction Annotator* | **Hash**: ebe57660
 

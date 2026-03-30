@@ -226,9 +226,6 @@ def _render_requirement(node: GraphNode) -> str:
         lines.append("")
         for entry in changelog:
             author_id = entry["author_id"]
-            # Wrap email-like author_id in angle brackets for markdown compliance
-            if "@" in author_id and not author_id.startswith("<"):
-                author_id = f"<{author_id}>"
             lines.append(
                 f"- {entry['date']} | {entry['hash']} | {entry['change_order']}"
                 f" | {entry['author_name']} ({author_id}) | {entry['reason']}"

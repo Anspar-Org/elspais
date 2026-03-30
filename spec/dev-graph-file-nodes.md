@@ -24,7 +24,7 @@ FILE nodes are the foundation for representing source files as first-class graph
 
 ## Changelog
 
-- 2026-03-30 | 664d3990 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | 664d3990 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *FILE Node Data Model* | **Hash**: 664d3990
 ---
@@ -92,7 +92,7 @@ FILE nodes make source files first-class graph participants. Creating them in fa
 
 ## Changelog
 
-- 2026-03-30 | 7742f15f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | 7742f15f | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *FILE Node Creation in Build Pipeline* | **Hash**: 7742f15f
 ---
@@ -187,7 +187,7 @@ The render protocol is the inverse of parsing: each node kind knows how to seria
 
 ## Changelog
 
-- 2026-03-30 | c004c62e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | c004c62e | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Render Protocol for Graph Nodes* | **Hash**: c004c62e
 ---
@@ -245,7 +245,7 @@ A single large scenario test that exercises the full mutation API in a realistic
 
 ## Changelog
 
-- 2026-03-30 | be52daed | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | be52daed | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Comprehensive Mutation Round-Trip Scenario Test* | **Hash**: be52daed
 ---

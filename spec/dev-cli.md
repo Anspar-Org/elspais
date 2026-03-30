@@ -55,7 +55,7 @@ The previous implementation hardcoded expansion in RequirementParser only, using
 
 ## Changelog
 
-- 2026-03-30 | 313fe52b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | 313fe52b | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Multi-Assertion Reference Expansion* | **Hash**: 313fe52b
 ---
@@ -115,7 +115,7 @@ A JSON graph output mode enables programmatic consumption of the full *Traceabil
 
 ## Changelog
 
-- 2026-03-30 | f8f0e0f2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | f8f0e0f2 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Trace Command* | **Hash**: f8f0e0f2
 ---
@@ -177,7 +177,7 @@ Coverage data is already computed during graph construction but is only surfaced
 
 ## Changelog
 
-- 2026-03-30 | 2fd4ab13 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | 2fd4ab13 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Coverage Report Section* | **Hash**: 2fd4ab13
 ---
@@ -235,7 +235,7 @@ In a large requirements DAG, naive metrics like descendant count always favor th
 
 ## Changelog
 
-- 2026-03-30 | 86bb619b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | 86bb619b | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Graph Analysis Engine* | **Hash**: 86bb619b
 ---

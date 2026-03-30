@@ -91,7 +91,7 @@ G. The PR validation pipeline SHALL require both ticket (CUR-XXX) and requiremen
 
 ## Changelog
 
-- 2026-03-30 | 315accce | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | 315accce | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *CI/CD Pipeline Enforcement* | **Hash**: 315accce
 ---

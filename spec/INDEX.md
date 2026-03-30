@@ -12,7 +12,7 @@
 | REQ-p00002 | Requirements Validation                          | prd-core.md     | e8f0e4eb |
 | REQ-p00003 | Traceability Matrix Generation                   | prd-core.md     | 6a3a9426 |
 | REQ-p00004 | Change Detection and Auditability                | prd-core.md     | f8ff5509 |
-| REQ-p00005 | Multi-Repository Requirements                    | prd-features.md | f935e564 |
+| REQ-p00005 | Multi-Repository Requirements                    | prd-features.md | c3303546 |
 | REQ-p00006 | Interactive Traceability Viewer                  | prd-features.md | b3dd4d1a |
 | REQ-p00013 | Automated Testing                                | prd-core.md     | 962216d8 |
 | REQ-p00014 | Satisfies Relationship                           | prd-features.md | 9115ce0d |

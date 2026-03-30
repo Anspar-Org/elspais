@@ -28,7 +28,7 @@ CI/CD pipelines and diverse developer environments mean associated repositories 
 
 A. The tool SHALL support requirement references across repository boundaries using configurable namespace prefixes.
 
-B. The tool SHALL generate combined *Traceability* matrices spanning multiple repositories.
+B. The tool SHALL generate combined **Traceability** matrices spanning multiple repositories.
 
 C. The tool SHALL support CLI-based configuration of associate repository paths so that external systems can register associates without manually editing configuration files.
 
@@ -40,9 +40,9 @@ F. The tool SHALL resolve relative associate paths from the canonical (non-workt
 
 ## Changelog
 
-- 2026-03-30 | f935e564 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | f935e564 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
-*End* *Multi-Repository Requirements* | **Hash**: f935e564
+*End* *Multi-Repository Requirements* | **Hash**: c3303546
 ---
 
 # REQ-p00006: Interactive Traceability Viewer
@@ -78,7 +78,10 @@ C. The viewer SHALL display source files inline in a side panel with syntax-high
 
 ## Changelog
 
-- 2026-03-30 | b3dd4d1a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | b3dd4d1a | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-03-30 | b3dd4d1a | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-03-30 | b3dd4d1a | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-03-30 | b3dd4d1a | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Interactive Traceability Viewer* | **Hash**: b3dd4d1a
 ---
@@ -103,7 +106,7 @@ D. The system SHALL attribute `Implements:` references to template assertions to
 
 ## Changelog
 
-- 2026-03-30 | 9115ce0d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | 9115ce0d | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Satisfies Relationship* | **Hash**: 9115ce0d
 ---
@@ -179,7 +182,7 @@ AI agents need programmatic access to requirements data for tasks like coverage 
 
 ## Changelog
 
-- 2026-03-30 | 3ebc237a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | 3ebc237a | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *MCP Server for AI-Driven Requirements Management* | **Hash**: 3ebc237a
 ---
@@ -232,7 +235,7 @@ E. Comment file path resolution SHALL mirror repo structure under .elspais/comme
 
 ## Changelog
 
-- 2026-03-30 | cdaa4044 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | cdaa4044 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Comment JSONL Storage* | **Hash**: cdaa4044
 
@@ -250,7 +253,7 @@ C. Rename-triggered promotion SHALL update all anchors prefixed with the old ID 
 
 ## Changelog
 
-- 2026-03-30 | 3048ea60 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | 3048ea60 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Comment Promotion Engine* | **Hash**: 3048ea60
 
@@ -300,7 +303,7 @@ B. A comment margin column SHALL render speech bubble icons with count badges fo
 
 ## Changelog
 
-- 2026-03-30 | 6869aa8a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | 6869aa8a | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Comment UI Anchors and Margin Column* | **Hash**: 6869aa8a
 

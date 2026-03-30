@@ -58,7 +58,7 @@ C. The tool SHALL verify content hashes match requirement body text.
 
 ## Changelog
 
-- 2026-03-30 | e8f0e4eb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-30 | e8f0e4eb | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Requirements Validation* | **Hash**: e8f0e4eb
 ---
@@ -388,7 +388,7 @@ D. `run_term_checks()` SHALL call all six term checks (`duplicates`, `undefined`
 
 ## Changelog
 
-- 2026-03-29 | 9788814d | - | Michael Lewis (<michael@anspar.org>) | Initial creation
+- 2026-03-29 | 9788814d | - | Michael Lewis (michael@anspar.org) | Initial creation
 
 *End* *New Term Health Checks* | **Hash**: 9788814d
 
@@ -406,6 +406,6 @@ C. Severity SHALL be read from `[rules.format] no_traceability_severity` (defaul
 
 ## Changelog
 
-- 2026-03-29 | 6e481d63 | - | Michael Lewis (<michael@anspar.org>) | Initial creation
+- 2026-03-29 | 6e481d63 | - | Michael Lewis (michael@anspar.org) | Initial creation
 
 *End* *Code No-Traceability Health Check* | **Hash**: e1272219

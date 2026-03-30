@@ -127,8 +127,8 @@ N. A `_migrate_v3_to_v4` migration SHALL move flat `duplicate_severity`, `undefi
 
 ## Changelog
 
-- 2026-03-30 | db4ad28c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
-- 2026-03-29 | c75b87f8 | - | Michael Lewis (<michael@anspar.org>) | Add assertion N for config migration v3 to v4
+- 2026-03-30 | db4ad28c | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-03-29 | c75b87f8 | - | Michael Lewis (michael@anspar.org) | Add assertion N for config migration v3 to v4
 
 *End* *Config Schema v3 Models* | **Hash**: db4ad28c
 ---
