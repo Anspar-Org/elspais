@@ -1,0 +1,70 @@
+version = 3
+cli_ttl = 2
+
+[project]
+name = "e2e-standard"
+namespace = "REQ"
+
+[levels.prd]
+rank = 1
+letter = "p"
+implements = ["prd"]
+
+[levels.ops]
+rank = 2
+letter = "o"
+implements = ["ops", "prd"]
+
+[levels.dev]
+rank = 3
+letter = "d"
+implements = ["dev", "ops", "prd"]
+
+[scanning.spec]
+directories = ["spec"]
+skip_files = ["INDEX.md", "NOTES.md"]
+skip_dirs = ["drafts"]
+
+[scanning.code]
+directories = ["src"]
+
+[scanning.test]
+enabled = true
+directories = ["tests"]
+file_patterns = ["test_*.py", "*_test.py"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
+
+[id-patterns.component]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[id-patterns.assertions]
+label_style = "uppercase"
+max_count = 26
+
+[rules.hierarchy]
+allow_structural_orphans = true
+
+[rules.format]
+require_hash = true
+require_assertions = true
+require_status = true
+allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
+
+[changelog]
+hash_current = false
+
+[terms]
+output_dir = "spec/_generated"
+markup_styles = ["*", "**"]
+
+[terms.severity]
+duplicate = "error"
+undefined = "warning"
+unmarked = "warning"
+unused = "warning"
+bad_definition = "error"
+collection_empty = "warning"

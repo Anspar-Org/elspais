@@ -1,9 +1,18 @@
 # Known Issues
 
-[ ] checks - chore
+[ ] bug: init template file generator
+- this is supposed to have detailed comments for every field, documenting what the options are
+- e.g. the valid values for hash_modes, and for all other enums. What does each option mean?
+- what do the true/false settings affect?
+- Not more than 1 line per enum/bool value: if the explanation is longer, then refer to the docs.
+- for text fields, explain what the value is and what allowed values are (e.g. a simple regex might work to explain?)
+ 
+[ ] .elspais.toml - chore
 - add all missing config.toml fields, even if they are the same as the defaults
-- ensure init template is complete and uptodate
-- add new checks descriptions to docs
+- ensure init template is complete and up-to-date
+
+[ ] checks - chore
+- add new checks descriptions to docs (new follow-up commands for failures/warnings on new checks)
 
 [ ] daemon: bug - timeout
 - daemon should timeout and shutdown after N minutes, unless there are unsaved changes
@@ -16,7 +25,8 @@
 - Fixed: New `elspais errors` command shows specific requirements with format violations and missing assertions. `elspais checks` now points to `elspais errors` as the follow-up command.
 
 [ ] chore: _generated files
-- set to read-only as (some) protection against people accidently editing them
+- have elspais set them read-only as (some) protection against people accidently editing them
+- of course, it will also have to unset the RO flag before writing them
 
 [x] 'fix' command: bug
 - bug 1: Fixed — error message now explains that [changelog] hash_current is enabled and Draft/Deprecated requirements update without a message
@@ -26,8 +36,6 @@
 [ ] mcp : bug
 - MCP refresh() should return error if unsaved changes
 - must use separate 'discard' command as a safety
-
-[ ] 
 
 [x] checks, gaps, reports: clarification
 - The `--status` flag already exists on checks/gaps commands for prospective analysis
@@ -70,7 +78,7 @@
 - 4 regex mutation helpers deleted; hash/search/API migrated to structured children
 - RequirementParser deleted; Lark is sole parser; shared patterns relocated to parsers/patterns.py
 
-[ ] feature: viewer: add review/comment
+[x] feature: viewer: add review/comment
 - In Edit Mode, allow user to tag any REQ or JNY element (and CODE and TEST reference) with a comment. 
  - this is most 'unique' aspect of this feature. What can we put a comment on? How do we do that w/o cluttering the display with a separate 'comment' icon on every field?
  - how do we show a comment thread without cluttering the display?
@@ -127,14 +135,6 @@
 - Or would it fit better in the 'file viewer' column?
 - 'Download' button for reports?
 - highlight 'gaps' on hierarchy? Why? ...it's already captured in the badge color.
-
-[ ] bug: init template file generator
-- this is supposed to have detailed comments for every field, documenting what the options are
-- e.g. the valid values for hash_modes, and for all other enums. What does each option mean?
-- what do the true/false settings affect?
-- Not more than 1 line per enum/bool value: if the explanation is longer, then refer to the docs.
-- for text fields, explain what the value is and what allowed values are (e.g. a simple regex might work to explain?)
- 
 
 [ ] feature: config
 - make journey IDs configurable like REQ IDs

@@ -72,3 +72,15 @@ allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
 strict_hierarchy = true
 hash_algorithm = "sha256"
 hash_length = 8
+
+[terms]
+output_dir = "spec/_generated"
+markup_styles = ["*", "**"]
+
+[terms.severity]
+duplicate = "error"
+undefined = "warning"
+unmarked = "warning"
+unused = "warning"
+bad_definition = "error"
+collection_empty = "warning"

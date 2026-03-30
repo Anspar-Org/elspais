@@ -1,0 +1,64 @@
+version = 3
+cli_ttl = 2
+
+[project]
+name = "e2e-fda-numeric"
+namespace = "REQ"
+
+[levels.PRD]
+rank = 1
+letter = "P"
+implements = ["PRD"]
+
+[levels.OPS]
+rank = 2
+letter = "O"
+implements = ["OPS", "PRD"]
+
+[levels.DEV]
+rank = 3
+letter = "D"
+implements = ["DEV", "OPS", "PRD"]
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = ["src"]
+
+[id-patterns]
+canonical = "{type}-{component}"
+
+[id-patterns.component]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[id-patterns.assertions]
+label_style = "numeric"
+max_count = 26
+
+[rules.hierarchy]
+allow_structural_orphans = true
+
+[rules.format]
+require_hash = true
+require_assertions = true
+require_status = true
+allowed_statuses = ["Active", "Draft", "Review", "Archived"]
+require_rationale = true
+
+[changelog]
+hash_current = false
+
+[terms]
+output_dir = "spec/_generated"
+markup_styles = ["**"]
+
+[terms.severity]
+duplicate = "error"
+undefined = "off"
+unmarked = "off"
+unused = "warning"
+bad_definition = "error"
+collection_empty = "off"

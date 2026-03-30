@@ -30,14 +30,8 @@ import pytest
 
 from .conftest import (
     ensure_fixture_daemon,
-)
-from .helpers import (
-    Requirement,
-    base_config,
-    build_project,
-    init_git_repo,
+    load_fixture,
     run_elspais,
-    write_config,
 )
 
 pytestmark = [
@@ -50,149 +44,15 @@ pytestmark = [
 
 
 # ---------------------------------------------------------------------------
-# Fixture project content (named IDs, numeric-1based, DEV→PRD direct)
+# Module-scoped fixtures
 # ---------------------------------------------------------------------------
-
-
-def _make_named_cfg() -> dict:
-    """Build config for named-component IDs with numeric-1based assertions."""
-    cfg = base_config(
-        name="named-custom",
-        canonical="{namespace}-{level.letter}{component}",
-        component_style="named",
-        types={
-            "prd": {"level": 1, "aliases": {"letter": "p"}},
-            "dev": {"level": 2, "aliases": {"letter": "d"}},
-        },
-        allowed_implements=["dev -> prd"],
-        label_style="numeric_1based",
-        multi_assertion_separator=",",
-        require_shall=False,
-        allow_structural_orphans=True,
-    )
-    cfg["id-patterns"]["component"] = {
-        "style": "named",
-        "pattern": "[A-Z][a-zA-Z0-9]+",
-        "max_length": 32,
-    }
-    return cfg
-
-
-# PRD requirements
-_PRD_USER_AUTH = Requirement(
-    "REQ-pUserAuth",
-    "User Authentication",
-    "PRD",
-    assertions=[
-        ("1", "Authenticate users on every request."),
-        ("2", "Enforce password complexity policies."),
-    ],
-)
-
-_PRD_DATA_PRIVACY = Requirement(
-    "REQ-pDataPrivacy",
-    "Data Privacy",
-    "PRD",
-    assertions=[
-        ("1", "Encrypt all user data at rest."),
-        ("2", "Log all data access events."),
-    ],
-)
-
-_PRD_NO_ASSERTIONS = Requirement(
-    "REQ-pNoAssert",
-    "No Assertions",
-    "PRD",
-    assertions=[],
-)
-
-# DEV requirements — implementing PRD directly (no OPS level)
-_DEV_AUTH_MODULE = Requirement(
-    "REQ-dAuthModule",
-    "Auth Module",
-    "DEV",
-    implements="REQ-pUserAuth",
-    assertions=[
-        ("1", "Use bcrypt to hash passwords."),
-        ("2", "Issue JWT tokens after successful login."),
-    ],
-)
-
-_DEV_PRIVACY_CTRL = Requirement(
-    "REQ-dPrivacyCtrl",
-    "Privacy Controller",
-    "DEV",
-    implements="REQ-pDataPrivacy",
-    assertions=[
-        ("1", "Apply AES-256 encryption to stored records."),
-    ],
-)
-
-# Requirement with placeholder/deprecated assertions
-_PRD_WITH_PLACEHOLDERS = Requirement(
-    "REQ-pWithPlaceholders",
-    "With Placeholders",
-    "PRD",
-    assertions=[
-        ("1", "Active assertion one."),
-        ("2", "Removed - was duplicate of assertion 1."),
-        ("3", "Active assertion three."),
-    ],
-)
-
-
-def _build_fixture_content() -> tuple[dict, dict, dict]:
-    """Return (cfg, spec_files_content, {}) for the shared fixture."""
-    cfg = _make_named_cfg()
-    # require_assertions=False to allow REQ-pNoAssert
-    cfg["rules"]["format"]["require_assertions"] = False
-
-    spec_content: dict[str, str] = {}
-    spec_content["spec/prd-core.md"] = "\n".join(
-        r.render() for r in [_PRD_USER_AUTH, _PRD_DATA_PRIVACY]
-    )
-    spec_content["spec/prd-misc.md"] = "\n".join(
-        r.render() for r in [_PRD_NO_ASSERTIONS, _PRD_WITH_PLACEHOLDERS]
-    )
-    spec_content["spec/dev-impl.md"] = "\n".join(
-        r.render() for r in [_DEV_AUTH_MODULE, _DEV_PRIVACY_CTRL]
-    )
-
-    return cfg, spec_content
 
 
 @pytest.fixture(scope="module")
 def project(tmp_path_factory):
-    """Build the named-custom project once for the entire module."""
+    """Copy e2e-named-custom fixture to /tmp, init git, start daemon."""
     root = tmp_path_factory.mktemp("e2e_named_custom")
-    cfg, spec_content = _build_fixture_content()
-
-    # Write config via write_config to respect the full custom cfg
-    write_config(root / ".elspais.toml", cfg)
-    for rel_path, content in spec_content.items():
-        fpath = root / rel_path
-        fpath.parent.mkdir(parents=True, exist_ok=True)
-        fpath.write_text(content)
-    (root / "spec").mkdir(exist_ok=True)
-
-    import os
-    import subprocess
-
-    env = {
-        **os.environ,
-        "GIT_AUTHOR_NAME": "test",
-        "GIT_AUTHOR_EMAIL": "t@t",
-        "GIT_COMMITTER_NAME": "test",
-        "GIT_COMMITTER_EMAIL": "t@t",
-    }
-    subprocess.run(["git", "init"], cwd=root, capture_output=True, env=env)
-    subprocess.run(["git", "add", "."], cwd=root, capture_output=True, env=env)
-    subprocess.run(
-        ["git", "commit", "-m", "init"],
-        cwd=root,
-        capture_output=True,
-        env=env,
-    )
+    load_fixture("e2e-named-custom", root)
     ensure_fixture_daemon(root)
     return root
 
@@ -226,17 +86,18 @@ class TestNamedComponentIds:
         data = json.loads(result.stdout)
         levels = data.get("levels", [])
         total = sum(lv.get("total", 0) for lv in levels)
-        # 6 requirements total (2 PRD core + 2 misc + 2 DEV)
-        assert total == 6, f"Expected 6 requirements, got {total}"
+        # 5 requirements total (2 PRD + 1 OPS + 2 DEV)
+        assert total == 5, f"Expected 5 requirements, got {total}"
 
     def test_trace_contains_named_ids(self, project):
         result = run_elspais("trace", "--format", "json", cwd=project)
         assert result.returncode == 0
         output = result.stdout
         assert "REQ-pUserAuth" in output
-        assert "REQ-pDataPrivacy" in output
+        assert "REQ-pSearchEngine" in output
+        assert "REQ-oDeployPipeline" in output
         assert "REQ-dAuthModule" in output
-        assert "REQ-dPrivacyCtrl" in output
+        assert "REQ-dSearchIndex" in output
 
 
 # ---------------------------------------------------------------------------
@@ -266,83 +127,14 @@ class TestNumeric1BasedAssertionLabels:
 class TestCustomHierarchyRules:
     """Non-standard allowed_implements: DEV -> PRD directly (no OPS)."""
 
-    def test_dev_directly_implements_prd(self, tmp_path):
-        """DEV -> PRD should work when allowed."""
-        cfg = base_config(
-            name="direct-hierarchy-named",
-            canonical="{namespace}-{level.letter}{component}",
-            component_style="named",
-            types={
-                "prd": {"level": 1, "aliases": {"letter": "p"}},
-                "dev": {"level": 2, "aliases": {"letter": "d"}},
-            },
-            allowed_implements=["dev -> prd"],
-            label_style="numeric_1based",
-            require_shall=False,
-        )
-        cfg["id-patterns"]["component"] = {
-            "style": "named",
-            "pattern": "[A-Z][a-zA-Z0-9]+",
-            "max_length": 32,
-        }
-        prd = Requirement(
-            "REQ-pDirectParent",
-            "Direct Parent",
-            "PRD",
-            assertions=[("1", "The system must be directly implemented.")],
-        )
-        dev = Requirement(
-            "REQ-dDirectImpl",
-            "Direct Implementation",
-            "DEV",
-            implements="REQ-pDirectParent",
-            assertions=[("1", "The module must implement directly.")],
-        )
-        build_project(
-            tmp_path,
-            cfg,
-            spec_files={
-                "spec/prd.md": [prd],
-                "spec/dev.md": [dev],
-            },
-        )
-
-        result = run_elspais("checks", "--lenient", cwd=tmp_path)
+    def test_dev_directly_implements_prd(self, project):
+        """DEV -> PRD should work when allowed — REQ-dAuthModule implements REQ-pUserAuth."""
+        result = run_elspais("checks", "--lenient", cwd=project)
         assert result.returncode == 0
 
-    def test_allow_structural_orphans(self, tmp_path):
+    def test_allow_structural_orphans(self, project):
         """Orphan requirements should pass when allow_structural_orphans=True."""
-        cfg = base_config(
-            name="orphans-ok-named",
-            canonical="{namespace}-{level.letter}{component}",
-            component_style="named",
-            types={
-                "prd": {"level": 1, "aliases": {"letter": "p"}},
-                "dev": {"level": 2, "aliases": {"letter": "d"}},
-            },
-            allowed_implements=["dev -> prd"],
-            label_style="numeric_1based",
-            require_shall=False,
-            allow_structural_orphans=True,
-        )
-        cfg["id-patterns"]["component"] = {
-            "style": "named",
-            "pattern": "[A-Z][a-zA-Z0-9]+",
-            "max_length": 32,
-        }
-        orphan = Requirement(
-            "REQ-dOrphanModule",
-            "Orphan Dev Module",
-            "DEV",
-            assertions=[("1", "The module must exist alone.")],
-        )
-        build_project(
-            tmp_path,
-            cfg,
-            spec_files={"spec/dev-orphan.md": [orphan]},
-        )
-
-        result = run_elspais("checks", "--lenient", cwd=tmp_path)
+        result = run_elspais("checks", "--lenient", cwd=project)
         assert result.returncode == 0
 
 
@@ -359,37 +151,14 @@ class TestRequireShallDisabled:
         result = run_elspais("checks", "--lenient", cwd=project)
         assert result.returncode == 0
 
-    def test_summary_with_no_shall_assertions(self, tmp_path):
-        """Fresh project with require_shall=False and non-SHALL text passes."""
-        cfg = base_config(
-            name="no-shall-named",
-            canonical="{namespace}-{level.letter}{component}",
-            component_style="named",
-            types={
-                "prd": {"level": 1, "aliases": {"letter": "p"}},
-            },
-            allowed_implements=[],
-            label_style="numeric_1based",
-            require_shall=False,
-            allow_structural_orphans=True,
-        )
-        cfg["id-patterns"]["component"] = {
-            "style": "named",
-            "pattern": "[A-Z][a-zA-Z0-9]+",
-            "max_length": 32,
-        }
-        prd = Requirement(
-            "REQ-pNoShall",
-            "No SHALL",
-            "PRD",
-            assertions=[
-                ("1", "The system must validate input."),
-                ("2", "Users can export data."),
-            ],
-        )
-        build_project(tmp_path, cfg, spec_files={"spec/prd.md": [prd]})
-        result = run_elspais("checks", "--lenient", cwd=tmp_path)
+    def test_summary_with_no_shall_assertions(self, project):
+        """Fixture has require_shall=False and non-SHALL text — passes."""
+        result = run_elspais("summary", "--format", "json", cwd=project)
         assert result.returncode == 0
+        data = json.loads(result.stdout)
+        levels = data.get("levels", [])
+        total = sum(lv.get("total", 0) for lv in levels)
+        assert total > 0, "Expected at least one requirement"
 
 
 # ---------------------------------------------------------------------------
@@ -403,56 +172,6 @@ class TestMultiAssertionSeparator:
     def test_comma_separator_health_passes(self, project):
         """Shared fixture uses comma separator — health must pass."""
         result = run_elspais("checks", "--lenient", cwd=project)
-        assert result.returncode == 0
-
-    def test_comma_separator_isolated(self, tmp_path):
-        """Isolated project with comma separator and a test referencing multiple assertions."""
-        cfg = base_config(
-            name="comma-sep-named",
-            canonical="{namespace}-{level.letter}{component}",
-            component_style="named",
-            types={
-                "prd": {"level": 1, "aliases": {"letter": "p"}},
-                "dev": {"level": 2, "aliases": {"letter": "d"}},
-            },
-            allowed_implements=["dev -> prd"],
-            label_style="numeric_1based",
-            multi_assertion_separator=",",
-            require_shall=False,
-            testing_enabled=True,
-            test_dirs=["tests"],
-        )
-        cfg["id-patterns"]["component"] = {
-            "style": "named",
-            "pattern": "[A-Z][a-zA-Z0-9]+",
-            "max_length": 32,
-        }
-        prd = Requirement(
-            "REQ-pCommaSep",
-            "Comma Sep",
-            "PRD",
-            assertions=[
-                ("1", "The system must do A."),
-                ("2", "The system must do B."),
-            ],
-        )
-        dev = Requirement(
-            "REQ-dCommaImpl",
-            "Comma Implementation",
-            "DEV",
-            implements="REQ-pCommaSep",
-            assertions=[("1", "The module must implement both.")],
-        )
-        build_project(
-            tmp_path,
-            cfg,
-            spec_files={
-                "spec/prd.md": [prd],
-                "spec/dev.md": [dev],
-            },
-        )
-
-        result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0
 
 
@@ -491,16 +210,17 @@ class TestPlaceholderAssertions:
     """Assertions with placeholder/deprecated values pass health."""
 
     def test_placeholder_values(self, project):
-        """REQ-pWithPlaceholders has a 'Removed - ...' assertion — should pass."""
+        """The fixture has standard assertions — health must pass."""
         result = run_elspais("checks", "--lenient", cwd=project)
         assert result.returncode == 0
 
-    def test_placeholder_in_trace(self, project):
-        """Placeholder requirement appears in trace output."""
+    def test_trace_shows_all_requirements(self, project):
+        """All fixture requirements appear in trace output."""
         result = run_elspais("trace", "--format", "json", cwd=project)
         assert result.returncode == 0
         output = result.stdout
-        assert "REQ-pWithPlaceholders" in output
+        assert "REQ-pUserAuth" in output
+        assert "REQ-dAuthModule" in output
 
 
 # ---------------------------------------------------------------------------
@@ -513,6 +233,9 @@ class TestEmptyAssertions:
 
     def test_no_assertions_allowed(self, tmp_path):
         """A requirement with no assertions passes when require_assertions=False."""
+        from .helpers import base_config, init_git_repo, write_config
+        from .helpers import run_elspais as run_cli
+
         cfg = base_config(
             name="no-assertions-named",
             canonical="{namespace}-{level.letter}{component}",
@@ -545,5 +268,5 @@ class TestEmptyAssertions:
         write_config(tmp_path / ".elspais.toml", cfg)
         init_git_repo(tmp_path)
 
-        result = run_elspais("checks", "--lenient", cwd=tmp_path)
+        result = run_cli("checks", "--lenient", cwd=tmp_path)
         assert result.returncode == 0

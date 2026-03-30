@@ -276,3 +276,41 @@ class TestGeneratedComments:
         assert (
             sections_with_comments >= total_sections // 2
         ), f"Only {sections_with_comments}/{total_sections} sections have comments"
+
+
+class TestTermsConfigInTemplate:
+    """Validates REQ-d00212-L: Init template reflects nested terms config."""
+
+    def test_REQ_d00212_L_terms_severity_nested_in_template(self) -> None:
+        """Init template generates [terms.severity] sub-table."""
+        content = generate_config("core")
+        assert "[terms.severity]" in content
+
+    def test_REQ_d00212_L_terms_markup_styles_in_template(self) -> None:
+        """Init template includes markup_styles field."""
+        content = generate_config("core")
+        assert "markup_styles" in content
+
+    def test_REQ_d00212_L_terms_exclude_files_in_template(self) -> None:
+        """Init template includes exclude_files field."""
+        content = generate_config("core")
+        assert "exclude_files" in content
+
+    def test_REQ_d00212_L_no_flat_severity_in_template(self) -> None:
+        """Init template does NOT contain old flat severity keys."""
+        content = generate_config("core")
+        assert "duplicate_severity" not in content
+        assert "undefined_severity" not in content
+        assert "unmarked_severity" not in content
+
+    def test_REQ_d00212_L_terms_severity_has_all_fields(self) -> None:
+        """Init template [terms.severity] has all 6 severity fields."""
+        content = generate_config("core")
+        parsed = tomlkit.parse(content)
+        severity = parsed["terms"]["severity"]
+        assert severity["duplicate"] == "error"
+        assert severity["undefined"] == "warning"
+        assert severity["unmarked"] == "warning"
+        assert severity["unused"] == "warning"
+        assert severity["bad_definition"] == "error"
+        assert severity["collection_empty"] == "warning"

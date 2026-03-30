@@ -28,16 +28,24 @@ REPO_ROOT = (
 FIXTURES_DIR = REPO_ROOT / "tests" / "fixtures"
 
 
-def run_elspais(*args: str, cwd: str | Path | None = None) -> subprocess.CompletedProcess:
+def run_elspais(
+    *args: str,
+    cwd: str | Path | None = None,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess:
     """Run elspais as a subprocess and return the CompletedProcess."""
     if _ELSPAIS is None:
         pytest.skip("elspais CLI not found on PATH")
+    run_env = None
+    if env is not None:
+        run_env = {**os.environ, **env}
     return subprocess.run(
         [_ELSPAIS, *args],
         capture_output=True,
         text=True,
         cwd=cwd or REPO_ROOT,
         timeout=120,
+        env=run_env,
     )
 
 
@@ -81,57 +89,42 @@ def _warm_daemon():
     yield
 
 
-def build_fixture_project(
-    root: Path,
-    config_overrides: dict | None = None,
-    spec_files: dict[str, str] | None = None,
-    code_files: dict[str, str] | None = None,
-    test_files: dict[str, str] | None = None,
-    extra_files: dict[str, str] | None = None,
-    init_git: bool = True,
-) -> Path:
-    """Build a project directory for a shared e2e fixture.
+def _git_init(root: Path) -> None:
+    """Initialize a git repo with an initial commit."""
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "test",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "test",
+        "GIT_COMMITTER_EMAIL": "t@t",
+    }
+    subprocess.run(["git", "init"], cwd=root, capture_output=True, env=env)
+    subprocess.run(["git", "add", "."], cwd=root, capture_output=True, env=env)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=root, capture_output=True, env=env)
 
-    Args:
-        root: Project root directory (e.g., from tmp_path_factory.mktemp).
-        config_overrides: Kwargs passed to helpers.base_config().
-        spec_files: {relative_path: content} for spec files.
-        code_files: {relative_path: content} for code files.
-        test_files: {relative_path: content} for test files.
-        extra_files: {relative_path: content} for any other files.
-        init_git: Whether to initialize a git repo and commit.
 
-    Returns:
-        The project root path.
+def load_fixture(fixture_name: str, dest: Path) -> Path:
+    """Copy an on-disk fixture to dest (in /tmp), git init, return dest.
+
+    Every e2e test runs against a copy in /tmp — never inside the repo tree.
     """
-    from tests.e2e.helpers import base_config, write_config
+    src = FIXTURES_DIR / fixture_name
+    for item in src.iterdir():
+        if item.is_dir():
+            shutil.copytree(item, dest / item.name)
+        else:
+            shutil.copy2(item, dest / item.name)
+    _git_init(dest)
+    return dest
 
-    config = base_config(**(config_overrides or {}))
-    write_config(root / ".elspais.toml", config)
 
-    for files in [spec_files, code_files, test_files, extra_files]:
-        if files:
-            for rel_path, content in files.items():
-                fpath = root / rel_path
-                fpath.parent.mkdir(parents=True, exist_ok=True)
-                fpath.write_text(content)
-
-    # Ensure spec/ exists even if no spec_files
-    (root / "spec").mkdir(exist_ok=True)
-
-    if init_git:
-        env = {
-            **os.environ,
-            "GIT_AUTHOR_NAME": "test",
-            "GIT_AUTHOR_EMAIL": "t@t",
-            "GIT_COMMITTER_NAME": "test",
-            "GIT_COMMITTER_EMAIL": "t@t",
-        }
-        subprocess.run(["git", "init"], cwd=root, capture_output=True, env=env)
-        subprocess.run(["git", "add", "."], cwd=root, capture_output=True, env=env)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=root, capture_output=True, env=env)
-
-    return root
+def load_associated_fixture(dest: Path) -> Path:
+    """Copy the e2e-associated fixture, git init each repo, return core root."""
+    src = FIXTURES_DIR / "e2e-associated"
+    shutil.copytree(src, dest, dirs_exist_ok=True)
+    for repo_dir in (dest / "core", dest / "alpha", dest / "beta"):
+        _git_init(repo_dir)
+    return dest / "core"
 
 
 def ensure_fixture_daemon(root: Path) -> None:

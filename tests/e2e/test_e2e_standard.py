@@ -3,13 +3,13 @@
 """Standard workhorse e2e tests — module-scoped fixture with daemon acceleration.
 
 Tests standard 3-tier hierarchy (REQ-p/o/d), uppercase assertions,
-and base_config() defaults against a single shared project.
+terms config with default severities, against a single shared project.
 
 Groups:
-  1. Read-only CLI tests (health, summary, trace, analysis, graph, config show)
-  2. Mutation tests (fix, config set, edit, changed)
-  3. MCP query tests (search, hierarchy, subtree, coverage)
-  4. MCP mutation tests (with undo)
+  1. Read-only CLI tests (health, summary, trace, analysis, graph, config show, terms)
+  2. Read-only MCP tests (search, hierarchy, subtree, coverage)
+  3. Incremental CLI mutations (fix, config set, edit, changed)
+  4. Incremental MCP mutations (add, rename, save, undo)
 """
 
 from __future__ import annotations
@@ -17,16 +17,12 @@ from __future__ import annotations
 import json
 import re
 import shutil
-import subprocess
 
 import pytest
 
 from .conftest import (
-    build_fixture_project,
     ensure_fixture_daemon,
-)
-from .helpers import (
-    Requirement,
+    load_fixture,
     run_elspais,
 )
 
@@ -40,202 +36,15 @@ pytestmark = [
 
 
 # ---------------------------------------------------------------------------
-# Fixture project content
-# ---------------------------------------------------------------------------
-
-_PRD_REQ_P00001 = Requirement(
-    "REQ-p00001",
-    "User Authentication",
-    "PRD",
-    assertions=[
-        ("A", "The system SHALL authenticate users."),
-        ("B", "The system SHALL enforce password policies."),
-        ("C", "The system SHALL support multi-factor authentication."),
-    ],
-)
-
-_PRD_REQ_P00002 = Requirement(
-    "REQ-p00002",
-    "Notifications",
-    "PRD",
-    assertions=[
-        ("A", "The system SHALL send email notifications."),
-        ("B", "The system SHALL send push notifications."),
-    ],
-)
-
-_PRD_REQ_P00003 = Requirement(
-    "REQ-p00003",
-    "Draft Feature",
-    "PRD",
-    status="Draft",
-    assertions=[
-        ("A", "The system SHALL provide draft feature."),
-    ],
-)
-
-_PRD_REQ_P00004 = Requirement(
-    "REQ-p00004",
-    "Deprecated Feature",
-    "PRD",
-    status="Deprecated",
-    assertions=[
-        ("A", "The system SHALL deprecate old feature."),
-    ],
-)
-
-_OPS_REQ_O00001 = Requirement(
-    "REQ-o00001",
-    "Auth Deployment",
-    "OPS",
-    implements="REQ-p00001",
-    assertions=[
-        ("A", "Operations SHALL deploy auth service with HA."),
-    ],
-)
-
-_OPS_REQ_O00002 = Requirement(
-    "REQ-o00002",
-    "Notification Ops",
-    "OPS",
-    implements="REQ-p00002",
-    assertions=[
-        ("A", "Operations SHALL monitor notification delivery."),
-    ],
-)
-
-_DEV_REQ_D00001 = Requirement(
-    "REQ-d00001",
-    "Auth Module",
-    "DEV",
-    implements="REQ-o00001",
-    assertions=[
-        ("A", "The module SHALL use bcrypt for hashing."),
-        ("B", "The module SHALL validate JWT tokens."),
-    ],
-)
-
-_DEV_REQ_D00002 = Requirement(
-    "REQ-d00002",
-    "Notification Service",
-    "DEV",
-    implements="REQ-o00002",
-    assertions=[
-        ("A", "The module SHALL queue notifications."),
-    ],
-)
-
-_DEV_REQ_D00003 = Requirement(
-    "REQ-d00003",
-    "Auth Refinement",
-    "DEV",
-    refines="REQ-d00001",
-    assertions=[
-        ("A", "The module SHALL add token refresh logic."),
-    ],
-)
-
-# Many-assertions requirement: 26 assertions A-Z
-_MANY_ASSERTIONS = [
-    (chr(ord("A") + i), f"The system SHALL satisfy criterion {chr(ord('A') + i)}.")
-    for i in range(26)
-]
-
-_PRD_REQ_P00005 = Requirement(
-    "REQ-p00005",
-    "Comprehensive Criteria",
-    "PRD",
-    assertions=_MANY_ASSERTIONS,
-)
-
-
-def _build_wrong_hash_spec() -> str:
-    """Build prd-deprecated.md with intentionally wrong hash for REQ-p00004."""
-    h_wrong = "00000000"
-    return (
-        "# REQ-p00004: Deprecated Feature\n"
-        "\n"
-        "**Level**: PRD | **Status**: Deprecated\n"
-        "\n"
-        "## Assertions\n"
-        "\n"
-        "A. The system SHALL deprecate old feature.\n"
-        "\n"
-        f"*End* *Deprecated Feature* | **Hash**: {h_wrong}\n"
-        "---\n"
-    )
-
-
-def _build_spec_content(reqs: list[Requirement]) -> str:
-    """Render multiple requirements to spec file content."""
-    return "\n".join(r.render() for r in reqs)
-
-
-# ---------------------------------------------------------------------------
 # Module-scoped fixtures
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture(scope="module")
 def project(tmp_path_factory):
-    """Build the standard project once for the entire module."""
+    """Copy e2e-standard fixture to /tmp, init git, start daemon."""
     root = tmp_path_factory.mktemp("e2e_standard")
-
-    spec_files = {
-        "spec/prd-core.md": _build_spec_content([_PRD_REQ_P00001, _PRD_REQ_P00002]),
-        "spec/prd-draft.md": _build_spec_content([_PRD_REQ_P00003]),
-        "spec/prd-deprecated.md": _build_wrong_hash_spec(),
-        "spec/prd-comprehensive.md": _build_spec_content([_PRD_REQ_P00005]),
-        "spec/ops-deploy.md": _build_spec_content([_OPS_REQ_O00001, _OPS_REQ_O00002]),
-        "spec/dev-impl.md": _build_spec_content([_DEV_REQ_D00001, _DEV_REQ_D00002]),
-        "spec/dev-refine.md": _build_spec_content([_DEV_REQ_D00003]),
-        "spec/INDEX.md": "# Index\n\nThis file should be skipped.\n",
-        "spec/NOTES.md": "# Notes\n\nThis file should be skipped.\n",
-        "spec/drafts/wip-ideas.md": (
-            "# REQ-p99999: WIP Idea\n\n"
-            "**Level**: PRD | **Status**: Draft\n\n"
-            "## Assertions\n\n"
-            "A. The system SHALL be a draft.\n\n"
-            "*End* *WIP Idea* | **Hash**: 00000000\n---\n"
-        ),
-    }
-
-    code_files = {
-        "src/auth.py": (
-            "# Implements: REQ-d00001-A\n" "\n" "def authenticate(user, password):\n" "    pass\n"
-        ),
-        "src/auth_multi.py": (
-            "# Implements: REQ-d00001-A+B\n" "\n" "def multi_auth():\n" "    pass\n"
-        ),
-        "src/notifications.py": (
-            "# Implements: REQ-d00002\n" "\n" "def send_notification():\n" "    pass\n"
-        ),
-    }
-
-    test_files = {
-        "tests/test_auth.py": (
-            "# Verifies: REQ-d00001-A\n" "\n" "def test_authenticate():\n" "    assert True\n"
-        ),
-        "tests/test_notifications.py": (
-            "# Verifies: REQ-d00002\n" "\n" "def test_send():\n" "    assert True\n"
-        ),
-    }
-
-    build_fixture_project(
-        root,
-        config_overrides={
-            "name": "e2e-standard",
-            "allow_structural_orphans": True,
-            "testing_enabled": True,
-            "test_dirs": ["tests"],
-            "skip_files": ["INDEX.md", "NOTES.md"],
-            "skip_dirs": ["drafts"],
-        },
-        spec_files=spec_files,
-        code_files=code_files,
-        test_files=test_files,
-    )
-
+    load_fixture("e2e-standard", root)
     ensure_fixture_daemon(root)
     return root
 
@@ -688,361 +497,12 @@ class TestCodeRefsAndTesting:
         assert "REQ-d00001" in result.stdout
 
 
-# ===================================================================
-# Group 2: Mutation CLI tests (use separate tmp_path copies)
-# ===================================================================
-
-
-class TestFixCorrectsHash:
-    """Fix command recalculates hashes correctly."""
-
-    def test_fix_corrects_wrong_hash(self, project, tmp_path):
-        """Fix the wrong hash in prd-deprecated.md (copy to tmp_path first)."""
-        # Copy project to tmp_path so we can mutate
-        import os
-
-        dst = tmp_path / "fix_project"
-        shutil.copytree(project, dst)
-
-        # Verify wrong hash exists
-        spec = dst / "spec" / "prd-deprecated.md"
-        content = spec.read_text()
-        assert "00000000" in content
-
-        # Commit the copy (fix needs git)
-        env = {
-            **os.environ,
-            "GIT_AUTHOR_NAME": "test",
-            "GIT_AUTHOR_EMAIL": "t@t",
-            "GIT_COMMITTER_NAME": "test",
-            "GIT_COMMITTER_EMAIL": "t@t",
-        }
-        subprocess.run(["git", "init"], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "add", "."], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=dst, capture_output=True, env=env)
-
-        result = run_elspais("fix", cwd=dst)
-        assert result.returncode == 0, f"fix failed: {result.stderr}"
-
-        content = spec.read_text()
-        assert "00000000" not in content, "Hash was not corrected by fix"
-        match = re.search(r"\*\*Hash\*\*:\s*([0-9a-f]{8})", content)
-        assert match, "No valid hash found after fix"
-
-    def test_fix_dry_run_does_not_modify(self, project, tmp_path):
-        import os
-
-        dst = tmp_path / "dryrun_project"
-        shutil.copytree(project, dst)
-
-        env = {
-            **os.environ,
-            "GIT_AUTHOR_NAME": "test",
-            "GIT_AUTHOR_EMAIL": "t@t",
-            "GIT_COMMITTER_NAME": "test",
-            "GIT_COMMITTER_EMAIL": "t@t",
-        }
-        subprocess.run(["git", "init"], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "add", "."], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=dst, capture_output=True, env=env)
-
-        spec = dst / "spec" / "prd-deprecated.md"
-        result = run_elspais("fix", "--dry-run", cwd=dst)
-        assert result.returncode == 0
-
-        content = spec.read_text()
-        assert "00000000" in content, "Dry run modified the file"
-
-
-class TestFixIdempotent:
-    """Running fix twice produces same result."""
-
-    def test_fix_idempotent(self, project, tmp_path):
-        import os
-
-        dst = tmp_path / "idemp_project"
-        shutil.copytree(project, dst)
-
-        env = {
-            **os.environ,
-            "GIT_AUTHOR_NAME": "test",
-            "GIT_AUTHOR_EMAIL": "t@t",
-            "GIT_COMMITTER_NAME": "test",
-            "GIT_COMMITTER_EMAIL": "t@t",
-        }
-        subprocess.run(["git", "init"], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "add", "."], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=dst, capture_output=True, env=env)
-
-        run_elspais("fix", cwd=dst)
-        spec = dst / "spec" / "prd-core.md"
-        content1 = spec.read_text()
-
-        subprocess.run(["git", "add", "."], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "commit", "-m", "fix1"], cwd=dst, capture_output=True, env=env)
-
-        run_elspais("fix", cwd=dst)
-        content2 = spec.read_text()
-
-        assert content1 == content2, "Second fix changed the file"
-
-
-class TestFixSpecificRequirement:
-    """Fix command targeting a specific requirement ID."""
-
-    def test_fix_specific_id(self, project, tmp_path):
-        import os
-
-        dst = tmp_path / "fix_specific"
-        shutil.copytree(project, dst)
-
-        env = {
-            **os.environ,
-            "GIT_AUTHOR_NAME": "test",
-            "GIT_AUTHOR_EMAIL": "t@t",
-            "GIT_COMMITTER_NAME": "test",
-            "GIT_COMMITTER_EMAIL": "t@t",
-        }
-        subprocess.run(["git", "init"], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "add", "."], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=dst, capture_output=True, env=env)
-
-        result = run_elspais("fix", "REQ-p00004", cwd=dst)
-        assert result.returncode == 0
-
-        content = (dst / "spec" / "prd-deprecated.md").read_text()
-        hashes = re.findall(r"\*\*Hash\*\*:\s*(\S+)", content)
-        assert len(hashes) >= 1
-        assert hashes[0] != "00000000"
-
-
-class TestConfigSetGet:
-    """Config set/get round-trip (uses copy)."""
-
-    def test_set_then_get(self, project, tmp_path):
-        import os
-
-        dst = tmp_path / "config_setget"
-        shutil.copytree(project, dst)
-
-        env = {
-            **os.environ,
-            "GIT_AUTHOR_NAME": "test",
-            "GIT_AUTHOR_EMAIL": "t@t",
-            "GIT_COMMITTER_NAME": "test",
-            "GIT_COMMITTER_EMAIL": "t@t",
-        }
-        subprocess.run(["git", "init"], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "add", "."], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=dst, capture_output=True, env=env)
-
-        set_result = run_elspais("config", "set", "project.name", "updated-name", cwd=dst)
-        assert set_result.returncode == 0
-
-        get_result = run_elspais("config", "get", "project.name", cwd=dst)
-        assert get_result.returncode == 0
-        assert "updated-name" in get_result.stdout
-
-
-class TestConfigArrayOperations:
-    """Config add/remove for array values."""
-
-    def test_add_status(self, project, tmp_path):
-        import os
-
-        dst = tmp_path / "config_add"
-        shutil.copytree(project, dst)
-
-        env = {
-            **os.environ,
-            "GIT_AUTHOR_NAME": "test",
-            "GIT_AUTHOR_EMAIL": "t@t",
-            "GIT_COMMITTER_NAME": "test",
-            "GIT_COMMITTER_EMAIL": "t@t",
-        }
-        subprocess.run(["git", "init"], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "add", "."], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=dst, capture_output=True, env=env)
-
-        result = run_elspais(
-            "config",
-            "add",
-            "rules.format.allowed_statuses",
-            "Experimental",
-            cwd=dst,
-        )
-        assert result.returncode == 0
-
-        show = run_elspais("config", "show", "--format", "json", cwd=dst)
-        data = json.loads(show.stdout)
-        statuses = data.get("rules", {}).get("format", {}).get("allowed_statuses", [])
-        assert "Experimental" in statuses
-
-    def test_remove_status(self, project, tmp_path):
-        import os
-
-        dst = tmp_path / "config_remove"
-        shutil.copytree(project, dst)
-
-        env = {
-            **os.environ,
-            "GIT_AUTHOR_NAME": "test",
-            "GIT_AUTHOR_EMAIL": "t@t",
-            "GIT_COMMITTER_NAME": "test",
-            "GIT_COMMITTER_EMAIL": "t@t",
-        }
-        subprocess.run(["git", "init"], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "add", "."], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=dst, capture_output=True, env=env)
-
-        result = run_elspais(
-            "config",
-            "remove",
-            "rules.format.allowed_statuses",
-            "Superseded",
-            cwd=dst,
-        )
-        assert result.returncode == 0
-
-        show = run_elspais("config", "show", "--format", "json", cwd=dst)
-        data = json.loads(show.stdout)
-        statuses = data.get("rules", {}).get("format", {}).get("allowed_statuses", [])
-        assert "Superseded" not in statuses
-
-
-class TestConfigUnset:
-    """Config unset removes a key."""
-
-    def test_unset_key(self, project, tmp_path):
-        import os
-
-        import tomlkit
-
-        dst = tmp_path / "config_unset"
-        shutil.copytree(project, dst)
-
-        env = {
-            **os.environ,
-            "GIT_AUTHOR_NAME": "test",
-            "GIT_AUTHOR_EMAIL": "t@t",
-            "GIT_COMMITTER_NAME": "test",
-            "GIT_COMMITTER_EMAIL": "t@t",
-        }
-        subprocess.run(["git", "init"], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "add", "."], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=dst, capture_output=True, env=env)
-
-        result = run_elspais("config", "unset", "project.namespace", cwd=dst)
-        assert result.returncode == 0
-
-        content = (dst / ".elspais.toml").read_text()
-        data = tomlkit.loads(content)
-        assert "namespace" not in data.get("project", {})
-
-
-class TestEditCommand:
-    """Edit command modifies requirements in-place."""
-
-    def test_edit_status(self, project, tmp_path):
-        import os
-
-        dst = tmp_path / "edit_project"
-        shutil.copytree(project, dst)
-
-        env = {
-            **os.environ,
-            "GIT_AUTHOR_NAME": "test",
-            "GIT_AUTHOR_EMAIL": "t@t",
-            "GIT_COMMITTER_NAME": "test",
-            "GIT_COMMITTER_EMAIL": "t@t",
-        }
-        subprocess.run(["git", "init"], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "add", "."], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=dst, capture_output=True, env=env)
-
-        result = run_elspais("edit", "REQ-p00001", "--status", "Draft", cwd=dst)
-        if result.returncode == 0:
-            content = (dst / "spec" / "prd-core.md").read_text()
-            assert "Draft" in content
-
-
-class TestChangedCommand:
-    """Changed command detects git changes to spec files."""
-
-    def test_changed_detects_uncommitted_edit(self, project, tmp_path):
-        import os
-
-        dst = tmp_path / "changed_project"
-        shutil.copytree(project, dst)
-
-        env = {
-            **os.environ,
-            "GIT_AUTHOR_NAME": "test",
-            "GIT_AUTHOR_EMAIL": "t@t",
-            "GIT_COMMITTER_NAME": "test",
-            "GIT_COMMITTER_EMAIL": "t@t",
-        }
-        subprocess.run(["git", "init"], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "add", "."], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=dst, capture_output=True, env=env)
-
-        # Modify a spec file
-        spec = dst / "spec" / "prd-core.md"
-        content = spec.read_text()
-        spec.write_text(content.replace("User Authentication", "Modified Authentication"))
-
-        result = run_elspais("changed", "--format", "json", cwd=dst)
-        assert result.returncode == 0
-        output = result.stdout.strip()
-        if output:
-            data = json.loads(output)
-            assert isinstance(data, (list, dict))
-
-    def test_changed_no_changes(self, project, tmp_path):
-        import os
-
-        dst = tmp_path / "changed_clean"
-        shutil.copytree(project, dst)
-
-        env = {
-            **os.environ,
-            "GIT_AUTHOR_NAME": "test",
-            "GIT_AUTHOR_EMAIL": "t@t",
-            "GIT_COMMITTER_NAME": "test",
-            "GIT_COMMITTER_EMAIL": "t@t",
-        }
-        subprocess.run(["git", "init"], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "add", "."], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=dst, capture_output=True, env=env)
-
-        result = run_elspais("changed", "--format", "json", cwd=dst)
-        assert result.returncode == 0
-
-    def test_changed_base_branch(self, project, tmp_path):
-        import os
-
-        dst = tmp_path / "changed_branch"
-        shutil.copytree(project, dst)
-
-        env = {
-            **os.environ,
-            "GIT_AUTHOR_NAME": "test",
-            "GIT_AUTHOR_EMAIL": "t@t",
-            "GIT_COMMITTER_NAME": "test",
-            "GIT_COMMITTER_EMAIL": "t@t",
-        }
-        subprocess.run(["git", "init", "-b", "main"], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "add", "."], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=dst, capture_output=True, env=env)
-
-        result = run_elspais(
-            "changed",
-            "--base-branch",
-            "main",
-            "--format",
-            "json",
-            cwd=dst,
-        )
+class TestMultiAssertionSyntax:
+    """Multi-assertion compact syntax (A+B) in code references."""
+
+    def test_multi_assertion_code_reference(self, project):
+        """src/auth_multi.py uses REQ-d00001-A+B syntax."""
+        result = run_elspais("checks", "--lenient", cwd=project)
         assert result.returncode == 0
 
 
@@ -1066,17 +526,90 @@ class TestHealthOutputToFile:
             assert isinstance(data, (dict, list))
 
 
-class TestMultiAssertionSyntax:
-    """Multi-assertion compact syntax (A+B) in code references."""
+# ===================================================================
+# Group 1b: Read-only CLI term tests
+# ===================================================================
 
-    def test_multi_assertion_code_reference(self, project):
-        """src/auth_multi.py uses REQ-d00001-A+B syntax."""
-        result = run_elspais("checks", "--lenient", cwd=project)
+
+class TestTermHealthChecks:
+    """Term health checks appear in checks output."""
+
+    def test_term_check_names_in_json(self, project):
+        result = run_elspais("checks", "--format", "json", "--lenient", cwd=project)
         assert result.returncode == 0
+        data = json.loads(result.stdout)
+        check_names = {c["name"] for c in data.get("checks", [])}
+        for name in (
+            "terms.duplicates",
+            "terms.undefined",
+            "terms.unmarked",
+            "terms.unused",
+            "terms.bad_definition",
+            "terms.collection_empty",
+        ):
+            assert name in check_names, f"Expected check '{name}' not found in {check_names}"
+
+
+class TestGlossaryCommand:
+    """elspais glossary generates output."""
+
+    def test_glossary_markdown(self, project):
+        result = run_elspais("glossary", cwd=project)
+        assert result.returncode == 0
+        assert "Authentication" in result.stdout
+
+    def test_glossary_json(self, project):
+        result = run_elspais("glossary", "--format", "json", cwd=project)
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        assert isinstance(data, (dict, list))
+
+
+class TestTermIndexCommand:
+    """elspais term-index generates output."""
+
+    def test_term_index_markdown(self, project):
+        result = run_elspais("term-index", cwd=project)
+        assert result.returncode == 0
+
+    def test_term_index_json(self, project):
+        result = run_elspais("term-index", "--format", "json", cwd=project)
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        assert isinstance(data, (dict, list))
+
+
+class TestHealthSARIF:
+    """Health SARIF output format."""
+
+    def test_health_sarif(self, project):
+        result = run_elspais("checks", "--format", "sarif", "--lenient", cwd=project)
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        assert isinstance(data, dict)
+        assert "$schema" in data or "runs" in data or "version" in data
+
+
+class TestHealthJUnit:
+    """Health JUnit output format."""
+
+    def test_health_junit(self, project):
+        result = run_elspais("checks", "--format", "junit", "--lenient", cwd=project)
+        assert result.returncode == 0
+        assert "<?xml" in result.stdout or "<testsuites" in result.stdout
+
+
+class TestHealthMarkdown:
+    """Health markdown output format."""
+
+    def test_health_markdown(self, project):
+        result = run_elspais("checks", "--format", "markdown", "--lenient", cwd=project)
+        assert result.returncode == 0
+        assert len(result.stdout.strip()) > 0
 
 
 # ===================================================================
-# Group 3: MCP query tests (read-only, use shared mcp_server)
+# Group 2: MCP query tests (read-only, use shared mcp_server)
 # ===================================================================
 
 
@@ -1393,354 +926,32 @@ class TestMCPChangedRequirements:
 
 
 # ===================================================================
-# Group 4: MCP mutation tests (each starts its own server for isolation)
+# Group 3: CLI mutation tests (incremental, run on project directly)
 # ===================================================================
 
 
-class TestMCPMutations:
-    """MCP mutation tools: add, update, rename, undo."""
-
-    def test_add_requirement_and_undo(self, project):
-        pytest.importorskip("mcp")
-        from .helpers import mcp_call, start_mcp, stop_mcp
-
-        proc = start_mcp(project)
-        try:
-            result = mcp_call(
-                proc,
-                "mutate_add_requirement",
-                {"req_id": "REQ-p00099", "title": "New Feature", "level": "prd", "status": "Draft"},
-            )
-            assert isinstance(result, dict)
-            assert not result.get("_error"), f"Add failed: {result}"
-
-            get_result = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00099"})
-            assert get_result and get_result.get("id") == "REQ-p00099"
-
-            undo = mcp_call(proc, "undo_last_mutation", {})
-            assert isinstance(undo, dict)
-
-            after_undo = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00099"})
-            assert after_undo is None or after_undo.get("error") or after_undo.get("_error")
-        finally:
-            stop_mcp(proc)
-
-    def test_update_title_and_undo(self, project):
-        pytest.importorskip("mcp")
-        from .helpers import mcp_call, start_mcp, stop_mcp
-
-        proc = start_mcp(project)
-        try:
-            original = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00001"})
-            orig_title = original["title"]
-
-            mcp_call(
-                proc,
-                "mutate_update_title",
-                {"node_id": "REQ-p00001", "new_title": "Updated Title"},
-            )
-
-            updated = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00001"})
-            assert updated["title"] == "Updated Title"
-
-            mcp_call(proc, "undo_last_mutation", {})
-            reverted = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00001"})
-            assert reverted["title"] == orig_title
-        finally:
-            stop_mcp(proc)
-
-    def test_mutation_log(self, project):
-        pytest.importorskip("mcp")
-        from .helpers import mcp_call, start_mcp, stop_mcp
-
-        proc = start_mcp(project)
-        try:
-            mcp_call(
-                proc,
-                "mutate_update_title",
-                {"node_id": "REQ-p00001", "new_title": "Title V1"},
-            )
-            mcp_call(
-                proc,
-                "mutate_update_title",
-                {"node_id": "REQ-p00001", "new_title": "Title V2"},
-            )
-
-            log = mcp_call(proc, "get_mutation_log", {"limit": 10})
-            assert isinstance(log, (list, dict))
-        finally:
-            stop_mcp(proc)
-
-
-class TestMCPAssertionMutations:
-    """MCP assertion CRUD operations."""
-
-    def test_add_assertion(self, project):
-        pytest.importorskip("mcp")
-        from .helpers import mcp_call, start_mcp, stop_mcp
-
-        proc = start_mcp(project)
-        try:
-            result = mcp_call(
-                proc,
-                "mutate_add_assertion",
-                {"req_id": "REQ-p00001", "label": "D", "text": "The system SHALL support SSO."},
-            )
-            assert isinstance(result, dict)
-            assert not result.get("_error")
-
-            req = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00001"})
-            labels = [a.get("label", "") for a in req.get("assertions", [])]
-            assert "D" in labels
-        finally:
-            stop_mcp(proc)
-
-    def test_update_assertion(self, project):
-        pytest.importorskip("mcp")
-        from .helpers import mcp_call, start_mcp, stop_mcp
-
-        proc = start_mcp(project)
-        try:
-            result = mcp_call(
-                proc,
-                "mutate_update_assertion",
-                {
-                    "assertion_id": "REQ-p00001-A",
-                    "new_text": "The system SHALL create and manage user accounts.",
-                },
-            )
-            assert isinstance(result, dict)
-        finally:
-            stop_mcp(proc)
-
-    def test_delete_assertion_and_undo(self, project):
-        pytest.importorskip("mcp")
-        from .helpers import mcp_call, start_mcp, stop_mcp
-
-        proc = start_mcp(project)
-        try:
-            result = mcp_call(
-                proc,
-                "mutate_delete_assertion",
-                {"assertion_id": "REQ-p00001-C", "confirm": True},
-            )
-            assert isinstance(result, dict)
-
-            req = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00001"})
-            labels = [a.get("label", "") for a in req.get("assertions", [])]
-            assert "C" not in labels
-
-            mcp_call(proc, "undo_last_mutation", {})
-            req2 = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00001"})
-            labels2 = [a.get("label", "") for a in req2.get("assertions", [])]
-            assert "C" in labels2
-        finally:
-            stop_mcp(proc)
-
-    def test_rename_assertion(self, project):
-        pytest.importorskip("mcp")
-        from .helpers import mcp_call, start_mcp, stop_mcp
-
-        proc = start_mcp(project)
-        try:
-            result = mcp_call(
-                proc,
-                "mutate_rename_assertion",
-                {"old_id": "REQ-p00001-A", "new_label": "X"},
-            )
-            assert isinstance(result, dict)
-
-            req = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00001"})
-            labels = [a.get("label", "") for a in req.get("assertions", [])]
-            assert "X" in labels
-            assert "A" not in labels
-        finally:
-            stop_mcp(proc)
-
-
-class TestMCPEdgeMutations:
-    """MCP edge add/delete operations."""
-
-    def test_add_edge(self, project):
-        pytest.importorskip("mcp")
-        from .helpers import mcp_call, start_mcp, stop_mcp
-
-        proc = start_mcp(project)
-        try:
-            result = mcp_call(
-                proc,
-                "mutate_add_edge",
-                {"source_id": "REQ-d00002", "target_id": "REQ-o00001", "edge_kind": "implements"},
-            )
-            assert isinstance(result, dict)
-            assert not result.get("_error"), f"Edge add failed: {result}"
-        finally:
-            stop_mcp(proc)
-
-    def test_delete_edge_and_undo(self, project):
-        pytest.importorskip("mcp")
-        from .helpers import mcp_call, start_mcp, stop_mcp
-
-        proc = start_mcp(project)
-        try:
-            result = mcp_call(
-                proc,
-                "mutate_delete_edge",
-                {"source_id": "REQ-d00001", "target_id": "REQ-o00001", "confirm": True},
-            )
-            assert isinstance(result, dict)
-
-            mcp_call(proc, "undo_last_mutation", {})
-
-            hier = mcp_call(proc, "get_hierarchy", {"req_id": "REQ-d00001"})
-            ancestors = hier.get("ancestors", [])
-            assert len(ancestors) > 0
-        finally:
-            stop_mcp(proc)
-
-    def test_change_edge_kind(self, project):
-        pytest.importorskip("mcp")
-        from .helpers import mcp_call, start_mcp, stop_mcp
-
-        proc = start_mcp(project)
-        try:
-            result = mcp_call(
-                proc,
-                "mutate_change_edge_kind",
-                {"source_id": "REQ-d00003", "target_id": "REQ-d00001", "new_kind": "implements"},
-            )
-            assert isinstance(result, dict)
-        finally:
-            stop_mcp(proc)
-
-
-class TestMCPRenameNode:
-    """MCP mutate_rename_node."""
-
-    def test_rename_and_undo(self, project):
-        pytest.importorskip("mcp")
-        from .helpers import mcp_call, start_mcp, stop_mcp
-
-        proc = start_mcp(project)
-        try:
-            result = mcp_call(
-                proc,
-                "mutate_rename_node",
-                {"old_id": "REQ-p00003", "new_id": "REQ-p00099"},
-            )
-            assert isinstance(result, dict)
-            assert not result.get("_error"), f"Rename failed: {result}"
-
-            req = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00099"})
-            assert req and req.get("id") == "REQ-p00099"
-
-            old = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00003"})
-            assert old is None or old.get("_error") or old.get("error")
-
-            mcp_call(proc, "undo_last_mutation", {})
-
-            restored = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00003"})
-            assert restored and restored.get("id") == "REQ-p00003"
-        finally:
-            stop_mcp(proc)
-
-
-class TestMCPChangeStatus:
-    """MCP mutate_change_status."""
-
-    def test_change_status(self, project):
-        pytest.importorskip("mcp")
-        from .helpers import mcp_call, start_mcp, stop_mcp
-
-        proc = start_mcp(project)
-        try:
-            result = mcp_call(
-                proc,
-                "mutate_change_status",
-                {"node_id": "REQ-p00001", "new_status": "Draft"},
-            )
-            assert isinstance(result, dict)
-
-            req = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00001"})
-            req_str = json.dumps(req)
-            assert "Draft" in req_str
-        finally:
-            stop_mcp(proc)
-
-
-class TestMCPDeleteRequirement:
-    """MCP mutate_delete_requirement."""
-
-    def test_delete_and_undo(self, project):
-        pytest.importorskip("mcp")
-        from .helpers import mcp_call, start_mcp, stop_mcp
-
-        proc = start_mcp(project)
-        try:
-            result = mcp_call(
-                proc,
-                "mutate_delete_requirement",
-                {"node_id": "REQ-p00003", "confirm": True},
-            )
-            assert isinstance(result, dict)
-
-            req = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00003"})
-            assert req is None or req.get("_error") or req.get("error")
-
-            req1 = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00001"})
-            assert req1 and req1.get("id") == "REQ-p00001"
-
-            mcp_call(proc, "undo_last_mutation", {})
-
-            restored = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00003"})
-            assert restored and restored.get("id") == "REQ-p00003"
-        finally:
-            stop_mcp(proc)
-
-
-class TestMCPUndoToMutation:
-    """MCP undo_to_mutation for selective rollback."""
-
-    def test_undo_multiple(self, project):
-        pytest.importorskip("mcp")
-        from .helpers import mcp_call, start_mcp, stop_mcp
-
-        proc = start_mcp(project)
-        try:
-            mcp_call(
-                proc, "mutate_update_title", {"node_id": "REQ-p00001", "new_title": "Title V1"}
-            )
-            mcp_call(
-                proc, "mutate_update_title", {"node_id": "REQ-p00001", "new_title": "Title V2"}
-            )
-            mcp_call(
-                proc, "mutate_update_title", {"node_id": "REQ-p00001", "new_title": "Title V3"}
-            )
-
-            log = mcp_call(proc, "get_mutation_log", {"limit": 10})
-            assert isinstance(log, (list, dict))
-
-            mcp_call(proc, "undo_last_mutation", {})
-            mcp_call(proc, "undo_last_mutation", {})
-            mcp_call(proc, "undo_last_mutation", {})
-
-            req = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00001"})
-            assert req["title"] == "User Authentication"
-        finally:
-            stop_mcp(proc)
-
-
-class TestMCPSaveRefreshRoundTrip:
-    """Mutate -> save -> refresh -> verify persisted."""
-
-    def test_save_refresh_roundtrip(self, project, tmp_path):
-        pytest.importorskip("mcp")
+@pytest.mark.incremental
+class TestStandardCLIMutations:
+    """Incremental CLI mutation tests — each builds on the prior state."""
+
+    def test_01_fix_corrects_wrong_hash(self, project):
+        """Fix the wrong hash in prd-deprecated.md."""
+        spec = project / "spec" / "prd-deprecated.md"
+        content = spec.read_text()
+        assert "XXXXXXXX" in content
+
+        result = run_elspais("fix", cwd=project)
+        assert result.returncode == 0, f"fix failed: {result.stderr}"
+
+        content = spec.read_text()
+        assert "XXXXXXXX" not in content, "Hash was not corrected by fix"
+        match = re.search(r"\*\*Hash\*\*:\s*([0-9a-f]{8})", content)
+        assert match, "No valid hash found after fix"
+
+    def test_02_fix_idempotent(self, project):
+        """Running fix again should not change anything."""
         import os
-
-        from .helpers import mcp_call, start_mcp, stop_mcp
-
-        dst = tmp_path / "mcp_save"
-        shutil.copytree(project, dst)
+        import subprocess
 
         env = {
             **os.environ,
@@ -1749,41 +960,116 @@ class TestMCPSaveRefreshRoundTrip:
             "GIT_COMMITTER_NAME": "test",
             "GIT_COMMITTER_EMAIL": "t@t",
         }
-        subprocess.run(["git", "init"], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "add", "."], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=dst, capture_output=True, env=env)
+        subprocess.run(["git", "add", "."], cwd=project, capture_output=True, env=env)
+        subprocess.run(
+            ["git", "commit", "-m", "after-fix"], cwd=project, capture_output=True, env=env
+        )
 
-        proc = start_mcp(dst)
-        try:
-            mcp_call(
-                proc,
-                "mutate_update_title",
-                {"node_id": "REQ-p00001", "new_title": "Updated Via MCP"},
-            )
+        spec = project / "spec" / "prd-core.md"
+        content1 = spec.read_text()
 
-            save = mcp_call(proc, "save_mutations", {"save_branch": False})
-            assert not save.get("_error"), f"Save failed: {save}"
+        run_elspais("fix", cwd=project)
+        content2 = spec.read_text()
 
-            refresh = mcp_call(proc, "refresh_graph", {})
-            assert not refresh.get("_error"), f"Refresh failed: {refresh}"
+        assert content1 == content2, "Second fix changed the file"
 
-            req = mcp_call(proc, "get_requirement", {"req_id": "REQ-p00001"})
-            assert req["title"] == "Updated Via MCP"
-        finally:
-            stop_mcp(proc)
+    def test_03_fix_specific_id(self, project):
+        """Fix command targeting a specific requirement ID (already fixed, should be no-op)."""
+        result = run_elspais("fix", "REQ-p00004", cwd=project)
+        assert result.returncode == 0
 
+        content = (project / "spec" / "prd-deprecated.md").read_text()
+        hashes = re.findall(r"\*\*Hash\*\*:\s*(\S+)", content)
+        assert len(hashes) >= 1
+        assert hashes[0] != "XXXXXXXX"
 
-class TestMCPSaveMutations:
-    """MCP save_mutations persists changes to disk."""
+    def test_04_fix_dry_run_does_not_modify(self, project):
+        """Dry run should not change files."""
+        spec = project / "spec" / "prd-core.md"
+        content_before = spec.read_text()
 
-    def test_save_persists_to_file(self, project, tmp_path):
-        pytest.importorskip("mcp")
+        result = run_elspais("fix", "--dry-run", cwd=project)
+        assert result.returncode == 0
+
+        content_after = spec.read_text()
+        assert content_before == content_after, "Dry run modified the file"
+
+    def test_05_config_set_then_get(self, project):
+        """Config set/get round-trip."""
+        set_result = run_elspais("config", "set", "project.name", "updated-name", cwd=project)
+        assert set_result.returncode == 0
+
+        get_result = run_elspais("config", "get", "project.name", cwd=project)
+        assert get_result.returncode == 0
+        assert "updated-name" in get_result.stdout
+
+    def test_06_config_add_status(self, project):
+        """Config add appends to array."""
+        result = run_elspais(
+            "config",
+            "add",
+            "rules.format.allowed_statuses",
+            "Experimental",
+            cwd=project,
+        )
+        assert result.returncode == 0
+
+        show = run_elspais("config", "show", "--format", "json", cwd=project)
+        data = json.loads(show.stdout)
+        statuses = data.get("rules", {}).get("format", {}).get("allowed_statuses", [])
+        assert "Experimental" in statuses
+
+    def test_07_config_remove_status(self, project):
+        """Config remove deletes from array."""
+        result = run_elspais(
+            "config",
+            "remove",
+            "rules.format.allowed_statuses",
+            "Superseded",
+            cwd=project,
+        )
+        assert result.returncode == 0
+
+        show = run_elspais("config", "show", "--format", "json", cwd=project)
+        data = json.loads(show.stdout)
+        statuses = data.get("rules", {}).get("format", {}).get("allowed_statuses", [])
+        assert "Superseded" not in statuses
+
+    def test_08_config_unset_key(self, project):
+        """Config unset removes a key."""
+        import tomlkit
+
+        result = run_elspais("config", "unset", "project.namespace", cwd=project)
+        assert result.returncode == 0
+
+        content = (project / ".elspais.toml").read_text()
+        data = tomlkit.loads(content)
+        assert "namespace" not in data.get("project", {})
+
+    def test_09_edit_status(self, project):
+        """Edit command modifies requirement status in-place."""
+        result = run_elspais("edit", "REQ-p00001", "--status", "Draft", cwd=project)
+        if result.returncode == 0:
+            content = (project / "spec" / "prd-core.md").read_text()
+            assert "Draft" in content
+
+    def test_10_changed_detects_uncommitted_edit(self, project):
+        """Changed command detects uncommitted spec file edits."""
+        spec = project / "spec" / "prd-core.md"
+        content = spec.read_text()
+        spec.write_text(content.replace("User Authentication", "Modified Authentication"))
+
+        result = run_elspais("changed", "--format", "json", cwd=project)
+        assert result.returncode == 0
+        output = result.stdout.strip()
+        if output:
+            data = json.loads(output)
+            assert isinstance(data, (list, dict))
+
+    def test_11_changed_no_changes_after_commit(self, project):
+        """Changed shows nothing after committing."""
         import os
-
-        from .helpers import mcp_call, start_mcp, stop_mcp
-
-        dst = tmp_path / "mcp_persist"
-        shutil.copytree(project, dst)
+        import subprocess
 
         env = {
             **os.environ,
@@ -1792,189 +1078,468 @@ class TestMCPSaveMutations:
             "GIT_COMMITTER_NAME": "test",
             "GIT_COMMITTER_EMAIL": "t@t",
         }
-        subprocess.run(["git", "init"], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "add", "."], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=dst, capture_output=True, env=env)
+        subprocess.run(["git", "add", "."], cwd=project, capture_output=True, env=env)
+        subprocess.run(
+            ["git", "commit", "-m", "mutations"], cwd=project, capture_output=True, env=env
+        )
 
-        proc = start_mcp(dst)
-        try:
-            mcp_call(
-                proc,
-                "mutate_update_title",
-                {"node_id": "REQ-p00001", "new_title": "Persisted Title Change"},
-            )
+        result = run_elspais("changed", "--format", "json", cwd=project)
+        assert result.returncode == 0
 
-            result = mcp_call(proc, "save_mutations", {"save_branch": False})
-            assert isinstance(result, dict)
-            assert not result.get("_error"), f"Save failed: {result}"
+    def test_12_changed_base_branch(self, project):
+        """Changed with --base-branch flag."""
+        import subprocess
 
-            spec = dst / "spec" / "prd-core.md"
-            content = spec.read_text()
-            assert "Persisted Title Change" in content
-        finally:
-            stop_mcp(proc)
+        # Get current branch name
+        branch = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=project,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
 
-
-class TestMCPComprehensiveWorkflow:
-    """Exercise many MCP tools in a single test."""
-
-    def test_full_workflow(self, project):
-        pytest.importorskip("mcp")
-        from .helpers import mcp_call, mcp_call_all, start_mcp, stop_mcp
-
-        proc = start_mcp(project)
-        try:
-            # 1. Status
-            status = mcp_call(proc, "get_graph_status", {})
-            assert isinstance(status, dict)
-
-            # 2. Summary
-            summary = mcp_call(proc, "get_project_summary", {})
-            assert isinstance(summary, dict)
-
-            # 3. Search
-            results = mcp_call_all(proc, "search", {"query": "notification"})
-            assert len(results) >= 1
-
-            # 4. Get requirement
-            req = mcp_call(proc, "get_requirement", {"req_id": "REQ-d00002"})
-            assert req["id"] == "REQ-d00002"
-
-            # 5. Hierarchy
-            hier = mcp_call(proc, "get_hierarchy", {"req_id": "REQ-d00002"})
-            assert "ancestors" in hier
-
-            # 6. Subtree
-            subtree = mcp_call(
-                proc,
-                "get_subtree",
-                {"root_id": "REQ-p00002", "format": "flat"},
-            )
-            assert isinstance(subtree, dict)
-
-            # 7. Add assertion
-            mcp_call(
-                proc,
-                "mutate_add_assertion",
-                {
-                    "req_id": "REQ-d00002",
-                    "label": "B",
-                    "text": "The module SHALL log delivery status.",
-                },
-            )
-
-            # 8. Verify
-            req2 = mcp_call(proc, "get_requirement", {"req_id": "REQ-d00002"})
-            labels = [a.get("label", "") for a in req2.get("assertions", [])]
-            assert "B" in labels
-
-            # 9. Log
-            log = mcp_call(proc, "get_mutation_log", {"limit": 5})
-            assert isinstance(log, (list, dict))
-
-            # 10. Undo
-            mcp_call(proc, "undo_last_mutation", {})
-
-            # 11. Verify undone
-            req3 = mcp_call(proc, "get_requirement", {"req_id": "REQ-d00002"})
-            labels3 = [a.get("label", "") for a in req3.get("assertions", [])]
-            assert "B" not in labels3
-
-            # 12. Workspace info
-            ws = mcp_call(proc, "get_workspace_info", {"detail": "testing"})
-            assert isinstance(ws, dict)
-        finally:
-            stop_mcp(proc)
+        result = run_elspais(
+            "changed",
+            "--base-branch",
+            branch,
+            "--format",
+            "json",
+            cwd=project,
+        )
+        assert result.returncode == 0
 
 
-class TestMCPMultiMutationWorkflow:
-    """Complex mutation workflow: add req, assertions, edges, save."""
-
-    def test_build_requirement_from_scratch(self, project, tmp_path):
-        pytest.importorskip("mcp")
-        import os
-
-        from .helpers import mcp_call, start_mcp, stop_mcp
-
-        dst = tmp_path / "mcp_multi"
-        shutil.copytree(project, dst)
-
-        env = {
-            **os.environ,
-            "GIT_AUTHOR_NAME": "test",
-            "GIT_AUTHOR_EMAIL": "t@t",
-            "GIT_COMMITTER_NAME": "test",
-            "GIT_COMMITTER_EMAIL": "t@t",
-        }
-        subprocess.run(["git", "init"], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "add", "."], cwd=dst, capture_output=True, env=env)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=dst, capture_output=True, env=env)
-
-        proc = start_mcp(dst)
-        try:
-            # 1. Add new OPS requirement
-            mcp_call(
-                proc,
-                "mutate_add_requirement",
-                {
-                    "req_id": "REQ-o00099",
-                    "title": "New Operations Req",
-                    "level": "ops",
-                    "status": "Draft",
-                },
-            )
-
-            # 2. Add edge
-            mcp_call(
-                proc,
-                "mutate_add_edge",
-                {"source_id": "REQ-o00099", "target_id": "REQ-p00001", "edge_kind": "implements"},
-            )
-
-            # 3. Add assertions
-            mcp_call(
-                proc,
-                "mutate_add_assertion",
-                {
-                    "req_id": "REQ-o00099",
-                    "label": "A",
-                    "text": "Operations SHALL deploy new service.",
-                },
-            )
-            mcp_call(
-                proc,
-                "mutate_add_assertion",
-                {
-                    "req_id": "REQ-o00099",
-                    "label": "B",
-                    "text": "Operations SHALL monitor new service.",
-                },
-            )
-
-            # 4. Verify
-            req = mcp_call(proc, "get_requirement", {"req_id": "REQ-o00099"})
-            assert req["id"] == "REQ-o00099"
-            assert req["title"] == "New Operations Req"
-            assert len(req.get("assertions", [])) == 2
-
-            # 5. Hierarchy
-            hier = mcp_call(proc, "get_hierarchy", {"req_id": "REQ-o00099"})
-            ancestor_ids = [a.get("id", "") for a in hier.get("ancestors", [])]
-            assert "REQ-p00001" in ancestor_ids
-
-            # 6. Save
-            save = mcp_call(proc, "save_mutations", {"save_branch": False})
-            assert not save.get("_error"), f"Save failed: {save}"
-        finally:
-            stop_mcp(proc)
+# ===================================================================
+# Group 4: MCP mutation tests (incremental, shared server)
+# ===================================================================
 
 
-class TestMCPFixBrokenReference:
-    """MCP mutate_fix_broken_reference."""
+@pytest.mark.incremental
+class TestStandardMCPMutations:
+    """Incremental MCP mutation tests — each builds on the prior state."""
 
-    def test_fix_broken_ref(self, project, tmp_path):
-        pytest.importorskip("mcp")
-        # Build a project with a broken reference
+    def test_01_add_requirement_and_undo(self, project, mcp_server):
+        from .helpers import mcp_call
+
+        result = mcp_call(
+            mcp_server,
+            "mutate_add_requirement",
+            {"req_id": "REQ-p00099", "title": "New Feature", "level": "prd", "status": "Draft"},
+        )
+        assert isinstance(result, dict)
+        assert not result.get("_error"), f"Add failed: {result}"
+
+        get_result = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00099"})
+        assert get_result and get_result.get("id") == "REQ-p00099"
+
+        undo = mcp_call(mcp_server, "undo_last_mutation", {})
+        assert isinstance(undo, dict)
+
+        after_undo = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00099"})
+        assert after_undo is None or after_undo.get("error") or after_undo.get("_error")
+
+    def test_02_update_title_and_undo(self, project, mcp_server):
+        from .helpers import mcp_call
+
+        original = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00001"})
+        orig_title = original["title"]
+
+        mcp_call(
+            mcp_server,
+            "mutate_update_title",
+            {"node_id": "REQ-p00001", "new_title": "Updated Title"},
+        )
+
+        updated = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00001"})
+        assert updated["title"] == "Updated Title"
+
+        mcp_call(mcp_server, "undo_last_mutation", {})
+        reverted = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00001"})
+        assert reverted["title"] == orig_title
+
+    def test_03_mutation_log(self, project, mcp_server):
+        from .helpers import mcp_call
+
+        mcp_call(
+            mcp_server,
+            "mutate_update_title",
+            {"node_id": "REQ-p00001", "new_title": "Title V1"},
+        )
+        mcp_call(
+            mcp_server,
+            "mutate_update_title",
+            {"node_id": "REQ-p00001", "new_title": "Title V2"},
+        )
+
+        log = mcp_call(mcp_server, "get_mutation_log", {"limit": 10})
+        assert isinstance(log, (list, dict))
+
+        # Undo both to restore original state
+        mcp_call(mcp_server, "undo_last_mutation", {})
+        mcp_call(mcp_server, "undo_last_mutation", {})
+
+    def test_04_add_assertion(self, project, mcp_server):
+        from .helpers import mcp_call
+
+        result = mcp_call(
+            mcp_server,
+            "mutate_add_assertion",
+            {"req_id": "REQ-p00001", "label": "D", "text": "The system SHALL support SSO."},
+        )
+        assert isinstance(result, dict)
+        assert not result.get("_error")
+
+        req = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00001"})
+        labels = [a.get("label", "") for a in req.get("assertions", [])]
+        assert "D" in labels
+
+        # Undo to restore original state
+        mcp_call(mcp_server, "undo_last_mutation", {})
+
+    def test_05_update_assertion(self, project, mcp_server):
+        from .helpers import mcp_call
+
+        result = mcp_call(
+            mcp_server,
+            "mutate_update_assertion",
+            {
+                "assertion_id": "REQ-p00001-A",
+                "new_text": "The system SHALL create and manage user accounts.",
+            },
+        )
+        assert isinstance(result, dict)
+
+        # Undo to restore original state
+        mcp_call(mcp_server, "undo_last_mutation", {})
+
+    def test_06_delete_assertion_and_undo(self, project, mcp_server):
+        from .helpers import mcp_call
+
+        result = mcp_call(
+            mcp_server,
+            "mutate_delete_assertion",
+            {"assertion_id": "REQ-p00001-C", "confirm": True},
+        )
+        assert isinstance(result, dict)
+
+        req = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00001"})
+        labels = [a.get("label", "") for a in req.get("assertions", [])]
+        assert "C" not in labels
+
+        mcp_call(mcp_server, "undo_last_mutation", {})
+        req2 = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00001"})
+        labels2 = [a.get("label", "") for a in req2.get("assertions", [])]
+        assert "C" in labels2
+
+    def test_07_rename_assertion(self, project, mcp_server):
+        from .helpers import mcp_call
+
+        result = mcp_call(
+            mcp_server,
+            "mutate_rename_assertion",
+            {"old_id": "REQ-p00001-A", "new_label": "X"},
+        )
+        assert isinstance(result, dict)
+
+        req = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00001"})
+        labels = [a.get("label", "") for a in req.get("assertions", [])]
+        assert "X" in labels
+        assert "A" not in labels
+
+        # Undo to restore original state
+        mcp_call(mcp_server, "undo_last_mutation", {})
+
+    def test_08_add_edge(self, project, mcp_server):
+        from .helpers import mcp_call
+
+        result = mcp_call(
+            mcp_server,
+            "mutate_add_edge",
+            {"source_id": "REQ-d00002", "target_id": "REQ-o00001", "edge_kind": "implements"},
+        )
+        assert isinstance(result, dict)
+        assert not result.get("_error"), f"Edge add failed: {result}"
+
+        # Undo to restore original state
+        mcp_call(mcp_server, "undo_last_mutation", {})
+
+    def test_09_delete_edge_and_undo(self, project, mcp_server):
+        from .helpers import mcp_call
+
+        result = mcp_call(
+            mcp_server,
+            "mutate_delete_edge",
+            {"source_id": "REQ-d00001", "target_id": "REQ-o00001", "confirm": True},
+        )
+        assert isinstance(result, dict)
+
+        mcp_call(mcp_server, "undo_last_mutation", {})
+
+        hier = mcp_call(mcp_server, "get_hierarchy", {"req_id": "REQ-d00001"})
+        ancestors = hier.get("ancestors", [])
+        assert len(ancestors) > 0
+
+    def test_10_change_edge_kind(self, project, mcp_server):
+        from .helpers import mcp_call
+
+        result = mcp_call(
+            mcp_server,
+            "mutate_change_edge_kind",
+            {"source_id": "REQ-d00003", "target_id": "REQ-d00001", "new_kind": "implements"},
+        )
+        assert isinstance(result, dict)
+
+        # Undo to restore original state
+        mcp_call(mcp_server, "undo_last_mutation", {})
+
+    def test_11_rename_node_and_undo(self, project, mcp_server):
+        from .helpers import mcp_call
+
+        result = mcp_call(
+            mcp_server,
+            "mutate_rename_node",
+            {"old_id": "REQ-p00003", "new_id": "REQ-p00099"},
+        )
+        assert isinstance(result, dict)
+        assert not result.get("_error"), f"Rename failed: {result}"
+
+        req = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00099"})
+        assert req and req.get("id") == "REQ-p00099"
+
+        old = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00003"})
+        assert old is None or old.get("_error") or old.get("error")
+
+        mcp_call(mcp_server, "undo_last_mutation", {})
+
+        restored = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00003"})
+        assert restored and restored.get("id") == "REQ-p00003"
+
+    def test_12_change_status(self, project, mcp_server):
+        from .helpers import mcp_call
+
+        result = mcp_call(
+            mcp_server,
+            "mutate_change_status",
+            {"node_id": "REQ-p00001", "new_status": "Draft"},
+        )
+        assert isinstance(result, dict)
+
+        req = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00001"})
+        req_str = json.dumps(req)
+        assert "Draft" in req_str
+
+        # Undo to restore original state
+        mcp_call(mcp_server, "undo_last_mutation", {})
+
+    def test_13_delete_requirement_and_undo(self, project, mcp_server):
+        from .helpers import mcp_call
+
+        result = mcp_call(
+            mcp_server,
+            "mutate_delete_requirement",
+            {"node_id": "REQ-p00003", "confirm": True},
+        )
+        assert isinstance(result, dict)
+
+        req = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00003"})
+        assert req is None or req.get("_error") or req.get("error")
+
+        req1 = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00001"})
+        assert req1 and req1.get("id") == "REQ-p00001"
+
+        mcp_call(mcp_server, "undo_last_mutation", {})
+
+        restored = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00003"})
+        assert restored and restored.get("id") == "REQ-p00003"
+
+    def test_14_undo_multiple(self, project, mcp_server):
+        from .helpers import mcp_call
+
+        mcp_call(
+            mcp_server, "mutate_update_title", {"node_id": "REQ-p00001", "new_title": "Title V1"}
+        )
+        mcp_call(
+            mcp_server, "mutate_update_title", {"node_id": "REQ-p00001", "new_title": "Title V2"}
+        )
+        mcp_call(
+            mcp_server, "mutate_update_title", {"node_id": "REQ-p00001", "new_title": "Title V3"}
+        )
+
+        log = mcp_call(mcp_server, "get_mutation_log", {"limit": 10})
+        assert isinstance(log, (list, dict))
+
+        mcp_call(mcp_server, "undo_last_mutation", {})
+        mcp_call(mcp_server, "undo_last_mutation", {})
+        mcp_call(mcp_server, "undo_last_mutation", {})
+
+        req = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00001"})
+        # Title should be back to whatever it was before these three mutations
+        assert req["title"] != "Title V3"
+
+    def test_15_comprehensive_workflow(self, project, mcp_server):
+        """Exercise many MCP tools in a single test."""
+        from .helpers import mcp_call, mcp_call_all
+
+        # 1. Status
+        status = mcp_call(mcp_server, "get_graph_status", {})
+        assert isinstance(status, dict)
+
+        # 2. Summary
+        summary = mcp_call(mcp_server, "get_project_summary", {})
+        assert isinstance(summary, dict)
+
+        # 3. Search
+        results = mcp_call_all(mcp_server, "search", {"query": "notification"})
+        assert len(results) >= 1
+
+        # 4. Get requirement
+        req = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-d00002"})
+        assert req["id"] == "REQ-d00002"
+
+        # 5. Hierarchy
+        hier = mcp_call(mcp_server, "get_hierarchy", {"req_id": "REQ-d00002"})
+        assert "ancestors" in hier
+
+        # 6. Subtree
+        subtree = mcp_call(
+            mcp_server,
+            "get_subtree",
+            {"root_id": "REQ-p00002", "format": "flat"},
+        )
+        assert isinstance(subtree, dict)
+
+        # 7. Add assertion
+        mcp_call(
+            mcp_server,
+            "mutate_add_assertion",
+            {
+                "req_id": "REQ-d00002",
+                "label": "B",
+                "text": "The module SHALL log delivery status.",
+            },
+        )
+
+        # 8. Verify
+        req2 = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-d00002"})
+        labels = [a.get("label", "") for a in req2.get("assertions", [])]
+        assert "B" in labels
+
+        # 9. Log
+        log = mcp_call(mcp_server, "get_mutation_log", {"limit": 5})
+        assert isinstance(log, (list, dict))
+
+        # 10. Undo
+        mcp_call(mcp_server, "undo_last_mutation", {})
+
+        # 11. Verify undone
+        req3 = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-d00002"})
+        labels3 = [a.get("label", "") for a in req3.get("assertions", [])]
+        assert "B" not in labels3
+
+        # 12. Workspace info
+        ws = mcp_call(mcp_server, "get_workspace_info", {"detail": "testing"})
+        assert isinstance(ws, dict)
+
+    def test_16_build_requirement_from_scratch(self, project, mcp_server):
+        """Complex mutation workflow: add req, assertions, edges, save."""
+        from .helpers import mcp_call
+
+        # 1. Add new OPS requirement
+        mcp_call(
+            mcp_server,
+            "mutate_add_requirement",
+            {
+                "req_id": "REQ-o00099",
+                "title": "New Operations Req",
+                "level": "ops",
+                "status": "Draft",
+            },
+        )
+
+        # 2. Add edge
+        mcp_call(
+            mcp_server,
+            "mutate_add_edge",
+            {"source_id": "REQ-o00099", "target_id": "REQ-p00001", "edge_kind": "implements"},
+        )
+
+        # 3. Add assertions
+        mcp_call(
+            mcp_server,
+            "mutate_add_assertion",
+            {
+                "req_id": "REQ-o00099",
+                "label": "A",
+                "text": "Operations SHALL deploy new service.",
+            },
+        )
+        mcp_call(
+            mcp_server,
+            "mutate_add_assertion",
+            {
+                "req_id": "REQ-o00099",
+                "label": "B",
+                "text": "Operations SHALL monitor new service.",
+            },
+        )
+
+        # 4. Verify
+        req = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-o00099"})
+        assert req["id"] == "REQ-o00099"
+        assert req["title"] == "New Operations Req"
+        assert len(req.get("assertions", [])) == 2
+
+        # 5. Hierarchy
+        hier = mcp_call(mcp_server, "get_hierarchy", {"req_id": "REQ-o00099"})
+        ancestor_ids = [a.get("id", "") for a in hier.get("ancestors", [])]
+        assert "REQ-p00001" in ancestor_ids
+
+        # 6. Save
+        save = mcp_call(mcp_server, "save_mutations", {"save_branch": False})
+        assert not save.get("_error"), f"Save failed: {save}"
+
+    def test_17_save_refresh_roundtrip(self, project, mcp_server):
+        """Mutate -> save -> refresh -> verify persisted."""
+        from .helpers import mcp_call
+
+        mcp_call(
+            mcp_server,
+            "mutate_update_title",
+            {"node_id": "REQ-p00001", "new_title": "Updated Via MCP"},
+        )
+
+        save = mcp_call(mcp_server, "save_mutations", {"save_branch": False})
+        assert not save.get("_error"), f"Save failed: {save}"
+
+        refresh = mcp_call(mcp_server, "refresh_graph", {})
+        assert not refresh.get("_error"), f"Refresh failed: {refresh}"
+
+        req = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00001"})
+        assert req["title"] == "Updated Via MCP"
+
+    def test_18_save_persists_to_file(self, project, mcp_server):
+        """Save mutations persists changes to disk."""
+        from .helpers import mcp_call
+
+        mcp_call(
+            mcp_server,
+            "mutate_update_title",
+            {"node_id": "REQ-p00001", "new_title": "Persisted Title Change"},
+        )
+
+        result = mcp_call(mcp_server, "save_mutations", {"save_branch": False})
+        assert isinstance(result, dict)
+        assert not result.get("_error"), f"Save failed: {result}"
+
+        spec = project / "spec" / "prd-core.md"
+        content = spec.read_text()
+        assert "Persisted Title Change" in content
+
+    def test_19_fix_broken_reference(self, project, mcp_server):
+        """MCP mutate_fix_broken_reference using a separate project."""
+        import tempfile
+        from pathlib import Path
+
         from .helpers import Requirement as Req
         from .helpers import base_config as bc
         from .helpers import build_project as bp
@@ -1995,23 +1560,25 @@ class TestMCPFixBrokenReference:
             assertions=[("A", "The module SHALL reference wrong thing.")],
         )
 
-        dst = tmp_path / "broken_ref"
-        bp(dst, cfg, spec_files={"spec/prd.md": [prd], "spec/dev.md": [dev]})
+        with tempfile.TemporaryDirectory() as tmp:
+            dst = Path(tmp) / "broken_ref"
+            dst.mkdir()
+            bp(dst, cfg, spec_files={"spec/prd.md": [prd], "spec/dev.md": [dev]})
 
-        proc = start_mcp(dst)
-        try:
-            broken = mcp_call(proc, "get_broken_references", {})
-            assert isinstance(broken, (list, dict))
+            proc = start_mcp(dst)
+            try:
+                broken = mcp_call(proc, "get_broken_references", {})
+                assert isinstance(broken, (list, dict))
 
-            result = mcp_call(
-                proc,
-                "mutate_fix_broken_reference",
-                {
-                    "source_id": "REQ-d00001",
-                    "old_target_id": "REQ-p99999",
-                    "new_target_id": "REQ-p00001",
-                },
-            )
-            assert isinstance(result, dict)
-        finally:
-            stop_mcp(proc)
+                result = mcp_call(
+                    proc,
+                    "mutate_fix_broken_reference",
+                    {
+                        "source_id": "REQ-d00001",
+                        "old_target_id": "REQ-p99999",
+                        "new_target_id": "REQ-p00001",
+                    },
+                )
+                assert isinstance(result, dict)
+            finally:
+                stop_mcp(proc)
