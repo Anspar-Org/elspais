@@ -2,9 +2,9 @@
 """
 elspais.commands.fix_cmd - Auto-fix spec file issues.
 
-Delegates to ``validate.run()`` with ``fix=True``.  For targeted
-single-requirement hash updates, uses shared utilities directly.
-``validate`` only reports issues; ``fix`` only fixes them.
+Single-pass pipeline: build graph → detect dirty → changelog entries →
+render_save. Handles hash mismatches, spacing canonicalization, term
+forms, changelog drift, and missing changelog sections.
 """
 
 from __future__ import annotations
