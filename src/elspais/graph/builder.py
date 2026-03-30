@@ -3056,7 +3056,7 @@ class GraphBuilder:
             parse_dirty_reasons.append("duplicate_refs")
         stored_hash = data.get("hash")
         if stored_hash:
-            from elspais.commands.validate import compute_hash_for_node
+            from elspais.graph.render import compute_hash_for_node
 
             computed = compute_hash_for_node(node, self.hash_mode)
             if computed and stored_hash != computed:

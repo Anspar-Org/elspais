@@ -220,9 +220,9 @@ class TestFixChangelog:
         # Step 1: Create project and compute the correct hash
         project = _make_project(tmp_path, ACTIVE_REQ_STALE_HASH)
 
-        from elspais.commands.validate import compute_hash_for_node
         from elspais.graph import NodeKind
         from elspais.graph.factory import build_graph
+        from elspais.graph.render import compute_hash_for_node
 
         graph = build_graph(
             spec_dirs=[project / "spec"],

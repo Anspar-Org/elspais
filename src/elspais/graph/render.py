@@ -59,6 +59,38 @@ def reconstruct_body_text(node: GraphNode) -> str:
     return "\n".join(parts)
 
 
+def compute_hash_for_node(node: GraphNode, hash_mode: str) -> str | None:
+    """Compute the content hash for a requirement node.
+
+    Supports two modes (per spec/requirements-spec.md Hash Definition):
+    - full-text: hash every line between header and footer (body_text)
+    - normalized-text: hash normalized assertion text only
+
+    Args:
+        node: The requirement GraphNode.
+        hash_mode: Hash calculation mode ("full-text" or "normalized-text").
+
+    Returns:
+        Computed hash string, or None if no hashable content.
+    """
+    if hash_mode == "normalized-text":
+        assertions = []
+        for child in node.iter_children():
+            if child.kind == NodeKind.ASSERTION:
+                label = child.get_field("label", "")
+                text = child.get_label() or ""
+                if label and text:
+                    assertions.append((label, text))
+        if not assertions:
+            return None
+        return compute_normalized_hash(assertions)
+    else:
+        body = reconstruct_body_text(node)
+        if not body:
+            return None
+        return calculate_hash(body)
+
+
 def render_node(node: GraphNode) -> str:
     """Render a graph node back to its text representation.
 

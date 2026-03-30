@@ -94,7 +94,7 @@ def _add_autofix_changelog_entries(
     if not typed_config.changelog.hash_current:
         return 0
 
-    from elspais.commands.validate import compute_hash_for_node
+    from elspais.graph.render import compute_hash_for_node
     from elspais.utilities.git import get_author_info
 
     id_source = typed_config.changelog.id_source
@@ -138,6 +138,50 @@ def _add_autofix_changelog_entries(
     return added
 
 
+def _add_drift_changelog_entries(
+    graph,  # noqa: ANN001 — FederatedGraph
+    drift_nodes: list,
+    config: dict[str, Any],
+) -> int:
+    """Add changelog entries for requirements with stale changelog hashes.
+
+    When a requirement's most recent changelog hash doesn't match the
+    stored End marker hash (e.g. after a format migration), adds a new
+    changelog entry with the current hash.  Returns the count added.
+    """
+    from datetime import date
+
+    from elspais.utilities.git import get_author_info
+
+    typed_config = _validate_config(config)
+    id_source = typed_config.changelog.id_source
+    try:
+        author = get_author_info(id_source)
+    except ValueError:
+        return 0
+
+    added = 0
+    for node in drift_nodes:
+        stored = node.hash or ""
+        entry = {
+            "date": date.today().isoformat(),
+            "hash": stored,
+            "change_order": "-",
+            "author_name": author["name"],
+            "author_id": author["id"],
+            "reason": "Auto-fix: sync changelog hash",
+        }
+        graph.add_changelog_entry(node.id, entry)
+        # Mark dirty so render_save picks up the file
+        node._content["parse_dirty"] = True
+        node._content.setdefault("parse_dirty_reasons", [])
+        if "changelog_drift" not in node._content["parse_dirty_reasons"]:
+            node._content["parse_dirty_reasons"].append("changelog_drift")
+        added += 1
+
+    return added
+
+
 def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> None:
     """Rewrite files that contain parse-dirty requirements.
 
@@ -163,13 +207,34 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> None:
         scan_tests=False,
     )
 
+    typed_config = _validate_config(config)
+    changelog_enforce = typed_config.changelog.hash_current
+
     dirty_nodes = [
         node
         for node in graph.nodes_by_kind(NodeKind.REQUIREMENT)
         if node.get_field("parse_dirty")
         and any(r != "stale_hash" for r in (node.get_field("parse_dirty_reasons") or []))
     ]
-    if not dirty_nodes:
+
+    # Also pick up Active nodes with changelog hash drift
+    drift_nodes = []
+    if changelog_enforce:
+        dirty_ids = {n.id for n in dirty_nodes}
+        for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+            if node.id in dirty_ids:
+                continue
+            if (node.status or "").lower() != "active":
+                continue
+            cl = node.get_field("changelog") or []
+            if not cl:
+                continue
+            latest_hash = cl[0].get("hash", "")
+            stored = node.hash or ""
+            if latest_hash and stored and latest_hash != stored:
+                drift_nodes.append(node)
+
+    if not dirty_nodes and not drift_nodes:
         return
 
     # Report what will be / was fixed
@@ -190,11 +255,16 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> None:
             else:
                 print(f"{prefix} {node.id}: {_REASON_LABELS.get(r, r)}")
 
+    prefix = "Would fix" if dry_run else "Fixing"
+    for node in drift_nodes:
+        print(f"{prefix} {node.id}: sync changelog hash")
+
     if dry_run:
         return
 
     # Add auto-fix changelog entries before render_save
     _add_autofix_changelog_entries(graph, dirty_nodes, config)
+    _add_drift_changelog_entries(graph, drift_nodes, config)
 
     result = render_save(graph, repo_root=repo_root)
     saved = result.get("saved_count", 0)
@@ -233,11 +303,10 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
     """
     from datetime import date
 
-    from elspais.commands.validate import compute_hash_for_node
     from elspais.config import get_config
     from elspais.graph import NodeKind
     from elspais.graph.factory import build_graph
-    from elspais.graph.render import render_save
+    from elspais.graph.render import compute_hash_for_node, render_save
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
@@ -293,7 +362,14 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
     existing_changelog = node.get_field("changelog") or []
     needs_new_section = is_active and changelog_enforce and not existing_changelog
 
-    if not something_to_fix and not needs_new_section:
+    # Check for changelog hash drift (changelog entry hash != stored hash)
+    changelog_hash_drifted = False
+    if is_active and changelog_enforce and existing_changelog:
+        latest_cl_hash = existing_changelog[0].get("hash", "")
+        if latest_cl_hash and stored and latest_cl_hash != stored:
+            changelog_hash_drifted = True
+
+    if not something_to_fix and not needs_new_section and not changelog_hash_drifted:
         print(f"{req_id} is already up to date")
         return 0
 
@@ -313,7 +389,9 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
                         print(f"{prefix} {req_id}: canonicalize term {old_form} -> {new_form}")
             else:
                 print(f"{prefix} {req_id}: {_REASON_LABELS.get(r, r)}")
-        if needs_new_section and not something_to_fix:
+        if changelog_hash_drifted and not something_to_fix:
+            print(f"{prefix} {req_id}: sync changelog hash")
+        if needs_new_section and not something_to_fix and not changelog_hash_drifted:
             print(f"{prefix} {req_id}: add missing changelog section")
         return 0
 
@@ -327,6 +405,8 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
             if hash_changed and not parts:
                 parts = ["update hash"]
             reason = "Auto-fix: " + ", ".join(parts) if parts else "Auto-fix: update hash"
+        elif changelog_hash_drifted:
+            reason = "Auto-fix: sync changelog hash"
         else:
             reason = "Adding missing Changelog section"
 

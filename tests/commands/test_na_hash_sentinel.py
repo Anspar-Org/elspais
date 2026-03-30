@@ -157,7 +157,7 @@ class TestValidateNAHashDetection:
         assert node is not None, "Test setup: REQ-d00001 should exist in graph"
 
         # Confirm this requirement has no hashable content in normalized-text mode
-        from elspais.commands.validate import compute_hash_for_node
+        from elspais.graph.render import compute_hash_for_node
 
         hash_mode = getattr(graph, "hash_mode", "normalized-text")
         computed = compute_hash_for_node(node, hash_mode)
@@ -228,7 +228,7 @@ class TestValidateNAHashDetection:
         assert stored == "N/A", f"Test setup: stored hash should be 'N/A', got '{stored}'"
 
         # Confirm computed is None
-        from elspais.commands.validate import compute_hash_for_node
+        from elspais.graph.render import compute_hash_for_node
 
         hash_mode = getattr(graph, "hash_mode", "normalized-text")
         computed = compute_hash_for_node(node, hash_mode)
@@ -337,3 +337,18 @@ class TestFixSingleNAHash:
         spec_file = project / "spec" / "requirements.md"
         content = spec_file.read_text()
         assert "N/A" in content, "N/A hash should remain"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tests: compute_hash_for_node location
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestREQ_d00131_J_compute_hash_in_render:
+    """Validates REQ-d00131-J: compute_hash_for_node lives in graph.render."""
+
+    def test_REQ_d00131_J_importable_from_render(self):
+        """compute_hash_for_node should be importable from elspais.graph.render."""
+        from elspais.graph.render import compute_hash_for_node
+
+        assert callable(compute_hash_for_node)
