@@ -8,8 +8,8 @@
 #   - Unstaged src/tests changes (prevents partial commits)
 #   - Python code quality (ruff + black)
 #   - Markdown linting (markdownlint)
-#   - Unit/integration tests with coverage
 #   - elspais fix (regenerate INDEX.md, KNOWN_ISSUES.md)
+#   - Unit/integration tests with coverage (last — most expensive)
 #
 # To install this hook:
 #   make setup   (or: git config core.hooksPath .githooks)
@@ -166,7 +166,27 @@ if [ -n "$MARKDOWN_FILES_CHANGED" ]; then
 fi
 
 # =====================================================
-# 5. Unit/Integration Tests with Coverage (cached)
+# 5. elspais fix (regenerate INDEX.md, KNOWN_ISSUES.md)
+# =====================================================
+
+if command -v elspais &> /dev/null; then
+    echo -e "${BLUE}Running elspais fix...${NC}"
+    if elspais fix 2>&1; then
+        # Stage any regenerated files
+        git add -u spec/INDEX.md KNOWN_ISSUES.md 2>/dev/null || true
+        echo -e "${GREEN}elspais fix passed${NC}"
+    else
+        echo -e "${RED}elspais fix failed!${NC}"
+        exit 1
+    fi
+    echo ""
+else
+    echo -e "${YELLOW}WARNING: elspais not installed - skipping fix${NC}"
+    echo ""
+fi
+
+# =====================================================
+# 6. Unit/Integration Tests with Coverage (cached)
 # =====================================================
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
@@ -200,26 +220,6 @@ else
 
     echo -e "${GREEN}Tests passed!${NC}"
     echo "$CONTENT_HASH" > "$UNIT_CACHE"
-    echo ""
-fi
-
-# =====================================================
-# 6. elspais fix (regenerate INDEX.md, KNOWN_ISSUES.md)
-# =====================================================
-
-if command -v elspais &> /dev/null; then
-    echo -e "${BLUE}Running elspais fix...${NC}"
-    if elspais fix 2>&1; then
-        # Stage any regenerated files
-        git add -u spec/INDEX.md KNOWN_ISSUES.md 2>/dev/null || true
-        echo -e "${GREEN}elspais fix passed${NC}"
-    else
-        echo -e "${RED}elspais fix failed!${NC}"
-        exit 1
-    fi
-    echo ""
-else
-    echo -e "${YELLOW}WARNING: elspais not installed - skipping fix${NC}"
     echo ""
 fi
 

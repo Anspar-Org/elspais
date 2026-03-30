@@ -45,6 +45,7 @@ body {
 {% include "partials/css/_topic-tags.css.j2" %}
 {% include "partials/css/_legend.css.j2" %}
 {% include "partials/css/_journey.css.j2" %}
+{% include "partials/css/_terms.css.j2" %}
 /* Responsive */
 @media (max-width: 768px) {
     .header { flex-direction: column; align-items: flex-start; }
@@ -74,6 +75,7 @@ body {
         <div class="nav-tabs">
             <button class="nav-tab active" data-kind="req" onclick="switchNavTab('req')">Req</button>
             <button class="nav-tab" data-kind="journey" onclick="switchNavTab('journey')">Journeys</button>
+            <button class="nav-tab" data-kind="terms" onclick="switchNavTab('terms')">Terms</button>
             <span class="nav-tab-spacer"></span>
             <button class="nav-tree-action" onclick="expandAllTreeNodes()" title="Expand all">&#9660;</button>
             <button class="nav-tree-action" onclick="collapseAllTreeNodes()" title="Collapse all">&#9654;</button>
@@ -184,7 +186,10 @@ const editState = {
     viewMode: 'tree',
     assertionBadgeMode: 'abbrev',
     cardViewMode: 'compact',
-    focusNodeId: null
+    focusNodeId: null,
+    termsData: [],
+    termsLookup: {},
+    termsRegex: null
 };
 // Apply theme early to prevent flash of wrong theme
 (function() {
@@ -334,7 +339,7 @@ document.addEventListener('keydown', function(e) {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
-    loadTreeData();  // loads tree data, updates header stats, renders nav tree
+    loadTreeData();  // loads tree data, updates header stats, renders nav tree (also reloads terms)
     initDividers();
     initSearch();
     loadOrphanedComments();  // Show lost comments card if any exist

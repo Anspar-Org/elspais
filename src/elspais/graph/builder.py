@@ -2737,6 +2737,7 @@ class GraphBuilder:
         3. Post-construction, all access should use get_field()/set_field()
     """
 
+    # Implements: REQ-d00222-D
     def __init__(
         self,
         repo_root: Path | None = None,
@@ -2744,6 +2745,7 @@ class GraphBuilder:
         satellite_kinds: list[str] | None = None,
         multi_assertion_separator: str = "+",
         resolver: Any | None = None,
+        namespace: str = "",
     ) -> None:
         """Initialize the graph builder.
 
@@ -2759,9 +2761,11 @@ class GraphBuilder:
             resolver: IdResolver instance for multi-assertion expansion.
                 When provided, uses resolver.parse()/expand()/render_canonical()
                 instead of string splitting.
+            namespace: Repository namespace for TermEntry attribution.
         """
         self.repo_root = repo_root or Path.cwd()
         self.hash_mode = hash_mode
+        self._namespace = namespace
         self._multi_assertion_separator = multi_assertion_separator
         self._resolver = resolver
         if satellite_kinds is not None:
@@ -3748,6 +3752,7 @@ class GraphBuilder:
                 indexed=data.get("indexed", True),
                 defined_in=defined_in,
                 defined_at_line=data.get("line", 0),
+                namespace=self._namespace,
             )
             graph._terms.add(entry)
 

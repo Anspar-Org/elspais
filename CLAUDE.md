@@ -21,12 +21,13 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 - Git state detection: only in core/git.py (get_git_changes, GitChangeInfo)
 - Pattern validation: only in core/patterns.py (PatternValidator)
 - Hash computation: only in `utilities/hasher.py` (`compute_normalized_hash`, `calculate_hash`). Do NOT create alternative hash functions elsewhere.
+- Term scanning: only in `graph/term_scanner.py` (comment extraction, term reference classification, markup analysis). Uses `ast.parse()` for Python files, regex for others.
 - Do NOT create hierarchy.py files in multiple locations
 
 **Minimal Dependencies**: Core requires `tomlkit` (pure Python TOML library), `pydantic>=2.0` (config schema validation), and `tyro>=0.9` (CLI generation). Uses Python 3.10+ stdlib for everything else.
 **Hierarchy Rules**: Requirements have levels defined in `[levels]` (e.g., prd rank=1, ops rank=2, dev rank=3). Each level declares its `implements` list (e.g., `dev.implements = ["dev", "ops", "prd"]`).
 **Hash-Based Change Detection**: Body content is hashed (SHA-256, 8 chars) for tracking requirement changes. Centralized in `utilities/hasher.py`.
-**Configuration System** (`config/__init__.py`, `config/schema.py`) almost all parsible content is configurable. `load_config()` returns a plain `dict[str, Any]`; defaults come from the `ElspaisConfig` Pydantic model via `config_defaults()`. Config version is 3. Top-level fields: `project`, `levels`, `id_patterns` (alias `id-patterns`), `scanning`, `rules`, `keywords`, `validation`, `changelog`, `output`, `associates`. There is no `ConfigLoader` class or `DEFAULT_CONFIG` dict.
+**Configuration System** (`config/__init__.py`, `config/schema.py`) almost all parsible content is configurable. `load_config()` returns a plain `dict[str, Any]`; defaults come from the `ElspaisConfig` Pydantic model via `config_defaults()`. Config version is 3. Top-level fields: `project`, `levels`, `id_patterns` (alias `id-patterns`), `scanning`, `rules`, `keywords`, `validation`, `changelog`, `output`, `associates`, `terms`. There is no `ConfigLoader` class or `DEFAULT_CONFIG` dict.
 **Format Validation** (`validation/format.py`)
 **Git-Based Change Detection**: The `changed` command uses git to detect uncommitted changes to spec files.
 **Git Repository Root Auto-Detection**: The CLI auto-detects the git repository root and runs as if invoked from there. This means `elspais` works identically from any subdirectory. Use `-v` flag to see "Working from repository root: ...". If not in a git repo, continues silently (warns with `-v`). Implementation: `find_git_root()` in `config/__init__.py`.

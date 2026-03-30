@@ -90,21 +90,28 @@
 - must support selecting independent branches for each TraceGrpah (separate repo)
 - but when making a new branch, it can apply to all repos (as a way to keep them in-sync)
 
-[ ] feature : defined terms (v1)
-- definition list syntax: `Term\n: definition text\n: Collection: true`
-- definitions can appear anywhere in spec files; parser collects them all
-- duplicate definitions (same term, two locations) = error by default (configurable)
-- glossary generation: `spec/_generated/glossary.md`
-- term index generation: `spec/_generated/index.md` (term + all marked-up reference sites)
-- collection manifests: `spec/_generated/collections/<term>.md`
-- health check: flag unmarked usages of defined terms in requirement/assertion text
-- CLI: `elspais glossary`, `elspais term-index`, wired into `elspais fix`
-- `--format` parameter (markdown first, JSON next)
-- references use normal *italic* or **bold** markup; matched against glossary
+[ ] feature : defined terms — robustness (non-viewer)
+- reference resolution engine: post-build scan of all text-bearing nodes + scanned files for term references
+- three-way classification: marked / wrong_marking / unmarked
+- config restructure: nested `[terms.severity]` sub-model, `markup_styles`, `exclude_files`
+- config version bump 4 → 5
+- wire existing health checks (defined but never called)
+- new checks: `terms.unused`, `terms.bad_definition`, `terms.collection_empty`
+- new check: `code.no_traceability` (code/test files with no REQ markers, in `[rules.format]`)
+- set `namespace` on TermEntry during build (currently always empty)
+- code/test comment scanning: AST where possible (Python), regex fallback with false-positive note
+- term index and collection manifests populated with real references
+- federated cross-repo reference resolution
+
+[x] feature : defined terms — viewer
+- hyperlinks and hover text for defined terms in requirement cards
+- Glossary tab (alongside REQ, JNY in tree column or separate panel)
+- Term Index tab showing each term + all marked-up reference sites
+- hyperlink from term references to definitions and back
+- depends on TermDictionary being populated (reference resolution must be done first)
+- Implemented: Terms tab with alphabetical listing + letter headings, term cards with definition/references, inline term highlighting with hover tooltips and click-to-open
 
 [ ] feature : defined terms (deferred)
-- viewer: hyperlinks and hover text for defined terms in requirement cards
-- code file scanning for term references (.dart, .py, etc.)
 - MCP tools for term lookup and cross-reference queries
 - plural/inflection matching in the unmarked-usage health check
 - term aliasing (multiple surface forms mapping to one definition)
@@ -244,6 +251,12 @@
 - Also handle Assertion deletion re-numbering (when state is 'prospective'), or marking 'deprecated' (active states)
 - Don't allow editing of state = retired REQs
 
+[ ] chore (med): Restructure `[rules]` config into focused sub-sections
+- `[rules.format]` currently holds mixed concerns: format validation, changelog, status, no_assertions, no_traceability
+- Should be split into: `[rules.changelog]`, `[rules.status]`, `[rules.format]` (pure format), etc.
+- Each sub-section should have its own severity settings following the nested `[*.severity]` pattern (as established by `[terms.severity]`)
+- Audit which checks have configurable severity and which are hardcoded — make them consistent
+
 [ ] chore (med): Unify `file_patterns` / `directories` in scanning config. `file_patterns` (glob against repo root, no skip logic) and `directories` (recursive walk with hardcoded `DEFAULT_CODE_PATTERNS` + skip/ignore) are partially redundant. Consider replacing both with a single `patterns` list that supports glob + skip/ignore.
 
 [ ] code review : no legacy code
@@ -262,12 +275,13 @@
 - Explore incremental recomputation after mutations for each category
 - Coverage is the highest impact (viewer badges go stale during edit sessions)
 
-[ ] feature: viewer: Term Index and Glossary tabs
+[x] feature: viewer: Term Index and Glossary tabs
 - Add a "Glossary" tab (alongside REQ, JNY in tree column or as a separate panel)
 - Shows all defined terms with their definitions, grouped or alphabetical
 - Add a "Term Index" tab showing each term + all marked-up reference sites
 - Hyperlink from term references to their definitions and back
 - Depends on TermDictionary being populated (see live recomputation issue above)
+- Implemented: unified Terms tab replaces both Glossary and Term Index concepts; term cards show full definition + reference sites; inline highlighting provides hyperlinks
 
 ---
 

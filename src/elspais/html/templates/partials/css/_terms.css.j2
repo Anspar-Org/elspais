@@ -1,0 +1,158 @@
+/* Implements: REQ-d00243-B */
+/* Terms tab styling for nav tree */
+
+.nav-tree-letter-heading {
+    padding: 6px 8px 2px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--secondary-text);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border-color);
+    margin-top: 4px;
+}
+
+.nav-tree-term {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.nav-tree-term-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+    font-size: 0.8rem;
+    color: var(--input-text);
+}
+
+.nav-tree-term-count {
+    flex-shrink: 0;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 8px;
+    background: var(--border-color);
+    color: var(--secondary-text);
+    min-width: 16px;
+    text-align: center;
+}
+
+.nav-tree-term-count.has-refs {
+    background: var(--primary-light-bg, #e7f1ff);
+    color: var(--primary);
+}
+
+/* Implements: REQ-d00244-A, REQ-d00244-B */
+/* Term card styling */
+
+.term-card .req-card-id {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.term-collection-badge {
+    display: inline-block;
+    font-size: 0.6rem;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: var(--primary-light-bg, #e7f1ff);
+    color: var(--primary);
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+.term-definition {
+    padding: 4px 0;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--input-text);
+}
+
+.term-ref-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    border-left: 3px solid transparent;
+    transition: background 0.1s;
+}
+
+.term-ref-row:hover {
+    background: var(--surface-hover-bg);
+}
+
+.term-ref-marked {
+    border-left-color: var(--primary);
+}
+
+.term-ref-id {
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-size: 0.75rem;
+    color: var(--primary);
+    flex-shrink: 0;
+}
+
+.term-ref-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+    color: var(--secondary-text);
+    font-size: 0.75rem;
+}
+
+.term-ref-line {
+    flex-shrink: 0;
+    font-size: 0.65rem;
+    color: var(--secondary-text);
+}
+
+.term-ref-badge {
+    flex-shrink: 0;
+    font-size: 0.6rem;
+    font-weight: 600;
+    padding: 0 4px;
+    border-radius: 4px;
+    background: var(--primary-light-bg, #e7f1ff);
+    color: var(--primary);
+}
+
+/* Implements: REQ-d00245-A, REQ-d00245-B */
+/* Inline term highlighting in card bodies */
+
+.defined-term {
+    border-bottom: 1px dotted var(--primary);
+    cursor: pointer;
+    position: relative;
+}
+
+.defined-term:hover {
+    background: var(--primary-light-bg, #e7f1ff);
+}
+
+.defined-term[data-tip]:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    background: var(--surface-bg, #1e1e1e);
+    color: var(--surface-text, #fff);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    z-index: 1000;
+    pointer-events: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}

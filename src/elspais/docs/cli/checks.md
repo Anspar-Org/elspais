@@ -80,6 +80,7 @@ check that is always present.
 |-------|-------------|
 | `code.coverage` | Code coverage statistics (informational) |
 | `code.unlinked` | Code files with no traceability markers (no `# Implements:` or `# Verifies:` comments); severity: info |
+| `code.no_traceability` | Code/test files with no traceability markers at all; default severity: info |
 | `code.retired_references` | Code referencing requirements with retired status (Deprecated, Superseded, Rejected); default severity: warning |
 | `code.provisional_references` | Code referencing requirements with provisional status (Draft, Proposed); default severity: info |
 | `code.aspirational_references` | Code referencing requirements with aspirational status (Roadmap, Future, Idea); default severity: info |
@@ -132,6 +133,19 @@ coverage and results from user journey validation.
 |-------|-------------|
 | `uat.coverage` | Requirements validated by USER_JOURNEY nodes (informational) |
 | `uat.results` | Journey pass/fail status from a CSV results file |
+
+### Terms Checks
+
+| Check | Description |
+|-------|-------------|
+| `terms.duplicates` | Same term defined in two locations; default severity: error |
+| `terms.undefined` | Bold/italic token with no matching definition; default severity: warning |
+| `terms.unmarked` | Indexed term used without markup or with wrong markup; default severity: warning |
+| `terms.unused` | Defined term with zero references; default severity: warning |
+| `terms.bad_definition` | Term with blank or trivial definition text; default severity: error |
+| `terms.collection_empty` | Collection term with no references; default severity: warning |
+
+Severity for each check is configurable via `[terms.severity]` in `.elspais.toml`. See `elspais docs terms` for full configuration details.
 
 #### UAT Results CSV Format
 

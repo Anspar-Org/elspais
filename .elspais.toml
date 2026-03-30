@@ -181,6 +181,20 @@ min_length = 3
 hash_mode = "normalized-text"
 allow_unresolved_cross_repo = false
 
+# Defined terms
+[terms]
+output_dir = "spec/_generated"
+markup_styles = ["*", "**"]
+exclude_files = []
+
+[terms.severity]
+duplicate = "error"
+undefined = "warning"
+unmarked = "warning"
+unused = "warning"
+bad_definition = "error"
+collection_empty = "warning"
+
 # Output settings
 
 [output]

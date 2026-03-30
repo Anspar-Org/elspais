@@ -309,3 +309,57 @@ A. compact_file SHALL rewrite JSONL files stripping resolved threads entirely an
 B. The elspais comments compact CLI command SHALL glob .elspais/comments/**/*.json, call compact_file on each, and report total events removed.
 
 *End* *Comment Compaction CLI* | **Hash**: f3547362
+
+## REQ-d00242: Terms API Endpoints
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+## Assertions
+
+A. GET /api/terms SHALL return a JSON array of term objects sorted alphabetically by term name, each containing fields: term, key, definition_short (truncated to 150 chars), defined_in, namespace, collection, indexed, ref_count. An empty TermDictionary SHALL return an empty array.
+
+B. GET /api/term/{term_key} SHALL return the full term detail including definition, defined_in, namespace, collection, indexed, and a references array where each reference includes node_id, node_title (resolved server-side via find_by_id), namespace, marked, and line.
+
+C. GET /api/term/{nonexistent_key} SHALL return HTTP 404 with an error message.
+
+*End* *Terms API Endpoints* | **Hash**: 6c934e14
+
+## REQ-d00243: Terms Tab in Viewer Nav Tree
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+## Assertions
+
+A. A Terms tab button with data-kind="terms" SHALL appear in the nav-tabs bar. switchNavTab('terms') SHALL activate it, persist via cookie, and render terms content.
+
+B. The Terms tab SHALL display a flat alphabetical list of terms with letter headings (A, B, C...). Each term row SHALL show the term name and a reference count badge. An empty TermDictionary SHALL show "No defined terms found".
+
+C. Expand/collapse buttons, tree/flat toggle, and filter groups (status, git, hierarchy, coverage) SHALL be hidden when the Terms tab is active. The text filter SHALL filter terms by name substring.
+
+*End* *Terms Tab in Viewer Nav Tree* | **Hash**: 3328f677
+
+## REQ-d00244: Term Cards in Viewer Card Stack
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+## Assertions
+
+A. openTermCard(termKey) SHALL fetch GET /api/term/{key} and open a card in the card stack with ID "term:{lowercase-key}". The card SHALL show term name header, definition text, defined-in link, namespace, and a "Collection" badge for collection terms.
+
+B. The references section SHALL group references by namespace, with each reference row clickable to open that node's card. Empty references SHALL show "No references resolved yet". Clicking defined-in link SHALL open the source requirement card.
+
+C. Term cards SHALL be read-only with no edit controls. The card SHALL be rendered via buildTermCardHtml() and wired into renderCardStack() via a kind === 'term' branch.
+
+*End* *Term Cards in Viewer Card Stack* | **Hash**: 5dd49a51
+
+## REQ-d00245: Inline Term Highlighting in Viewer Cards
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+## Assertions
+
+A. simpleMarkdown(text, true) SHALL wrap defined terms in span elements with class "defined-term", data-term-key, and data-tip (truncated definition) attributes. Matching SHALL be longest-first, word-boundary anchored, and case-insensitive.
+
+B. Clicking a defined-term span SHALL open the term card via a delegated click handler on the card-stack-body. Hover SHALL show a truncated definition tooltip via the data-tip attribute. Term annotation SHALL NOT be applied inside term cards to prevent recursion.
+
+*End* *Inline Term Highlighting in Viewer Cards* | **Hash**: 62a44ed3

@@ -57,6 +57,7 @@ class HierarchyConfig(_StrictModel):
     allow_orphans: bool | None = None
 
 
+# Implements: REQ-d00212-M
 class FormatConfig(_StrictModel):
     require_hash: bool | None = None
     require_assertions: bool | None = None
@@ -65,6 +66,7 @@ class FormatConfig(_StrictModel):
     allowed_statuses: list[str] | None = None
     status_roles: dict[str, list[str] | str] | None = None
     no_assertions_severity: str | None = None
+    no_traceability_severity: str | None = None
 
 
 class CoverageSeverityConfig(_StrictModel):
@@ -226,13 +228,25 @@ class AssociateEntryConfig(_StrictModel):
 
 
 # Implements: REQ-d00212-L
+class TermsSeverityConfig(_StrictModel):
+    """Severity levels for defined-terms health checks."""
+
+    duplicate: str = "error"
+    undefined: str = "warning"
+    unmarked: str = "warning"
+    unused: str = "warning"
+    bad_definition: str = "error"
+    collection_empty: str = "warning"
+
+
+# Implements: REQ-d00212-L
 class TermsConfig(_StrictModel):
     """Configuration for defined terms feature."""
 
     output_dir: str = "spec/_generated"
-    duplicate_severity: str = "error"
-    undefined_severity: str = "warning"
-    unmarked_severity: str = "warning"
+    markup_styles: list[str] = Field(default_factory=lambda: ["*", "**"])
+    exclude_files: list[str] = Field(default_factory=list)
+    severity: TermsSeverityConfig = Field(default_factory=TermsSeverityConfig)
 
 
 # Implements: REQ-d00212-F

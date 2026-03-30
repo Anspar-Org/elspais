@@ -318,6 +318,24 @@ async function refreshDirtyCount() {
 }
 
 // =====================================================================
+// Nav Tree — Terms Data (Implements: REQ-d00243-A, REQ-d00243-B)
+// =====================================================================
+
+async function loadTermsData() {
+    const data = await apiFetch('/api/terms');
+    if (!data) { editState.termsData = []; return; }
+    editState.termsData = data;
+    editState.termsLookup = {};
+    for (var i = 0; i < data.length; i++) {
+        editState.termsLookup[data[i].key] = data[i];
+    }
+    editState.termsRegex = null;  // invalidate cached regex for term highlighting
+    if (editState.activeNavTab === 'terms') {
+        renderNavTree();
+    }
+}
+
+// =====================================================================
 // Nav Tree
 // =====================================================================
 
@@ -328,6 +346,8 @@ async function loadTreeData() {
     updateHeaderStats();
     onFilterEvent('refresh');
     renderNavTree();
+    // Reload terms data alongside tree data (terms may change after mutations/saves)
+    loadTermsData();
 }
 
 function renderNavTree() {
@@ -378,6 +398,45 @@ function renderNavTree() {
                 '</div>';
         }
         container.innerHTML = jhtml;
+        return;
+    }
+
+    // Implements: REQ-d00243-B, REQ-d00243-C
+    if (activeTab === 'terms') {
+        var termsArr = editState.termsData || [];
+        // Client-side text filter for terms
+        var hasTextFilter = editState.filterText && editState.filterText.trim() !== '';
+        if (hasTextFilter) {
+            var filterLower = editState.filterText.trim().toLowerCase();
+            termsArr = termsArr.filter(function(t) {
+                return t.term.toLowerCase().indexOf(filterLower) >= 0;
+            });
+        }
+        if (termsArr.length === 0) {
+            var msg = hasTextFilter ? 'No matching terms' : 'No defined terms found';
+            container.innerHTML = '<div style="padding:20px;color:#adb5bd;text-align:center;font-size:0.85rem;">' + msg + '</div>';
+            return;
+        }
+        var thtml = '';
+        var currentLetter = '';
+        for (var ti = 0; ti < termsArr.length; ti++) {
+            var t = termsArr[ti];
+            var firstLetter = t.term.charAt(0).toUpperCase();
+            if (firstLetter !== currentLetter) {
+                currentLetter = firstLetter;
+                thtml += '<div class="nav-tree-letter-heading">' + escapeHtml(currentLetter) + '</div>';
+            }
+            var tKey = t.key || t.term.toLowerCase();
+            var tSelected = editState.openCards.has('term:' + tKey) ? ' selected' : '';
+            var countClass = t.ref_count > 0 ? ' has-refs' : '';
+            thtml += '<div class="nav-tree-row nav-tree-term' + tSelected + '" ' +
+                'data-id="term:' + escapeHtml(tKey) + '" data-kind="term" ' +
+                'onclick="openTermCard(\'' + escapeHtml(tKey).replace(/'/g, "\\'") + '\')">' +
+                '<span class="nav-tree-term-name">' + escapeHtml(t.term) + '</span>' +
+                '<span class="nav-tree-term-count' + countClass + '">' + t.ref_count + '</span>' +
+                '</div>';
+        }
+        container.innerHTML = thtml;
         return;
     }
 
@@ -745,11 +804,30 @@ function toggleTreeNode(nodeId) {
     saveState();
 }
 
+// Implements: REQ-d00243-A, REQ-d00243-C
 function switchNavTab(kind) {
     editState.activeNavTab = kind;
     document.querySelectorAll('.nav-tab').forEach(function(tab) {
         tab.classList.toggle('active', tab.dataset.kind === kind);
     });
+    // Hide expand/collapse, tree/flat toggle, and filter groups for non-req tabs
+    var isTerms = kind === 'terms';
+    var isJourney = kind === 'journey';
+    var hideControls = isTerms || isJourney;
+    // Expand/collapse buttons
+    document.querySelectorAll('.nav-tabs .nav-tree-action').forEach(function(btn) {
+        btn.style.display = hideControls ? 'none' : '';
+    });
+    // Tree/flat toggle
+    var viewToggle = document.getElementById('view-mode-toggle');
+    if (viewToggle) viewToggle.style.display = hideControls ? 'none' : '';
+    // Filter groups (git, hierarchy, status, coverage) — hide for terms tab
+    document.querySelectorAll('.filter-group').forEach(function(fg) {
+        fg.style.display = isTerms ? 'none' : '';
+    });
+    // Show-parents checkbox — hide for terms tab
+    var showParents = document.querySelector('.toggle-inline');
+    if (showParents) showParents.style.display = isTerms ? 'none' : '';
     renderNavTree();
     saveState();
 }

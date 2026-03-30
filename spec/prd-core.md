@@ -218,7 +218,11 @@ C. `TermDictionary.iter_indexed()` SHALL yield only entries where `indexed` is `
 
 D. `TermDictionary.merge()` SHALL combine two dictionaries and return a list of `(TermEntry, TermEntry)` pairs for duplicate terms detected across namespaces.
 
-*End* *TermDictionary Data Model* | **Hash**: 31915ae3
+E. `TermRef` SHALL have a `wrong_marking` field (str, default "") that records the incorrect emphasis delimiter used (e.g., `"__"` when the configured markup_styles are `["*", "**"]`). When non-empty, `marked` SHALL be `False`.
+
+*End* *TermDictionary Data Model* | **Hash**: 0d0fd97c
+
+<!-- markdownlint-disable MD038 -->
 
 ## REQ-d00221: Grammar Extension for Definition Blocks
 
@@ -244,7 +248,9 @@ B. The `defined_in` field of each `TermEntry` SHALL point to the nearest REQUIRE
 
 C. `FederatedGraph` SHALL merge per-repo `_terms` dictionaries into a single federated `TermDictionary`, detecting cross-namespace duplicates.
 
-*End* *TraceGraph Terms and GraphBuilder Integration* | **Hash**: 2e76a3f2
+D. `GraphBuilder` SHALL accept a `namespace` parameter (str, default "") and set `TermEntry.namespace` from it during term creation.
+
+*End* *TraceGraph Terms and GraphBuilder Integration* | **Hash**: 96b5223f
 
 ## REQ-d00223: Term Health Checks
 
@@ -260,7 +266,11 @@ C. `check_unmarked_usage()` SHALL return a `HealthCheck` for whole-word case-ins
 
 D. When any severity is set to `"off"`, the corresponding check SHALL be skipped and return a passed HealthCheck with severity `"info"`.
 
-*End* *Term Health Checks* | **Hash**: 34da7dc1
+E. A `run_term_checks(graph, config)` aggregator SHALL call `check_term_duplicates`, `check_undefined_terms`, and `check_unmarked_usage` with data extracted from `graph._terms` and `graph._term_duplicates`, reading severity from `config["terms"]["severity"]`. It SHALL be wired into `render_section()` and `compute_checks()`.
+
+F. `check_unmarked_usage()` SHALL produce distinct messages for wrong-marking references (e.g., "Wrong markup for 'term' (uses __, should use configured style)") versus plain unmarked references (e.g., "Unmarked usage of 'term'").
+
+*End* *Term Health Checks* | **Hash**: 82c10ca8
 
 ## REQ-d00224: Glossary and Term Index Generators
 
@@ -289,3 +299,109 @@ A. `GlossaryArgs` and `TermIndexArgs` dataclasses SHALL be defined in `commands/
 B. `elspais fix` SHALL call glossary and term-index generation after existing fix operations when the graph has defined terms.
 
 *End* *CLI Registration for Glossary and Term Index* | **Hash**: d18fc2c9
+
+## REQ-d00236: Comment Extraction Utilities
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. `extract_comments(source, ext)` SHALL return a `list[tuple[str, int]]` of (comment_text, line_number) pairs extracted from source code text based on file extension.
+
+B. For Python files (`.py`), the extractor SHALL use `tokenize` to extract `#` line comments and `ast` to extract docstrings, ignoring string literals that are not docstrings.
+
+C. For slash-comment languages (`.js`, `.ts`, `.jsx`, `.tsx`, `.java`, `.c`, `.h`, `.cpp`, `.go`, `.rs`, `.dart`), the extractor SHALL extract `//` line comments and `/* */` block comments.
+
+D. For hash-comment languages (`.rb`, `.sh`, `.bash`, `.yaml`, `.yml`), the extractor SHALL extract `#` line comments.
+
+E. For dash-comment languages (`.sql`, `.lua`), the extractor SHALL extract `--` line comments.
+
+F. For markup languages (`.html`, `.xml`, `.svg`), the extractor SHALL extract `<!-- -->` comments.
+
+G. For file extensions with no known comment style, `extract_comments()` SHALL return an empty list.
+
+*End* *Comment Extraction Utilities* | **Hash**: 499123f1
+
+## REQ-d00237: Term Reference Scanner Core
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. `scan_text_for_terms(text, td, node_id, namespace, line_offset, markup_styles)` SHALL return a `list[TermRef]` classifying each term occurrence as marked, wrong-marking, or unmarked.
+
+B. For each configured `markup_style` in `markup_styles`, the scanner SHALL detect terms wrapped in that delimiter as `marked=True, wrong_marking=""`.
+
+C. For Markdown emphasis delimiters (`*`, `**`, `__`, `_`) NOT in `markup_styles`, the scanner SHALL detect wrapped terms as `marked=False` with `wrong_marking` set to the delimiter used.
+
+D. For terms with `indexed=True`, the scanner SHALL perform whole-word case-insensitive matching for unmarked (plain text) occurrences, excluding positions already matched as marked or wrong-marking.
+
+E. Terms with `indexed=False` SHALL be scanned for marked and wrong-marking references only; unmarked scanning SHALL be skipped.
+
+*End* *Term Reference Scanner Core* | **Hash**: 63cb874b
+
+## REQ-d00238: Graph-Wide Term Scan
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. `scan_graph(terms, nodes, namespace, markup_styles, exclude_files)` SHALL populate `TermEntry.references` by scanning graph nodes for term occurrences.
+
+B. REQUIREMENT, ASSERTION, REMAINDER (excluding `definition_block`), and JOURNEY nodes SHALL be scanned using their full text content.
+
+C. CODE and TEST nodes SHALL be scanned via comment extraction only (not raw source code), to avoid false positives on variable names and string literals.
+
+D. Files matching any `exclude_files` glob pattern SHALL be skipped during scanning.
+
+*End* *Graph-Wide Term Scan* | **Hash**: 655f284e
+
+## REQ-d00239: Federated Graph Term Scanner Pass
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. After `FederatedGraph._merge_terms()`, the scanner SHALL run across all repos using the merged `TermDictionary` so that cross-repo term references resolve correctly.
+
+B. Each repo's scan SHALL use its own config for `markup_styles` and `exclude_files`.
+
+*End* *Federated Graph Term Scanner Pass* | **Hash**: 7d9a30c4
+
+## REQ-d00240: New Term Health Checks
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. `check_term_unused(entries, severity)` SHALL return a `HealthCheck` reporting defined terms with zero references. Default severity: `"warning"`. When `severity="off"`, return passed/info.
+
+B. `check_term_bad_definition(entries, severity)` SHALL return a `HealthCheck` reporting terms with blank or trivially short (less than 10 characters) definition text. Default severity: `"error"`. When `severity="off"`, return passed/info.
+
+C. `check_term_collection_empty(entries, severity)` SHALL return a `HealthCheck` reporting collection terms (`collection=True`) with zero references. Default severity: `"warning"`. When `severity="off"`, return passed/info.
+
+D. `run_term_checks()` SHALL call all six term checks (`duplicates`, `undefined`, `unmarked`, `unused`, `bad_definition`, `collection_empty`) with severity from `config["terms"]["severity"]`.
+
+## Changelog
+
+- 2026-03-29 | 9788814d | - | Michael Lewis (<michael@anspar.org>) | Initial creation
+
+*End* *New Term Health Checks* | **Hash**: 9788814d
+
+## REQ-d00241: Code No-Traceability Health Check
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. `check_no_traceability(unlinked_files, severity)` SHALL return a `HealthCheck` reporting code and test files with no traceability markers. Default severity: `"warning"`. When `severity="off"`, return passed/info.
+
+B. The check SHALL be wired into `run_code_checks()` using `graph.iter_unlinked()` to find CODE/TEST nodes not linked to any requirement.
+
+C. Severity SHALL be read from `[rules.format] no_traceability_severity` (default `"warning"` if None).
+
+## Changelog
+
+- 2026-03-29 | 6e481d63 | - | Michael Lewis (<michael@anspar.org>) | Initial creation
+
+*End* *Code No-Traceability Health Check* | **Hash**: 6e481d63

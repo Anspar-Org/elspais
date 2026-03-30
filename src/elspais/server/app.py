@@ -71,6 +71,8 @@ from elspais.server.routes_api import (
     api_shutdown,
     api_spec_files,
     api_status,
+    api_term,
+    api_terms,
     api_test_coverage,
     api_tree_data,
     api_uat_coverage,
@@ -155,6 +157,9 @@ def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
         Route("/api/spec-files", api_spec_files),
         Route("/api/dirty", api_dirty),
         Route("/api/check-freshness", api_check_freshness),
+        # Terms endpoints
+        Route("/api/terms", api_terms),
+        Route("/api/term/{term_key:path}", api_term),
         # CLI command endpoints
         Route("/api/run/checks", api_run_checks),
         Route("/api/run/broken", api_run_broken),

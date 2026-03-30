@@ -1292,9 +1292,15 @@ def check_unmarked_usage(
 
     findings = []
     for item in unmarked:
+        # Implements: REQ-d00223-F
+        wrong = item.get("wrong_marking", "")
+        if wrong:
+            msg = f"Wrong markup for '{item['term']}' " f"(uses {wrong}) in {item['node_id']}"
+        else:
+            msg = f"Unmarked usage of '{item['term']}' in {item['node_id']}"
         findings.append(
             HealthFinding(
-                message=f"Unmarked usage of '{item['term']}' in {item['node_id']}",
+                message=msg,
                 node_id=item.get("node_id"),
                 line=item.get("line"),
             )
@@ -1308,6 +1314,181 @@ def check_unmarked_usage(
         severity=severity,
         findings=findings,
     )
+
+
+# Implements: REQ-d00240-A
+def check_term_unused(
+    entries: list,
+    severity: str = "warning",
+) -> HealthCheck:
+    """Check for defined terms with zero references."""
+    if severity == "off":
+        return HealthCheck(
+            name="terms.unused",
+            passed=True,
+            message="Unused term check skipped (severity=off)",
+            category="terms",
+            severity="info",
+        )
+
+    findings = []
+    for entry in entries:
+        if not entry.references:
+            findings.append(
+                HealthFinding(
+                    message=(
+                        f"Unused defined term '{entry.term}' "
+                        f"(defined in {entry.defined_in}:{entry.defined_at_line})"
+                    ),
+                    node_id=entry.defined_in,
+                    line=entry.defined_at_line,
+                )
+            )
+
+    if not findings:
+        return HealthCheck(
+            name="terms.unused",
+            passed=True,
+            message="No unused defined terms",
+            category="terms",
+            severity=severity,
+        )
+
+    return HealthCheck(
+        name="terms.unused",
+        passed=False,
+        message=f"{len(findings)} unused defined term(s)",
+        category="terms",
+        severity=severity,
+        findings=findings,
+    )
+
+
+_MIN_DEFINITION_LENGTH = 10
+
+
+# Implements: REQ-d00240-B
+def check_term_bad_definition(
+    entries: list,
+    severity: str = "error",
+) -> HealthCheck:
+    """Check for terms with blank or trivially short definitions."""
+    if severity == "off":
+        return HealthCheck(
+            name="terms.bad_definition",
+            passed=True,
+            message="Bad definition check skipped (severity=off)",
+            category="terms",
+            severity="info",
+        )
+
+    findings = []
+    for entry in entries:
+        stripped = entry.definition.strip() if entry.definition else ""
+        if len(stripped) < _MIN_DEFINITION_LENGTH:
+            findings.append(
+                HealthFinding(
+                    message=(
+                        f"Term '{entry.term}' has empty/trivial definition "
+                        f"({entry.defined_in}:{entry.defined_at_line})"
+                    ),
+                    node_id=entry.defined_in,
+                    line=entry.defined_at_line,
+                )
+            )
+
+    if not findings:
+        return HealthCheck(
+            name="terms.bad_definition",
+            passed=True,
+            message="No bad term definitions",
+            category="terms",
+            severity=severity,
+        )
+
+    return HealthCheck(
+        name="terms.bad_definition",
+        passed=False,
+        message=f"{len(findings)} bad term definition(s)",
+        category="terms",
+        severity=severity,
+        findings=findings,
+    )
+
+
+# Implements: REQ-d00240-C
+def check_term_collection_empty(
+    entries: list,
+    severity: str = "warning",
+) -> HealthCheck:
+    """Check for collection terms with zero references."""
+    if severity == "off":
+        return HealthCheck(
+            name="terms.collection_empty",
+            passed=True,
+            message="Collection empty check skipped (severity=off)",
+            category="terms",
+            severity="info",
+        )
+
+    findings = []
+    for entry in entries:
+        if entry.collection and not entry.references:
+            findings.append(
+                HealthFinding(
+                    message=(
+                        f"Collection term '{entry.term}' has no references "
+                        f"({entry.defined_in}:{entry.defined_at_line})"
+                    ),
+                    node_id=entry.defined_in,
+                    line=entry.defined_at_line,
+                )
+            )
+
+    if not findings:
+        return HealthCheck(
+            name="terms.collection_empty",
+            passed=True,
+            message="No empty collection terms",
+            category="terms",
+            severity=severity,
+        )
+
+    return HealthCheck(
+        name="terms.collection_empty",
+        passed=False,
+        message=f"{len(findings)} empty collection term(s)",
+        category="terms",
+        severity=severity,
+        findings=findings,
+    )
+
+
+# Implements: REQ-d00223-E, REQ-d00240-D
+def run_term_checks(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> list[HealthCheck]:
+    """Run all term health checks."""
+    typed_config = _validate_config(config or {})
+    sev = typed_config.terms.severity
+
+    # Extract data from graph
+    duplicates = getattr(graph, "_term_duplicates", [])
+    terms = getattr(graph, "_terms", None)
+    entries = list(terms.iter_all()) if terms else []
+
+    # undefined and unmarked data come from reference scanning
+    undefined: list[dict] = []
+    unmarked: list[dict] = []
+
+    return [
+        check_term_duplicates(duplicates, severity=sev.duplicate),
+        check_undefined_terms(undefined, severity=sev.undefined),
+        check_unmarked_usage(unmarked, severity=sev.unmarked),
+        check_term_unused(entries, severity=sev.unused),
+        check_term_bad_definition(entries, severity=sev.bad_definition),
+        check_term_collection_empty(entries, severity=sev.collection_empty),
+    ]
 
 
 # Implements: REQ-d00204-A, REQ-d00204-B, REQ-d00204-F
@@ -1725,6 +1906,47 @@ def _check_status_references(
     )
 
 
+# Implements: REQ-d00241-A
+def check_no_traceability(
+    unlinked_files: list[str],
+    severity: str = "warning",
+) -> HealthCheck:
+    """Check for code/test files with no traceability markers."""
+    if severity == "off":
+        return HealthCheck(
+            name="code.no_traceability",
+            passed=True,
+            message="No traceability check skipped (severity=off)",
+            category="code",
+            severity="info",
+        )
+
+    if not unlinked_files:
+        return HealthCheck(
+            name="code.no_traceability",
+            passed=True,
+            message="All code/test files have traceability markers",
+            category="code",
+            severity=severity,
+        )
+
+    findings = [
+        HealthFinding(
+            message=f"No traceability markers in {path}",
+        )
+        for path in unlinked_files
+    ]
+
+    return HealthCheck(
+        name="code.no_traceability",
+        passed=False,
+        message=f"{len(unlinked_files)} file(s) without traceability markers",
+        category="code",
+        severity=severity,
+        findings=findings,
+    )
+
+
 def run_code_checks(
     graph: FederatedGraph,
     exclude_status: set[str] | None = None,
@@ -1761,6 +1983,18 @@ def run_code_checks(
                 graph, "code_tested", exclude_status=exclude_status, config=config
             )
         )
+
+    # Implements: REQ-d00241-B, REQ-d00241-C
+    no_trace_sev = typed_config.rules.format.no_traceability_severity or "warning"
+    unlinked_files = []
+    for kind in (NodeKind.CODE, NodeKind.TEST):
+        for node in graph.iter_unlinked(kind):
+            file_n = node.file_node()
+            if file_n:
+                rel = file_n.get_field("relative_path")
+                if rel:
+                    unlinked_files.append(rel)
+    checks.append(check_no_traceability(unlinked_files, severity=no_trace_sev))
 
     return checks
 
@@ -2140,6 +2374,8 @@ def render_section(
             report.add(check)
         for check in run_uat_checks(graph, exclude_status=exclude_status, config=raw_config):
             report.add(check)
+        for check in run_term_checks(graph, config=raw_config):
+            report.add(check)
 
     output = _format_report(report, args)
     lenient = getattr(args, "lenient", False)
@@ -2213,6 +2449,11 @@ def compute_checks(
     # UAT checks
     if run_all or tests_only:
         for check in run_uat_checks(graph, exclude_status=exclude_status, config=config):
+            report.add(check)
+
+    # Term checks
+    if run_all:
+        for check in run_term_checks(graph, config=config):
             report.add(check)
 
     return report.to_dict(lenient=lenient)

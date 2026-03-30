@@ -134,10 +134,42 @@ def _migrate_legacy_patterns(config: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
-CURRENT_CONFIG_VERSION = 3
+CURRENT_CONFIG_VERSION = 4
+
+
+# Implements: REQ-d00212-N
+def _migrate_v3_to_v4(config: dict) -> dict:
+    """Move flat terms severity fields into nested [terms.severity]."""
+    terms = config.get("terms")
+    if not isinstance(terms, dict):
+        config["version"] = 4
+        return config
+
+    # Don't double-migrate if [terms.severity] already exists
+    if "severity" in terms and isinstance(terms["severity"], dict):
+        config["version"] = 4
+        return config
+
+    severity: dict[str, str] = {}
+    field_map = {
+        "duplicate_severity": "duplicate",
+        "undefined_severity": "undefined",
+        "unmarked_severity": "unmarked",
+    }
+    for old_key, new_key in field_map.items():
+        if old_key in terms:
+            severity[new_key] = terms.pop(old_key)
+
+    if severity:
+        terms["severity"] = severity
+
+    config["version"] = 4
+    return config
+
 
 MIGRATIONS: dict[int, Callable[[dict], dict]] = {
     1: _migrate_legacy_patterns,  # [patterns] -> [id-patterns]
+    3: _migrate_v3_to_v4,  # flat terms severity -> nested [terms.severity]
 }
 
 

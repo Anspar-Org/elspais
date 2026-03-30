@@ -119,7 +119,15 @@ J. `ProjectConfig` SHALL contain only `namespace` and `name`. The `version` and 
 
 K. `AssociateEntryConfig` SHALL contain `path` (str) and `namespace` (str). The `git` and `spec` fields SHALL be removed.
 
-L. A `TermsConfig` model SHALL define defined-terms configuration: `output_dir` (str, default "spec/_generated"), `duplicate_severity` (str, default "error"), `undefined_severity` (str, default "warning"), `unmarked_severity` (str, default "warning"). `ElspaisConfig` SHALL include a `terms` field of type `TermsConfig` with factory default.
+L. A `TermsConfig` model SHALL define defined-terms configuration: `output_dir` (str, default "spec/_generated"), `markup_styles` (list[str], default ["*", "**"]), `exclude_files` (list[str], default []), and a nested `severity` field of type `TermsSeverityConfig`. `TermsSeverityConfig` SHALL define 6 severity fields: `duplicate` (default "error"), `undefined` (default "warning"), `unmarked` (default "warning"), `unused` (default "warning"), `bad_definition` (default "error"), `collection_empty` (default "warning"). `ElspaisConfig` SHALL include a `terms` field of type `TermsConfig` with factory default.
 
-*End* *Config Schema v3 Models* | **Hash**: 0cee5e84
+M. `FormatConfig` SHALL include a `no_traceability_severity` field (str | None, default None) to configure the severity of code/test files lacking traceability markers.
+
+N. A `_migrate_v3_to_v4` migration SHALL move flat `duplicate_severity`, `undefined_severity`, `unmarked_severity` from `[terms]` into `[terms.severity]` as `duplicate`, `undefined`, `unmarked`. Configs without `[terms]` SHALL pass through unchanged. Configs already having `[terms.severity]` SHALL NOT be double-migrated. `CURRENT_CONFIG_VERSION` SHALL be bumped to 4.
+
+## Changelog
+
+- 2026-03-29 | c75b87f8 | - | Michael Lewis (<michael@anspar.org>) | Add assertion N for config migration v3 to v4
+
+*End* *Config Schema v3 Models* | **Hash**: c75b87f8
 ---

@@ -100,7 +100,7 @@
 | REQ-d00209 | Schema-Driven Init Template Generation                        | dev-graph-config.md     | 44aeb496 |
 | REQ-d00210 | Documentation Drift Detection                                 | dev-graph-config.md     | eb94434a |
 | REQ-d00211 | Config-Driven Viewer UI Values                                | dev-graph-config.md     | a9cc41d2 |
-| REQ-d00212 | Config Schema v3 Models                                       | dev-graph-config.md     | 0cee5e84 |
+| REQ-d00212 | Config Schema v3 Models                                       | dev-graph-config.md     | c75b87f8 |
 | REQ-d00213 | Version Check and Update Notification                         | dev-cli.md              | 56b62d01 |
 | REQ-d00214 | MCP Server Install/Uninstall CLI Commands                     | dev-mcp-tools.md        | f1518d2c |
 | REQ-d00215 | Keyword Extraction Annotator                                  | dev-graph-core.md       | 3e0a2d00 |
@@ -108,10 +108,10 @@
 | REQ-d00217 | INDEX.md Regeneration                                         | dev-cli.md              | a1e3915a |
 | REQ-d00218 | Health Check Coverage Rollup                                  | dev-cli.md              | 64b0dfbb |
 | REQ-d00219 | UAT Health Check Section                                      | dev-cli.md              | 3a95ff57 |
-| REQ-d00220 | TermDictionary Data Model                                     | prd-core.md             | 31915ae3 |
+| REQ-d00220 | TermDictionary Data Model                                     | prd-core.md             | 0d0fd97c |
 | REQ-d00221 | Grammar Extension for Definition Blocks                       | prd-core.md             | 078ce203 |
-| REQ-d00222 | TraceGraph Terms and GraphBuilder Integration                 | prd-core.md             | 2e76a3f2 |
-| REQ-d00223 | Term Health Checks                                            | prd-core.md             | 34da7dc1 |
+| REQ-d00222 | TraceGraph Terms and GraphBuilder Integration                 | prd-core.md             | 96b5223f |
+| REQ-d00223 | Term Health Checks                                            | prd-core.md             | 82c10ca8 |
 | REQ-d00224 | Glossary and Term Index Generators                            | prd-core.md             | f2da30fb |
 | REQ-d00225 | CLI Registration for Glossary and Term Index                  | prd-core.md             | d18fc2c9 |
 | REQ-d00226 | Comment Data Models                                           | prd-features.md         | dd5c745e |
@@ -124,6 +124,16 @@
 | REQ-d00233 | Comment Inline Threads and Comment Mode                       | prd-features.md         | 792d13ce |
 | REQ-d00234 | Lost Comments Card                                            | prd-features.md         | 7fc99c6a |
 | REQ-d00235 | Comment Compaction CLI                                        | prd-features.md         | f3547362 |
+| REQ-d00236 | Comment Extraction Utilities                                  | prd-core.md             | 499123f1 |
+| REQ-d00237 | Term Reference Scanner Core                                   | prd-core.md             | 63cb874b |
+| REQ-d00238 | Graph-Wide Term Scan                                          | prd-core.md             | 655f284e |
+| REQ-d00239 | Federated Graph Term Scanner Pass                             | prd-core.md             | 7d9a30c4 |
+| REQ-d00240 | New Term Health Checks                                        | prd-core.md             | 9788814d |
+| REQ-d00241 | Code No-Traceability Health Check                             | prd-core.md             | 6e481d63 |
+| REQ-d00242 | Terms API Endpoints                                           | prd-features.md         | 6c934e14 |
+| REQ-d00243 | Terms Tab in Viewer Nav Tree                                  | prd-features.md         | 3328f677 |
+| REQ-d00244 | Term Cards in Viewer Card Stack                               | prd-features.md         | 5dd49a51 |
+| REQ-d00245 | Inline Term Highlighting in Viewer Cards                      | prd-features.md         | 62a44ed3 |
 
 ## User Journeys
 

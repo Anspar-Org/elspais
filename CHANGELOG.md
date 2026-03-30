@@ -4,8 +4,18 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **TermsConfig restructured** — flat severity fields (`duplicate_severity`, `undefined_severity`, `unmarked_severity`) replaced with nested `[terms.severity]` sub-table containing 6 fields: `duplicate`, `undefined`, `unmarked`, `unused`, `bad_definition`, `collection_empty`. New top-level fields: `markup_styles` (which markdown delimiters count as marked) and `exclude_files` (glob patterns to skip during scanning).
+- **no_traceability_severity** — new `[rules.format]` option to configure severity for code/test files lacking traceability markers (default: None, uses check default of "warning").
+- **Config migration v3→v4** — automatic migration of flat `duplicate_severity`/`undefined_severity`/`unmarked_severity` under `[terms]` to nested `[terms.severity]` sub-table. `CURRENT_CONFIG_VERSION` bumped to 4.
+
 ### Added
 
+- **Terms tab in viewer** — new Terms tab in the nav tree (between Journeys and the spacer) showing an alphabetical list of defined terms grouped by letter heading with reference count badges. Text filter narrows terms by name substring. Expand/collapse, tree/flat toggle, and filter groups are hidden when the Terms tab is active. Terms data loaded from `GET /api/terms` on page init.
+- **Terms API endpoints** — `GET /api/terms` returns all defined terms sorted alphabetically (term, key, definition_short, defined_in, namespace, collection, indexed, ref_count); `GET /api/term/{term_key}` returns full term detail with definition and references array (node_id, node_title, namespace, marked, line). Returns 404 for nonexistent terms.
+- **Term cards in viewer** — clicking a term in the Terms tab opens a read-only card in the card stack via `openTermCard(termKey)`. Card displays term name header, definition text, defined-in link (clickable to open source REQ card), namespace, and a "Collection" badge for collection terms. References section groups by namespace with each reference clickable to open its node card. Empty references show "No references resolved yet".
+- **Inline term highlighting** — defined terms in remainder sections and journey bodies are wrapped in clickable, hoverable spans with class `defined-term`. Longest-first matching with word-boundary anchoring and case-insensitive lookup. Each span carries `data-term-key` and `data-tip` (truncated definition) attributes. Clicking opens the term card; hovering shows a tooltip. Term cards themselves are excluded to prevent recursion. Regex built once from `termsLookup`, cached as `termsRegex`, and invalidated on reload.
 - **Comment/review system** — threaded comments on requirements, assertions, edges, and body sections, persisted as append-only JSONL in `.elspais/comments/`
   - Data layer: `CommentEvent` (frozen), `CommentThread`, `CommentIndex` with iterator-only API
   - Storage: JSONL I/O, anchor parsing, thread assembly, comment ID generation via `comment_store.py`

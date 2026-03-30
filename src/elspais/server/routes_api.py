@@ -1,6 +1,7 @@
 # Implements: REQ-p00006-B
 # Implements: REQ-d00010-A, REQ-d00010-F, REQ-d00010-G
 # Implements: REQ-d00231-A+B+C+D+E
+# Implements: REQ-d00242-A+B+C
 """Starlette REST API route handlers for /api/* endpoints.
 
 All logic delegates to pure functions in ``elspais.mcp.server``.
@@ -1740,3 +1741,72 @@ async def api_get_comments_orphaned(request: Request) -> JSONResponse:
     state = _st(request)
     orphaned = list(state.graph.iter_orphaned_comments())
     return JSONResponse({"success": True, "threads": [_thread_to_dict(t) for t in orphaned]})
+
+
+# ---------------------------------------------------------------------------
+# Terms endpoints
+# ---------------------------------------------------------------------------
+
+
+# Implements: REQ-d00242-A
+async def api_terms(request: Request) -> JSONResponse:
+    """GET /api/terms — list all defined terms, sorted alphabetically."""
+    state = _st(request)
+    td = state.graph._terms
+    entries = sorted(td.iter_all(), key=lambda e: e.term.lower())
+    result = []
+    for entry in entries:
+        defn = entry.definition
+        if len(defn) > 150:
+            defn_short = defn[:150] + "..."
+        else:
+            defn_short = defn
+        result.append(
+            {
+                "term": entry.term,
+                "key": entry.term.lower(),
+                "definition_short": defn_short,
+                "defined_in": entry.defined_in,
+                "namespace": entry.namespace,
+                "collection": entry.collection,
+                "indexed": entry.indexed,
+                "ref_count": len(entry.references),
+            }
+        )
+    return JSONResponse(result)
+
+
+# Implements: REQ-d00242-B, REQ-d00242-C
+async def api_term(request: Request) -> JSONResponse:
+    """GET /api/term/{term_key} — full detail for a single term."""
+    state = _st(request)
+    term_key = request.path_params["term_key"]
+    td = state.graph._terms
+    entry = td.lookup(term_key)
+    if entry is None:
+        return JSONResponse({"error": f"Term '{term_key}' not found"}, status_code=404)
+    refs = []
+    for ref in entry.references:
+        node = state.graph.find_by_id(ref.node_id)
+        node_title = node.get_field("title") if node else ""
+        refs.append(
+            {
+                "node_id": ref.node_id,
+                "node_title": node_title or "",
+                "namespace": ref.namespace,
+                "marked": ref.marked,
+                "line": ref.line,
+            }
+        )
+    return JSONResponse(
+        {
+            "term": entry.term,
+            "key": entry.term.lower(),
+            "definition": entry.definition,
+            "defined_in": entry.defined_in,
+            "namespace": entry.namespace,
+            "collection": entry.collection,
+            "indexed": entry.indexed,
+            "references": refs,
+        }
+    )

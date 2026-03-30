@@ -48,6 +48,18 @@ All **electronic record** instances are encrypted at rest.
 
 References are matched case-insensitively against the term dictionary. They are detected in body text, rationale, named block content, journey content, and assertion text.
 
+### Three-Way Classification
+
+Each occurrence of a defined term in prose is classified into one of three categories:
+
+| Classification | Meaning | Example |
+|----------------|---------|---------|
+| **Marked** | Term wrapped in a configured `markup_styles` delimiter | `*electronic record*` or `**electronic record**` |
+| **Wrong-marking** | Term wrapped in emphasis NOT listed in `markup_styles` | `~~electronic record~~` when only `*` and `**` are configured |
+| **Unmarked** | Plain text occurrence of an indexed term | `electronic record` with no emphasis |
+
+The `markup_styles` config option (default: `["*", "**"]`) controls which Markdown emphasis delimiters count as "marked". Any emphasis delimiter not in this list produces a wrong-marking finding.
+
 ## Placement Rules
 
 Definition blocks are allowed in:
@@ -66,13 +78,16 @@ Term references (`*term*` / `**term**`) are allowed everywhere prose appears, in
 
 ## Health Checks
 
-Three term-related checks appear in `elspais checks` under the **Terms** category:
+Six term-related checks appear in `elspais checks` under the **Terms** category:
 
 | Check | Default Severity | Description |
 |-------|-----------------|-------------|
 | `terms.duplicates` | error | Same term defined in two locations |
 | `terms.undefined` | warning | `*token*` or `**token**` with no matching definition |
-| `terms.unmarked` | warning | Indexed term used in prose without `*...*` or `**...**` markup |
+| `terms.unmarked` | warning | Indexed term used in prose without markup, or with wrong markup |
+| `terms.unused` | warning | Defined term with zero references anywhere |
+| `terms.bad_definition` | error | Term with blank or trivial definition text |
+| `terms.collection_empty` | warning | Collection term (`Collection: true`) with no references |
 
 Example output:
 
@@ -82,6 +97,9 @@ Terms:
   WARN: Possible undefined term 'Flowchart' in REQ-p00003-B (prd-core.md:47)
   WARN: Unmarked usage of 'Electronic Record' in REQ-d00045 (dev-records.md:12)
   ERROR: Duplicate definition of 'Audit Trail' in prd-core.md:23 and prd-compliance.md:56
+  WARN: Unused term 'Legacy System' defined in prd-core.md:80
+  ERROR: Bad definition for 'TBD' in ops-spec.md:15 — blank body
+  WARN: Collection term 'Questionnaire' has no references
 ```
 
 ## CLI Commands
@@ -157,14 +175,41 @@ In `.elspais.toml`:
 # Where generated files go (relative to repo root)
 output_dir = "spec/_generated"
 
-# Severity for duplicate definitions (same term, two locations)
-duplicate_severity = "error"      # "error" | "warning" | "off"
+# Which markdown emphasis delimiters count as "marked" term references
+markup_styles = ["*", "**"]       # default: italic and bold
 
-# Severity for undefined terms (bold/italic token with no definition)
-undefined_severity = "warning"    # "error" | "warning" | "off"
+# Glob patterns to skip during term reference scanning
+exclude_files = []
 
-# Severity for unmarked usage of indexed terms in prose
-unmarked_severity = "warning"     # "error" | "warning" | "off"
+# Severity levels for defined-terms health checks
+# Each value is "error" | "warning" | "off"
+[terms.severity]
+duplicate = "error"               # same term defined in two locations
+undefined = "warning"             # bold/italic token with no definition
+unmarked = "warning"              # known term used without markup
+unused = "warning"                # defined term never referenced
+bad_definition = "error"          # malformed definition block
+collection_empty = "warning"      # collection term with no references
+```
+
+## Comment Extraction for Code/Test Files
+
+Term references are also scanned inside comments in code and test files. The extraction strategy depends on the language:
+
+- **Python files**: Uses `ast.parse()` for 100% accurate comment and docstring extraction (immune to multiline strings and other syntax that could mislead regex)
+- **Other languages**: Uses regex-based extraction matching common comment styles (`#`, `//`, `/* */`, etc.)
+
+Note: Regex-based comment extraction may produce false positives in some edge cases (e.g., comment-like patterns inside string literals in non-Python files). If this causes noisy findings, use `exclude_files` to skip those files from term scanning.
+
+## Related Check: `code.no_traceability`
+
+While not a terms check, `code.no_traceability` (configured in `[rules.format]`) is closely related to the terms workflow. It reports code and test files that contain no traceability markers at all -- no `Implements:`, `Verifies:`, or REQ-xxx references in comments. This helps identify source files that have not been linked to any requirement.
+
+**Configuration:**
+
+```toml
+[rules.format]
+no_traceability_severity = "info"   # or "warning" or "error"
 ```
 
 ## Multi-Repo Support

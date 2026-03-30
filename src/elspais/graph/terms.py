@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 
 
 @dataclass
+# Implements: REQ-d00220-E
 class TermRef:
     """A reference to a defined term found in prose text."""
 
@@ -17,6 +18,7 @@ class TermRef:
     namespace: str  # repo where the reference occurs
     marked: bool  # True = *term*/**term**, False = plain text
     line: int  # for error reporting
+    wrong_marking: str = ""  # e.g. "__" when markup_styles are ["*", "**"]
 
 
 @dataclass
