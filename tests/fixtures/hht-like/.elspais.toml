@@ -49,6 +49,14 @@ file_patterns = [
     "packages/**/*.dart",
 ]
 
+[scanning.test]
+enabled = true
+directories = ["tests"]
+file_patterns = ["test_*.py", "*_test.py"]
+
+[scanning.journey]
+directories = ["spec"]
+
 [rules.hierarchy]
 allow_circular = false
 allow_structural_orphans = false

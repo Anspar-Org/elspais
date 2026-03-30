@@ -86,13 +86,40 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 
 **Test tiers** (configured in `pyproject.toml`):
 
-- `pytest` — runs unit/integration tests only (~12s). This is the default during development.
-- `pytest -m e2e` — runs e2e subprocess tests only (CLI commands, MCP protocol, CI workflows).
+- `pytest` — runs unit/integration tests only (~26s). This is the default during development.
+- `pytest -m e2e` — runs e2e subprocess tests only (~143s). CLI commands, MCP protocol, CI workflows.
 - `pytest -m "e2e or browser"` — runs all slow tests.
-- `pytest -m ""` — runs everything (unit + e2e + browser). **Run before `git push`.**
+- `pytest -m ""` — runs everything (unit + e2e + browser, ~182s). **Run before `git push`.**
 
 **Marking tests**: Use `@pytest.mark.e2e` on tests that spawn external processes (elspais CLI, claude CLI, act, MCP subprocess). Use `@pytest.mark.browser` on Playwright tests.
 **Claude Code caveat**: The `test_e2e_install_and_uninstall` test (claude MCP install) is auto-skipped inside Claude Code sessions (`CLAUDECODE=1`) because the claude CLI hijacks pytest's file descriptors.
+
+### Test-Writing Conventions
+
+**Prefer the canonical graph**: Use the `canonical_graph` session fixture for read-only assertions instead of building ad-hoc graphs with `build_graph()` or `make_requirement()`. Use `canonical_federated_graph` when you need the FederatedGraph (e.g., trace rendering). Only create custom graphs when testing features not in the hht-like fixture (invalid inputs, specific config variations).
+
+**Use incremental classes for mutation tests**: Mark with `@pytest.mark.incremental`, use the `mutable_graph` fixture. Assert after each mutation step. The fixture undoes all mutations on teardown via the undo log — no disk I/O for reset.
+
+**No tautology tests**: Don't assert constants, factory return values, or type-system guarantees. Tests must exercise behavior — if the test can't fail due to a code change, it's not testing anything.
+
+**Parametrize variants, don't duplicate**: If testing the same behavior across formats/configs, use `@pytest.mark.parametrize` with the shared fixture. Don't write separate test methods for each format.
+
+**E2E fixture structure**: E2E tests are organized into 6 shared fixture files (test_e2e_global, test_e2e_standard, test_e2e_fda_numeric, test_e2e_named_custom, test_e2e_jira_edge, test_e2e_associated) plus test_e2e_special for unique setups. Each fixture builds one project with a daemon, and tests run sequentially against it. When adding new e2e tests, add them to the appropriate fixture file rather than creating a new file with its own project setup. Config dimensions (ID patterns, assertion labels, hierarchy rules) are crossed efficiently across fixtures.
+
+**E2E: reuse MCP servers**: The `mcp` fixture in `test_mcp_e2e.py` is module-scoped. Don't start a new server per test class unless the project config differs.
+
+**E2E: choosing the right fixture file**: Match your test to an existing fixture by config needs:
+- `test_e2e_global` — runs against REPO_ROOT (self-validation, CLI smoke tests, global MCP)
+- `test_e2e_standard` — standard IDs (REQ-p/o/d), uppercase assertions, 3-tier hierarchy, testing+code enabled
+- `test_e2e_fda_numeric` — FDA-style IDs (PRD-/OPS-/DEV-), numeric-0 assertions, custom statuses, require_rationale
+- `test_e2e_named_custom` — named-component IDs, numeric-1 assertions, custom hierarchy, SHALL=false, comma separator
+- `test_e2e_jira_edge` — Jira-style variable-length IDs, zero-padded assertions, status_roles, complex dirs, env overrides
+- `test_e2e_associated` — multi-repo with associates (standard core + FDA associate)
+- `test_e2e_special` — tests needing truly unique setup (init, lifecycle from scratch, specific error states)
+
+**E2E: ordering within a fixture**: Read-only tests go first (health, summary, trace, analysis). Mutation tests (fix, config set, edit) go after. MCP tests go last. If your test mutates disk, add it after existing mutations — later tests expect the mutated state.
+
+**E2E: when to create a new fixture file**: Only if you need a config combination that conflicts with ALL existing fixtures. Before creating a new file, check if you can add your config option to an existing fixture without breaking its other tests.
 
 ## Master Plan Workflow
 

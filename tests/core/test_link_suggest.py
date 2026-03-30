@@ -13,6 +13,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from elspais.graph.builder import TraceGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.link_suggest import (
@@ -107,25 +109,20 @@ def _make_discover_fn(assertions: list[dict[str, Any]]):
 class TestLinkSuggestionDataclass:
     """Tests for LinkSuggestion confidence bands and serialization."""
 
-    def test_REQ_d00072_A_confidence_band_high(self) -> None:
-        s = LinkSuggestion("t1", "t1", "f.py", "REQ-1", "Title", 0.9)
-        assert s.confidence_band == "high"
-
-    def test_REQ_d00072_A_confidence_band_medium(self) -> None:
-        s = LinkSuggestion("t1", "t1", "f.py", "REQ-1", "Title", 0.6)
-        assert s.confidence_band == "medium"
-
-    def test_REQ_d00072_A_confidence_band_low(self) -> None:
-        s = LinkSuggestion("t1", "t1", "f.py", "REQ-1", "Title", 0.3)
-        assert s.confidence_band == "low"
-
-    def test_REQ_d00072_A_confidence_band_boundary_high(self) -> None:
-        s = LinkSuggestion("t1", "t1", "f.py", "REQ-1", "Title", CONFIDENCE_HIGH)
-        assert s.confidence_band == "high"
-
-    def test_REQ_d00072_A_confidence_band_boundary_medium(self) -> None:
-        s = LinkSuggestion("t1", "t1", "f.py", "REQ-1", "Title", CONFIDENCE_MEDIUM)
-        assert s.confidence_band == "medium"
+    @pytest.mark.parametrize(
+        ("confidence", "expected_band"),
+        [
+            (0.9, "high"),
+            (0.6, "medium"),
+            (0.3, "low"),
+            (CONFIDENCE_HIGH, "high"),
+            (CONFIDENCE_MEDIUM, "medium"),
+        ],
+        ids=["high_score", "medium_score", "low_score", "boundary_high", "boundary_medium"],
+    )
+    def test_REQ_d00072_A_confidence_band(self, confidence: float, expected_band: str) -> None:
+        s = LinkSuggestion("t1", "t1", "f.py", "REQ-1", "Title", confidence)
+        assert s.confidence_band == expected_band
 
     def test_REQ_d00072_A_to_dict_serialization(self) -> None:
         s = LinkSuggestion("t1", "label", "f.py", "REQ-1", "Title", 0.85, ["reason1"])

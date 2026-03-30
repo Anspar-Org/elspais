@@ -19,10 +19,6 @@ class TestNodeKindFile:
         """NodeKind.FILE enum member exists."""
         assert hasattr(NodeKind, "FILE")
 
-    def test_REQ_d00126_A_file_kind_value(self):
-        """NodeKind.FILE has string value 'file'."""
-        assert NodeKind.FILE.value == "file"
-
     def test_REQ_d00126_A_file_node_creation(self):
         """A GraphNode can be created with kind=NodeKind.FILE."""
         node = GraphNode(id="file:spec/prd.md", kind=NodeKind.FILE, label="prd.md")
@@ -48,16 +44,6 @@ class TestFileTypeEnum:
         actual = {member.name for member in FileType}
         assert expected == actual, f"Missing members: {expected - actual}"
 
-    def test_REQ_d00126_B_filetype_string_values(self):
-        """FileType members have lowercase string values."""
-        from elspais.graph.GraphNode import FileType
-
-        assert FileType.SPEC.value == "spec"
-        assert FileType.JOURNEY.value == "journey"
-        assert FileType.CODE.value == "code"
-        assert FileType.TEST.value == "test"
-        assert FileType.RESULT.value == "result"
-
 
 class TestEdgeKindFileAware:
     """Validates REQ-d00126-C: EdgeKind includes STRUCTURES, DEFINES, YIELDS."""
@@ -65,17 +51,14 @@ class TestEdgeKindFileAware:
     def test_REQ_d00126_C_structures_exists(self):
         """EdgeKind.STRUCTURES enum member exists."""
         assert hasattr(EdgeKind, "STRUCTURES")
-        assert EdgeKind.STRUCTURES.value == "structures"
 
     def test_REQ_d00126_C_defines_exists(self):
         """EdgeKind.DEFINES enum member exists."""
         assert hasattr(EdgeKind, "DEFINES")
-        assert EdgeKind.DEFINES.value == "defines"
 
     def test_REQ_d00126_C_yields_exists(self):
         """EdgeKind.YIELDS enum member exists."""
         assert hasattr(EdgeKind, "YIELDS")
-        assert EdgeKind.YIELDS.value == "yields"
 
 
 class TestEdgeKindCoverage:

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import signal
 import sys
 import threading
 import traceback
@@ -68,7 +70,10 @@ class TTLMiddleware(BaseHTTPMiddleware):
     @staticmethod
     def _exit() -> None:
         print("\nTTL expired — shutting down.", file=sys.stderr)
-        sys.exit(0)
+        # sys.exit() only raises SystemExit in the calling thread — it does
+        # NOT terminate the process when called from a non-main thread.
+        # Use SIGTERM so uvicorn shuts down gracefully.
+        os.kill(os.getpid(), signal.SIGTERM)
 
     async def dispatch(self, request: Request, call_next) -> Response:
         self._start_timer()

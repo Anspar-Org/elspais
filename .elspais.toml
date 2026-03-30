@@ -181,13 +181,6 @@ min_length = 3
 hash_mode = "normalized-text"
 allow_unresolved_cross_repo = false
 
-# Defined terms
-[terms]
-output_dir = "spec/_generated"
-duplicate_severity = "error"
-undefined_severity = "warning"
-unmarked_severity = "warning"
-
 # Output settings
 
 [output]

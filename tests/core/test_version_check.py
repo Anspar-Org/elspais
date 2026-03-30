@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from unittest.mock import patch
 
+import pytest
+
 from elspais.utilities.version_check import (
     check_for_updates,
     detect_install_method,
@@ -17,57 +19,50 @@ from elspais.utilities.version_check import (
 
 class TestParseVersionTuple:
     # Implements: REQ-d00213-A
-    def test_simple_version(self):
-        assert parse_version_tuple("0.58.0") == (0, 58, 0)
-
-    # Implements: REQ-d00213-A
-    def test_major_only(self):
-        assert parse_version_tuple("1") == (1,)
-
-    # Implements: REQ-d00213-A
-    def test_two_part(self):
-        assert parse_version_tuple("1.2") == (1, 2)
-
-    # Implements: REQ-d00213-A
-    def test_strips_prerelease(self):
-        assert parse_version_tuple("1.0.0a1") == (1, 0, 0)
-        assert parse_version_tuple("1.0.0b2") == (1, 0, 0)
-        assert parse_version_tuple("1.0.0rc1") == (1, 0, 0)
-
-    # Implements: REQ-d00213-A
-    def test_strips_local(self):
-        assert parse_version_tuple("0.58.0+local") == (0, 58, 0)
-
-    # Implements: REQ-d00213-A
-    def test_strips_dev(self):
-        # Implements: REQ-d00213-A
-        assert parse_version_tuple("0.58.0.dev1") == (0, 58, 0)
-
-    # Implements: REQ-d00213-A
-    def test_unknown_fallback(self):
-        assert parse_version_tuple("unknown") == (0,)
+    @pytest.mark.parametrize(
+        ("version_str", "expected"),
+        [
+            ("0.58.0", (0, 58, 0)),
+            ("1", (1,)),
+            ("1.2", (1, 2)),
+            ("1.0.0a1", (1, 0, 0)),
+            ("1.0.0b2", (1, 0, 0)),
+            ("1.0.0rc1", (1, 0, 0)),
+            ("0.58.0+local", (0, 58, 0)),
+            ("0.58.0.dev1", (0, 58, 0)),
+            ("unknown", (0,)),
+        ],
+        ids=[
+            "simple",
+            "major_only",
+            "two_part",
+            "prerelease_alpha",
+            "prerelease_beta",
+            "prerelease_rc",
+            "local",
+            "dev",
+            "unknown_fallback",
+        ],
+    )
+    def test_parse_version_tuple(self, version_str: str, expected: tuple) -> None:
+        assert parse_version_tuple(version_str) == expected
 
 
 class TestIsNewer:
     # Implements: REQ-d00213-B
-    def test_newer_patch(self):
-        assert is_newer("0.58.1", "0.58.0") is True
-
-    # Implements: REQ-d00213-B
-    def test_newer_minor(self):
-        assert is_newer("0.59.0", "0.58.0") is True
-
-    # Implements: REQ-d00213-B
-    def test_newer_major(self):
-        assert is_newer("1.0.0", "0.58.0") is True
-
-    # Implements: REQ-d00213-B
-    def test_same_version(self):
-        assert is_newer("0.58.0", "0.58.0") is False
-
-    # Implements: REQ-d00213-B
-    def test_older(self):
-        assert is_newer("0.57.0", "0.58.0") is False
+    @pytest.mark.parametrize(
+        ("latest", "current", "expected"),
+        [
+            ("0.58.1", "0.58.0", True),
+            ("0.59.0", "0.58.0", True),
+            ("1.0.0", "0.58.0", True),
+            ("0.58.0", "0.58.0", False),
+            ("0.57.0", "0.58.0", False),
+        ],
+        ids=["newer_patch", "newer_minor", "newer_major", "same_version", "older"],
+    )
+    def test_is_newer(self, latest: str, current: str, expected: bool) -> None:
+        assert is_newer(latest, current) is expected
 
 
 class TestDetectInstallMethod:

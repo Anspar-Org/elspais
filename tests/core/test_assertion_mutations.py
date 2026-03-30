@@ -641,3 +641,82 @@ class TestMultipleAssertionMutations:
 
         graph.undo_last()
         assert graph.find_by_id("REQ-p00001-A").get_label() == original_a_text
+
+
+@pytest.mark.incremental
+class TestAssertionMutationChain:
+    """Incremental chain: add an assertion, update it, rename it, delete it.
+
+    Uses REQ-p00002 from the canonical (hht-like) graph which has assertions
+    A-D. The chain adds assertion E, updates it, renames it to F, then
+    deletes F — leaving exactly the original A-D in place. The mutable_graph
+    fixture undoes any remaining mutations after the class, so later tests
+    see a pristine canonical graph regardless of where the chain stops.
+
+    State is shared between steps via class-level attributes.
+    """
+
+    # Implements: REQ-o00062-B
+    def test_step_1_add_assertion(self, mutable_graph):
+        """Add assertion E to REQ-p00002 from the canonical graph."""
+        from elspais.graph.GraphNode import NodeKind
+
+        parent = mutable_graph.find_by_id("REQ-p00002")
+        assert parent is not None, "REQ-p00002 must exist in canonical graph"
+        # Record starting assertion count for later verification
+        self.__class__._orig_assertion_count = sum(
+            1 for c in parent.iter_children() if c.kind == NodeKind.ASSERTION
+        )
+        mutable_graph.add_assertion("REQ-p00002", "E", "The system SHALL archive old sessions.")
+        node = mutable_graph.find_by_id("REQ-p00002-E")
+        assert node is not None
+        assert node.get_label() == "The system SHALL archive old sessions."
+        assert node.get_field("label") == "E"
+        assert len(mutable_graph.mutation_log) == 1
+
+    # Implements: REQ-o00062-B
+    def test_step_2_update_assertion(self, mutable_graph):
+        """Update assertion E text."""
+        mutable_graph.update_assertion(
+            "REQ-p00002-E", "The system SHALL expire old sessions after 24 hours."
+        )
+        node = mutable_graph.find_by_id("REQ-p00002-E")
+        assert node.get_label() == "The system SHALL expire old sessions after 24 hours."
+        assert len(mutable_graph.mutation_log) == 2
+
+    # Implements: REQ-o00062-B
+    def test_step_3_rename_assertion(self, mutable_graph):
+        """Rename assertion E to F."""
+        mutable_graph.rename_assertion("REQ-p00002-E", "F")
+        assert mutable_graph.find_by_id("REQ-p00002-E") is None
+        node = mutable_graph.find_by_id("REQ-p00002-F")
+        assert node is not None
+        assert node.get_field("label") == "F"
+        assert len(mutable_graph.mutation_log) == 3
+
+    # Implements: REQ-o00062-B
+    def test_step_4_delete_assertion(self, mutable_graph):
+        """Delete assertion F, restoring the original assertion count."""
+        from elspais.graph.GraphNode import NodeKind
+
+        mutable_graph.delete_assertion("REQ-p00002-F", compact=False)
+        assert mutable_graph.find_by_id("REQ-p00002-F") is None
+        parent = mutable_graph.find_by_id("REQ-p00002")
+        remaining = sum(1 for c in parent.iter_children() if c.kind == NodeKind.ASSERTION)
+        assert remaining == self.__class__._orig_assertion_count
+        assert len(mutable_graph.mutation_log) == 4
+
+    # Implements: REQ-o00062-G
+    def test_step_5_undo_all_mutations(self, mutable_graph):
+        """Undo all 4 mutations in reverse — graph is fully restored."""
+        from elspais.graph.GraphNode import NodeKind
+
+        parent = mutable_graph.find_by_id("REQ-p00002")
+        for _ in range(4):
+            mutable_graph.undo_last()
+        # All assertions undone: E and F gone, original A-D back
+        assert mutable_graph.find_by_id("REQ-p00002-E") is None
+        assert mutable_graph.find_by_id("REQ-p00002-F") is None
+        restored = sum(1 for c in parent.iter_children() if c.kind == NodeKind.ASSERTION)
+        assert restored == self.__class__._orig_assertion_count
+        assert len(mutable_graph.mutation_log) == 0

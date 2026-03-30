@@ -31,10 +31,6 @@ class TestIndirectCoverageSource:
     Validates REQ-d00069-A: INDIRECT enum exists in CoverageSource.
     """
 
-    def test_REQ_d00069_A_indirect_enum_value(self):
-        """INDIRECT enum value exists and has correct string value."""
-        assert CoverageSource.INDIRECT.value == "indirect"
-
     def test_REQ_d00069_A_indirect_is_distinct(self):
         """INDIRECT is distinct from other coverage sources."""
         values = {s.value for s in CoverageSource}

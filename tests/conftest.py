@@ -31,6 +31,10 @@ def pytest_configure(config):
     os.environ.pop("GIT_DIR", None)
     os.environ.pop("GIT_WORK_TREE", None)
     os.environ["GIT_CEILING_DIRECTORIES"] = "/"
+    config.addinivalue_line(
+        "markers",
+        "incremental: mark test class for sequential execution with xfail on prior failure",
+    )
 
 
 # Fixtures directory
@@ -57,6 +61,19 @@ def pytest_deselected(items):
             indent=2,
         )
     )
+
+
+def pytest_runtest_makereport(item, call):
+    """Track failures in incremental test classes."""
+    if "incremental" in item.keywords and call.excinfo is not None:
+        item.parent._previous_failed = item.name
+
+
+def pytest_runtest_setup(item):
+    """Skip subsequent tests in incremental class if a prior step failed."""
+    previous = getattr(item.parent, "_previous_failed", None)
+    if previous and "incremental" in item.keywords:
+        pytest.xfail(f"previous step failed: {previous}")
 
 
 @pytest.fixture
@@ -204,3 +221,39 @@ def sample_config_dict() -> dict:
             },
         },
     }
+
+
+@pytest.fixture(scope="session")
+def canonical_federated_graph():
+    """Build the hht-like fixture FederatedGraph once per session.
+
+    Use this when you need the full FederatedGraph (e.g., for trace commands).
+    Use canonical_graph for the primary TraceGraph.
+    """
+    from elspais.graph.factory import build_graph
+
+    root = FIXTURES_DIR / "hht-like"
+    return build_graph(repo_root=root)
+
+
+@pytest.fixture(scope="session")
+def canonical_graph(canonical_federated_graph):
+    """The primary TraceGraph from the hht-like fixture.
+
+    Built once per session. For read-only assertions against graph state.
+    """
+    fg = canonical_federated_graph
+    return fg._repos[fg._root_repo].graph
+
+
+@pytest.fixture(scope="class")
+def mutable_graph(canonical_graph):
+    """Yield the canonical graph for a mutation chain, undo all on teardown.
+
+    Use with @pytest.mark.incremental test classes. Tests run in order,
+    each mutating the graph. After the class completes, all mutations
+    are undone, restoring the graph to its pristine state.
+    """
+    yield canonical_graph
+    while canonical_graph.mutation_log.last() is not None:
+        canonical_graph.undo_last()

@@ -54,19 +54,12 @@ class TestEdgeKindSatisfies:
     directly contribute to coverage counts.
     """
 
-    def test_REQ_d00069_G_satisfies_enum_value(self):
-        assert EdgeKind.SATISFIES.value == "satisfies"
-
     def test_REQ_d00069_G_satisfies_does_not_contribute_to_coverage(self):
         assert EdgeKind.SATISFIES.contributes_to_coverage() is False
 
     def test_REQ_d00069_G_refines_does_not_contribute(self):
         """Ensure REFINES still doesn't contribute (regression guard)."""
         assert EdgeKind.REFINES.contributes_to_coverage() is False
-
-    def test_REQ_p00014_C_instance_enum_value(self):
-        """EdgeKind.INSTANCE has value 'instance'."""
-        assert EdgeKind.INSTANCE.value == "instance"
 
     def test_REQ_p00014_C_instance_does_not_contribute_to_coverage(self):
         """INSTANCE edges do not contribute to coverage (like SATISFIES/REFINES)."""
@@ -78,15 +71,6 @@ class TestStereotypeEnum:
 
     Validates REQ-p00014-C: Stereotype enum classification.
     """
-
-    def test_REQ_p00014_C_stereotype_concrete_value(self):
-        assert Stereotype.CONCRETE.value == "concrete"
-
-    def test_REQ_p00014_C_stereotype_template_value(self):
-        assert Stereotype.TEMPLATE.value == "template"
-
-    def test_REQ_p00014_C_stereotype_instance_value(self):
-        assert Stereotype.INSTANCE.value == "instance"
 
     def test_REQ_p00014_C_stereotype_default_is_concrete(self):
         """CONCRETE is the default (first member) of the Stereotype enum."""

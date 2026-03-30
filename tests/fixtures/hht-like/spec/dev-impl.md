@@ -6,7 +6,7 @@ This document defines development implementation requirements.
 
 ### REQ-d00001: Authentication Module
 
-**Level**: DEV | **Implements**: p00001, o00001 | **Status**: Active
+**Level**: DEV | **Implements**: p00001-A+B+C, o00001 | **Status**: Active
 
 The authentication module SHALL implement secure user verification using industry-standard protocols.
 

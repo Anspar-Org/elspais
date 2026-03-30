@@ -858,3 +858,70 @@ class TestMultipleEdgeMutations:
         graph.undo_last()  # Undo add_edge
 
         assert not parent.has_child(child)
+
+
+@pytest.mark.incremental
+class TestEdgeMutationChain:
+    """Incremental chain: add edge, change kind, then undo both.
+
+    Uses REQ-d00003 and REQ-p00002 from the canonical (hht-like) graph.
+    REQ-d00003 implements REQ-p00003 only — it has no edge to REQ-p00002,
+    so we can add one, change its kind, then undo back to the original
+    disconnected state.
+
+    The mutable_graph fixture undoes any remaining mutations after the class
+    completes, ensuring the canonical graph is fully restored.
+    """
+
+    # Implements: REQ-o00062-C
+    def test_step_1_add_edge(self, mutable_graph):
+        """Add an IMPLEMENTS edge from REQ-d00003 to REQ-p00002."""
+        parent = mutable_graph.find_by_id("REQ-p00002")
+        child = mutable_graph.find_by_id("REQ-d00003")
+        assert parent is not None
+        assert child is not None
+        assert not child.has_parent(parent), "precondition: no edge to REQ-p00002 yet"
+
+        entry = mutable_graph.add_edge("REQ-d00003", "REQ-p00002", EdgeKind.IMPLEMENTS)
+
+        assert entry.operation == "add_edge"
+        assert parent.has_child(child)
+        assert child.has_parent(parent)
+        assert len(mutable_graph.mutation_log) == 1
+
+    # Implements: REQ-o00062-C
+    def test_step_2_change_edge_kind(self, mutable_graph):
+        """Change the edge kind from IMPLEMENTS to REFINES."""
+        entry = mutable_graph.change_edge_kind("REQ-d00003", "REQ-p00002", EdgeKind.REFINES)
+
+        assert entry.operation == "change_edge_kind"
+        assert entry.before_state["edge_kind"] == "implements"
+        assert entry.after_state["edge_kind"] == "refines"
+
+        child = mutable_graph.find_by_id("REQ-d00003")
+        edges = [e for e in child.iter_incoming_edges() if e.source.id == "REQ-p00002"]
+        assert len(edges) == 1
+        assert edges[0].kind == EdgeKind.REFINES
+        assert len(mutable_graph.mutation_log) == 2
+
+    # Implements: REQ-o00062-G
+    def test_step_3_undo_change_kind(self, mutable_graph):
+        """Undo the kind change — edge reverts to IMPLEMENTS."""
+        mutable_graph.undo_last()
+
+        child = mutable_graph.find_by_id("REQ-d00003")
+        edges = [e for e in child.iter_incoming_edges() if e.source.id == "REQ-p00002"]
+        assert len(edges) == 1
+        assert edges[0].kind == EdgeKind.IMPLEMENTS
+        assert len(mutable_graph.mutation_log) == 1
+
+    # Implements: REQ-o00062-G
+    def test_step_4_undo_add_edge(self, mutable_graph):
+        """Undo the add_edge — REQ-d00003 is disconnected from REQ-p00002 again."""
+        mutable_graph.undo_last()
+
+        parent = mutable_graph.find_by_id("REQ-p00002")
+        child = mutable_graph.find_by_id("REQ-d00003")
+        assert not parent.has_child(child)
+        assert not child.has_parent(parent)
+        assert len(mutable_graph.mutation_log) == 0

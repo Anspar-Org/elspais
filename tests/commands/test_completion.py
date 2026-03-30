@@ -25,31 +25,26 @@ from elspais.commands.completion import (
 class TestDetectShell:
     """Validates REQ-p00001-A: shell auto-detection from $SHELL."""
 
-    def test_REQ_p00001_A_detect_bash(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("SHELL", "/bin/bash")
-        assert _detect_shell() == "bash"
-
-    def test_REQ_p00001_A_detect_zsh(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("SHELL", "/usr/bin/zsh")
-        assert _detect_shell() == "zsh"
-
-    def test_REQ_p00001_A_detect_tcsh(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("SHELL", "/usr/local/bin/tcsh")
-        assert _detect_shell() == "tcsh"
-
-    def test_REQ_p00001_A_detect_unknown_shell(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("SHELL", "/usr/bin/fish")
-        assert _detect_shell() is None
+    @pytest.mark.parametrize(
+        ("shell_path", "expected"),
+        [
+            ("/bin/bash", "bash"),
+            ("/usr/bin/zsh", "zsh"),
+            ("/usr/local/bin/tcsh", "tcsh"),
+            ("/usr/bin/fish", None),
+            ("/nix/store/abc123/bin/zsh", "zsh"),
+        ],
+        ids=["bash", "zsh", "tcsh", "unknown_fish", "deep_path_zsh"],
+    )
+    def test_REQ_p00001_A_detect_shell(
+        self, monkeypatch: pytest.MonkeyPatch, shell_path: str, expected: str | None
+    ) -> None:
+        monkeypatch.setenv("SHELL", shell_path)
+        assert _detect_shell() == expected
 
     def test_REQ_p00001_A_detect_empty_shell(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("SHELL", raising=False)
         assert _detect_shell() is None
-
-    def test_REQ_p00001_A_detect_shell_with_deep_path(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("SHELL", "/nix/store/abc123/bin/zsh")
-        assert _detect_shell() == "zsh"
 
 
 class TestRemoveArgcompleteLines:
