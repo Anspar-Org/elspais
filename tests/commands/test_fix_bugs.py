@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import subprocess
 from pathlib import Path
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -70,6 +71,20 @@ def _make_project(
 
     req_file = spec_dir / filename
     req_file.write_text(req_content)
+
+    # Init git repo with author config so get_author_info works in CI
+    env = {**os.environ, "GIT_DIR": "", "GIT_WORK_TREE": ""}
+    env.pop("GIT_DIR", None)
+    env.pop("GIT_WORK_TREE", None)
+    subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, env=env, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"], cwd=tmp_path, env=env, capture_output=True
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"], cwd=tmp_path, env=env, capture_output=True
+    )
+    subprocess.run(["git", "add", "."], cwd=tmp_path, env=env, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, env=env, capture_output=True)
 
     return tmp_path
 
