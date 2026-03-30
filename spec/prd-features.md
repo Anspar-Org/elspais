@@ -40,6 +40,7 @@ F. The tool SHALL resolve relative associate paths from the canonical (non-workt
 
 ## Changelog
 
+- 2026-03-30 | c3303546 | - | Michael Lewis (michael@anspar.org) | Auto-fix: sync changelog hash
 - 2026-03-30 | f935e564 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Multi-Repository Requirements* | **Hash**: c3303546

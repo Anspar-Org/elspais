@@ -406,6 +406,7 @@ C. Severity SHALL be read from `[rules.format] no_traceability_severity` (defaul
 
 ## Changelog
 
+- 2026-03-30 | e1272219 | - | Michael Lewis (michael@anspar.org) | Auto-fix: sync changelog hash
 - 2026-03-29 | 6e481d63 | - | Michael Lewis (michael@anspar.org) | Initial creation
 
 *End* *Code No-Traceability Health Check* | **Hash**: e1272219
