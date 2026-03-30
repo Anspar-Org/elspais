@@ -222,7 +222,9 @@ class RequirementTransformer:
         raw_text = self._reconstruct_raw_text(node)
 
         # Build preamble section from body_lines (text before first ## section)
-        preamble_content = "\n".join(ln for ln in body_lines if ln.strip()).strip()
+        # Preserve internal blank lines (significant for list spacing) but strip
+        # leading/trailing blank lines.
+        preamble_content = "\n".join(body_lines).strip()
         if preamble_content:
             sections.insert(
                 0,

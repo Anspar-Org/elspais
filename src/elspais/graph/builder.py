@@ -32,6 +32,27 @@ def _chain_self_and_ancestors(node: GraphNode) -> Iterator[GraphNode]:
     return itertools.chain([node], node.ancestors())
 
 
+def _canonicalize_list_spacing(text: str) -> str:
+    """Insert blank lines before list items that follow non-blank, non-list lines.
+
+    Pandoc requires a blank line before the first list item.
+    Returns the text with canonical spacing (unchanged if already correct).
+    """
+    lines = text.split("\n")
+    result: list[str] = []
+    for i, line in enumerate(lines):
+        if (
+            line.lstrip().startswith("- ")
+            and i > 0
+            and result
+            and result[-1].strip()
+            and not result[-1].lstrip().startswith("- ")
+        ):
+            result.append("")
+        result.append(line)
+    return "\n".join(result)
+
+
 # Implements: REQ-d00071-C
 # Default satellite kinds: children of these types don't count as "meaningful"
 # for determining root vs orphan status. Configurable via [graph].satellite_kinds.
@@ -2998,9 +3019,15 @@ class GraphBuilder:
         # Create REMAINDER child nodes from non-normative sections
         # Each section (preamble, Rationale, Notes, etc.) becomes its own node
         # so that the requirement can be reconstructed from the graph.
+        _has_list_spacing_fix = False
         for idx, section in enumerate(data.get("sections", [])):
             section_id = f"{req_id}:section:{idx}"
             section_line = section.get("line", content.start_line)
+            section_text = section["content"]
+            canonical_text = _canonicalize_list_spacing(section_text)
+            if canonical_text != section_text:
+                _has_list_spacing_fix = True
+                section_text = canonical_text
             section_node = GraphNode(
                 id=section_id,
                 kind=NodeKind.REMAINDER,
@@ -3008,7 +3035,7 @@ class GraphBuilder:
             )
             section_node._content = {
                 "heading": section["heading"],
-                "text": section["content"],
+                "text": section_text,
                 "order": idx,
                 "parse_line": section_line,
                 "parse_end_line": None,
@@ -3064,6 +3091,8 @@ class GraphBuilder:
                 if b_line <= a_line + a_lines:
                     parse_dirty_reasons.append("assertion_spacing")
                     break
+        if _has_list_spacing_fix:
+            parse_dirty_reasons.append("list_spacing")
         stored_hash = data.get("hash")
         if stored_hash:
             from elspais.graph.render import compute_hash_for_node
