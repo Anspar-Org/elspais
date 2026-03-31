@@ -28,6 +28,8 @@ Configuration checks always run as part of traceability verification. For focuse
 | `config.pattern_tokens` | Validates pattern template tokens |
 | `config.hierarchy_rules` | Checks hierarchy rules consistency |
 | `config.paths_exist` | Verifies spec directories exist |
+| `config.associate_paths` | Validates that configured `[associates]` paths exist and contain spec files; severity: error |
+| `config.no_requirements` | Flags when no requirements are found (likely config issue); severity: warning |
 | `docs.config_drift` | Compares config schema sections against `docs/configuration.md`; reports undocumented and stale sections (runs in `elspais doctor`) |
 
 ### Spec File Checks (`--spec`)
@@ -41,6 +43,12 @@ Configuration checks always run as part of traceability verification. For focuse
 | `spec.hierarchy_levels` | Requirements follow hierarchy rules |
 | `spec.structural_orphans` | No nodes without a FILE ancestor (build bugs) |
 | `spec.broken_references` | No edges targeting non-existent nodes |
+| `spec.needs_rewrite` | Flags requirements that will be rewritten on next save (duplicate refs, stale hash); severity: warning |
+| `spec.hash_integrity` | Flags Satisfies-linked requirements for review when their template hash is stale; severity: warning |
+| `spec.changelog_present` | Active requirements must have at least one changelog entry (when `changelog.present = true`); severity: warning |
+| `spec.changelog_current` | Active requirements' latest changelog hash must match content hash (when `changelog.hash_current = true`); severity: error |
+| `spec.changelog_format` | Changelog entries must include required fields (reason, author, etc.); severity: error |
+| `spec.index_current` | INDEX.md must be up to date with current requirements and journeys; severity: warning |
 | `spec.no_assertions` | Requirements with no assertions (not testable); default severity: warning |
 
 #### `spec.no_assertions` — Not Testable Requirements
@@ -73,6 +81,54 @@ no_assertions_severity = "info"   # or "warning" (default) or "error"
 Use `require_assertions = true` when you want assertions to be mandatory for all
 requirements. Use `no_assertions_severity` to tune the visibility of the advisory
 check that is always present.
+
+#### `spec.changelog_*` — Changelog Enforcement
+
+Three checks enforce changelog discipline on Active requirements when enabled
+in `[changelog]` config:
+
+- **`spec.changelog_present`** — requires at least one changelog entry.
+  Enabled when `changelog.present = true`.
+- **`spec.changelog_current`** — the latest entry's hash must match the
+  requirement's current content hash. Enabled when `changelog.hash_current = true`.
+- **`spec.changelog_format`** — entries must include fields marked as required
+  in `[changelog.require]` (reason, author_name, author_id, change_order).
+
+**Configuration:**
+
+```toml
+[changelog]
+present = true          # require changelog section on Active REQs
+hash_current = true     # latest entry hash must match content
+
+[changelog.require]
+reason = false          # require a reason in each entry
+author_name = false     # require author name
+author_id = false       # require author ID
+change_order = false    # require change order number
+```
+
+**Follow-up:** Run `elspais fix` to add missing changelog entries or update
+stale hashes.
+
+#### `spec.index_current` — INDEX.md Staleness
+
+Checks that `INDEX.md` lists exactly the requirements and journeys in the
+current graph. Reports missing IDs, extra IDs, or both.
+
+**Follow-up:** Run `elspais index regenerate` to rebuild INDEX.md.
+
+#### `spec.needs_rewrite` — Pending Rewrites
+
+Flags requirements that have been parsed with differences from their on-disk
+format (duplicate references, stale hashes). These will be rewritten on the
+next `elspais fix` or `elspais save`.
+
+#### `spec.hash_integrity` — Template Hash Review
+
+When a template requirement's content changes (stale hash), all requirements
+that declare `Satisfies:` pointing to it are flagged for review. This ensures
+that changes to cross-cutting requirements are propagated to their consumers.
 
 ### Code Reference Checks (`--code`)
 
@@ -144,6 +200,7 @@ coverage and results from user journey validation.
 | `terms.unused` | Defined term with zero references; default severity: warning |
 | `terms.bad_definition` | Term with blank or trivial definition text; default severity: error |
 | `terms.collection_empty` | Collection term with no references; default severity: warning |
+| `terms.canonical_form` | Term references must use canonical casing and markup; default severity: warning |
 
 Severity for each check is configurable via `[terms.severity]` in `.elspais.toml`. See `elspais docs terms` for full configuration details.
 

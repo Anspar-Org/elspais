@@ -2228,7 +2228,8 @@ function onAddJourneySection(journeyId) {
                 '<div class="journey-section-content journey-section-content-view"></div>' +
                 '<textarea class="edit-only journey-section-content-edit"' +
                 ' data-journey-id="' + journeyId + '" data-section-name="' + escapeAttr(name) + '"' +
-                ' onblur="onJourneySectionContentBlur(this)"></textarea>';
+                ' onblur="onJourneySectionContentBlur(this)"' +
+                ' style="width:100%;min-height:120px;font-size:0.8rem;border:1px solid var(--border-color);border-radius:4px;padding:6px;resize:vertical;background:var(--card-bg);color:var(--input-text);"></textarea>';
             container.insertBefore(section, addBtn);
         }
     });
