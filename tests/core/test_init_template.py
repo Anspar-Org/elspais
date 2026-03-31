@@ -212,18 +212,36 @@ class TestGeneratedSections:
         config = ElspaisConfig.model_validate(data)
         assert config.id_patterns.canonical is not None
 
+    def test_REQ_d00209_C_core_emits_all_non_optional_fields(self) -> None:
+        """Core config must emit every field that has a non-None default."""
+        content = generate_config("core")
+        parsed = tomlkit.parse(content)
+        config = ElspaisConfig.model_validate(dict(parsed))
+        # Spot-check fields that were previously missing
+        assert config.validation.hash_mode == "normalized-text"
+        assert config.keywords.min_length == 3
+        assert config.changelog.hash_current is True
+        assert config.scanning.test.reference_keyword == "Verifies"
+
+    def test_REQ_d00209_C_core_emits_top_level_scalars(self) -> None:
+        """Core config must emit cli_ttl and stats fields."""
+        content = generate_config("core")
+        assert "cli_ttl" in content, "cli_ttl must appear in generated config"
+        # stats is optional, should appear as comment
+        assert "stats" in content, "stats must appear (as comment) in generated config"
+
 
 class TestGeneratedComments:
     """Validates REQ-d00209-D: Generated TOML includes human-readable comments."""
 
     def test_REQ_d00209_D_core_config_has_comments(self) -> None:
-        """Core config must contain comment lines (lines starting with #)."""
+        """Core config must contain comment lines for every field."""
         content = generate_config("core")
         comment_lines = [line for line in content.splitlines() if line.strip().startswith("#")]
-        # Should have a reasonable number of comments for guidance
+        # With per-field comments, expect at least one comment per schema field
         assert (
-            len(comment_lines) >= 5
-        ), f"Expected at least 5 comment lines, got {len(comment_lines)}"
+            len(comment_lines) >= 40
+        ), f"Expected at least 40 comment lines (per-field), got {len(comment_lines)}"
 
     def test_REQ_d00209_D_associated_config_has_comments(self) -> None:
         """Associated config must contain comment lines."""
@@ -245,6 +263,15 @@ class TestGeneratedComments:
         assert (
             len(descriptive_comments) >= 3
         ), f"Expected at least 3 descriptive comments, got {len(descriptive_comments)}"
+
+    def test_REQ_d00209_D_optional_fields_appear_as_comments(self) -> None:
+        """Optional (None-default) schema fields appear as commented-out TOML."""
+        content = generate_config("core")
+        # These are None-default fields that should appear commented out
+        assert "# pattern =" in content, "component.pattern should be commented out"
+        assert "# max_length =" in content, "component.max_length should be commented out"
+        assert "# zero_pad =" in content, "assertions.zero_pad should be commented out"
+        assert "# hash_algorithm =" in content, "validation.hash_algorithm should be commented out"
 
     def test_REQ_d00209_D_section_comments_present(self) -> None:
         """Each major section should have a preceding comment explaining it.
