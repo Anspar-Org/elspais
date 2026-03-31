@@ -10,6 +10,10 @@ or parent directories up to the git repository root.
   $ elspais config show     # View all settings
   $ elspais config schema   # Export JSON Schema
 
+The generated file includes every configuration field with a comment
+explaining its purpose, valid values, and effect. Optional fields appear
+as commented-out lines that you can uncomment and customize.
+
 ## Git Worktree Support
 
 elspais automatically detects git worktrees and resolves cross-repo
@@ -49,7 +53,7 @@ specify the keys you want to override. Environment variables always win.
 ### version
 
 ```toml
-version = 3   # Config schema version (required)
+version = 4   # Config schema version (required)
 ```
 
 ### [project] Section
@@ -188,7 +192,6 @@ require_hash = true                 # Require hash footer
 require_rationale = false           # Require Rationale section
 require_assertions = true           # Require Assertions section
 require_status = true               # Require Status field
-allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
 # content_rules = []                # Additional content rules
 
 [rules.format.status_roles]

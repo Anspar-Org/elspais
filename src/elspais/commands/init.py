@@ -124,54 +124,187 @@ def create_template_requirement(args: argparse.Namespace) -> int:
 
 
 # Implements: REQ-d00209
-# Section-level comments for the generated TOML, keyed by TOML section path.
-_SECTION_COMMENTS: dict[str, str] = {
+# Per-field comments for generated TOML.  Keyed by dotted TOML path.
+# Section-level comments use the bare section name (e.g. "project").
+# Field-level comments use the full path (e.g. "project.namespace").
+# 1 line max.  For enums, list valid values.  Refer to docs for detail.
+_FIELD_COMMENTS: dict[str, str] = {
+    # --- top-level scalars ---
+    "version": "Config schema version (do not change)",
+    "cli_ttl": "Daemon TTL in minutes (>0 = auto-start, 0 = disabled, <0 = no timeout)",
+    "stats": "File path for MCP tool-usage statistics (optional)",
+    # --- [project] ---
     "project": "Project identity",
+    "project.namespace": "Prefix for requirement IDs (e.g. REQ -> REQ-p00001)",
+    "project.name": "Project display name",
+    # --- [id-patterns] ---
     "id-patterns": "Requirement ID format and type definitions",
-    "id-patterns.assertions": ('"uppercase" | "numeric" | "alphanumeric" | "numeric_1based"'),
-    "levels": "Requirement level definitions with hierarchy rules",
+    "id-patterns.canonical": "ID template; vars: {namespace}, {level.letter}, {component}",
+    "id-patterns.separators": "Characters treated as equivalent separators when matching IDs",
+    "id-patterns.prefix_optional": "If true, namespace prefix is optional when matching IDs",
+    "id-patterns.aliases": "Named shorthand patterns for ID matching",
+    "id-patterns.component": "Component (numeric part) of the ID",
+    "id-patterns.component.style": '"numeric" | "alphanumeric" | "named"',
+    "id-patterns.component.digits": "Number of digits in numeric components",
+    "id-patterns.component.leading_zeros": "Pad numeric components with leading zeros",
+    "id-patterns.component.pattern": "Regex pattern (alphanumeric style only)",
+    "id-patterns.component.max_length": "Max length (named style only)",
+    "id-patterns.assertions": "Assertion label format",
+    "id-patterns.assertions.label_style": (
+        '"uppercase" (A,B,C) | "numeric" (0,1,2) | "numeric_1based" | "alphanumeric"'
+    ),
+    "id-patterns.assertions.max_count": "Maximum number of assertions per requirement",
+    "id-patterns.assertions.zero_pad": "Pad numeric assertion labels with leading zero",
+    "id-patterns.assertions.multi_separator": (
+        'Separator for multi-assertion refs (e.g. "+" -> A+B+C)'
+    ),
+    "id-patterns.associated": "Associated (cross-repo) prefix formatting",
+    "id-patterns.associated.enabled": "Enable associated prefix in IDs",
+    "id-patterns.associated.position": '"after_prefix" | "before_prefix"',
+    "id-patterns.associated.format": '"uppercase" | "lowercase"',
+    "id-patterns.associated.length": "Length of associated prefix code",
+    "id-patterns.associated.separator": "Separator between associated prefix and rest of ID",
+    # --- [levels] ---
+    "levels": "Requirement hierarchy levels (name -> config)",
+    "levels.*.rank": "Numeric rank (1 = highest, e.g. PRD)",
+    "levels.*.letter": "Single letter used in IDs (e.g. p -> REQ-p00001)",
+    "levels.*.display_name": "Human-readable name for reports",
+    "levels.*.implements": "Which levels this level can implement (list of level names)",
+    # --- [scanning] ---
     "scanning": "File scanning configuration",
+    "scanning.skip": "Global skip patterns (applied to all scan kinds)",
     "scanning.spec": "Spec file scanning",
+    "scanning.spec.directories": "Directories to scan for spec files",
+    "scanning.spec.file_patterns": "Glob patterns for spec files",
+    "scanning.spec.skip_files": "Filenames to skip in spec directories",
+    "scanning.spec.skip_dirs": "Subdirectories to skip in spec directories",
+    "scanning.spec.index_file": "Index file for ordering (e.g. INDEX.md)",
     "scanning.code": "Code file scanning",
+    "scanning.code.directories": "Directories to scan for code files",
+    "scanning.code.file_patterns": "Glob patterns for code files",
+    "scanning.code.skip_files": "Filenames to skip in code directories",
+    "scanning.code.skip_dirs": "Subdirectories to skip in code directories",
+    "scanning.code.source_roots": "Import resolution roots",
     "scanning.test": "Test file scanning and reference detection",
+    "scanning.test.enabled": "Enable test file scanning",
+    "scanning.test.directories": "Directories to scan for test files",
+    "scanning.test.file_patterns": "Glob patterns for test files",
+    "scanning.test.skip_files": "Filenames to skip in test directories",
+    "scanning.test.skip_dirs": "Subdirectories to skip in test directories",
+    "scanning.test.prescan_command": (
+        "External command for function detection (stdin: paths, stdout: JSON)"
+    ),
+    "scanning.test.reference_keyword": 'Keyword for test->requirement refs (e.g. "Verifies")',
+    "scanning.test.reference_patterns": "Additional regex patterns for reference detection",
     "scanning.result": "Test result file scanning",
+    "scanning.result.directories": "Directories to scan for test results",
+    "scanning.result.file_patterns": "Glob patterns for result files",
+    "scanning.result.skip_files": "Filenames to skip in result directories",
+    "scanning.result.skip_dirs": "Subdirectories to skip in result directories",
+    "scanning.result.run_meta_file": "Path to test run metadata JSON file",
     "scanning.coverage": "Code coverage report scanning",
+    "scanning.coverage.directories": "Directories to scan for coverage reports",
+    "scanning.coverage.file_patterns": "Glob patterns for coverage files",
+    "scanning.coverage.skip_files": "Filenames to skip in coverage directories",
+    "scanning.coverage.skip_dirs": "Subdirectories to skip in coverage directories",
     "scanning.journey": "User journey file scanning",
+    "scanning.journey.directories": "Directories to scan for journey files",
+    "scanning.journey.file_patterns": "Glob patterns for journey files",
+    "scanning.journey.skip_files": "Filenames to skip in journey directories",
+    "scanning.journey.skip_dirs": "Subdirectories to skip in journey directories",
     "scanning.docs": "Documentation file scanning",
+    "scanning.docs.directories": "Directories to scan for documentation",
+    "scanning.docs.file_patterns": "Glob patterns for doc files",
+    "scanning.docs.skip_files": "Filenames to skip in docs directories",
+    "scanning.docs.skip_dirs": "Subdirectories to skip in docs directories",
+    # --- [rules] ---
     "rules": "Validation rules",
-    "rules.hierarchy": "Global hierarchy settings",
+    "rules.protected_branches": "Branches where edit mode is disabled (names or globs)",
+    "rules.content_rules": "Content validation rules (list of rule module paths)",
+    "rules.hierarchy": "Hierarchy validation settings",
+    "rules.hierarchy.allow_circular": "Allow circular requirement references",
+    "rules.hierarchy.allow_structural_orphans": "Allow nodes without a FILE ancestor",
+    "rules.hierarchy.cross_repo_implements": "Allow implements edges across repos",
+    "rules.hierarchy.allow_orphans": "Allow orphaned nodes in the graph",
     "rules.format": "Format enforcement rules",
-    "rules.protected_branches": (
-        "# Branches where edit mode is disabled in the viewer.\n"
-        "# Supports exact names and glob patterns (e.g. 'release/*').\n"
+    "rules.format.require_hash": "Require content hash in requirement footer",
+    "rules.format.require_assertions": "Require at least one assertion per requirement",
+    "rules.format.require_status": "Require Status field in requirement metadata",
+    "rules.format.require_rationale": "Require Rationale section in requirements",
+    "rules.format.no_assertions_severity": (
+        '"warning" | "info" — severity for REQs with no assertions'
     ),
-    "rules.format.status_roles": (
-        "Status role classification (determines behavior in metrics/viewer)\n"
-        "# active: committed, normative - counted in all metrics\n"
-        "# provisional: in-progress toward active - excluded from coverage\n"
-        "# aspirational: future/planning - excluded from coverage and analysis\n"
-        "# retired: concluded - excluded from everything"
+    "rules.format.no_traceability_severity": (
+        '"warning" | "info" — severity for code/test files with no REQ markers'
     ),
-    "rules.coverage": (
-        "Coverage severity tiers per dimension (ok/info/warning/error)\n"
-        "# full_direct: all assertions covered by direct references\n"
-        "# full_indirect: covered via parent/child rollup only\n"
-        "# partial: some assertions covered, some not\n"
-        "# none: no coverage at all\n"
-        "# failing: has coverage but test results show failures"
+    "rules.format.status_roles": "Status role classification (metrics/viewer behavior)",
+    "rules.format.status_roles.active": "Committed, normative — counted in all metrics",
+    "rules.format.status_roles.provisional": "In-progress toward active — excluded from coverage",
+    "rules.format.status_roles.aspirational": "Future/planning — excluded from coverage+analysis",
+    "rules.format.status_roles.retired": "Concluded — excluded from everything, hidden by default",
+    "rules.coverage": "Coverage severity tiers per dimension (ok | info | warning | error)",
+    "rules.coverage.implemented": "Code implements assertions",
+    "rules.coverage.tested": "Tests reference assertions",
+    "rules.coverage.verified": "Test results exist for assertions",
+    "rules.coverage.uat_coverage": "User journeys validate assertions",
+    "rules.coverage.uat_verified": "User journey results exist",
+    "rules.coverage.*.full_direct": "All assertions covered by direct references",
+    "rules.coverage.*.full_indirect": "Covered via parent/child rollup only",
+    "rules.coverage.*.partial": "Some assertions covered, some not",
+    "rules.coverage.*.none": "No coverage at all",
+    "rules.coverage.*.failing": "Has coverage but test results show failures",
+    "rules.references": "Severity for code/test references to non-active requirements",
+    "rules.references.retired": ('"ok" | "info" | "warning" | "error" — refs to retired REQs'),
+    "rules.references.provisional": (
+        '"ok" | "info" | "warning" | "error" — refs to provisional REQs'
     ),
-    "rules.references": (
-        "Severity for code/test references to non-active requirements\n"
-        "# retired: code/tests referencing Deprecated/Superseded/Rejected REQs\n"
-        "# provisional: code/tests referencing Draft/Proposed REQs\n"
-        "# aspirational: code/tests referencing Roadmap/Future/Idea REQs"
+    "rules.references.aspirational": (
+        '"ok" | "info" | "warning" | "error" — refs to aspirational REQs'
     ),
-    "changelog": "Changelog enforcement",
+    # --- [changelog] ---
+    "changelog": "Changelog enforcement for requirement changes",
+    "changelog.hash_current": "Track current content hash in changelog entries",
+    "changelog.present": "Require changelog section in requirements",
+    "changelog.id_source": '"gh" (GitHub) | "env" | "manual" — source for author IDs',
+    "changelog.date_format": '"iso" (YYYY-MM-DD) | "us" (MM/DD/YYYY) | "eu" (DD/MM/YYYY)',
+    "changelog.author_id_format": '"email" | "username" | "full_name"',
+    "changelog.allowed_author_ids": '"all" or list of allowed author identifiers',
+    "changelog.require": "Which changelog fields are mandatory",
+    "changelog.require.reason": "Require a reason for each change",
+    "changelog.require.author_name": "Require author name in changelog entries",
+    "changelog.require.author_id": "Require author ID in changelog entries",
+    "changelog.require.change_order": "Require changes in chronological order",
+    # --- [keywords] ---
     "keywords": "Keyword extraction settings",
+    "keywords.min_length": "Minimum word length for keyword extraction",
+    # --- [validation] ---
     "validation": "Hash and validation settings",
+    "validation.hash_mode": '"normalized-text" — how requirement content is hashed',
+    "validation.hash_algorithm": '"sha256" (default) — hash algorithm',
+    "validation.hash_length": "Hash truncation length in chars (default: 8)",
+    "validation.allow_unresolved_cross_repo": "Suppress errors for unresolved cross-repo refs",
+    "validation.strict_hierarchy": "Strict hierarchy validation mode",
+    # --- [terms] ---
     "terms": "Defined terms: glossary, index, and health checks",
+    "terms.output_dir": "Directory for generated glossary and index files",
+    "terms.markup_styles": "Markup styles recognized as term references",
+    "terms.exclude_files": "Files excluded from term scanning",
+    "terms.severity": "Severity levels for defined-terms health checks",
+    "terms.severity.duplicate": "Duplicate term definitions",
+    "terms.severity.undefined": "References to undefined terms",
+    "terms.severity.unmarked": "Unmarked usages of defined terms",
+    "terms.severity.unused": "Defined terms with no references",
+    "terms.severity.bad_definition": "Malformed term definitions",
+    "terms.severity.collection_empty": "Empty collection terms",
+    "terms.severity.canonical_form": "Non-canonical form usage",
+    # --- [output] ---
     "output": "Output settings",
-    "associates": "Associated repository definitions",
+    "output.formats": 'Output format list (e.g. ["json", "csv"])',
+    "output.dir": "Directory for generated output files",
+    # --- [associates] ---
+    "associates": "Associated repository definitions for cross-repo federation",
+    "associates.*.path": "Path to the associated repository (absolute or relative to repo root)",
+    "associates.*.namespace": "Namespace prefix for the associated repo's requirements",
 }
 
 # Per-project-type overrides applied on top of schema defaults.
@@ -213,6 +346,22 @@ _CORE_OVERRIDES: dict[str, Any] = {
             "file_patterns": ["test_*.py", "*_test.py"],
             "reference_keyword": "Verifies",
         },
+        "result": {
+            "directories": [],
+            "file_patterns": [],
+        },
+        "coverage": {
+            "directories": ["."],
+            "file_patterns": [],
+        },
+        "journey": {
+            "directories": ["spec"],
+            "file_patterns": ["*.md"],
+        },
+        "docs": {
+            "directories": ["docs"],
+            "file_patterns": ["*.md"],
+        },
     },
     "rules": {
         "hierarchy": {
@@ -249,8 +398,8 @@ _CORE_OVERRIDES: dict[str, Any] = {
 }
 
 # Sections to include in core template (order determines output order).
+# Top-level scalars (version, cli_ttl, stats) are handled separately.
 _CORE_SECTIONS = [
-    "version",
     "project",
     "id-patterns",
     "levels",
@@ -265,7 +414,6 @@ _CORE_SECTIONS = [
 
 # Sections to include in associated template.
 _ASSOCIATED_SECTIONS = [
-    "version",
     "project",
     "id-patterns",
     "levels",
@@ -290,111 +438,63 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
+def _add_field_comment(container: Any, field_path: str) -> None:
+    """Add a TOML comment line above a field if one exists in _FIELD_COMMENTS."""
+    comment = _FIELD_COMMENTS.get(field_path)
+    if not comment:
+        # Try wildcard match for dict-of-model fields like levels.*, coverage.*
+        parts = field_path.rsplit(".", 1)
+        if len(parts) == 2:
+            parent, field = parts
+            parent_parts = parent.rsplit(".", 1)
+            if len(parent_parts) == 2:
+                comment = _FIELD_COMMENTS.get(f"{parent_parts[0]}.*.{field}")
+            if not comment:
+                comment = _FIELD_COMMENTS.get(f"{parent}.*.{field}")
+    if comment:
+        container.add(tomlkit.comment(comment))
+
+
 def _add_table(
     doc: tomlkit.TOMLDocument,
     key: str,
     value: Any,
     comment: str | None = None,
 ) -> None:
-    """Add a key/value pair to *doc*, inserting a comment above tables."""
+    """Add a key/value pair to *doc*, inserting field-level comments."""
     if comment:
         for line in comment.split("\n"):
             doc.add(tomlkit.comment(line))
-    if isinstance(value, dict):
-        tbl = tomlkit.table()
-        for k, v in value.items():
-            if isinstance(v, dict):
-                sub = tomlkit.table()
-                for sk, sv in v.items():
-                    if isinstance(sv, dict):
-                        inner = tomlkit.table()
-                        for ik, iv in sv.items():
-                            inner.add(ik, iv)
-                        sub.add(sk, inner)
-                    else:
-                        sub.add(sk, sv)
-                sub_comment = _SECTION_COMMENTS.get(f"{key}.{k}")
-                if sub_comment:
-                    sub.comment(sub_comment)
-                tbl.add(k, sub)
-            else:
-                tbl.add(k, v)
-        doc.add(key, tbl)
-    else:
+
+    if not isinstance(value, dict):
+        _add_field_comment(doc, key)
         doc.add(key, value)
+        return
 
-
-# Optional fields not in config_defaults() (None values are excluded).
-# Keyed by the TOML line after which to insert; value is a list of
-# commented-out lines to append.
-_OPTIONAL_FIELD_INJECTIONS: list[tuple[str, list[str]]] = [
-    # id-patterns.component
-    (
-        "leading_zeros = true",
-        [
-            '# pattern = "[A-Z]{2}[0-9]{3}"  # For alphanumeric',
-            "# max_length = 32               # For named style",
-        ],
-    ),
-    # id-patterns.assertions
-    (
-        "max_count = 26",
-        [
-            "# zero_pad = false              # Pad numeric labels",
-            '# multi_separator = "+"         # Multi-assertion (A+B+C)',
-        ],
-    ),
-    # rules.hierarchy
-    (
-        "allow_structural_orphans = false",
-        [
-            "# cross_repo_implements = true  # Cross-repo implements",
-            "# allow_orphans = false         # Allow orphaned nodes",
-        ],
-    ),
-    # rules.format
-    (
-        "require_status = true",
-        [
-            '# allowed_statuses = ["Active", "Draft"]  # Override status_roles-derived list',
-            "# content_rules = []            # Content validation rules",
-        ],
-    ),
-    # validation
-    (
-        "allow_unresolved_cross_repo = false",
-        [
-            '# hash_algorithm = "sha256"     # Hash algorithm',
-            "# hash_length = 8               # Hash truncation length",
-            "# strict_hierarchy = false       # Strict hierarchy mode",
-        ],
-    ),
-]
-
-
-def _inject_optional_fields(toml_text: str) -> str:
-    """Insert commented-out optional fields into generated TOML."""
-    lines = toml_text.split("\n")
-    result: list[str] = []
-    current_section = ""
-    for line in lines:
-        result.append(line)
-        stripped = line.strip()
-        # Track current section for context-aware injection
-        if stripped.startswith("[") and "]" in stripped:
-            current_section = stripped[1 : stripped.index("]")]
-        for anchor, inj_lines in _OPTIONAL_FIELD_INJECTIONS:
-            if anchor in stripped:
-                result.extend(inj_lines)
-                break
-        # Section-specific optional fields (only inject in the right section)
-        if current_section == "scanning.spec" and stripped.startswith("skip_dirs"):
-            result.append('# index_file = "INDEX.md"  # Index file for ordering')
-        if current_section == "scanning.coverage" and stripped.startswith("skip_dirs"):
-            result.append('# file_patterns = ["coverage.json", "**/lcov.info"]')
-        if current_section == "scanning.code" and stripped.startswith("skip_dirs"):
-            result.append("# source_roots = []    # Import resolution roots")
-    return "\n".join(result)
+    tbl = tomlkit.table()
+    for k, v in value.items():
+        field_path = f"{key}.{k}"
+        if isinstance(v, dict):
+            sub = tomlkit.table()
+            for sk, sv in v.items():
+                sub_field_path = f"{field_path}.{sk}"
+                if isinstance(sv, dict):
+                    inner = tomlkit.table()
+                    for ik, iv in sv.items():
+                        _add_field_comment(inner, f"{sub_field_path}.{ik}")
+                        inner.add(ik, iv)
+                    sub.add(sk, inner)
+                else:
+                    _add_field_comment(sub, sub_field_path)
+                    sub.add(sk, sv)
+            sub_comment = _FIELD_COMMENTS.get(field_path)
+            if sub_comment:
+                sub.comment(sub_comment)
+            tbl.add(k, sub)
+        else:
+            _add_field_comment(tbl, field_path)
+            tbl.add(k, v)
+    doc.add(key, tbl)
 
 
 def generate_config(project_type: str, associated_prefix: str | None = None) -> str:
@@ -472,11 +572,17 @@ def generate_config(project_type: str, associated_prefix: str | None = None) -> 
     doc.add(tomlkit.comment("overrides (e.g. associate paths). It is deep-merged and gitignored."))
     doc.add(tomlkit.nl())
 
+    # Top-level scalars (field comments are looked up by _add_field_comment)
+    _add_table(doc, "version", data["version"])
+    _add_table(doc, "cli_ttl", data.get("cli_ttl", 30))
+    _add_table(doc, "stats", data.get("stats", ""))
+    doc.add(tomlkit.nl())
+
     for section in sections:
         if section not in data:
             continue
-        comment = _SECTION_COMMENTS.get(section)
+        comment = _FIELD_COMMENTS.get(section)
         _add_table(doc, section, data[section], comment)
         doc.add(tomlkit.nl())
 
-    return _inject_optional_fields(tomlkit.dumps(doc))
+    return tomlkit.dumps(doc)

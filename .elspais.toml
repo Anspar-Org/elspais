@@ -3,20 +3,79 @@
 # Tip: Create .elspais.local.toml alongside this file for developer-local
 # overrides (e.g. associate paths). It is deep-merged and gitignored.
 
+# Config schema version (do not change)
 version = 4
+# Daemon TTL in minutes (>0 = auto-start, 0 = disabled, <0 = no timeout)
+cli_ttl = 30
+# File path for MCP tool-usage statistics (empty = disabled)
+stats = ""
 
 # Project identity
-
 [project]
+# Prefix for requirement IDs (e.g. REQ -> REQ-p00001)
 namespace = "REQ"
+# Project display name
 name = "elspais"
 
-# Requirement level definitions with hierarchy rules
+# Requirement ID format and type definitions
+[id-patterns]
+# ID template; vars: {namespace}, {level.letter}, {component}
+canonical = "{namespace}-{level.letter}{component}"
+# Characters treated as equivalent separators when matching IDs
+separators = ["-", "_"]
+# If true, namespace prefix is optional when matching IDs
+prefix_optional = false
 
+# Named shorthand patterns for ID matching
+[id-patterns.aliases]
+short = "{level.letter}{component}"
+
+# Component (numeric part) of the ID
+[id-patterns.component]
+# "numeric" | "alphanumeric" | "named"
+style = "numeric"
+# Number of digits in numeric components
+digits = 5
+# Pad numeric components with leading zeros
+leading_zeros = true
+# Regex pattern (empty = not applicable for numeric style)
+pattern = ""
+# Max length (0 = unlimited; named style only)
+max_length = 0
+
+# Assertion label format
+[id-patterns.assertions]
+# "uppercase" (A,B,C) | "numeric" (0,1,2) | "numeric_1based" (1,2,3) | "alphanumeric"
+label_style = "uppercase"
+# Maximum number of assertions per requirement
+max_count = 26
+# Pad numeric assertion labels with leading zero
+zero_pad = false
+# Separator for multi-assertion refs (e.g. "+" -> A+B+C)
+multi_separator = "+"
+
+# Associated (cross-repo) prefix formatting
+[id-patterns.associated]
+# Enable associated prefix in IDs
+enabled = false
+# "after_prefix" | "before_prefix"
+position = "after_prefix"
+# "uppercase" | "lowercase"
+format = "uppercase"
+# Length of associated prefix code
+length = 3
+# Separator between associated prefix and rest of ID
+separator = "-"
+
+# Requirement hierarchy levels (name -> config)
 [levels.prd]
+# Numeric rank (1 = highest, e.g. PRD)
 rank = 1
+# Single letter used in IDs (e.g. p -> REQ-p00001)
 letter = "p"
+# Human-readable name for reports
 display_name = "Product"
+# Which levels this level can implement (list of level names)
 implements = ["prd"]
 
 [levels.ops]
@@ -31,90 +90,161 @@ letter = "d"
 display_name = "Development"
 implements = ["dev", "ops", "prd"]
 
-# Requirement ID format
-
-[id-patterns]
-canonical = "{namespace}-{level.letter}{component}"
-separators = ["-", "_"]
-prefix_optional = false
-
-[id-patterns.aliases]
-short = "{level.letter}{component}"
-
-[id-patterns.component]
-style = "numeric"
-digits = 5
-leading_zeros = true
-
-[id-patterns.assertions]
-label_style = "uppercase"
-max_count = 26
-
 # File scanning configuration
-
 [scanning]
+# Global skip patterns (applied to all scan kinds)
 skip = ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"]
 
+# Spec file scanning
 [scanning.spec]
+# Directories to scan for spec files
 directories = ["spec"]
+# Glob patterns for spec files
 file_patterns = ["*.md"]
+# Filenames to skip in spec directories
 skip_files = ["README.md", "requirements-format.md", "INDEX.md"]
+# Subdirectories to skip in spec directories
 skip_dirs = ["roadmap", "_generated"]
+# Index file for ordering (empty = no index)
+index_file = ""
 
+# Code file scanning
 [scanning.code]
+# Directories to scan for code files
 directories = ["src", ".github/workflows"]
+# Glob patterns for code files
 file_patterns = ["tests/conftest.py", "tests/e2e/test_scenario_mutations.py"]
+# Filenames to skip in code directories
+skip_files = []
+# Subdirectories to skip in code directories
+skip_dirs = []
+# Import resolution roots
+source_roots = ["src", ""]
 
+# Test file scanning and reference detection
 [scanning.test]
+# Enable test file scanning
 enabled = true
+# Directories to scan for test files
 directories = ["tests"]
+# Glob patterns for test files
 file_patterns = ["test_*.py", "*_test.py"]
+# Filenames to skip in test directories
+skip_files = []
+# Subdirectories to skip in test directories
 skip_dirs = ["fixtures"]
+# External command for function detection (receives paths on stdin, outputs JSON)
+prescan_command = ""
+# Keyword for test->requirement refs (e.g. "Verifies")
 reference_keyword = "Validates"
+# Additional regex patterns for reference detection
+reference_patterns = []
 
+# Test result file scanning
 [scanning.result]
+# Directories to scan for test results
 directories = [".results"]
+# Glob patterns for result files
 file_patterns = ["test-results.xml"]
+# Filenames to skip in result directories
+skip_files = []
+# Subdirectories to skip in result directories
+skip_dirs = []
+# Path to test run metadata JSON file
 run_meta_file = ".results/test-run-meta.json"
 
+# Code coverage report scanning
 [scanning.coverage]
+# Directories to scan for coverage reports
 directories = [".results"]
+# Glob patterns for coverage files
 file_patterns = ["coverage.json"]
+# Filenames to skip in coverage directories
+skip_files = []
+# Subdirectories to skip in coverage directories
+skip_dirs = []
 
+# User journey file scanning
 [scanning.journey]
+# Directories to scan for journey files
 directories = ["spec"]
+# Glob patterns for journey files
 file_patterns = ["*.md"]
+# Filenames to skip in journey directories
+skip_files = []
+# Subdirectories to skip in journey directories
+skip_dirs = []
+
+# Documentation file scanning
+[scanning.docs]
+# Directories to scan for documentation
+directories = ["docs"]
+# Glob patterns for doc files
+file_patterns = ["*.md"]
+# Filenames to skip in docs directories
+skip_files = []
+# Subdirectories to skip in docs directories
+skip_dirs = []
 
 # Validation rules
-
 [rules]
+# Branches where viewer edit mode is disabled (exact names or globs)
 protected_branches = ["main", "master"]
+# Content validation rules (list of rule module paths)
+content_rules = []
 
+# Hierarchy validation settings
 [rules.hierarchy]
+# Allow circular requirement references
 allow_circular = false
+# Allow nodes without a FILE ancestor
 allow_structural_orphans = false
+# Allow implements edges across repos
+cross_repo_implements = false
+# Allow orphaned nodes in the graph
+allow_orphans = false
 
+# Format enforcement rules
 [rules.format]
+# Require content hash in requirement footer
 require_hash = true
+# Require Rationale section in requirements
 require_rationale = false
+# Require at least one assertion per requirement
 require_assertions = true
+# Require Status field in requirement metadata
 require_status = true
+# "warning" | "info" -- severity for REQs with no assertions
+no_assertions_severity = "warning"
+# "warning" | "info" -- severity for code/test files with no REQ markers
 no_traceability_severity = "info"
 
+# Status role classification (determines behavior in metrics/viewer)
 [rules.format.status_roles]
+# Committed, normative -- counted in all metrics
 active = ["Active"]
+# In-progress toward active -- excluded from coverage
 provisional = ["Draft", "Proposed"]
+# Future/planning -- excluded from coverage and analysis
 aspirational = ["Roadmap", "Future"]
+# Concluded -- excluded from everything, hidden by default
 retired = ["Deprecated", "Superseded"]
 
-# Coverage severity tiers per dimension (ok/info/warning/error)
+# Coverage severity tiers per dimension (ok | info | warning | error)
+# Code implements assertions
 [rules.coverage.implemented]
+# All assertions covered by direct references
 full_direct = "ok"
+# Covered via parent/child rollup only
 full_indirect = "info"
+# Some assertions covered, some not
 partial = "warning"
+# No coverage at all
 none = "error"
+# Has coverage but test results show failures
 failing = "error"
 
+# Tests reference assertions
 [rules.coverage.tested]
 full_direct = "ok"
 full_indirect = "info"
@@ -122,6 +252,7 @@ partial = "warning"
 none = "error"
 failing = "error"
 
+# Test results exist for assertions
 [rules.coverage.verified]
 full_direct = "ok"
 full_indirect = "info"
@@ -129,6 +260,7 @@ partial = "warning"
 none = "warning"
 failing = "error"
 
+# User journeys validate assertions
 [rules.coverage.uat_coverage]
 full_direct = "ok"
 full_indirect = "info"
@@ -136,6 +268,7 @@ partial = "info"
 none = "info"
 failing = "error"
 
+# User journey results exist
 [rules.coverage.uat_verified]
 full_direct = "ok"
 full_indirect = "info"
@@ -145,58 +278,86 @@ failing = "error"
 
 # Severity for code/test references to non-active requirements
 [rules.references]
+# "ok" | "info" | "warning" | "error" -- refs to Deprecated/Superseded/Rejected
 retired = "warning"
+# "ok" | "info" | "warning" | "error" -- refs to Draft/Proposed
 provisional = "info"
+# "ok" | "info" | "warning" | "error" -- refs to Roadmap/Future/Idea
 aspirational = "info"
 
-# Changelog enforcement
-
+# Changelog enforcement for requirement changes
 [changelog]
+# Track current content hash in changelog entries
 hash_current = true
+# Require changelog section in requirements
 present = false
+# "gh" (GitHub) | "env" | "manual" -- source for author IDs
 id_source = "gh"
+# "iso" (YYYY-MM-DD) | "us" (MM/DD/YYYY) | "eu" (DD/MM/YYYY)
 date_format = "iso"
+# "email" | "username" | "full_name"
 author_id_format = "email"
+# "all" or list of allowed author identifiers
 allowed_author_ids = "all"
 
+# Which changelog fields are mandatory
 [changelog.require]
+# Require a reason for each change
 reason = true
+# Require author name in changelog entries
 author_name = true
+# Require author ID in changelog entries
 author_id = true
+# Require changes in chronological order
 change_order = false
 
-# Reference parsing
-
-[references]
-enabled = true
-case_sensitive = false
-
 # Keyword extraction settings
-
 [keywords]
+# Minimum word length for keyword extraction
 min_length = 3
 
 # Hash and validation settings
-
 [validation]
+# "normalized-text" -- how requirement content is hashed
 hash_mode = "normalized-text"
+# Suppress errors for unresolved cross-repo refs
 allow_unresolved_cross_repo = false
+# Hash algorithm
+hash_algorithm = "sha256"
+# Hash truncation length in chars
+hash_length = 8
+# Strict hierarchy validation mode
+strict_hierarchy = false
 
-# Defined terms
+# Defined terms: glossary, index, and health checks
 [terms]
+# Directory for generated glossary and index files
 output_dir = "spec/_generated"
+# Markup styles recognized as term references
 markup_styles = ["*", "**"]
+# Files excluded from term scanning
 exclude_files = []
 
+# Severity levels for defined-terms health checks
 [terms.severity]
+# Duplicate term definitions
 duplicate = "error"
+# References to undefined terms
 undefined = "warning"
+# Unmarked usages of defined terms
 unmarked = "warning"
+# Defined terms with no references
 unused = "warning"
+# Malformed term definitions
 bad_definition = "error"
+# Empty collection terms
 collection_empty = "warning"
+# Non-canonical form usage
 canonical_form = "info"
 
 # Output settings
-
 [output]
+# Output format list (e.g. ["json", "csv"])
+formats = []
+# Directory for generated output files
+dir = ""

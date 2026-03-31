@@ -101,21 +101,23 @@ def test_project_namespace_accepted():
 
 
 # Verifies: REQ-d00212-F
-def test_status_roles_reference_allowed_statuses():
-    """status_roles referencing known statuses should work."""
+def test_status_roles_custom_values():
+    """status_roles with custom values should validate."""
     from elspais.config.schema import ElspaisConfig
 
     config = ElspaisConfig.model_validate(
         {
             "rules": {
                 "format": {
-                    "allowed_statuses": ["Active", "Draft"],
                     "status_roles": {"active": ["Active"], "provisional": ["Draft"]},
                 },
             },
         }
     )
-    assert config.rules.format.allowed_statuses == ["Active", "Draft"]
+    assert config.rules.format.status_roles == {
+        "active": ["Active"],
+        "provisional": ["Draft"],
+    }
 
 
 class TestProtectedBranches:

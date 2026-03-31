@@ -178,7 +178,7 @@ def load_content_rules(
         List of ContentRule objects (missing files are skipped)
     """
     typed_config = _validate_config(config)
-    rule_paths = typed_config.rules.content_rules or []
+    rule_paths = typed_config.rules.content_rules
 
     rules = []
     for rel_path in rule_paths:

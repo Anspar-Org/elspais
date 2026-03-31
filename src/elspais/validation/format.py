@@ -6,7 +6,7 @@ Validates requirements against rules defined in [rules.format] config section:
 - require_rationale: Check rationale section exists
 - require_shall: Check "shall" keyword in assertion text
 - require_status: Check status field in metadata
-- allowed_statuses: List of valid status values
+- status_roles: Mapping of roles to status lists (allowed statuses derived from union)
 - labels_sequential: Check assertion labels are sequential (A,B,C not A,C,E)
 - labels_unique: Check no duplicate assertion labels
 """
@@ -50,7 +50,7 @@ class FormatRulesConfig:
     require_rationale: bool = False
     require_shall: bool = False
     require_status: bool = False
-    allowed_statuses: list[str] = field(default_factory=list)
+    allowed_statuses: list[str] = field(default_factory=list)  # derived from status_roles
     labels_sequential: bool = False
     labels_unique: bool = True  # Default True - duplicates are usually errors
 
@@ -71,7 +71,6 @@ class FormatRulesConfig:
             require_rationale=data.get("require_rationale", False),
             require_shall=data.get("require_shall", False),
             require_status=data.get("require_status", False),
-            allowed_statuses=data.get("allowed_statuses", []),
             labels_sequential=data.get("labels_sequential", False),
             labels_unique=data.get("labels_unique", True),
         )
@@ -279,8 +278,7 @@ def validate_requirement_format(
 def get_format_rules_config(config: dict[str, Any]) -> FormatRulesConfig:
     """Get FormatRulesConfig from configuration dictionary.
 
-    If allowed_statuses is empty but status_roles is defined, computes
-    allowed_statuses from the union of all status role lists.
+    Derives allowed_statuses from the union of all status_roles lists.
 
     Args:
         config: Full configuration dictionary from get_config()
@@ -292,11 +290,10 @@ def get_format_rules_config(config: dict[str, Any]) -> FormatRulesConfig:
     rules_data = typed_config.rules.format.model_dump()
     fmt = FormatRulesConfig.from_dict(rules_data)
 
-    # Derive allowed_statuses from status_roles when not explicitly set
-    if not fmt.allowed_statuses and rules_data.get("status_roles"):
-        from elspais.config import get_status_roles
+    # Derive allowed_statuses from status_roles
+    from elspais.config import get_status_roles
 
-        roles = get_status_roles(config)
-        fmt.allowed_statuses = sorted(roles._original_case.values())
+    roles = get_status_roles(config)
+    fmt.allowed_statuses = sorted(roles._original_case.values())
 
     return fmt

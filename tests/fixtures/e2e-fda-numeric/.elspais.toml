@@ -45,8 +45,12 @@ allow_structural_orphans = true
 require_hash = true
 require_assertions = true
 require_status = true
-allowed_statuses = ["Active", "Draft", "Review", "Archived"]
 require_rationale = true
+
+[rules.format.status_roles]
+active = ["Active"]
+provisional = ["Draft", "Review"]
+retired = ["Archived"]
 
 [changelog]
 hash_current = false

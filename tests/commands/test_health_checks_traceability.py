@@ -345,11 +345,11 @@ class TestCheckBrokenReferences:
 class TestConfigBackwardCompat:
     """Test that legacy allow_orphans config key is respected."""
 
-    def test_REQ_d00085_allow_orphans_fallback_in_run_spec_checks(self, tmp_path: Path) -> None:
-        """run_spec_checks() falls back to allow_orphans when allow_structural_orphans is absent."""
+    def test_REQ_d00085_allow_structural_orphans_skips_check(self, tmp_path: Path) -> None:
+        """allow_structural_orphans=true skips structural orphan check."""
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            """version = 3
+            """version = 4
 
 [project]
 name = "test-compat"
@@ -358,7 +358,7 @@ name = "test-compat"
 directories = ["spec"]
 
 [rules.hierarchy]
-allow_orphans = true
+allow_structural_orphans = true
 """
         )
         raw = get_config(config_path)
@@ -373,16 +373,15 @@ allow_orphans = true
 
         checks = run_spec_checks(_wrap(graph, config), config)
         structural_check = next(c for c in checks if c.name == "spec.structural_orphans")
-        # The legacy allow_orphans=true should cause the structural orphan check to pass
         assert (
             structural_check.passed
-        ), "allow_orphans=true should skip structural orphan check via fallback"
+        ), "allow_structural_orphans=true should skip structural orphan check"
 
-    def test_REQ_d00085_allow_structural_orphans_takes_precedence(self, tmp_path: Path) -> None:
-        """allow_structural_orphans takes precedence over allow_orphans."""
+    def test_REQ_d00085_allow_structural_orphans_false_runs_check(self, tmp_path: Path) -> None:
+        """allow_structural_orphans=false runs the check regardless of allow_orphans."""
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            """version = 3
+            """version = 4
 
 [project]
 name = "test-precedence"
@@ -406,7 +405,6 @@ allow_structural_orphans = false
 
         checks = run_spec_checks(_wrap(graph, config), config)
         structural_check = next(c for c in checks if c.name == "spec.structural_orphans")
-        # allow_structural_orphans=false should override allow_orphans=true
         assert (
             not structural_check.passed
-        ), "allow_structural_orphans=false should override allow_orphans=true"
+        ), "allow_structural_orphans=false should run structural orphan check"
