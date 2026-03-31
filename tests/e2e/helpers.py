@@ -287,7 +287,7 @@ def base_config(
     require_assertions: bool = True,
     require_shall: bool = True,
     require_status: bool = True,
-    allowed_statuses: list[str] | None = None,
+    status_roles: dict[str, list[str]] | None = None,
     acceptance_criteria: str = "warn",
     labels_sequential: bool = True,
     # Hierarchy rules
@@ -330,8 +330,12 @@ def base_config(
             else:
                 levels[code] = {"rank": 1, "letter": code[0], "implements": [code]}
 
-    if allowed_statuses is None:
-        allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
+    if status_roles is None:
+        status_roles = {
+            "active": ["Active"],
+            "provisional": ["Draft"],
+            "retired": ["Deprecated", "Superseded"],
+        }
 
     spec_dirs = [spec_dir] if isinstance(spec_dir, str) else spec_dir
     code_dirs = [code_dir] if isinstance(code_dir, str) else code_dir
@@ -368,7 +372,7 @@ def base_config(
                 "require_hash": require_hash,
                 "require_assertions": require_assertions,
                 "require_status": require_status,
-                "allowed_statuses": allowed_statuses,
+                "status_roles": status_roles,
             },
         },
         "changelog": {

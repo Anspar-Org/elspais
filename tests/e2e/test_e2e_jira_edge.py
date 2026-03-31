@@ -289,7 +289,7 @@ class TestAllowStructuralOrphansConfig:
             label_style="numeric",
             zero_pad_assertions=True,
             allow_structural_orphans=False,
-            allowed_statuses=["Active", "Draft"],
+            status_roles={"active": ["Active"], "provisional": ["Draft"]},
             types={"req": {"level": 1}},
         )
         orphan = Requirement(

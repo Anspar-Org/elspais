@@ -7,8 +7,8 @@
 version = 4
 # Daemon TTL in minutes (>0 = auto-start, 0 = disabled, <0 = no timeout)
 cli_ttl = 30
-# File path for MCP tool-usage statistics (optional)
-# stats = ".elspais/stats.jsonl"
+# File path for MCP tool-usage statistics (empty = disabled)
+stats = ""
 
 # Project identity
 [project]
@@ -38,10 +38,10 @@ style = "numeric"
 digits = 5
 # Pad numeric components with leading zeros
 leading_zeros = true
-# Regex pattern (alphanumeric style only)
-# pattern = "[A-Z]{2}[0-9]{3}"
-# Max length (named style only)
-# max_length = 32
+# Regex pattern (empty = not applicable for numeric style)
+pattern = ""
+# Max length (0 = unlimited; named style only)
+max_length = 0
 
 # Assertion label format
 [id-patterns.assertions]
@@ -50,9 +50,9 @@ label_style = "uppercase"
 # Maximum number of assertions per requirement
 max_count = 26
 # Pad numeric assertion labels with leading zero
-# zero_pad = false
+zero_pad = false
 # Separator for multi-assertion refs (e.g. "+" -> A+B+C)
-# multi_separator = "+"
+multi_separator = "+"
 
 # Associated (cross-repo) prefix formatting
 [id-patterns.associated]
@@ -105,8 +105,8 @@ file_patterns = ["*.md"]
 skip_files = ["README.md", "requirements-format.md", "INDEX.md"]
 # Subdirectories to skip in spec directories
 skip_dirs = ["roadmap", "_generated"]
-# Index file for ordering (e.g. INDEX.md)
-# index_file = "INDEX.md"
+# Index file for ordering (empty = no index)
+index_file = ""
 
 # Code file scanning
 [scanning.code]
@@ -119,7 +119,7 @@ skip_files = []
 # Subdirectories to skip in code directories
 skip_dirs = []
 # Import resolution roots
-# source_roots = []
+source_roots = ["src", ""]
 
 # Test file scanning and reference detection
 [scanning.test]
@@ -191,7 +191,7 @@ skip_dirs = []
 # Branches where viewer edit mode is disabled (exact names or globs)
 protected_branches = ["main", "master"]
 # Content validation rules (list of rule module paths)
-# content_rules = []
+content_rules = []
 
 # Hierarchy validation settings
 [rules.hierarchy]
@@ -200,9 +200,9 @@ allow_circular = false
 # Allow nodes without a FILE ancestor
 allow_structural_orphans = false
 # Allow implements edges across repos
-# cross_repo_implements = true
+cross_repo_implements = false
 # Allow orphaned nodes in the graph
-# allow_orphans = false
+allow_orphans = false
 
 # Format enforcement rules
 [rules.format]
@@ -214,12 +214,10 @@ require_rationale = false
 require_assertions = true
 # Require Status field in requirement metadata
 require_status = true
+# "warning" | "info" -- severity for REQs with no assertions
+no_assertions_severity = "warning"
 # "warning" | "info" -- severity for code/test files with no REQ markers
 no_traceability_severity = "info"
-# Explicit list of valid statuses (overrides status_roles-derived list)
-# allowed_statuses = ["Active", "Draft", "Deprecated"]
-# "warning" | "info" -- severity for REQs with no assertions
-# no_assertions_severity = "warning"
 
 # Status role classification (determines behavior in metrics/viewer)
 [rules.format.status_roles]
@@ -324,12 +322,12 @@ min_length = 3
 hash_mode = "normalized-text"
 # Suppress errors for unresolved cross-repo refs
 allow_unresolved_cross_repo = false
-# "sha256" (default) -- hash algorithm
-# hash_algorithm = "sha256"
-# Hash truncation length in chars (default: 8)
-# hash_length = 8
+# Hash algorithm
+hash_algorithm = "sha256"
+# Hash truncation length in chars
+hash_length = 8
 # Strict hierarchy validation mode
-# strict_hierarchy = false
+strict_hierarchy = false
 
 # Defined terms: glossary, index, and health checks
 [terms]

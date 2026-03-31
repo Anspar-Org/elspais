@@ -1010,37 +1010,37 @@ class TestStandardCLIMutations:
         assert get_result.returncode == 0
         assert "updated-name" in get_result.stdout
 
-    def test_06_config_add_status(self, project):
+    def test_06_config_add_to_array(self, project):
         """Config add appends to array."""
         result = run_elspais(
             "config",
             "add",
-            "rules.format.allowed_statuses",
-            "Experimental",
+            "rules.protected_branches",
+            "staging",
             cwd=project,
         )
         assert result.returncode == 0
 
         show = run_elspais("config", "show", "--format", "json", cwd=project)
         data = json.loads(show.stdout)
-        statuses = data.get("rules", {}).get("format", {}).get("allowed_statuses", [])
-        assert "Experimental" in statuses
+        branches = data.get("rules", {}).get("protected_branches", [])
+        assert "staging" in branches
 
-    def test_07_config_remove_status(self, project):
+    def test_07_config_remove_from_array(self, project):
         """Config remove deletes from array."""
         result = run_elspais(
             "config",
             "remove",
-            "rules.format.allowed_statuses",
-            "Superseded",
+            "rules.protected_branches",
+            "staging",
             cwd=project,
         )
         assert result.returncode == 0
 
         show = run_elspais("config", "show", "--format", "json", cwd=project)
         data = json.loads(show.stdout)
-        statuses = data.get("rules", {}).get("format", {}).get("allowed_statuses", [])
-        assert "Superseded" not in statuses
+        branches = data.get("rules", {}).get("protected_branches", [])
+        assert "staging" not in branches
 
     def test_08_config_unset_key(self, project):
         """Config unset removes a key."""

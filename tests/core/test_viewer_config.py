@@ -35,11 +35,15 @@ def custom_types_config(default_config):
 
 @pytest.fixture()
 def custom_statuses_config(default_config):
-    """Return config with custom allowed_statuses."""
+    """Return config with custom status_roles (statuses derived from roles)."""
     cfg = dict(default_config)
     cfg["rules"] = dict(cfg.get("rules", {}))
     cfg["rules"]["format"] = dict(cfg["rules"].get("format", {}))
-    cfg["rules"]["format"]["allowed_statuses"] = ["Open", "Closed", "Review"]
+    cfg["rules"]["format"]["status_roles"] = {
+        "active": ["Open"],
+        "provisional": ["Review"],
+        "retired": ["Closed"],
+    }
     return cfg
 
 

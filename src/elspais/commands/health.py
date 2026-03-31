@@ -427,7 +427,7 @@ def check_spec_hierarchy_levels(graph: FederatedGraph, config: dict[str, Any]) -
 
     typed_config = _validate_config(config)
     levels = typed_config.levels
-    strict_hierarchy = typed_config.validation.strict_hierarchy or False
+    strict_hierarchy = typed_config.validation.strict_hierarchy
 
     # Parse hierarchy rules from levels config
     allowed_parents_map = {
@@ -677,7 +677,7 @@ def check_spec_format_rules(
             rules.require_rationale,
             rules.require_shall,
             rules.require_status,
-            bool(rules.allowed_statuses),
+            bool(rules.allowed_statuses),  # always populated from status_roles
             rules.labels_sequential,
             rules.labels_unique,
         ]
@@ -773,10 +773,8 @@ def check_spec_no_assertions(graph: FederatedGraph, config: dict[str, Any]) -> H
     from elspais.graph import NodeKind
     from elspais.graph.relations import EdgeKind
 
-    severity = "warning"
     typed = _validate_config(config)
-    if typed.rules.format.no_assertions_severity in ("info", "warning", "error"):
-        severity = typed.rules.format.no_assertions_severity
+    severity = typed.rules.format.no_assertions_severity
 
     findings: list[HealthFinding] = []
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
@@ -1728,11 +1726,7 @@ def run_spec_checks(
             )
         )
         _typed_repo = _validate_config(repo_config)
-        _allow_so = (
-            _typed_repo.rules.hierarchy.allow_structural_orphans
-            if _typed_repo.rules.hierarchy.allow_structural_orphans is not None
-            else (_typed_repo.rules.hierarchy.allow_orphans or False)
-        )
+        _allow_so = _typed_repo.rules.hierarchy.allow_structural_orphans
         checks.append(
             _annotate_findings(
                 check_structural_orphans(
@@ -2152,7 +2146,7 @@ def run_code_checks(
         )
 
     # Implements: REQ-d00241-B, REQ-d00241-C
-    no_trace_sev = typed_config.rules.format.no_traceability_severity or "warning"
+    no_trace_sev = typed_config.rules.format.no_traceability_severity
     unlinked_files = []
     for kind in (NodeKind.CODE, NodeKind.TEST):
         for node in graph.iter_unlinked(kind):

@@ -12,22 +12,22 @@ class _StrictModel(BaseModel):
 # Implements: REQ-d00212-J
 class ProjectConfig(_StrictModel):
     namespace: str = "REQ"
-    name: str | None = None
+    name: str = ""
 
 
 class ComponentConfig(_StrictModel):
     style: str = "numeric"
     digits: int = 5
     leading_zeros: bool = True
-    pattern: str | None = None
-    max_length: int | None = None
+    pattern: str = ""
+    max_length: int = 0
 
 
 class AssertionConfig(_StrictModel):
     label_style: str = "uppercase"
     max_count: int = 26
-    zero_pad: bool | None = None
-    multi_separator: str | None = None
+    zero_pad: bool = False
+    multi_separator: str = "+"
 
 
 class AssociatedPatternConfig(_StrictModel):
@@ -51,22 +51,28 @@ class IdPatternsConfig(_StrictModel):
 
 # Implements: REQ-d00212-H
 class HierarchyConfig(_StrictModel):
-    cross_repo_implements: bool | None = None
-    allow_structural_orphans: bool | None = None
-    allow_circular: bool | None = None
-    allow_orphans: bool | None = None
+    cross_repo_implements: bool = False
+    allow_structural_orphans: bool = False
+    allow_circular: bool = False
+    allow_orphans: bool = False
 
 
 # Implements: REQ-d00212-M
 class FormatConfig(_StrictModel):
-    require_hash: bool | None = None
-    require_assertions: bool | None = None
-    require_status: bool | None = None
-    require_rationale: bool | None = None
-    allowed_statuses: list[str] | None = None
-    status_roles: dict[str, list[str] | str] | None = None
-    no_assertions_severity: str | None = None
-    no_traceability_severity: str | None = None
+    require_hash: bool = False
+    require_assertions: bool = False
+    require_status: bool = False
+    require_rationale: bool = False
+    status_roles: dict[str, list[str] | str] = Field(
+        default_factory=lambda: {
+            "active": ["Active"],
+            "provisional": ["Draft", "Proposed"],
+            "aspirational": ["Roadmap", "Future", "Idea"],
+            "retired": ["Deprecated", "Superseded", "Rejected"],
+        }
+    )
+    no_assertions_severity: str = "warning"
+    no_traceability_severity: str = "warning"
 
 
 class CoverageSeverityConfig(_StrictModel):
@@ -111,7 +117,7 @@ class RulesConfig(_StrictModel):
     format: FormatConfig = Field(default_factory=FormatConfig)
     coverage: CoverageConfig = Field(default_factory=CoverageConfig)
     references: ReferenceSeverityConfig = Field(default_factory=ReferenceSeverityConfig)
-    content_rules: list[str] | None = None
+    content_rules: list[str] = Field(default_factory=list)
     protected_branches: list[str] = Field(default=["main", "master"])
 
 
@@ -121,17 +127,17 @@ class KeywordsSearchConfig(_StrictModel):
 
 class ValidationConfig(_StrictModel):
     hash_mode: str = "normalized-text"
-    hash_algorithm: str | None = None
-    hash_length: int | None = None
+    hash_algorithm: str = "sha256"
+    hash_length: int = 8
     allow_unresolved_cross_repo: bool = False
-    strict_hierarchy: bool | None = None
+    strict_hierarchy: bool = False
 
 
 # Implements: REQ-d00212-A
 class LevelConfig(_StrictModel):
     rank: int
     letter: str
-    display_name: str | None = None
+    display_name: str = ""
     implements: list[str]
 
 
@@ -146,12 +152,12 @@ class ScanningKindConfig(_StrictModel):
 class SpecScanningConfig(ScanningKindConfig):
     directories: list[str] = Field(default_factory=lambda: ["spec"])
     file_patterns: list[str] = Field(default_factory=lambda: ["*.md"])
-    index_file: str | None = None
+    index_file: str = ""
 
 
 class CodeScanningConfig(ScanningKindConfig):
     directories: list[str] = Field(default_factory=lambda: ["src"])
-    source_roots: list[str] | None = None
+    source_roots: list[str] = Field(default_factory=lambda: ["src", ""])
 
 
 class TestScanningConfig(ScanningKindConfig):
@@ -277,7 +283,7 @@ class ElspaisConfig(_StrictModel):
     output: OutputConfig = Field(default_factory=OutputConfig)
     terms: TermsConfig = Field(default_factory=TermsConfig)
     associates: dict[str, AssociateEntryConfig] = Field(default_factory=dict)
-    stats: str | None = Field(default=None, description="File path for MCP tool usage statistics")
+    stats: str = Field(default="", description="File path for MCP tool usage statistics")
     cli_ttl: int = Field(
         default=30,
         description="CLI daemon TTL in minutes (>0=auto-start, 0=disabled, <0=no timeout)",

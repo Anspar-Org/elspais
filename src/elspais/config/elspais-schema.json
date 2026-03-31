@@ -14,28 +14,14 @@
           "type": "integer"
         },
         "zero_pad": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Zero Pad"
+          "default": false,
+          "title": "Zero Pad",
+          "type": "boolean"
         },
         "multi_separator": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Multi Separator"
+          "default": "+",
+          "title": "Multi Separator",
+          "type": "string"
         }
       },
       "title": "AssertionConfig",
@@ -201,19 +187,11 @@
           "type": "array"
         },
         "source_roots": {
-          "anyOf": [
-            {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Source Roots"
+          "items": {
+            "type": "string"
+          },
+          "title": "Source Roots",
+          "type": "array"
         }
       },
       "title": "CodeScanningConfig",
@@ -238,28 +216,14 @@
           "type": "boolean"
         },
         "pattern": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Pattern"
+          "default": "",
+          "title": "Pattern",
+          "type": "string"
         },
         "max_length": {
-          "anyOf": [
-            {
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Max Length"
+          "default": 0,
+          "title": "Max Length",
+          "type": "integer"
         }
       },
       "title": "ComponentConfig",
@@ -396,116 +360,51 @@
       "additionalProperties": false,
       "properties": {
         "require_hash": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Require Hash"
+          "default": false,
+          "title": "Require Hash",
+          "type": "boolean"
         },
         "require_assertions": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Require Assertions"
+          "default": false,
+          "title": "Require Assertions",
+          "type": "boolean"
         },
         "require_status": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Require Status"
+          "default": false,
+          "title": "Require Status",
+          "type": "boolean"
         },
         "require_rationale": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Require Rationale"
-        },
-        "allowed_statuses": {
-          "anyOf": [
-            {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Allowed Statuses"
+          "default": false,
+          "title": "Require Rationale",
+          "type": "boolean"
         },
         "status_roles": {
-          "anyOf": [
-            {
-              "additionalProperties": {
-                "anyOf": [
-                  {
-                    "items": {
-                      "type": "string"
-                    },
-                    "type": "array"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
               },
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Status Roles"
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "title": "Status Roles",
+          "type": "object"
         },
         "no_assertions_severity": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "No Assertions Severity"
+          "default": "warning",
+          "title": "No Assertions Severity",
+          "type": "string"
         },
         "no_traceability_severity": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "No Traceability Severity"
+          "default": "warning",
+          "title": "No Traceability Severity",
+          "type": "string"
         }
       },
       "title": "FormatConfig",
@@ -515,52 +414,24 @@
       "additionalProperties": false,
       "properties": {
         "cross_repo_implements": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Cross Repo Implements"
+          "default": false,
+          "title": "Cross Repo Implements",
+          "type": "boolean"
         },
         "allow_structural_orphans": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Allow Structural Orphans"
+          "default": false,
+          "title": "Allow Structural Orphans",
+          "type": "boolean"
         },
         "allow_circular": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Allow Circular"
+          "default": false,
+          "title": "Allow Circular",
+          "type": "boolean"
         },
         "allow_orphans": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Allow Orphans"
+          "default": false,
+          "title": "Allow Orphans",
+          "type": "boolean"
         }
       },
       "title": "HierarchyConfig",
@@ -665,16 +536,9 @@
           "type": "string"
         },
         "display_name": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Display Name"
+          "default": "",
+          "title": "Display Name",
+          "type": "string"
         },
         "implements": {
           "items": {
@@ -720,16 +584,9 @@
           "type": "string"
         },
         "name": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Name"
+          "default": "",
+          "title": "Name",
+          "type": "string"
         }
       },
       "title": "ProjectConfig",
@@ -814,19 +671,11 @@
           "$ref": "#/$defs/ReferenceSeverityConfig"
         },
         "content_rules": {
-          "anyOf": [
-            {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Content Rules"
+          "items": {
+            "type": "string"
+          },
+          "title": "Content Rules",
+          "type": "array"
         },
         "protected_branches": {
           "default": [
@@ -910,16 +759,9 @@
           "type": "array"
         },
         "index_file": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Index File"
+          "default": "",
+          "title": "Index File",
+          "type": "string"
         }
       },
       "title": "SpecScanningConfig",
@@ -1064,28 +906,14 @@
           "type": "string"
         },
         "hash_algorithm": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Hash Algorithm"
+          "default": "sha256",
+          "title": "Hash Algorithm",
+          "type": "string"
         },
         "hash_length": {
-          "anyOf": [
-            {
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Hash Length"
+          "default": 8,
+          "title": "Hash Length",
+          "type": "integer"
         },
         "allow_unresolved_cross_repo": {
           "default": false,
@@ -1093,16 +921,9 @@
           "type": "boolean"
         },
         "strict_hierarchy": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Strict Hierarchy"
+          "default": false,
+          "title": "Strict Hierarchy",
+          "type": "boolean"
         }
       },
       "title": "ValidationConfig",
@@ -1159,17 +980,10 @@
       "type": "object"
     },
     "stats": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
+      "default": "",
       "description": "File path for MCP tool usage statistics",
-      "title": "Stats"
+      "title": "Stats",
+      "type": "string"
     },
     "cli_ttl": {
       "default": 30,

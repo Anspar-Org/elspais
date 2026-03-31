@@ -162,28 +162,28 @@ class TestHierarchyConfigBooleansOnly:
     """Validates REQ-d00212-H: HierarchyConfig is booleans only."""
 
     def test_REQ_d00212_H_has_allow_circular(self):
-        """HierarchyConfig has allow_circular (bool|None)."""
+        """HierarchyConfig has allow_circular (bool, default False)."""
         assert "allow_circular" in HierarchyConfig.model_fields
         cfg = HierarchyConfig()
-        assert cfg.allow_circular is None
+        assert cfg.allow_circular is False
 
     def test_REQ_d00212_H_has_allow_structural_orphans(self):
-        """HierarchyConfig has allow_structural_orphans (bool|None)."""
+        """HierarchyConfig has allow_structural_orphans (bool, default False)."""
         assert "allow_structural_orphans" in HierarchyConfig.model_fields
         cfg = HierarchyConfig()
-        assert cfg.allow_structural_orphans is None
+        assert cfg.allow_structural_orphans is False
 
     def test_REQ_d00212_H_has_allow_orphans(self):
-        """HierarchyConfig has allow_orphans (bool|None)."""
+        """HierarchyConfig has allow_orphans (bool, default False)."""
         assert "allow_orphans" in HierarchyConfig.model_fields
         cfg = HierarchyConfig()
-        assert cfg.allow_orphans is None
+        assert cfg.allow_orphans is False
 
     def test_REQ_d00212_H_has_cross_repo_implements(self):
-        """HierarchyConfig has cross_repo_implements (bool|None)."""
+        """HierarchyConfig has cross_repo_implements (bool, default False)."""
         assert "cross_repo_implements" in HierarchyConfig.model_fields
         cfg = HierarchyConfig()
-        assert cfg.cross_repo_implements is None
+        assert cfg.cross_repo_implements is False
 
     def test_REQ_d00212_H_no_dev_field(self):
         """HierarchyConfig does NOT have a 'dev' field."""
@@ -218,10 +218,10 @@ class TestProjectConfigSimplified:
         assert isinstance(cfg.namespace, str)
 
     def test_REQ_d00212_J_has_name(self):
-        """ProjectConfig has 'name' field (str|None)."""
+        """ProjectConfig has 'name' field (str, default empty)."""
         assert "name" in ProjectConfig.model_fields
         cfg = ProjectConfig()
-        assert cfg.name is None
+        assert cfg.name == ""
 
     def test_REQ_d00212_J_no_version_field(self):
         """ProjectConfig does NOT have a 'version' field."""

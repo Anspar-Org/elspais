@@ -79,9 +79,9 @@ class TestFormatConfig:
     """Validates REQ-d00212-M: FormatConfig no_traceability_severity field."""
 
     def test_REQ_d00212_M_no_traceability_severity_default(self):
-        """FormatConfig().no_traceability_severity defaults to None."""
+        """FormatConfig().no_traceability_severity defaults to 'warning'."""
         fc = _schema.FormatConfig()
-        assert fc.no_traceability_severity is None
+        assert fc.no_traceability_severity == "warning"
 
     def test_REQ_d00212_M_no_traceability_severity_accepts_values(self):
         """FormatConfig accepts warning/error/off for no_traceability_severity."""

@@ -264,14 +264,18 @@ class TestGeneratedComments:
             len(descriptive_comments) >= 3
         ), f"Expected at least 3 descriptive comments, got {len(descriptive_comments)}"
 
-    def test_REQ_d00209_D_optional_fields_appear_as_comments(self) -> None:
-        """Optional (None-default) schema fields appear as commented-out TOML."""
+    def test_REQ_d00209_D_no_commented_out_fields(self) -> None:
+        """All schema fields appear as real values, none commented out."""
         content = generate_config("core")
-        # These are None-default fields that should appear commented out
-        assert "# pattern =" in content, "component.pattern should be commented out"
-        assert "# max_length =" in content, "component.max_length should be commented out"
-        assert "# zero_pad =" in content, "assertions.zero_pad should be commented out"
-        assert "# hash_algorithm =" in content, "validation.hash_algorithm should be commented out"
+        parsed = tomlkit.parse(content)
+        config = ElspaisConfig.model_validate(dict(parsed))
+        # Fields that were previously None-default are now explicit
+        assert config.id_patterns.component.pattern == ""
+        assert config.id_patterns.component.max_length == 0
+        assert config.id_patterns.assertions.zero_pad is False
+        assert config.validation.hash_algorithm == "sha256"
+        assert config.validation.hash_length == 8
+        assert config.validation.strict_hierarchy is False
 
     def test_REQ_d00209_D_section_comments_present(self) -> None:
         """Each major section should have a preceding comment explaining it.

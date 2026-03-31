@@ -32,7 +32,7 @@ def config_defaults() -> dict[str, Any]:
     """
     from elspais.config.schema import ElspaisConfig
 
-    return ElspaisConfig.model_validate({}).model_dump(by_alias=True, exclude_none=True)
+    return ElspaisConfig.model_validate({}).model_dump(by_alias=True)
 
 
 def _migrate_legacy_patterns(config: dict[str, Any]) -> dict[str, Any]:
@@ -221,13 +221,18 @@ def load_config(config_path: Path) -> dict[str, Any]:
     if isinstance(assoc, dict) and "paths" in assoc:
         stripped["associates"] = merged.pop("associates")
 
+    # Strip removed field: allowed_statuses (now derived from status_roles)
+    fmt = merged.get("rules", {}).get("format", {})
+    if "allowed_statuses" in fmt:
+        fmt.pop("allowed_statuses")
+
     # Validate via Pydantic schema
     from elspais.config.schema import ElspaisConfig
 
     validated = ElspaisConfig.model_validate(merged)
 
     # Produce hyphenated dict for backward-compatible access
-    result = validated.model_dump(by_alias=True, exclude_none=True)
+    result = validated.model_dump(by_alias=True)
 
     # Restore stripped legacy keys so existing config access still works
     for key, value in stripped.items():

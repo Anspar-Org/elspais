@@ -192,7 +192,6 @@ require_hash = true                 # Require hash footer
 require_rationale = false           # Require Rationale section
 require_assertions = true           # Require Assertions section
 require_status = true               # Require Status field
-allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
 # content_rules = []                # Additional content rules
 
 [rules.format.status_roles]

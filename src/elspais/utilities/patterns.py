@@ -252,7 +252,7 @@ class IdResolver:
         """Build optional assertion suffix regex."""
         af = self.config.assertions
         label_pat = self._assertion_label_regex_str()
-        sep = re.escape(af.multi_separator) if af.multi_separator else r"\+"
+        sep = re.escape(af.multi_separator)
         return rf"(?:-(?P<assertions>{label_pat}(?:{sep}{label_pat})*))?"
 
     def _assertion_label_regex_str(self) -> str:
@@ -321,7 +321,7 @@ class IdResolver:
         assertions: list[str] = []
         if assertions_str:
             af = self.config.assertions
-            sep = af.multi_separator if af.multi_separator else "+"
+            sep = af.multi_separator
             assertions = assertions_str.split(sep)
 
         # Render FQN (canonical form without assertion)
@@ -360,7 +360,7 @@ class IdResolver:
         result = parsed.fqn
         if parsed.assertions:
             af = self.config.assertions
-            sep = af.multi_separator if af.multi_separator else "+"
+            sep = af.multi_separator
             result += f"-{sep.join(parsed.assertions)}"
         return result
 
@@ -380,7 +380,7 @@ class IdResolver:
         )
         if parsed_id.assertions:
             af = self.config.assertions
-            sep = af.multi_separator if af.multi_separator else "+"
+            sep = af.multi_separator
             result += f"-{sep.join(parsed_id.assertions)}"
         return result
 

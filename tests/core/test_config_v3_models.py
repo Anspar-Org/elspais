@@ -47,9 +47,9 @@ class TestLevelConfig:
             LevelConfig(rank=1, letter="p", implements=[], bogus="nope")
 
     def test_REQ_d00212_A_level_config_display_name_optional(self):
-        """display_name defaults to None when omitted."""
+        """display_name defaults to empty string when omitted."""
         lc = LevelConfig(rank=2, letter="o", implements=["prd"])
-        assert lc.display_name is None
+        assert lc.display_name == ""
 
     def test_REQ_d00212_A_level_config_rank_required(self):
         """rank is required."""
@@ -110,12 +110,12 @@ class TestScanningKindConfig:
 class TestSpecScanningConfig:
     """Validates REQ-d00212-B: SpecScanningConfig subclass."""
 
-    def test_REQ_d00212_B_spec_index_file_default_none(self):
-        """SpecScanningConfig.index_file defaults to None."""
+    def test_REQ_d00212_B_spec_index_file_default_empty(self):
+        """SpecScanningConfig.index_file defaults to empty string."""
         sc = SpecScanningConfig(
             directories=["spec"], file_patterns=["*.md"], skip_files=[], skip_dirs=[]
         )
-        assert sc.index_file is None
+        assert sc.index_file == ""
 
     def test_REQ_d00212_B_spec_index_file_set(self):
         """SpecScanningConfig.index_file can be set."""
@@ -143,12 +143,12 @@ class TestSpecScanningConfig:
 class TestCodeScanningConfig:
     """Validates REQ-d00212-B: CodeScanningConfig subclass."""
 
-    def test_REQ_d00212_B_code_source_roots_default_none(self):
-        """CodeScanningConfig.source_roots defaults to None."""
+    def test_REQ_d00212_B_code_source_roots_default(self):
+        """CodeScanningConfig.source_roots defaults to ["src", ""]."""
         cc = CodeScanningConfig(
             directories=["src"], file_patterns=["*.py"], skip_files=[], skip_dirs=[]
         )
-        assert cc.source_roots is None
+        assert cc.source_roots == ["src", ""]
 
     def test_REQ_d00212_B_code_source_roots_set(self):
         """CodeScanningConfig.source_roots can be set."""

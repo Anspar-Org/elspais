@@ -83,9 +83,7 @@ class GrammarFactory:
         assertion_label = r._assertion_label_regex_str()
 
         # Multi-assertion separator
-        multi_sep = (
-            re.escape(cfg.assertions.multi_separator) if cfg.assertions.multi_separator else r"\+"
-        )
+        multi_sep = re.escape(cfg.assertions.multi_separator)
 
         # Build __ID_PATTERN__ from canonical template.
         # Strategy: split canonical into literal segments and placeholders,
@@ -365,7 +363,7 @@ class FileDispatcher:
                         # keywords in string literals
                         continue
                     # Include multi-assertion separator (+) in pattern
-                    multi_sep = _re.escape(self._resolver.config.assertions.multi_separator or "+")
+                    multi_sep = _re.escape(self._resolver.config.assertions.multi_separator)
                     for ref_match in _re.finditer(
                         rf"{_re.escape(prefix)}[-_][A-Za-z0-9\-_]+(?:{multi_sep}[A-Za-z0-9]+)*",
                         text,

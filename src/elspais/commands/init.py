@@ -231,7 +231,6 @@ _FIELD_COMMENTS: dict[str, str] = {
     "rules.format.require_assertions": "Require at least one assertion per requirement",
     "rules.format.require_status": "Require Status field in requirement metadata",
     "rules.format.require_rationale": "Require Rationale section in requirements",
-    "rules.format.allowed_statuses": "Valid statuses (overrides status_roles-derived list)",
     "rules.format.no_assertions_severity": (
         '"warning" | "info" — severity for REQs with no assertions'
     ),
@@ -498,80 +497,6 @@ def _add_table(
     doc.add(key, tbl)
 
 
-# Optional fields (None defaults in schema) to inject as commented-out TOML lines.
-_OPTIONAL_FIELDS: dict[str, list[tuple[str, str]]] = {
-    "id-patterns.component": [
-        ("pattern", '"[A-Z]{2}[0-9]{3}"'),
-        ("max_length", "32"),
-    ],
-    "id-patterns.assertions": [
-        ("zero_pad", "false"),
-        ("multi_separator", '"+"'),
-    ],
-    "rules.hierarchy": [
-        ("cross_repo_implements", "true"),
-        ("allow_orphans", "false"),
-    ],
-    "rules.format": [
-        ("allowed_statuses", '["Active", "Draft", "Deprecated"]'),
-        ("no_assertions_severity", '"warning"'),
-        ("no_traceability_severity", '"info"'),
-    ],
-    "rules": [
-        ("content_rules", "[]"),
-    ],
-    "validation": [
-        ("hash_algorithm", '"sha256"'),
-        ("hash_length", "8"),
-        ("strict_hierarchy", "false"),
-    ],
-    "scanning.spec": [
-        ("index_file", '"INDEX.md"'),
-    ],
-    "scanning.code": [
-        ("source_roots", "[]"),
-    ],
-}
-
-
-def _inject_optional_fields(toml_text: str) -> str:
-    """Insert commented-out optional fields into generated TOML.
-
-    Finds each parent section and appends commented-out fields after
-    the last real field in that section.
-    """
-    lines = toml_text.split("\n")
-    result: list[str] = []
-    current_section = ""
-    injected: set[str] = set()
-
-    for i, line in enumerate(lines):
-        result.append(line)
-        stripped = line.strip()
-
-        # Track current section
-        if stripped.startswith("[") and "]" in stripped:
-            current_section = stripped.split("]")[0].lstrip("[").strip()
-
-        # At blank line or next section, inject optional fields for current section
-        is_boundary = (not stripped) or (
-            i + 1 < len(lines) and lines[i + 1].strip().startswith("[")
-        )
-        if is_boundary and current_section in _OPTIONAL_FIELDS and current_section not in injected:
-            for field_name, example_val in _OPTIONAL_FIELDS[current_section]:
-                field_path = f"{current_section}.{field_name}"
-                comment = _FIELD_COMMENTS.get(field_path, "")
-                if comment:
-                    result.append(f"# {comment}")
-                result.append(f"# {field_name} = {example_val}")
-            injected.add(current_section)
-            # Blank line after injected optional fields
-            if i + 1 < len(lines) and lines[i + 1].strip().startswith("["):
-                result.append("")
-
-    return "\n".join(result)
-
-
 def generate_config(project_type: str, associated_prefix: str | None = None) -> str:
     """Generate configuration file content from the ElspaisConfig schema.
 
@@ -650,11 +575,7 @@ def generate_config(project_type: str, associated_prefix: str | None = None) -> 
     # Top-level scalars (field comments are looked up by _add_field_comment)
     _add_table(doc, "version", data["version"])
     _add_table(doc, "cli_ttl", data.get("cli_ttl", 30))
-    # stats is optional (None default) — emit as commented-out
-    stats_comment = _FIELD_COMMENTS.get("stats", "")
-    if stats_comment:
-        doc.add(tomlkit.comment(stats_comment))
-    doc.add(tomlkit.comment('stats = ".elspais/stats.jsonl"'))
+    _add_table(doc, "stats", data.get("stats", ""))
     doc.add(tomlkit.nl())
 
     for section in sections:
@@ -664,4 +585,4 @@ def generate_config(project_type: str, associated_prefix: str | None = None) -> 
         _add_table(doc, section, data[section], comment)
         doc.add(tomlkit.nl())
 
-    return _inject_optional_fields(tomlkit.dumps(doc))
+    return tomlkit.dumps(doc)
