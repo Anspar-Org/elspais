@@ -4787,7 +4787,7 @@ def create_server(
         return _get_graph_status(_state["graph"])
 
     @mcp.tool()
-    def refresh_graph(full: bool = False, path: str = "") -> dict[str, Any]:
+    def refresh_graph(full: bool = False, path: str = "", force: bool = False) -> dict[str, Any]:
         """Reload the requirements graph from spec files on disk.
 
         Use when: spec files were edited outside of mutation tools, or after
@@ -4796,7 +4796,21 @@ def create_server(
         Args:
             full: If True, clear all caches before rebuild.
             path: Switch to a different project directory before rebuilding.
+            force: If True, discard unsaved mutations and refresh anyway.
         """
+        # Guard against accidental loss of unsaved mutations
+        graph = _state.get("graph")
+        if graph is not None and not force:
+            pending = len(graph.mutation_log)
+            if pending > 0:
+                return {
+                    "success": False,
+                    "message": (
+                        f"Unsaved mutations ({pending} pending). "
+                        "Save with render_save() first, or pass force=True to discard."
+                    ),
+                }
+
         if path:
             new_dir = Path(path).resolve()
             if not new_dir.is_dir():

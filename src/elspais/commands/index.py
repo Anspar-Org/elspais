@@ -363,7 +363,10 @@ def _regenerate_index(
 
     # Write to first spec dir
     output_path = spec_dirs[0] / "INDEX.md" if spec_dirs else Path("spec/INDEX.md")
+    if output_path.exists():
+        output_path.chmod(0o644)
     output_path.write_text("\n".join(lines), encoding="utf-8")
+    output_path.chmod(0o444)
 
     print(f"Generated {output_path} ({req_count} requirements, {jny_count} journeys)")
     return 0

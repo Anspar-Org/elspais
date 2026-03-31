@@ -1,41 +1,55 @@
 # Known Issues
 
-[ ] bug: init template file generator
+[x] bug: init template file generator
 - this is supposed to have detailed comments for every field, documenting what the options are
 - e.g. the valid values for hash_modes, and for all other enums. What does each option mean?
 - what do the true/false settings affect?
 - Not more than 1 line per enum/bool value: if the explanation is longer, then refer to the docs.
 - for text fields, explain what the value is and what allowed values are (e.g. a simple regex might work to explain?)
  
-[ ] .elspais.toml - chore
+[x] .elspais.toml - chore
 - add all missing config.toml fields, even if they are the same as the defaults
 - ensure init template is complete and up-to-date
 
-[ ] checks - chore
+[x] checks - chore
 - add new checks descriptions to docs (new follow-up commands for failures/warnings on new checks)
+- Documented: 9 missing checks added to checks.md (changelog, index, needs_rewrite, hash_integrity, associate_paths, no_requirements, canonical_form)
 
-[ ] daemon: bug - timeout
+[x] daemon: bug - timeout
 - daemon should timeout and shutdown after N minutes, unless there are unsaved changes
 - currently, some MCP daemons are peristing for many hours after their spawners are shut down
+- Already implemented: TTLMiddleware (30min idle timeout, configurable via cli_ttl). Orphan detection deferred.
 
-[ ] viewer : bug
+[ ] daemon: bug - orphan detection
+- When a spawner (Claude Code, IDE) crashes or is killed, the daemon has no way to detect this
+- TTLMiddleware resets on every HTTP request, so any polling keeps the daemon alive indefinitely
+- Negative cli_ttl (run forever) means no timeout at all
+- Fix: record spawner_pid in daemon.json (passed via env var, since start_new_session=True reparents to PID 1)
+- Add a periodic watchdog (or check on TTL expiry) that verifies spawner_pid is still alive
+- If spawner dead + no unsaved mutations: exit immediately
+- If spawner dead + unsaved mutations: log warning, extend for grace period, then exit
+
+[x] viewer : bug
 - text-box edit fields lost their default-height of 120px. They default to far too narrow boxes.
+- Fixed: added inline styles (min-height:120px) to dynamically-created textarea in onAddJourneySection
 
 [x] checks : bug
 - Fixed: New `elspais errors` command shows specific requirements with format violations and missing assertions. `elspais checks` now points to `elspais errors` as the follow-up command.
 
-[ ] chore: _generated files
+[x] chore: _generated files
 - have elspais set them read-only as (some) protection against people accidently editing them
 - of course, it will also have to unset the RO flag before writing them
+- Fixed: glossary_cmd.py and index.py now chmod 444 after write, 644 before if exists
 
 [x] 'fix' command: bug
 - bug 1: Fixed — error message now explains that [changelog] hash_current is enabled and Draft/Deprecated requirements update without a message
 - bug 2: Fixed — N/A hash sentinel for unhashable content; REFORMATTED vs FIXED labeling; only succeeded fixes reported
 - bug 3: Fixed — global fix mode defers Active REQs with changelog enforcement, shows per-REQ guidance
 
-[ ] mcp : bug
+[x] mcp : bug
 - MCP refresh() should return error if unsaved changes
 - must use separate 'discard' command as a safety
+- Fixed: refresh_graph() checks mutation_log; returns error if pending mutations unless force=True
 
 [x] checks, gaps, reports: clarification
 - The `--status` flag already exists on checks/gaps commands for prospective analysis

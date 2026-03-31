@@ -1,6 +1,6 @@
 # Trace View Server Specifications
 
-These requirements define the traceability viewer server and federation.
+These requirements define the *Traceability* viewer server and federation.
 
 ---
 
@@ -15,14 +15,12 @@ These requirements define the traceability viewer server and federation.
 A. The API server SHALL be implemented as a Flask application with `create_app(repo_root, static_dir)` factory function.
 
 B. Thread endpoints SHALL support:
-
     - `POST /api/reviews/reqs/{id}/threads`: Create thread
     - `POST /api/reviews/reqs/{id}/threads/{tid}/comments`: Add comment
     - `POST /api/reviews/reqs/{id}/threads/{tid}/resolve`: Resolve thread
     - `POST /api/reviews/reqs/{id}/threads/{tid}/unresolve`: Unresolve thread
 
 C. Status endpoints SHALL support:
-
     - `GET /api/reviews/reqs/{id}/status`: Get current status
     - `POST /api/reviews/reqs/{id}/status`: Change status
     - `GET /api/reviews/reqs/{id}/requests`: Get status requests
@@ -30,14 +28,12 @@ C. Status endpoints SHALL support:
     - `POST /api/reviews/reqs/{id}/requests/{rid}/approvals`: Add approval
 
 D. Package endpoints SHALL support:
-
     - `GET/POST /api/reviews/packages`: List/create packages
     - `GET/PUT/DELETE /api/reviews/packages/{id}`: CRUD operations
     - `POST/DELETE /api/reviews/packages/{id}/reqs/{req_id}`: Membership
     - `GET/PUT /api/reviews/packages/active`: Active package management
 
 E. Sync endpoints SHALL support:
-
     - `GET /api/reviews/sync/status`: Sync status
     - `POST /api/reviews/sync/push`: Manual push
     - `POST /api/reviews/sync/fetch`: Fetch from remote
@@ -50,7 +46,6 @@ G. Static file serving SHALL be supported from configured directory.
 H. All write endpoints SHALL optionally trigger auto-sync based on configuration.
 
 I. Archive endpoints SHALL support:
-
     - `POST /api/reviews/packages/{id}/archive`: Manual archive
     - `GET /api/reviews/archive`: List archived packages
     - `GET /api/reviews/archive/{id}`: Get archived package
