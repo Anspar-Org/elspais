@@ -39,6 +39,14 @@ class TermEntry:
     defined_at_line: int = 0  # for error reporting
     namespace: str = ""  # repo namespace
     references: list[TermRef] = field(default_factory=list)
+    # Phase 4: reference-type definitions, synonyms, change tracking
+    is_reference: bool = False  # True for external standard/document definitions
+    reference_fields: dict[str, str] = field(
+        default_factory=dict
+    )  # title, version, effective_date, url
+    reference_term: str = ""  # synonym: official name in a reference document
+    reference_source: str = ""  # which reference document defines the official name
+    definition_hash: str = ""  # SHA-256 hash of definition text for change tracking
 
 
 # Implements: REQ-d00220
@@ -81,6 +89,20 @@ class TermDictionary:
             if entry.collection:
                 yield entry
 
+    def iter_references(self) -> Iterator[TermEntry]:
+        """Yield only reference-type entries (external standards/documents)."""
+        for entry in self._entries.values():
+            if entry.is_reference:
+                yield entry
+
+    def lookup_by_synonym(self, synonym: str) -> TermEntry | None:
+        """Find a term that declares the given synonym via reference_term."""
+        key = synonym.lower()
+        for entry in self._entries.values():
+            if entry.reference_term and entry.reference_term.lower() == key:
+                return entry
+        return None
+
     # Implements: REQ-d00220-D
     def merge(self, other: TermDictionary) -> list[tuple[TermEntry, TermEntry]]:
         """Merge another dictionary into this one.
@@ -98,3 +120,52 @@ class TermDictionary:
 
     def __len__(self) -> int:
         return len(self._entries)
+
+
+def compute_definition_hash(
+    definition: str,
+    reference_fields: dict[str, str] | None = None,
+) -> str:
+    """Compute 8-char SHA-256 hash of a term definition for change tracking.
+
+    For reference-type entries, includes reference_fields values so that
+    URL/version/title changes are detected.
+    """
+    from elspais.utilities.hasher import calculate_hash
+
+    text = definition
+    if reference_fields:
+        text += "\n" + "\n".join(f"{k}={v}" for k, v in sorted(reference_fields.items()))
+    return calculate_hash(text)
+
+
+def diff_terms(old: TermDictionary, new: TermDictionary) -> dict[str, list[dict[str, str]]]:
+    """Compare two TermDictionaries and return changes.
+
+    Returns dict with 'added', 'removed', 'changed' lists.
+    Each entry is {'term': str, 'old_hash': str, 'new_hash': str}.
+    """
+    old_keys = {e.term.lower(): e for e in old.iter_all()}
+    new_keys = {e.term.lower(): e for e in new.iter_all()}
+
+    added = [
+        {"term": new_keys[k].term, "old_hash": "", "new_hash": new_keys[k].definition_hash}
+        for k in new_keys
+        if k not in old_keys
+    ]
+    removed = [
+        {"term": old_keys[k].term, "old_hash": old_keys[k].definition_hash, "new_hash": ""}
+        for k in old_keys
+        if k not in new_keys
+    ]
+    changed = [
+        {
+            "term": new_keys[k].term,
+            "old_hash": old_keys[k].definition_hash,
+            "new_hash": new_keys[k].definition_hash,
+        }
+        for k in new_keys
+        if k in old_keys and new_keys[k].definition_hash != old_keys[k].definition_hash
+    ]
+
+    return {"added": added, "removed": removed, "changed": changed}

@@ -1530,13 +1530,25 @@ def run_term_checks(
     sev = typed_config.terms.severity
 
     # Extract data from graph
-    duplicates = getattr(graph, "_term_duplicates", [])
-    terms = getattr(graph, "_terms", None)
+    duplicates = getattr(graph, "term_duplicates", [])
+    terms = getattr(graph, "terms", None)
     entries = list(terms.iter_all()) if terms else []
 
-    # undefined and unmarked data come from reference scanning
-    undefined: list[dict] = []
+    # Undefined terms: emphasis-wrapped tokens not matching any definition
+    undefined: list[dict] = getattr(graph, "unmatched_emphasis", [])
+
+    # Unmarked usage: known terms used as plain text without emphasis
     unmarked: list[dict] = []
+    for entry in entries:
+        for ref in entry.references:
+            if not ref.marked and not ref.wrong_marking and not ref.delimiter:
+                unmarked.append(
+                    {
+                        "term": entry.term,
+                        "node_id": ref.node_id,
+                        "line": ref.line,
+                    }
+                )
 
     return [
         check_term_duplicates(duplicates, severity=sev.duplicate),
@@ -2860,6 +2872,13 @@ _FOLLOWUP_COMMANDS: dict[str, str] = {
     "tests.unlinked": "elspais unlinked",
     "tests.results": "elspais failing",
     "uat.results": "elspais failing",
+    "terms.duplicates": "elspais checks --terms --format json",
+    "terms.undefined": "elspais checks --terms --format json",
+    "terms.unmarked": "elspais checks --terms --format json",
+    "terms.unused": "elspais checks --terms --format json",
+    "terms.bad_definition": "elspais checks --terms --format json",
+    "terms.collection_empty": "elspais checks --terms --format json",
+    "terms.canonical_form": "elspais fix",
 }
 
 

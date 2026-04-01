@@ -1752,7 +1752,7 @@ async def api_get_comments_orphaned(request: Request) -> JSONResponse:
 async def api_terms(request: Request) -> JSONResponse:
     """GET /api/terms — list all defined terms, sorted alphabetically."""
     state = _st(request)
-    td = state.graph._terms
+    td = state.graph.terms
     entries = sorted(td.iter_all(), key=lambda e: e.term.lower())
     result = []
     for entry in entries:
@@ -1771,6 +1771,7 @@ async def api_terms(request: Request) -> JSONResponse:
                 "collection": entry.collection,
                 "indexed": entry.indexed,
                 "ref_count": len(entry.references),
+                "is_reference": entry.is_reference,
             }
         )
     return JSONResponse(result)
@@ -1781,7 +1782,7 @@ async def api_term(request: Request) -> JSONResponse:
     """GET /api/term/{term_key} — full detail for a single term."""
     state = _st(request)
     term_key = request.path_params["term_key"]
-    td = state.graph._terms
+    td = state.graph.terms
     entry = td.lookup(term_key)
     if entry is None:
         return JSONResponse({"error": f"Term '{term_key}' not found"}, status_code=404)
@@ -1820,6 +1821,11 @@ async def api_term(request: Request) -> JSONResponse:
             "namespace": entry.namespace,
             "collection": entry.collection,
             "indexed": entry.indexed,
+            "is_reference": entry.is_reference,
+            "reference_fields": entry.reference_fields,
+            "reference_term": entry.reference_term,
+            "reference_source": entry.reference_source,
+            "definition_hash": entry.definition_hash,
             "references": refs,
         }
     )

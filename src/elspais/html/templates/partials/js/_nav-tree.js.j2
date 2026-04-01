@@ -429,10 +429,12 @@ function renderNavTree() {
             var tKey = t.key || t.term.toLowerCase();
             var tSelected = editState.openCards.has('term:' + tKey) ? ' selected' : '';
             var countClass = t.ref_count > 0 ? ' has-refs' : '';
+            var refBadge = t.is_reference ? '<span class="term-ref-badge term-ref-reference" title="External reference/standard">REF</span>' : '';
             thtml += '<div class="nav-tree-row nav-tree-term' + tSelected + '" ' +
                 'data-id="term:' + escapeHtml(tKey) + '" data-kind="term" ' +
                 'onclick="openTermCard(\'' + escapeHtml(tKey).replace(/'/g, "\\'") + '\')">' +
                 '<span class="nav-tree-term-name">' + escapeHtml(t.term) + '</span>' +
+                refBadge +
                 '<span class="nav-tree-term-count' + countClass + '">' + t.ref_count + '</span>' +
                 '</div>';
         }

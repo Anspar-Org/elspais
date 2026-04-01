@@ -574,13 +574,13 @@ def _fix_terms(args: argparse.Namespace, dry_run: bool) -> None:
 
     # Get terms from the graph
     td = None
-    if hasattr(graph, "_terms"):
-        td = graph._terms
+    if hasattr(graph, "terms"):
+        td = graph.terms
     else:
         # FederatedGraph — check root repo
         for entry in graph._repos.values():
-            if entry.graph and hasattr(entry.graph, "_terms"):
-                td = entry.graph._terms
+            if entry.graph and hasattr(entry.graph, "terms"):
+                td = entry.graph.terms
                 break
 
     if td is None or len(td) == 0:

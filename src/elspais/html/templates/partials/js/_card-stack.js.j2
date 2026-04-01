@@ -1981,6 +1981,34 @@ function buildTermCardHtml(cardId, data, collapsed) {
     html += '<div class="term-definition">' + simpleMarkdown(data.definition || '') + '</div>';
     html += '</div>';
 
+    // Citation section for reference-type terms
+    if (data.is_reference && data.reference_fields) {
+        var rf = data.reference_fields;
+        html += '<div class="term-citation">';
+        if (rf.title) {
+            html += '<p class="term-citation-title">' + escapeHtml(rf.title) + '</p>';
+        }
+        if (rf.version) {
+            html += '<p><strong>Version:</strong> ' + escapeHtml(rf.version) + '</p>';
+        }
+        if (rf.effective_date) {
+            html += '<p><strong>Effective Date:</strong> ' + escapeHtml(rf.effective_date) + '</p>';
+        }
+        if (rf.url) {
+            html += '<p><a href="' + escapeAttr(rf.url) + '" target="_blank">' + escapeHtml(rf.url) + '</a></p>';
+        }
+        html += '</div>';
+    }
+
+    // Reference term (synonym) display
+    if (data.reference_term) {
+        html += '<div class="term-synonym"><em>Reference Term:</em> ' + escapeHtml(data.reference_term);
+        if (data.reference_source) {
+            html += ' <span class="term-synonym-source">(' + escapeHtml(data.reference_source) + ')</span>';
+        }
+        html += '</div>';
+    }
+
     // Source section
     html += '<div class="card-section"><div class="card-section-label">Source</div>';
     html += '<div class="card-meta">';

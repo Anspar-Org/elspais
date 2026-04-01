@@ -36,6 +36,9 @@ _HEADER = (
 def generate_glossary(td: TermDictionary, format: str = "markdown") -> str:
     """Generate a glossary from all defined terms.
 
+    Regular terms appear in an alphabetical "Glossary" section.
+    Reference-type terms appear in a separate "References" section.
+
     Args:
         td: The term dictionary to generate from.
         format: "markdown" or "json".
@@ -43,11 +46,11 @@ def generate_glossary(td: TermDictionary, format: str = "markdown") -> str:
     Returns:
         Formatted glossary content.
     """
-    entries = sorted(td.iter_all(), key=lambda e: e.term.lower())
+    all_entries = sorted(td.iter_all(), key=lambda e: e.term.lower())
 
     if format == "json":
         data = []
-        for entry in entries:
+        for entry in all_entries:
             item = {
                 "term": entry.term,
                 "definition": entry.definition,
@@ -55,15 +58,22 @@ def generate_glossary(td: TermDictionary, format: str = "markdown") -> str:
                 "namespace": entry.namespace,
                 "collection": entry.collection,
                 "indexed": entry.indexed,
+                "is_reference": entry.is_reference,
+                "reference_fields": entry.reference_fields,
+                "reference_term": entry.reference_term,
+                "reference_source": entry.reference_source,
             }
             data.append(item)
         return json.dumps(data, indent=2)
 
-    # Markdown format
+    # Markdown format — split regular terms from references
+    regular = [e for e in all_entries if not e.is_reference]
+    references = [e for e in all_entries if e.is_reference]
+
     lines = [_HEADER, "# Glossary"]
     current_letter = ""
 
-    for entry in entries:
+    for entry in regular:
         first_letter = entry.term[0].upper()
         if first_letter != current_letter:
             current_letter = first_letter
@@ -80,7 +90,31 @@ def generate_glossary(td: TermDictionary, format: str = "markdown") -> str:
 
         lines.append(f"**{entry.term}**{annotation}")
         lines.append(f": {entry.definition}")
+        # Show synonym link if present
+        if entry.reference_term:
+            source_note = f" ({entry.reference_source})" if entry.reference_source else ""
+            lines.append(f"*Reference Term: {entry.reference_term}{source_note}*")
         lines.append(f"*Defined in: {entry.defined_in} ({entry.namespace})*")
+
+    # References section
+    if references:
+        lines.append("")
+        lines.append("# References")
+        lines.append("")
+
+        for entry in references:
+            lines.append(f"**{entry.term}**")
+            rf = entry.reference_fields
+            if rf.get("title"):
+                lines.append(f": {rf['title']}")
+            if rf.get("version"):
+                lines.append(f": Version: {rf['version']}")
+            if rf.get("effective_date"):
+                lines.append(f": Effective Date: {rf['effective_date']}")
+            if rf.get("url"):
+                lines.append(f": URL: <{rf['url']}>")
+            lines.append(f"*Defined in: {entry.defined_in} ({entry.namespace})*")
+            lines.append("")
 
     lines.append("")
     return "\n".join(lines)
@@ -222,12 +256,12 @@ def run(args: argparse.Namespace) -> int:
     from elspais.commands import _engine
 
     def _compute(graph, config, params):  # type: ignore
-        td = graph._terms if hasattr(graph, "_terms") else None
+        td = graph.terms if hasattr(graph, "terms") else None
         if not td:
             # Try root repo graph
             for entry in graph._repos.values():
-                if entry.graph and hasattr(entry.graph, "_terms"):
-                    td = entry.graph._terms
+                if entry.graph and hasattr(entry.graph, "terms"):
+                    td = entry.graph.terms
                     break
         if td is None:
             return {"error": "No terms found in graph"}

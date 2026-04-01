@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from elspais.graph.builder import TraceGraph
     from elspais.graph.comments import CommentThread
     from elspais.graph.mutations import BrokenReference
+    from elspais.graph.terms import TermDictionary
 
 
 # Implements: REQ-d00201-B
@@ -203,12 +204,13 @@ class FederatedGraph:
         """
         from elspais.graph.term_scanner import scan_graph
 
+        self._unmatched_emphasis: list[dict] = []
         for entry in self._repos.values():
             if entry.graph is None:
                 continue
             config = entry.config or {}
             terms_cfg = config.get("terms", {})
-            scan_graph(
+            unmatched = scan_graph(
                 self._terms,
                 entry.graph,
                 namespace=entry.name,
@@ -216,6 +218,8 @@ class FederatedGraph:
                 exclude_files=terms_cfg.get("exclude_files"),
                 canonicalize=True,
             )
+            if unmatched:
+                self._unmatched_emphasis.extend(unmatched)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Comment Routing (Implements: REQ-d00230-B)
@@ -315,6 +319,25 @@ class FederatedGraph:
             if entry and entry.graph:
                 return entry.graph.comment_source_file(anchor)
         return None
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Term Access Properties
+    # ─────────────────────────────────────────────────────────────────────────
+
+    @property
+    def terms(self) -> TermDictionary:
+        """Read-only access to the merged term dictionary."""
+        return self._terms
+
+    @property
+    def term_duplicates(self) -> list[tuple]:
+        """Read-only access to cross-repo term duplicates."""
+        return self._term_duplicates
+
+    @property
+    def unmatched_emphasis(self) -> list[dict]:
+        """Read-only access to emphasis tokens not matching any defined term."""
+        return getattr(self, "_unmatched_emphasis", [])
 
     # ─────────────────────────────────────────────────────────────────────────
     # Root Repo Convenience Properties

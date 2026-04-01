@@ -520,6 +520,83 @@ def _should_exclude(rel_path: str, patterns: list[str]) -> bool:
 
 
 # Implements: REQ-d00238-A
+def find_unmatched_emphasis(
+    text: str,
+    td: TermDictionary,
+    node_id: str,
+    namespace: str,
+    line_offset: int = 0,
+    markup_styles: list[str] | None = None,
+) -> list[dict[str, str | int]]:
+    """Find emphasis-wrapped tokens in *text* that don't match any defined term.
+
+    Scans for all ``*word*`` and ``**word**`` patterns (only configured
+    markup_styles) and reports those whose inner text doesn't match a term
+    in *td* via case-insensitive lookup.
+
+    Returns a list of dicts with keys: token, node_id, line, delimiter, namespace.
+    """
+    if not text:
+        return []
+    if markup_styles is None:
+        markup_styles = _DEFAULT_MARKUP_STYLES
+
+    results: list[dict[str, str | int]] = []
+    claimed_spans: list[tuple[int, int]] = []
+
+    # Only scan configured markup styles (not all 4 delimiters)
+    for delim in markup_styles:
+        esc = re.escape(delim)
+        # Match delim + (one or more non-newline chars) + delim
+        if delim == "*":
+            pat = re.compile(
+                r"(?<!\*)\*(?!\*)([^\n*]+?)(?<!\*)\*(?!\*)",
+            )
+        elif delim == "**":
+            pat = re.compile(
+                r"\*\*([^\n*]+?)\*\*",
+            )
+        elif delim == "_":
+            pat = re.compile(
+                r"(?<!_)_(?!_)([^\n_]+?)(?<!_)_(?!_)",
+            )
+        elif delim == "__":
+            pat = re.compile(
+                r"__([^\n_]+?)__",
+            )
+        else:
+            pat = re.compile(esc + r"([^\n]+?)" + esc)
+
+        for m in pat.finditer(text):
+            span_start, span_end = m.start(), m.end()
+            if any(not (span_end <= cs or span_start >= ce) for cs, ce in claimed_spans):
+                continue
+            claimed_spans.append((span_start, span_end))
+
+            inner = m.group(1).strip()
+            if not inner:
+                continue
+            # Check if this token matches a defined term
+            if td.lookup(inner) is not None:
+                continue  # known term, skip
+            # Also skip if it matches a synonym
+            if td.lookup_by_synonym(inner) is not None:
+                continue
+
+            lineno = text[:span_start].count("\n") + 1 + line_offset
+            results.append(
+                {
+                    "token": inner,
+                    "node_id": node_id,
+                    "line": lineno,
+                    "delimiter": delim,
+                    "namespace": namespace,
+                }
+            )
+
+    return results
+
+
 def scan_graph(
     terms: TermDictionary,
     graph: TraceGraph,
@@ -527,7 +604,7 @@ def scan_graph(
     markup_styles: list[str] | None = None,
     exclude_files: list[str] | None = None,
     canonicalize: bool = False,
-) -> None:
+) -> list[dict[str, str | int]]:
     """Scan graph nodes for term occurrences and populate references.
 
     Mutates ``TermEntry.references`` in *terms* with discovered
@@ -535,11 +612,15 @@ def scan_graph(
 
     If *canonicalize* is True, also fixes non-canonical term forms in spec
     node text and marks affected requirements as ``parse_dirty``.
+
+    Returns a list of unmatched emphasis dicts (emphasis-wrapped tokens
+    that don't match any defined term).
     """
     if len(terms) == 0:
-        return
+        return []
 
     excl = exclude_files or []
+    unmatched: list[dict[str, str | int]] = []
 
     # Code/test file types: scan comments only (not code or string literals)
     _CODE_FILE_TYPES = frozenset({FileType.CODE, FileType.TEST})
@@ -579,6 +660,17 @@ def scan_graph(
                     line_offset=offset,
                     markup_styles=markup_styles,
                 )
+                # Also find emphasis tokens that don't match any term
+                unmatched.extend(
+                    find_unmatched_emphasis(
+                        text,
+                        terms,
+                        node.id,
+                        namespace,
+                        line_offset=offset,
+                        markup_styles=markup_styles,
+                    )
+                )
 
     # Code/test FILE nodes: read the whole file once and scan its comments.
     # This gives tokenize/ast valid source, producing accurate line numbers.
@@ -614,6 +706,8 @@ def scan_graph(
                     if file_n and file_n.get_field("file_type") in _CODE_FILE_TYPES:
                         continue
                 canonicalize_node_terms(node, terms, preferred, markup_styles)
+
+    return unmatched
 
 
 def _is_excluded(node, excl: list[str]) -> bool:  # noqa: ANN001

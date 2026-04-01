@@ -835,6 +835,11 @@
           "default": "warning",
           "title": "Canonical Form",
           "type": "string"
+        },
+        "changed": {
+          "default": "warning",
+          "title": "Changed",
+          "type": "string"
         }
       },
       "title": "TermsSeverityConfig",

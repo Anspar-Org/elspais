@@ -70,6 +70,7 @@ from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode
 from elspais.graph.mutations import MutationEntry
 from elspais.graph.relations import EdgeKind
+from elspais.graph.terms import TermDictionary
 from elspais.mcp.search import ParsedQuery, matches_node, parse_query, score_node
 from elspais.utilities.patterns import build_resolver
 
@@ -501,6 +502,117 @@ def _serialize_broken_reference(ref: Any) -> dict[str, Any]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _get_terms_logic(td: TermDictionary, kind: str = "all") -> dict[str, Any]:
+    """List defined terms with summary info."""
+    if kind == "reference":
+        entries = sorted(td.iter_references(), key=lambda e: e.term.lower())
+    elif kind == "glossary":
+        entries = sorted(
+            (e for e in td.iter_all() if not e.is_reference),
+            key=lambda e: e.term.lower(),
+        )
+    else:
+        entries = sorted(td.iter_all(), key=lambda e: e.term.lower())
+
+    terms = []
+    for entry in entries:
+        preview = entry.definition
+        if len(preview) > 120:
+            preview = preview[:120] + "..."
+        terms.append(
+            {
+                "term": entry.term,
+                "definition_preview": preview,
+                "is_reference": entry.is_reference,
+                "ref_count": len(entry.references),
+                "namespace": entry.namespace,
+            }
+        )
+
+    return {
+        "terms": terms,
+        "total": len(terms),
+        "glossary_count": sum(1 for t in terms if not t["is_reference"]),
+        "reference_count": sum(1 for t in terms if t["is_reference"]),
+    }
+
+
+def _get_term_detail_logic(
+    td: TermDictionary,
+    term: str,
+    graph: FederatedGraph | None = None,
+) -> dict[str, Any]:
+    """Get full detail for a defined term."""
+    entry = td.lookup(term)
+    if entry is None:
+        return {"error": f"Term '{term}' not found. Use get_terms() to list available terms."}
+
+    refs = []
+    for ref in entry.references:
+        ref_info: dict[str, Any] = {
+            "node_id": ref.node_id,
+            "namespace": ref.namespace,
+            "marked": ref.marked,
+            "wrong_marking": ref.wrong_marking,
+            "line": ref.line,
+        }
+        if graph is not None:
+            node = graph.find_by_id(ref.node_id)
+            ref_info["title"] = node.get_field("title") if node else ""
+        refs.append(ref_info)
+
+    return {
+        "term": entry.term,
+        "definition": entry.definition,
+        "defined_in": entry.defined_in,
+        "namespace": entry.namespace,
+        "collection": entry.collection,
+        "indexed": entry.indexed,
+        "is_reference": entry.is_reference,
+        "reference_fields": entry.reference_fields,
+        "reference_term": entry.reference_term,
+        "reference_source": entry.reference_source,
+        "definition_hash": entry.definition_hash,
+        "references": refs,
+    }
+
+
+def _search_terms_logic(td: TermDictionary, query: str) -> list[dict[str, Any]]:
+    """Search defined terms by name or definition text."""
+    q = query.lower()
+    matches: list[tuple[int, Any]] = []
+    for entry in td.iter_all():
+        score = 0
+        if q in entry.term.lower():
+            score += 100
+        if q in entry.definition.lower():
+            score += 10
+        # Search reference fields too
+        for val in entry.reference_fields.values():
+            if q in val.lower():
+                score += 10
+                break
+        if score > 0:
+            matches.append((score, entry))
+
+    matches.sort(key=lambda x: (-x[0], x[1].term.lower()))
+
+    results = []
+    for score, entry in matches[:50]:
+        preview = entry.definition
+        if len(preview) > 120:
+            preview = preview[:120] + "..."
+        results.append(
+            {
+                "term": entry.term,
+                "definition_preview": preview,
+                "is_reference": entry.is_reference,
+                "score": score,
+            }
+        )
+    return results
+
+
 def _get_graph_status(graph: FederatedGraph) -> dict[str, Any]:
     """Get graph status.
 
@@ -522,7 +634,17 @@ def _get_graph_status(graph: FederatedGraph) -> dict[str, Any]:
         "total_nodes": graph.node_count(),
         "has_orphans": graph.has_orphans(),
         "has_broken_references": graph.has_broken_references(),
+        "terms_dirty": _has_dirty_terms(graph),
     }
+
+
+def _has_dirty_terms(graph: FederatedGraph) -> bool:
+    """Check if any definition_block REMAINDER nodes are dirty."""
+    for node in graph.nodes_by_kind(NodeKind.REMAINDER):
+        if node.get_field("content_type") == "definition_block":
+            if node.get_field("parse_dirty"):
+                return True
+    return False
 
 
 def _get_active_mutated_reqs(graph: FederatedGraph) -> set[str]:
@@ -5656,6 +5778,52 @@ def create_server(
             params=params or {},
             batch_size=batch_size,
         )
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Term Tools
+    # ─────────────────────────────────────────────────────────────────────
+
+    @mcp.tool()
+    def get_terms(
+        kind: str = "all",
+    ) -> dict[str, Any]:
+        """List all defined terms with summary info.
+
+        Use when: you need an overview of the project's glossary or external references.
+
+        Args:
+            kind: Filter — "all" (default), "glossary" (regular terms only),
+                  or "reference" (external standards only).
+        """
+        return _get_terms_logic(_state["graph"].terms, kind=kind)
+
+    @mcp.tool()
+    def get_term_detail(
+        term: str,
+    ) -> dict[str, Any]:
+        """Get full detail for a defined term: definition, references, synonyms, citation fields.
+
+        Use when: you need to understand a specific term's definition, where it's
+        referenced, or its synonym/citation metadata.
+
+        Args:
+            term: The term name (case-insensitive).
+        """
+        graph = _state["graph"]
+        return _get_term_detail_logic(graph.terms, term, graph=graph)
+
+    @mcp.tool()
+    def search_terms(
+        query: str,
+    ) -> dict[str, Any]:
+        """Search defined terms by name or definition text.
+
+        Use when: you need to find terms matching a keyword or phrase.
+
+        Args:
+            query: Search string matched against term names and definitions (case-insensitive).
+        """
+        return {"results": _search_terms_logic(_state["graph"].terms, query)}
 
     @mcp.tool()
     def cursor_next(
