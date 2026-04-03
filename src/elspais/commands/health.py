@@ -2929,7 +2929,13 @@ def _build_hint(report: HealthReport, already_verbose: bool) -> str | None:
     if not failed_categories:
         return None
 
-    category_flags = {"spec": "--spec", "code": "--code", "tests": "--tests", "config": ""}
+    category_flags = {
+        "spec": "--spec",
+        "code": "--code",
+        "tests": "--tests",
+        "config": "",
+        "terms": "--terms",
+    }
     if len(failed_categories) == 1:
         cat = next(iter(failed_categories))
         flag = category_flags.get(cat, "")
@@ -2976,7 +2982,7 @@ def _build_report_data(report: HealthReport, verbose: bool = False) -> _ReportDa
     counting (excluding info-severity from pass/total), check icon selection,
     summary line, and hint string.
     """
-    categories = ["config", "spec", "code", "tests", "uat"]
+    categories = ["config", "spec", "code", "tests", "uat", "terms"]
     sections: list[_SectionData] = []
 
     for category in categories:
@@ -3012,7 +3018,7 @@ def _build_report_data(report: HealthReport, verbose: bool = False) -> _ReportDa
             else:
                 c_icon = "\u2717"
             followup = None
-            if not check.passed or check.severity == "warning":
+            if not check.passed and check.severity in ("error", "warning"):
                 followup = _FOLLOWUP_COMMANDS.get(check.name)
             check_lines.append(
                 _CheckLine(icon=c_icon, name=check.name, message=check.message, followup=followup)
@@ -3131,7 +3137,7 @@ def _render_junit(
     import xml.etree.ElementTree as ET
 
     testsuites = ET.Element("testsuites")
-    categories = ["config", "spec", "code", "tests", "uat"]
+    categories = ["config", "spec", "code", "tests", "uat", "terms"]
 
     for category in categories:
         checks = list(report.iter_by_category(category))
