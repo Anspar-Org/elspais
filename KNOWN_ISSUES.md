@@ -112,11 +112,11 @@
 - must support selecting independent branches for each TraceGrpah (separate repo)
 - but when making a new branch, it can apply to all repos (as a way to keep them in-sync)
 
-[ ] feature : defined terms — robustness (non-viewer)
+[x] feature : defined terms — robustness (non-viewer)
 - reference resolution engine: post-build scan of all text-bearing nodes + scanned files for term references
 - three-way classification: marked / wrong_marking / unmarked
 - config restructure: nested `[terms.severity]` sub-model, `markup_styles`, `exclude_files`
-- config version bump 4 → 5
+- ~~config version bump 4 → 5~~ (skipped: no breaking schema changes, new fields have defaults)
 - wire existing health checks (defined but never called)
 - new checks: `terms.unused`, `terms.bad_definition`, `terms.collection_empty`
 - new check: `code.no_traceability` (code/test files with no REQ markers, in `[rules.format]`)
@@ -133,10 +133,19 @@
 - depends on TermDictionary being populated (reference resolution must be done first)
 - Implemented: Terms tab with alphabetical listing + letter headings, term cards with definition/references, inline term highlighting with hover tooltips and click-to-open
 
+[x] feature : defined terms (phase 4)
+- MCP tools for term lookup and cross-reference queries (get_terms, get_term_detail, search_terms)
+- MCP dirty flag for term changes (terms_dirty in graph status)
+- term aliasing / synonym support (Reference Term / Reference Source metadata)
+- reference-type definitions: structured citation fields (Title, Version, Effective Date, URL)
+- glossary reference section: alphabetized listing of reference-type definitions
+- definition change tracking via definition_hash (SHA-256, 8 chars) and diff_terms()
+- wired undefined/unmarked health checks (were implemented but never called)
+- follow-up commands for term health checks
+- viewer: reference-type term card rendering with citation display
+
 [ ] feature : defined terms (deferred)
-- MCP tools for term lookup and cross-reference queries
 - plural/inflection matching in the unmarked-usage health check
-- term aliasing (multiple surface forms mapping to one definition)
 
 
 

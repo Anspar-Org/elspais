@@ -297,6 +297,7 @@ _FIELD_COMMENTS: dict[str, str] = {
     "terms.severity.bad_definition": "Malformed term definitions",
     "terms.severity.collection_empty": "Empty collection terms",
     "terms.severity.canonical_form": "Non-canonical form usage",
+    "terms.severity.changed": "Changed definitions with unresolved review",
     # --- [output] ---
     "output": "Output settings",
     "output.formats": 'Output format list (e.g. ["json", "csv"])',

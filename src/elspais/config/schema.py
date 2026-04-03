@@ -244,6 +244,7 @@ class TermsSeverityConfig(_StrictModel):
     bad_definition: str = "error"
     collection_empty: str = "warning"
     canonical_form: str = "warning"
+    changed: str = "warning"  # definitions changed with unresolved review
 
 
 # Implements: REQ-d00212-L

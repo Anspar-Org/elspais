@@ -595,6 +595,10 @@ class RequirementTransformer:
         def_lines: list[str] = []
         collection = False
         indexed = True
+        is_reference = False
+        reference_fields: dict[str, str] = {}
+        reference_term = ""
+        reference_source = ""
         start_line = 0
 
         for child in node.children:
@@ -612,14 +616,39 @@ class RequirementTransformer:
 
                     # Check for metadata flags
                     stripped = line_text.strip()
-                    if stripped.lower() == "collection: true":
+                    low = stripped.lower()
+                    if low == "collection: true":
                         collection = True
-                    elif stripped.lower() == "collection: false":
+                    elif low == "collection: false":
                         collection = False
-                    elif stripped.lower() == "indexed: true":
+                    elif low == "indexed: true":
                         indexed = True
-                    elif stripped.lower() == "indexed: false":
+                    elif low == "indexed: false":
                         indexed = False
+                    # Reference-type marker
+                    elif low == "reference":
+                        is_reference = True
+                    # Structured citation fields
+                    elif low.startswith("title:"):
+                        reference_fields["title"] = stripped[6:].strip()
+                    elif low.startswith("version:"):
+                        reference_fields["version"] = stripped[8:].strip()
+                    elif low.startswith("effective date:"):
+                        reference_fields["effective_date"] = stripped[15:].strip()
+                    elif low.startswith("url:"):
+                        url_val = stripped[4:].strip()
+                        if url_val.startswith("<") and url_val.endswith(">"):
+                            url_val = url_val[1:-1]
+                        reference_fields["url"] = url_val
+                    # Synonym/alias metadata
+                    elif low.startswith("reference term:"):
+                        val = stripped[15:].strip()
+                        val = val.strip("_").strip("*")
+                        reference_term = val
+                    elif low.startswith("reference source:"):
+                        val = stripped[17:].strip()
+                        val = val.strip("_").strip("*")
+                        reference_source = val
                     else:
                         def_lines.append(line_text)
 
@@ -632,6 +661,10 @@ class RequirementTransformer:
             "collection": collection,
             "indexed": indexed,
             "line": start_line,
+            "is_reference": is_reference,
+            "reference_fields": reference_fields,
+            "reference_term": reference_term,
+            "reference_source": reference_source,
         }
 
     def _transform_definition_block(self, node: Tree) -> ParsedContent:

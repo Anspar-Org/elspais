@@ -22,7 +22,7 @@ from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.relations import EdgeKind, Stereotype
-from elspais.graph.terms import TermDictionary, TermEntry
+from elspais.graph.terms import TermDictionary, TermEntry, compute_definition_hash
 from elspais.utilities.patterns import INSTANCE_SEPARATOR
 from elspais.utilities.test_identity import build_test_id
 
@@ -308,6 +308,11 @@ class TraceGraph:
     # ─────────────────────────────────────────────────────────────────────────
     # Mutation Infrastructure
     # ─────────────────────────────────────────────────────────────────────────
+
+    @property
+    def terms(self) -> TermDictionary:
+        """Read-only access to the term dictionary."""
+        return self._terms
 
     @property
     def mutation_log(self) -> MutationLog:
@@ -3836,6 +3841,7 @@ class GraphBuilder:
                     if ancestor.kind == NodeKind.FILE:
                         defined_in = ancestor.id
                         break
+            ref_fields = data.get("reference_fields", {})
             entry = TermEntry(
                 term=data.get("term", ""),
                 definition=data.get("definition", ""),
@@ -3844,6 +3850,14 @@ class GraphBuilder:
                 defined_in=defined_in,
                 defined_at_line=data.get("line", 0),
                 namespace=self._namespace,
+                is_reference=data.get("is_reference", False),
+                reference_fields=ref_fields,
+                reference_term=data.get("reference_term", ""),
+                reference_source=data.get("reference_source", ""),
+                definition_hash=compute_definition_hash(
+                    data.get("definition", ""),
+                    reference_fields=ref_fields or None,
+                ),
             )
             graph._terms.add(entry)
 

@@ -199,6 +199,8 @@ unmarked = "warning"          # known term used without markup
 unused = "warning"            # defined term never referenced
 bad_definition = "error"      # malformed definition block
 collection_empty = "warning"  # collection term with no references
+canonical_form = "warning"    # term used in non-canonical form (case/spelling variant)
+changed = "warning"           # definition content changed, pending review
 
 #──────────────────────────────────────────────────────────────────────────────
 # OUTPUT - Output formats and directory

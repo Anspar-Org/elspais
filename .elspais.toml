@@ -343,9 +343,9 @@ exclude_files = []
 # Duplicate term definitions
 duplicate = "error"
 # References to undefined terms
-undefined = "warning"
+undefined = "info"
 # Unmarked usages of defined terms
-unmarked = "warning"
+unmarked = "info"
 # Defined terms with no references
 unused = "warning"
 # Malformed term definitions

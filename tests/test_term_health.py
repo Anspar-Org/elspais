@@ -424,8 +424,8 @@ class _FakeGraph:
         terms: TermDictionary | None = None,
         term_duplicates: list[tuple] | None = None,
     ) -> None:
-        self._terms = terms or TermDictionary()
-        self._term_duplicates = term_duplicates or []
+        self.terms = terms or TermDictionary()
+        self.term_duplicates = term_duplicates or []
 
 
 class TestRunTermChecks:
