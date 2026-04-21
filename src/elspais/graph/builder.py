@@ -2947,7 +2947,8 @@ class GraphBuilder:
                 data = content.parsed_data
                 source_ctx = getattr(content, "source_context", None)
                 source_path = source_ctx.source_id if source_ctx else ""
-                remainder_id = data.get("id") or f"def:{source_path}:{content.start_line}"
+                rel_source = self._to_relative_path(source_path) if source_path else source_path
+                remainder_id = data.get("id") or f"def:{rel_source}:{content.start_line}"
                 node = self._nodes.get(remainder_id)
                 if node:
                     self._wire_contains_edge(file_node, node, content)
@@ -2958,7 +2959,8 @@ class GraphBuilder:
                 data = content.parsed_data
                 source_ctx = getattr(content, "source_context", None)
                 source_path = source_ctx.source_id if source_ctx else ""
-                remainder_id = data.get("id") or f"rem:{source_path}:{content.start_line}"
+                rel_source = self._to_relative_path(source_path) if source_path else source_path
+                remainder_id = data.get("id") or f"rem:{rel_source}:{content.start_line}"
                 node = self._nodes.get(remainder_id)
                 if node:
                     self._wire_contains_edge(file_node, node, content)
@@ -3298,7 +3300,8 @@ class GraphBuilder:
         source_ctx = getattr(content, "source_context", None)
         source_path = source_ctx.source_id if source_ctx else ""
 
-        remainder_id = data.get("id") or f"def:{source_path}:{content.start_line}"
+        rel_source = self._to_relative_path(source_path) if source_path else source_path
+        remainder_id = data.get("id") or f"def:{rel_source}:{content.start_line}"
         text = content.raw_text or ""
 
         node = GraphNode(
@@ -3325,8 +3328,10 @@ class GraphBuilder:
         source_ctx = getattr(content, "source_context", None)
         source_path = source_ctx.source_id if source_ctx else ""
 
-        # Use provided ID or generate from source location
-        remainder_id = data.get("id") or f"rem:{source_path}:{content.start_line}"
+        # Use provided ID or generate from source location (repo-relative to
+        # keep generated artifacts stable across worktrees).
+        rel_source = self._to_relative_path(source_path) if source_path else source_path
+        remainder_id = data.get("id") or f"rem:{rel_source}:{content.start_line}"
         text = data.get("text", content.raw_text or "")
 
         node = GraphNode(
