@@ -3076,6 +3076,8 @@ def _render_text(data: _ReportData) -> str:
         lines.append(meta_line)
     elif data.graph_source:
         lines.append(f"(via {data.graph_source})")
+    if data.hint:
+        lines.append(data.hint)
     if followups:
         lines.append("")
         lines.append("Follow-up:")
@@ -3119,6 +3121,9 @@ def _render_markdown(data: _ReportData) -> str:
     lines.append("---")
     lines.append("")
     lines.append(data.summary_line)
+    if data.hint:
+        lines.append("")
+        lines.append(data.hint)
 
     return "\n".join(lines)
 
