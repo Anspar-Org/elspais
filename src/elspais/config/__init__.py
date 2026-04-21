@@ -139,18 +139,24 @@ CURRENT_CONFIG_VERSION = 4
 
 # Implements: REQ-d00212-N
 def _migrate_v3_to_v4(config: dict) -> dict:
-    """Move flat terms severity fields into nested [terms.severity]."""
+    """Move flat terms severity fields into nested [terms.severity].
+
+    Flat fields are always popped when present, even if `[terms.severity]`
+    already exists — `load_config()` merges `config_defaults()` into the
+    user config before invoking migrations, so the nested `severity` dict
+    will typically already be populated from the v4 defaults. Flat values
+    the user explicitly set override the defaults inside that dict.
+    """
     terms = config.get("terms")
     if not isinstance(terms, dict):
         config["version"] = 4
         return config
 
-    # Don't double-migrate if [terms.severity] already exists
-    if "severity" in terms and isinstance(terms["severity"], dict):
-        config["version"] = 4
-        return config
+    severity = terms.get("severity")
+    if not isinstance(severity, dict):
+        severity = {}
+        terms["severity"] = severity
 
-    severity: dict[str, str] = {}
     field_map = {
         "duplicate_severity": "duplicate",
         "undefined_severity": "undefined",
@@ -159,9 +165,6 @@ def _migrate_v3_to_v4(config: dict) -> dict:
     for old_key, new_key in field_map.items():
         if old_key in terms:
             severity[new_key] = terms.pop(old_key)
-
-    if severity:
-        terms["severity"] = severity
 
     config["version"] = 4
     return config
