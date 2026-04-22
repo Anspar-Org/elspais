@@ -260,6 +260,138 @@ def _config_hash_stale(info: dict, repo_root: Path) -> bool:
     return compute_config_hash(config_path) != daemon_hash
 
 
+def get_daemon_mutation_count(info: dict) -> int | None:
+    """Query the daemon's unsaved-mutation count.
+
+    Returns int on success, or None if the daemon can't be reached / the
+    endpoint is missing (treated as "unknown", not zero).
+    """
+    import json as _json
+
+    port = info.get("port")
+    if not port:
+        return None
+    try:
+        with urlopen(f"http://127.0.0.1:{port}/api/dirty", timeout=3) as resp:
+            data = _json.loads(resp.read().decode())
+            count = data.get("mutation_count")
+            if isinstance(count, int):
+                return count
+    except (URLError, OSError, ValueError):
+        return None
+    return None
+
+
+def save_daemon_mutations(info: dict) -> dict:
+    """Ask the daemon to persist pending mutations to disk.
+
+    Returns the daemon's JSON response, or ``{"success": False, "error": "..."}``
+    if the call fails.
+    """
+    import json as _json
+    from urllib.request import Request as _Request
+
+    port = info.get("port")
+    if not port:
+        return {"success": False, "error": "daemon has no port"}
+    req = _Request(f"http://127.0.0.1:{port}/api/save", method="POST")
+    try:
+        with urlopen(req, timeout=30) as resp:
+            return _json.loads(resp.read().decode())
+    except URLError as e:
+        return {"success": False, "error": f"daemon unreachable: {e}"}
+    except (OSError, ValueError) as e:
+        return {"success": False, "error": str(e)}
+
+
+def restart_daemon(
+    repo_root: Path,
+    force: bool = False,
+    persist: bool = False,
+    ttl_minutes: int | None = None,
+) -> dict:
+    """Stop and restart the daemon, picking up any config file changes.
+
+    Hard restart only — kills the existing process and spawns a fresh one,
+    which re-reads ``.elspais.toml`` during startup.
+
+    In-memory mutation safety:
+        - If the daemon reports 0 unsaved mutations: restart proceeds.
+        - Otherwise, default behavior is to refuse with an error listing
+          the count. Caller must opt in via ``force`` (discard) or
+          ``persist`` (save first). These flags are mutually exclusive.
+
+    Returns:
+        Dict with ``success`` (bool) and ``message`` (str). On successful
+        restart, also includes ``port``. On refusal due to unsaved
+        mutations, includes ``mutation_count`` and an ``error`` key.
+    """
+    if force and persist:
+        return {
+            "success": False,
+            "error": "--force and --persist are mutually exclusive",
+        }
+
+    info = get_daemon_info(repo_root)
+    if info is None:
+        # No daemon running — just start one.
+        if ttl_minutes is None:
+            ttl_minutes = get_cli_ttl(repo_root)
+        if ttl_minutes == 0:
+            return {
+                "success": False,
+                "error": "Daemon auto-launch disabled (cli_ttl=0)",
+            }
+        port = start_daemon(repo_root, ttl_minutes=ttl_minutes)
+        return {
+            "success": True,
+            "message": "No daemon was running; started a fresh one.",
+            "port": port,
+        }
+
+    # Daemon is running — check for unsaved work.
+    count = get_daemon_mutation_count(info)
+    if count and count > 0:
+        if persist:
+            save_result = save_daemon_mutations(info)
+            if not save_result.get("success"):
+                return {
+                    "success": False,
+                    "error": (
+                        f"Cannot restart — persist requested but save failed: "
+                        f"{save_result.get('error', save_result)}"
+                    ),
+                    "mutation_count": count,
+                }
+        elif not force:
+            return {
+                "success": False,
+                "error": (
+                    f"Cannot restart — daemon has {count} unsaved in-memory mutation(s). "
+                    "Use --force to discard them, or --persist to save first."
+                ),
+                "mutation_count": count,
+            }
+        # force: fall through and kill anyway
+
+    # At this point we're committed to restart.
+    stop_daemon(repo_root)
+
+    if ttl_minutes is None:
+        ttl_minutes = get_cli_ttl(repo_root)
+    if ttl_minutes == 0:
+        return {
+            "success": True,
+            "message": "Daemon stopped (cli_ttl=0, not restarting).",
+        }
+    port = start_daemon(repo_root, ttl_minutes=ttl_minutes)
+    return {
+        "success": True,
+        "message": f"Daemon restarted on port {port}.",
+        "port": port,
+    }
+
+
 def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
     """Return port of a running daemon, starting one if needed.
 

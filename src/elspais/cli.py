@@ -55,6 +55,8 @@ from elspais.commands.args import (
     ConfigSetArgs,
     ConfigShowArgs,
     ConfigUnsetArgs,
+    DaemonArgs,
+    DaemonRestartArgs,
     DocsArgs,
     DoctorArgs,
     EditArgs,
@@ -151,6 +153,7 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
         InstallArgs: "install",
         UninstallArgs: "uninstall",
         McpArgs: "mcp",
+        DaemonArgs: "daemon",
         LinkArgs: "link",
         CompletionArgs: "completion",
         GlossaryArgs: "glossary",
@@ -195,6 +198,11 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
             McpUninstallArgs: "uninstall",
         }
         ns.mcp_action = _MCP_MAP.get(type(cmd.action), None)
+        if hasattr(cmd.action, "__dataclass_fields__"):
+            for field in dataclasses.fields(cmd.action):
+                setattr(ns, field.name, getattr(cmd.action, field.name))
+    elif isinstance(cmd, DaemonArgs):
+        ns.daemon_action = "restart" if isinstance(cmd.action, DaemonRestartArgs) else None
         if hasattr(cmd.action, "__dataclass_fields__"):
             for field in dataclasses.fields(cmd.action):
                 setattr(ns, field.name, getattr(cmd.action, field.name))
@@ -448,6 +456,10 @@ def main(argv: list[str] | None = None) -> int:
             from elspais.commands import comments_cmd
 
             return comments_cmd.run(args)
+        elif args.command == "daemon":
+            from elspais.commands import daemon_cmd
+
+            return daemon_cmd.run(args)
         else:
             _print_help()
             return 1

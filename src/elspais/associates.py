@@ -118,15 +118,17 @@ def discover_associate_from_path(
     if not config_file.exists():
         return f"No .elspais.toml found in associate path: {repo_path}"
 
-    from elspais.config import parse_toml_document
+    from elspais.config import load_config
 
-    config = parse_toml_document(config_file.read_text(encoding="utf-8"))
+    # Route through the single canonical loader so migrations and field
+    # strips (e.g. legacy rules.format.allowed_statuses) apply consistently.
+    config = load_config(config_file)
 
-    typed_config = _validate_config(config)
-
-    name = typed_config.project.name or repo_path.name
-    namespace = typed_config.project.namespace
-    spec_dirs = typed_config.scanning.spec.directories
+    project = config.get("project", {})
+    scanning_spec = config.get("scanning", {}).get("spec", {})
+    spec_dirs = scanning_spec.get("directories", [])
+    name = project.get("name") or repo_path.name
+    namespace = project.get("namespace", "")
     spec_path = spec_dirs[0] if spec_dirs else "spec"
 
     return Associate(

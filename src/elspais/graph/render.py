@@ -17,7 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from elspais.graph.GraphNode import GraphNode, NodeKind
+from elspais.graph.GraphNode import GraphNode, NodeKind, make_file_id
 from elspais.graph.relations import EdgeKind
 from elspais.utilities.hasher import calculate_hash, compute_normalized_hash
 
@@ -508,7 +508,7 @@ def _find_dirty_files(graph: FederatedGraph, resolver: Any | None = None) -> set
         if entry.operation == "delete_requirement":
             source_path = entry.before_state.get("source_path")
             if source_path:
-                file_id = f"file:{source_path}"
+                file_id = make_file_id(source_path)
                 if graph.find_by_id(file_id) is not None:
                     dirty_file_ids.add(file_id)
             # Also try parent IDs from before_state

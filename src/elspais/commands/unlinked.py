@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from elspais.graph import NodeKind
-from elspais.graph.GraphNode import FileType
+from elspais.graph.GraphNode import FileType, make_file_id
 from elspais.graph.relations import EdgeKind
 
 if TYPE_CHECKING:
@@ -180,9 +180,9 @@ def _unlinked_data_from_dict(data: dict[str, Any]) -> UnlinkedData:
     """Reconstruct UnlinkedData from a JSON dict returned by the daemon."""
     ud = UnlinkedData()
     for f in data.get("tests", {}).get("files", []):
-        ud.tests.append(UnlinkedEntry(node_id=f"file:{f}", file=f))
+        ud.tests.append(UnlinkedEntry(node_id=make_file_id(f), file=f))
     for f in data.get("code", {}).get("files", []):
-        ud.code.append(UnlinkedEntry(node_id=f"file:{f}", file=f))
+        ud.code.append(UnlinkedEntry(node_id=make_file_id(f), file=f))
     return ud
 
 

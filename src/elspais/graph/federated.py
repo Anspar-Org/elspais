@@ -14,7 +14,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from elspais.graph.GraphNode import GraphNode, NodeKind
+from elspais.graph.GraphNode import (
+    STRUCTURAL_ID_PREFIXES,
+    FileType,
+    GraphNode,
+    NodeKind,
+)
 from elspais.graph.mutations import MutationEntry
 from elspais.graph.relations import EdgeKind
 
@@ -150,13 +155,12 @@ class FederatedGraph:
         # Detect ID conflicts across repos (skip FILE/REMAINDER nodes which
         # naturally have same relative paths across repos)
         self._ownership: dict[str, str] = {}
-        _structural_prefixes = ("file:", "remainder:")
         for entry in repos:
             if entry.graph is not None:
                 for node_id in entry.graph._index:
                     if node_id in self._ownership:
                         # FILE and REMAINDER nodes may share relative paths
-                        if any(node_id.startswith(p) for p in _structural_prefixes):
+                        if node_id.startswith(STRUCTURAL_ID_PREFIXES):
                             continue
                         existing_repo = self._ownership[node_id]
                         raise FederationError(
@@ -1058,6 +1062,39 @@ class FederatedGraph:
     # ─────────────────────────────────────────────────────────────────────────
     # Special Mutations
     # ─────────────────────────────────────────────────────────────────────────
+
+    def add_file_node(
+        self,
+        absolute_path: Path,
+        file_type: FileType,
+        target_repo: str | None = None,
+        git_branch: str | None = None,
+        git_commit: str | None = None,
+    ) -> MutationEntry:
+        """Add a new FILE node to a specific sub-graph.
+
+        # Strategy: special — target_repo specifies destination
+
+        Delegates to the sub-graph's ``add_file_node``, which in turn uses
+        ``factory.create_file_node`` so the produced node is identical to
+        what a rebuild would yield. Updates ownership so subsequent by_id
+        lookups route to the correct sub-graph.
+        """
+        repo_name = target_repo or self._root_repo
+        entry = self._repos.get(repo_name)
+        if entry is None or entry.graph is None:
+            raise KeyError(f"Repo '{repo_name}' not found or unavailable")
+        result = entry.graph.add_file_node(
+            absolute_path,
+            entry.repo_root,
+            file_type,
+            repo=None if repo_name == self._root_repo else repo_name,
+            git_branch=git_branch,
+            git_commit=git_commit,
+        )
+        self._ownership[result.target_id] = repo_name
+        self._record_mutation(repo_name, result)
+        return result
 
     # Implements: REQ-d00201-D
     def add_requirement(

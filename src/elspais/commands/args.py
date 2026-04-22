@@ -812,6 +812,33 @@ class McpArgs:
 
 
 # ---------------------------------------------------------------------------
+# Daemon subcommands
+# ---------------------------------------------------------------------------
+@dataclasses.dataclass
+class DaemonRestartArgs:
+    """Restart the background daemon to pick up config file changes."""
+
+    force: bool = False
+    """Restart even if the daemon has unsaved in-memory mutations (discards them)."""
+
+    persist: bool = False
+    """Persist any unsaved in-memory mutations to disk before restarting."""
+
+
+DaemonAction = Annotated[DaemonRestartArgs, tyro.conf.subcommand("restart")]
+
+
+@dataclasses.dataclass
+class DaemonArgs:
+    """Manage the background daemon (MCP + CLI share one daemon per repo)."""
+
+    action: tyro.conf.OmitSubcommandPrefixes[tyro.conf.OmitArgPrefixes[DaemonAction]] = (
+        dataclasses.field(default_factory=DaemonRestartArgs)
+    )
+    """Daemon subcommand (restart)."""
+
+
+# ---------------------------------------------------------------------------
 # Link subcommands
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
@@ -919,6 +946,7 @@ Command = (
     | Annotated[InstallArgs, tyro.conf.subcommand("install")]
     | Annotated[UninstallArgs, tyro.conf.subcommand("uninstall")]
     | Annotated[McpArgs, tyro.conf.subcommand("mcp")]
+    | Annotated[DaemonArgs, tyro.conf.subcommand("daemon")]
     | Annotated[LinkArgs, tyro.conf.subcommand("link")]
     | Annotated[CompletionArgs, tyro.conf.subcommand("completion")]
     | Annotated[GlossaryArgs, tyro.conf.subcommand("glossary")]
@@ -986,6 +1014,7 @@ COMMAND_GROUPS: dict[str, str] = {
     "associate": "Configuration",
     "doctor": "Install",
     "mcp": "Install",
+    "daemon": "Install",
     "install": "Install",
     "uninstall": "Install",
     "completion": "Install",

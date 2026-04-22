@@ -25,7 +25,7 @@ from elspais.config.schema import ElspaisConfig
 from elspais.graph.builder import GraphBuilder
 from elspais.graph.deserializer import DomainFile
 from elspais.graph.federated import FederatedGraph
-from elspais.graph.GraphNode import FileType, GraphNode, NodeKind
+from elspais.graph.GraphNode import FileType, GraphNode, NodeKind, make_file_id
 from elspais.graph.parsers import ParserRegistry
 from elspais.graph.parsers.journey import JourneyParser
 from elspais.graph.parsers.lark import FileDispatcher
@@ -78,13 +78,13 @@ def _capture_git_info(repo_root: Path) -> tuple[str | None, str | None]:
 
 
 # Implements: REQ-d00128-A, REQ-d00128-B
-def _create_file_node(
+def create_file_node(
     file_path: Path,
     repo_root: Path,
     file_type: FileType,
-    repo: str | None,
-    git_branch: str | None,
-    git_commit: str | None,
+    repo: str | None = None,
+    git_branch: str | None = None,
+    git_commit: str | None = None,
 ) -> GraphNode:
     """Create a FILE node for a scanned file.
 
@@ -104,7 +104,7 @@ def _create_file_node(
     except ValueError:
         rel_path = str(file_path)
 
-    file_id = f"file:{rel_path}"
+    file_id = make_file_id(rel_path)
     node = GraphNode(
         id=file_id,
         kind=NodeKind.FILE,
@@ -431,7 +431,7 @@ def build_graph(
         """Get or create a FILE node for the given source path."""
         resolved = str(source_path.resolve())
         if resolved not in file_nodes:
-            fn = _create_file_node(
+            fn = create_file_node(
                 source_path, repo_root, file_type, file_repo, git_branch, git_commit
             )
             file_nodes[resolved] = fn
@@ -646,7 +646,7 @@ def build_graph(
 
                     # Annotate existing FILE nodes
                     for source_file, data in parsed.items():
-                        file_id = f"file:{source_file}"
+                        file_id = make_file_id(source_file)
                         node = graph.find_by_id(file_id)
                         if node is None:
                             continue
