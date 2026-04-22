@@ -304,6 +304,61 @@ class TestRenderText:
         output = _render_text(data)
         assert "  ~ code.coverage: info only" in output
 
+    def test_REQ_d00085_hint_rendered_when_unhealthy(self) -> None:
+        """Hint line appears in text output when report has failures/warnings."""
+        from elspais.commands.health import _render_text
+
+        report = _make_mixed_report()
+        data = _build_report_data(report, verbose=False)
+        assert data.hint is not None
+        output = _render_text(data)
+        assert data.hint in output
+
+    def test_REQ_d00085_hint_rendered_for_warnings_only(self) -> None:
+        """Hint is rendered when report has warnings but no errors (regression guard)."""
+        from elspais.commands.health import _render_text
+
+        report = HealthReport()
+        report.add(
+            HealthCheck(
+                name="spec.format",
+                passed=True,
+                message="ok",
+                category="spec",
+                severity="error",
+            )
+        )
+        report.add(
+            HealthCheck(
+                name="spec.style",
+                passed=False,
+                message="style issues",
+                category="spec",
+                severity="warning",
+            )
+        )
+        data = _build_report_data(report, verbose=False)
+        output = _render_text(data)
+        assert "Run 'elspais -v checks" in output
+
+    def test_REQ_d00085_hint_absent_when_healthy(self) -> None:
+        """Hint line is not rendered when report is healthy."""
+        from elspais.commands.health import _render_text
+
+        report = HealthReport()
+        report.add(
+            HealthCheck(
+                name="config.toml",
+                passed=True,
+                message="ok",
+                category="config",
+                severity="error",
+            )
+        )
+        data = _build_report_data(report)
+        output = _render_text(data)
+        assert "Run 'elspais" not in output
+
 
 class TestRenderMarkdown:
     """Tests for _render_markdown checklist renderer."""
@@ -368,6 +423,30 @@ class TestRenderMarkdown:
         data = _build_report_data(report)
         output = _render_markdown(data)
         assert "UNHEALTHY" in output
+
+    def test_hint_rendered_when_unhealthy(self) -> None:
+        """Hint line appears in markdown output when report has failures/warnings."""
+        report = _make_mixed_report()
+        data = _build_report_data(report, verbose=False)
+        assert data.hint is not None
+        output = _render_markdown(data)
+        assert data.hint in output
+
+    def test_hint_absent_when_healthy(self) -> None:
+        """Hint line is not rendered when report is healthy."""
+        report = HealthReport()
+        report.add(
+            HealthCheck(
+                name="config.toml",
+                passed=True,
+                message="ok",
+                category="config",
+                severity="error",
+            )
+        )
+        data = _build_report_data(report)
+        output = _render_markdown(data)
+        assert "Run 'elspais" not in output
 
     def test_separator_between_categories(self) -> None:
         report = _make_mixed_report()

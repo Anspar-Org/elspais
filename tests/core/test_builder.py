@@ -12,6 +12,7 @@ from elspais.graph.builder import GraphBuilder
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.relations import EdgeKind
 from tests.core.graph_test_helpers import (
+    MockSourceContext,
     build_graph,
     children_string,
     incoming_edges_string,
@@ -1609,3 +1610,58 @@ def test_add_assertion_sets_render_order():
         f"New render_order {new_edge.metadata['render_order']} should be > "
         f"max existing {max_existing}"
     )
+
+
+# Validates REQ-p00050-A
+class TestSynthesizedIdsRelative:
+    """Regression: REMAINDER/DEFINITION_BLOCK node IDs use repo-relative paths.
+
+    Absolute paths cause spec/_generated/term-index.md to churn per worktree.
+    """
+
+    def test_remainder_id_is_relative_to_repo_root(self, tmp_path: Path) -> None:
+        """An auto-synthesized remainder ID embeds the repo-relative path, not absolute."""
+        absolute_source = tmp_path / "spec" / "notes.md"
+
+        builder = GraphBuilder(repo_root=tmp_path)
+        content = ParsedContent(
+            content_type="remainder",
+            start_line=7,
+            end_line=9,
+            raw_text="unclaimed text",
+            parsed_data={"text": "unclaimed text"},
+        )
+        content.source_context = MockSourceContext(source_id=str(absolute_source))
+
+        builder.add_parsed_content(content)
+        graph = builder.build()
+
+        remainders = list(graph.iter_by_kind(NodeKind.REMAINDER))
+        assert len(remainders) == 1
+        assert remainders[0].id == "rem:spec/notes.md:7"
+        assert str(tmp_path) not in remainders[0].id
+
+    def test_definition_block_id_is_relative_to_repo_root(self, tmp_path: Path) -> None:
+        """An auto-synthesized definition_block ID embeds the repo-relative path, not absolute."""
+        absolute_source = tmp_path / "spec" / "glossary.md"
+
+        builder = GraphBuilder(repo_root=tmp_path)
+        content = ParsedContent(
+            content_type="definition_block",
+            start_line=12,
+            end_line=14,
+            raw_text="Def: widget :: a small device",
+            parsed_data={
+                "term": "widget",
+                "definition": "a small device",
+            },
+        )
+        content.source_context = MockSourceContext(source_id=str(absolute_source))
+
+        builder.add_parsed_content(content)
+        graph = builder.build()
+
+        definitions = list(graph.iter_by_kind(NodeKind.REMAINDER))
+        assert len(definitions) == 1
+        assert definitions[0].id == "def:spec/glossary.md:12"
+        assert str(tmp_path) not in definitions[0].id
