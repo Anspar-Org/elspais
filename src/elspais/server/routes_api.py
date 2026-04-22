@@ -17,7 +17,7 @@ from typing import Any
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from elspais.graph import NodeKind
+from elspais.graph import FILE_ID_PREFIX, NodeKind
 from elspais.graph.comment_store import (
     append_event,
     comment_file_for,
@@ -1267,8 +1267,8 @@ async def api_mutate_move_to_file(request: Request) -> JSONResponse:
         )
 
     # Check if the target file exists on disk; if not, create it
-    if target_file_id.startswith("file:"):
-        relative_path = target_file_id[5:]  # strip "file:" prefix
+    if target_file_id.startswith(FILE_ID_PREFIX):
+        relative_path = target_file_id[len(FILE_ID_PREFIX) :]
     else:
         relative_path = target_file_id
 
@@ -1297,8 +1297,12 @@ async def api_mutate_move_to_file(request: Request) -> JSONResponse:
         # Create the empty file and parent directories
         target_path.parent.mkdir(parents=True, exist_ok=True)
         target_path.write_text("", encoding="utf-8")
-        # Create a FILE node in the graph (empty files aren't picked up by rebuild)
-        _register_new_file_node(state, target_file_id, relative_path, target_path)
+        # Register a FILE node in the graph (empty files aren't picked up
+        # by rebuild). Goes through the mutation API so undo + ownership
+        # + render_save all see the new node consistently.
+        from elspais.graph.GraphNode import FileType
+
+        state.graph.add_file_node(target_path, FileType.SPEC)
 
     result = _mutate_move_node_to_file(state.graph, node_id, target_file_id)
     status_code = 200 if result.get("success") else 400
@@ -1358,54 +1362,6 @@ def _validate_new_spec_path(relative_path: str, config: dict[str, Any]) -> str |
         return f"Path '{relative_path}' is ignored by ignore configuration"
 
     return None
-
-
-def _register_new_file_node(
-    state: Any,
-    file_id: str,
-    relative_path: str,
-    absolute_path: Path,
-) -> None:
-    """Create and register a FILE node for a newly-created empty spec file.
-
-    Inserts the node directly into the graph's index and the federated
-    ownership map so that ``move_node_to_file`` can find it without a
-    full rebuild (which would skip empty files anyway).
-    """
-    from elspais.graph import GraphNode
-    from elspais.graph.GraphNode import FileType
-
-    node = GraphNode(
-        id=file_id,
-        kind=NodeKind.FILE,
-        label=absolute_path.name,
-    )
-    node._content = {
-        "file_type": FileType.SPEC,
-        "absolute_path": str(absolute_path.resolve()),
-        "relative_path": relative_path,
-        "repo": None,
-        "git_branch": None,
-        "git_commit": None,
-    }
-
-    # Register in the sub-graph that owns the node being moved
-    # For a single-repo setup this is the root repo's TraceGraph.
-    # We register in the root repo since new spec files belong there.
-    from elspais.graph.federated import FederatedGraph
-
-    graph = state.graph
-    if isinstance(graph, FederatedGraph):
-        root_repo = graph._root_repo
-        entry = graph._repos[root_repo]
-        if entry.graph is not None:
-            entry.graph._index[file_id] = node
-            entry.graph._roots.append(node)
-        graph._ownership[file_id] = root_repo
-    else:
-        # Direct TraceGraph (shouldn't happen with current server, but safe)
-        graph._index[file_id] = node
-        graph._roots.append(node)
 
 
 async def api_mutate_rename_file(request: Request) -> JSONResponse:

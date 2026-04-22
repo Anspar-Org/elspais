@@ -1,4 +1,4 @@
-# Verifies: REQ-d00203-A, REQ-d00203-B, REQ-d00203-C, REQ-d00203-D, REQ-d00203-E
+# Verifies: REQ-d00203-A, REQ-d00203-B, REQ-d00203-C, REQ-d00203-D, REQ-d00203-E, REQ-d00200-D
 """Tests for multi-repo federation building in factory.build_graph().
 
 Validates REQ-d00203-A: build_graph() builds separate TraceGraphs per repo
@@ -446,3 +446,84 @@ class TestCrossGraphWiring:
         broken = fed.broken_references()
         broken_targets = {br.target_id for br in broken}
         assert "REQ-p99999" in broken_targets
+
+    def test_shared_path_remainder_does_not_conflict(self, tmp_path: Path) -> None:
+        """Regression: REMAINDER nodes use `rem:` prefix, not `remainder:`.
+
+        Two repos with a spec file at the same relative path whose content
+        produces a REMAINDER node (prose-only file) previously raised a
+        FederationError because the ownership-map built in
+        FederatedGraph.__init__ skipped `remainder:` but actual IDs are
+        `rem:<path>:<line>`. Verifies REQ-d00200-D ownership mapping
+        construction correctly skips structural (FILE/REMAINDER) nodes
+        that naturally share relative paths across repos.
+        """
+        root_dir = tmp_path / "root"
+        assoc_dir = tmp_path / "assoc"
+
+        # Associate: unique REQ + shared-path prose file
+        _write_config(assoc_dir)
+        _write_spec_file(
+            assoc_dir / "spec",
+            "prd.md",
+            req_id="REQ-p00001",
+            title="Assoc PRD",
+            level="PRD",
+        )
+        (assoc_dir / "spec").mkdir(parents=True, exist_ok=True)
+        (assoc_dir / "spec" / "shared_notes.md").write_text(
+            "Some prose that contains no requirement block.\n",
+            encoding="utf-8",
+        )
+
+        # Root: unique REQ + same-path prose file
+        _write_config(
+            root_dir,
+            extra={"associates": {"assoc": {"path": "../assoc", "namespace": "REQ"}}},
+        )
+        _write_spec_file(
+            root_dir / "spec",
+            "dev.md",
+            req_id="REQ-d00001",
+            title="Root DEV",
+            level="DEV",
+        )
+        (root_dir / "spec" / "shared_notes.md").write_text(
+            "Different prose, also without a requirement block.\n",
+            encoding="utf-8",
+        )
+
+        # Must NOT raise — REMAINDER nodes (`rem:spec/shared_notes.md:1`)
+        # naturally share IDs across repos and should be skipped during
+        # ID-conflict detection.
+        fed = build_graph(
+            repo_root=root_dir,
+            scan_code=False,
+            scan_tests=False,
+        )
+
+        # Both sub-graphs merged: requirements from each repo are findable.
+        assert (
+            fed.find_by_id("REQ-d00001") is not None
+        ), "Root DEV requirement not found after federated build"
+        assert (
+            fed.find_by_id("REQ-p00001") is not None
+        ), "Associate PRD requirement not found after federated build"
+
+        # Confirm the shared-path REMAINDER actually existed in at least
+        # one sub-graph (proves the scenario reproduces the pre-fix bug).
+        rem_found = False
+        for entry in fed.iter_repos():
+            if entry.graph is None:
+                continue
+            for node_id in entry.graph._index:
+                if node_id.startswith("rem:spec/shared_notes.md"):
+                    rem_found = True
+                    break
+            if rem_found:
+                break
+        assert rem_found, (
+            "Expected at least one REMAINDER node with id starting "
+            "'rem:spec/shared_notes.md' in some sub-graph; "
+            "fixture did not reproduce the bug condition"
+        )

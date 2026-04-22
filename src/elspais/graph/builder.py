@@ -18,7 +18,16 @@ from typing import Any
 
 from elspais.graph.comment_store import update_anchors_on_rename
 from elspais.graph.comments import CommentIndex, CommentThread
-from elspais.graph.GraphNode import GraphNode, NodeKind
+from elspais.graph.GraphNode import (
+    FileType,
+    GraphNode,
+    NodeKind,
+    make_code_id,
+    make_definition_id,
+    make_file_id,
+    make_remainder_id,
+    make_test_id,
+)
 from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.relations import EdgeKind, Stereotype
@@ -412,6 +421,8 @@ class TraceGraph:
             self._undo_move_node_to_file(entry)
         elif op == "rename_file":
             self._undo_rename_file(entry)
+        elif op == "add_file_node":
+            self._undo_add_file_node(entry)
         elif op == "fix_broken_reference":
             self._undo_fix_broken_reference(entry)
         elif op in (
@@ -1949,6 +1960,84 @@ class TraceGraph:
         self._mutation_log.append(entry)
         return entry
 
+    def add_file_node(
+        self,
+        absolute_path: Path,
+        repo_root: Path,
+        file_type: FileType,
+        repo: str | None = None,
+        git_branch: str | None = None,
+        git_commit: str | None = None,
+    ) -> MutationEntry:
+        """Add a new FILE node for a file that has just been created on disk.
+
+        The node is built via ``graph.factory.create_file_node`` so it
+        matches what a full rebuild would produce — same fields, same id,
+        same FileType handling. Consumers see the new FILE node on their
+        next read of the graph (no separate notification channel); the
+        MutationEntry is for undo and save-persistence accounting.
+
+        Args:
+            absolute_path: Path to the file on disk.
+            repo_root: Repository root for computing the relative path.
+            file_type: FileType classification (SPEC / CODE / TEST / etc.).
+            repo: Repository identifier (None for the main project).
+            git_branch: Current git branch (captured once per repo).
+            git_commit: Current git commit (captured once per repo).
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            ValueError: If a FILE node with this id already exists.
+        """
+        # Import here to avoid a circular import between builder and factory.
+        from elspais.graph.factory import create_file_node
+
+        node = create_file_node(
+            absolute_path,
+            repo_root,
+            file_type,
+            repo,
+            git_branch,
+            git_commit,
+        )
+        if node.id in self._index:
+            raise ValueError(f"FILE node '{node.id}' already exists")
+
+        self._index[node.id] = node
+        self._roots.append(node)
+
+        entry = MutationEntry(
+            operation="add_file_node",
+            target_id=node.id,
+            before_state={},  # Node didn't exist
+            after_state={
+                "id": node.id,
+                "relative_path": node.get_field("relative_path"),
+                "absolute_path": node.get_field("absolute_path"),
+                "file_type": file_type.value,
+                "repo": repo,
+            },
+        )
+        self._mutation_log.append(entry)
+        return entry
+
+    def _undo_add_file_node(self, entry: MutationEntry) -> None:
+        """Undo an add_file_node operation (remove the FILE node)."""
+        node_id = entry.target_id
+        node = self._index.pop(node_id, None)
+        if node is None:
+            return
+        self._roots = [r for r in self._roots if r.id != node_id]
+        # FILE nodes added via add_file_node have no incoming edges
+        # (they're freshly created roots), but belt-and-suspenders: unlink
+        # anything that snuck in.
+        for parent in list(node.iter_parents()):
+            parent.unlink(node)
+        for child in list(node.iter_children()):
+            node.unlink(child)
+
     # Implements: REQ-o00063
     def rename_file(
         self,
@@ -1977,7 +2066,7 @@ class TraceGraph:
         if node.kind != NodeKind.FILE:
             raise ValueError(f"Node '{file_id}' is not a FILE node")
 
-        new_id = f"file:{new_relative_path}"
+        new_id = make_file_id(new_relative_path)
         old_relative_path = node.get_field("relative_path")
         old_absolute_path = node.get_field("absolute_path")
 
@@ -2913,7 +3002,7 @@ class GraphBuilder:
             if file_node is not None:
                 source_ctx = getattr(content, "source_context", None)
                 source_id = source_ctx.source_id if source_ctx else "code"
-                code_id = f"code:{source_id}:{content.start_line}"
+                code_id = make_code_id(source_id, content.start_line)
                 node = self._nodes.get(code_id)
                 if node:
                     self._wire_contains_edge(file_node, node, content)
@@ -2930,7 +3019,7 @@ class GraphBuilder:
                     rel_path = self._to_relative_path(source_id)
                     test_id = build_test_id(rel_path, func_name, class_name)
                 else:
-                    test_id = f"test:{source_id}:{content.start_line}"
+                    test_id = make_test_id(source_id, content.start_line)
                 node = self._nodes.get(test_id)
                 if node:
                     self._wire_contains_edge(file_node, node, content)
@@ -2948,7 +3037,7 @@ class GraphBuilder:
                 source_ctx = getattr(content, "source_context", None)
                 source_path = source_ctx.source_id if source_ctx else ""
                 rel_source = self._to_relative_path(source_path) if source_path else source_path
-                remainder_id = data.get("id") or f"def:{rel_source}:{content.start_line}"
+                remainder_id = data.get("id") or make_definition_id(rel_source, content.start_line)
                 node = self._nodes.get(remainder_id)
                 if node:
                     self._wire_contains_edge(file_node, node, content)
@@ -2960,7 +3049,7 @@ class GraphBuilder:
                 source_ctx = getattr(content, "source_context", None)
                 source_path = source_ctx.source_id if source_ctx else ""
                 rel_source = self._to_relative_path(source_path) if source_path else source_path
-                remainder_id = data.get("id") or f"rem:{rel_source}:{content.start_line}"
+                remainder_id = data.get("id") or make_remainder_id(rel_source, content.start_line)
                 node = self._nodes.get(remainder_id)
                 if node:
                     self._wire_contains_edge(file_node, node, content)
@@ -3175,7 +3264,7 @@ class GraphBuilder:
             (ref, EdgeKind.VERIFIES) for ref in data.get("verifies", [])
         ]
         for ref, edge_kind in all_refs:
-            code_id = f"code:{source_id}:{content.start_line}"
+            code_id = make_code_id(source_id, content.start_line)
             if code_id not in self._nodes:
                 node = GraphNode(
                     id=code_id,
@@ -3226,7 +3315,7 @@ class GraphBuilder:
             source_line = func_line
         else:
             # Fallback: line-based ID for refs outside functions
-            test_id = f"test:{source_id}:{content.start_line}"
+            test_id = make_test_id(source_id, content.start_line)
             label = f"Test at {source_id}:{content.start_line}"
             source_line = content.start_line
 
@@ -3301,7 +3390,7 @@ class GraphBuilder:
         source_path = source_ctx.source_id if source_ctx else ""
 
         rel_source = self._to_relative_path(source_path) if source_path else source_path
-        remainder_id = data.get("id") or f"def:{rel_source}:{content.start_line}"
+        remainder_id = data.get("id") or make_definition_id(rel_source, content.start_line)
         text = content.raw_text or ""
 
         node = GraphNode(
@@ -3331,7 +3420,7 @@ class GraphBuilder:
         # Use provided ID or generate from source location (repo-relative to
         # keep generated artifacts stable across worktrees).
         rel_source = self._to_relative_path(source_path) if source_path else source_path
-        remainder_id = data.get("id") or f"rem:{rel_source}:{content.start_line}"
+        remainder_id = data.get("id") or make_remainder_id(rel_source, content.start_line)
         text = data.get("text", content.raw_text or "")
 
         node = GraphNode(

@@ -49,6 +49,61 @@ class FileType(Enum):
     RESULT = "result"
 
 
+# Structural node-id prefixes. FILE and REMAINDER node IDs are keyed by
+# relative file path (not by semantic identity), so the same id can
+# legitimately appear in multiple repos during federation. Consumers that
+# construct or recognize these ids MUST use these constants / helpers
+# rather than inline string literals — past drift between construction
+# (``rem:``) and recognition (``remainder:``) caused federated ID-conflict
+# false positives.
+FILE_ID_PREFIX = "file:"
+REMAINDER_ID_PREFIX = "rem:"
+DEFINITION_ID_PREFIX = "def:"
+CODE_ID_PREFIX = "code:"
+TEST_ID_PREFIX = "test:"
+
+# Structural prefixes are those whose IDs are keyed by repo-relative source
+# location (path and/or line), not by semantic identity. Two repos can
+# legitimately produce the same such id. DEFINITION nodes are REMAINDER
+# nodes with a separate prefix for definition blocks — same collision
+# semantics as rem:, so they belong here.
+STRUCTURAL_ID_PREFIXES: tuple[str, ...] = (
+    FILE_ID_PREFIX,
+    REMAINDER_ID_PREFIX,
+    DEFINITION_ID_PREFIX,
+)
+
+
+def make_file_id(relative_path: str) -> str:
+    """Canonical FILE node id for a repo-relative path."""
+    return f"{FILE_ID_PREFIX}{relative_path}"
+
+
+def make_remainder_id(relative_path: str, start_line: int) -> str:
+    """Canonical REMAINDER node id for a repo-relative path + line."""
+    return f"{REMAINDER_ID_PREFIX}{relative_path}:{start_line}"
+
+
+def make_definition_id(relative_path: str, start_line: int) -> str:
+    """Canonical id for a REMAINDER node created from a definition block."""
+    return f"{DEFINITION_ID_PREFIX}{relative_path}:{start_line}"
+
+
+def make_code_id(source_id: str, start_line: int) -> str:
+    """Canonical id for a CODE reference node."""
+    return f"{CODE_ID_PREFIX}{source_id}:{start_line}"
+
+
+def make_test_id(source_id: str, start_line: int) -> str:
+    """Canonical id for a line-anchored TEST reference node.
+
+    Named / prescan-resolved test ids (``test:module::class::name``) are
+    built by ``utilities.test_identity``; those use the same TEST_ID_PREFIX
+    but have a different structural form and are not interchangeable.
+    """
+    return f"{TEST_ID_PREFIX}{source_id}:{start_line}"
+
+
 @dataclass
 class GraphNode:
     """A node in the traceability graph.
@@ -221,6 +276,21 @@ class GraphNode:
     def set_metric(self, key: str, value: Any) -> None:
         """Set a metric value."""
         self._metrics[key] = value
+
+    def mark_parse_dirty(self, reason: str) -> None:
+        """Flag this node for re-parse/re-render and record why.
+
+        Sets ``parse_dirty = True`` and appends ``reason`` to
+        ``parse_dirty_reasons`` (creating the list if absent, deduplicating
+        so the same reason isn't recorded twice). The fix/render pipeline
+        consumes these fields to decide which files to rewrite.
+        """
+        self._content["parse_dirty"] = True
+        reasons = self._content.get("parse_dirty_reasons")
+        if reasons is None:
+            self._content["parse_dirty_reasons"] = [reason]
+        elif reason not in reasons:
+            reasons.append(reason)
 
     # Convenience properties for common fields
     @property

@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import re
 
+from elspais.graph.GraphNode import TEST_ID_PREFIX
+
 
 # Implements: REQ-d00054-A
 def classname_to_module_path(classname: str) -> tuple[str, str | None]:
@@ -116,8 +118,8 @@ def build_test_id(
     clean_name = strip_parametrize_suffix(function_name)
 
     if class_name:
-        return f"test:{module_path}::{class_name}::{clean_name}"
-    return f"test:{module_path}::{clean_name}"
+        return f"{TEST_ID_PREFIX}{module_path}::{class_name}::{clean_name}"
+    return f"{TEST_ID_PREFIX}{module_path}::{clean_name}"
 
 
 # Implements: REQ-d00054-A
@@ -172,4 +174,4 @@ def build_test_id_from_nodeid(nodeid: str) -> str:
     if parts:
         parts[-1] = strip_parametrize_suffix(parts[-1])
     cleaned = "::".join(parts)
-    return f"test:{cleaned}"
+    return f"{TEST_ID_PREFIX}{cleaned}"

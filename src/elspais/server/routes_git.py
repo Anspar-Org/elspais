@@ -109,25 +109,13 @@ async def api_git_status(request: Request) -> JSONResponse:
     result["originating_branch"] = root_ds.originating_branch if root_ds else None
     result["originating_head"] = root_ds.originating_head if root_ds else None
     if is_detached:
-        from elspais.utilities.git import get_current_commit
+        from elspais.utilities.git import count_commits_between, get_current_commit
 
         result["detached_commit"] = get_current_commit(root)
         if root_ds and root_ds.originating_head:
-            import subprocess
-
-            from elspais.utilities.git import _clean_git_env
-
-            try:
-                rv = subprocess.run(
-                    ["git", "rev-list", "--count", "HEAD.." + root_ds.originating_head],
-                    cwd=root,
-                    env=_clean_git_env(),
-                    capture_output=True,
-                    text=True,
-                )
-                result["commits_behind_head"] = int(rv.stdout.strip()) if rv.returncode == 0 else 0
-            except (FileNotFoundError, ValueError):
-                result["commits_behind_head"] = 0
+            result["commits_behind_head"] = count_commits_between(
+                root, "HEAD", root_ds.originating_head
+            )
         else:
             result["commits_behind_head"] = 0
     else:
@@ -173,9 +161,7 @@ async def api_git_branch(request: Request) -> JSONResponse:
 async def api_git_push(request: Request) -> JSONResponse:
     # Implements: REQ-p00004-E
     """POST /api/git/push - Push local commits to remote."""
-    import subprocess
-
-    from elspais.utilities.git import _clean_git_env, get_current_branch
+    from elspais.utilities.git import get_current_branch, push_branch
 
     state = request.app.state.app_state
     try:
@@ -192,18 +178,11 @@ async def api_git_push(request: Request) -> JSONResponse:
             if not branch:
                 results.append({"repo": name, "success": False, "error": "detached HEAD"})
                 continue
-            env = _clean_git_env()
-            rv = subprocess.run(
-                ["git", "push", "-u", "origin", branch],
-                cwd=root,
-                env=env,
-                capture_output=True,
-                text=True,
-            )
-            if rv.returncode != 0:
-                results.append({"repo": name, "success": False, "error": rv.stderr.strip()})
-            else:
+            rv = push_branch(root, branch)
+            if rv["success"]:
                 results.append({"repo": name, "success": True, "branch": branch})
+            else:
+                results.append({"repo": name, "success": False, "error": rv["error"]})
         all_ok = all(r["success"] for r in results)
         return JSONResponse({"success": all_ok, "results": results})
     else:
@@ -213,20 +192,9 @@ async def api_git_push(request: Request) -> JSONResponse:
             return JSONResponse(
                 {"success": False, "error": "Cannot push in detached HEAD state"}, status_code=400
             )
-        env = _clean_git_env()
-        try:
-            rv = subprocess.run(
-                ["git", "push", "-u", "origin", branch],
-                cwd=root,
-                env=env,
-                capture_output=True,
-                text=True,
-            )
-            if rv.returncode != 0:
-                return JSONResponse({"success": False, "error": rv.stderr.strip()}, status_code=400)
-            return JSONResponse({"success": True, "branch": branch})
-        except FileNotFoundError:
-            return JSONResponse({"success": False, "error": "git not found"}, status_code=500)
+        rv = push_branch(root, branch)
+        status_code = 200 if rv["success"] else (500 if rv["error"] == "git not found" else 400)
+        return JSONResponse(rv, status_code=status_code)
 
 
 async def api_git_pull(request: Request) -> JSONResponse:
@@ -275,43 +243,11 @@ def _checkout_single_repo(repo: Path, branch: str, is_remote: bool) -> dict:
     """Checkout a branch in a single repo.
 
     Tries local checkout first. For remote branches, also tries creating
-    a local tracking branch. Catches FileNotFoundError for missing git.
+    a local tracking branch. Delegates to ``utilities.git.checkout_branch``.
     """
-    import subprocess
+    from elspais.utilities.git import checkout_branch
 
-    from elspais.utilities.git import _clean_git_env
-
-    env = _clean_git_env()
-    try:
-        if is_remote:
-            result = subprocess.run(
-                ["git", "checkout", "-b", branch, f"origin/{branch}"],
-                cwd=repo,
-                env=env,
-                capture_output=True,
-                text=True,
-            )
-            if result.returncode != 0 and "already exists" in result.stderr:
-                result = subprocess.run(
-                    ["git", "checkout", branch],
-                    cwd=repo,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                )
-        else:
-            result = subprocess.run(
-                ["git", "checkout", branch],
-                cwd=repo,
-                env=env,
-                capture_output=True,
-                text=True,
-            )
-        if result.returncode != 0:
-            return {"success": False, "error": result.stderr.strip()}
-        return {"success": True, "branch": branch}
-    except FileNotFoundError:
-        return {"success": False, "error": "git not found"}
+    return checkout_branch(repo, branch, from_remote=is_remote)
 
 
 async def api_git_checkout(request: Request) -> JSONResponse:
@@ -445,10 +381,7 @@ async def api_git_commit(request: Request) -> JSONResponse:
 
 async def api_git_checkout_commit(request: Request) -> JSONResponse:
     """POST /api/git/checkout-commit - Checkout a specific commit (detached HEAD)."""
-    import subprocess
-
     from elspais.utilities.git import (
-        _clean_git_env,
         check_dirty_repos,
         checkout_commit,
         get_current_branch,
@@ -478,22 +411,15 @@ async def api_git_checkout_commit(request: Request) -> JSONResponse:
                 status_code=409,
             )
         results = []
-        env = _clean_git_env()
         for name, root in repos:
             branch = get_current_branch(root) or ""
             head = get_current_commit(root) or ""
-            rv = subprocess.run(
-                ["git", "checkout", f"HEAD~{offset}"],
-                cwd=root,
-                env=env,
-                capture_output=True,
-                text=True,
-            )
-            if rv.returncode == 0:
+            rv = checkout_commit(root, f"HEAD~{offset}")
+            if rv.get("success"):
                 state.enter_detached(name, branch=branch, head_commit=head)
                 results.append({"repo": name, "success": True})
             else:
-                results.append({"repo": name, "success": False, "error": rv.stderr.strip()})
+                results.append({"repo": name, "success": False, "error": rv.get("error", "")})
         invalidate_ancestor_cache()
         return JSONResponse({"success": all(r["success"] for r in results), "results": results})
     else:

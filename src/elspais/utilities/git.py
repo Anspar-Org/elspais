@@ -1323,7 +1323,8 @@ def checkout_commit(repo_root: Path, commit_hash: str) -> dict[str, Any]:
 
     Args:
         repo_root: Path to repository root.
-        commit_hash: Full or abbreviated commit hash.
+        commit_hash: Full or abbreviated commit hash, or any rev-parseable
+            reference (e.g. ``"HEAD~2"``).
 
     Returns:
         ``{"success": True}`` on success, or ``{"success": False, "error": "..."}``
@@ -1345,6 +1346,139 @@ def checkout_commit(repo_root: Path, commit_hash: str) -> dict[str, Any]:
         return {"success": False, "error": err}
 
     return {"success": True}
+
+
+def checkout_branch(
+    repo_root: Path,
+    branch: str,
+    from_remote: bool = False,
+    remote: str = "origin",
+) -> dict[str, Any]:
+    """Check out a branch, optionally creating it from a remote tracking ref.
+
+    When ``from_remote`` is True: runs ``git checkout -b <branch> <remote>/<branch>``.
+    If the local branch already exists, falls back to a plain ``git checkout <branch>``
+    so the caller can converge on the requested branch whether or not it's
+    been tracked before.
+
+    When ``from_remote`` is False: runs ``git checkout <branch>``.
+
+    Args:
+        repo_root: Path to repository root.
+        branch: Branch name to check out.
+        from_remote: If True, first attempt a tracking-branch creation.
+        remote: Remote name (default "origin"); only used when from_remote is True.
+
+    Returns:
+        ``{"success": True, "branch": branch}`` on success, or
+        ``{"success": False, "error": "..."}`` on failure.
+    """
+    env = _clean_git_env()
+    try:
+        if from_remote:
+            result = subprocess.run(
+                ["git", "checkout", "-b", branch, f"{remote}/{branch}"],
+                cwd=repo_root,
+                env=env,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0 and "already exists" in (result.stderr or ""):
+                result = subprocess.run(
+                    ["git", "checkout", branch],
+                    cwd=repo_root,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                )
+        else:
+            result = subprocess.run(
+                ["git", "checkout", branch],
+                cwd=repo_root,
+                env=env,
+                capture_output=True,
+                text=True,
+            )
+    except FileNotFoundError:
+        return {"success": False, "error": "git not found"}
+
+    if result.returncode != 0:
+        return {"success": False, "error": (result.stderr or "").strip()}
+    return {"success": True, "branch": branch}
+
+
+def push_branch(
+    repo_root: Path,
+    branch: str,
+    remote: str = "origin",
+    set_upstream: bool = True,
+) -> dict[str, Any]:
+    """Push ``branch`` to ``remote``.
+
+    Args:
+        repo_root: Path to repository root.
+        branch: Local branch name to push.
+        remote: Remote name (default "origin").
+        set_upstream: If True, pass ``-u`` to set the remote-tracking ref.
+
+    Returns:
+        ``{"success": True, "branch": branch}`` on success, or
+        ``{"success": False, "error": "..."}`` on failure.
+    """
+    cmd = ["git", "push"]
+    if set_upstream:
+        cmd.append("-u")
+    cmd.extend([remote, branch])
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=repo_root,
+            env=_clean_git_env(),
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        return {"success": False, "error": "git not found"}
+
+    if result.returncode != 0:
+        return {"success": False, "error": (result.stderr or "").strip()}
+    return {"success": True, "branch": branch}
+
+
+def count_commits_between(
+    repo_root: Path,
+    base: str,
+    head: str,
+) -> int:
+    """Count commits reachable from ``head`` but not from ``base``.
+
+    Runs ``git rev-list --count <base>..<head>``. Returns 0 on any failure
+    (unknown refs, git missing) so callers can treat the helper as a
+    best-effort count rather than a fatal operation.
+
+    Common uses:
+        ``count_commits_between(root, "HEAD", target)`` — how far ``target``
+        is ahead of HEAD.
+        ``count_commits_between(root, origin_ref, "HEAD")`` — how far HEAD
+        is ahead of the tracking ref.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-list", "--count", f"{base}..{head}"],
+            cwd=repo_root,
+            env=_clean_git_env(),
+            capture_output=True,
+            text=True,
+        )
+    except (FileNotFoundError, OSError):
+        return 0
+
+    if result.returncode != 0:
+        return 0
+    try:
+        return int((result.stdout or "").strip())
+    except ValueError:
+        return 0
 
 
 def commit_spec_files(

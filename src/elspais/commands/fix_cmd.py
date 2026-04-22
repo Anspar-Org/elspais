@@ -217,10 +217,7 @@ def _add_drift_changelog_entries(
         entry = _make_changelog_entry(stored, "Auto-fix: sync changelog hash", author)
         graph.add_changelog_entry(node.id, entry)
         # Mark dirty so render_save picks up the file
-        node._content["parse_dirty"] = True
-        node._content.setdefault("parse_dirty_reasons", [])
-        if "changelog_drift" not in node._content["parse_dirty_reasons"]:
-            node._content["parse_dirty_reasons"].append("changelog_drift")
+        node.mark_parse_dirty("changelog_drift")
         added += 1
 
     return added
@@ -300,11 +297,8 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> None:
 
     # Mark all fixable nodes dirty so render_save picks up their files
     for node, reasons in fixable_nodes:
-        node._content["parse_dirty"] = True
-        node._content.setdefault("parse_dirty_reasons", [])
         for r in reasons:
-            if r not in node._content["parse_dirty_reasons"]:
-                node._content["parse_dirty_reasons"].append(r)
+            node.mark_parse_dirty(r)
 
     result = render_save(graph, repo_root=repo_root)
     saved = result.get("saved_count", 0)
@@ -442,10 +436,7 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
 
     # Always mark the target node dirty so render_save picks up its file.
     # "fix_single" overrides the stale_hash filter in _find_dirty_files.
-    node._content["parse_dirty"] = True
-    node._content.setdefault("parse_dirty_reasons", [])
-    if "fix_single" not in node._content["parse_dirty_reasons"]:
-        node._content["parse_dirty_reasons"].append("fix_single")
+    node.mark_parse_dirty("fix_single")
 
     result = render_save(graph, repo_root=repo_root)
     if result.get("errors"):

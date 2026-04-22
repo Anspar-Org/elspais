@@ -19,9 +19,20 @@ Use FederatedGraph (the public API) via graph.factory.build_graph().
 from elspais.graph.annotators import annotate_coverage
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import (
+    CODE_ID_PREFIX,
+    DEFINITION_ID_PREFIX,
+    FILE_ID_PREFIX,
+    REMAINDER_ID_PREFIX,
+    STRUCTURAL_ID_PREFIXES,
+    TEST_ID_PREFIX,
     FileType,
     GraphNode,
     NodeKind,
+    make_code_id,
+    make_definition_id,
+    make_file_id,
+    make_remainder_id,
+    make_test_id,
 )
 from elspais.graph.metrics import CoverageContribution, CoverageSource, RollupMetrics
 from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
@@ -31,6 +42,17 @@ __all__ = [
     "FileType",
     "NodeKind",
     "GraphNode",
+    "FILE_ID_PREFIX",
+    "REMAINDER_ID_PREFIX",
+    "DEFINITION_ID_PREFIX",
+    "CODE_ID_PREFIX",
+    "TEST_ID_PREFIX",
+    "STRUCTURAL_ID_PREFIXES",
+    "make_file_id",
+    "make_remainder_id",
+    "make_definition_id",
+    "make_code_id",
+    "make_test_id",
     "Edge",
     "EdgeKind",
     "Stereotype",
