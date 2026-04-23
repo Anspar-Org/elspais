@@ -68,9 +68,9 @@ def _load_config(config_path: Path) -> dict:
 class TestChangelogPresent:
     """Tests for check_spec_changelog_present."""
 
-    def test_disabled_by_default_returns_passed_info(self, tmp_path: Path):
-        """When present is False (default), returns passed with info severity."""
-        config_path = _make_config(tmp_path)
+    def test_disabled_when_both_flags_off_returns_passed_info(self, tmp_path: Path):
+        """When neither present nor hash_current is set, check is inactive."""
+        config_path = _make_config(tmp_path, {"hash_current": False, "present": False})
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
 
@@ -98,6 +98,36 @@ class TestChangelogPresent:
         assert result.severity == "info"
         assert result.name == "spec.changelog_present"
         assert "disabled" in result.message.lower()
+
+    def test_active_when_only_hash_current_enabled(self, tmp_path: Path):
+        """Check must fire when hash_current is set (since fix will add entries)."""
+        # Defaults: hash_current=True, present=False — the problematic combo from TODO.md.
+        config_path = _make_config(tmp_path)
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+
+        req_file = spec_dir / "requirements.md"
+        req_file.write_text(
+            "# REQ-d00001: Test Req\n"
+            "\n"
+            "**Level**: DEV | **Status**: Active"
+            " | **Implements**: -\n"
+            "\n"
+            "## Assertions\n"
+            "\n"
+            "A. The system SHALL do X.\n"
+            "\n"
+            "*End* *Test Req*\n"
+            "---\n"
+        )
+
+        graph = _build(tmp_path, config_path)
+        config = _load_config(config_path)
+        result = check_spec_changelog_present(graph, config)
+
+        assert result.passed is False
+        assert result.name == "spec.changelog_present"
+        assert "REQ-d00001" in result.message
 
     def test_enabled_no_active_reqs_passes(self, tmp_path: Path):
         """When enabled but no Active reqs exist, passes."""

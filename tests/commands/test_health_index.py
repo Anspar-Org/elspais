@@ -70,16 +70,13 @@ class TestIndexCurrent:
     """Integration tests for check_spec_index_current."""
 
     def test_REQ_d00085_index_up_to_date(self, tmp_path: Path):
-        """Check passes when INDEX.md has all requirement IDs."""
-        index_content = """\
-# Requirements Index
+        """Check passes when INDEX.md is byte-identical to what fix would produce."""
+        from elspais.commands.index import _build_index_content
 
-| ID | Title |
-|----|-------|
-| REQ-p00001 | First Requirement |
-| REQ-p00002 | Second Requirement |
-"""
-        graph, spec_dirs = _make_project(tmp_path, index_content)
+        graph, spec_dirs = _make_project(tmp_path, index_content=None)
+        _out, expected, _rc, _jc = _build_index_content(graph, spec_dirs)
+        (spec_dirs[0] / "INDEX.md").write_text(expected, encoding="utf-8")
+
         result = check_spec_index_current(graph, spec_dirs)
 
         assert result.passed is True

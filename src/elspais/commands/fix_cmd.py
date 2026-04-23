@@ -514,8 +514,8 @@ def _ensure_changelog_section(
 
 
 def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
-    """Regenerate INDEX.md from current graph state."""
-    from elspais.commands.index import _regenerate_index
+    """Regenerate INDEX.md from current graph state (no-op when already current)."""
+    from elspais.commands.index import _build_index_content, _regenerate_index
     from elspais.config import get_config, get_spec_directories
     from elspais.graph.factory import build_graph
 
@@ -528,10 +528,6 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
     if not spec_dirs:
         return
 
-    if dry_run:
-        print("Would regenerate INDEX.md")
-        return
-
     all_spec_dirs = list(spec_dirs)
 
     graph = build_graph(
@@ -540,6 +536,16 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
         scan_code=False,
         scan_tests=False,
     )
+
+    output_path, expected, _req_count, _jny_count = _build_index_content(graph, all_spec_dirs)
+    if output_path.exists():
+        current = output_path.read_text(encoding="utf-8")
+        if current == expected:
+            return
+
+    if dry_run:
+        print("Would regenerate INDEX.md")
+        return
 
     _regenerate_index(graph, all_spec_dirs, args)
 

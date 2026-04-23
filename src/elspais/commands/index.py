@@ -206,13 +206,18 @@ def _classify_node(node: object, spec_dirs: list[Path]) -> Path | None:
     """Return the most-specific spec directory that contains a node's source file.
 
     Checks deepest paths first so ``spec/regulations/fda`` matches before ``spec``.
+    Uses the FILE node's ``absolute_path`` (resolved at build time against the
+    node's own repo_root) so classification is correct for federated graphs
+    and independent of the current working directory.
     """
     # Implements: REQ-d00129-D
     fn = node.file_node() if hasattr(node, "file_node") else None
-    rp = fn.get_field("relative_path") if fn else None
-    if not rp:
+    if fn is None:
         return None
-    source_path = Path(rp).resolve()
+    abs_path = fn.get_field("absolute_path")
+    if not abs_path:
+        return None
+    source_path = Path(abs_path)
     # Sort deepest-first so nested dirs match before their parents
     for spec_dir in sorted(spec_dirs, key=lambda p: len(p.resolve().parts), reverse=True):
         resolved = spec_dir.resolve()
@@ -224,16 +229,13 @@ def _classify_node(node: object, spec_dirs: list[Path]) -> Path | None:
     return None
 
 
-def _regenerate_index(
-    graph: FederatedGraph, spec_dirs: list[Path], args: argparse.Namespace
-) -> int:
-    """Regenerate INDEX.md from graph requirements."""
-    # Use git root (threaded from CLI) for relative paths
-    repo_root = getattr(args, "git_root", None)
-    if repo_root is None:
-        print("Cannot generate INDEX.md: not in a git repository.", file=sys.stderr)
-        return 1
+def _build_index_content(
+    graph: FederatedGraph, spec_dirs: list[Path]
+) -> tuple[Path, str, int, int]:
+    """Render INDEX.md content without writing.
 
+    Returns (output_path, content, req_count, jny_count).
+    """
     # Group requirements by spec directory
     from collections import defaultdict
 
@@ -361,11 +363,26 @@ def _regenerate_index(
             lines.append("")
             jny_count += len(jnys)
 
-    # Write to first spec dir
     output_path = spec_dirs[0] / "INDEX.md" if spec_dirs else Path("spec/INDEX.md")
+    content = "\n".join(lines)
+    return output_path, content, req_count, jny_count
+
+
+def _regenerate_index(
+    graph: FederatedGraph, spec_dirs: list[Path], args: argparse.Namespace
+) -> int:
+    """Regenerate INDEX.md from graph requirements."""
+    # Use git root (threaded from CLI) for relative paths
+    repo_root = getattr(args, "git_root", None)
+    if repo_root is None:
+        print("Cannot generate INDEX.md: not in a git repository.", file=sys.stderr)
+        return 1
+
+    output_path, content, req_count, jny_count = _build_index_content(graph, spec_dirs)
+
     if output_path.exists():
         output_path.chmod(0o644)
-    output_path.write_text("\n".join(lines), encoding="utf-8")
+    output_path.write_text(content, encoding="utf-8")
     output_path.chmod(0o444)
 
     print(f"Generated {output_path} ({req_count} requirements, {jny_count} journeys)")

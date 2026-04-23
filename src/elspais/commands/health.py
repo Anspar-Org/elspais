@@ -881,11 +881,16 @@ def check_spec_hash_integrity(graph: FederatedGraph) -> HealthCheck:
 
 
 def check_spec_changelog_present(graph: FederatedGraph, config: dict[str, Any]) -> HealthCheck:
-    """Check that all Active requirements have at least one changelog entry."""
+    """Check that all Active requirements have at least one changelog entry.
+
+    Active whenever `changelog.present` is set OR `changelog.hash_current` is set.
+    The latter matches `elspais fix`, which adds missing entries when hash
+    tracking is enabled — keeping the check aligned with fix behavior.
+    """
     from elspais.graph import NodeKind
 
     typed_config = _validate_config(config)
-    require_present = typed_config.changelog.present
+    require_present = typed_config.changelog.present or typed_config.changelog.hash_current
     if not require_present:
         return HealthCheck(
             name="spec.changelog_present",
@@ -1060,9 +1065,8 @@ def check_spec_index_current(
     graph: FederatedGraph,
     spec_dirs: list[Path],
 ) -> HealthCheck:
-    """Check that INDEX.md is up to date with current requirements."""
-    import re
-
+    """Check that INDEX.md is byte-identical to what 'elspais fix' would produce."""
+    from elspais.commands.index import _build_index_content
     from elspais.graph import NodeKind
 
     # Find INDEX.md
@@ -1082,10 +1086,25 @@ def check_spec_index_current(
             severity="info",
         )
 
-    content = index_path.read_text()
-    index_req_ids = set(re.findall(r"REQ-[a-z0-9-]+", content, re.IGNORECASE))
-    index_jny_ids = set(re.findall(r"JNY-[A-Za-z0-9-]+", content))
+    _expected_path, expected, _req_count, _jny_count = _build_index_content(graph, spec_dirs)
+    actual = index_path.read_text(encoding="utf-8")
 
+    if actual == expected:
+        total = sum(1 for _ in graph.nodes_by_kind(NodeKind.REQUIREMENT)) + sum(
+            1 for _ in graph.nodes_by_kind(NodeKind.USER_JOURNEY)
+        )
+        return HealthCheck(
+            name="spec.index_current",
+            passed=True,
+            message=f"INDEX.md is up to date ({total} entries)",
+            category="spec",
+        )
+
+    # Byte-level mismatch — still provide the legacy ID-diff breakdown for context.
+    import re
+
+    index_req_ids = set(re.findall(r"REQ-[a-z0-9-]+", actual, re.IGNORECASE))
+    index_jny_ids = set(re.findall(r"JNY-[A-Za-z0-9-]+", actual))
     graph_req_ids = {n.id for n in graph.nodes_by_kind(NodeKind.REQUIREMENT)}
     graph_jny_ids = {n.id for n in graph.nodes_by_kind(NodeKind.USER_JOURNEY)}
 
@@ -1103,28 +1122,21 @@ def check_spec_index_current(
         issues.append(f"{len(missing_jnys)} missing journey(s)")
     if extra_jnys:
         issues.append(f"{len(extra_jnys)} extra journey(s)")
+    if not issues:
+        issues.append("content differs (titles, order, hashes, or formatting)")
 
-    if issues:
-        return HealthCheck(
-            name="spec.index_current",
-            passed=False,
-            message=f"INDEX.md is stale: {', '.join(issues)}",
-            category="spec",
-            severity="warning",
-            details={
-                "missing_reqs": sorted(missing_reqs),
-                "extra_reqs": sorted(extra_reqs),
-                "missing_jnys": sorted(missing_jnys),
-                "extra_jnys": sorted(extra_jnys),
-            },
-        )
-
-    total = len(graph_req_ids) + len(graph_jny_ids)
     return HealthCheck(
         name="spec.index_current",
-        passed=True,
-        message=f"INDEX.md is up to date ({total} entries)",
+        passed=False,
+        message=f"INDEX.md is stale: {', '.join(issues)}",
         category="spec",
+        severity="warning",
+        details={
+            "missing_reqs": sorted(missing_reqs),
+            "extra_reqs": sorted(extra_reqs),
+            "missing_jnys": sorted(missing_jnys),
+            "extra_jnys": sorted(extra_jnys),
+        },
     )
 
 
