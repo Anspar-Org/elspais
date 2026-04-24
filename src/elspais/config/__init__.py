@@ -402,12 +402,20 @@ def _try_parse_env_value(value: str) -> Any:
     return value
 
 
+# Env vars reserved by the tool itself — must NOT be treated as config overrides.
+# ELSPAIS_VERSION is the min-CLI-version pin consumed by utilities/version_check.py;
+# it would otherwise collide with the config's top-level `version` (schema format int).
+_RESERVED_ENV_VARS = frozenset({"ELSPAIS_VERSION"})
+
+
 def _apply_env_overrides(config: dict[str, Any]) -> dict[str, Any]:
     """Apply environment variable overrides.
 
     Looks for ELSPAIS_* environment variables.  Values are parsed via
     ``_try_parse_env_value`` so that JSON lists, booleans, and plain
     strings are all handled correctly.
+
+    Tool-reserved vars in ``_RESERVED_ENV_VARS`` are skipped.
 
     Args:
         config: Configuration dictionary.
@@ -418,7 +426,7 @@ def _apply_env_overrides(config: dict[str, Any]) -> dict[str, Any]:
     # Example: ELSPAIS_PATTERNS_PREFIX=MYREQ
     # Example: ELSPAIS_ASSOCIATES_PATHS='["/path/to/repo"]'
     for key, value in os.environ.items():
-        if key.startswith("ELSPAIS_"):
+        if key.startswith("ELSPAIS_") and key not in _RESERVED_ENV_VARS:
             # Convert ELSPAIS_PATTERNS_PREFIX to patterns.prefix
             # Single _ = section separator, __ = literal underscore in key
             # e.g., ELSPAIS_VALIDATION_STRICT__HIERARCHY -> validation.strict_hierarchy

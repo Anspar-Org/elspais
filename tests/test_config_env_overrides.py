@@ -121,3 +121,70 @@ class TestApplyEnvOverridesWithParsing:
         assert result["associates_paths"] == ["/repo"]
         # Must NOT create an empty-string section key (the old bug)
         assert "" not in result
+
+
+class TestReservedEnvVarsSkipped:
+    """Validates REQ-p00005-C: tool-reserved env vars (e.g. ELSPAIS_VERSION)
+    must NOT be consumed as config overrides.
+
+    Regression: ELSPAIS_VERSION is used by utilities/version_check.py to pin the
+    minimum elspais CLI version (often set in downstream pre-commit hooks).
+    Treating it as a config override collided with the config's top-level
+    integer `version` field (schema format version), producing a misleading
+    Pydantic validation error against ``.elspais.toml``.
+    """
+
+    def test_REQ_p00005_C_elspais_version_not_applied_as_override(self, monkeypatch):
+        """ELSPAIS_VERSION env var does NOT override config['version']."""
+        from elspais.config import _apply_env_overrides
+
+        monkeypatch.setenv("ELSPAIS_VERSION", "0.112.13")
+        config = {"version": 4}
+        result = _apply_env_overrides(config)
+        # Must preserve the int schema version, not overwrite with version-string.
+        assert result["version"] == 4
+        assert isinstance(result["version"], int)
+
+    def test_REQ_p00005_C_non_reserved_override_still_applies(self, monkeypatch):
+        """Non-reserved ELSPAIS_* vars are still applied (guard against over-reservation)."""
+        from elspais.config import _apply_env_overrides
+
+        monkeypatch.setenv("ELSPAIS_PATTERNS_PREFIX", "MYREQ")
+        config = {"patterns": {"prefix": "REQ"}}
+        result = _apply_env_overrides(config)
+        assert result["patterns"]["prefix"] == "MYREQ"
+
+    def test_REQ_p00005_C_reserved_and_regular_env_vars_together(self, monkeypatch):
+        """With both set: version stays intact AND non-reserved override still applies."""
+        from elspais.config import _apply_env_overrides
+
+        monkeypatch.setenv("ELSPAIS_VERSION", "0.112.13")
+        monkeypatch.setenv("ELSPAIS_PATTERNS_PREFIX", "MYREQ")
+        config = {"version": 4, "patterns": {"prefix": "REQ"}}
+        result = _apply_env_overrides(config)
+        assert result["version"] == 4
+        assert isinstance(result["version"], int)
+        assert result["patterns"]["prefix"] == "MYREQ"
+
+    def test_REQ_p00005_C_load_config_survives_elspais_version_env(self, monkeypatch, tmp_path):
+        """End-to-end: load_config() must not fail Pydantic validation when
+        ELSPAIS_VERSION is set in the environment. This is the exact user-facing
+        scenario: a pre-commit hook sets ELSPAIS_VERSION=0.112.13, and elspais
+        is invoked against a project whose .elspais.toml declares `version = 4`.
+        Before the fix, this raised:
+            invalid literal for int() with base 10: '0.112.13'
+        """
+        from elspais.config import load_config
+
+        config_path = tmp_path / ".elspais.toml"
+        config_path.write_text(
+            "version = 4\n" "\n" "[scanning.spec]\n" 'directories = ["spec"]\n',
+            encoding="utf-8",
+        )
+
+        monkeypatch.setenv("ELSPAIS_VERSION", "0.112.13")
+
+        # Should not raise.
+        config = load_config(config_path)
+        assert config["version"] == 4
+        assert isinstance(config["version"], int)
