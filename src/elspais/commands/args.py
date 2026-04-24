@@ -779,7 +779,7 @@ class McpServeArgs:
 class McpInstallArgs:
     """Register elspais MCP server with Claude Code."""
 
-    global_scope: bool = False
+    global_scope: Annotated[bool, tyro.conf.arg(name="global")] = False
     """Install for all projects (user scope)."""
 
     desktop: bool = False
@@ -790,7 +790,7 @@ class McpInstallArgs:
 class McpUninstallArgs:
     """Remove elspais MCP server from Claude Code."""
 
-    global_scope: bool = False
+    global_scope: Annotated[bool, tyro.conf.arg(name="global")] = False
     """Remove from user scope."""
 
     desktop: bool = False

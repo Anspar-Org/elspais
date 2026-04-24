@@ -171,10 +171,10 @@ class TestCliArgsDataclasses:
         assert result.command.action.transport == "stdio"
 
     def test_REQ_p00001_A_tyro_parses_mcp_install(self) -> None:
-        """Tyro parses 'mcp install --global-scope'."""
+        """Tyro parses 'mcp install --global' (maps to global_scope field)."""
         result = tyro.cli(
             GlobalArgs,
-            args=["mcp", "install", "--global-scope"],
+            args=["mcp", "install", "--global"],
         )
         assert isinstance(result.command, McpArgs)
         assert isinstance(result.command.action, McpInstallArgs)
