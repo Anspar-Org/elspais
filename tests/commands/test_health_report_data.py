@@ -9,6 +9,7 @@ summary line, and hint string.
 from __future__ import annotations
 
 from elspais.commands.health import (
+    _FOLLOWUP_COMMANDS,
     HealthCheck,
     HealthReport,
     _build_hint,
@@ -241,6 +242,95 @@ class TestBuildHint:
         )
         hint = _build_hint(report, already_verbose=False)
         assert hint is None
+
+
+def _checks_cli_flags() -> set[str]:
+    """Flags accepted by `elspais checks`, derived from ChecksArgs metadata."""
+    import dataclasses
+    import typing
+
+    from elspais.commands.args import ChecksArgs
+
+    flags: set[str] = {"-h", "--help"}
+    hints = typing.get_type_hints(ChecksArgs, include_extras=True)
+    for field in dataclasses.fields(ChecksArgs):
+        t = hints[field.name]
+        arg_name = field.name.replace("_", "-")
+        aliases: tuple[str, ...] = ()
+        if hasattr(t, "__metadata__"):
+            for meta in typing.get_args(t)[1:]:
+                if hasattr(meta, "name") and meta.name:
+                    arg_name = meta.name
+                if hasattr(meta, "aliases") and meta.aliases:
+                    aliases = meta.aliases
+        flags.add(f"--{arg_name}")
+        if field.type is bool or field.type == "bool":
+            flags.add(f"--no-{arg_name}")
+        flags.update(aliases)
+    return flags
+
+
+class TestFollowupCommandsAreValid:
+    """Regression: hints in _FOLLOWUP_COMMANDS must use real CLI flags.
+
+    Commit c04d237 added `--terms` to hints for terms.* checks but never
+    added the corresponding flag to ChecksArgs, so every hint referencing
+    `--terms` produced an "Unrecognized options" error when users ran it.
+    """
+
+    def test_followup_checks_flags_are_real(self) -> None:
+        import shlex
+
+        valid = _checks_cli_flags()
+        for name, cmd in _FOLLOWUP_COMMANDS.items():
+            tokens = shlex.split(cmd)
+            if tokens[:2] != ["elspais", "checks"]:
+                continue
+            for tok in tokens[2:]:
+                if tok.startswith("-"):
+                    assert tok in valid, (
+                        f"_FOLLOWUP_COMMANDS[{name!r}] uses unknown flag {tok!r} "
+                        f"in {cmd!r}; known flags: {sorted(valid)}"
+                    )
+
+    def test_build_hint_uses_real_flags(self) -> None:
+        """_build_hint output for each single-category failure is a valid CLI invocation."""
+        import shlex
+
+        valid = _checks_cli_flags()
+        for category in ("spec", "code", "tests", "uat", "terms", "config"):
+            report = HealthReport()
+            report.add(
+                HealthCheck(
+                    name=f"{category}.x",
+                    passed=False,
+                    message="fail",
+                    category=category,
+                    severity="error",
+                )
+            )
+            hint = _build_hint(report, already_verbose=False)
+            assert hint is not None
+            # Extract each `elspais ...` invocation from the hint text and
+            # verify every flag on `elspais checks` lines is real.
+            for line in hint.split("\n"):
+                # Pull the quoted command string(s) out of the hint line
+                for quoted in shlex.split(line, posix=True):
+                    if not quoted.startswith("elspais "):
+                        continue
+                    tokens = shlex.split(quoted)
+                    if tokens[:2] != ["elspais", "checks"] and tokens[:3] != [
+                        "elspais",
+                        "-v",
+                        "checks",
+                    ]:
+                        continue
+                    for tok in tokens:
+                        if tok.startswith("--"):
+                            assert tok in valid, (
+                                f"_build_hint for category {category!r} uses "
+                                f"unknown flag {tok!r} in {quoted!r}"
+                            )
 
 
 class TestRenderText:

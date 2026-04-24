@@ -145,6 +145,15 @@ class TestHealthScopeFlags:
         result = run_elspais("checks", "--tests", "--lenient", cwd=project)
         assert result.returncode == 0
 
+    def test_health_terms_only(self, project):
+        result = run_elspais("checks", "--terms", "--lenient", "--format", "json", cwd=project)
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        categories = {c["category"] for c in data["checks"]}
+        assert categories == {
+            "terms"
+        }, f"--terms should produce only terms-category checks, got {categories}"
+
 
 class TestSummaryCounts:
     """Summary command counts requirements correctly."""

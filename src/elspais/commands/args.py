@@ -34,6 +34,9 @@ class ChecksArgs:
     tests_only: Annotated[bool, tyro.conf.arg(name="tests")] = False
     """Run test mapping checks only."""
 
+    terms_only: Annotated[bool, tyro.conf.arg(name="terms")] = False
+    """Run defined-term checks only."""
+
     format: Literal["text", "markdown", "json", "junit", "sarif"] = "text"
     """Output format."""
 
