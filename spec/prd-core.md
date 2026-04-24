@@ -262,15 +262,16 @@ E. `TermRef` SHALL have a `wrong_marking` field (str, default "") that records t
 
 ## Assertions
 
-A. The grammar SHALL include a `DEF_LINE` terminal matching `: ` followed by non-newline text, and a `definition_block` rule matching `TEXT _NL (DEF_LINE _NL)+`. The `definition_block` rule SHALL be an alternative in `_item`, `preamble_line`, `content_line`, `jny_body_line`, and `jny_content_line` but NOT in `assertion_item` or `changelog_block`.
+A. The grammar SHALL include a `DEF_LINE` terminal matching `: ` followed by non-newline text, a `CONT_LINE` terminal matching two or more leading spaces followed by non-newline text, and a `definition_block` rule matching `TEXT _NL (DEF_LINE _NL (CONT_LINE _NL)*)+`. Continuation lines SHALL attach to the preceding `DEF_LINE` and be joined with a newline before metadata classification. The `definition_block` rule SHALL be an alternative in `_item`, `preamble_line`, `content_line`, `jny_body_line`, and `jny_content_line` but NOT in `assertion_item` or `changelog_block`.
 
 B. The transformer SHALL handle `definition_block` nodes by extracting the term name from the TEXT token, definition text from DEF_LINE tokens, and metadata flags (Collection, Indexed) from definition lines. It SHALL return a `ParsedContent` with `content_type="definition_block"` and parsed_data containing `term`, `definition`, `collection`, and `indexed` fields.
 
 ## Changelog
 
+- 2026-04-24 | 6adaa258 | - | Developer (dev@example.com) | Auto-fix: update hash
 - 2026-04-23 | 078ce203 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
-*End* *Grammar Extension for Definition Blocks* | **Hash**: 078ce203
+*End* *Grammar Extension for Definition Blocks* | **Hash**: 6adaa258
 
 ## REQ-d00222: TraceGraph Terms and GraphBuilder Integration
 
@@ -444,7 +445,7 @@ B. Each repo's scan SHALL use its own config for `markup_styles` and `exclude_fi
 
 A. `check_term_unused(entries, severity)` SHALL return a `HealthCheck` reporting defined terms with zero references. Default severity: `"warning"`. When `severity="off"`, return passed/info.
 
-B. `check_term_bad_definition(entries, severity)` SHALL return a `HealthCheck` reporting terms with blank or trivially short (less than 10 characters) definition text. Default severity: `"error"`. When `severity="off"`, return passed/info.
+B. `check_term_bad_definition(entries, severity)` SHALL return a `HealthCheck` reporting terms with blank or trivially short (less than 10 characters) definition text. Default severity: `"error"`. When `severity="off"`, return passed/info. Reference-type terms (`is_reference=True`) SHALL be exempted from this check because their content lives in structured `reference_fields` instead of prose.
 
 C. `check_term_collection_empty(entries, severity)` SHALL return a `HealthCheck` reporting collection terms (`collection=True`) with zero references. Default severity: `"warning"`. When `severity="off"`, return passed/info.
 
@@ -452,9 +453,10 @@ D. `run_term_checks()` SHALL call all six term checks (`duplicates`, `undefined`
 
 ## Changelog
 
+- 2026-04-24 | 76a49db3 | - | Developer (dev@example.com) | Auto-fix: update hash
 - 2026-03-29 | 9788814d | - | Michael Lewis (michael@anspar.org) | Initial creation
 
-*End* *New Term Health Checks* | **Hash**: 9788814d
+*End* *New Term Health Checks* | **Hash**: 76a49db3
 
 ## REQ-d00241: Code No-Traceability Health Check
 

@@ -287,6 +287,55 @@ def _render_remainder(node: GraphNode) -> str:
     return node.get_field("text") or ""
 
 
+# Implements: REQ-d00221-A
+def format_definition_block(data: dict[str, Any]) -> str:
+    """Format a parsed definition-block dict back to canonical markdown.
+
+    Produces a definition list with:
+    - Term on its own line
+    - First prose line prefixed with ": "
+    - Continuation lines of the same prose entry prefixed with "  " (2 spaces)
+    - Metadata entries (collection, indexed, reference fields, synonyms)
+      re-emitted as their own ": " lines after the prose
+
+    Canonical form — always 2-space hanging indent.
+    """
+    term = (data.get("term") or "").strip()
+    definition = data.get("definition") or ""
+    lines: list[str] = [term]
+
+    if definition:
+        prose_lines = definition.split("\n")
+        first = prose_lines[0]
+        lines.append(f": {first}")
+        for cont in prose_lines[1:]:
+            lines.append(f"  {cont}")
+
+    if data.get("collection"):
+        lines.append(": Collection: true")
+    if data.get("indexed") is False:
+        lines.append(": Indexed: false")
+    if data.get("is_reference"):
+        lines.append(": Reference")
+
+    ref_fields = data.get("reference_fields") or {}
+    if "title" in ref_fields:
+        lines.append(f": Title: {ref_fields['title']}")
+    if "version" in ref_fields:
+        lines.append(f": Version: {ref_fields['version']}")
+    if "effective_date" in ref_fields:
+        lines.append(f": Effective Date: {ref_fields['effective_date']}")
+    if "url" in ref_fields:
+        lines.append(f": URL: <{ref_fields['url']}>")
+
+    if data.get("reference_term"):
+        lines.append(f": Reference Term: __{data['reference_term']}__")
+    if data.get("reference_source"):
+        lines.append(f": Reference Source: **{data['reference_source']}**")
+
+    return "\n".join(lines)
+
+
 # Implements: REQ-d00131-E
 def _render_journey(node: GraphNode) -> str:
     """Render a USER_JOURNEY node back to its full block.

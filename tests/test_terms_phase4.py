@@ -525,6 +525,31 @@ class TestDefinitionChangeTracking:
         h2 = compute_definition_hash("", reference_fields={"url": "https://b.com"})
         assert h1 != h2
 
+    def test_compute_definition_hash_canonicalizes_trailing_whitespace(self):
+        """Trailing whitespace on a line does not flip the hash."""
+        from elspais.graph.terms import compute_definition_hash
+
+        assert compute_definition_hash("foo   \nbar") == compute_definition_hash("foo\nbar")
+
+    def test_compute_definition_hash_collapses_blank_line_runs(self):
+        """Runs of blank lines collapse to a single blank line for hashing."""
+        from elspais.graph.terms import compute_definition_hash
+
+        assert compute_definition_hash("foo\n\n\n\nbar") == compute_definition_hash("foo\n\nbar")
+
+    def test_compute_definition_hash_strips_outer_whitespace(self):
+        """Leading/trailing blank lines on the block are stripped before hashing."""
+        from elspais.graph.terms import compute_definition_hash
+
+        assert compute_definition_hash("\n\nfoo\n\n") == compute_definition_hash("foo")
+
+    def test_compute_definition_hash_preserves_internal_content(self):
+        """Intra-line whitespace runs are NOT collapsed — semantic differences preserved."""
+        from elspais.graph.terms import compute_definition_hash
+
+        # Two spaces vs one space inside a line must produce different hashes.
+        assert compute_definition_hash("foo bar") != compute_definition_hash("foo  bar")
+
     def test_builder_populates_definition_hash(self):
         builder = GraphBuilder(repo_root=Path("/test/repo"))
         content = _make_definition_block("Audit Trail", "A chronological record.")

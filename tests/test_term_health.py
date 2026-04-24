@@ -318,6 +318,56 @@ class TestCheckTermBadDefinition:
         assert result.passed is True
         assert result.severity == "info"
 
+    # Implements: REQ-d00240-B
+    def test_REQ_d00240_B_exempts_reference_type(self):
+        """Reference-type terms are exempt: empty prose definition is expected."""
+        entries = [
+            TermEntry(
+                term="ISO/IEC 24760-1",
+                definition="",
+                is_reference=True,
+                reference_fields={
+                    "title": "IT Security and Privacy",
+                    "version": "ISO/IEC 24760-1:2019",
+                    "url": "https://www.iso.org",
+                },
+                defined_in="REQ-p00001",
+                defined_at_line=5,
+                namespace="REQ",
+            ),
+        ]
+
+        result = check_term_bad_definition(entries)
+
+        assert isinstance(result, HealthCheck)
+        assert result.name == "terms.bad_definition"
+        assert result.passed is True
+        assert len(result.findings) == 0
+
+    # Implements: REQ-d00240-B
+    def test_REQ_d00240_B_non_reference_with_empty_still_fails(self):
+        """Non-reference term with empty definition still produces a finding.
+
+        Sanity check: the reference-type exemption must NOT affect regular terms.
+        """
+        entries = [
+            TermEntry(
+                term="Regular Empty",
+                definition="",
+                is_reference=False,
+                defined_in="REQ-p00001",
+                defined_at_line=7,
+                namespace="REQ",
+            ),
+        ]
+
+        result = check_term_bad_definition(entries)
+
+        assert isinstance(result, HealthCheck)
+        assert result.passed is False
+        assert len(result.findings) == 1
+        assert "Regular Empty" in result.findings[0].message
+
 
 class TestCheckTermCollectionEmpty:
     """Validates REQ-d00240-C: empty collection term detection."""

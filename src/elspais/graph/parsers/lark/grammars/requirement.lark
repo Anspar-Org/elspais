@@ -110,7 +110,7 @@ jny_footer: JNY_END_MARKER _NL?
 // Definition blocks (Markdown definition list syntax)
 // ===================================================================
 
-definition_block: TEXT _NL (DEF_LINE _NL)+
+definition_block: TEXT _NL (DEF_LINE _NL (CONT_LINE _NL)*)+
 
 // ===================================================================
 // Stray markers / remainder
@@ -177,6 +177,7 @@ ASSERT_CONT.2: /[^\n]+/
 // --- Definition continuation line (higher priority than TEXT) ---
 // Implements: REQ-d00221-A
 DEF_LINE.3: /: [^\n]+/
+CONT_LINE.3: /  [^\n]+/
 
 // --- Generic text (lowest priority -- catch-all) ---
 

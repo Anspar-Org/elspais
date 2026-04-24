@@ -31,6 +31,7 @@ from elspais.graph.GraphNode import (
 from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.relations import EdgeKind, Stereotype
+from elspais.graph.render import format_definition_block
 from elspais.graph.terms import TermDictionary, TermEntry, compute_definition_hash
 from elspais.utilities.patterns import INSTANCE_SEPARATOR
 from elspais.utilities.test_identity import build_test_id
@@ -3154,7 +3155,7 @@ class GraphBuilder:
                 label=defn.get("term", ""),
             )
             def_node._content = {
-                "text": f"{defn.get('term', '')}\n: {defn.get('definition', '')}",
+                "text": format_definition_block(defn),
                 "content_type": "definition_block",
                 "term": defn.get("term", ""),
                 "definition": defn.get("definition", ""),

@@ -1394,6 +1394,10 @@ def check_term_bad_definition(
 
     findings = []
     for entry in entries:
+        # Reference-type terms store structured metadata (Title, Version,
+        # URL, ...) instead of prose; an empty prose definition is expected.
+        if getattr(entry, "is_reference", False):
+            continue
         stripped = entry.definition.strip() if entry.definition else ""
         if len(stripped) < _MIN_DEFINITION_LENGTH:
             findings.append(

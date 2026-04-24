@@ -588,8 +588,13 @@ class RequirementTransformer:
     def _extract_definition_block(self, node: Tree) -> dict[str, Any] | None:
         """Extract term, definition, and metadata from a definition_block node.
 
-        The grammar rule is: definition_block: TEXT _NL (DEF_LINE _NL)+
-        DEF_LINE tokens match ": <text>" lines.
+        The grammar rule is:
+            definition_block: TEXT _NL (DEF_LINE _NL (CONT_LINE _NL)*)+
+
+        DEF_LINE tokens match ": <text>" lines; CONT_LINE tokens match
+        indented continuation lines (2+ leading spaces, no `:`). Continuation
+        lines attach to the preceding DEF_LINE and are joined with a newline
+        before metadata classification.
         """
         term_name: str | None = None
         def_lines: list[str] = []
@@ -601,56 +606,69 @@ class RequirementTransformer:
         reference_source = ""
         start_line = 0
 
+        # First pass: group DEF_LINE + its following CONT_LINEs into entries.
+        entries: list[str] = []
+        current_parts: list[str] | None = None
         for child in node.children:
-            if isinstance(child, Token):
-                if child.type == "TEXT":
-                    term_name = str(child).strip()
-                    start_line = child.line  # type: ignore[attr-defined]
-                elif child.type == "DEF_LINE":
-                    # Strip leading ": " from the definition line
-                    line_text = str(child)
-                    if line_text.startswith(": "):
-                        line_text = line_text[2:]
-                    elif line_text.startswith(":"):
-                        line_text = line_text[1:].lstrip()
+            if not isinstance(child, Token):
+                continue
+            if child.type == "TEXT":
+                term_name = str(child).strip()
+                start_line = child.line  # type: ignore[attr-defined]
+            elif child.type == "DEF_LINE":
+                if current_parts is not None:
+                    entries.append("\n".join(current_parts))
+                line_text = str(child)
+                if line_text.startswith(": "):
+                    line_text = line_text[2:]
+                elif line_text.startswith(":"):
+                    line_text = line_text[1:].lstrip()
+                current_parts = [line_text]
+            elif child.type == "CONT_LINE":
+                if current_parts is None:
+                    continue
+                cont_text = str(child)
+                if cont_text.startswith("  "):
+                    cont_text = cont_text[2:]
+                current_parts.append(cont_text)
+        if current_parts is not None:
+            entries.append("\n".join(current_parts))
 
-                    # Check for metadata flags
-                    stripped = line_text.strip()
-                    low = stripped.lower()
-                    if low == "collection: true":
-                        collection = True
-                    elif low == "collection: false":
-                        collection = False
-                    elif low == "indexed: true":
-                        indexed = True
-                    elif low == "indexed: false":
-                        indexed = False
-                    # Reference-type marker
-                    elif low == "reference":
-                        is_reference = True
-                    # Structured citation fields
-                    elif low.startswith("title:"):
-                        reference_fields["title"] = stripped[6:].strip()
-                    elif low.startswith("version:"):
-                        reference_fields["version"] = stripped[8:].strip()
-                    elif low.startswith("effective date:"):
-                        reference_fields["effective_date"] = stripped[15:].strip()
-                    elif low.startswith("url:"):
-                        url_val = stripped[4:].strip()
-                        if url_val.startswith("<") and url_val.endswith(">"):
-                            url_val = url_val[1:-1]
-                        reference_fields["url"] = url_val
-                    # Synonym/alias metadata
-                    elif low.startswith("reference term:"):
-                        val = stripped[15:].strip()
-                        val = val.strip("_").strip("*")
-                        reference_term = val
-                    elif low.startswith("reference source:"):
-                        val = stripped[17:].strip()
-                        val = val.strip("_").strip("*")
-                        reference_source = val
-                    else:
-                        def_lines.append(line_text)
+        # Second pass: classify each entry as metadata or definition prose.
+        for entry_text in entries:
+            stripped = entry_text.strip()
+            low = stripped.lower()
+            if low == "collection: true":
+                collection = True
+            elif low == "collection: false":
+                collection = False
+            elif low == "indexed: true":
+                indexed = True
+            elif low == "indexed: false":
+                indexed = False
+            elif low == "reference":
+                is_reference = True
+            elif low.startswith("title:"):
+                reference_fields["title"] = stripped[6:].strip()
+            elif low.startswith("version:"):
+                reference_fields["version"] = stripped[8:].strip()
+            elif low.startswith("effective date:"):
+                reference_fields["effective_date"] = stripped[15:].strip()
+            elif low.startswith("url:"):
+                url_val = stripped[4:].strip()
+                if url_val.startswith("<") and url_val.endswith(">"):
+                    url_val = url_val[1:-1]
+                reference_fields["url"] = url_val
+            elif low.startswith("reference term:"):
+                val = stripped[15:].strip()
+                val = val.strip("_").strip("*")
+                reference_term = val
+            elif low.startswith("reference source:"):
+                val = stripped[17:].strip()
+                val = val.strip("_").strip("*")
+                reference_source = val
+            else:
+                def_lines.append(entry_text)
 
         if not term_name:
             return None
