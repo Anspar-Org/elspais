@@ -53,6 +53,10 @@ I. Archive endpoints SHALL support:
 
 J. Health check endpoint SHALL be available at `/api/health`.
 
+## Changelog
+
+- 2026-04-23 | b647ec64 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Review API Server* | **Hash**: b647ec64
 
 ---
@@ -76,5 +80,9 @@ D. Staleness info SHALL be informational only and SHALL NOT affect build or heal
 ## Rationale
 
 Multi-repo federation users need visibility into which repos are current and which are behind their remotes. The viewer/server surfaces this as informational metadata without gating builds on it.
+
+## Changelog
+
+- 2026-04-23 | b4fae1d0 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Server Federation and Staleness* | **Hash**: b4fae1d0

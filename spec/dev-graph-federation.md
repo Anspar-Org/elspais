@@ -28,6 +28,10 @@ H. iter_repos() SHALL yield all RepoEntry objects including error-state repos.
 
 FederatedGraph provides config isolation for multi-repo builds while presenting a unified API to consumers. The federation-of-one pattern ensures all code paths go through FederatedGraph, preventing accidental direct TraceGraph usage. Error-state repos (missing associates) are represented in the federation but skipped during aggregation, preserving graceful degradation.
 
+## Changelog
+
+- 2026-04-23 | 72471144 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *FederatedGraph Read-Only Delegation* | **Hash**: 72471144
 ---
 
@@ -57,6 +61,10 @@ G. clone() SHALL perform federation-aware deep copy: deep-copy each sub-graph in
 
 Mutation delegation preserves TraceGraph's existing mutation+undo logic while adding federation awareness. The lightweight federated log avoids duplicating MutationEntry data. Ownership tracking ensures by_id lookups remain O(1) after mutations.
 
+## Changelog
+
+- 2026-04-23 | 1a0942a4 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *FederatedGraph Mutation Delegation* | **Hash**: 1a0942a4
 ---
 
@@ -79,6 +87,10 @@ D. Associates declaring their own `[associates]` section SHALL be a hard error: 
 ## Rationale
 
 Associates are declared in the root repo's `.elspais.toml` using a structured TOML section. Each associate specifies a relative filesystem path and optional git remote URL. Transitive federation (associates of associates) is disallowed to keep the topology simple and predictable.
+
+## Changelog
+
+- 2026-04-23 | 479dcbb8 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Associates Config Loading* | **Hash**: 479dcbb8
 ---
@@ -104,6 +116,10 @@ E. The root repo and all valid associates SHALL be combined into a single `Feder
 ## Rationale
 
 Per-repo building ensures config isolation: each repo's hierarchy rules, format rules, and hash mode apply only to its own nodes. Error-state entries preserve visibility of missing associates in health reports without blocking the build.
+
+## Changelog
+
+- 2026-04-23 | 31e019a1 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Multi-Repo Build Pipeline* | **Hash**: 31e019a1
 ---
@@ -131,6 +147,10 @@ F. `run_spec_checks` SHALL accept a `FederatedGraph` and iterate `iter_repos()` 
 ## Rationale
 
 Without per-repo delegation, all nodes are validated against the root repo's config. When repos have different hierarchy rules, format rules, or changelog policies, this produces false positives (root config rejects valid associate nodes) or false negatives (root config allows invalid associate nodes). Per-repo delegation ensures each repo is validated by its own rules.
+
+## Changelog
+
+- 2026-04-23 | 2313140d | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Per-Repo Health Check Delegation* | **Hash**: 2313140d
 ---

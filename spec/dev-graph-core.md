@@ -22,6 +22,10 @@ E. Annotator functions SHALL be idempotent - calling twice produces same result.
 
 Per-node annotators enable fine-grained control over which annotations are applied and when.
 
+## Changelog
+
+- 2026-04-23 | 8ca0389e | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Node Annotator Functions* | **Hash**: 8ca0389e
 ---
 
@@ -48,6 +52,10 @@ F. Aggregate functions SHALL NOT duplicate iteration - they SHALL use graph.all_
 ## Rationale
 
 Aggregate functions provide reusable statistics computation that any output format can use.
+
+## Changelog
+
+- 2026-04-23 | 97c0f6fc | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Graph Aggregate Functions* | **Hash**: 97c0f6fc
 ---
@@ -78,6 +86,10 @@ G. All file write operations in output commands SHALL specify explicit `encoding
 
 Direct graph consumption eliminates data structure conversion overhead and ensures consistency.
 
+## Changelog
+
+- 2026-04-23 | a3575fcc | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Output Generators Consume Graph Directly* | **Hash**: a3575fcc
 ---
 
@@ -94,6 +106,10 @@ A. The pipeline SHALL be: parse -> build graph -> annotate nodes -> generate out
 ## Rationale
 
 A standard pipeline ensures consistent annotation across all output formats and simplifies debugging.
+
+## Changelog
+
+- 2026-04-23 | 0256df47 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Annotation Pipeline Pattern* | **Hash**: 0256df47
 ---
@@ -119,6 +135,10 @@ E. Custom metrics MAY be added by specific annotators without modifying TraceNod
 ## Rationale
 
 Using metrics dict as the extension point enables adding new annotations without modifying the core TraceNode dataclass.
+
+## Changelog
+
+- 2026-04-23 | 0073a9c3 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Node Metrics as Extension Point* | **Hash**: 0073a9c3
 ---
@@ -284,5 +304,9 @@ D. The clone SHALL preserve the root set, maintaining iteration equivalence with
 E. The clone SHALL preserve graph-level metadata such as repository root.
 
 F. The clone SHALL handle DAG structures with multiple parents without infinite recursion.
+
+## Changelog
+
+- 2026-04-23 | a007d5ed | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *TraceGraph Deep Clone* | **Hash**: a007d5ed

@@ -306,6 +306,10 @@ directories = ["spec"]
 
 [rules.format]
 no_assertions_severity = "info"
+
+[changelog]
+hash_current = false
+present = false
 """
         )
 

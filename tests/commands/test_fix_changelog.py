@@ -274,3 +274,77 @@ A. The system SHALL do X.
 
         # Hash should remain correct (not changed)
         assert correct_hash in content
+
+    @patch("elspais.utilities.git.get_author_info", return_value=MOCK_AUTHOR)
+    def test_REQ_p00004_A_batch_fix_persists_missing_changelog(self, mock_author, tmp_path: Path):
+        """``elspais fix`` (batch mode, no req_id) must actually write
+        changelog sections to disk for Active reqs that lack them.
+
+        Regression guard: ``_fix_parse_dirty`` used to exclude
+        ``missing_changelog``-only nodes from the autofix changelog path,
+        so fix would log "Fixing REQ-X: add missing changelog section"
+        and "Rewrote <file>" but the file content was byte-identical
+        (render_save wrote the graph state, which had no changelog entry
+        because no code path added one).
+        """
+        from elspais.commands.fix_cmd import run
+        from elspais.graph import NodeKind
+        from elspais.graph.factory import build_graph
+        from elspais.graph.render import compute_hash_for_node
+
+        project = _make_project(tmp_path, ACTIVE_REQ_STALE_HASH)
+
+        # Put the req in a state where the ONLY fixable reason is
+        # missing_changelog — correct hash, no changelog section.
+        graph = build_graph(
+            spec_dirs=[project / "spec"],
+            config_path=project / ".elspais.toml",
+            repo_root=project,
+            scan_code=False,
+            scan_tests=False,
+        )
+        hash_mode = getattr(graph, "hash_mode", "full-text")
+        node = next(n for n in graph.nodes_by_kind(NodeKind.REQUIREMENT) if n.id == "REQ-d00001")
+        correct_hash = compute_hash_for_node(node, hash_mode)
+
+        (project / "spec" / "requirements.md").write_text(
+            f"""\
+# REQ-d00001: Test Req
+
+**Level**: DEV | **Status**: Active | **Implements**: -
+
+## Assertions
+
+A. The system SHALL do X.
+
+*End* *Test Req* | **Hash**: {correct_hash}
+---
+"""
+        )
+
+        # Run batch fix (no req_id on args)
+        args = argparse.Namespace(
+            req_id=None,
+            dry_run=False,
+            spec_dir=project / "spec",
+            config=project / ".elspais.toml",
+            verbose=False,
+            quiet=False,
+            git_root=project,
+        )
+
+        old_cwd = os.getcwd()
+        os.chdir(project)
+        try:
+            result = run(args)
+        finally:
+            os.chdir(old_cwd)
+
+        assert result == 0
+
+        content = (project / "spec" / "requirements.md").read_text()
+        assert "## Changelog" in content, (
+            "Batch fix must write the missing Changelog section to disk; "
+            f"content was:\n{content}"
+        )
+        assert correct_hash in content

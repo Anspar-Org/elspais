@@ -156,6 +156,10 @@ Multiple data structures lead to synchronization bugs, duplicated logic, and mai
 - Centralized metrics computation
 - Easier testing and debugging
 
+## Changelog
+
+- 2026-04-23 | 4a1e5d0b | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Unified Graph Architecture* | **Hash**: 4a1e5d0b
 ---
 
@@ -202,6 +206,10 @@ C. CommentThread SHALL be a mutable dataclass with root, replies, anchor, resolv
 
 D. CommentThread anchor SHALL default to the root event anchor when not explicitly provided.
 
+## Changelog
+
+- 2026-04-23 | dd5c745e | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Comment Data Models* | **Hash**: dd5c745e
 
 ## REQ-d00227: Comment Index
@@ -215,6 +223,10 @@ A. CommentIndex SHALL provide an iterator-only query API: iter_threads, thread_c
 B. CommentIndex iter_all_anchors_for_node SHALL match exact node_id and node_id#fragment patterns.
 
 C. CommentIndex SHALL support merge for federation following the TermDictionary pattern.
+
+## Changelog
+
+- 2026-04-23 | ff891bd9 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Comment Index* | **Hash**: ff891bd9
 
@@ -272,6 +284,10 @@ C. TraceGraph rename_node and rename_assertion SHALL call update_anchors_on_rena
 
 D. FederatedGraph SHALL provide a repo_root_for(node_id) public method that returns the repo root Path for write routing.
 
+## Changelog
+
+- 2026-04-23 | 0eed8546 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Comment Graph Integration* | **Hash**: 0eed8546
 
 ## REQ-d00231: Comment API Endpoints
@@ -289,6 +305,10 @@ C. POST /api/comment/resolve SHALL remove a thread from the in-memory index, per
 D. GET /api/comments SHALL return serialized threads for a given anchor. GET /api/comments/card SHALL return threads grouped by anchor for all anchors of a node. GET /api/comments/orphaned SHALL return all orphaned threads.
 
 E. Author identity SHALL be resolved server-side via get_author_info using the changelog.id_source config, never from client input.
+
+## Changelog
+
+- 2026-04-23 | b8533d82 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Comment API Endpoints* | **Hash**: b8533d82
 
@@ -318,6 +338,10 @@ A. Inline thread rendering SHALL display author, date, text, replies, and edit-m
 
 B. Comment mode SHALL be a one-shot mode entered via C key or toolbar button (Edit Mode required), showing a textarea on click, posting via /api/comment/add, then exiting.
 
+## Changelog
+
+- 2026-04-23 | 792d13ce | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Comment Inline Threads and Comment Mode* | **Hash**: 792d13ce
 
 ## REQ-d00234: Lost Comments Card
@@ -327,6 +351,10 @@ B. Comment mode SHALL be a one-shot mode entered via C key or toolbar button (Ed
 ## Assertions
 
 A. A Lost Comments card SHALL appear at the top of the card column when orphaned comments exist, fetched via /api/comments/orphaned on page load, showing original anchor context and edit-mode-only Resolve buttons.
+
+## Changelog
+
+- 2026-04-23 | 7fc99c6a | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Lost Comments Card* | **Hash**: 7fc99c6a
 
@@ -339,6 +367,10 @@ A. A Lost Comments card SHALL appear at the top of the card column when orphaned
 A. compact_file SHALL rewrite JSONL files stripping resolved threads entirely and collapsing promote chains to keep only the final promote event, returning the count of removed events.
 
 B. The elspais comments compact CLI command SHALL glob .elspais/comments/**/*.json, call compact_file on each, and report total events removed.
+
+## Changelog
+
+- 2026-04-23 | f3547362 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Comment Compaction CLI* | **Hash**: f3547362
 
@@ -354,6 +386,10 @@ B. GET /api/term/{term_key} SHALL return the full term detail including definiti
 
 C. GET /api/term/{nonexistent_key} SHALL return HTTP 404 with an error message.
 
+## Changelog
+
+- 2026-04-23 | 6c934e14 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Terms API Endpoints* | **Hash**: 6c934e14
 
 ## REQ-d00243: Terms Tab in Viewer Nav Tree
@@ -367,6 +403,10 @@ A. A Terms tab button with data-kind="terms" SHALL appear in the nav-tabs bar. s
 B. The Terms tab SHALL display a flat alphabetical list of terms with letter headings (A, B, C...). Each term row SHALL show the term name and a reference count badge. An empty TermDictionary SHALL show "No defined terms found".
 
 C. Expand/collapse buttons, tree/flat toggle, and filter groups (status, git, hierarchy, coverage) SHALL be hidden when the Terms tab is active. The text filter SHALL filter terms by name substring.
+
+## Changelog
+
+- 2026-04-23 | 3328f677 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Terms Tab in Viewer Nav Tree* | **Hash**: 3328f677
 
@@ -382,6 +422,10 @@ B. The references section SHALL group references by namespace, with each referen
 
 C. Term cards SHALL be read-only with no edit controls. The card SHALL be rendered via buildTermCardHtml() and wired into renderCardStack() via a kind === 'term' branch.
 
+## Changelog
+
+- 2026-04-23 | 5dd49a51 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Term Cards in Viewer Card Stack* | **Hash**: 5dd49a51
 
 ## REQ-d00245: Inline Term Highlighting in Viewer Cards
@@ -393,5 +437,9 @@ C. Term cards SHALL be read-only with no edit controls. The card SHALL be render
 A. simpleMarkdown(text, true) SHALL wrap defined terms in span elements with class "defined-term", data-term-key, and data-tip (truncated definition) attributes. Matching SHALL be longest-first, word-boundary anchored, and case-insensitive.
 
 B. Clicking a defined-term span SHALL open the term card via a delegated click handler on the card-stack-body. Hover SHALL show a truncated definition tooltip via the data-tip attribute. Term annotation SHALL NOT be applied inside term cards to prevent recursion.
+
+## Changelog
+
+- 2026-04-23 | 62a44ed3 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Inline Term Highlighting in Viewer Cards* | **Hash**: 62a44ed3

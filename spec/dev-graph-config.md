@@ -14,6 +14,10 @@ B. `ConfigLoader` class SHALL be removed; `load_config()` SHALL return a plain `
 
 C. All consumer code that references `ConfigLoader` (type annotations, imports, `.from_dict()`, `.get_raw()`, `.get()`) SHALL be updated to use plain dicts directly.
 
+## Changelog
+
+- 2026-04-23 | 8d323813 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Declarative Config Schema Cleanup* | **Hash**: 8d323813
 ---
 
@@ -30,6 +34,10 @@ A. `elspais config schema` SHALL output the JSON Schema to stdout (or to a file 
 B. A committed `src/elspais/config/elspais-schema.json` SHALL match the output of `ElspaisConfig.model_json_schema()`. A CI test SHALL verify this.
 
 C. The generated JSON Schema SHALL include `$schema` and `title` top-level keys.
+
+## Changelog
+
+- 2026-04-23 | 2b82ef02 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *JSON Schema Export for IDE Autocomplete* | **Hash**: 2b82ef02
 ---
@@ -50,6 +58,10 @@ C. The generated TOML SHALL include all sections present in the current hardcode
 
 D. The generated TOML SHALL include human-readable comments derived from Pydantic field descriptions or the current template comments.
 
+## Changelog
+
+- 2026-04-23 | 44aeb496 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Schema-Driven Init Template Generation* | **Hash**: 44aeb496
 ---
 
@@ -66,6 +78,10 @@ A. `elspais doctor` SHALL include a `docs.config_drift` health check that compar
 B. The drift detection SHALL report undocumented sections (in schema but not in docs) and stale sections (in docs but not in schema).
 
 C. The drift check SHALL pass when all schema sections are documented and no stale sections exist, and fail otherwise.
+
+## Changelog
+
+- 2026-04-23 | eb94434a | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Documentation Drift Detection* | **Hash**: eb94434a
 ---
@@ -85,6 +101,10 @@ B. The Flask template context SHALL include a `config_relationship_kinds` variab
 C. The Flask template context SHALL include a `config_statuses` variable containing allowed statuses from `ElspaisConfig.rules.format.allowed_statuses` when configured.
 
 D. `StatusRolesConfig` SHALL provide a `sort_by_role()` method that orders a list of status strings by role priority (active first, then provisional, aspirational, and retired last), preserving original order within each role group; unknown statuses SHALL be treated as active.
+
+## Changelog
+
+- 2026-04-23 | a9cc41d2 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Config-Driven Viewer UI Values* | **Hash**: a9cc41d2
 ---
