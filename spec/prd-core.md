@@ -28,6 +28,10 @@ C. The tool SHALL detect changes to requirements using content hashing and git i
 
 D. [DEPRECATED]
 
+## Changelog
+
+- 2026-04-23 | ce489de6 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Requirements Management Tool* | **Hash**: ce489de6
 ---
 
@@ -85,6 +89,10 @@ A. The tool SHALL generate *Traceability* matrices in Markdown, HTML, and CSV fo
 
 B. The tool SHALL derive *Traceability* from `Implements:` metadata without manual matrix maintenance.
 
+## Changelog
+
+- 2026-04-23 | 6a3a9426 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Traceability Matrix Generation* | **Hash**: 6a3a9426
 ---
 
@@ -129,6 +137,10 @@ I. The tool SHALL switch to an existing local or remote git branch, refusing if 
 
 J. The tool SHALL re-read configuration from disk when reloading the graph, ensuring branch switches with different configurations produce correct rebuilds.
 
+## Changelog
+
+- 2026-04-23 | f8ff5509 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Change Detection and Auditability* | **Hash**: f8ff5509
 ---
 
@@ -161,6 +173,10 @@ E. The project SHALL include MCP protocol tests that verify tool invocation, sea
 
 F. All tests marked `@pytest.mark.e2e` SHALL invoke the `elspais` CLI as a subprocess. Tests that call internal Python functions or submodules directly SHALL NOT be marked e2e; they are unit or integration tests.
 
+## Changelog
+
+- 2026-04-23 | 962216d8 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Automated Testing* | **Hash**: 962216d8
 ---
 
@@ -177,6 +193,10 @@ A. A child requirement that adds specificity, constraints, or commits to mechani
 B. `Implements:` and `Refines:` declarations apply to requirements only; code references and test nodes use their own linkage mechanisms.
 
 C. Multiple requirements MAY exist at the same Level each declaring a relationship to the same parent requirement.
+
+## Changelog
+
+- 2026-04-23 | fc1e85fe | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Requirement Decomposition Rules* | **Hash**: fc1e85fe
 ---
@@ -205,6 +225,10 @@ E. The tool SHALL insert page breaks before each requirement heading to ensure e
 
 F. The tool SHALL support an `--overview` flag that generates a stakeholder-oriented PDF containing only PRD-level requirements, with an optional `--max-depth` flag to limit core PRD graph depth while always including all associated-repo PRDs.
 
+## Changelog
+
+- 2026-04-23 | bfc0cadf | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Spec-to-PDF Compilation* | **Hash**: bfc0cadf
 ---
 
@@ -224,6 +248,10 @@ D. `TermDictionary.merge()` SHALL combine two dictionaries and return a list of 
 
 E. `TermRef` SHALL have a `wrong_marking` field (str, default "") that records the incorrect emphasis delimiter used (e.g., `"__"` when the configured markup_styles are `["*", "**"]`). When non-empty, `marked` SHALL be `False`.
 
+## Changelog
+
+- 2026-04-23 | 0d0fd97c | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *TermDictionary Data Model* | **Hash**: 0d0fd97c
 
 <!-- markdownlint-disable MD038 -->
@@ -237,6 +265,10 @@ E. `TermRef` SHALL have a `wrong_marking` field (str, default "") that records t
 A. The grammar SHALL include a `DEF_LINE` terminal matching `: ` followed by non-newline text, and a `definition_block` rule matching `TEXT _NL (DEF_LINE _NL)+`. The `definition_block` rule SHALL be an alternative in `_item`, `preamble_line`, `content_line`, `jny_body_line`, and `jny_content_line` but NOT in `assertion_item` or `changelog_block`.
 
 B. The transformer SHALL handle `definition_block` nodes by extracting the term name from the TEXT token, definition text from DEF_LINE tokens, and metadata flags (Collection, Indexed) from definition lines. It SHALL return a `ParsedContent` with `content_type="definition_block"` and parsed_data containing `term`, `definition`, `collection`, and `indexed` fields.
+
+## Changelog
+
+- 2026-04-23 | 078ce203 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Grammar Extension for Definition Blocks* | **Hash**: 078ce203
 
@@ -253,6 +285,10 @@ B. The `defined_in` field of each `TermEntry` SHALL point to the nearest REQUIRE
 C. `FederatedGraph` SHALL merge per-repo `_terms` dictionaries into a single federated `TermDictionary`, detecting cross-namespace duplicates.
 
 D. `GraphBuilder` SHALL accept a `namespace` parameter (str, default "") and set `TermEntry.namespace` from it during term creation.
+
+## Changelog
+
+- 2026-04-23 | 96b5223f | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *TraceGraph Terms and GraphBuilder Integration* | **Hash**: 96b5223f
 
@@ -274,6 +310,10 @@ E. A `run_term_checks(graph, config)` aggregator SHALL call `check_term_duplicat
 
 F. `check_unmarked_usage()` SHALL produce distinct messages for wrong-marking references (e.g., "Wrong markup for 'term' (uses __, should use configured style)") versus plain unmarked references (e.g., "Unmarked usage of 'term'").
 
+## Changelog
+
+- 2026-04-23 | 0d96cc34 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Term Health Checks* | **Hash**: 0d96cc34
 
 ## REQ-d00224: Glossary and Term Index Generators
@@ -290,6 +330,10 @@ C. `generate_collection_manifest()` SHALL produce a standalone manifest file per
 
 D. All generated files SHALL include an auto-generated header comment. Both `--format markdown` and `--format json` SHALL be supported.
 
+## Changelog
+
+- 2026-04-23 | f2da30fb | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Glossary and Term Index Generators* | **Hash**: f2da30fb
 
 ## REQ-d00225: CLI Registration for Glossary and Term Index
@@ -301,6 +345,10 @@ D. All generated files SHALL include an auto-generated header comment. Both `--f
 A. `GlossaryArgs` and `TermIndexArgs` dataclasses SHALL be defined in `commands/args.py` with `format` and `output_dir` fields. They SHALL be registered in the `Command` union and `_CMD_MAP`.
 
 B. `elspais fix` SHALL call glossary and term-index generation after existing fix operations when the graph has defined terms.
+
+## Changelog
+
+- 2026-04-23 | d18fc2c9 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *CLI Registration for Glossary and Term Index* | **Hash**: d18fc2c9
 
@@ -324,6 +372,10 @@ F. For markup languages (`.html`, `.xml`, `.svg`), the extractor SHALL extract `
 
 G. For file extensions with no known comment style, `extract_comments()` SHALL return an empty list.
 
+## Changelog
+
+- 2026-04-23 | 499123f1 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Comment Extraction Utilities* | **Hash**: 499123f1
 
 ## REQ-d00237: Term Reference Scanner Core
@@ -342,6 +394,10 @@ D. For terms with `indexed=True`, the scanner SHALL perform whole-word case-inse
 
 E. Terms with `indexed=False` SHALL be scanned for marked and wrong-marking references only; unmarked scanning SHALL be skipped.
 
+## Changelog
+
+- 2026-04-23 | 63cb874b | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Term Reference Scanner Core* | **Hash**: 63cb874b
 
 ## REQ-d00238: Graph-Wide Term Scan
@@ -358,6 +414,10 @@ C. CODE and TEST nodes SHALL be scanned via comment extraction only (not raw sou
 
 D. Files matching any `exclude_files` glob pattern SHALL be skipped during scanning.
 
+## Changelog
+
+- 2026-04-23 | d3a202d4 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Graph-Wide Term Scan* | **Hash**: d3a202d4
 
 ## REQ-d00239: Federated Graph Term Scanner Pass
@@ -369,6 +429,10 @@ D. Files matching any `exclude_files` glob pattern SHALL be skipped during scann
 A. After `FederatedGraph._merge_terms()`, the scanner SHALL run across all repos using the merged `TermDictionary` so that cross-repo term references resolve correctly.
 
 B. Each repo's scan SHALL use its own config for `markup_styles` and `exclude_files`.
+
+## Changelog
+
+- 2026-04-23 | 7d9a30c4 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Federated Graph Term Scanner Pass* | **Hash**: 7d9a30c4
 

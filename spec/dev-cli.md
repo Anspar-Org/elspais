@@ -24,6 +24,10 @@ Warnings represent real problems: missing paths, orphaned nodes, unresolved refe
 
 The previous `validate` command's responsibilities are absorbed by `health`. References to `validate` in assertions B and E now refer to the `health` command's spec-checking category.
 
+## Changelog
+
+- 2026-04-23 | ada92a29 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Diagnostic Command Exit Code Contract* | **Hash**: ada92a29
 ---
 
@@ -90,6 +94,10 @@ L. PytestJSONParser SHALL accept PatternConfig and ReferenceResolver for configu
 
 Different projects use different ID conventions, comment styles, and directory structures. A unified reference configuration allows all parsers to share the same configurable pattern matching, avoiding duplicated logic and ensuring consistent behavior across parser types.
 
+## Changelog
+
+- 2026-04-23 | 89956cd7 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Unified Reference Configuration* | **Hash**: 89956cd7
 ---
 
@@ -152,6 +160,10 @@ J. The `--format sarif` option SHALL render health findings as SARIF v2.1.0 JSON
 
 Report-producing commands (`health`, `trace`, `coverage`, `changed`) currently exist as independent subcommands with inconsistent format support. Composing a combined report (e.g. health + coverage for a CI PR comment) requires multiple invocations and manual concatenation. A composable system builds the graph once, renders each section, and produces unified output. The `--lenient` flag provides an escape hatch for workflows that want to observe warnings without gating on them.
 
+## Changelog
+
+- 2026-04-23 | 82d76f1a | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Unified Report Composition* | **Hash**: 82d76f1a
 ---
 
@@ -203,6 +215,10 @@ E. `--apply [--dry-run]` SHALL insert `# Implements:` comments into source files
 ## Rationale
 
 CLI exposure enables both interactive use and CI pipeline integration. JSON output mode supports tooling and scripting workflows.
+
+## Changelog
+
+- 2026-04-23 | 44fd54e9 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Link Suggestion CLI Command* | **Hash**: 44fd54e9
 ---
@@ -268,6 +284,10 @@ H. The JSON output SHALL serialize the full `FoundationReport` structure.
 
 A CLI command provides immediate visibility into which requirements are most foundational, enabling project planning without requiring MCP or viewer integration.
 
+## Changelog
+
+- 2026-04-23 | 3cd66dbe | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Analysis CLI Command* | **Hash**: 3cd66dbe
 ---
 
@@ -289,6 +309,10 @@ E. The tool SHALL query the package index for the latest published version, retu
 
 F. The tool SHALL compare local vs. remote versions and report whether the installation is up-to-date, an update is available (with upgrade instructions), or the check failed (silently suppressed).
 
+## Changelog
+
+- 2026-04-23 | 56b62d01 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Version Check and Update Notification* | **Hash**: 56b62d01
 
 ## REQ-d00217: INDEX.md Regeneration
@@ -305,6 +329,10 @@ C. The regenerated INDEX.md SHALL contain per-level requirement tables sorted by
 
 D. When multiple spec directories exist, the INDEX.md SHALL include subsections for each directory.
 
+## Changelog
+
+- 2026-04-23 | a1e3915a | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *INDEX.md Regeneration* | **Hash**: a1e3915a
 
 ## REQ-d00218: Health Check Coverage Rollup
@@ -318,6 +346,10 @@ A. The tests.coverage health check SHALL use the rollup coverage metric from the
 B. The tests.coverage check SHALL report test-specific coverage (assertions verified by TEST nodes) separately from code coverage.
 
 C. When a child requirement has test coverage, its parent requirement SHALL receive coverage credit through the rollup mechanism.
+
+## Changelog
+
+- 2026-04-23 | 64b0dfbb | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Health Check Coverage Rollup* | **Hash**: 64b0dfbb
 
@@ -334,5 +366,9 @@ B. The uat.coverage check SHALL report requirements validated through USER_JOURN
 C. The uat.results check SHALL parse a CSV file with journey_id and status columns, reporting pass/fail/skip counts and flagging failing journeys.
 
 D. When no UAT results CSV file exists, the uat.results check SHALL report as skipped (informational) without failing.
+
+## Changelog
+
+- 2026-04-23 | 3a95ff57 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *UAT Health Check Section* | **Hash**: 3a95ff57

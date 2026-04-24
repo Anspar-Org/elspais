@@ -24,6 +24,10 @@ F. All query tools SHALL read directly from TraceGraph nodes using the iterator-
 
 Core query tools enable AI agents to discover and explore requirements without modifying the graph. These are safe, read-only operations.
 
+## Changelog
+
+- 2026-04-23 | 73c31134 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *MCP Core Query Tools* | **Hash**: 73c31134
 ---
 
@@ -46,6 +50,10 @@ D. Configuration data SHALL be read from the unified config system, not parsed s
 ## Rationale
 
 AI agents need context about the workspace they're operating in to provide relevant assistance. Workspace tools answer "what repo am I serving?" and "what's the state of this project?"
+
+## Changelog
+
+- 2026-04-23 | 0aa9dff4 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *MCP Workspace Context Tools* | **Hash**: 0aa9dff4
 ---
@@ -204,6 +212,10 @@ F. The subtree tool SHALL include coverage summary statistics for requirement no
 
 LLM agents need scoped requirement subsets for sub-agent consumption. Extracting a subtree avoids context pollution from the full graph.
 
+## Changelog
+
+- 2026-04-23 | ab29e315 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *MCP Subtree Extraction Tool* | **Hash**: ab29e315
 ---
 
@@ -231,6 +243,10 @@ F. The cursor protocol SHALL support query types: `subtree`, `search`, `hierarch
 
 LLMs benefit from incremental exploration of results, deciding when to stop rather than receiving everything at once. A cursor protocol enables this without modifying existing read tools.
 
+## Changelog
+
+- 2026-04-23 | 743877c3 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *MCP Cursor Protocol* | **Hash**: 743877c3
 ---
 
@@ -255,6 +271,10 @@ E. The tool SHALL follow IMPLEMENTS and REFINES edges when determining ancestor 
 ## Rationale
 
 Agents listing requirements for a ticket often include both specific leaf requirements and their broad ancestors, creating noise. This tool enables automated pruning to the most-specific set.
+
+## Changelog
+
+- 2026-04-23 | c667abd2 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *MCP Minimize Requirement Set Tool* | **Hash**: c667abd2
 ---
@@ -307,6 +327,10 @@ D. The tool SHALL pass through all results unchanged when no ancestor relationsh
 ## Rationale
 
 Agents won't compose scoped_search + minimize_requirement_set unprompted. A single wrapper tool is the most discoverable interface for finding the most-specific requirements within a subgraph.
+
+## Changelog
+
+- 2026-04-23 | fea647ee | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *MCP Discover Requirements Tool* | **Hash**: fea647ee
 ---

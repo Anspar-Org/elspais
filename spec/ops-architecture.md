@@ -22,6 +22,10 @@ E. TraceGraphBuilder SHALL support optional TODO node creation for lossless reco
 
 Centralizing graph construction ensures consistent hierarchy building, cycle detection, and validation across all entry points.
 
+## Changelog
+
+- 2026-04-23 | 65d2ad6a | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Graph Builder as Single Entry Point* | **Hash**: 65d2ad6a
 ---
 
@@ -53,6 +57,10 @@ Separating iteration from annotation enables:
 - Clear separation of concerns
 - Easy testing of individual annotators
 - Flexible composition of annotation pipelines
+
+## Changelog
+
+- 2026-04-23 | c73a6e32 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Composable Annotation Design* | **Hash**: c73a6e32
 ---

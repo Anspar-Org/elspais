@@ -22,6 +22,10 @@ E. SHALL NOT iterate the full graph to count nodes when kind-specific counts suf
 
 Graph status provides a quick health check without expensive traversal operations.
 
+## Changelog
+
+- 2026-04-23 | 4e2277cc | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Graph Status Tool Implementation* | **Hash**: 4e2277cc
 ---
 
@@ -62,6 +66,10 @@ M. SHALL include a `score` field in search results when multi-term scoring is ap
 ## Rationale
 
 Search enables AI agents to discover requirements by content without knowing exact IDs. Multi-term queries with AND/OR/NOT support, relevance scoring, and exact keyword matching allow both human users and AI agents to efficiently find requirements using natural search patterns like synonym lists or multi-concept queries.
+
+## Changelog
+
+- 2026-04-23 | 0183195b | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Requirement Search Tool Implementation* | **Hash**: 0183195b
 ---
@@ -119,6 +127,10 @@ E. SHALL handle DAG structure where nodes may have multiple parents.
 
 Hierarchy navigation enables AI agents to understand requirement context and relationships.
 
+## Changelog
+
+- 2026-04-23 | 2b1d284b | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Hierarchy Navigation Tool Implementation* | **Hash**: 2b1d284b
 ---
 
@@ -144,6 +156,10 @@ E. Serializers SHALL NOT trigger graph traversal beyond the single node being se
 
 Serializers provide the boundary between graph internals and MCP responses. They ensure consistent, safe data extraction.
 
+## Changelog
+
+- 2026-04-23 | 8d56d937 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Serializer Functions* | **Hash**: 8d56d937
 ---
 
@@ -168,6 +184,10 @@ E. Mutation tools SHALL return the MutationEntry from the graph method for audit
 ## Rationale
 
 Delegation ensures mutation logic lives in one place (TraceGraph) and MCP is purely an interface layer.
+
+## Changelog
+
+- 2026-04-23 | 5d1f7627 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Mutation Tool Delegation* | **Hash**: 5d1f7627
 ---
@@ -197,6 +217,10 @@ G. SHALL use `graph.nodes_by_kind(NodeKind.TEST)` and iterate edges, not travers
 ## Rationale
 
 Test coverage per requirement enables targeted test writing and gap analysis.
+
+## Changelog
+
+- 2026-04-23 | 6ac6b51f | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Test Coverage Tool Implementation* | **Hash**: 6ac6b51f
 ---
@@ -283,6 +307,10 @@ D. `apply_link()` SHALL validate that the target requirement exists in the graph
 
 MCP exposure enables AI agents to discover and apply link suggestions during coding sessions, completing the workflow: discover gaps -> get suggestions -> apply links.
 
+## Changelog
+
+- 2026-04-23 | e438ff5e | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *MCP Link Suggestion Tools* | **Hash**: e438ff5e
 ---
 
@@ -345,6 +373,10 @@ G. The implementation SHALL reuse existing serializers: `_serialize_requirement_
 
 A single-cursor model with materialized items provides simple, predictable iteration that fits the single-LLM-session model without complex streaming or concurrent cursor management.
 
+## Changelog
+
+- 2026-04-23 | 997facb6 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *Cursor Protocol Implementation* | **Hash**: 997facb6
 ---
 
@@ -371,6 +403,10 @@ F. The MCP tool wrapper SHALL delegate to the helper, performing only parameter 
 ## Rationale
 
 Separating the helper from the tool wrapper enables reuse by `discover_requirements` which chains scoped_search with minimize.
+
+## Changelog
+
+- 2026-04-23 | 15572ed9 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Minimize Requirement Set Implementation* | **Hash**: 15572ed9
 ---
@@ -425,6 +461,10 @@ D. The MCP tool wrapper SHALL delegate to the helper, performing only edge_kinds
 ## Rationale
 
 Chaining existing helpers avoids duplicating search or pruning logic and maintains the single-code-path principle.
+
+## Changelog
+
+- 2026-04-23 | b5683277 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Discover Requirements Implementation* | **Hash**: b5683277
 ---
@@ -506,5 +546,9 @@ E. Install SHALL support Claude Desktop configuration with platform-specific con
 F. The --desktop flag SHALL write or remove the MCP server entry in the Claude Desktop JSON config file.
 
 G. All operations SHALL produce a clear error when the underlying CLI command fails.
+
+## Changelog
+
+- 2026-04-23 | f1518d2c | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *MCP Server Install/Uninstall CLI Commands* | **Hash**: f1518d2c

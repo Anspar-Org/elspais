@@ -151,14 +151,20 @@ def _make_changelog_entry(
 
 def _add_autofix_changelog_entries(
     graph,  # noqa: ANN001 — FederatedGraph
-    dirty_nodes: list,
+    node_reasons: list[tuple[Any, list[str]]],
     config: dict[str, Any],
 ) -> int:
     """Add changelog entries for auto-fixed requirements.
 
-    For each dirty Active requirement (when changelog is enabled),
-    adds a changelog entry with an auto-generated reason describing
-    the fix.  Returns the number of entries added.
+    For each (node, reasons) pair whose requirement is Active and whose
+    reasons aren't exclusively ``changelog_drift`` (drift is handled by
+    ``_add_drift_changelog_entries``), adds one changelog entry derived
+    from the detected reasons. Uses the reasons supplied by the caller
+    rather than ``parse_dirty_reasons`` on the node, since
+    ``missing_changelog`` is discovered by ``_detect_fixable`` and isn't
+    reflected in the graph builder's parse-time flags.
+
+    Returns the number of entries added.
     """
     typed_config = _validate_config(config)
     if not typed_config.changelog.hash_current:
@@ -173,17 +179,18 @@ def _add_autofix_changelog_entries(
     hash_mode = getattr(graph, "hash_mode", "full-text")
     added = 0
 
-    for node in dirty_nodes:
+    for node, reasons in node_reasons:
         status = (node.get_field("status") or "").lower()
         if status != "active":
             continue
 
-        reasons = node.get_field("parse_dirty_reasons") or []
-        if not reasons:
+        # Drift is handled by _add_drift_changelog_entries; skip drift-only here.
+        non_drift = [r for r in reasons if r != "changelog_drift"]
+        if not non_drift:
             continue
 
-        # Build a human-readable reason from dirty reasons
-        parts = [_REASON_LABELS.get(r, r) for r in reasons if r != "stale_hash"]
+        # Build a human-readable reason from the detected reasons.
+        parts = [_REASON_LABELS.get(r, r) for r in non_drift if r != "stale_hash"]
         if not parts:
             parts = ["update hash"]
         reason = "Auto-fix: " + ", ".join(parts)
@@ -281,24 +288,20 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> None:
     if dry_run:
         return
 
-    # Separate nodes by fix type for changelog entries
-    dirty_nodes = [
-        n
-        for n, reasons in fixable_nodes
-        if any(r not in ("changelog_drift", "missing_changelog") for r in reasons)
-    ]
-    drift_nodes = [
-        n for n, reasons in fixable_nodes if "changelog_drift" in reasons and n not in dirty_nodes
-    ]
+    # Drift-only nodes (changelog hash mismatch with no other fixable issues)
+    # go through _add_drift_changelog_entries; everything else — including
+    # missing_changelog and mixed-reason nodes — goes through the unified
+    # autofix path.
+    drift_only_nodes = [n for n, reasons in fixable_nodes if reasons == ["changelog_drift"]]
+    autofix_items = [(n, reasons) for n, reasons in fixable_nodes if reasons != ["changelog_drift"]]
 
-    # Add auto-fix changelog entries before render_save
-    _add_autofix_changelog_entries(graph, dirty_nodes, config)
-    _add_drift_changelog_entries(graph, drift_nodes, config)
-
-    # Mark all fixable nodes dirty so render_save picks up their files
+    # Mark fixable nodes dirty first so render_save picks up their files.
     for node, reasons in fixable_nodes:
         for r in reasons:
             node.mark_parse_dirty(r)
+
+    _add_autofix_changelog_entries(graph, autofix_items, config)
+    _add_drift_changelog_entries(graph, drift_only_nodes, config)
 
     result = render_save(graph, repo_root=repo_root)
     saved = result.get("saved_count", 0)

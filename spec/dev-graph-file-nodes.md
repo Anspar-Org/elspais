@@ -51,6 +51,10 @@ E. TEST_RESULT nodes SHALL be linked from TEST nodes via `EdgeKind.YIELDS` (TEST
 
 Eliminating `add_child()` ensures every relationship in the graph has a typed edge, enabling filtered traversal. The `file_node()` convenience method provides efficient navigation to FILE ancestors. Renaming `remove_child()` to `unlink()` creates API symmetry with `link()`. The YIELDS edge kind correctly models the TEST->TEST_RESULT relationship.
 
+## Changelog
+
+- 2026-04-23 | 12964863 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *GraphNode API: Filtered Traversal and Edge-Only Relationships* | **Hash**: 12964863
 ---
 
@@ -123,6 +127,10 @@ G. External output (CLI text, MCP JSON responses, HTML, PDF) SHALL produce ident
 
 SourceLocation duplicates information now available through the graph structure itself. FILE nodes carry path and repo identity; content nodes carry line numbers as fields. Removing SourceLocation eliminates redundancy and ensures all file identity flows through the graph's edge structure.
 
+## Changelog
+
+- 2026-04-23 | 8bd81196 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
 *End* *SourceLocation Removal and Consumer Migration* | **Hash**: 8bd81196
 ---
 
@@ -149,6 +157,10 @@ F. FILE nodes SHALL NOT appear in the default `iter_roots()` results (no argumen
 ## Rationale
 
 Parameterized roots enable view-specific entry points into the graph: domain consumers iterate REQ/JOURNEY roots as before, while file-level consumers iterate FILE nodes. `iter_by_kind()` provides a naming-consistent alternative to `nodes_by_kind()` aligned with the iterator-only API convention.
+
+## Changelog
+
+- 2026-04-23 | f56f8527 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Parameterized Root Iteration and Kind-Based Index Query* | **Hash**: f56f8527
 ---
@@ -215,6 +227,10 @@ F. The render-based save SHALL derive implements and refines reference lists fro
 ## Rationale
 
 Render-based save replaces the brittle text surgery in persistence.py with graph-native serialization. Each FILE node renders its content from the graph, making the graph the single source of truth. The consistency check (rebuild + compare) proves round-trip fidelity.
+
+## Changelog
+
+- 2026-04-23 | 7043f7af | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Render-Based Save Operation* | **Hash**: 7043f7af
 ---
