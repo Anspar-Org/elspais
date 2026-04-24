@@ -44,8 +44,12 @@ def _init_fixture_repo(tmp_path):
     _git(tmp_path, "config", "user.email", "test@test.com")
     _git(tmp_path, "config", "user.name", "Test")
 
+    # Minimal fixture: opt out of changelog enforcement so `spec.changelog_present`
+    # (active by default via `changelog.hash_current = true`, see commit 5e2800f)
+    # doesn't fire on the single bare REQ this test writes.
     (tmp_path / ".elspais.toml").write_text(
         '[project]\nname = "git-sync-test"\nnamespace = "REQ"\n'
+        "[changelog]\npresent = false\nhash_current = false\n"
     )
     (tmp_path / "spec").mkdir()
     (tmp_path / "spec" / "prd.md").write_text(
