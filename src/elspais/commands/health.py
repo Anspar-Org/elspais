@@ -1394,6 +1394,10 @@ def check_term_bad_definition(
 
     findings = []
     for entry in entries:
+        # Reference-type terms store structured metadata (Title, Version,
+        # URL, ...) instead of prose; an empty prose definition is expected.
+        if getattr(entry, "is_reference", False):
+            continue
         stripped = entry.definition.strip() if entry.definition else ""
         if len(stripped) < _MIN_DEFINITION_LENGTH:
             findings.append(
@@ -2584,10 +2588,11 @@ def compute_checks(
     spec_only = params.get("spec_only", "false") == "true"
     code_only = params.get("code_only", "false") == "true"
     tests_only = params.get("tests_only", "false") == "true"
+    terms_only = params.get("terms_only", "false") == "true"
     lenient = params.get("lenient", "false") == "true"
 
     report = HealthReport()
-    run_all = not any([spec_only, code_only, tests_only])
+    run_all = not any([spec_only, code_only, tests_only, terms_only])
 
     # Build a minimal args namespace for _resolve_exclude_status
     fake_args = argparse.Namespace()
@@ -2637,7 +2642,7 @@ def compute_checks(
             report.add(check)
 
     # Term checks
-    if run_all:
+    if run_all or terms_only:
         for check in run_term_checks(graph, config=config):
             report.add(check)
 
@@ -2689,6 +2694,8 @@ def run(args: argparse.Namespace) -> int:
         params["code_only"] = "true"
     if getattr(args, "tests_only", False):
         params["tests_only"] = "true"
+    if getattr(args, "terms_only", False):
+        params["terms_only"] = "true"
     if getattr(args, "lenient", False):
         params["lenient"] = "true"
     status_filter = getattr(args, "status", None)
@@ -2740,6 +2747,7 @@ def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[
             params.get("spec_only") == "true",
             params.get("code_only") == "true",
             params.get("tests_only") == "true",
+            params.get("terms_only") == "true",
         ]
     )
 
@@ -2829,6 +2837,8 @@ def _format_report(
         flag_parts.append("--code")
     if getattr(args, "tests_only", False):
         flag_parts.append("--tests")
+    if getattr(args, "terms_only", False):
+        flag_parts.append("--terms")
     active_flags = ", ".join(flag_parts) if flag_parts else None
 
     from elspais.utilities.report_meta import report_metadata

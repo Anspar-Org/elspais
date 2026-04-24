@@ -200,7 +200,11 @@ jobs:
       - name: Audit dependencies for known vulnerabilities
         run: |
           pip install pip-audit
-          pip-audit --ignore-vuln CVE-2026-4539  # ReDoS in pygments AdlLexer, no fix available
+          pip-audit \
+            --ignore-vuln CVE-2026-4539 \
+            --ignore-vuln CVE-2026-3219
+          # CVE-2026-4539: ReDoS in pygments AdlLexer, no fix available
+          # CVE-2026-3219: vulnerability in pip 26.0.1, no fix available
 
       - name: Check with safety
         run: |

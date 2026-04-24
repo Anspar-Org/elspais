@@ -122,18 +122,43 @@ class TermDictionary:
         return len(self._entries)
 
 
+def _canonicalize_definition_text(text: str) -> str:
+    """Canonicalize whitespace in definition text before hashing.
+
+    - Strip trailing whitespace from each line
+    - Collapse runs of blank lines to a single blank line
+    - Strip leading/trailing blank lines from the block
+    """
+    lines = [line.rstrip() for line in text.split("\n")]
+    collapsed: list[str] = []
+    prev_blank = False
+    for line in lines:
+        if not line:
+            if prev_blank:
+                continue
+            prev_blank = True
+        else:
+            prev_blank = False
+        collapsed.append(line)
+    return "\n".join(collapsed).strip()
+
+
 def compute_definition_hash(
     definition: str,
     reference_fields: dict[str, str] | None = None,
 ) -> str:
     """Compute 8-char SHA-256 hash of a term definition for change tracking.
 
+    Definition text is canonicalized (trailing whitespace stripped, blank
+    runs collapsed, outer whitespace trimmed) before hashing so cosmetic
+    whitespace changes do not flip hashes on round-trip.
+
     For reference-type entries, includes reference_fields values so that
     URL/version/title changes are detected.
     """
     from elspais.utilities.hasher import calculate_hash
 
-    text = definition
+    text = _canonicalize_definition_text(definition)
     if reference_fields:
         text += "\n" + "\n".join(f"{k}={v}" for k, v in sorted(reference_fields.items()))
     return calculate_hash(text)

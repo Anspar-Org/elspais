@@ -34,6 +34,9 @@ class ChecksArgs:
     tests_only: Annotated[bool, tyro.conf.arg(name="tests")] = False
     """Run test mapping checks only."""
 
+    terms_only: Annotated[bool, tyro.conf.arg(name="terms")] = False
+    """Run defined-term checks only."""
+
     format: Literal["text", "markdown", "json", "junit", "sarif"] = "text"
     """Output format."""
 
@@ -776,7 +779,7 @@ class McpServeArgs:
 class McpInstallArgs:
     """Register elspais MCP server with Claude Code."""
 
-    global_scope: bool = False
+    global_scope: Annotated[bool, tyro.conf.arg(name="global")] = False
     """Install for all projects (user scope)."""
 
     desktop: bool = False
@@ -787,7 +790,7 @@ class McpInstallArgs:
 class McpUninstallArgs:
     """Remove elspais MCP server from Claude Code."""
 
-    global_scope: bool = False
+    global_scope: Annotated[bool, tyro.conf.arg(name="global")] = False
     """Remove from user scope."""
 
     desktop: bool = False

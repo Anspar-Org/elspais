@@ -12,6 +12,7 @@ elspais checks
 elspais checks --spec      # Spec file checks
 elspais checks --code      # Code reference checks
 elspais checks --tests     # Test mapping checks
+elspais checks --terms     # Defined-term checks
 ```
 
 ## Check Categories
@@ -190,7 +191,7 @@ coverage and results from user journey validation.
 | `uat.coverage` | Requirements validated by USER_JOURNEY nodes (informational) |
 | `uat.results` | Journey pass/fail status from a CSV results file |
 
-### Terms Checks
+### Terms Checks (`--terms`)
 
 | Check | Description |
 |-------|-------------|

@@ -354,3 +354,232 @@ A. First assertion
         assert (
             "regulatory" in definition_text
         ), f"Expected 'regulatory' in definition (multiline join), got {definition_text!r}"
+
+    # -- REQ-d00221-A: hanging-indent continuation line support ----------------
+
+    def test_REQ_d00221_A_indented_continuation(self, resolver):
+        """Def block with 2-space continuation lines joins all 3 lines with \\n."""
+        content = """\
+# REQ-p00001: Requirement With Continuation
+**Level**: prd | **Status**: Active
+
+Electronic Record
+: Any combination of text, graphics, data, audio, or pictorial
+  information stored in digital form. Used for regulatory
+  compliance tracking and audit support.
+
+## Assertions
+
+A. First assertion
+
+*End* *REQ-p00001* **Hash**: abcd1234
+"""
+        results = _parse(content, resolver)
+        def_data = None
+        for r in results:
+            if r.content_type == "definition_block":
+                def_data = r.parsed_data
+                break
+        for r in results:
+            if r.content_type == "requirement" and "definitions" in r.parsed_data:
+                defs = r.parsed_data["definitions"]
+                if defs:
+                    def_data = defs[0]
+                    break
+
+        assert def_data is not None, (
+            f"No definition_block data found. content_types: "
+            f"{[r.content_type for r in results]}"
+        )
+        definition = def_data.get("definition", "")
+        # All three lines must appear in the joined definition text.
+        assert "combination" in definition
+        assert "information stored" in definition
+        assert "compliance tracking" in definition
+        # Continuation indent must have been stripped (no leading double-space).
+        lines = definition.split("\n")
+        assert len(lines) >= 3, f"Expected >=3 lines in definition, got {lines!r}"
+        for ln in lines[1:]:
+            assert not ln.startswith("  "), f"Continuation line still has hanging indent: {ln!r}"
+
+    def test_REQ_d00221_A_mixed_colon_and_continuation(self, resolver):
+        """Continuation line attaches only to the preceding DEF_LINE, not the next."""
+        content = """\
+# REQ-p00001: Requirement With Mixed
+**Level**: prd | **Status**: Active
+
+Email Address
+: A unique technical identifier used as a destination for system notifications
+  and as a primary User ID for authentication.
+: Reference Term: __Registered Notification Address__
+
+## Assertions
+
+A. First assertion
+
+*End* *REQ-p00001* **Hash**: abcd1234
+"""
+        results = _parse(content, resolver)
+        def_blocks = [r for r in results if r.content_type == "definition_block"]
+        # Also check inside requirement parsed_data
+        req_defs: list = []
+        for r in results:
+            if r.content_type == "requirement":
+                req_defs = r.parsed_data.get("definitions", [])
+
+        all_def_data = [r.parsed_data for r in def_blocks] + list(req_defs)
+        assert (
+            len(all_def_data) == 1
+        ), f"Expected exactly one definition_block, got {len(all_def_data)}"
+
+        def_data = all_def_data[0]
+        assert (
+            def_data.get("term") == "Email Address"
+        ), f"Expected term='Email Address', got {def_data.get('term')!r}"
+        definition = def_data.get("definition", "")
+        assert "unique technical identifier" in definition
+        assert "primary User ID for authentication" in definition
+        # Reference Term must be parsed cleanly, not polluted with continuation text.
+        ref_term = def_data.get("reference_term", "")
+        assert ref_term == "Registered Notification Address", (
+            f"Expected reference_term='Registered Notification Address', " f"got {ref_term!r}"
+        )
+
+    def test_REQ_d00221_A_reference_type_with_structured_fields(self, resolver):
+        """Reference entry with Title/Version/URL metadata lines and no prose."""
+        content = """\
+# REQ-p00001: Requirement With Reference
+**Level**: prd | **Status**: Active
+
+ISO/IEC 24760-1
+: Reference
+: Title: IT Security and Privacy
+: Version: ISO/IEC 24760-1:2019
+: URL: <https://www.iso.org>
+
+## Assertions
+
+A. First assertion
+
+*End* *REQ-p00001* **Hash**: abcd1234
+"""
+        results = _parse(content, resolver)
+        def_data = None
+        for r in results:
+            if r.content_type == "definition_block":
+                def_data = r.parsed_data
+                break
+        for r in results:
+            if r.content_type == "requirement" and "definitions" in r.parsed_data:
+                defs = r.parsed_data["definitions"]
+                if defs:
+                    def_data = defs[0]
+                    break
+
+        assert def_data is not None, (
+            f"No definition_block data found. content_types: "
+            f"{[r.content_type for r in results]}"
+        )
+        assert (
+            def_data.get("is_reference") is True
+        ), f"Expected is_reference=True, got {def_data.get('is_reference')!r}"
+        ref_fields = def_data.get("reference_fields") or {}
+        assert (
+            ref_fields.get("title") == "IT Security and Privacy"
+        ), f"Expected title='IT Security and Privacy', got {ref_fields.get('title')!r}"
+        assert (
+            ref_fields.get("version") == "ISO/IEC 24760-1:2019"
+        ), f"Expected version='ISO/IEC 24760-1:2019', got {ref_fields.get('version')!r}"
+        assert (
+            ref_fields.get("url") == "https://www.iso.org"
+        ), f"Expected url='https://www.iso.org', got {ref_fields.get('url')!r}"
+        # No prose definition -- only metadata.
+        assert (
+            def_data.get("definition", "") == ""
+        ), f"Expected empty definition, got {def_data.get('definition')!r}"
+
+    def test_REQ_d00221_A_continuation_on_metadata_line(self, resolver):
+        """Continuation line after a '<key>: <val>' metadata line joins into the value."""
+        content = """\
+# REQ-p00001: Requirement With Metadata Continuation
+**Level**: prd | **Status**: Active
+
+Some Term
+: Title: A long title
+  that continues on the next line
+
+## Assertions
+
+A. First assertion
+
+*End* *REQ-p00001* **Hash**: abcd1234
+"""
+        results = _parse(content, resolver)
+        def_data = None
+        for r in results:
+            if r.content_type == "definition_block":
+                def_data = r.parsed_data
+                break
+        for r in results:
+            if r.content_type == "requirement" and "definitions" in r.parsed_data:
+                defs = r.parsed_data["definitions"]
+                if defs:
+                    def_data = defs[0]
+                    break
+
+        assert def_data is not None, (
+            f"No definition_block data found. content_types: "
+            f"{[r.content_type for r in results]}"
+        )
+        title = (def_data.get("reference_fields") or {}).get("title", "")
+        assert "A long title" in title, f"Expected 'A long title' in title, got {title!r}"
+        assert (
+            "continues on the next line" in title
+        ), f"Expected continuation text in title, got {title!r}"
+
+    # -- format_definition_block renderer --------------------------------------
+
+    def test_format_definition_block_multiline_prose(self):
+        """Multi-line prose renders with ': ' on first line, 2-space hanging indent."""
+        from elspais.graph.render import format_definition_block
+
+        data = {
+            "term": "Electronic Record",
+            "definition": "first\nsecond\nthird",
+        }
+        out = format_definition_block(data)
+        # Canonical shape: term line, then ': first', then '  second', '  third'.
+        assert (
+            "\n: first\n  second\n  third" in out
+        ), f"Expected hanging-indent shape in output, got {out!r}"
+        # Term must appear as its own (first) line.
+        assert out.startswith(
+            "Electronic Record\n"
+        ), f"Expected output to start with term line, got {out!r}"
+
+    def test_format_definition_block_reference_fields(self):
+        """Reference entry renders ': Reference' + ': Title: ...' + ': URL: <...>' lines."""
+        from elspais.graph.render import format_definition_block
+
+        data = {
+            "term": "ISO/IEC 24760-1",
+            "definition": "",
+            "is_reference": True,
+            "reference_fields": {
+                "title": "IT Security and Privacy",
+                "version": "ISO/IEC 24760-1:2019",
+                "url": "https://www.iso.org",
+            },
+        }
+        out = format_definition_block(data)
+        lines = out.split("\n")
+        assert ": Reference" in lines, f"Expected ': Reference' line in output, got {out!r}"
+        assert (
+            ": Title: IT Security and Privacy" in lines
+        ), f"Expected title line in output, got {out!r}"
+        assert (
+            ": Version: ISO/IEC 24760-1:2019" in lines
+        ), f"Expected version line in output, got {out!r}"
+        assert (
+            ": URL: <https://www.iso.org>" in lines
+        ), f"Expected URL line with angle brackets in output, got {out!r}"
