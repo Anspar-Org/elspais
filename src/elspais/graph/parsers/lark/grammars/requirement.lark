@@ -142,11 +142,18 @@ JNY_END_MARKER.9: /\*End\*[ \t]+\*JNY-[^*]+\*[^\n]*/
 
 // --- Section headers ---
 
-// Case-insensitive: `## Assertions`, `## assertions`, `## ASSERTIONS` all
-// map to the same structural keyword. Mirrors the metadata-field pattern.
-ASSERTIONS_HDR.8: /##[ \t]+[Aa][Ss][Ss][Ee][Rr][Tt][Ii][Oo][Nn][Ss][ \t]*/
-CHANGELOG_HDR.8: /##[ \t]+[Cc][Hh][Aa][Nn][Gg][Ee][Ll][Oo][Gg][ \t]*/
-SECTION_HDR.7: /##[ \t]+(?![Aa][Ss][Ss][Ee][Rr][Tt][Ii][Oo][Nn][Ss]\b)(?![Cc][Hh][Aa][Nn][Gg][Ee][Ll][Oo][Gg]\b)[^\n]+/
+// Tolerant matching for the two structural keywords. The trailing
+// (?=\n) lookahead anchors the match to a complete line so partial
+// matches never dangle. Tolerated variations:
+//   - case-insensitive: `## Assertions` / `## assertions` / `## ASSERTIONS`
+//   - optional markdown decoration: `## **Assertions**`, `## *Foo*`, `## _Bar_`
+//   - optional trailing punctuation: `## Assertions:`, `## Assertions.`
+// Mirrors the metadata-field tolerance. Section headers with extra text
+// past the keyword (`## Assertions Foo`) are NOT structural -- they fall
+// through to SECTION_HDR as ordinary named sections.
+ASSERTIONS_HDR.8: /##[ \t]+(?:\*\*|\*|_)?[Aa][Ss][Ss][Ee][Rr][Tt][Ii][Oo][Nn][Ss](?:\*\*|\*|_)?[:.]?[ \t]*(?=\n)/
+CHANGELOG_HDR.8: /##[ \t]+(?:\*\*|\*|_)?[Cc][Hh][Aa][Nn][Gg][Ee][Ll][Oo][Gg](?:\*\*|\*|_)?[:.]?[ \t]*(?=\n)/
+SECTION_HDR.7: /##[ \t]+(?!(?:\*\*|\*|_)?[Aa][Ss][Ss][Ee][Rr][Tt][Ii][Oo][Nn][Ss](?:\*\*|\*|_)?[:.]?[ \t]*\n)(?!(?:\*\*|\*|_)?[Cc][Hh][Aa][Nn][Gg][Ee][Ll][Oo][Gg](?:\*\*|\*|_)?[:.]?[ \t]*\n)[^\n]+/
 
 // --- Journey section headers (same pattern as SECTION_HDR but distinct terminal) ---
 JNY_SECTION_HDR.7: /##[ \t]+[^\n]+/

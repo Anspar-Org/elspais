@@ -709,6 +709,355 @@ A. SHALL do A.
         assert assertions[0]["label"] == "A"
 
 
+class TestLarkAssertionHeaderTolerance:
+    """Tests that ``## Assertions`` and ``## Changelog`` headers tolerate
+    optional markdown decoration (``**``/``*``/``_``) and optional trailing
+    punctuation (``:`` or ``.``).
+
+    Variants such as ``## **Assertions**``, ``## *Assertions*``,
+    ``## _Assertions_``, ``## Assertions:``, ``## Assertions.``, and
+    combos like ``## **Assertions**:`` must be recognized as the
+    structural assertion/changelog block. ``## Notes about Assertions``
+    (a named section that merely mentions the keyword) and
+    ``## Assertions Foo`` (extra text past the keyword) must continue to
+    fall through to ``SECTION_HDR`` as ordinary named sections.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _setup(self, hht_resolver):
+        self.resolver = hht_resolver
+        factory = GrammarFactory(hht_resolver)
+        self.parser = factory.get_requirement_parser()
+        self.transformer = RequirementTransformer(hht_resolver)
+
+    def _parse(self, content: str):
+        if not content.endswith("\n"):
+            content += "\n"
+        tree = self.parser.parse(content)
+        return self.transformer.transform(tree)
+
+    def test_bold_assertions_recognized(self):
+        content = """\
+## REQ-p00001: Bold Assertions
+**Level**: PRD | **Status**: Active
+
+## **Assertions**
+
+A. SHALL do A.
+
+B. SHALL do B.
+
+*End* *Bold Assertions* | **Hash**: abc12345
+"""
+        results = self._parse(content)
+        reqs = [r for r in results if r.content_type == "requirement"]
+        assert len(reqs) == 1, f"Expected exactly 1 requirement, got {len(reqs)}"
+        d = reqs[0].parsed_data
+        assertions = d["assertions"]
+        assert len(assertions) == 2, (
+            f"Expected 2 assertions captured under '## **Assertions**', "
+            f"got {len(assertions)}: {[a.get('label') for a in assertions]}"
+        )
+        assert [a["label"] for a in assertions] == ["A", "B"]
+        sections = d["sections"]
+        assert not any(s.get("heading", "").lower() == "assertions" for s in sections), (
+            f"'## **Assertions**' must be parsed as the assertion block, not a "
+            f"named section. Got sections: {sections}"
+        )
+
+    def test_italic_assertions_recognized(self):
+        content = """\
+## REQ-p00002: Italic Assertions
+**Level**: PRD | **Status**: Active
+
+## *Assertions*
+
+A. SHALL do A.
+
+B. SHALL do B.
+
+*End* *Italic Assertions* | **Hash**: abc12345
+"""
+        results = self._parse(content)
+        reqs = [r for r in results if r.content_type == "requirement"]
+        assert len(reqs) == 1
+        d = reqs[0].parsed_data
+        assertions = d["assertions"]
+        assert len(assertions) == 2, (
+            f"Expected 2 assertions captured under '## *Assertions*', "
+            f"got {len(assertions)}: {[a.get('label') for a in assertions]}"
+        )
+        assert [a["label"] for a in assertions] == ["A", "B"]
+        sections = d["sections"]
+        assert not any(s.get("heading", "").lower() == "assertions" for s in sections), (
+            f"'## *Assertions*' must be parsed as the assertion block, not a "
+            f"named section. Got sections: {sections}"
+        )
+
+    def test_underscore_assertions_recognized(self):
+        content = """\
+## REQ-p00003: Underscore Assertions
+**Level**: PRD | **Status**: Active
+
+## _Assertions_
+
+A. SHALL do A.
+
+B. SHALL do B.
+
+*End* *Underscore Assertions* | **Hash**: abc12345
+"""
+        results = self._parse(content)
+        reqs = [r for r in results if r.content_type == "requirement"]
+        assert len(reqs) == 1
+        d = reqs[0].parsed_data
+        assertions = d["assertions"]
+        assert len(assertions) == 2, (
+            f"Expected 2 assertions captured under '## _Assertions_', "
+            f"got {len(assertions)}: {[a.get('label') for a in assertions]}"
+        )
+        assert [a["label"] for a in assertions] == ["A", "B"]
+        sections = d["sections"]
+        assert not any(s.get("heading", "").lower() == "assertions" for s in sections), (
+            f"'## _Assertions_' must be parsed as the assertion block, not a "
+            f"named section. Got sections: {sections}"
+        )
+
+    def test_trailing_colon_assertions_recognized(self):
+        content = """\
+## REQ-p00004: Trailing Colon Assertions
+**Level**: PRD | **Status**: Active
+
+## Assertions:
+
+A. SHALL do A.
+
+B. SHALL do B.
+
+*End* *Trailing Colon Assertions* | **Hash**: abc12345
+"""
+        results = self._parse(content)
+        reqs = [r for r in results if r.content_type == "requirement"]
+        assert len(reqs) == 1
+        d = reqs[0].parsed_data
+        assertions = d["assertions"]
+        assert len(assertions) == 2, (
+            f"Expected 2 assertions captured under '## Assertions:', "
+            f"got {len(assertions)}: {[a.get('label') for a in assertions]}"
+        )
+        assert [a["label"] for a in assertions] == ["A", "B"]
+        sections = d["sections"]
+        assert not any(s.get("heading", "").lower() == "assertions" for s in sections), (
+            f"'## Assertions:' must be parsed as the assertion block, not a "
+            f"named section. Got sections: {sections}"
+        )
+
+    def test_trailing_period_assertions_recognized(self):
+        content = """\
+## REQ-p00005: Trailing Period Assertions
+**Level**: PRD | **Status**: Active
+
+## Assertions.
+
+A. SHALL do A.
+
+B. SHALL do B.
+
+*End* *Trailing Period Assertions* | **Hash**: abc12345
+"""
+        results = self._parse(content)
+        reqs = [r for r in results if r.content_type == "requirement"]
+        assert len(reqs) == 1
+        d = reqs[0].parsed_data
+        assertions = d["assertions"]
+        assert len(assertions) == 2, (
+            f"Expected 2 assertions captured under '## Assertions.', "
+            f"got {len(assertions)}: {[a.get('label') for a in assertions]}"
+        )
+        assert [a["label"] for a in assertions] == ["A", "B"]
+        sections = d["sections"]
+        assert not any(s.get("heading", "").lower() == "assertions" for s in sections), (
+            f"'## Assertions.' must be parsed as the assertion block, not a "
+            f"named section. Got sections: {sections}"
+        )
+
+    def test_decorated_lowercase_assertions_recognized(self):
+        content = """\
+## REQ-p00006: Decorated Lowercase Assertions
+**Level**: PRD | **Status**: Active
+
+## **assertions**
+
+A. SHALL do A.
+
+B. SHALL do B.
+
+*End* *Decorated Lowercase Assertions* | **Hash**: abc12345
+"""
+        results = self._parse(content)
+        reqs = [r for r in results if r.content_type == "requirement"]
+        assert len(reqs) == 1
+        d = reqs[0].parsed_data
+        assertions = d["assertions"]
+        assert len(assertions) == 2, (
+            f"Expected 2 assertions captured under '## **assertions**', "
+            f"got {len(assertions)}: {[a.get('label') for a in assertions]}"
+        )
+        assert [a["label"] for a in assertions] == ["A", "B"]
+        sections = d["sections"]
+        assert not any(s.get("heading", "").lower() == "assertions" for s in sections), (
+            f"'## **assertions**' must be parsed as the assertion block, not a "
+            f"named section. Got sections: {sections}"
+        )
+
+    def test_decorated_with_trailing_punct(self):
+        content = """\
+## REQ-p00007: Decorated With Trailing Punct
+**Level**: PRD | **Status**: Active
+
+## **Assertions**:
+
+A. SHALL do A.
+
+B. SHALL do B.
+
+*End* *Decorated With Trailing Punct* | **Hash**: abc12345
+"""
+        results = self._parse(content)
+        reqs = [r for r in results if r.content_type == "requirement"]
+        assert len(reqs) == 1
+        d = reqs[0].parsed_data
+        assertions = d["assertions"]
+        assert len(assertions) == 2, (
+            f"Expected 2 assertions captured under '## **Assertions**:', "
+            f"got {len(assertions)}: {[a.get('label') for a in assertions]}"
+        )
+        assert [a["label"] for a in assertions] == ["A", "B"]
+        sections = d["sections"]
+        assert not any(s.get("heading", "").lower() == "assertions" for s in sections), (
+            f"'## **Assertions**:' must be parsed as the assertion block, not a "
+            f"named section. Got sections: {sections}"
+        )
+
+    def test_extra_text_falls_to_named_section(self):
+        """``## Assertions Foo`` has extra text past the keyword, so it
+        must be parsed as an ordinary named section ``Assertions Foo``,
+        NOT as the structural assertion block.
+        """
+        content = """\
+## REQ-p00008: Extra Text Section
+**Level**: PRD | **Status**: Active
+
+## Assertions Foo
+
+Body text.
+
+*End* *Extra Text Section* | **Hash**: abc12345
+"""
+        results = self._parse(content)
+        reqs = [r for r in results if r.content_type == "requirement"]
+        assert len(reqs) == 1
+        d = reqs[0].parsed_data
+        assertions = d["assertions"]
+        assert assertions == [], (
+            f"'## Assertions Foo' must NOT be parsed as the assertion block. "
+            f"Got assertions: {assertions}"
+        )
+        sections = d["sections"]
+        headings = [s.get("heading") for s in sections]
+        assert "Assertions Foo" in headings, (
+            f"'## Assertions Foo' must be a named section. " f"Got headings: {headings}"
+        )
+
+    def test_named_section_about_assertions_with_decoration_still_named(self):
+        """Regression test for negative-lookahead tightness: a named
+        section that mentions ``Assertions`` as a substring (but does not
+        equal the bare keyword) must remain a named section.
+        """
+        content = """\
+## REQ-p00009: Section Substring Decoration
+**Level**: PRD | **Status**: Active
+
+## Notes about Assertions
+
+Some prose discussing assertions in general.
+
+## Assertions
+
+A. SHALL do A.
+
+*End* *Section Substring Decoration* | **Hash**: abc12345
+"""
+        results = self._parse(content)
+        reqs = [r for r in results if r.content_type == "requirement"]
+        assert len(reqs) == 1
+        d = reqs[0].parsed_data
+        sections = d["sections"]
+        headings = [s.get("heading") for s in sections]
+        assert "Notes about Assertions" in headings, (
+            f"'## Notes about Assertions' must remain a named section "
+            f"(it does not equal 'Assertions'). Got headings: {headings}"
+        )
+        assertions = d["assertions"]
+        assert len(assertions) == 1, (
+            f"Expected 1 assertion under '## Assertions', got "
+            f"{len(assertions)}: {[a.get('label') for a in assertions]}"
+        )
+        assert assertions[0]["label"] == "A"
+
+    def test_bold_changelog_recognized(self):
+        content = """\
+## REQ-p00010: Bold Changelog
+**Level**: PRD | **Status**: Active
+
+## Assertions
+
+A. SHALL do A.
+
+## **Changelog**
+
+- 2025-01-01 | abc12345 | 0 | Author (a@b) | reason
+
+*End* *Bold Changelog* | **Hash**: def45678
+"""
+        results = self._parse(content)
+        reqs = [r for r in results if r.content_type == "requirement"]
+        assert len(reqs) == 1
+        d = reqs[0].parsed_data
+        changelog = d["changelog"]
+        assert len(changelog) == 1, (
+            f"Expected 1 changelog entry captured under '## **Changelog**', "
+            f"got {len(changelog)}: {changelog}"
+        )
+        assert changelog[0]["date"] == "2025-01-01"
+
+    def test_trailing_colon_changelog_recognized(self):
+        content = """\
+## REQ-p00011: Trailing Colon Changelog
+**Level**: PRD | **Status**: Active
+
+## Assertions
+
+A. SHALL do A.
+
+## Changelog:
+
+- 2025-01-01 | abc12345 | 0 | Author (a@b) | reason
+
+*End* *Trailing Colon Changelog* | **Hash**: def45678
+"""
+        results = self._parse(content)
+        reqs = [r for r in results if r.content_type == "requirement"]
+        assert len(reqs) == 1
+        d = reqs[0].parsed_data
+        changelog = d["changelog"]
+        assert len(changelog) == 1, (
+            f"Expected 1 changelog entry captured under '## Changelog:', "
+            f"got {len(changelog)}: {changelog}"
+        )
+        assert changelog[0]["date"] == "2025-01-01"
+
+
 class TestLarkPerformance:
     """Verify LALR parser performance is acceptable."""
 
