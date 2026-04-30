@@ -226,12 +226,26 @@ def _render_requirement(node: GraphNode) -> str:
                     lines.append("")
                     lines.append(content)
             elif heading_style:
-                # Assertion sub-heading (inline label like *Core Functionality*)
-                # Do NOT reset in_assertions — these are within the assertion block
+                # Assertion sub-heading. Two flavors:
+                #   - inline label (style is `**`/`*`/`_`)  ->  `**Heading**`
+                #   - markdown heading (style is `###`...`######`)  ->  `### Heading`
+                # The sub-heading lives INSIDE the assertion block. If the
+                # `## Assertions` header has not been emitted yet (sub-heading
+                # appears before the first assertion), emit it first so the
+                # output document is structurally coherent.
+                if not in_assertions:
+                    if lines and lines[-1] != "":
+                        lines.append("")
+                    lines.append("## Assertions")
+                    lines.append("")
+                    in_assertions = True
                 if lines and lines[-1] != "":
                     lines.append("")
                 s = heading_style
-                lines.append(f"{s}{heading}{s}")
+                if s.startswith("#"):
+                    lines.append(f"{s} {heading}")
+                else:
+                    lines.append(f"{s}{heading}{s}")
                 lines.append("")
                 if content:
                     lines.append(content)

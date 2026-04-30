@@ -734,6 +734,245 @@ class TestRenderRoundTrip:
         assert "### Core Functionality" not in rendered
         assert "### Data Management" not in rendered
 
+    # Implements: REQ-d00131-I
+    def test_render_roundtrip_lowercase_assertions_canonicalized(self, tmp_path):
+        """Lowercase ``## assertions`` in source is canonicalized to
+        ``## Assertions`` on render.
+
+        The grammar accepts the header case-insensitively, but the
+        renderer always emits the canonical capitalization
+        ``## Assertions``. Source casing is therefore not preserved by
+        round-trip; instead it is normalized.
+        """
+        from elspais.graph.factory import build_graph
+        from elspais.graph.render import render_file
+
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        (tmp_path / ".elspais.toml").write_text(
+            "version = 4\n"
+            '[project]\nname = "test"\nnamespace = "REQ"\n'
+            '[levels.prd]\nrank = 1\nletter = "p"\n'
+            '[id-patterns]\ncanonical = "{namespace}-{level.letter}{component}"\n'
+            '[id-patterns.component]\nstyle = "numeric"\ndigits = 5\n'
+            "leading_zeros = true\n"
+            '[id-patterns.assertions]\nlabel_style = "uppercase"\nmax_count = 26\n'
+            '[scanning.spec]\ndirectories = ["spec"]\n'
+            "[rules.format]\nrequire_hash = true\nrequire_assertions = true\n"
+        )
+        content = (
+            "## REQ-p00001: Lowercase Assertions Header\n"
+            "\n"
+            "**Level**: prd | **Status**: Active\n"
+            "\n"
+            "## assertions\n"
+            "\n"
+            "A. SHALL do X.\n"
+            "\n"
+            "B. SHALL do Y.\n"
+            "\n"
+            "*End* *Lowercase Assertions Header* | **Hash**: placeholder\n"
+        )
+        (spec_dir / "test.md").write_text(content)
+        graph = build_graph(repo_root=tmp_path)
+
+        # Find FILE node
+        file_node = None
+        for root in graph.iter_roots(NodeKind.FILE):
+            rel_path = root.get_field("relative_path")
+            if rel_path and rel_path.endswith("test.md"):
+                file_node = root
+                break
+        assert file_node is not None, "FILE node not found"
+
+        rendered = render_file(file_node)
+
+        # Renderer always emits canonical capitalization.
+        assert "## Assertions" in rendered, (
+            f"Renderer must emit canonical '## Assertions' even when source "
+            f"used lowercase '## assertions'.\nRendered:\n{rendered}"
+        )
+        # Lowercase form should NOT appear in the rendered output.
+        assert "## assertions" not in rendered, (
+            f"Source lowercase '## assertions' must be canonicalized away.\n"
+            f"Rendered:\n{rendered}"
+        )
+        # And the assertions themselves must round-trip.
+        assert "A. SHALL do X." in rendered
+        assert "B. SHALL do Y." in rendered
+
+    # Implements: REQ-d00131-I
+    def test_render_roundtrip_hash_assertion_sub_headings(self, tmp_path):
+        """CUR-1199: ### sub-headings in assertion blocks survive round-trip.
+
+        When assertions are grouped under ### markdown headings inside
+        ## Assertions, build_graph + render_file must preserve those
+        sub-headings, render them between ## Assertions and the assertions
+        themselves (in order), and emit a single *End* marker (not a
+        synthetic duplicate).
+        """
+        from elspais.graph.factory import build_graph
+        from elspais.graph.render import render_file
+
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        (tmp_path / ".elspais.toml").write_text(
+            "version = 4\n"
+            '[project]\nname = "test"\nnamespace = "REQ"\n'
+            '[levels.prd]\nrank = 1\nletter = "p"\n'
+            '[id-patterns]\ncanonical = "{namespace}-{level.letter}{component}"\n'
+            '[id-patterns.component]\nstyle = "numeric"\ndigits = 5\n'
+            "leading_zeros = true\n"
+            '[id-patterns.assertions]\nlabel_style = "uppercase"\nmax_count = 26\n'
+            '[scanning.spec]\ndirectories = ["spec"]\n'
+            "[rules.format]\nrequire_hash = true\nrequire_assertions = true\n"
+        )
+        content = (
+            "## REQ-p00001: Hash Sub Headings\n"
+            "\n"
+            "**Level**: prd | **Status**: Active\n"
+            "\n"
+            "## Assertions\n"
+            "\n"
+            "### Group A\n"
+            "\n"
+            "A. SHALL provide feature A.\n"
+            "\n"
+            "B. SHALL provide feature B.\n"
+            "\n"
+            "### Group B\n"
+            "\n"
+            "C. SHALL provide feature C.\n"
+            "\n"
+            "*End* *Hash Sub Headings* | **Hash**: placeholder\n"
+        )
+        (spec_dir / "test.md").write_text(content)
+        graph = build_graph(repo_root=tmp_path)
+
+        # Find FILE node
+        file_node = None
+        for root in graph.iter_roots(NodeKind.FILE):
+            rel_path = root.get_field("relative_path")
+            if rel_path and rel_path.endswith("test.md"):
+                file_node = root
+                break
+        assert file_node is not None, "FILE node not found"
+
+        rendered = render_file(file_node)
+
+        # The hash sub-headings must appear in the output
+        assert (
+            "### Group A" in rendered
+        ), f"### Group A sub-heading not preserved.\nRendered:\n{rendered}"
+        assert (
+            "### Group B" in rendered
+        ), f"### Group B sub-heading not preserved.\nRendered:\n{rendered}"
+
+        # Ordering: ## Assertions < ### Group A < A. ... < ### Group B < C. ...
+        idx_assertions = rendered.find("## Assertions")
+        idx_group_a = rendered.find("### Group A")
+        idx_assertion_a = rendered.find("A. SHALL provide feature A.")
+        idx_group_b = rendered.find("### Group B")
+        idx_assertion_c = rendered.find("C. SHALL provide feature C.")
+        assert idx_assertions != -1, f"## Assertions missing from render:\n{rendered}"
+        assert idx_group_a != -1, f"### Group A missing from render:\n{rendered}"
+        assert idx_assertion_a != -1, f"Assertion A missing from render:\n{rendered}"
+        assert idx_group_b != -1, f"### Group B missing from render:\n{rendered}"
+        assert idx_assertion_c != -1, f"Assertion C missing from render:\n{rendered}"
+        assert idx_assertions < idx_group_a < idx_assertion_a < idx_group_b < idx_assertion_c, (
+            "Order should be: ## Assertions < ### Group A < assertion A "
+            f"< ### Group B < assertion C. Got positions: "
+            f"assertions={idx_assertions}, group_a={idx_group_a}, "
+            f"assertion_a={idx_assertion_a}, group_b={idx_group_b}, "
+            f"assertion_c={idx_assertion_c}.\nRendered:\n{rendered}"
+        )
+
+        # *End* must appear exactly once -- no synthetic duplicate
+        end_count = rendered.count("*End*")
+        assert end_count == 1, (
+            f"Expected exactly one *End* marker, found {end_count}.\n" f"Rendered:\n{rendered}"
+        )
+
+    # Implements: REQ-d00131-I
+    def test_render_subheading_before_first_assertion_emits_assertions_header(self, tmp_path):
+        """CUR-1199: ## Assertions header is emitted even when a sub-heading
+        is the first thing inside the assertion block.
+
+        Degenerate but legal case: ### Group A immediately follows
+        ## Assertions with no assertion in between. The renderer must still
+        emit ## Assertions (not skip it) before the sub-heading and
+        assertions.
+        """
+        from elspais.graph.factory import build_graph
+        from elspais.graph.render import render_file
+
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        (tmp_path / ".elspais.toml").write_text(
+            "version = 4\n"
+            '[project]\nname = "test"\nnamespace = "REQ"\n'
+            '[levels.prd]\nrank = 1\nletter = "p"\n'
+            '[id-patterns]\ncanonical = "{namespace}-{level.letter}{component}"\n'
+            '[id-patterns.component]\nstyle = "numeric"\ndigits = 5\n'
+            "leading_zeros = true\n"
+            '[id-patterns.assertions]\nlabel_style = "uppercase"\nmax_count = 26\n'
+            '[scanning.spec]\ndirectories = ["spec"]\n'
+            "[rules.format]\nrequire_hash = true\nrequire_assertions = true\n"
+        )
+        content = (
+            "## REQ-p00001: Subheading First\n"
+            "\n"
+            "**Level**: prd | **Status**: Active\n"
+            "\n"
+            "## Assertions\n"
+            "\n"
+            "### Group A\n"
+            "\n"
+            "A. SHALL provide feature A.\n"
+            "\n"
+            "B. SHALL provide feature B.\n"
+            "\n"
+            "*End* *Subheading First* | **Hash**: placeholder\n"
+        )
+        (spec_dir / "test.md").write_text(content)
+        graph = build_graph(repo_root=tmp_path)
+
+        file_node = None
+        for root in graph.iter_roots(NodeKind.FILE):
+            rel_path = root.get_field("relative_path")
+            if rel_path and rel_path.endswith("test.md"):
+                file_node = root
+                break
+        assert file_node is not None, "FILE node not found"
+
+        rendered = render_file(file_node)
+
+        # All three required tokens must appear
+        idx_assertions = rendered.find("## Assertions")
+        idx_group_a = rendered.find("### Group A")
+        idx_assertion_a = rendered.find("A. SHALL provide feature A.")
+        idx_assertion_b = rendered.find("B. SHALL provide feature B.")
+        assert idx_assertions != -1, (
+            f"## Assertions header missing -- it must be emitted even when a "
+            f"sub-heading is the first thing in the assertion block.\n"
+            f"Rendered:\n{rendered}"
+        )
+        assert idx_group_a != -1, f"### Group A missing from render:\n{rendered}"
+        assert idx_assertion_a != -1, f"Assertion A missing from render:\n{rendered}"
+        assert idx_assertion_b != -1, f"Assertion B missing from render:\n{rendered}"
+        assert idx_assertions < idx_group_a < idx_assertion_a < idx_assertion_b, (
+            "Order should be: ## Assertions < ### Group A < assertion A "
+            f"< assertion B. Got positions: assertions={idx_assertions}, "
+            f"group_a={idx_group_a}, assertion_a={idx_assertion_a}, "
+            f"assertion_b={idx_assertion_b}.\nRendered:\n{rendered}"
+        )
+
+        # Single *End* marker
+        end_count = rendered.count("*End*")
+        assert end_count == 1, (
+            f"Expected exactly one *End* marker, found {end_count}.\n" f"Rendered:\n{rendered}"
+        )
+
 
 class TestReconstructBodyText:
     """Validates REQ-d00131-B: reconstruct_body_text() produces text from STRUCTURES children."""

@@ -57,10 +57,12 @@ body_line: TEXT _NL
 assertion_block: ASSERTIONS_HDR _NL assertion_item*
 
 ?assertion_item: assertion_sub_heading
+               | assertion_sub_heading_hash
                | assertion
                | _NL
 
 assertion_sub_heading: ASSERT_SUB_HDR _NL
+assertion_sub_heading_hash: ASSERT_SUB_HASH_HDR _NL
 
 // Assertion continuation uses ASSERT_CONT (distinct from TEXT) to prevent
 // LALR state merging with non-assertion contexts.
@@ -140,9 +142,11 @@ JNY_END_MARKER.9: /\*End\*[ \t]+\*JNY-[^*]+\*[^\n]*/
 
 // --- Section headers ---
 
-ASSERTIONS_HDR.8: /##[ \t]+Assertions[ \t]*/
-CHANGELOG_HDR.8: /##[ \t]+Changelog[ \t]*/
-SECTION_HDR.7: /##[ \t]+(?!Assertions\b)(?!Changelog\b)[^\n]+/
+// Case-insensitive: `## Assertions`, `## assertions`, `## ASSERTIONS` all
+// map to the same structural keyword. Mirrors the metadata-field pattern.
+ASSERTIONS_HDR.8: /##[ \t]+[Aa][Ss][Ss][Ee][Rr][Tt][Ii][Oo][Nn][Ss][ \t]*/
+CHANGELOG_HDR.8: /##[ \t]+[Cc][Hh][Aa][Nn][Gg][Ee][Ll][Oo][Gg][ \t]*/
+SECTION_HDR.7: /##[ \t]+(?![Aa][Ss][Ss][Ee][Rr][Tt][Ii][Oo][Nn][Ss]\b)(?![Cc][Hh][Aa][Nn][Gg][Ee][Ll][Oo][Gg]\b)[^\n]+/
 
 // --- Journey section headers (same pattern as SECTION_HDR but distinct terminal) ---
 JNY_SECTION_HDR.7: /##[ \t]+[^\n]+/
@@ -171,6 +175,10 @@ PIPE.7: /[ \t]*\|[ \t]*/
 // contextual lexer to bleed ASSERT_SUB_HDR into non-assertion states.
 
 ASSERT_SUB_HDR.6: /(?:\*\*|\*|_)[^\n*_]+(?:\*\*|\*|_)/
+// `### Heading` (3-6 hashes) inside an assertion block is a grouping
+// sub-heading. Active only inside assertion_block via the contextual
+// lexer; outside this state, `### Heading` lexes as TEXT.
+ASSERT_SUB_HASH_HDR.6: /#{3,6}[ \t]+[^\n]+/
 ASSERTION_ENTRY.5: /__ASSERTION_LABEL__\.[ \t]+[^\n]+/
 ASSERT_CONT.2: /[^\n]+/
 
