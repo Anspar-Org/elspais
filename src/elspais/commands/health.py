@@ -349,6 +349,59 @@ def check_spec_refines_resolve(
     )
 
 
+# Implements: REQ-p00014-E
+def check_spec_satisfies_resolve(
+    graph: FederatedGraph, resolver: IdResolver | None = None
+) -> HealthCheck:
+    """Check that all Satisfies references resolve to valid requirements or assertions."""
+    from elspais.graph import NodeKind
+
+    unresolved = []
+
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        satisfies = node.get_field("satisfies", [])
+        for ref in satisfies:
+            target = graph.find_by_id(ref)
+            if target is None:
+                # Check assertion reference
+                split = resolver.split_assertion_ref(ref) if resolver else None
+                if split is None and "-" in ref:
+                    parts = ref.rsplit("-", 1)
+                    if len(parts) == 2:
+                        split = (parts[0], parts[1])
+                if split is not None:
+                    parent = graph.find_by_id(split[0])
+                    if parent is not None:
+                        continue
+                unresolved.append({"from": node.id, "to": ref})
+
+    if unresolved:
+        findings = [
+            HealthFinding(
+                message=f"Unresolved: {u['from']} -> {u['to']}",
+                node_id=u["from"],
+                related=[u["to"]],
+            )
+            for u in unresolved
+        ]
+        return HealthCheck(
+            name="spec.satisfies_resolve",
+            passed=False,
+            message=f"{len(unresolved)} unresolved Satisfies references",
+            category="spec",
+            severity="warning",
+            details={"unresolved": unresolved[:10]},
+            findings=findings,
+        )
+
+    return HealthCheck(
+        name="spec.satisfies_resolve",
+        passed=True,
+        message="All Satisfies references resolve",
+        category="spec",
+    )
+
+
 # Implements: REQ-d00085-I
 def check_spec_needs_rewrite(graph: FederatedGraph) -> HealthCheck:
     """Check for requirements that would change the file on next save.
@@ -1743,6 +1796,12 @@ def run_spec_checks(
         )
         checks.append(
             _annotate_findings(
+                check_spec_satisfies_resolve(repo_graph, resolver=repo_resolver),
+                entry.name,
+            )
+        )
+        checks.append(
+            _annotate_findings(
                 check_spec_needs_rewrite(repo_graph),
                 entry.name,
             )
@@ -2884,6 +2943,7 @@ _FOLLOWUP_COMMANDS: dict[str, str] = {
     "spec.no_duplicates": "elspais checks --spec --format json",
     "spec.implements_resolve": "elspais broken",
     "spec.refines_resolve": "elspais broken",
+    "spec.satisfies_resolve": "elspais broken",
     "spec.broken_references": "elspais broken",
     "spec.structural_orphans": "elspais checks --spec --format json",
     "spec.hierarchy_levels": "elspais checks --spec --format json",

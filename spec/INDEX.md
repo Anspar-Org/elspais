@@ -15,7 +15,7 @@
 | REQ-p00005 | Multi-Repository Requirements                    | prd-features.md | c3303546 |
 | REQ-p00006 | Interactive Traceability Viewer                  | prd-features.md | b3dd4d1a |
 | REQ-p00013 | Automated Testing                                | prd-core.md     | 962216d8 |
-| REQ-p00014 | Satisfies Relationship                           | prd-features.md | 9115ce0d |
+| REQ-p00014 | Satisfies Relationship                           | prd-features.md | bae1b85d |
 | REQ-p00016 | NOT APPLICABLE Status                            | prd-features.md | cf53ad98 |
 | REQ-p00050 | Unified Graph Architecture                       | prd-features.md | 4a1e5d0b |
 | REQ-p00060 | MCP Server for AI-Driven Requirements Management | prd-features.md | 3ebc237a |
