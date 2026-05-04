@@ -506,3 +506,17 @@ A. Fenced code block content (lines between ``` markers) SHALL be preserved verb
 - 2026-05-04 | 1270eb2b | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Fenced Code Block Preservation* | **Hash**: 1270eb2b
+
+## REQ-d00248: Fix Command Idempotency
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. `elspais fix` SHALL be idempotent: running the command twice in succession on the same project SHALL produce identical files. The second invocation SHALL detect no pending changes and SHALL not modify any spec, journey, code, test, or generated artifact file. This invariant SHALL be exercised by a fixture that includes fenced code blocks with markdown emphasis, a glossary term with emphasis-wrapped name, a user journey with emphasized actor field, and a REMAINDER section containing emphasized text.
+
+## Changelog
+
+- 2026-05-04 | 8a92207b | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
+*End* *Fix Command Idempotency* | **Hash**: 8a92207b
