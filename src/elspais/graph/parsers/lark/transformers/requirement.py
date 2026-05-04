@@ -87,10 +87,26 @@ class RequirementTransformer:
                     results.append(self._transform_definition_block(child))
                 elif child.data == "remainder_line":
                     token = child.children[0]  # TEXT token
-                    remainder_lines.append((token.line, str(token)))  # type: ignore[attr-defined]
+                    # Implements: REQ-d00247-A
+                    # Token text comes from the neutralized parse buffer; pull
+                    # from _source_lines (original) so fence content survives.
+                    line_no = token.line  # type: ignore[attr-defined]
+                    text = (
+                        self._source_lines[line_no - 1]
+                        if self._source_lines and line_no - 1 < len(self._source_lines)
+                        else str(token)
+                    )
+                    remainder_lines.append((line_no, text))
                 elif child.data == "stray_marker":
                     token = child.children[0]
-                    remainder_lines.append((token.line, str(token)))  # type: ignore[attr-defined]
+                    # Implements: REQ-d00247-A
+                    line_no = token.line  # type: ignore[attr-defined]
+                    text = (
+                        self._source_lines[line_no - 1]
+                        if self._source_lines and line_no - 1 < len(self._source_lines)
+                        else str(token)
+                    )
+                    remainder_lines.append((line_no, text))
 
         self._flush_remainder(remainder_lines, results)
 

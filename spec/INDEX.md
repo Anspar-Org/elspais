@@ -135,6 +135,7 @@
 | REQ-d00244 | Term Cards in Viewer Card Stack                               | prd-features.md         | 5dd49a51 |
 | REQ-d00245 | Inline Term Highlighting in Viewer Cards                      | prd-features.md         | 62a44ed3 |
 | REQ-d00246 | Markdown Emphasis Normalization Utility                       | prd-core.md             | 16af6c80 |
+| REQ-d00247 | Fenced Code Block Preservation                                | prd-core.md             | 1270eb2b |
 
 ## User Journeys
 

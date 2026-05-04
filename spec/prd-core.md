@@ -492,3 +492,17 @@ B. Lark transformers SHALL use `strip_emphasis()` to normalize all user-text cap
 - 2026-05-04 | 16af6c80 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Markdown Emphasis Normalization Utility* | **Hash**: 16af6c80
+
+## REQ-d00247: Fenced Code Block Preservation
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. Fenced code block content (lines between ``` markers) SHALL be preserved verbatim across the parse-render round trip. Any preprocessing applied to fenced content for grammar matching (e.g., line replacement with neutralization placeholders) SHALL be ephemeral, used only as parser input, and SHALL NOT be persisted to disk via render. The lark spec parser SHALL pass the original un-preprocessed source content to the transformer's `source` parameter so REMAINDER nodes capture the original text.
+
+## Changelog
+
+- 2026-05-04 | 1270eb2b | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
+*End* *Fenced Code Block Preservation* | **Hash**: 1270eb2b

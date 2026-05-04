@@ -260,12 +260,16 @@ class FileDispatcher:
 
         if not content.endswith("\n"):
             content += "\n"
-        # Neutralize fenced code blocks before parsing
-        content = self._neutralize_fenced_blocks(content)
+        # Implements: REQ-d00247-A
+        # Neutralize fenced code blocks for grammar matching only; the
+        # neutralized buffer must NOT escape the parser. Pass the original
+        # content as `source` so REMAINDER nodes capture the original text.
+        original_content = content
+        neutralized = self._neutralize_fenced_blocks(content)
         parser = self._get_req_parser()
-        tree = parser.parse(content)
+        tree = parser.parse(neutralized)
         transformer = RequirementTransformer(self._resolver)
-        return transformer.transform(tree, source=content)
+        return transformer.transform(tree, source=original_content)
 
     def dispatch_code(
         self,

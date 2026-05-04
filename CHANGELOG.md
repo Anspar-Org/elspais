@@ -33,6 +33,7 @@ All notable changes to elspais will be documented in this file.
 
 - **Term name emphasis stripping** — term names captured during definition-block parsing now pass through `strip_emphasis()`, so `**Email Address**` and `Email Address` no longer collide as distinct terms in the glossary and term index.
 - **Journey field and reference emphasis stripping** — journey actor/goal/context values and `reference term`/`reference source` values now pass through `strip_emphasis()`, eliminating unbalanced `**` leakage into `INDEX.md` actor cells and replacing the prior asymmetric `.strip("_").strip("*")` that mangled unbalanced wrappers.
+- **Fenced code block preservation** — `elspais fix` no longer overwrites the contents of fenced code blocks with `<!-- fenced -->` placeholders. The neutralization step used during parsing is now confined to the parser, and the original source is used when capturing remainder text so fenced bodies round-trip unchanged through regenerations.
 
 ## [0.112.34]
 
