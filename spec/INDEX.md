@@ -105,7 +105,7 @@
 | REQ-d00214 | MCP Server Install/Uninstall CLI Commands                     | dev-mcp-tools.md        | f1518d2c |
 | REQ-d00215 | Keyword Extraction Annotator                                  | dev-graph-core.md       | ebe57660 |
 | REQ-d00216 | TraceGraph Deep Clone                                         | dev-graph-core.md       | a007d5ed |
-| REQ-d00217 | INDEX.md Regeneration                                         | dev-cli.md              | a1e3915a |
+| REQ-d00217 | INDEX.md Regeneration                                         | dev-cli.md              | 7c4f1816 |
 | REQ-d00218 | Health Check Coverage Rollup                                  | dev-cli.md              | 64b0dfbb |
 | REQ-d00219 | UAT Health Check Section                                      | dev-cli.md              | 3a95ff57 |
 | REQ-d00220 | TermDictionary Data Model                                     | prd-core.md             | 0d0fd97c |

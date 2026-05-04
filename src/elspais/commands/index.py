@@ -202,31 +202,79 @@ def _resolve_spec_dir_info(spec_dir: Path) -> _SpecDirInfo:
     )
 
 
-def _classify_node(node: object, spec_dirs: list[Path]) -> Path | None:
-    """Return the most-specific spec directory that contains a node's source file.
+# Implements: REQ-d00217-B
+def _repo_name_for(graph: FederatedGraph, node_id: str) -> str | None:
+    """Return the owning repo's name for a node ID, or None if unknown.
 
-    Checks deepest paths first so ``spec/regulations/fda`` matches before ``spec``.
-    Uses the FILE node's ``absolute_path`` (resolved at build time against the
-    node's own repo_root) so classification is correct for federated graphs
-    and independent of the current working directory.
+    Uses ``FederatedGraph.repo_for(node_id).name`` directly. REQ/JNY IDs are
+    forbidden from colliding cross-repo, so this lookup is unambiguous (unlike
+    a FILE-node-based lookup, since two repos may share a relative path).
+
+    For backward compat with callers passing a bare ``TraceGraph`` (legacy
+    code paths and tests), returns ``"root"`` if the graph has no
+    ``repo_for`` method.
     """
-    # Implements: REQ-d00129-D
-    fn = node.file_node() if hasattr(node, "file_node") else None
-    if fn is None:
+    if not hasattr(graph, "repo_for"):
+        return "root"
+    try:
+        return graph.repo_for(node_id).name
+    except KeyError:
         return None
-    abs_path = fn.get_field("absolute_path")
-    if not abs_path:
-        return None
-    source_path = Path(abs_path)
-    # Sort deepest-first so nested dirs match before their parents
-    for spec_dir in sorted(spec_dirs, key=lambda p: len(p.resolve().parts), reverse=True):
-        resolved = spec_dir.resolve()
+
+
+def _resolve_repo_info(
+    graph: FederatedGraph, repo_name: str, fallback_dir: Path | None = None
+) -> _SpecDirInfo:
+    """Resolve label and level ordering for a repo by name.
+
+    Reads the repo's config from FederatedGraph for level rank/display name.
+    Falls back to scanning ``fallback_dir`` for a `.elspais.toml` when the
+    graph is a bare TraceGraph (legacy caller) and config isn't otherwise
+    accessible.
+    """
+    from elspais.config.schema import ElspaisConfig
+
+    label = repo_name
+    level_order: dict[str, int] = {}
+    level_names: dict[str, str] = {}
+
+    config = None
+    if hasattr(graph, "iter_repos"):
+        for entry in graph.iter_repos():
+            if entry.name == repo_name and entry.config is not None:
+                config = entry.config
+                break
+
+    if config is None and fallback_dir is not None:
+        # Legacy fallback: walk up from spec dir to find .elspais.toml
+        from elspais.config import get_config
+
+        current = fallback_dir.resolve()
+        while current != current.parent:
+            cfg_file = current / ".elspais.toml"
+            if cfg_file.exists():
+                config = get_config(cfg_file, current)
+                break
+            current = current.parent
+
+    if config is not None:
+        schema_fields = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
+            ElspaisConfig.model_fields.keys()
+        )
+        filtered = {k: v for k, v in config.items() if k in schema_fields}
+        assoc = filtered.get("associates")
+        if isinstance(assoc, dict) and "paths" in assoc:
+            filtered.pop("associates", None)
         try:
-            source_path.relative_to(resolved)
-            return spec_dir
-        except ValueError:
-            continue
-    return None
+            typed_config = ElspaisConfig.model_validate(filtered)
+            for level_key, level_cfg in typed_config.levels.items():
+                level_order[level_key] = level_cfg.rank
+                display = (level_cfg.display_name or level_key).upper()
+                level_names[level_key] = display
+        except Exception:
+            pass
+
+    return _SpecDirInfo(label=label, level_order=level_order, level_names=level_names)
 
 
 def _build_index_content(
@@ -235,56 +283,65 @@ def _build_index_content(
     """Render INDEX.md content without writing.
 
     Returns (output_path, content, req_count, jny_count).
+
+    Buckets nodes by their owning repo name via ``FederatedGraph.repo_for()``
+    rather than by source-file path matching against ``spec_dirs``. The
+    ``spec_dirs`` parameter is retained only to determine the output path.
+    Nodes whose ID is not in ``_ownership`` bucket as ``"Unattributed"``.
     """
-    # Group requirements by spec directory
+    # Implements: REQ-d00217-B
     from collections import defaultdict
 
-    reqs_by_dir: dict[Path | None, list] = defaultdict(list)
+    UNATTRIBUTED = "__unattributed__"
+
+    reqs_by_repo: dict[str, list] = defaultdict(list)
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        spec_dir = _classify_node(node, spec_dirs)
-        reqs_by_dir[spec_dir].append(node)
+        repo_name = _repo_name_for(graph, node.id) or UNATTRIBUTED
+        reqs_by_repo[repo_name].append(node)
 
-    jnys_by_dir: dict[Path | None, list] = defaultdict(list)
+    jnys_by_repo: dict[str, list] = defaultdict(list)
     for node in graph.nodes_by_kind(NodeKind.USER_JOURNEY):
-        spec_dir = _classify_node(node, spec_dirs)
-        jnys_by_dir[spec_dir].append(node)
+        repo_name = _repo_name_for(graph, node.id) or UNATTRIBUTED
+        jnys_by_repo[repo_name].append(node)
 
-    # Build ordered list of spec dirs that have content
-    active_dirs: list[Path] = []
-    for sd in spec_dirs:
-        if reqs_by_dir.get(sd) or jnys_by_dir.get(sd):
-            active_dirs.append(sd)
-    # Append None bucket for nodes with unknown source
-    if reqs_by_dir.get(None) or jnys_by_dir.get(None):
-        active_dirs.append(None)  # type: ignore[arg-type]
+    # Build ordered list of repo names that have content. Order: each
+    # RepoEntry in graph.iter_repos() (preserves construction order, with
+    # primary "root" first), then UNATTRIBUTED if any.
+    active_repos: list[str] = []
+    if hasattr(graph, "iter_repos"):
+        for entry in graph.iter_repos():
+            if reqs_by_repo.get(entry.name) or jnys_by_repo.get(entry.name):
+                active_repos.append(entry.name)
+    else:
+        # Bare TraceGraph: single bucket "root"
+        if reqs_by_repo.get("root") or jnys_by_repo.get("root"):
+            active_repos.append("root")
+    if reqs_by_repo.get(UNATTRIBUTED) or jnys_by_repo.get(UNATTRIBUTED):
+        active_repos.append(UNATTRIBUTED)
 
-    # Resolve info for each spec directory
-    dir_info: dict[Path | None, _SpecDirInfo] = {}
-    for sd in active_dirs:
-        if sd is None:
-            dir_info[None] = _SpecDirInfo(
-                label="Unknown Source",
+    # Resolve info for each repo. For bare-TraceGraph callers, fall back to
+    # the first spec_dir's parent for config discovery.
+    fallback_dir = spec_dirs[0] if spec_dirs else None
+    repo_info: dict[str, _SpecDirInfo] = {}
+    for name in active_repos:
+        if name == UNATTRIBUTED:
+            repo_info[name] = _SpecDirInfo(
+                label="Unattributed",
                 level_order={},
                 level_names={},
             )
         else:
-            dir_info[sd] = _resolve_spec_dir_info(sd)
+            repo_info[name] = _resolve_repo_info(graph, name, fallback_dir)
 
-    # Build (level, spec_dir) -> [nodes] index
-    from collections import defaultdict as _defaultdict
-
-    reqs_by_level_dir: dict[str, dict[Path | None, list]] = _defaultdict(lambda: _defaultdict(list))
-    for sd in active_dirs:
-        for node in reqs_by_dir.get(sd, []):
+    reqs_by_level_repo: dict[str, dict[str, list]] = defaultdict(lambda: defaultdict(list))
+    for name in active_repos:
+        for node in reqs_by_repo.get(name, []):
             level = node.level or ""
-            reqs_by_level_dir[level][sd].append(node)
+            reqs_by_level_repo[level][name].append(node)
 
-    # Collect all levels across all dirs, sorted by dependency order.
-    # Use the first dir's config for ordering (all dirs in same project
-    # share config; for multi-project the ordering is still reasonable).
     first_info = (
-        dir_info[active_dirs[0]]
-        if active_dirs
+        repo_info[active_repos[0]]
+        if active_repos
         else _SpecDirInfo(
             label="",
             level_order={},
@@ -292,7 +349,7 @@ def _build_index_content(
         )
     )
     all_levels = sorted(
-        reqs_by_level_dir.keys(),
+        reqs_by_level_repo.keys(),
         key=lambda lv: first_info.level_order.get(lv, 99),
     )
 
@@ -315,14 +372,14 @@ def _build_index_content(
         lines.append(f"## {level_display}")
         lines.append("")
 
-        dirs_with_level = [sd for sd in active_dirs if reqs_by_level_dir[level].get(sd)]
-        multi_dir = len(dirs_with_level) > 1
+        repos_with_level = [r for r in active_repos if reqs_by_level_repo[level].get(r)]
+        multi_repo = len(repos_with_level) > 1
 
-        for sd in dirs_with_level:
-            info = dir_info[sd]
-            nodes = reqs_by_level_dir[level][sd]
+        for name in repos_with_level:
+            info = repo_info[name]
+            nodes = reqs_by_level_repo[level][name]
 
-            if multi_dir:
+            if multi_repo:
                 lines.append(f"### {info.label}")
                 lines.append("")
 
@@ -339,15 +396,17 @@ def _build_index_content(
             req_count += len(nodes)
 
     # User Journeys: after all requirements
-    all_jnys = [(sd, jnys_by_dir.get(sd, [])) for sd in active_dirs if jnys_by_dir.get(sd)]
+    all_jnys = [
+        (name, jnys_by_repo.get(name, [])) for name in active_repos if jnys_by_repo.get(name)
+    ]
     if all_jnys:
         lines.append("## User Journeys")
         lines.append("")
 
-        multi_dir = len(all_jnys) > 1
-        for sd, jnys in all_jnys:
-            info = dir_info[sd]
-            if multi_dir:
+        multi_repo = len(all_jnys) > 1
+        for name, jnys in all_jnys:
+            info = repo_info[name]
+            if multi_repo:
                 lines.append(f"### {info.label}")
                 lines.append("")
 
