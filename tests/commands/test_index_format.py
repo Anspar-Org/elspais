@@ -8,12 +8,10 @@ where columns are aligned, and _regenerate_index uses aligned tables.
 import argparse
 
 from elspais.commands.index import (
-    _classify_node,
     _format_table,
     _regenerate_index,
     _resolve_spec_dir_info,
 )
-from elspais.graph import NodeKind
 from tests.core.graph_test_helpers import (
     build_graph,
     make_journey,
@@ -163,36 +161,9 @@ class TestResolveSpecDirInfo:
         assert info.level_names == {}
 
 
-class TestClassifyNode:
-    """Tests for _classify_node."""
-
-    # Implements: REQ-d00217-B
-    def test_matches_correct_spec_dir(self, tmp_path):
-        """Node is classified to the spec dir containing its source."""
-        spec_dir = tmp_path / "spec"
-        spec_dir.mkdir()
-        graph = build_graph(
-            make_requirement("REQ-p00001", level="PRD", source_path=str(spec_dir / "file.md")),
-        )
-        node = next(graph.nodes_by_kind(NodeKind.REQUIREMENT))
-
-        result = _classify_node(node, [spec_dir])
-
-        assert result == spec_dir
-
-    # Implements: REQ-d00217-B
-    def test_no_source_returns_none(self, tmp_path):
-        """Node with no source path returns None."""
-        spec_dir = tmp_path / "spec"
-        spec_dir.mkdir()
-        graph = build_graph(
-            make_requirement("REQ-p00001", level="PRD", source_path=""),
-        )
-        node = next(graph.nodes_by_kind(NodeKind.REQUIREMENT))
-
-        result = _classify_node(node, [spec_dir])
-
-        assert result is None
+# TestClassifyNode (path-based classifier) was removed in CUR-1199 Task 7.
+# Replaced by repo-name attribution via FederatedGraph.repo_for(); coverage
+# now lives in `tests/commands/test_index_repo_attribution.py`.
 
 
 class TestRegenerateIndexAlignment:
@@ -365,7 +336,12 @@ class TestRegenerateIndexAlignment:
         assert prd_idx < dev_idx
 
     def test_REQ_d00052_G_multi_dir_shows_subsections(self, tmp_path):
-        """Multiple spec dirs get ### subsections within a level."""
+        """Multiple spec dirs within a repo get ### subsections within a level.
+
+        Restored after CUR-1199 Task 7 follow-up: repo-attribution and
+        spec-dir classification are independent dimensions, so a single-repo
+        project with multiple spec dirs still shows per-dir subsections.
+        """
         dir_a = tmp_path / "spec_a"
         dir_b = tmp_path / "spec_b"
         dir_a.mkdir()

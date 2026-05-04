@@ -50,6 +50,7 @@
 - REQ-p00013-A
 - REQ-d00238-B
 - REQ-p00014-A
+- REQ-p00014-E
 - REQ-p00016-C
 - REQ-d00228-A
 - REQ-d00229-A
@@ -66,6 +67,7 @@
 - REQ-d00068:section:1
 - REQ-p00002:section:0
 - REQ-p00016:section:0
+- rem:spec/requirements-spec.md:28
 - rem:spec/requirements-spec.md:34
 - rem:spec/requirements-spec.md:98
 - rem:spec/requirements-spec.md:137

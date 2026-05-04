@@ -15,7 +15,7 @@
 | REQ-p00005 | Multi-Repository Requirements                    | prd-features.md | c3303546 |
 | REQ-p00006 | Interactive Traceability Viewer                  | prd-features.md | b3dd4d1a |
 | REQ-p00013 | Automated Testing                                | prd-core.md     | 962216d8 |
-| REQ-p00014 | Satisfies Relationship                           | prd-features.md | 9115ce0d |
+| REQ-p00014 | Satisfies Relationship                           | prd-features.md | bae1b85d |
 | REQ-p00016 | NOT APPLICABLE Status                            | prd-features.md | cf53ad98 |
 | REQ-p00050 | Unified Graph Architecture                       | prd-features.md | 4a1e5d0b |
 | REQ-p00060 | MCP Server for AI-Driven Requirements Management | prd-features.md | 3ebc237a |
@@ -105,7 +105,7 @@
 | REQ-d00214 | MCP Server Install/Uninstall CLI Commands                     | dev-mcp-tools.md        | f1518d2c |
 | REQ-d00215 | Keyword Extraction Annotator                                  | dev-graph-core.md       | ebe57660 |
 | REQ-d00216 | TraceGraph Deep Clone                                         | dev-graph-core.md       | a007d5ed |
-| REQ-d00217 | INDEX.md Regeneration                                         | dev-cli.md              | a1e3915a |
+| REQ-d00217 | INDEX.md Regeneration                                         | dev-cli.md              | 4310931a |
 | REQ-d00218 | Health Check Coverage Rollup                                  | dev-cli.md              | 64b0dfbb |
 | REQ-d00219 | UAT Health Check Section                                      | dev-cli.md              | 3a95ff57 |
 | REQ-d00220 | TermDictionary Data Model                                     | prd-core.md             | 0d0fd97c |
@@ -134,6 +134,9 @@
 | REQ-d00243 | Terms Tab in Viewer Nav Tree                                  | prd-features.md         | 3328f677 |
 | REQ-d00244 | Term Cards in Viewer Card Stack                               | prd-features.md         | 5dd49a51 |
 | REQ-d00245 | Inline Term Highlighting in Viewer Cards                      | prd-features.md         | 62a44ed3 |
+| REQ-d00246 | Markdown Emphasis Normalization Utility                       | prd-core.md             | 16af6c80 |
+| REQ-d00247 | Fenced Code Block Preservation                                | prd-core.md             | 1270eb2b |
+| REQ-d00248 | Fix Command Idempotency                                       | prd-core.md             | 8a92207b |
 
 ## User Journeys
 

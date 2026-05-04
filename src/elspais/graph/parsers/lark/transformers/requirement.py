@@ -16,8 +16,10 @@ from typing import TYPE_CHECKING, Any
 
 from lark import Token, Tree
 
+# Implements: REQ-d00246-B
 from elspais.graph.parsers import ParsedContent
 from elspais.utilities.hasher import HASH_VALUE_PATTERN
+from elspais.utilities.markdown import strip_emphasis
 
 if TYPE_CHECKING:
     from elspais.utilities.patterns import IdResolver
@@ -85,10 +87,26 @@ class RequirementTransformer:
                     results.append(self._transform_definition_block(child))
                 elif child.data == "remainder_line":
                     token = child.children[0]  # TEXT token
-                    remainder_lines.append((token.line, str(token)))  # type: ignore[attr-defined]
+                    # Implements: REQ-d00247-A
+                    # Token text comes from the neutralized parse buffer; pull
+                    # from _source_lines (original) so fence content survives.
+                    line_no = token.line  # type: ignore[attr-defined]
+                    text = (
+                        self._source_lines[line_no - 1]
+                        if self._source_lines and line_no - 1 < len(self._source_lines)
+                        else str(token)
+                    )
+                    remainder_lines.append((line_no, text))
                 elif child.data == "stray_marker":
                     token = child.children[0]
-                    remainder_lines.append((token.line, str(token)))  # type: ignore[attr-defined]
+                    # Implements: REQ-d00247-A
+                    line_no = token.line  # type: ignore[attr-defined]
+                    text = (
+                        self._source_lines[line_no - 1]
+                        if self._source_lines and line_no - 1 < len(self._source_lines)
+                        else str(token)
+                    )
+                    remainder_lines.append((line_no, text))
 
         self._flush_remainder(remainder_lines, results)
 
@@ -157,24 +175,15 @@ class RequirementTransformer:
                             refines.append(ref)
                     if len(refines) < old_len + len(meta["refines"]):
                         has_redundant_refs = True
+                # Implements: REQ-p00014-A
+                if meta.get("satisfies"):
+                    old_len = len(satisfies)
+                    for ref in meta["satisfies"]:
+                        if ref not in satisfies:
+                            satisfies.append(ref)
+                    if len(satisfies) < old_len + len(meta["satisfies"]):
+                        has_redundant_refs = True
                 end_line = self._last_line(child)
-
-            elif child.data == "satisfies_line":
-                token = child.children[0]  # SATISFIES_FIELD
-                sat_text = str(token)
-                # Extract value after separator (: or = or space)
-                sep_match = re.search(r"[:=\s]", sat_text.replace("*", "").replace("_", ""))
-                if sep_match:
-                    # Find separator in original text after field name
-                    field_name_end = sat_text.lower().index("satisfies") + len("satisfies")
-                    # Skip past any closing decoration
-                    while field_name_end < len(sat_text) and sat_text[field_name_end] in "*_":
-                        field_name_end += 1
-                    sat_value = sat_text[field_name_end:].lstrip(":= \t").strip()
-                else:
-                    sat_value = ""
-                satisfies = self._parse_refs(sat_value)
-                end_line = token.line  # type: ignore[attr-defined]
 
             elif child.data == "assertion_block":
                 assertions, sub_heading_sections = self._extract_assertions(child, header_line)
@@ -285,6 +294,9 @@ class RequirementTransformer:
                     result["implements"] = self._parse_refs(val)
                 elif child.type == "REFINES_FIELD":
                     result["refines"] = self._parse_refs(val)
+                # Implements: REQ-p00014-A
+                elif child.type == "SATISFIES_FIELD":
+                    result["satisfies"] = self._parse_refs(val)
                 # PIPE tokens are ignored
         return result
 
@@ -528,13 +540,16 @@ class RequirementTransformer:
             if child.data == "jny_meta_line":
                 token = child.children[0]
                 text = str(token)
-                # Extract value after the field name separator
+                # Extract value after the field name separator;
+                # strip_emphasis() normalizes balanced **bold**/__bold__ wrappers
+                # on the value (Bug 4).
                 val = re.sub(
                     r"^(?:\*\*|\*|_)?(?:Actor|Goal|Context)(?:\*\*|\*|_)?[:=\s]\s*",
                     "",
                     text,
                     flags=re.IGNORECASE,
-                ).strip()
+                )
+                val = strip_emphasis(val)
                 token_type = token.type  # type: ignore[attr-defined]
                 if token_type == "JNY_ACTOR_FIELD":
                     parsed_data["actor"] = val
@@ -632,7 +647,10 @@ class RequirementTransformer:
             if not isinstance(child, Token):
                 continue
             if child.type == "TEXT":
-                term_name = str(child).strip()
+                # Bug 2: term names with emphasis wrappers (**Email Address**)
+                # must canonicalize to the bare term, else the dictionary
+                # records pseudo-duplicates per asterisk count.
+                term_name = strip_emphasis(str(child))
                 start_line = child.line  # type: ignore[attr-defined]
             elif child.type == "DEF_LINE":
                 if current_parts is not None:
@@ -680,11 +698,11 @@ class RequirementTransformer:
                 reference_fields["url"] = url_val
             elif low.startswith("reference term:"):
                 val = stripped[15:].strip()
-                val = val.strip("_").strip("*")
+                val = strip_emphasis(val)
                 reference_term = val
             elif low.startswith("reference source:"):
                 val = stripped[17:].strip()
-                val = val.strip("_").strip("*")
+                val = strip_emphasis(val)
                 reference_source = val
             else:
                 def_lines.append(entry_text)

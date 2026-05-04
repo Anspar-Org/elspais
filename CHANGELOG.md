@@ -9,9 +9,13 @@ All notable changes to elspais will be documented in this file.
 - **TermsConfig restructured** — flat severity fields (`duplicate_severity`, `undefined_severity`, `unmarked_severity`) replaced with nested `[terms.severity]` sub-table containing 6 fields: `duplicate`, `undefined`, `unmarked`, `unused`, `bad_definition`, `collection_empty`. New top-level fields: `markup_styles` (which markdown delimiters count as marked) and `exclude_files` (glob patterns to skip during scanning).
 - **no_traceability_severity** — new `[rules.format]` option to configure severity for code/test files lacking traceability markers (default: None, uses check default of "warning").
 - **Config migration v3→v4** — automatic migration of flat `duplicate_severity`/`undefined_severity`/`unmarked_severity` under `[terms]` to nested `[terms.severity]` sub-table. `CURRENT_CONFIG_VERSION` bumped to 4.
+- **`SATISFIES_FIELD` PIPE-stop semantics** — lexer regex tightened from `[^\n]+` to `[^|\n]+` so `**Satisfies**: X | **Status**: Y` no longer greedy-consumes subsequent piped fields. The standalone `satisfies_line` grammar rule and transformer handler were removed; `Satisfies` is now a regular `_field` extracted via `_extract_metadata` alongside Level/Status/Implements/Refines.
 
 ### Added
 
+- **Fix idempotency regression test** — new `tests/e2e/test_e2e_idempotency.py` runs `elspais fix` twice on a fixture exercising fenced code blocks, emphasis-wrapped glossary terms, an emphasized journey actor, and REMAINDER prose with emphasis, asserting byte-equality of all files between runs so the second invocation is a complete no-op.
+- **`check_spec_satisfies_resolve` health check** — new per-repo check that walks REQs declaring `Satisfies:` references and warns when any target fails to resolve to an existing requirement or assertion. Mirrors `check_spec_refines_resolve`; followup command is `elspais broken`.
+- **`strip_emphasis()` utility** — new `src/elspais/utilities/markdown.py` module exposing `strip_emphasis(s: str) -> str`, which removes balanced `**`, `__`, `*`, `_` wrappers from string boundaries, trims outer whitespace, leaves unbalanced wrappers intact, and is idempotent.
 - **Terms tab in viewer** — new Terms tab in the nav tree (between Journeys and the spacer) showing an alphabetical list of defined terms grouped by letter heading with reference count badges. Text filter narrows terms by name substring. Expand/collapse, tree/flat toggle, and filter groups are hidden when the Terms tab is active. Terms data loaded from `GET /api/terms` on page init.
 - **Terms API endpoints** — `GET /api/terms` returns all defined terms sorted alphabetically (term, key, definition_short, defined_in, namespace, collection, indexed, ref_count); `GET /api/term/{term_key}` returns full term detail with definition and references array (node_id, node_title, namespace, marked, line). Returns 404 for nonexistent terms.
 - **Term cards in viewer** — clicking a term in the Terms tab opens a read-only card in the card stack via `openTermCard(termKey)`. Card displays term name header, definition text, defined-in link (clickable to open source REQ card), namespace, and a "Collection" badge for collection terms. References section groups by namespace with each reference clickable to open its node card. Empty references show "No references resolved yet".
@@ -27,6 +31,15 @@ All notable changes to elspais will be documented in this file.
   - Lost Comments card: warning card for orphaned comments, shown at top of card stack on page load
   - CLI: `elspais comments compact` strips resolved threads and collapses promote chains
   - Comments loaded automatically at viewer startup, on refresh, and on reload
+
+### Fixed
+
+- **INDEX.md cross-repo attribution** — `elspais index` no longer emits an `### Unknown Source` section for foreign-repo requirements (e.g. `REQ-CAL-*` from a `callisto` associate). Repo classification now consults the FederatedGraph ownership map (`graph.repo_for(node_id).name`) instead of matching FILE-node `absolute_path` against the primary repo's `spec_dirs`, so cross-repo REQs render under their owning repo's section.
+
+- **Term name emphasis stripping** — term names captured during definition-block parsing now pass through `strip_emphasis()`, so `**Email Address**` and `Email Address` no longer collide as distinct terms in the glossary and term index.
+- **Journey field and reference emphasis stripping** — journey actor/goal/context values and `reference term`/`reference source` values now pass through `strip_emphasis()`, eliminating unbalanced `**` leakage into `INDEX.md` actor cells and replacing the prior asymmetric `.strip("_").strip("*")` that mangled unbalanced wrappers.
+- **Fenced code block preservation** — `elspais fix` no longer overwrites the contents of fenced code blocks with `<!-- fenced -->` placeholders. The neutralization step used during parsing is now confined to the parser, and the original source is used when capturing remainder text so fenced bodies round-trip unchanged through regenerations.
+- **Piped `Satisfies` metadata parse error** — `elspais fix` no longer rejects `**Satisfies**: REQ-X` when placed on the piped metadata line alongside Level/Status/Implements/Refines (`Unexpected token Token('SATISFIES_FIELD', ...)`). Authors using the piped form were previously blocked from running `fix`; Satisfies now flows through the same path as Implements/Refines. Standalone `Satisfies: REQ-X` on its own line continues to parse via the unified metadata-line rule -- no migration required.
 
 ## [0.112.34]
 

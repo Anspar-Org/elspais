@@ -323,17 +323,19 @@ F. The tool SHALL compare local vs. remote versions and report whether the insta
 
 A. INDEX.md generation SHALL read the project name and level rank/display name from project configuration to populate headers and table structure.
 
-B. INDEX.md generation SHALL classify each requirement node to its correct spec directory based on source file location.
+B. INDEX.md generation SHALL bucket each requirement and journey node by its owning repository name, resolved via `FederatedGraph.repo_for(node.id).name`. Path-based classification against `spec_dirs` SHALL NOT be used to resolve the owning repo. Nodes whose ownership cannot be determined SHALL bucket as `Unattributed`, distinct from any per-repo bucket.
 
 C. The regenerated INDEX.md SHALL contain per-level requirement tables sorted by dependency order.
 
-D. When multiple spec directories exist, the INDEX.md SHALL include subsections for each directory.
+D. When multiple `(repo, spec_dir)` buckets contribute requirements within a level, the INDEX.md SHALL include `###` subsections per bucket. Each subsection's label SHALL be derived from the bucket's spec directory (`{project_name}/{spec_subpath}`) when the bucket has an associated spec dir; otherwise the bucket is labeled with the owning `RepoEntry.name`. The `Unattributed` bucket retains its fixed label.
 
 ## Changelog
 
+- 2026-05-04 | 4310931a | - | Developer (dev@example.com) | Auto-fix: update hash
+- 2026-05-04 | 7c4f1816 | - | Developer (dev@example.com) | Auto-fix: update hash
 - 2026-04-23 | a1e3915a | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
-*End* *INDEX.md Regeneration* | **Hash**: a1e3915a
+*End* *INDEX.md Regeneration* | **Hash**: 4310931a
 
 ## REQ-d00218: Health Check Coverage Rollup
 

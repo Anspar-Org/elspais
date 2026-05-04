@@ -105,11 +105,14 @@ C. The system SHALL classify nodes using a `Stereotype` field: `CONCRETE` (defau
 
 D. The system SHALL attribute `Implements:` references to template assertions to the correct instance by finding a sibling `Implements:` reference to a CONCRETE node in the same source file, walking that node's ancestors to the first node with a `Satisfies:` declaration matching the template, and constructing the instance ID from the declaring node's ID and the referenced node's ID.
 
+E. The system SHALL provide a `spec.satisfies_resolve` health check that verifies every `Satisfies:` target on a requirement resolves to an existing requirement or *Assertion* in the graph. Unresolved targets SHALL be reported as warnings (matching the severity of `spec.implements_resolve` and `spec.refines_resolve`).
+
 ## Changelog
 
+- 2026-05-04 | bae1b85d | - | Developer (dev@example.com) | Auto-fix: canonicalize term forms, update hash
 - 2026-03-30 | 9115ce0d | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
-*End* *Satisfies Relationship* | **Hash**: 9115ce0d
+*End* *Satisfies Relationship* | **Hash**: bae1b85d
 ---
 
 ## REQ-p00016: NOT APPLICABLE Status

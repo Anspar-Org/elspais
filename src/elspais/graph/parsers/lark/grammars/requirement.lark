@@ -32,18 +32,17 @@ requirement: REQ_HEADER _NL preamble_line* block* end_block?
 // --- Preamble (metadata + body text, before first heading) ---
 
 ?preamble_line: metadata_line
-              | satisfies_line
               | definition_block
               | body_line
 
 metadata_line: _field (PIPE _field)* _NL
 
+// Implements: REQ-p00014-A
 _field: LEVEL_FIELD
       | STATUS_FIELD
       | IMPLEMENTS_FIELD
       | REFINES_FIELD
-
-satisfies_line: SATISFIES_FIELD _NL
+      | SATISFIES_FIELD
 
 body_line: TEXT _NL
          | _NL
@@ -172,7 +171,7 @@ LEVEL_FIELD.7: /(?:\*\*|\*|_)?[Ll][Ee][Vv][Ee][Ll](?:\*\*|\*|_)?[:= \t]\s*\w+/
 STATUS_FIELD.7: /(?:\*\*|\*|_)?[Ss][Tt][Aa][Tt][Uu][Ss](?:\*\*|\*|_)?[:= \t]\s*\w+/
 IMPLEMENTS_FIELD.7: /(?:\*\*|\*|_)?[Ii][Mm][Pp][Ll][Ee][Mm][Ee][Nn][Tt][Ss](?:\*\*|\*|_)?[:= \t]\s*[^|\n]+/
 REFINES_FIELD.7: /(?:\*\*|\*|_)?[Rr][Ee][Ff][Ii][Nn][Ee][Ss](?:\*\*|\*|_)?[:= \t]\s*[^|\n]+/
-SATISFIES_FIELD.7: /(?:\*\*|\*|_)?[Ss][Aa][Tt][Ii][Ss][Ff][Ii][Ee][Ss](?:\*\*|\*|_)?[:= \t]\s*[^\n]+/
+SATISFIES_FIELD.7: /(?:\*\*|\*|_)?[Ss][Aa][Tt][Ii][Ss][Ff][Ii][Ee][Ss](?:\*\*|\*|_)?[:= \t]\s*[^|\n]+/
 PIPE.7: /[ \t]*\|[ \t]*/
 
 // --- Assertion content (only active inside assertion_block) ---
