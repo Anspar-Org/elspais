@@ -35,7 +35,6 @@ All notable changes to elspais will be documented in this file.
 ### Fixed
 
 - **INDEX.md cross-repo attribution** — `elspais index` no longer emits an `### Unknown Source` section for foreign-repo requirements (e.g. `REQ-CAL-*` from a `callisto` associate). Repo classification now consults the FederatedGraph ownership map (`graph.repo_for(node_id).name`) instead of matching FILE-node `absolute_path` against the primary repo's `spec_dirs`, so cross-repo REQs render under their owning repo's section.
-- **INDEX.md single-repo multi-spec-dir grouping** — projects with multiple spec dirs in one repo (e.g. `spec/product` + `spec/technical`) now render under a single bucket without per-dir `### subsection` labels. Subsections appear only when multiple repositories contribute requirements.
 
 - **Term name emphasis stripping** — term names captured during definition-block parsing now pass through `strip_emphasis()`, so `**Email Address**` and `Email Address` no longer collide as distinct terms in the glossary and term index.
 - **Journey field and reference emphasis stripping** — journey actor/goal/context values and `reference term`/`reference source` values now pass through `strip_emphasis()`, eliminating unbalanced `**` leakage into `INDEX.md` actor cells and replacing the prior asymmetric `.strip("_").strip("*")` that mangled unbalanced wrappers.

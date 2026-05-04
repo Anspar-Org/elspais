@@ -327,14 +327,15 @@ B. INDEX.md generation SHALL bucket each requirement and journey node by its own
 
 C. The regenerated INDEX.md SHALL contain per-level requirement tables sorted by dependency order.
 
-D. When multiple repositories contribute requirements, the INDEX.md SHALL include subsections labeled with the owning `RepoEntry.name` for each repo.
+D. When multiple `(repo, spec_dir)` buckets contribute requirements within a level, the INDEX.md SHALL include `###` subsections per bucket. Each subsection's label SHALL be derived from the bucket's spec directory (`{project_name}/{spec_subpath}`) when the bucket has an associated spec dir; otherwise the bucket is labeled with the owning `RepoEntry.name`. The `Unattributed` bucket retains its fixed label.
 
 ## Changelog
 
+- 2026-05-04 | 4310931a | - | Developer (dev@example.com) | Auto-fix: update hash
 - 2026-05-04 | 7c4f1816 | - | Developer (dev@example.com) | Auto-fix: update hash
 - 2026-04-23 | a1e3915a | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
-*End* *INDEX.md Regeneration* | **Hash**: 7c4f1816
+*End* *INDEX.md Regeneration* | **Hash**: 4310931a
 
 ## REQ-d00218: Health Check Coverage Rollup
 

@@ -335,11 +335,13 @@ class TestRegenerateIndexAlignment:
         dev_idx = next(i for i, ln in enumerate(h2_lines) if "DEV" in ln)
         assert prd_idx < dev_idx
 
-    def test_REQ_d00052_G_single_repo_multi_dir_no_subsection(self, tmp_path):
-        """Single repo with multiple spec dirs renders a single bucket
-        (no per-dir subsection). This is the post-CUR-1199 behavior:
-        bucketing is by repo name, not spec dir. Subsections appear only
-        when multiple repos contribute (see test_index_repo_attribution.py)."""
+    def test_REQ_d00052_G_multi_dir_shows_subsections(self, tmp_path):
+        """Multiple spec dirs within a repo get ### subsections within a level.
+
+        Restored after CUR-1199 Task 7 follow-up: repo-attribution and
+        spec-dir classification are independent dimensions, so a single-repo
+        project with multiple spec dirs still shows per-dir subsections.
+        """
         dir_a = tmp_path / "spec_a"
         dir_b = tmp_path / "spec_b"
         dir_a.mkdir()
@@ -363,12 +365,8 @@ class TestRegenerateIndexAlignment:
         _regenerate_index(graph, [dir_a, dir_b], args)
 
         content = (dir_a / "INDEX.md").read_text()
-        # Both REQs render under the single root bucket; no per-dir subsection.
-        assert "REQ-p00001" in content
-        assert "REQ-p00002" in content
-        # No "Unknown Source" or "Unattributed" mis-classification.
-        assert "Unknown Source" not in content
-        assert "Unattributed" not in content
+        h3_lines = [line for line in content.split("\n") if line.startswith("### ")]
+        assert len(h3_lines) == 2
 
     def test_REQ_d00052_G_jny_table_has_no_addresses_column(self, tmp_path):
         """JNY table does not include an Addresses column."""

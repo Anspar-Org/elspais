@@ -222,6 +222,50 @@ def _repo_name_for(graph: FederatedGraph, node_id: str) -> str | None:
         return None
 
 
+def _repo_spec_dirs(graph: FederatedGraph, repo_name: str, fallback: list[Path]) -> list[Path]:
+    """Return the absolute spec directory paths for a repo.
+
+    Reads ``[scanning.spec].directories`` from the repo's config when
+    available; falls back to ``fallback`` (the caller's spec_dirs) for
+    bare-TraceGraph callers or repos with no config.
+    """
+    if hasattr(graph, "iter_repos"):
+        for entry in graph.iter_repos():
+            if entry.name != repo_name or entry.config is None:
+                continue
+            scanning = entry.config.get("scanning", {})
+            spec_cfg = scanning.get("spec", {}) if isinstance(scanning, dict) else {}
+            dirs = spec_cfg.get("directories") if isinstance(spec_cfg, dict) else None
+            if dirs:
+                return [Path(d) if Path(d).is_absolute() else entry.repo_root / d for d in dirs]
+            return [entry.repo_root / "spec"]
+    return fallback
+
+
+def _classify_node(node: object, spec_dirs: list[Path]) -> Path | None:
+    """Return the most-specific spec directory containing the node's source.
+
+    Within-repo classifier used for per-spec-dir subsection labels. Repo
+    attribution itself is handled separately by ``_repo_name_for`` so this
+    function only resolves the *secondary* dimension (which spec dir within
+    the already-attributed repo).
+    """
+    fn = node.file_node() if hasattr(node, "file_node") else None
+    if fn is None:
+        return None
+    abs_path = fn.get_field("absolute_path")
+    if not abs_path:
+        return None
+    source_path = Path(abs_path)
+    for spec_dir in sorted(spec_dirs, key=lambda p: len(p.resolve().parts), reverse=True):
+        try:
+            source_path.relative_to(spec_dir.resolve())
+            return spec_dir
+        except ValueError:
+            continue
+    return None
+
+
 def _resolve_repo_info(
     graph: FederatedGraph, repo_name: str, fallback_dir: Path | None = None
 ) -> _SpecDirInfo:
@@ -284,64 +328,95 @@ def _build_index_content(
 
     Returns (output_path, content, req_count, jny_count).
 
-    Buckets nodes by their owning repo name via ``FederatedGraph.repo_for()``
-    rather than by source-file path matching against ``spec_dirs``. The
-    ``spec_dirs`` parameter is retained only to determine the output path.
-    Nodes whose ID is not in ``_ownership`` bucket as ``"Unattributed"``.
+    Buckets nodes by ``(repo_name, spec_dir)``: repo attribution comes from
+    ``FederatedGraph.repo_for()`` (fixes Bug 3 for foreign-repo nodes) and
+    spec_dir comes from a within-repo path classifier (preserves per-dir
+    subsections for projects with multiple spec dirs in a single repo).
+    Nodes whose repo cannot be determined bucket under ``(UNATTRIBUTED, None)``.
     """
     # Implements: REQ-d00217-B
     from collections import defaultdict
 
     UNATTRIBUTED = "__unattributed__"
 
-    reqs_by_repo: dict[str, list] = defaultdict(list)
+    Bucket = tuple[str, Path | None]
+
+    reqs_by_bucket: dict[Bucket, list] = defaultdict(list)
+    jnys_by_bucket: dict[Bucket, list] = defaultdict(list)
+    repo_dirs_cache: dict[str, list[Path]] = {}
+
+    def _bucket_for(node: object) -> Bucket:
+        repo_name = _repo_name_for(graph, node.id) or UNATTRIBUTED
+        if repo_name == UNATTRIBUTED:
+            return (UNATTRIBUTED, None)
+        if repo_name not in repo_dirs_cache:
+            repo_dirs_cache[repo_name] = _repo_spec_dirs(graph, repo_name, spec_dirs)
+        sd = _classify_node(node, repo_dirs_cache[repo_name])
+        return (repo_name, sd)
+
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        repo_name = _repo_name_for(graph, node.id) or UNATTRIBUTED
-        reqs_by_repo[repo_name].append(node)
-
-    jnys_by_repo: dict[str, list] = defaultdict(list)
+        reqs_by_bucket[_bucket_for(node)].append(node)
     for node in graph.nodes_by_kind(NodeKind.USER_JOURNEY):
-        repo_name = _repo_name_for(graph, node.id) or UNATTRIBUTED
-        jnys_by_repo[repo_name].append(node)
+        jnys_by_bucket[_bucket_for(node)].append(node)
 
-    # Build ordered list of repo names that have content. Order: each
-    # RepoEntry in graph.iter_repos() (preserves construction order, with
-    # primary "root" first), then UNATTRIBUTED if any.
-    active_repos: list[str] = []
+    # Order buckets: each repo in iter_repos() construction order, within
+    # each repo its spec_dirs in the order returned by _repo_spec_dirs;
+    # then any (repo, None) leftovers; then UNATTRIBUTED.
+    active_buckets: list[Bucket] = []
+
+    def _add_repo_buckets(repo_name: str, repo_dirs: list[Path]) -> None:
+        seen: set[Bucket] = set()
+        for sd in repo_dirs:
+            b: Bucket = (repo_name, sd)
+            if b in seen:
+                continue
+            if reqs_by_bucket.get(b) or jnys_by_bucket.get(b):
+                active_buckets.append(b)
+                seen.add(b)
+        # Any (repo, None) — files that didn't match any of repo's spec_dirs.
+        b_none: Bucket = (repo_name, None)
+        if (reqs_by_bucket.get(b_none) or jnys_by_bucket.get(b_none)) and b_none not in seen:
+            active_buckets.append(b_none)
+
     if hasattr(graph, "iter_repos"):
         for entry in graph.iter_repos():
-            if reqs_by_repo.get(entry.name) or jnys_by_repo.get(entry.name):
-                active_repos.append(entry.name)
+            dirs = _repo_spec_dirs(graph, entry.name, spec_dirs)
+            _add_repo_buckets(entry.name, dirs)
     else:
-        # Bare TraceGraph: single bucket "root"
-        if reqs_by_repo.get("root") or jnys_by_repo.get("root"):
-            active_repos.append("root")
-    if reqs_by_repo.get(UNATTRIBUTED) or jnys_by_repo.get(UNATTRIBUTED):
-        active_repos.append(UNATTRIBUTED)
+        _add_repo_buckets("root", spec_dirs)
 
-    # Resolve info for each repo. For bare-TraceGraph callers, fall back to
-    # the first spec_dir's parent for config discovery.
-    fallback_dir = spec_dirs[0] if spec_dirs else None
-    repo_info: dict[str, _SpecDirInfo] = {}
-    for name in active_repos:
-        if name == UNATTRIBUTED:
-            repo_info[name] = _SpecDirInfo(
+    unatt_bucket: Bucket = (UNATTRIBUTED, None)
+    if reqs_by_bucket.get(unatt_bucket) or jnys_by_bucket.get(unatt_bucket):
+        active_buckets.append(unatt_bucket)
+
+    # Resolve display info per bucket.
+    bucket_info: dict[Bucket, _SpecDirInfo] = {}
+    for b in active_buckets:
+        repo_name, sd = b
+        if repo_name == UNATTRIBUTED:
+            bucket_info[b] = _SpecDirInfo(
                 label="Unattributed",
                 level_order={},
                 level_names={},
             )
+        elif sd is not None:
+            bucket_info[b] = _resolve_spec_dir_info(sd)
         else:
-            repo_info[name] = _resolve_repo_info(graph, name, fallback_dir)
+            # Repo with no per-dir classification — label by repo name and
+            # source level info from repo config.
+            bucket_info[b] = _resolve_repo_info(
+                graph, repo_name, spec_dirs[0] if spec_dirs else None
+            )
 
-    reqs_by_level_repo: dict[str, dict[str, list]] = defaultdict(lambda: defaultdict(list))
-    for name in active_repos:
-        for node in reqs_by_repo.get(name, []):
+    reqs_by_level_bucket: dict[str, dict[Bucket, list]] = defaultdict(lambda: defaultdict(list))
+    for b in active_buckets:
+        for node in reqs_by_bucket.get(b, []):
             level = node.level or ""
-            reqs_by_level_repo[level][name].append(node)
+            reqs_by_level_bucket[level][b].append(node)
 
     first_info = (
-        repo_info[active_repos[0]]
-        if active_repos
+        bucket_info[active_buckets[0]]
+        if active_buckets
         else _SpecDirInfo(
             label="",
             level_order={},
@@ -349,7 +424,7 @@ def _build_index_content(
         )
     )
     all_levels = sorted(
-        reqs_by_level_repo.keys(),
+        reqs_by_level_bucket.keys(),
         key=lambda lv: first_info.level_order.get(lv, 99),
     )
 
@@ -372,14 +447,14 @@ def _build_index_content(
         lines.append(f"## {level_display}")
         lines.append("")
 
-        repos_with_level = [r for r in active_repos if reqs_by_level_repo[level].get(r)]
-        multi_repo = len(repos_with_level) > 1
+        buckets_with_level = [b for b in active_buckets if reqs_by_level_bucket[level].get(b)]
+        multi_bucket = len(buckets_with_level) > 1
 
-        for name in repos_with_level:
-            info = repo_info[name]
-            nodes = reqs_by_level_repo[level][name]
+        for b in buckets_with_level:
+            info = bucket_info[b]
+            nodes = reqs_by_level_bucket[level][b]
 
-            if multi_repo:
+            if multi_bucket:
                 lines.append(f"### {info.label}")
                 lines.append("")
 
@@ -396,17 +471,15 @@ def _build_index_content(
             req_count += len(nodes)
 
     # User Journeys: after all requirements
-    all_jnys = [
-        (name, jnys_by_repo.get(name, [])) for name in active_repos if jnys_by_repo.get(name)
-    ]
+    all_jnys = [(b, jnys_by_bucket.get(b, [])) for b in active_buckets if jnys_by_bucket.get(b)]
     if all_jnys:
         lines.append("## User Journeys")
         lines.append("")
 
-        multi_repo = len(all_jnys) > 1
-        for name, jnys in all_jnys:
-            info = repo_info[name]
-            if multi_repo:
+        multi_bucket = len(all_jnys) > 1
+        for b, jnys in all_jnys:
+            info = bucket_info[b]
+            if multi_bucket:
                 lines.append(f"### {info.label}")
                 lines.append("")
 
