@@ -29,6 +29,11 @@ All notable changes to elspais will be documented in this file.
   - CLI: `elspais comments compact` strips resolved threads and collapses promote chains
   - Comments loaded automatically at viewer startup, on refresh, and on reload
 
+### Fixed
+
+- **Term name emphasis stripping** — term names captured during definition-block parsing now pass through `strip_emphasis()`, so `**Email Address**` and `Email Address` no longer collide as distinct terms in the glossary and term index.
+- **Journey field and reference emphasis stripping** — journey actor/goal/context values and `reference term`/`reference source` values now pass through `strip_emphasis()`, eliminating unbalanced `**` leakage into `INDEX.md` actor cells and replacing the prior asymmetric `.strip("_").strip("*")` that mangled unbalanced wrappers.
+
 ## [0.112.34]
 
 ### Added

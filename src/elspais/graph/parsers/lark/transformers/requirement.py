@@ -16,8 +16,10 @@ from typing import TYPE_CHECKING, Any
 
 from lark import Token, Tree
 
+# Implements: REQ-d00246-B
 from elspais.graph.parsers import ParsedContent
 from elspais.utilities.hasher import HASH_VALUE_PATTERN
+from elspais.utilities.markdown import strip_emphasis
 
 if TYPE_CHECKING:
     from elspais.utilities.patterns import IdResolver
@@ -528,13 +530,16 @@ class RequirementTransformer:
             if child.data == "jny_meta_line":
                 token = child.children[0]
                 text = str(token)
-                # Extract value after the field name separator
+                # Extract value after the field name separator;
+                # strip_emphasis() normalizes balanced **bold**/__bold__ wrappers
+                # on the value (Bug 4).
                 val = re.sub(
                     r"^(?:\*\*|\*|_)?(?:Actor|Goal|Context)(?:\*\*|\*|_)?[:=\s]\s*",
                     "",
                     text,
                     flags=re.IGNORECASE,
-                ).strip()
+                )
+                val = strip_emphasis(val)
                 token_type = token.type  # type: ignore[attr-defined]
                 if token_type == "JNY_ACTOR_FIELD":
                     parsed_data["actor"] = val
@@ -632,7 +637,10 @@ class RequirementTransformer:
             if not isinstance(child, Token):
                 continue
             if child.type == "TEXT":
-                term_name = str(child).strip()
+                # Bug 2: term names with emphasis wrappers (**Email Address**)
+                # must canonicalize to the bare term, else the dictionary
+                # records pseudo-duplicates per asterisk count.
+                term_name = strip_emphasis(str(child))
                 start_line = child.line  # type: ignore[attr-defined]
             elif child.type == "DEF_LINE":
                 if current_parts is not None:
@@ -680,11 +688,11 @@ class RequirementTransformer:
                 reference_fields["url"] = url_val
             elif low.startswith("reference term:"):
                 val = stripped[15:].strip()
-                val = val.strip("_").strip("*")
+                val = strip_emphasis(val)
                 reference_term = val
             elif low.startswith("reference source:"):
                 val = stripped[17:].strip()
-                val = val.strip("_").strip("*")
+                val = strip_emphasis(val)
                 reference_source = val
             else:
                 def_lines.append(entry_text)

@@ -485,8 +485,10 @@ C. Severity SHALL be read from `[rules.format] no_traceability_severity` (defaul
 
 A. The codebase SHALL provide a `strip_emphasis(s: str) -> str` utility in `utilities/markdown.py` that strips balanced pairs of `**`, `__`, `*`, and `_` from the start and end of `s`, in order of width (widest first). Outer whitespace SHALL be trimmed. Unbalanced wrappers (e.g. `*Foo_`, `**Foo`) SHALL leave the string intact. The function SHALL be idempotent.
 
+B. Lark transformers SHALL use `strip_emphasis()` to normalize all user-text captured from emphasis-decorated spec source: term names extracted from `definition_block` TEXT tokens, value text extracted from journey `Actor`/`Goal`/`Context` metadata fields, and `reference term`/`reference source` definition-block fields. Ad-hoc per-character strip calls (e.g., `.strip("*")`, `.strip("_")`) SHALL NOT remain in the transformer modules.
+
 ## Changelog
 
-- 2026-05-04 | 3547ca7e | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-04 | 16af6c80 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
-*End* *Markdown Emphasis Normalization Utility* | **Hash**: 3547ca7e
+*End* *Markdown Emphasis Normalization Utility* | **Hash**: 16af6c80
