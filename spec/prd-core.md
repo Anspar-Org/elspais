@@ -476,3 +476,17 @@ C. Severity SHALL be read from `[rules.format] no_traceability_severity` (defaul
 - 2026-03-29 | 6e481d63 | - | Michael Lewis (michael@anspar.org) | Initial creation
 
 *End* *Code No-Traceability Health Check* | **Hash**: e1272219
+
+## REQ-d00246: Markdown Emphasis Normalization Utility
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+## Assertions
+
+A. The codebase SHALL provide a `strip_emphasis(s: str) -> str` utility in `utilities/markdown.py` that strips balanced pairs of `**`, `__`, `*`, and `_` from the start and end of `s`, in order of width (widest first). Outer whitespace SHALL be trimmed. Unbalanced wrappers (e.g. `*Foo_`, `**Foo`) SHALL leave the string intact. The function SHALL be idempotent.
+
+## Changelog
+
+- 2026-05-04 | 3547ca7e | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+
+*End* *Markdown Emphasis Normalization Utility* | **Hash**: 3547ca7e

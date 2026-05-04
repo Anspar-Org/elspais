@@ -12,6 +12,7 @@ All notable changes to elspais will be documented in this file.
 
 ### Added
 
+- **`strip_emphasis()` utility** — new `src/elspais/utilities/markdown.py` module exposing `strip_emphasis(s: str) -> str`, which removes balanced `**`, `__`, `*`, `_` wrappers from string boundaries, trims outer whitespace, leaves unbalanced wrappers intact, and is idempotent.
 - **Terms tab in viewer** — new Terms tab in the nav tree (between Journeys and the spacer) showing an alphabetical list of defined terms grouped by letter heading with reference count badges. Text filter narrows terms by name substring. Expand/collapse, tree/flat toggle, and filter groups are hidden when the Terms tab is active. Terms data loaded from `GET /api/terms` on page init.
 - **Terms API endpoints** — `GET /api/terms` returns all defined terms sorted alphabetically (term, key, definition_short, defined_in, namespace, collection, indexed, ref_count); `GET /api/term/{term_key}` returns full term detail with definition and references array (node_id, node_title, namespace, marked, line). Returns 404 for nonexistent terms.
 - **Term cards in viewer** — clicking a term in the Terms tab opens a read-only card in the card stack via `openTermCard(termKey)`. Card displays term name header, definition text, defined-in link (clickable to open source REQ card), namespace, and a "Collection" badge for collection terms. References section groups by namespace with each reference clickable to open its node card. Empty references show "No references resolved yet".

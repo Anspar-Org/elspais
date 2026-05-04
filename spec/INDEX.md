@@ -134,6 +134,7 @@
 | REQ-d00243 | Terms Tab in Viewer Nav Tree                                  | prd-features.md         | 3328f677 |
 | REQ-d00244 | Term Cards in Viewer Card Stack                               | prd-features.md         | 5dd49a51 |
 | REQ-d00245 | Inline Term Highlighting in Viewer Cards                      | prd-features.md         | 62a44ed3 |
+| REQ-d00246 | Markdown Emphasis Normalization Utility                       | prd-core.md             | 3547ca7e |
 
 ## User Journeys
 
