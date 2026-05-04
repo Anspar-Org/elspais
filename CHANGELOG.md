@@ -9,6 +9,7 @@ All notable changes to elspais will be documented in this file.
 - **TermsConfig restructured** — flat severity fields (`duplicate_severity`, `undefined_severity`, `unmarked_severity`) replaced with nested `[terms.severity]` sub-table containing 6 fields: `duplicate`, `undefined`, `unmarked`, `unused`, `bad_definition`, `collection_empty`. New top-level fields: `markup_styles` (which markdown delimiters count as marked) and `exclude_files` (glob patterns to skip during scanning).
 - **no_traceability_severity** — new `[rules.format]` option to configure severity for code/test files lacking traceability markers (default: None, uses check default of "warning").
 - **Config migration v3→v4** — automatic migration of flat `duplicate_severity`/`undefined_severity`/`unmarked_severity` under `[terms]` to nested `[terms.severity]` sub-table. `CURRENT_CONFIG_VERSION` bumped to 4.
+- **`SATISFIES_FIELD` PIPE-stop semantics** — lexer regex tightened from `[^\n]+` to `[^|\n]+` so `**Satisfies**: X | **Status**: Y` no longer greedy-consumes subsequent piped fields. The standalone `satisfies_line` grammar rule and transformer handler were removed; `Satisfies` is now a regular `_field` extracted via `_extract_metadata` alongside Level/Status/Implements/Refines.
 
 ### Added
 
@@ -35,6 +36,7 @@ All notable changes to elspais will be documented in this file.
 - **Term name emphasis stripping** — term names captured during definition-block parsing now pass through `strip_emphasis()`, so `**Email Address**` and `Email Address` no longer collide as distinct terms in the glossary and term index.
 - **Journey field and reference emphasis stripping** — journey actor/goal/context values and `reference term`/`reference source` values now pass through `strip_emphasis()`, eliminating unbalanced `**` leakage into `INDEX.md` actor cells and replacing the prior asymmetric `.strip("_").strip("*")` that mangled unbalanced wrappers.
 - **Fenced code block preservation** — `elspais fix` no longer overwrites the contents of fenced code blocks with `<!-- fenced -->` placeholders. The neutralization step used during parsing is now confined to the parser, and the original source is used when capturing remainder text so fenced bodies round-trip unchanged through regenerations.
+- **Piped `Satisfies` metadata parse error** — `elspais fix` no longer rejects `**Satisfies**: REQ-X` when placed on the piped metadata line alongside Level/Status/Implements/Refines (`Unexpected token Token('SATISFIES_FIELD', ...)`). Authors using the piped form were previously blocked from running `fix`; Satisfies now flows through the same path as Implements/Refines. Standalone `Satisfies: REQ-X` on its own line continues to parse via the unified metadata-line rule -- no migration required.
 
 ## [0.112.34]
 

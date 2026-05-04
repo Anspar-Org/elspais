@@ -175,24 +175,15 @@ class RequirementTransformer:
                             refines.append(ref)
                     if len(refines) < old_len + len(meta["refines"]):
                         has_redundant_refs = True
+                # Implements: REQ-p00014-A
+                if meta.get("satisfies"):
+                    old_len = len(satisfies)
+                    for ref in meta["satisfies"]:
+                        if ref not in satisfies:
+                            satisfies.append(ref)
+                    if len(satisfies) < old_len + len(meta["satisfies"]):
+                        has_redundant_refs = True
                 end_line = self._last_line(child)
-
-            elif child.data == "satisfies_line":
-                token = child.children[0]  # SATISFIES_FIELD
-                sat_text = str(token)
-                # Extract value after separator (: or = or space)
-                sep_match = re.search(r"[:=\s]", sat_text.replace("*", "").replace("_", ""))
-                if sep_match:
-                    # Find separator in original text after field name
-                    field_name_end = sat_text.lower().index("satisfies") + len("satisfies")
-                    # Skip past any closing decoration
-                    while field_name_end < len(sat_text) and sat_text[field_name_end] in "*_":
-                        field_name_end += 1
-                    sat_value = sat_text[field_name_end:].lstrip(":= \t").strip()
-                else:
-                    sat_value = ""
-                satisfies = self._parse_refs(sat_value)
-                end_line = token.line  # type: ignore[attr-defined]
 
             elif child.data == "assertion_block":
                 assertions, sub_heading_sections = self._extract_assertions(child, header_line)
@@ -303,6 +294,9 @@ class RequirementTransformer:
                     result["implements"] = self._parse_refs(val)
                 elif child.type == "REFINES_FIELD":
                     result["refines"] = self._parse_refs(val)
+                # Implements: REQ-p00014-A
+                elif child.type == "SATISFIES_FIELD":
+                    result["satisfies"] = self._parse_refs(val)
                 # PIPE tokens are ignored
         return result
 
