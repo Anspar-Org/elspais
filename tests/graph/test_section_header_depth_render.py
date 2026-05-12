@@ -97,7 +97,10 @@ def test_assertions_render_depth(tmp_path, req_d, stored_d, expected_d):
     [
         (1, 2, 2),
         (1, 1, 2),
-        (2, 2, 3),
+        # H2 req with H2 named section: SECTION_HDR only supports #{1,2},
+        # so named sections are capped at H2 to preserve parse-roundtrip.
+        # The section stays at H2 (not promoted to H3).
+        (2, 2, 2),
         (2, 3, 3),
         (3, 5, 5),
     ],

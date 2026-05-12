@@ -97,11 +97,13 @@ def test_assertions_too_shallow_marks_section_header_depth(
 @pytest.mark.parametrize(
     "req_d,sec_d,expect_fixable",
     [
-        # SECTION_HDR matches only #{1,2}, so named sections without assertions
-        # are only testable for H1 and H2 requirements.
+        # SECTION_HDR matches only #{1,2}, so named sections can only be
+        # rendered at H1 or H2.  A named section at H2 under a H2 requirement
+        # is NOT flagged as too-shallow because promoting it to H3 would put it
+        # beyond SECTION_HDR's range, breaking the parse roundtrip.
         (1, 2, False),  # H1 req, H2 named section: valid (min depth = 2)
-        (1, 1, True),  # H1 req, H1 named section: too shallow
-        (2, 2, True),  # H2 req, H2 named section: too shallow (min depth = 3)
+        (1, 1, True),  # H1 req, H1 named section: too shallow (min depth = 2, fixable to H2)
+        (2, 2, False),  # H2 req, H2 named section: NOT flagged (min depth = 3 > SECTION_HDR max)
     ],
 )
 def test_named_section_too_shallow_marks_section_header_depth(
