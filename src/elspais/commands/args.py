@@ -49,6 +49,12 @@ class ChecksArgs:
     include_passing_details: bool = False
     """Show full details for passing checks."""
 
+    run_tests: bool = False
+    """Run configured `[[scanning.test.runners]]` before evaluating checks."""
+
+    fail_fast: bool = False
+    """With --run-tests: stop at the first runner failure and skip checks."""
+
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
 
