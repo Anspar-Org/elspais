@@ -64,21 +64,21 @@
 | REQ-d00070 | Indirect Coverage Toggle Display                              | dev-graph-core.md       | N/A      |
 | REQ-d00071 | Unified Root vs Orphan Classification                         | dev-graph-core.md       | N/A      |
 | REQ-d00072 | Link Suggestion Core Engine                                   | dev-graph-core.md       | N/A      |
-| REQ-d00073 | Link Suggestion CLI Command                                   | dev-cli.md              | N/A      |
+| REQ-d00073 | Link Suggestion CLI Command                                   | dev-cli.md              | 44fd54e9 |
 | REQ-d00074 | MCP Link Suggestion Tools                                     | dev-mcp-tools.md        | N/A      |
 | REQ-d00075 | Subtree Extraction Implementation                             | dev-mcp-tools.md        | N/A      |
 | REQ-d00076 | Cursor Protocol Implementation                                | dev-mcp-tools.md        | N/A      |
 | REQ-d00077 | Minimize Requirement Set Implementation                       | dev-mcp-tools.md        | N/A      |
 | REQ-d00078 | Scoped Search Implementation                                  | dev-mcp-tools.md        | N/A      |
 | REQ-d00079 | Discover Requirements Implementation                          | dev-mcp-tools.md        | N/A      |
-| REQ-d00080 | Diagnostic Command Exit Code Contract                         | dev-cli.md              | N/A      |
-| REQ-d00081 | Multi-Assertion Reference Expansion                           | dev-cli.md              | N/A      |
-| REQ-d00082 | Unified Reference Configuration                               | dev-cli.md              | N/A      |
-| REQ-d00084 | Trace Command                                                 | dev-cli.md              | N/A      |
-| REQ-d00085 | Unified Report Composition                                    | dev-cli.md              | N/A      |
-| REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | N/A      |
-| REQ-d00124 | Graph Analysis Engine                                         | dev-cli.md              | N/A      |
-| REQ-d00125 | Analysis CLI Command                                          | dev-cli.md              | N/A      |
+| REQ-d00080 | Diagnostic Command Exit Code Contract                         | dev-cli.md              | ada92a29 |
+| REQ-d00081 | Multi-Assertion Reference Expansion                           | dev-cli.md              | 313fe52b |
+| REQ-d00082 | Unified Reference Configuration                               | dev-cli.md              | 89956cd7 |
+| REQ-d00084 | Trace Command                                                 | dev-cli.md              | f8f0e0f2 |
+| REQ-d00085 | Unified Report Composition                                    | dev-cli.md              | 82d76f1a |
+| REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | 2fd4ab13 |
+| REQ-d00124 | Graph Analysis Engine                                         | dev-cli.md              | 86bb619b |
+| REQ-d00125 | Analysis CLI Command                                          | dev-cli.md              | 3cd66dbe |
 | REQ-d00126 | FILE Node Data Model                                          | dev-graph-file-nodes.md | N/A      |
 | REQ-d00127 | GraphNode API: Filtered Traversal and Edge-Only Relationships | dev-graph-file-nodes.md | N/A      |
 | REQ-d00128 | FILE Node Creation in Build Pipeline                          | dev-graph-file-nodes.md | N/A      |
@@ -101,13 +101,13 @@
 | REQ-d00210 | Documentation Drift Detection                                 | dev-graph-config.md     | N/A      |
 | REQ-d00211 | Config-Driven Viewer UI Values                                | dev-graph-config.md     | N/A      |
 | REQ-d00212 | Config Schema v3 Models                                       | dev-graph-config.md     | N/A      |
-| REQ-d00213 | Version Check and Update Notification                         | dev-cli.md              | N/A      |
+| REQ-d00213 | Version Check and Update Notification                         | dev-cli.md              | 56b62d01 |
 | REQ-d00214 | MCP Server Install/Uninstall CLI Commands                     | dev-mcp-tools.md        | N/A      |
 | REQ-d00215 | Keyword Extraction Annotator                                  | dev-graph-core.md       | N/A      |
 | REQ-d00216 | TraceGraph Deep Clone                                         | dev-graph-core.md       | N/A      |
-| REQ-d00217 | INDEX.md Regeneration                                         | dev-cli.md              | N/A      |
-| REQ-d00218 | Health Check Coverage Rollup                                  | dev-cli.md              | N/A      |
-| REQ-d00219 | UAT Health Check Section                                      | dev-cli.md              | N/A      |
+| REQ-d00217 | INDEX.md Regeneration                                         | dev-cli.md              | 4310931a |
+| REQ-d00218 | Health Check Coverage Rollup                                  | dev-cli.md              | 64b0dfbb |
+| REQ-d00219 | UAT Health Check Section                                      | dev-cli.md              | 3a95ff57 |
 | REQ-d00220 | TermDictionary Data Model                                     | prd-core.md             | N/A      |
 | REQ-d00221 | Grammar Extension for Definition Blocks                       | prd-core.md             | N/A      |
 | REQ-d00222 | TraceGraph Terms and GraphBuilder Integration                 | prd-core.md             | N/A      |
@@ -137,7 +137,7 @@
 | REQ-d00246 | Markdown Emphasis Normalization Utility                       | prd-core.md             | N/A      |
 | REQ-d00247 | Fenced Code Block Preservation                                | prd-core.md             | N/A      |
 | REQ-d00248 | Fix Command Idempotency                                       | prd-core.md             | N/A      |
-| REQ-d00249 | Configured test runner execution                              | dev-cli.md              | N/A      |
+| REQ-d00249 | Configured test runner execution                              | dev-cli.md              | 8a579eb1 |
 
 ## User Journeys
 
