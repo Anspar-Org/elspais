@@ -2283,9 +2283,37 @@ def _read_run_meta(config: dict | None) -> dict:
         return defaults
 
 
+def _collect_file_mtimes(
+    graph: FederatedGraph,
+    file_types: set,
+) -> list[float]:
+    """Collect on-disk mtimes for FILE nodes of the given types.
+
+    Files missing from disk are silently skipped.
+    """
+    from elspais.graph import NodeKind
+
+    mtimes: list[float] = []
+    for node in graph.nodes_by_kind(NodeKind.FILE):
+        ft = node.get_field("file_type", None)
+        if ft not in file_types:
+            continue
+        abs_path = node.get_field("absolute_path", None)
+        if not abs_path:
+            continue
+        try:
+            mtimes.append(Path(abs_path).stat().st_mtime)
+        except OSError:
+            continue
+    return mtimes
+
+
 def check_test_results(graph: FederatedGraph, config: dict | None = None) -> HealthCheck:
     """Check test result status from JUnit/pytest output."""
+    from datetime import datetime
+
     from elspais.graph import NodeKind
+    from elspais.graph.GraphNode import FileType
 
     result_nodes = list(graph.nodes_by_kind(NodeKind.RESULT))
     run_meta = _read_run_meta(config)
@@ -2299,19 +2327,42 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
         else:
             result_files = []
         if not result_files:
-            message = "No result files configured"
-        else:
-            message = (
-                f"No test results found ({len(result_files)} result path(s) configured but empty)"
+            return HealthCheck(
+                name="tests.results",
+                passed=True,
+                message="No result files configured",
+                category="tests",
+                severity="info",
             )
         return HealthCheck(
             name="tests.results",
             passed=True,
-            message=message,
+            message=(
+                f"Test result files missing ({len(result_files)} pattern(s) "
+                "configured but no matching files). "
+                "Run `elspais checks --run-tests` or refresh manually."
+            ),
             category="tests",
-            severity="info",
+            severity="warning",
         )
 
+    # Compute staleness
+    stale_finding: HealthFinding | None = None
+    result_mtimes = _collect_file_mtimes(graph, {FileType.RESULT})
+    source_mtimes = _collect_file_mtimes(graph, {FileType.SPEC, FileType.CODE, FileType.TEST})
+    if result_mtimes and source_mtimes and min(result_mtimes) < max(source_mtimes):
+        oldest_result = datetime.fromtimestamp(min(result_mtimes)).isoformat(timespec="seconds")
+        newest_source = datetime.fromtimestamp(max(source_mtimes)).isoformat(timespec="seconds")
+        stale_finding = HealthFinding(
+            message=(
+                f"Test results are stale -- oldest result mtime "
+                f"{oldest_result} is earlier than newest scanned source "
+                f"mtime {newest_source}. Re-run with "
+                f"`elspais checks --run-tests` to refresh."
+            ),
+        )
+
+    # Tally
     passed = 0
     failed = 0
     skipped = 0
@@ -2329,8 +2380,12 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
     pass_rate = (passed / total * 100) if total > 0 else 0
     deselected_suffix = f", {deselected} deselected" if deselected else ""
 
+    findings: list[HealthFinding] = []
+    if stale_finding is not None:
+        findings.append(stale_finding)
+
     if failed > 0:
-        findings = [
+        findings.extend(
             HealthFinding(
                 message=f"Failed: {node.get_label() or node.id}",
                 node_id=node.id,
@@ -2338,7 +2393,7 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
             )
             for node in result_nodes
             if node.get_field("status", "unknown") == "failed"
-        ]
+        )
         return HealthCheck(
             name="tests.results",
             passed=False,
@@ -2358,11 +2413,14 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
             findings=findings,
         )
 
+    severity = "warning" if stale_finding else "info"
     return HealthCheck(
         name="tests.results",
         passed=True,
         message=f"All tests passing: {passed} passed, {skipped} skipped{deselected_suffix}",
         category="tests",
+        severity=severity,
+        findings=findings,
         details={
             "passed": passed,
             "failed": failed,
