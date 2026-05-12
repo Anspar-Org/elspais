@@ -196,6 +196,14 @@ _FIELD_COMMENTS: dict[str, str] = {
     ),
     "scanning.test.reference_keyword": 'Keyword for test->requirement refs (e.g. "Verifies")',
     "scanning.test.reference_patterns": "Additional regex patterns for reference detection",
+    "scanning.test.runners": ("Configured test runners executed by `checks --run-tests`"),
+    "scanning.test.runners.name": "Display name for the runner (e.g. 'python')",
+    "scanning.test.runners.command": (
+        "Shell command to execute (writes result files where [scanning.result] expects them)"
+    ),
+    "scanning.test.runners.cwd": (
+        "Working directory for the runner, relative to repo root (default: repo root)"
+    ),
     "scanning.result": "Test result file scanning",
     "scanning.result.directories": "Directories to scan for test results",
     "scanning.result.file_patterns": "Glob patterns for result files",
