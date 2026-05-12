@@ -76,6 +76,99 @@ def pytest_runtest_setup(item):
         pytest.xfail(f"previous step failed: {previous}")
 
 
+def pytest_sessionfinish(session, exitstatus):
+    """Prime the pre-commit/pre-push test-result cache when a manual pytest
+    run passes, so a follow-up `git add . && git commit` skips re-running.
+
+    The hooks key their cache on `git write-tree` (the staged index tree).
+    We mirror that by computing the tree that `git add -A` would produce
+    via a throwaway index (no side effects on the real index) and write
+    it to the same file the hook checks. After `git add .`, the hook's
+    write-tree matches and the cache hits.
+
+    Only writes for full runs matching the hook's invocation (no -k, no
+    positional path filter, marker expression equals the hook's).
+    """
+    if exitstatus != 0:
+        return
+    if getattr(session.config, "workerinput", None) is not None:
+        return
+    if session.config.getoption("keyword"):
+        return
+
+    markexpr = session.config.getoption("markexpr") or ""
+    if markexpr == "not e2e and not browser":
+        cache_name = ".test-cache-unit"
+    elif markexpr == "e2e":
+        cache_name = ".test-cache-e2e"
+    else:
+        return
+
+    repo_root = Path(__file__).parent.parent
+    testpaths = session.config.getini("testpaths") or []
+    try:
+        arg_paths = {Path(a).resolve() for a in session.config.args}
+        tp_paths = {(repo_root / p).resolve() for p in testpaths}
+    except OSError:
+        return
+    if arg_paths != tp_paths:
+        return
+
+    import subprocess
+    import tempfile
+
+    try:
+        git_dir = Path(
+            subprocess.check_output(
+                ["git", "rev-parse", "--git-dir"],
+                cwd=str(repo_root),
+                text=True,
+                stderr=subprocess.DEVNULL,
+            ).strip()
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        return
+    if not git_dir.is_absolute():
+        git_dir = (repo_root / git_dir).resolve()
+    real_index = git_dir / "index"
+    if not real_index.is_file():
+        return
+
+    tmp_fd, tmp_path = tempfile.mkstemp(prefix=".elspais-idx-", dir=str(git_dir))
+    os.close(tmp_fd)
+    try:
+        Path(tmp_path).write_bytes(real_index.read_bytes())
+        env = {**os.environ, "GIT_INDEX_FILE": tmp_path}
+        subprocess.check_call(
+            ["git", "add", "-A"],
+            cwd=str(repo_root),
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        tree_hash = subprocess.check_output(
+            ["git", "write-tree"],
+            cwd=str(repo_root),
+            env=env,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        return
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+    cache_dir = repo_root / ".results"
+    try:
+        cache_dir.mkdir(exist_ok=True)
+        (cache_dir / cache_name).write_text(tree_hash)
+    except OSError:
+        pass
+
+
 @pytest.fixture
 def fixtures_dir() -> Path:
     """Return path to fixtures directory."""
