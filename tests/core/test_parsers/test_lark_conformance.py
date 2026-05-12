@@ -343,8 +343,8 @@ B. Simple assertion.
         CUR-1199: When assertions are grouped under ### markdown headings (rather
         than inline **bold**/*italic* markers), the parser must recognize the
         ### lines as sub-headings inside the assertion_block. All assertions
-        must still be attributed and the ### text captured with
-        heading_style="###".
+        must still be attributed and the hash sub-headings captured with
+        heading_style="hash" and heading_level=3.
         """
         content = """\
 ## REQ-p00001: With Hash Sub-Headings
@@ -383,23 +383,28 @@ C. Third assertion in group B.
             assertions[2]["label"] == "C"
         ), f"Third assertion label should be C, got {assertions[2]['label']!r}"
         sections = d["sections"]
-        hash_subs = [s for s in sections if s.get("heading_style") == "###"]
-        assert len(hash_subs) == 2, (
-            f"Expected 2 ### sub-heading sections, got {len(hash_subs)}: "
-            f"{[(s.get('heading'), s.get('heading_style')) for s in sections]}"
-        )
+        # heading_style is now the kind marker "hash"; depth is in heading_level
+        hash_subs = [s for s in sections if s.get("heading_style") == "hash"]
+        info = [
+            (s.get("heading"), s.get("heading_style"), s.get("heading_level")) for s in sections
+        ]
+        assert (
+            len(hash_subs) == 2
+        ), f"Expected 2 hash sub-heading sections, got {len(hash_subs)}: {info}"
         headings = [s["heading"] for s in hash_subs]
         assert headings == [
             "Group A",
             "Group B",
         ], f"Expected sub-headings [Group A, Group B], got {headings}"
+        levels = [s.get("heading_level") for s in hash_subs]
+        assert levels == [3, 3], f"Expected heading_level=3 for both ### sub-headings, got {levels}"
 
     def test_h4_sub_headings_recognized(self):
         """#### (4-hash) sub-headings inside ## Assertions are captured.
 
         CUR-1199: ###/####/#####/###### are all valid sub-heading styles inside
-        the assertion_block, and the literal hash prefix is preserved in
-        heading_style.
+        the assertion_block. heading_style is the kind marker "hash" and
+        heading_level captures the numeric depth (4 for ####).
         """
         content = """\
 ## REQ-p00001: With H4 Sub-Headings
@@ -434,11 +439,16 @@ C. Third assertion in group B.
             "C",
         ], f"Expected labels [A, B, C], got {[a['label'] for a in assertions]}"
         sections = d["sections"]
-        h4_subs = [s for s in sections if s.get("heading_style") == "####"]
-        assert len(h4_subs) == 2, (
-            f"Expected 2 #### sub-heading sections, got {len(h4_subs)}: "
-            f"{[(s.get('heading'), s.get('heading_style')) for s in sections]}"
-        )
+        # heading_style is now the kind marker "hash"; depth is in heading_level
+        h4_subs = [
+            s for s in sections if s.get("heading_style") == "hash" and s.get("heading_level") == 4
+        ]
+        info = [
+            (s.get("heading"), s.get("heading_style"), s.get("heading_level")) for s in sections
+        ]
+        assert (
+            len(h4_subs) == 2
+        ), f"Expected 2 #### (heading_level=4) sub-heading sections, got {len(h4_subs)}: {info}"
         headings = [s["heading"] for s in h4_subs]
         assert headings == [
             "Group A",
@@ -497,10 +507,16 @@ C. Third assertion.
             f"*italic* sub-heading should have heading_style='*', "
             f"got {sub_map.get('italic')!r}; full sections: {sections}"
         )
-        assert sub_map.get("Hash") == "###", (
-            f"### sub-heading should have heading_style='###', "
+        assert sub_map.get("Hash") == "hash", (
+            f"### sub-heading should have heading_style='hash', "
             f"got {sub_map.get('Hash')!r}; full sections: {sections}"
         )
+        # Also verify heading_level=3 for the ### hash sub-heading
+        hash_sec = next((s for s in sections if s.get("heading") == "Hash"), None)
+        assert hash_sec is not None
+        assert (
+            hash_sec.get("heading_level") == 3
+        ), f"### sub-heading should have heading_level=3, got {hash_sec.get('heading_level')!r}"
 
 
 class TestLarkCaseInsensitiveHeaders:

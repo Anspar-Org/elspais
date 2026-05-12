@@ -147,6 +147,97 @@ def test_named_section_header_recognized_at_any_depth(req_d, sec_d, tmp_path):
     )
 
 
+# ===========================================================================
+# Task 3: Transformer depth-capture assertions (REQ-d00250-A)
+# ===========================================================================
+
+
+# Verifies: REQ-d00250-A
+def test_assertions_heading_level_captured(tmp_path):
+    """Transformer captures `### Assertions` depth into the REQ node."""
+    spec = (
+        "## REQ-d00001: Test\n\n"
+        "**Level**: dev | **Status**: Active | **Implements**: -\n\n"
+        "### Assertions\n\n"
+        "A. The system shall do X.\n\n"
+        "*End* *Test* | **Hash**: -\n"
+    )
+    graph = _build(tmp_path, spec)
+    node = _find_req(graph, "REQ-d00001")
+    assert node is not None
+    assert node.get_field("heading_level") == 2
+    assert node.get_field("assertions_heading_level") == 3
+
+
+# Verifies: REQ-d00250-A
+def test_changelog_heading_level_captured(tmp_path):
+    """Transformer captures `### Changelog` depth into the REQ node."""
+    spec = (
+        "## REQ-d00001: Test\n\n"
+        "**Level**: dev | **Status**: Active | **Implements**: -\n\n"
+        "### Assertions\n\n"
+        "A. The system shall do X.\n\n"
+        "### Changelog\n\n"
+        "- 2026-05-11 | abc12345 | - | Dev (d@ex.com) | seed\n\n"
+        "*End* *Test* | **Hash**: -\n"
+    )
+    graph = _build(tmp_path, spec)
+    node = _find_req(graph, "REQ-d00001")
+    assert node is not None
+    assert node.get_field("changelog_heading_level") == 3
+
+
+# Verifies: REQ-d00250-A
+def test_named_section_heading_level_captured(tmp_path):
+    """Transformer captures named section depth into the REMAINDER node."""
+    # Use H1 req with H2 named section (SECTION_HDR matches #{1,2})
+    spec = (
+        "# REQ-d00001: Test\n\n"
+        "**Level**: dev | **Status**: Active | **Implements**: -\n\n"
+        "## Notes\n\n"
+        "Some notes.\n\n"
+        "*End* *Test* | **Hash**: -\n"
+    )
+    graph = _build(tmp_path, spec)
+    node = _find_req(graph, "REQ-d00001")
+    assert node is not None
+    from elspais.graph import EdgeKind, NodeKind
+
+    rems = [
+        c
+        for c in node.iter_children(edge_kinds={EdgeKind.STRUCTURES})
+        if c.kind == NodeKind.REMAINDER and c.get_field("heading") == "Notes"
+    ]
+    assert len(rems) == 1
+    assert rems[0].get_field("heading_level") == 2
+
+
+# Verifies: REQ-d00250-A
+def test_hash_sub_heading_uses_kind_marker(tmp_path):
+    """Hash-style sub-headings store heading_style='hash' + heading_level (not '###')."""
+    spec = (
+        "# REQ-d00001: Test\n\n"
+        "**Level**: dev | **Status**: Active | **Implements**: -\n\n"
+        "## Assertions\n\n"
+        "### Core\n\n"
+        "A. The system shall do X.\n\n"
+        "*End* *Test* | **Hash**: -\n"
+    )
+    graph = _build(tmp_path, spec)
+    node = _find_req(graph, "REQ-d00001")
+    assert node is not None
+    from elspais.graph import EdgeKind, NodeKind
+
+    rems = [
+        c
+        for c in node.iter_children(edge_kinds={EdgeKind.STRUCTURES})
+        if c.kind == NodeKind.REMAINDER and c.get_field("heading") == "Core"
+    ]
+    assert len(rems) == 1
+    assert rems[0].get_field("heading_style") == "hash"
+    assert rems[0].get_field("heading_level") == 3
+
+
 SUB_HEADING_CASES = [
     # (assertions_depth, sub_depth)
     (2, 3),

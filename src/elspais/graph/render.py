@@ -242,7 +242,12 @@ def _render_requirement(node: GraphNode) -> str:
                 if lines and lines[-1] != "":
                     lines.append("")
                 s = heading_style
-                if s.startswith("#"):
+                if s == "hash":
+                    # Hash sub-heading: depth stored in heading_level
+                    depth = child.get_field("heading_level") or 3
+                    lines.append(f"{'#' * depth} {heading}")
+                elif s.startswith("#"):
+                    # Legacy: heading_style was the literal hash string (e.g. "###")
                     lines.append(f"{s} {heading}")
                 else:
                     lines.append(f"{s}{heading}{s}")

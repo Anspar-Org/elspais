@@ -3083,6 +3083,8 @@ class GraphBuilder:
             "refines_refs": data.get("refines", []),
             "satisfies_refs": data.get("satisfies", []),
             "heading_level": data.get("heading_level", 2),
+            "assertions_heading_level": data.get("assertions_heading_level"),
+            "changelog_heading_level": data.get("changelog_heading_level"),
             "hash_mode": self.hash_mode,
         }
         # Extract rationale from sections for format validation (require_rationale)
@@ -3138,9 +3140,12 @@ class GraphBuilder:
                 "parse_end_line": None,
                 "content_line": section.get("content_line", section_line),
             }
-            # Preserve heading style for assertion sub-headings (* ** _)
+            # Preserve heading style for assertion sub-headings (* ** _ hash)
             if "heading_style" in section:
                 section_node._content["heading_style"] = section["heading_style"]
+            # Preserve heading_level for section depth canonicalization (REQ-d00250-A)
+            if "heading_level" in section:
+                section_node._content["heading_level"] = section["heading_level"]
             self._nodes[section_id] = section_node
             children_with_lines.append((section_line, section_node))
 

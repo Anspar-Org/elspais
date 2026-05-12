@@ -49,6 +49,11 @@ _CHANGELOG_ENTRY_RE = re.compile(r"^- (.+?) \| (\S+) \| (.+?) \| (.+?) \(<?(.+?)
 _NO_REF_VALUES = {"-", "null", "none", "x", "X", "N/A", "n/a"}
 
 
+def _count_hashes(text: str) -> int:
+    """Count leading `#` chars on a header token text."""
+    return len(text) - len(text.lstrip("#"))
+
+
 class RequirementTransformer:
     """Transform a requirement.lark parse tree into ParsedContent objects.
 
@@ -149,6 +154,8 @@ class RequirementTransformer:
         hash_value: str | None = None
         end_line = header_line
         has_redundant_refs = False
+        assertions_depth: int | None = None
+        changelog_depth: int | None = None
 
         for child in node.children[1:]:
             if not isinstance(child, Tree):
@@ -186,12 +193,14 @@ class RequirementTransformer:
                 end_line = self._last_line(child)
 
             elif child.data == "assertion_block":
-                assertions, sub_heading_sections = self._extract_assertions(child, header_line)
+                assertions, sub_heading_sections, assertions_depth = self._extract_assertions(
+                    child, header_line
+                )
                 sections.extend(sub_heading_sections)
                 end_line = self._last_line(child)
 
             elif child.data == "changelog_block":
-                changelog = self._extract_changelog(child)
+                changelog, changelog_depth = self._extract_changelog(child)
                 end_line = self._last_line(child)
 
             elif child.data == "named_block":
@@ -258,6 +267,8 @@ class RequirementTransformer:
             "definitions": definitions,
             "hash": hash_value,
             "heading_level": heading_level,
+            "assertions_heading_level": assertions_depth,
+            "changelog_heading_level": changelog_depth,
         }
         if has_redundant_refs:
             parsed_data["has_redundant_refs"] = True
@@ -330,16 +341,21 @@ class RequirementTransformer:
 
     def _extract_assertions(
         self, node: Tree, req_start_line: int
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        """Extract assertions and sub-heading sections from an assertion block.
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
+        """Extract assertions, sub-heading sections, and assertions-block depth.
 
         Returns:
-            (assertions, sub_heading_sections) where sub_heading_sections are
-            inline labels like ``*Core Functionality*`` stored as section dicts
-            with ``heading_style`` preserving the original formatting.
+            (assertions, sub_heading_sections, assertions_depth) where
+            sub_heading_sections are inline labels like ``*Core Functionality*``
+            stored as section dicts with ``heading_style`` preserving the
+            original formatting (hash sub-headings use ``heading_style="hash"``
+            with a separate ``heading_level`` field).
         """
         assertions: list[dict[str, Any]] = []
         sub_sections: list[dict[str, Any]] = []
+        # Read the depth of the ASSERTIONS_HDR token (first child of the block).
+        hdr_token = node.children[0] if node.children else None
+        assertions_depth = _count_hashes(str(hdr_token)) if hdr_token is not None else 2
         for child in node.children:
             if isinstance(child, Tree) and child.data == "assertion":
                 assertion = self._extract_single_assertion(child)
@@ -376,20 +392,21 @@ class RequirementTransformer:
                 line_num = token.line  # type: ignore[attr-defined]
                 m = re.match(r"^(#{1,6})[ \t]+(.+)$", raw_text)
                 if m:
-                    heading_style = m.group(1)
+                    heading_level = _count_hashes(m.group(1))
                     heading_text = m.group(2).strip()
                 else:
-                    heading_style = "###"
+                    heading_level = 3
                     heading_text = raw_text
                 sub_sections.append(
                     {
                         "heading": heading_text,
                         "content": "",
                         "line": line_num,
-                        "heading_style": heading_style,
+                        "heading_style": "hash",
+                        "heading_level": heading_level,
                     }
                 )
-        return assertions, sub_sections
+        return assertions, sub_sections, assertions_depth
 
     def _extract_single_assertion(self, node: Tree) -> dict[str, Any] | None:
         """Extract a single assertion (entry + continuation lines)."""
@@ -461,17 +478,27 @@ class RequirementTransformer:
             "content": content,
             "line": line_num,
             "content_line": first_content_line or line_num + 1,
+            "heading_level": _count_hashes(header_text),
         }
 
     # ------------------------------------------------------------------
     # Changelog extraction
     # ------------------------------------------------------------------
 
-    def _extract_changelog(self, node: Tree) -> list[dict[str, str]]:
-        """Extract changelog entries from a changelog_block tree node."""
+    def _extract_changelog(self, node: Tree) -> tuple[list[dict[str, str]], int]:
+        """Extract changelog entries and the depth of the Changelog header.
+
+        Returns:
+            (entries, changelog_depth) where changelog_depth is the number of
+            leading `#` characters on the CHANGELOG_HDR token.
+        """
         entries: list[dict[str, str]] = []
+        changelog_depth = 2
         for child in node.children:
             line: str | None = None
+            if isinstance(child, Token) and child.type == "CHANGELOG_HDR":
+                changelog_depth = _count_hashes(str(child))
+                continue
             if isinstance(child, Tree) and child.data == "content_line":
                 for token in child.children:
                     if isinstance(token, Token) and token.type == "TEXT":
@@ -492,7 +519,7 @@ class RequirementTransformer:
                             "reason": m.group(6),
                         }
                     )
-        return entries
+        return entries, changelog_depth
 
     # ------------------------------------------------------------------
     # Journey transformation
@@ -572,8 +599,10 @@ class RequirementTransformer:
 
             elif child.data == "jny_block":
                 # ## Section with content
-                section_hdr = str(child.children[0])
-                section_name = re.sub(r"^##\s*", "", section_hdr).strip()
+                section_hdr_token = child.children[0]
+                section_hdr = str(section_hdr_token)
+                section_name = re.sub(r"^#+\s*", "", section_hdr).strip()
+                section_depth = _count_hashes(section_hdr)
                 section_lines: list[str] = []
                 for sub in child.children[1:]:
                     if isinstance(sub, Tree) and sub.data == "jny_content_line":
@@ -586,6 +615,7 @@ class RequirementTransformer:
                     {
                         "name": section_name,
                         "content": "\n".join(section_lines).strip(),
+                        "heading_level": section_depth,
                     }
                 )
 
