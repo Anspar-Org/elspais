@@ -374,7 +374,7 @@ class RequirementTransformer:
                 token = child.children[0]  # ASSERT_SUB_HASH_HDR
                 raw_text = str(token).strip()
                 line_num = token.line  # type: ignore[attr-defined]
-                m = re.match(r"^(#{3,6})[ \t]+(.+)$", raw_text)
+                m = re.match(r"^(#{1,6})[ \t]+(.+)$", raw_text)
                 if m:
                     heading_style = m.group(1)
                     heading_text = m.group(2).strip()
