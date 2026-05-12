@@ -51,8 +51,38 @@ def run_configured_runners(
         One `RunnerResult` per runner that was actually invoked.
     """
     results: list[RunnerResult] = []
+    resolved_root = repo_root.resolve()
     for runner in config.scanning.test.runners:
-        cwd = (repo_root / runner.cwd).resolve() if runner.cwd else repo_root
+        # Resolve cwd and confine it to the repo root. `Path` join honors an
+        # absolute right-hand side, and `..` segments can escape upward, so
+        # we explicitly verify the resolved path lives under the repo.
+        cwd_candidate = (repo_root / runner.cwd).resolve() if runner.cwd else resolved_root
+        try:
+            cwd_candidate.relative_to(resolved_root)
+        except ValueError:
+            elapsed = 0.0
+            err = (
+                f"cwd '{runner.cwd}' resolves to {cwd_candidate} which is "
+                f"outside the repo root {resolved_root}"
+            )
+            print(
+                f"\n<<< {runner.name}: FAILED (config error: {err}) ({elapsed:.1f}s)",
+                file=sys.stderr,
+            )
+            results.append(
+                RunnerResult(
+                    name=runner.name,
+                    command=runner.command,
+                    cwd=cwd_candidate,
+                    returncode=-1,
+                    duration_seconds=elapsed,
+                    error=err,
+                )
+            )
+            if fail_fast:
+                break
+            continue
+        cwd = cwd_candidate
         print(
             f"\n>>> Running '{runner.name}' runner: {runner.command}",
             file=sys.stderr,

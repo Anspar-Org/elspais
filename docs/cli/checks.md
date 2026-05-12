@@ -48,13 +48,17 @@ repository root; an empty value means the repo root.
 Even without `--run-tests`, `elspais checks` warns when:
 
 - Result files are configured in `[scanning.result].file_patterns` but
-  none exist on disk -- severity `warning` (was `info` prior to v0.115).
+  none exist on disk: the `tests.results` check returns `passed=false`,
+  `severity=warning` (was `passed=true severity=info` prior to v0.115),
+  which flips the exit code to 1 unless `--lenient` is passed.
 - Result files exist but the oldest result mtime is earlier than the
-  newest scanned spec/code/test file mtime -- an additional
-  `tests.results_stale` finding is emitted with severity `warning`.
+  newest scanned spec/code/test file mtime: a separate
+  `tests.results_stale` check is returned with `passed=false`,
+  `severity=warning`, also flipping the exit code unless `--lenient`.
 
-`--lenient` keeps both from affecting the exit code; the findings are
-still emitted to the report.
+`--lenient` keeps these warnings from affecting the exit code; the
+checks are still emitted in the report and remain visible in `--format
+json`.
 
 ## Exit codes
 

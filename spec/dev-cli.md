@@ -6,7 +6,7 @@
 
 Diagnostic commands (`doctor`, `health`) SHALL exit non-zero when they detect configuration or validation failures, ensuring CI pipelines and callers can rely on exit codes to gate merges.
 
-## Assertions
+### Assertions
 
 A. Diagnostic commands (`doctor`, `health`) SHALL exit non-zero when any check produces a warning-level or error-level finding. The `--lenient` flag SHALL relax this so that only error-level findings cause non-zero exit.
 
@@ -18,17 +18,22 @@ D. For `project.type = "associated"`, `doctor` SHALL validate that the `[associa
 
 E. For `project.type = "core"` with configured associate paths, `health` SHALL exit non-zero when an associate path is missing, misconfigured, or produces zero requirements. A silent requirement count drop is a data-loss condition.
 
-## Rationale
+### Rationale
 
 Warnings represent real problems: missing paths, orphaned nodes, unresolved references. By default, any warning causes a non-zero exit code, making diagnostic commands safe for CI gating (REQ-o00066-C). The `--lenient` flag provides an escape hatch for development workflows where warnings are informational and should not block.
 
 The previous `validate` command's responsibilities are absorbed by `health`. References to `validate` in assertions B and E now refer to the `health` command's spec-checking category.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | ada92a29 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | ada92a29 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
-*End* *Diagnostic Command Exit Code Contract* | **Hash**: ada92a29
+## Changelog
+
+- 2026-05-11 | N/A | - | Developer (dev@example.com) | Auto-fix: update hash, add missing changelog section
+
+*End* *Diagnostic Command Exit Code Contract* | **Hash**: N/A
 ---
 
 ## REQ-d00081: Multi-Assertion Reference Expansion
@@ -37,7 +42,7 @@ The previous `validate` command's responsibilities are absorbed by `health`. Ref
 
 Multi-*Assertion* references allow compact notation for referencing multiple assertions of the same requirement. A dedicated separator character (distinct from ID separators) joins *Assertion* labels after the first: `REQ-p00001-A+B+C` expands to individual *Assertion* references `REQ-p00001-A`, `REQ-p00001-B`, `REQ-p00001-C`.
 
-## Assertions
+### Assertions
 
 A. The `multi_assertion_separator` key SHALL be available in `[references.defaults]` configuration.
 
@@ -53,15 +58,20 @@ F. When `multi_assertion_separator` is empty or `false`, expansion SHALL be disa
 
 G. A reference containing no multi-*Assertion* separator character SHALL pass through unchanged.
 
-## Rationale
+### Rationale
 
 The previous implementation hardcoded expansion in RequirementParser only, using a regex that assumed uppercase letter labels and hyphen separators. This created silent failures when code comments (`# Implements: REQ-x-A-B-C`) and test names (`test_REQ_x_A_B_C`) were not expanded. A dedicated separator character eliminates ambiguity regardless of the configured *Assertion* label style (uppercase, numeric, alphanumeric).
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 313fe52b | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 313fe52b | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
-*End* *Multi-Assertion Reference Expansion* | **Hash**: 313fe52b
+## Changelog
+
+- 2026-05-11 | N/A | - | Developer (dev@example.com) | Auto-fix: update hash, add missing changelog section
+
+*End* *Multi-Assertion Reference Expansion* | **Hash**: N/A
 ---
 
 ## REQ-d00082: Unified Reference Configuration
@@ -70,7 +80,7 @@ The previous implementation hardcoded expansion in RequirementParser only, using
 
 The system SHALL provide a unified, configurable reference pattern system used by all parsers (CodeParser, TestParser, JUnitXMLParser, PytestJSONParser) to locate requirement references in source files.
 
-## Assertions
+### Assertions
 
 D. The reference configuration SHALL support case-sensitive and case-insensitive ID matching.
 
@@ -90,15 +100,20 @@ K. JUnitXMLParser SHALL accept PatternConfig and ReferenceResolver for configura
 
 L. PytestJSONParser SHALL accept PatternConfig and ReferenceResolver for configurable reference matching in pytest JSON reports.
 
-## Rationale
+### Rationale
 
 Different projects use different ID conventions, comment styles, and directory structures. A unified reference configuration allows all parsers to share the same configurable pattern matching, avoiding duplicated logic and ensuring consistent behavior across parser types.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 89956cd7 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 89956cd7 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
-*End* *Unified Reference Configuration* | **Hash**: 89956cd7
+## Changelog
+
+- 2026-05-11 | N/A | - | Developer (dev@example.com) | Auto-fix: update hash, add missing changelog section
+
+*End* *Unified Reference Configuration* | **Hash**: N/A
 ---
 
 ## REQ-d00084: Trace Command
@@ -107,7 +122,7 @@ Different projects use different ID conventions, comment styles, and directory s
 
 The `trace` command SHALL generate *Traceability* output from the requirement graph, supporting multiple output formats with configurable column presets and detail levels.
 
-## Assertions
+### Assertions
 
 A. The command SHALL support structured JSON graph output via `--graph-json`, including git change annotations when available.
 
@@ -117,15 +132,20 @@ C. The command SHALL support independent detail flags (`--body`, `--assertions`,
 
 D. Coverage columns SHALL show per-requirement *Assertion*-level coverage: Implemented (assertions with code refs, direct or transitive), Validated (assertions with test refs), Passing (validated assertions whose tests pass), each displayed as N/M (%).
 
-## Rationale
+### Rationale
 
 A JSON graph output mode enables programmatic consumption of the full *Traceability* graph with git-aware change tracking, supporting dashboard integrations and automated analysis pipelines. Column presets and detail flags are independent axes of control: a user may want a compact table with full coverage columns, or a minimal table with expanded *Assertion* rows.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | f8f0e0f2 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | f8f0e0f2 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
-*End* *Trace Command* | **Hash**: f8f0e0f2
+## Changelog
+
+- 2026-05-11 | N/A | - | Developer (dev@example.com) | Auto-fix: update hash, add missing changelog section
+
+*End* *Trace Command* | **Hash**: N/A
 ---
 
 ## REQ-d00085: Unified Report Composition
@@ -134,7 +154,7 @@ A JSON graph output mode enables programmatic consumption of the full *Traceabil
 
 The CLI SHALL support composable report output by accepting multiple section names as positional arguments. Sections are rendered in the order specified and concatenated into a single output stream.
 
-## Assertions
+### Assertions
 
 A. The CLI SHALL accept multiple section names (`health`, `coverage`, `trace`, `changed`) as positional arguments, rendering each in order and concatenating the output.
 
@@ -156,15 +176,20 @@ I. Each `HealthCheck` SHALL carry a `findings` list of `HealthFinding` dataclass
 
 J. The `--format sarif` option SHALL render health findings as SARIF v2.1.0 JSON, with one `reportingDescriptor` per unique check name, one `result` per `HealthFinding` with physical locations, passing checks omitted, and coverage stats in `run.properties`.
 
-## Rationale
+### Rationale
 
 Report-producing commands (`health`, `trace`, `coverage`, `changed`) currently exist as independent subcommands with inconsistent format support. Composing a combined report (e.g. health + coverage for a CI PR comment) requires multiple invocations and manual concatenation. A composable system builds the graph once, renders each section, and produces unified output. The `--lenient` flag provides an escape hatch for workflows that want to observe warnings without gating on them.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 82d76f1a | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 82d76f1a | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
-*End* *Unified Report Composition* | **Hash**: 82d76f1a
+## Changelog
+
+- 2026-05-11 | N/A | - | Developer (dev@example.com) | Auto-fix: update hash, add missing changelog section
+
+*End* *Unified Report Composition* | **Hash**: N/A
 ---
 
 ## REQ-d00086: Coverage Report Section
@@ -173,7 +198,7 @@ Report-producing commands (`health`, `trace`, `coverage`, `changed`) currently e
 
 The `coverage` section SHALL produce a coverage report showing implementation, validation, and test-passing status at the requirement and *Assertion* level.
 
-## Assertions
+### Assertions
 
 A. The report SHALL group requirements by level (PRD, OPS, DEV) and show counts and percentages of requirements with code references, test references, and passing tests.
 
@@ -183,15 +208,20 @@ C. The report SHALL support `text`, `markdown`, `json`, and `csv` output formats
 
 D. The report SHALL use existing graph aggregate functions and annotator data rather than reimplementing coverage logic.
 
-## Rationale
+### Rationale
 
 Coverage data is already computed during graph construction but is only surfaced through the interactive viewer or the underpowered `analyze coverage` text output. A dedicated coverage section with multi-format support enables CI badge generation, PR comment summaries, and developer-facing markdown reports.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 2fd4ab13 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 2fd4ab13 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
-*End* *Coverage Report Section* | **Hash**: 2fd4ab13
+## Changelog
+
+- 2026-05-11 | N/A | - | Developer (dev@example.com) | Auto-fix: update hash, add missing changelog section
+
+*End* *Coverage Report Section* | **Hash**: N/A
 ---
 
 ## REQ-d00073: Link Suggestion CLI Command
@@ -200,7 +230,7 @@ Coverage data is already computed during graph construction but is only surfaced
 
 The `commands/link_suggest.py` module SHALL provide the `elspais link suggest` CLI command.
 
-## Assertions
+### Assertions
 
 A. `elspais link suggest` SHALL scan all unlinked test nodes and print suggestions with confidence scores.
 
@@ -212,15 +242,20 @@ D. `--min-confidence high|medium|low` SHALL filter suggestions by confidence ban
 
 E. `--apply [--dry-run]` SHALL insert `# Implements:` comments into source files at the suggested locations, with dry-run previewing changes without writing.
 
-## Rationale
+### Rationale
 
 CLI exposure enables both interactive use and CI pipeline integration. JSON output mode supports tooling and scripting workflows.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 44fd54e9 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 44fd54e9 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
-*End* *Link Suggestion CLI Command* | **Hash**: 44fd54e9
+## Changelog
+
+- 2026-05-11 | N/A | - | Developer (dev@example.com) | Auto-fix: update hash, add missing changelog section
+
+*End* *Link Suggestion CLI Command* | **Hash**: N/A
 ---
 
 ## REQ-d00124: Graph Analysis Engine
@@ -229,7 +264,7 @@ CLI exposure enables both interactive use and CI pipeline integration. JSON outp
 
 The `analysis` module SHALL provide read-only analytical functions that operate on a `TraceGraph` to rank requirements by foundational importance. The module SHALL NOT modify the graph or create parallel data structures.
 
-## Assertions
+### Assertions
 
 A. The module SHALL compute PageRank-style centrality scores for requirement nodes by iterating on reversed edges (children distribute score to parents) with a configurable damping factor, converging within a tolerance threshold.
 
@@ -245,15 +280,20 @@ F. The module SHALL filter nodes by `NodeKind`, defaulting to REQUIREMENT and *A
 
 G. The module SHALL rank actionable leaf nodes by summing the composite scores of their ancestors, surfacing the most impactful uncovered work items.
 
-## Rationale
+### Rationale
 
 In a large requirements DAG, naive metrics like descendant count always favor the root node. PageRank centrality naturally handles DAGs and rewards cross-cutting dependencies. Combined with fan-in (how many independent areas depend on a node) and coverage gaps, this enables evidence-based prioritization of foundational work.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 86bb619b | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 86bb619b | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
-*End* *Graph Analysis Engine* | **Hash**: 86bb619b
+## Changelog
+
+- 2026-05-11 | N/A | - | Developer (dev@example.com) | Auto-fix: update hash, add missing changelog section
+
+*End* *Graph Analysis Engine* | **Hash**: N/A
 ---
 
 ## REQ-d00125: Analysis CLI Command
@@ -262,7 +302,7 @@ In a large requirements DAG, naive metrics like descendant count always favor th
 
 The `elspais analysis` command SHALL invoke the graph analysis engine and render ranked results in table or JSON format.
 
-## Assertions
+### Assertions
 
 A. The command SHALL accept `--top N` to limit the number of results displayed (default 10).
 
@@ -280,22 +320,27 @@ G. The table output SHALL display columns for Rank, ID, Title, Centrality, Fan-I
 
 H. The JSON output SHALL serialize the full `FoundationReport` structure.
 
-## Rationale
+### Rationale
 
 A CLI command provides immediate visibility into which requirements are most foundational, enabling project planning without requiring MCP or viewer integration.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 3cd66dbe | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 3cd66dbe | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
-*End* *Analysis CLI Command* | **Hash**: 3cd66dbe
+## Changelog
+
+- 2026-05-11 | N/A | - | Developer (dev@example.com) | Auto-fix: update hash, add missing changelog section
+
+*End* *Analysis CLI Command* | **Hash**: N/A
 ---
 
 ## REQ-d00213: Version Check and Update Notification
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00001
 
-## Assertions
+### Assertions
 
 A. The tool SHALL parse semantic version strings into comparable representations, stripping pre-release/dev/local suffixes.
 
@@ -309,17 +354,22 @@ E. The tool SHALL query the package index for the latest published version, retu
 
 F. The tool SHALL compare local vs. remote versions and report whether the installation is up-to-date, an update is available (with upgrade instructions), or the check failed (silently suppressed).
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 56b62d01 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 56b62d01 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
-*End* *Version Check and Update Notification* | **Hash**: 56b62d01
+## Changelog
+
+- 2026-05-11 | N/A | - | Developer (dev@example.com) | Auto-fix: update hash, add missing changelog section
+
+*End* *Version Check and Update Notification* | **Hash**: N/A
 
 ## REQ-d00217: INDEX.md Regeneration
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00003
 
-## Assertions
+### Assertions
 
 A. INDEX.md generation SHALL read the project name and level rank/display name from project configuration to populate headers and table structure.
 
@@ -329,19 +379,24 @@ C. The regenerated INDEX.md SHALL contain per-level requirement tables sorted by
 
 D. When multiple `(repo, spec_dir)` buckets contribute requirements within a level, the INDEX.md SHALL include `###` subsections per bucket. Each subsection's label SHALL be derived from the bucket's spec directory (`{project_name}/{spec_subpath}`) when the bucket has an associated spec dir; otherwise the bucket is labeled with the owning `RepoEntry.name`. The `Unattributed` bucket retains its fixed label.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 4310931a | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize section header depth
 - 2026-05-04 | 4310931a | - | Developer (dev@example.com) | Auto-fix: update hash
 - 2026-05-04 | 7c4f1816 | - | Developer (dev@example.com) | Auto-fix: update hash
 - 2026-04-23 | a1e3915a | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
-*End* *INDEX.md Regeneration* | **Hash**: 4310931a
+## Changelog
+
+- 2026-05-11 | N/A | - | Developer (dev@example.com) | Auto-fix: update hash, add missing changelog section
+
+*End* *INDEX.md Regeneration* | **Hash**: N/A
 
 ## REQ-d00218: Health Check Coverage Rollup
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-d00085
 
-## Assertions
+### Assertions
 
 A. The tests.coverage health check SHALL use the rollup coverage metric from the annotation pipeline, not a direct parent walk from TEST nodes.
 
@@ -349,17 +404,22 @@ B. The tests.coverage check SHALL report test-specific coverage (assertions veri
 
 C. When a child requirement has test coverage, its parent requirement SHALL receive coverage credit through the rollup mechanism.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 64b0dfbb | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 64b0dfbb | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
-*End* *Health Check Coverage Rollup* | **Hash**: 64b0dfbb
+## Changelog
+
+- 2026-05-11 | N/A | - | Developer (dev@example.com) | Auto-fix: update hash, add missing changelog section
+
+*End* *Health Check Coverage Rollup* | **Hash**: N/A
 
 ## REQ-d00219: UAT Health Check Section
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-d00085
 
-## Assertions
+### Assertions
 
 A. The health report SHALL include a UAT section below the TESTS section, reporting journey-based validation coverage and results separately.
 
@@ -369,33 +429,38 @@ C. The uat.results check SHALL parse a CSV file with journey_id and status colum
 
 D. When no UAT results CSV file exists, the uat.results check SHALL report as skipped (informational) without failing.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 3a95ff57 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 3a95ff57 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
-*End* *UAT Health Check Section* | **Hash**: 3a95ff57
+## Changelog
+
+- 2026-05-11 | N/A | - | Developer (dev@example.com) | Auto-fix: update hash, add missing changelog section
+
+*End* *UAT Health Check Section* | **Hash**: N/A
 
 ## REQ-d00249: Configured test runner execution
 
 **Level**: dev | **Status**: Draft | **Implements**: -
 
-## Assertions
+### Assertions
 
-A. The system SHALL execute each entry in `[[scanning.test.runners]]` in declaration order when invoked with `elspais checks --run-tests`, resolving each entry's `cwd` relative to the repository root.
+A. The system SHALL execute each entry in `[[scanning.test.runners]]` in declaration order when invoked with `elspais checks --run-tests`, resolving each entry's `cwd` relative to the repository root and rejecting any `cwd` that resolves outside the repository root.
 
 B. The system SHALL stream runner stdout and stderr live to the invoking terminal, emit a per-runner banner before invocation, and a tally line with elapsed seconds and the exit code after invocation.
 
 C. The system SHALL stop at the first failing runner and skip the checks pass entirely when invoked with `elspais checks --run-tests --fail-fast`.
 
-D. The system SHALL emit a `tests.results` finding with severity `warning` when no result files are present.
+D. When result file patterns are configured but no matching files exist on disk, the system SHALL return the `tests.results` health check with `passed = false` and severity `warning`, flipping the exit code unless `--lenient` is passed.
 
-E. The system SHALL emit an additional `tests.results_stale` finding with severity `warning` when the oldest result file mtime is earlier than the newest scanned spec/code/test FILE-node mtime.
+E. When result files exist but the oldest result file mtime is earlier than the newest scanned spec, code, or test FILE-node mtime, the system SHALL return a separate `tests.results_stale` health check with `passed = false` and severity `warning`, flipping the exit code unless `--lenient` is passed.
 
 F. The system SHALL return exit code 2 and an error message pointing at `docs/cli/checks.md` when `elspais checks --run-tests` is invoked with no runners configured.
 
 G. The system SHALL return a non-zero exit code if any runner failed OR any check failed, and 0 only if all succeeded.
 
-## Rationale
+### Rationale
 
 `elspais checks` previously reported verified coverage based on RESULT
 nodes parsed from JUnit XML or pytest JSON files. When those files were
@@ -404,5 +469,4 @@ indication that test results were not recent. This requirement closes
 both gaps: a single command can execute tests and re-evaluate checks,
 and the checks pass warns when results are out of date even without
 running tests.
-
-*End* *Configured test runner execution* | **Hash**: b75d9360
+*End* *Configured test runner execution* | **Hash**: N/A

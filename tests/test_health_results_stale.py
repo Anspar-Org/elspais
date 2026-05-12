@@ -1,12 +1,12 @@
 # Verifies: REQ-d00249-D, REQ-d00249-E
-"""Staleness handling in check_test_results."""
+"""Missing-results and staleness behavior in tests.results / tests.results_stale."""
 from __future__ import annotations
 
 import os
 import time
 from pathlib import Path
 
-from elspais.commands.health import check_test_results
+from elspais.commands.health import check_test_results, check_test_results_stale
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import FileType, GraphNode, NodeKind, make_file_id
@@ -30,7 +30,7 @@ def _graph_with_files(*nodes: GraphNode) -> FederatedGraph:
     return FederatedGraph.from_single(tg, config=None, repo_root=Path("."))
 
 
-def test_missing_results_warns(tmp_path: Path):
+def test_missing_results_fails_with_warning(tmp_path: Path):
     spec = tmp_path / "spec.md"
     spec.write_text("# REQ-p00001\n")
     spec_node = _make_file_node(spec, FileType.SPEC)
@@ -38,18 +38,19 @@ def test_missing_results_warns(tmp_path: Path):
     config = {"scanning": {"result": {"file_patterns": ["results/*.json"]}}}
     chk = check_test_results(graph, config=config)
     assert chk.name == "tests.results"
+    assert chk.passed is False
     assert chk.severity == "warning"
-    msg = (chk.message or "").lower()
-    assert "missing" in msg or "no test" in msg or "results" in msg
 
 
 def test_no_result_files_configured_remains_info():
     graph = _graph_with_files()
     chk = check_test_results(graph, config=None)
+    assert chk.name == "tests.results"
+    assert chk.passed is True
     assert chk.severity == "info"
 
 
-def test_fresh_results_no_stale_finding(tmp_path: Path):
+def test_fresh_results_stale_check_passes(tmp_path: Path):
     spec = tmp_path / "spec.md"
     spec.write_text("# REQ-p00001\n")
     older = time.time() - 60
@@ -60,17 +61,16 @@ def test_fresh_results_no_stale_finding(tmp_path: Path):
 
     spec_node = _make_file_node(spec, FileType.SPEC)
     result_node = _make_file_node(result_file, FileType.RESULT)
-    content_result = GraphNode(id="result:dummy", kind=NodeKind.RESULT)
-    content_result.set_field("status", "passed")
 
-    graph = _graph_with_files(spec_node, result_node, content_result)
+    graph = _graph_with_files(spec_node, result_node)
 
-    chk = check_test_results(graph, config={"scanning": {"result": {"file_patterns": ["*.json"]}}})
-    assert "stale" not in chk.message.lower()
-    assert all("stale" not in (f.message or "").lower() for f in chk.findings)
+    chk = check_test_results_stale(graph)
+    assert chk.name == "tests.results_stale"
+    assert chk.passed is True
+    assert chk.severity == "info"
 
 
-def test_stale_results_emits_stale_finding(tmp_path: Path):
+def test_stale_results_emits_named_warning(tmp_path: Path):
     spec = tmp_path / "spec.md"
     spec.write_text("# REQ-p00001\n")
 
@@ -81,17 +81,22 @@ def test_stale_results_emits_stale_finding(tmp_path: Path):
 
     spec_node = _make_file_node(spec, FileType.SPEC)
     result_node = _make_file_node(result_file, FileType.RESULT)
-    content_result = GraphNode(id="result:dummy", kind=NodeKind.RESULT)
-    content_result.set_field("status", "passed")
 
-    graph = _graph_with_files(spec_node, result_node, content_result)
+    graph = _graph_with_files(spec_node, result_node)
 
-    chk = check_test_results(graph, config={"scanning": {"result": {"file_patterns": ["*.json"]}}})
-    has_stale = (
-        any("stale" in (f.message or "").lower() for f in chk.findings)
-        or "stale" in (chk.message or "").lower()
-    )
-    finding_msgs = [f.message for f in chk.findings]
-    assert has_stale, (
-        f"expected stale finding, got message={chk.message!r}, " f"findings={finding_msgs}"
-    )
+    chk = check_test_results_stale(graph)
+    assert chk.name == "tests.results_stale"
+    assert chk.passed is False
+    assert chk.severity == "warning"
+    assert "stale" in (chk.message or "").lower()
+
+
+def test_stale_check_skipped_when_no_results(tmp_path: Path):
+    spec = tmp_path / "spec.md"
+    spec.write_text("# REQ-p00001\n")
+    spec_node = _make_file_node(spec, FileType.SPEC)
+    graph = _graph_with_files(spec_node)
+    chk = check_test_results_stale(graph)
+    assert chk.name == "tests.results_stale"
+    assert chk.passed is True
+    assert chk.severity == "info"

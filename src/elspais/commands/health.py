@@ -2309,18 +2309,25 @@ def _collect_file_mtimes(
 
 
 def check_test_results(graph: FederatedGraph, config: dict | None = None) -> HealthCheck:
-    """Check test result status from JUnit/pytest output."""
-    from datetime import datetime
+    """Check test result status from JUnit/pytest output.
 
+    Returns one of:
+    - ``tests.results`` severity=info, passed=True -- no patterns configured.
+    - ``tests.results`` severity=warning, passed=False -- patterns configured
+      but no matching files on disk. Flips exit code unless ``--lenient``.
+    - ``tests.results`` severity=warning, passed=False -- some tests failed.
+    - ``tests.results`` severity=info, passed=True -- all tests passing.
+
+    Staleness is reported as a separate :func:`check_test_results_stale` check
+    so consumers can key off the ``tests.results_stale`` name.
+    """
     from elspais.graph import NodeKind
-    from elspais.graph.GraphNode import FileType
 
     result_nodes = list(graph.nodes_by_kind(NodeKind.RESULT))
     run_meta = _read_run_meta(config)
     deselected = run_meta["deselected_count"]
 
     if not result_nodes:
-        # Check if result scanning is actually configured
         if config:
             _tc = _validate_config(config)
             result_files = _tc.scanning.result.file_patterns
@@ -2336,7 +2343,7 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
             )
         return HealthCheck(
             name="tests.results",
-            passed=True,
+            passed=False,
             message=(
                 f"Test result files missing ({len(result_files)} pattern(s) "
                 "configured but no matching files). "
@@ -2344,22 +2351,6 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
             ),
             category="tests",
             severity="warning",
-        )
-
-    # Compute staleness
-    stale_finding: HealthFinding | None = None
-    result_mtimes = _collect_file_mtimes(graph, {FileType.RESULT})
-    source_mtimes = _collect_file_mtimes(graph, {FileType.SPEC, FileType.CODE, FileType.TEST})
-    if result_mtimes and source_mtimes and min(result_mtimes) < max(source_mtimes):
-        oldest_result = datetime.fromtimestamp(min(result_mtimes)).isoformat(timespec="seconds")
-        newest_source = datetime.fromtimestamp(max(source_mtimes)).isoformat(timespec="seconds")
-        stale_finding = HealthFinding(
-            message=(
-                f"Test results are stale -- oldest result mtime "
-                f"{oldest_result} is earlier than newest scanned source "
-                f"mtime {newest_source}. Re-run with "
-                f"`elspais checks --run-tests` to refresh."
-            ),
         )
 
     # Tally
@@ -2380,12 +2371,8 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
     pass_rate = (passed / total * 100) if total > 0 else 0
     deselected_suffix = f", {deselected} deselected" if deselected else ""
 
-    findings: list[HealthFinding] = []
-    if stale_finding is not None:
-        findings.append(stale_finding)
-
     if failed > 0:
-        findings.extend(
+        findings = [
             HealthFinding(
                 message=f"Failed: {node.get_label() or node.id}",
                 node_id=node.id,
@@ -2393,7 +2380,7 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
             )
             for node in result_nodes
             if node.get_field("status", "unknown") == "failed"
-        )
+        ]
         return HealthCheck(
             name="tests.results",
             passed=False,
@@ -2413,14 +2400,12 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
             findings=findings,
         )
 
-    severity = "warning" if stale_finding else "info"
     return HealthCheck(
         name="tests.results",
         passed=True,
         message=f"All tests passing: {passed} passed, {skipped} skipped{deselected_suffix}",
         category="tests",
-        severity=severity,
-        findings=findings,
+        severity="info",
         details={
             "passed": passed,
             "failed": failed,
@@ -2428,6 +2413,58 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
             "deselected": deselected,
             "pass_rate": round(pass_rate, 1),
         },
+    )
+
+
+def check_test_results_stale(graph: FederatedGraph) -> HealthCheck:
+    """Emit ``tests.results_stale`` warning when result mtimes lag source mtimes.
+
+    Returns:
+        ``tests.results_stale`` severity=info, passed=True -- results are
+        fresh or no result files exist (a missing-results report is the job
+        of :func:`check_test_results`).
+
+        ``tests.results_stale`` severity=warning, passed=False -- oldest
+        result file mtime is earlier than the newest scanned spec/code/test
+        file mtime. Flips exit code unless ``--lenient``.
+    """
+    from datetime import datetime
+
+    from elspais.graph.GraphNode import FileType
+
+    result_mtimes = _collect_file_mtimes(graph, {FileType.RESULT})
+    source_mtimes = _collect_file_mtimes(graph, {FileType.SPEC, FileType.CODE, FileType.TEST})
+
+    if not result_mtimes or not source_mtimes:
+        return HealthCheck(
+            name="tests.results_stale",
+            passed=True,
+            message="Result freshness not evaluated (no results or no scanned sources)",
+            category="tests",
+            severity="info",
+        )
+
+    if min(result_mtimes) >= max(source_mtimes):
+        return HealthCheck(
+            name="tests.results_stale",
+            passed=True,
+            message="Test results are up to date",
+            category="tests",
+            severity="info",
+        )
+
+    oldest_result = datetime.fromtimestamp(min(result_mtimes)).isoformat(timespec="seconds")
+    newest_source = datetime.fromtimestamp(max(source_mtimes)).isoformat(timespec="seconds")
+    return HealthCheck(
+        name="tests.results_stale",
+        passed=False,
+        message=(
+            f"Test results are stale -- oldest result mtime {oldest_result} "
+            f"is earlier than newest scanned source mtime {newest_source}. "
+            f"Re-run with `elspais checks --run-tests` to refresh."
+        ),
+        category="tests",
+        severity="warning",
     )
 
 
@@ -2616,6 +2653,7 @@ def run_test_checks(
         check_dimension_coverage(graph, "verified", exclude_status=exclude_status, config=config),
         check_unlinked_tests(graph),
         check_test_results(graph, config=config),
+        check_test_results_stale(graph),
         _check_status_references(
             graph, NodeKind.TEST, StatusRole.RETIRED, ref_sev.retired, exclude_status
         ),

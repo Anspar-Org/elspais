@@ -1705,14 +1705,21 @@ class TestRunTestsFailFast:
 class TestStaleResultsWarning:
     """Verifies: REQ-d00249-E"""
 
-    def test_stale_results_emit_warning(self, tmp_path, project):
+    @staticmethod
+    def _build_stale_project(scratch, project):
         import os
         import shutil
         import time
 
-        scratch = tmp_path / "stale"
         shutil.copytree(project, scratch)
-        # Write a fresh result file then back-date it.
+        # The fixture's daemon.json points at the parent project's daemon,
+        # which has cached its own graph and won't see the result file we're
+        # about to create in scratch. Strip it so elspais falls back to a
+        # fresh local build.
+        for daemon_file in ("daemon.json", "daemon.log"):
+            p = scratch / ".elspais" / daemon_file
+            if p.exists():
+                p.unlink()
         result_dir = scratch / ".elspais" / "results"
         result_dir.mkdir(parents=True, exist_ok=True)
         result_file = result_dir / "test-results.json"
@@ -1729,27 +1736,45 @@ class TestStaleResultsWarning:
         )
         old = time.time() - 7200
         os.utime(result_file, (old, old))
-        # Touch a spec file so its mtime is now.
+        # Touch every scanned spec markdown so at least one in-graph file
+        # is newer than the (back-dated) result. Touching just the first
+        # glob match can hit a file that the parser skipped, leaving the
+        # graph's source mtimes unchanged.
         for spec_md in (scratch / "spec").glob("*.md"):
             spec_md.touch()
-            break
-        # Use --tests scope to focus on tests.results check only, avoiding
-        # interference from spec mutations in the shared project fixture.
+
+    def test_stale_results_emit_named_check_with_lenient(self, tmp_path, project):
+        scratch = tmp_path / "stale_lenient"
+        self._build_stale_project(scratch, project)
         out = run_elspais("checks", "--tests", "--format", "json", "--lenient", cwd=scratch)
+        # --lenient mutes exit code; the check is still in the report.
         assert (
             out.returncode == 0
-        ), f"checks --tests failed: stdout={out.stdout!r} stderr={out.stderr!r}"
+        ), f"checks --tests --lenient failed: stdout={out.stdout!r} stderr={out.stderr!r}"
         data = json.loads(out.stdout)
-        results_chk = next(
-            (c for c in data.get("checks", []) if c.get("name") == "tests.results"),
+        stale_chk = next(
+            (c for c in data.get("checks", []) if c.get("name") == "tests.results_stale"),
             None,
         )
-        assert results_chk is not None
-        haystack = (
-            (results_chk.get("message") or "").lower()
-            + " "
-            + " ".join(
-                (f.get("message") or "").lower() for f in (results_chk.get("findings") or [])
-            )
+        assert stale_chk is not None, "expected tests.results_stale in checks"
+        assert stale_chk.get("passed") is False
+        assert stale_chk.get("severity") == "warning"
+        assert "stale" in (stale_chk.get("message") or "").lower()
+
+    def test_stale_results_non_lenient_flips_exit_code(self, tmp_path, project):
+        scratch = tmp_path / "stale_strict"
+        self._build_stale_project(scratch, project)
+        out = run_elspais("checks", "--tests", "--format", "json", cwd=scratch)
+        # Without --lenient, the warning flips exit code.
+        assert out.returncode != 0, (
+            f"expected non-zero exit without --lenient when results are stale; "
+            f"got {out.returncode}, stdout={out.stdout!r}"
         )
-        assert "stale" in haystack, f"expected stale in: {haystack!r}"
+        data = json.loads(out.stdout)
+        stale_chk = next(
+            (c for c in data.get("checks", []) if c.get("name") == "tests.results_stale"),
+            None,
+        )
+        assert stale_chk is not None
+        assert stale_chk.get("passed") is False
+        assert data.get("healthy") is False

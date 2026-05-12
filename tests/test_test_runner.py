@@ -99,3 +99,34 @@ def test_default_does_not_fail_fast(tmp_path: Path):
     assert results[0].returncode != 0
     assert results[1].returncode == 0
     assert marker.exists()
+
+
+def test_absolute_cwd_outside_repo_is_rejected(tmp_path: Path):
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    cfg = _cfg_with_runners([TestRunnerConfig(name="escape", command="true", cwd=str(outside))])
+    results = run_configured_runners(cfg, repo)
+    assert len(results) == 1
+    r = results[0]
+    assert r.returncode == -1
+    assert "outside the repo root" in r.error
+
+
+def test_parent_traversal_cwd_is_rejected(tmp_path: Path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    cfg = _cfg_with_runners([TestRunnerConfig(name="dotdot", command="true", cwd="../elsewhere")])
+    results = run_configured_runners(cfg, repo)
+    assert results[0].returncode == -1
+    assert "outside the repo root" in results[0].error
+
+
+def test_relative_subdir_cwd_is_accepted(tmp_path: Path):
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    cfg = _cfg_with_runners([TestRunnerConfig(name="ok", command="true", cwd="sub")])
+    results = run_configured_runners(cfg, tmp_path)
+    assert results[0].returncode == 0
+    assert results[0].cwd == sub.resolve()
