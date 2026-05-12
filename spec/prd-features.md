@@ -91,7 +91,7 @@ C. The viewer SHALL display source files inline in a side panel with syntax-high
 
 **Level**: prd | **Status**: Active | **Implements**: REQ-p00001
 
-## Rationale
+### Rationale
 
 Cross-cutting concerns — regulatory compliance frameworks, security policies, accessibility standards, operational baselines — define obligations that multiple independent subsystems must satisfy. The `Satisfies:` relationship enables a template-instance pattern: a set of requirements is defined once as a reusable template, and individual subsystems declare that they satisfy it. When a requirement declares `Satisfies: X`, the graph builder clones the template's REQ subtree with composite IDs, creating instance nodes that participate in normal coverage computation. A `Stereotype` enum (`CONCRETE`, `TEMPLATE`, `INSTANCE`) classifies nodes, and an `INSTANCE` edge connects each clone to its template original.
 
@@ -110,6 +110,7 @@ E. The system SHALL provide a `spec.satisfies_resolve` health check that verifie
 ### Changelog
 
 - 2026-05-11 | bae1b85d | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
+- 2026-05-11 | bae1b85d | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-04 | bae1b85d | - | Developer (dev@example.com) | Auto-fix: canonicalize term forms, update hash
 - 2026-03-30 | 9115ce0d | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
@@ -120,7 +121,7 @@ E. The system SHALL provide a `spec.satisfies_resolve` health check that verifie
 
 **Level**: prd | **Status**: Draft | **Implements**: REQ-p00001
 
-## Rationale
+### Rationale
 
 When a cross-cutting template *Assertion* does not apply to a specific subsystem, the declaring requirement must be able to explicitly exclude it. This uses normative *Assertion* language consistent with the rest of the spec system, and follows the same semantics as deprecated status — the *Assertion* is excluded from the coverage denominator.
 
@@ -151,7 +152,7 @@ C. The system SHALL NOT create parallel data structures that duplicate informati
 
 D. The system SHALL NOT have multiple code paths that independently compute hierarchy, coverage, or relationships.
 
-## Rationale
+### Rationale
 
 Multiple data structures lead to synchronization bugs, duplicated logic, and maintenance burden. A single graph provides:
 
@@ -162,6 +163,7 @@ Multiple data structures lead to synchronization bugs, duplicated logic, and mai
 
 ### Changelog
 
+- 2026-05-11 | 4a1e5d0b | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 4a1e5d0b | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 4a1e5d0b | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -186,12 +188,13 @@ D. The MCP server SHALL provide mutation tools for AI-assisted requirement manag
 
 E. The MCP server SHALL support undo operations for all graph mutations.
 
-## Rationale
+### Rationale
 
 AI agents need programmatic access to requirements data for tasks like coverage analysis, requirement drafting, and *Traceability* verification. The MCP protocol provides a standardized interface that works with multiple AI platforms.
 
 ### Changelog
 
+- 2026-05-11 | 3ebc237a | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 3ebc237a | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 3ebc237a | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 

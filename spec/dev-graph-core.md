@@ -18,12 +18,13 @@ D. Annotator functions SHALL only operate on REQUIREMENT nodes (skip other node 
 
 E. Annotator functions SHALL be idempotent - calling twice produces same result.
 
-## Rationale
+### Rationale
 
 Per-node annotators enable fine-grained control over which annotations are applied and when.
 
 ### Changelog
 
+- 2026-05-11 | 8ca0389e | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 8ca0389e | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 8ca0389e | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -50,12 +51,13 @@ E. The system SHALL provide per-requirement coverage status (Full/Partial/Unimpl
 
 F. Aggregate functions SHALL NOT duplicate iteration - they SHALL use graph.all_nodes().
 
-## Rationale
+### Rationale
 
 Aggregate functions provide reusable statistics computation that any output format can use.
 
 ### Changelog
 
+- 2026-05-11 | 97c0f6fc | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 97c0f6fc | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 97c0f6fc | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -84,12 +86,13 @@ F. Generators SHALL use aggregate functions from annotators module for statistic
 
 G. All file write operations in output commands SHALL specify explicit `encoding="utf-8"` for cross-platform portability.
 
-## Rationale
+### Rationale
 
 Direct graph consumption eliminates data structure conversion overhead and ensures consistency.
 
 ### Changelog
 
+- 2026-05-11 | a3575fcc | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | a3575fcc | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | a3575fcc | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -106,12 +109,13 @@ Output generators SHALL follow a standard annotation pipeline pattern.
 
 A. The pipeline SHALL be: parse -> build graph -> annotate nodes -> generate output.
 
-## Rationale
+### Rationale
 
 A standard pipeline ensures consistent annotation across all output formats and simplifies debugging.
 
 ### Changelog
 
+- 2026-05-11 | 0256df47 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 0256df47 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 0256df47 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -136,12 +140,13 @@ D. Standard metrics keys SHALL include: is_uncommitted, is_moved, is_new, is_roa
 
 E. Custom metrics MAY be added by specific annotators without modifying TraceNode class.
 
-## Rationale
+### Rationale
 
 Using metrics dict as the extension point enables adding new annotations without modifying the core TraceNode dataclass.
 
 ### Changelog
 
+- 2026-05-11 | 0073a9c3 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 0073a9c3 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 0073a9c3 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -178,12 +183,13 @@ J. A `Refines:` relationship SHALL NOT count as coverage in itself, but coverage
 
 K. The system SHALL report coverage gaps on template instance nodes through the standard coverage mechanisms. Instance nodes are normal graph nodes and participate in existing health checks.
 
-## Rationale
+### Rationale
 
 Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* suffix) currently contribute zero *Assertion* coverage. Adding INDIRECT as a separate source allows a "progress indicator" view alongside strict *Traceability*, following the same pattern as INFERRED coverage for requirement-to-requirement relationships.
 
 ### Changelog
 
+- 2026-05-11 | e9b5c3f1 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | e9b5c3f1 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | e9b5c3f1 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
@@ -208,12 +214,13 @@ D. The default display SHALL show strict coverage (toggle OFF).
 
 E. The `has_failures` warning indicator SHALL display regardless of toggle state.
 
-## Rationale
+### Rationale
 
 Users need both a strict *Traceability* view (only *Assertion*-targeted tests count) and a progress indicator view (whole-requirement tests cover all assertions). A toggle lets users switch between modes without regenerating the trace.
 
 ### Changelog
 
+- 2026-05-11 | 3e5b1766 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 3e5b1766 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 3e5b1766 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
@@ -236,12 +243,13 @@ C. Satellite node kinds SHALL be configurable via `[graph].satellite_kinds` in `
 
 D. USER_JOURNEY nodes SHALL follow the same root vs orphan classification rules as REQUIREMENT nodes.
 
-## Rationale
+### Rationale
 
 Currently, all parentless REQUIREMENTs and all USER_JOURNEYs are unconditionally treated as roots, even when disconnected from the rest of the graph. A PRD with only assertions but no OPS/DEV implementations is effectively orphaned — it anchors no subgraph. Unifying the classification rule across all node kinds simplifies the logic and produces more accurate orphan detection.
 
 ### Changelog
 
+- 2026-05-11 | 4bd239f1 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 4bd239f1 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 4bd239f1 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
@@ -262,12 +270,13 @@ B. The suggestion engine SHALL extract meaningful keywords from test node metada
 
 C. Deduplication SHALL merge suggestions for the same (test, requirement) pair, keeping the highest confidence and combining reasons.
 
-## Rationale
+### Rationale
 
 The core engine composes existing building blocks into a scoring pipeline. Each heuristic reuses proven code rather than reimplementing analysis logic.
 
 ### Changelog
 
+- 2026-05-11 | 95f09aea | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 95f09aea | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 95f09aea | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 

@@ -24,12 +24,13 @@ G. repo_for(node_id) SHALL return the RepoEntry for the graph owning that node. 
 
 H. iter_repos() SHALL yield all RepoEntry objects including error-state repos.
 
-## Rationale
+### Rationale
 
 FederatedGraph provides config isolation for multi-repo builds while presenting a unified API to consumers. The federation-of-one pattern ensures all code paths go through FederatedGraph, preventing accidental direct TraceGraph usage. Error-state repos (missing associates) are represented in the federation but skipped during aggregation, preserving graceful degradation.
 
 ### Changelog
 
+- 2026-05-11 | 72471144 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 72471144 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 72471144 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -58,12 +59,13 @@ F. The mutation_log property SHALL return a log object whose iter_entries() yiel
 
 G. clone() SHALL perform federation-aware deep copy: deep-copy each sub-graph independently, then rebuild cross-graph edges and the ownership map.
 
-## Rationale
+### Rationale
 
 Mutation delegation preserves TraceGraph's existing mutation+undo logic while adding federation awareness. The lightweight federated log avoids duplicating MutationEntry data. Ownership tracking ensures by_id lookups remain O(1) after mutations.
 
 ### Changelog
 
+- 2026-05-11 | 1a0942a4 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 1a0942a4 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 1a0942a4 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -86,12 +88,13 @@ C. When no `[associates]` section exists in config, `get_associates_config()` SH
 
 D. Associates declaring their own `[associates]` section SHALL be a hard error: "Associate 'X' declares its own associates -- only the root repo may declare associates."
 
-## Rationale
+### Rationale
 
 Associates are declared in the root repo's `.elspais.toml` using a structured TOML section. Each associate specifies a relative filesystem path and optional git remote URL. Transitive federation (associates of associates) is disallowed to keep the topology simple and predictable.
 
 ### Changelog
 
+- 2026-05-11 | 479dcbb8 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 479dcbb8 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 479dcbb8 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -116,12 +119,13 @@ D. A `strict` parameter on `build_graph()` SHALL cause missing associates to rai
 
 E. The root repo and all valid associates SHALL be combined into a single `FederatedGraph` with the root repo as `_root_repo`.
 
-## Rationale
+### Rationale
 
 Per-repo building ensures config isolation: each repo's hierarchy rules, format rules, and hash mode apply only to its own nodes. Error-state entries preserve visibility of missing associates in health reports without blocking the build.
 
 ### Changelog
 
+- 2026-05-11 | 31e019a1 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 31e019a1 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 31e019a1 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -148,12 +152,13 @@ E. `check_broken_references` SHALL distinguish within-repo broken references (er
 
 F. `run_spec_checks` SHALL accept a `FederatedGraph` and iterate `iter_repos()` for config-sensitive checks, using `FederatedGraph.from_single()` to create per-repo sub-federations.
 
-## Rationale
+### Rationale
 
 Without per-repo delegation, all nodes are validated against the root repo's config. When repos have different hierarchy rules, format rules, or changelog policies, this produces false positives (root config rejects valid associate nodes) or false negatives (root config allows invalid associate nodes). Per-repo delegation ensures each repo is validated by its own rules.
 
 ### Changelog
 
+- 2026-05-11 | 2313140d | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 2313140d | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 2313140d | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 

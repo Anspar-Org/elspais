@@ -77,12 +77,13 @@ C. `/api/status` SHALL include federation repo metadata from `iter_repos()`, rep
 
 D. Staleness info SHALL be informational only and SHALL NOT affect build or health check results.
 
-## Rationale
+### Rationale
 
 Multi-repo federation users need visibility into which repos are current and which are behind their remotes. The viewer/server surfaces this as informational metadata without gating builds on it.
 
 ### Changelog
 
+- 2026-05-11 | b4fae1d0 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | b4fae1d0 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | b4fae1d0 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 

@@ -18,12 +18,13 @@ D. TraceGraphBuilder SHALL create *Assertion* nodes as children of requirement n
 
 E. TraceGraphBuilder SHALL support optional TODO node creation for lossless reconstruction.
 
-## Rationale
+### Rationale
 
 Centralizing graph construction ensures consistent hierarchy building, cycle detection, and validation across all entry points.
 
 ### Changelog
 
+- 2026-05-11 | 65d2ad6a | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 65d2ad6a | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 65d2ad6a | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -50,7 +51,7 @@ E. Annotation SHALL be composable - multiple annotators can be applied in sequen
 
 F. The system SHALL support phased annotation (e.g., base graph -> git state -> display info -> coverage).
 
-## Rationale
+### Rationale
 
 Separating iteration from annotation enables:
 
@@ -61,6 +62,7 @@ Separating iteration from annotation enables:
 
 ### Changelog
 
+- 2026-05-11 | c73a6e32 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | c73a6e32 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | c73a6e32 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 

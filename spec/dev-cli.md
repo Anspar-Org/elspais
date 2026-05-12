@@ -18,7 +18,7 @@ D. For `project.type = "associated"`, `doctor` SHALL validate that the `[associa
 
 E. For `project.type = "core"` with configured associate paths, `health` SHALL exit non-zero when an associate path is missing, misconfigured, or produces zero requirements. A silent requirement count drop is a data-loss condition.
 
-## Rationale
+### Rationale
 
 Warnings represent real problems: missing paths, orphaned nodes, unresolved references. By default, any warning causes a non-zero exit code, making diagnostic commands safe for CI gating (REQ-o00066-C). The `--lenient` flag provides an escape hatch for development workflows where warnings are informational and should not block.
 
@@ -26,6 +26,7 @@ The previous `validate` command's responsibilities are absorbed by `health`. Ref
 
 ### Changelog
 
+- 2026-05-11 | ada92a29 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | ada92a29 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | ada92a29 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -54,12 +55,13 @@ F. When `multi_assertion_separator` is empty or `false`, expansion SHALL be disa
 
 G. A reference containing no multi-*Assertion* separator character SHALL pass through unchanged.
 
-## Rationale
+### Rationale
 
 The previous implementation hardcoded expansion in RequirementParser only, using a regex that assumed uppercase letter labels and hyphen separators. This created silent failures when code comments (`# Implements: REQ-x-A-B-C`) and test names (`test_REQ_x_A_B_C`) were not expanded. A dedicated separator character eliminates ambiguity regardless of the configured *Assertion* label style (uppercase, numeric, alphanumeric).
 
 ### Changelog
 
+- 2026-05-11 | 313fe52b | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 313fe52b | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 313fe52b | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
@@ -92,12 +94,13 @@ K. JUnitXMLParser SHALL accept PatternConfig and ReferenceResolver for configura
 
 L. PytestJSONParser SHALL accept PatternConfig and ReferenceResolver for configurable reference matching in pytest JSON reports.
 
-## Rationale
+### Rationale
 
 Different projects use different ID conventions, comment styles, and directory structures. A unified reference configuration allows all parsers to share the same configurable pattern matching, avoiding duplicated logic and ensuring consistent behavior across parser types.
 
 ### Changelog
 
+- 2026-05-11 | 89956cd7 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 89956cd7 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 89956cd7 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -120,12 +123,13 @@ C. The command SHALL support independent detail flags (`--body`, `--assertions`,
 
 D. Coverage columns SHALL show per-requirement *Assertion*-level coverage: Implemented (assertions with code refs, direct or transitive), Validated (assertions with test refs), Passing (validated assertions whose tests pass), each displayed as N/M (%).
 
-## Rationale
+### Rationale
 
 A JSON graph output mode enables programmatic consumption of the full *Traceability* graph with git-aware change tracking, supporting dashboard integrations and automated analysis pipelines. Column presets and detail flags are independent axes of control: a user may want a compact table with full coverage columns, or a minimal table with expanded *Assertion* rows.
 
 ### Changelog
 
+- 2026-05-11 | f8f0e0f2 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | f8f0e0f2 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | f8f0e0f2 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
@@ -160,12 +164,13 @@ I. Each `HealthCheck` SHALL carry a `findings` list of `HealthFinding` dataclass
 
 J. The `--format sarif` option SHALL render health findings as SARIF v2.1.0 JSON, with one `reportingDescriptor` per unique check name, one `result` per `HealthFinding` with physical locations, passing checks omitted, and coverage stats in `run.properties`.
 
-## Rationale
+### Rationale
 
 Report-producing commands (`health`, `trace`, `coverage`, `changed`) currently exist as independent subcommands with inconsistent format support. Composing a combined report (e.g. health + coverage for a CI PR comment) requires multiple invocations and manual concatenation. A composable system builds the graph once, renders each section, and produces unified output. The `--lenient` flag provides an escape hatch for workflows that want to observe warnings without gating on them.
 
 ### Changelog
 
+- 2026-05-11 | 82d76f1a | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 82d76f1a | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 82d76f1a | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -188,12 +193,13 @@ C. The report SHALL support `text`, `markdown`, `json`, and `csv` output formats
 
 D. The report SHALL use existing graph aggregate functions and annotator data rather than reimplementing coverage logic.
 
-## Rationale
+### Rationale
 
 Coverage data is already computed during graph construction but is only surfaced through the interactive viewer or the underpowered `analyze coverage` text output. A dedicated coverage section with multi-format support enables CI badge generation, PR comment summaries, and developer-facing markdown reports.
 
 ### Changelog
 
+- 2026-05-11 | 2fd4ab13 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 2fd4ab13 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 2fd4ab13 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
@@ -218,12 +224,13 @@ D. `--min-confidence high|medium|low` SHALL filter suggestions by confidence ban
 
 E. `--apply [--dry-run]` SHALL insert `# Implements:` comments into source files at the suggested locations, with dry-run previewing changes without writing.
 
-## Rationale
+### Rationale
 
 CLI exposure enables both interactive use and CI pipeline integration. JSON output mode supports tooling and scripting workflows.
 
 ### Changelog
 
+- 2026-05-11 | 44fd54e9 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 44fd54e9 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 44fd54e9 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -252,12 +259,13 @@ F. The module SHALL filter nodes by `NodeKind`, defaulting to REQUIREMENT and *A
 
 G. The module SHALL rank actionable leaf nodes by summing the composite scores of their ancestors, surfacing the most impactful uncovered work items.
 
-## Rationale
+### Rationale
 
 In a large requirements DAG, naive metrics like descendant count always favor the root node. PageRank centrality naturally handles DAGs and rewards cross-cutting dependencies. Combined with fan-in (how many independent areas depend on a node) and coverage gaps, this enables evidence-based prioritization of foundational work.
 
 ### Changelog
 
+- 2026-05-11 | 86bb619b | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 86bb619b | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 86bb619b | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
@@ -288,12 +296,13 @@ G. The table output SHALL display columns for Rank, ID, Title, Centrality, Fan-I
 
 H. The JSON output SHALL serialize the full `FoundationReport` structure.
 
-## Rationale
+### Rationale
 
 A CLI command provides immediate visibility into which requirements are most foundational, enabling project planning without requiring MCP or viewer integration.
 
 ### Changelog
 
+- 2026-05-11 | 3cd66dbe | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 3cd66dbe | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 3cd66dbe | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 

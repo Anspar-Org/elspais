@@ -18,12 +18,13 @@ D. `STRUCTURES`, `DEFINES`, and `YIELDS` edge kinds SHALL NOT contribute to cove
 
 E. `Edge` dataclass SHALL have a `metadata: dict[str, Any]` field defaulting to an empty dict, excluded from `__eq__` and `__hash__` comparisons.
 
-## Rationale
+### Rationale
 
 FILE nodes are the foundation for representing source files as first-class graph participants. The new edge kinds (STRUCTURES, DEFINES, YIELDS) enable domain-internal hierarchy, virtual node provenance, and test-result linking. Edge metadata carries mutable annotations (line ranges, render order) without affecting edge identity.
 
 ### Changelog
 
+- 2026-05-11 | 664d3990 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 664d3990 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 664d3990 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
@@ -48,12 +49,13 @@ D. `GraphNode.file_node()` SHALL walk incoming edges upward to find the nearest 
 
 E. TEST_RESULT nodes SHALL be linked from TEST nodes via `EdgeKind.YIELDS` (TEST -> TEST_RESULT direction), not via `EdgeKind.CONTAINS`.
 
-## Rationale
+### Rationale
 
 Eliminating `add_child()` ensures every relationship in the graph has a typed edge, enabling filtered traversal. The `file_node()` convenience method provides efficient navigation to FILE ancestors. Renaming `remove_child()` to `unlink()` creates API symmetry with `link()`. The YIELDS edge kind correctly models the TEST->TEST_RESULT relationship.
 
 ### Changelog
 
+- 2026-05-11 | 12964863 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 12964863 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 12964863 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -92,12 +94,13 @@ K. INSTANCE nodes SHALL NOT have CONTAINS edges. They are virtual nodes not phys
 
 L. `file_node()` SHALL return None for INSTANCE nodes. To find the originating file, navigate via the INSTANCE edge to the original node and call `file_node()` on it.
 
-## Rationale
+### Rationale
 
 FILE nodes make source files first-class graph participants. Creating them in factory.py (which knows the file path and type) rather than the deserializer maintains separation of concerns. CONTAINS edges with line-range metadata enable file-level operations. RemainderParser ensures complete line coverage for text-based files. DEFINES edges from FILE to INSTANCE nodes establish provenance for virtual nodes created by template instantiation.
 
 ### Changelog
 
+- 2026-05-11 | 7742f15f | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 7742f15f | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 7742f15f | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
@@ -126,12 +129,13 @@ F. All consumers that previously read `node.source.repo` SHALL use `node.file_no
 
 G. External output (CLI text, MCP JSON responses, HTML, PDF) SHALL produce identical file paths and line numbers as before the migration.
 
-## Rationale
+### Rationale
 
 SourceLocation duplicates information now available through the graph structure itself. FILE nodes carry path and repo identity; content nodes carry line numbers as fields. Removing SourceLocation eliminates redundancy and ensures all file identity flows through the graph's edge structure.
 
 ### Changelog
 
+- 2026-05-11 | 8bd81196 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 8bd81196 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 8bd81196 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -158,12 +162,13 @@ E. `iter_by_kind(kind)` SHALL iterate all nodes of the given `NodeKind` from `_i
 
 F. FILE nodes SHALL NOT appear in the default `iter_roots()` results (no argument).
 
-## Rationale
+### Rationale
 
 Parameterized roots enable view-specific entry points into the graph: domain consumers iterate REQ/JOURNEY roots as before, while file-level consumers iterate FILE nodes. `iter_by_kind()` provides a naming-consistent alternative to `nodes_by_kind()` aligned with the iterator-only API convention.
 
 ### Changelog
 
+- 2026-05-11 | f56f8527 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | f56f8527 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | f56f8527 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -198,12 +203,13 @@ I. Rendering a FILE node SHALL walk its CONTAINS children sorted by `render_orde
 
 J. Requirement hash computation SHALL use order-independent *Assertion* hashing: compute each *Assertion*'s normalized text hash individually, sort the hashes lexicographically, then hash the sorted collection into the requirement's final hash.
 
-## Rationale
+### Rationale
 
 The render protocol is the inverse of parsing: each node kind knows how to serialize itself back to text. This enables the graph to reconstruct files from its internal state, which is the foundation for render-based persistence. Order-independent *Assertion* hashing ensures that *Assertion* reordering does not trigger false change-detection flags.
 
 ### Changelog
 
+- 2026-05-11 | c004c62e | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | c004c62e | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | c004c62e | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
@@ -230,12 +236,13 @@ E. The mutation log and undo system SHALL continue to work unchanged. The mutati
 
 F. The render-based save SHALL derive implements and refines reference lists from the live graph edges rather than stored fields, ensuring edge mutations are correctly reflected in the output.
 
-## Rationale
+### Rationale
 
 Render-based save replaces the brittle text surgery in persistence.py with graph-native serialization. Each FILE node renders its content from the graph, making the graph the single source of truth. The consistency check (rebuild + compare) proves round-trip fidelity.
 
 ### Changelog
 
+- 2026-05-11 | 7043f7af | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 7043f7af | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 7043f7af | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -262,12 +269,13 @@ E. The scenario test SHALL perform a second round of mutations after reload and 
 
 F. The scenario test SHALL exercise undo operations at various points and verify that undone mutations are properly reverted in the final saved state.
 
-## Rationale
+### Rationale
 
 A single large scenario test that exercises the full mutation API in a realistic sequence provides confidence that mutation operations compose correctly and that the render-save-reload pipeline is faithful. This complements the existing per-mutation-type unit tests with a holistic integration test.
 
 ### Changelog
 
+- 2026-05-11 | be52daed | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | be52daed | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | be52daed | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 

@@ -20,12 +20,13 @@ E. `get_hierarchy(req_id)` SHALL return ancestors and children for navigation.
 
 F. All query tools SHALL read directly from TraceGraph nodes using the iterator-only API.
 
-## Rationale
+### Rationale
 
 Core query tools enable AI agents to discover and explore requirements without modifying the graph. These are safe, read-only operations.
 
 ### Changelog
 
+- 2026-05-11 | 73c31134 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 73c31134 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 73c31134 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -48,12 +49,13 @@ C. Workspace tools SHALL use graph aggregate functions from the annotators modul
 
 D. Configuration data SHALL be read from the unified config system, not parsed separately.
 
-## Rationale
+### Rationale
 
 AI agents need context about the workspace they're operating in to provide relevant assistance. Workspace tools answer "what repo am I serving?" and "what's the state of this project?"
 
 ### Changelog
 
+- 2026-05-11 | 0aa9dff4 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 0aa9dff4 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 0aa9dff4 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -82,12 +84,13 @@ F. Destructive operations (delete_*) SHALL require explicit `confirm=True` param
 
 G. `undo_last_mutation()` and `undo_to_mutation(id)` SHALL reverse mutations using graph.undo_last() and graph.undo_to().
 
-## Rationale
+### Rationale
 
 In-memory mutations enable AI agents to draft requirement changes that can be reviewed before persisting. The undo system provides safety for exploratory editing.
 
 ### Changelog
 
+- 2026-05-11 | ef63f424 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | ef63f424 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | ef63f424 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
@@ -120,12 +123,13 @@ H. `modify_assertion_text(req_id, label, new_text)` SHALL modify the text of an 
 
 I. `add_assertion(req_id, label, text)` SHALL add a new *Assertion* to a requirement in its spec file.
 
-## Rationale
+### Rationale
 
 File mutations persist changes to the authoritative spec files. Git safety branches provide rollback capability for destructive operations.
 
 ### Changelog
 
+- 2026-05-11 | 291497b8 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 291497b8 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 291497b8 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
@@ -150,12 +154,13 @@ D. Coverage tools SHALL consume graph edges directly without caching or recomput
 
 E. Coverage tools SHALL support filtering by requirement ID or scanning all requirements.
 
-## Rationale
+### Rationale
 
 AI agents performing requirement analysis need to understand test coverage and identify gaps. These tools enable systematic coverage improvement workflows like those in Phase 7 of the master plan.
 
 ### Changelog
 
+- 2026-05-11 | e7fd1b43 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | e7fd1b43 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | e7fd1b43 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
@@ -182,12 +187,13 @@ E. The suggestion engine SHALL operate read-only on the graph, producing suggest
 
 F. The suggestion engine SHALL support applying suggestions by inserting `# Implements:` comments into source files.
 
-## Rationale
+### Rationale
 
 Teams need to not just see what's unlinked but act on it efficiently. Combining existing building blocks (import analyzer, test-code linker, keyword search) into a scoring pipeline enables AI agents and humans to close *Traceability* gaps systematically.
 
 ### Changelog
 
+- 2026-05-11 | 17851ae2 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 17851ae2 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 17851ae2 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
@@ -214,12 +220,13 @@ E. The subtree tool SHALL deduplicate nodes in DAG structures using a visited se
 
 F. The subtree tool SHALL include coverage summary statistics for requirement nodes.
 
-## Rationale
+### Rationale
 
 LLM agents need scoped requirement subsets for sub-agent consumption. Extracting a subtree avoids context pollution from the full graph.
 
 ### Changelog
 
+- 2026-05-11 | ab29e315 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | ab29e315 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | ab29e315 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -246,12 +253,13 @@ E. The cursor protocol SHALL support `batch_size` semantics: `-1` for assertions
 
 F. The cursor protocol SHALL support query types: `subtree`, `search`, `hierarchy`, `query_nodes`, `test_coverage`, `uncovered_assertions`, `scoped_search`.
 
-## Rationale
+### Rationale
 
 LLMs benefit from incremental exploration of results, deciding when to stop rather than receiving everything at once. A cursor protocol enables this without modifying existing read tools.
 
 ### Changelog
 
+- 2026-05-11 | 743877c3 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 743877c3 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 743877c3 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -276,12 +284,13 @@ D. The tool SHALL report unknown IDs separately in a `not_found` list without fa
 
 E. The tool SHALL follow IMPLEMENTS and REFINES edges when determining ancestor relationships, configurable via the `edge_kinds` parameter.
 
-## Rationale
+### Rationale
 
 Agents listing requirements for a ticket often include both specific leaf requirements and their broad ancestors, creating noise. This tool enables automated pruning to the most-specific set.
 
 ### Changelog
 
+- 2026-05-11 | c667abd2 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | c667abd2 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | c667abd2 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -306,12 +315,13 @@ D. The tool SHALL return an error when the scope_id is not found in the graph.
 
 E. The tool SHALL reuse `_matches_query()` for field/regex matching logic, maintaining a single code path per REQ-p00050-D.
 
-## Rationale
+### Rationale
 
 Agents exploring requirements for a ticket need to search within a relevant subgraph rather than the entire graph, which produces too many unrelated matches.
 
 ### Changelog
 
+- 2026-05-11 | 7f1e6589 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 7f1e6589 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 7f1e6589 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
@@ -334,12 +344,13 @@ C. The tool SHALL return results in scoped_search format containing only the min
 
 D. The tool SHALL pass through all results unchanged when no ancestor relationships exist between matches.
 
-## Rationale
+### Rationale
 
 Agents won't compose scoped_search + minimize_requirement_set unprompted. A single wrapper tool is the most discoverable interface for finding the most-specific requirements within a subgraph.
 
 ### Changelog
 
+- 2026-05-11 | fea647ee | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | fea647ee | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | fea647ee | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
