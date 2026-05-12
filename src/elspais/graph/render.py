@@ -104,13 +104,16 @@ def compute_hash_for_node(node: GraphNode, hash_mode: str) -> str | None:
         return calculate_hash(body)
 
 
-def render_node(node: GraphNode) -> str:
+def render_node(node: GraphNode, resolver: Any | None = None) -> str:
     """Render a graph node back to its text representation.
 
     Dispatches to the appropriate renderer based on NodeKind.
 
     Args:
         node: The graph node to render.
+        resolver: Optional IdResolver for citation formatting using the
+            configured assertion separator. When None, citations fall
+            back to the default ``-A+B+C`` form.
 
     Returns:
         The text representation of the node.
@@ -123,7 +126,7 @@ def render_node(node: GraphNode) -> str:
     kind = node.kind
 
     if kind == NodeKind.REQUIREMENT:
-        return _render_requirement(node)
+        return _render_requirement(node, resolver=resolver)
     elif kind == NodeKind.ASSERTION:
         # Implements: REQ-d00131-C
         raise ValueError(
@@ -142,13 +145,13 @@ def render_node(node: GraphNode) -> str:
         # Implements: REQ-d00131-H
         raise ValueError("RESULT nodes are read-only and cannot be rendered back to disk.")
     elif kind == NodeKind.FILE:
-        return render_file(node)
+        return render_file(node, resolver=resolver)
     else:
         raise ValueError(f"Unknown NodeKind: {kind}")
 
 
 # Implements: REQ-d00131-B
-def _render_requirement(node: GraphNode) -> str:
+def _render_requirement(node: GraphNode, resolver: Any | None = None) -> str:
     """Render a REQUIREMENT node to its full text block.
 
     Produces:
@@ -167,8 +170,8 @@ def _render_requirement(node: GraphNode) -> str:
 
     # Implements: REQ-d00132-F
     # Derive implements refs from live graph edges, falling back to stored field
-    implements_refs = _derive_implements_refs(node)
-    refines_refs = _derive_refines_refs(node)
+    implements_refs = _derive_implements_refs(node, resolver=resolver)
+    refines_refs = _derive_refines_refs(node, resolver=resolver)
     satisfies_refs = node.get_field("satisfies_refs") or []
 
     lines: list[str] = []
@@ -406,7 +409,7 @@ def _render_test(node: GraphNode) -> str:
 
 
 # Implements: REQ-d00131-I
-def render_file(node: GraphNode) -> str:
+def render_file(node: GraphNode, resolver: Any | None = None) -> str:
     """Render a FILE node by walking its CONTAINS children.
 
     Walks CONTAINS children sorted by render_order edge metadata,
@@ -414,6 +417,8 @@ def render_file(node: GraphNode) -> str:
 
     Args:
         node: A FILE node.
+        resolver: Optional IdResolver, forwarded to ``render_node`` so
+            REQUIREMENT citations use the configured assertion separator.
 
     Returns:
         The complete file content as a string.
@@ -442,7 +447,7 @@ def render_file(node: GraphNode) -> str:
     # giving automatic compaction.
     parts: list[str] = []
     for _order, child in children_with_order:
-        rendered = render_node(child)
+        rendered = render_node(child, resolver=resolver)
         if rendered is not None:
             parts.append(rendered)
 
@@ -458,57 +463,65 @@ def render_file(node: GraphNode) -> str:
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def _derive_implements_refs(node: GraphNode) -> list[str]:
-    """Derive the implements reference list from live graph edges.
+def _derive_refs_for_edge_kind(
+    node: GraphNode,
+    edge_kind: EdgeKind,
+    stored_field: str,
+    resolver: Any | None = None,
+) -> list[str]:
+    """Derive a citation reference list from live graph edges.
 
-    Walks incoming IMPLEMENTS edges where the source is a REQUIREMENT,
-    producing the list of parent IDs. Falls back to stored
-    ``implements_refs`` field when no edges are found (e.g., nodes
-    created by mutations that haven't been wired yet).
+    Walks incoming edges of *edge_kind* from REQUIREMENT sources and
+    builds canonical reference strings. Edges targeting specific
+    assertions are aggregated per source so multi-assertion citations
+    round-trip through the configured ``separator``/``multi_separator``
+    (e.g. one source with labels ``["A", "B"]`` renders as
+    ``foo/A/B`` rather than two separate ``foo/A, foo/B`` entries).
 
-    Returns:
-        Sorted list of implements reference IDs.
+    Falls back to the stored field when no edges are found (e.g., nodes
+    created by mutations that haven't been wired yet, or broken-ref
+    cases where edges silently dropped).
     """
-    refs: set[str] = set()
+    # source_id -> (whole_req_flag, set of assertion labels)
+    by_source: dict[str, tuple[bool, set[str]]] = {}
     for edge in node.iter_incoming_edges():
-        if edge.kind == EdgeKind.IMPLEMENTS and edge.source.kind == NodeKind.REQUIREMENT:
-            if edge.assertion_targets:
-                for label in edge.assertion_targets:
-                    refs.add(f"{edge.source.id}-{label}")
+        if edge.kind != edge_kind or edge.source.kind != NodeKind.REQUIREMENT:
+            continue
+        src = edge.source.id
+        whole, labels = by_source.get(src, (False, set()))
+        if edge.assertion_targets:
+            labels.update(edge.assertion_targets)
+        else:
+            whole = True
+        by_source[src] = (whole, labels)
+
+    refs: set[str] = set()
+    for src, (whole, labels) in by_source.items():
+        if whole or not labels:
+            refs.add(src)
+        if labels:
+            sorted_labels = sorted(labels)
+            if resolver is not None:
+                refs.add(resolver.make_assertion_ref(src, sorted_labels))
             else:
-                refs.add(edge.source.id)
+                refs.add(f"{src}-{'+'.join(sorted_labels)}")
 
     if refs:
         return sorted(refs)
 
     # Fallback to stored field
-    stored = node.get_field("implements_refs")
+    stored = node.get_field(stored_field)
     return list(stored) if stored else []
 
 
-def _derive_refines_refs(node: GraphNode) -> list[str]:
-    """Derive the refines reference list from live graph edges.
+def _derive_implements_refs(node: GraphNode, resolver: Any | None = None) -> list[str]:
+    """Derive the implements reference list from live graph edges."""
+    return _derive_refs_for_edge_kind(node, EdgeKind.IMPLEMENTS, "implements_refs", resolver)
 
-    Same as ``_derive_implements_refs`` but for REFINES edges.
 
-    Returns:
-        Sorted list of refines reference IDs.
-    """
-    refs: set[str] = set()
-    for edge in node.iter_incoming_edges():
-        if edge.kind == EdgeKind.REFINES and edge.source.kind == NodeKind.REQUIREMENT:
-            if edge.assertion_targets:
-                for label in edge.assertion_targets:
-                    refs.add(f"{edge.source.id}-{label}")
-            else:
-                refs.add(edge.source.id)
-
-    if refs:
-        return sorted(refs)
-
-    # Fallback to stored field
-    stored = node.get_field("refines_refs")
-    return list(stored) if stored else []
+def _derive_refines_refs(node: GraphNode, resolver: Any | None = None) -> list[str]:
+    """Derive the refines reference list from live graph edges."""
+    return _derive_refs_for_edge_kind(node, EdgeKind.REFINES, "refines_refs", resolver)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -765,7 +778,18 @@ def render_save(
             abs_path = file_root / rel_path
 
         try:
-            content = render_file(file_node)
+            # Prefer caller-supplied resolver; otherwise pull from the TraceGraph
+            # that owns this file so citations use the configured separator.
+            file_resolver = resolver
+            if file_resolver is None and hasattr(graph, "repo_for"):
+                try:
+                    owning_tg = graph.repo_for(file_id).graph
+                    file_resolver = getattr(owning_tg, "_resolver", None)
+                except KeyError:
+                    pass
+            if file_resolver is None:
+                file_resolver = getattr(graph, "_resolver", None)
+            content = render_file(file_node, resolver=file_resolver)
             # Ensure file ends with newline
             if content and not content.endswith("\n"):
                 content += "\n"
