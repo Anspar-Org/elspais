@@ -6,7 +6,7 @@
 
 The `get_graph_status()` tool SHALL report graph state using direct graph inspection.
 
-## Assertions
+### Assertions
 
 A. SHALL return `is_stale` boolean from graph metadata, not recomputed.
 
@@ -18,12 +18,13 @@ D. SHALL return `root_count` using `graph.root_count()`.
 
 E. SHALL NOT iterate the full graph to count nodes when kind-specific counts suffice.
 
-## Rationale
+### Rationale
 
 Graph status provides a quick health check without expensive traversal operations.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 4e2277cc | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 4e2277cc | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Graph Status Tool Implementation* | **Hash**: 4e2277cc
@@ -35,7 +36,7 @@ Graph status provides a quick health check without expensive traversal operation
 
 The `search()` tool SHALL find requirements using graph iteration with filtering.
 
-## Assertions
+### Assertions
 
 A. SHALL iterate `graph.nodes_by_kind(NodeKind.REQUIREMENT)` for requirement search.
 
@@ -63,12 +64,13 @@ L. SHALL score results by field match quality (ID > title > keyword > body) and 
 
 M. SHALL include a `score` field in search results when multi-term scoring is applied.
 
-## Rationale
+### Rationale
 
 Search enables AI agents to discover requirements by content without knowing exact IDs. Multi-term queries with AND/OR/NOT support, relevance scoring, and exact keyword matching allow both human users and AI agents to efficiently find requirements using natural search patterns like synonym lists or multi-concept queries.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 0183195b | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 0183195b | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Requirement Search Tool Implementation* | **Hash**: 0183195b
@@ -80,7 +82,7 @@ Search enables AI agents to discover requirements by content without knowing exa
 
 The `get_requirement()` tool SHALL return full requirement details from a single graph lookup.
 
-## Assertions
+### Assertions
 
 A. SHALL use `graph.get_node(req_id)` for O(1) lookup.
 
@@ -94,12 +96,13 @@ E. SHALL return metrics from `node.metrics` dict without recomputation.
 
 F. SHALL return 404-equivalent error for non-existent requirements.
 
-## Rationale
+### Rationale
 
 Single-requirement lookup is the most common operation. O(1) access via graph index is essential.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 6e01fc33 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 6e01fc33 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Requirement Detail Tool Implementation* | **Hash**: 6e01fc33
@@ -111,7 +114,7 @@ Single-requirement lookup is the most common operation. O(1) access via graph in
 
 The `get_hierarchy()` tool SHALL return ancestors and children for tree navigation.
 
-## Assertions
+### Assertions
 
 A. SHALL return `ancestors` by walking `node.iter_parents()` recursively to roots.
 
@@ -123,12 +126,13 @@ D. SHALL include node summaries (id, title, level) not full details.
 
 E. SHALL handle DAG structure where nodes may have multiple parents.
 
-## Rationale
+### Rationale
 
 Hierarchy navigation enables AI agents to understand requirement context and relationships.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 2b1d284b | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 2b1d284b | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Hierarchy Navigation Tool Implementation* | **Hash**: 2b1d284b
@@ -140,7 +144,7 @@ Hierarchy navigation enables AI agents to understand requirement context and rel
 
 Serializer functions SHALL convert GraphNode data to JSON-safe dictionaries.
 
-## Assertions
+### Assertions
 
 A. Summary serialization SHALL return id, title, level, status only.
 
@@ -152,12 +156,13 @@ D. Serializers SHALL handle missing fields gracefully with sensible defaults.
 
 E. Serializers SHALL NOT trigger graph traversal beyond the single node being serialized.
 
-## Rationale
+### Rationale
 
 Serializers provide the boundary between graph internals and MCP responses. They ensure consistent, safe data extraction.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 8d56d937 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 8d56d937 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Serializer Functions* | **Hash**: 8d56d937
@@ -169,7 +174,7 @@ Serializers provide the boundary between graph internals and MCP responses. They
 
 MCP mutation tools SHALL delegate to TraceGraph mutation methods.
 
-## Assertions
+### Assertions
 
 A. Node rename mutations SHALL delegate to the graph's rename method.
 
@@ -181,12 +186,13 @@ D. Mutation tools SHALL NOT implement mutation logic - only parameter validation
 
 E. Mutation tools SHALL return the MutationEntry from the graph method for audit trail.
 
-## Rationale
+### Rationale
 
 Delegation ensures mutation logic lives in one place (TraceGraph) and MCP is purely an interface layer.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 5d1f7627 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 5d1f7627 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Mutation Tool Delegation* | **Hash**: 5d1f7627
@@ -198,7 +204,7 @@ Delegation ensures mutation logic lives in one place (TraceGraph) and MCP is pur
 
 The `get_test_coverage()` tool SHALL return test coverage information for a requirement.
 
-## Assertions
+### Assertions
 
 A. SHALL accept `req_id` parameter identifying the target requirement.
 
@@ -214,12 +220,13 @@ F. SHALL return coverage summary: total assertions, covered count, coverage perc
 
 G. SHALL use `graph.nodes_by_kind(NodeKind.TEST)` and iterate edges, not traverse full graph.
 
-## Rationale
+### Rationale
 
 Test coverage per requirement enables targeted test writing and gap analysis.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 6ac6b51f | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 6ac6b51f | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Test Coverage Tool Implementation* | **Hash**: 6ac6b51f
@@ -231,7 +238,7 @@ Test coverage per requirement enables targeted test writing and gap analysis.
 
 The `get_uncovered_assertions()` tool SHALL find assertions lacking test coverage.
 
-## Assertions
+### Assertions
 
 A. SHALL accept optional `req_id` parameter; when None, scan all requirements.
 
@@ -245,12 +252,13 @@ E. SHALL return parent requirement id and title for context.
 
 F. SHALL limit results to prevent unbounded response sizes.
 
-## Rationale
+### Rationale
 
 Finding uncovered assertions enables systematic test coverage improvement across the project.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 4884d7cb | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 4884d7cb | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Uncovered Assertions Tool Implementation* | **Hash**: 4884d7cb
@@ -262,7 +270,7 @@ Finding uncovered assertions enables systematic test coverage improvement across
 
 The `find_assertions_by_keywords()` tool SHALL search *Assertion* text for keyword matches.
 
-## Assertions
+### Assertions
 
 A. SHALL accept `keywords` list parameter with search terms.
 
@@ -276,12 +284,13 @@ E. SHALL perform case-insensitive matching by default.
 
 F. SHALL complement `find_by_keywords()` which searches requirement titles, not *Assertion* text.
 
-## Rationale
+### Rationale
 
 Searching within *Assertion* text enables AI agents to find assertions related to specific concepts when linking tests to requirements.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | a9b8dff2 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | a9b8dff2 | - | Developer (dev@example.com) | Auto-fix: canonicalize term forms
 - 2026-03-30 | a9b8dff2 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
@@ -294,7 +303,7 @@ Searching within *Assertion* text enables AI agents to find assertions related t
 
 The MCP server SHALL provide link suggestion tools that expose the suggestion engine to AI agents.
 
-## Assertions
+### Assertions
 
 A. `suggest_links(file_path?, limit?)` SHALL return structured link suggestions from the core engine, including source node, target requirement, confidence, and reason.
 
@@ -304,12 +313,13 @@ C. Link suggestion tools SHALL consume the graph read-only via the core engine, 
 
 D. `apply_link()` SHALL validate that the target requirement exists in the graph before modifying files.
 
-## Rationale
+### Rationale
 
 MCP exposure enables AI agents to discover and apply link suggestions during coding sessions, completing the workflow: discover gaps -> get suggestions -> apply links.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | e438ff5e | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | e438ff5e | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *MCP Link Suggestion Tools* | **Hash**: e438ff5e
@@ -321,7 +331,7 @@ MCP exposure enables AI agents to discover and apply link suggestions during cod
 
 The subtree extraction tool SHALL be implemented as MCP-layer helpers that consume the graph iterator API.
 
-## Assertions
+### Assertions
 
 A. Subtree collection SHALL perform BFS traversal with depth tracking and a visited set for DAG deduplication.
 
@@ -337,12 +347,13 @@ F. Conservative kind defaults SHALL include `REQUIREMENT` + `ASSERTION` for requ
 
 G. The implementation SHALL NOT modify Graph, GraphTrace, or GraphBuilder structures.
 
-## Rationale
+### Rationale
 
 BFS with depth tracking and kind filtering provides the flexible subtree extraction that `GraphNode.walk()` alone cannot deliver, while staying in the MCP layer.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 5ba55cf2 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 5ba55cf2 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Subtree Extraction Implementation* | **Hash**: 5ba55cf2
@@ -354,7 +365,7 @@ BFS with depth tracking and kind filtering provides the flexible subtree extract
 
 The cursor protocol SHALL be implemented as a `CursorState` dataclass with three MCP tool wrappers.
 
-## Assertions
+### Assertions
 
 A. The cursor SHALL track query, params, batch_size, materialized items, and position.
 
@@ -370,12 +381,13 @@ F. `cursor_info` SHALL be read-only, returning `{position, total, remaining, que
 
 G. The implementation SHALL reuse existing serializers: `_serialize_requirement_summary()`, `_serialize_assertion()`, `_serialize_node_summary()`.
 
-## Rationale
+### Rationale
 
 A single-cursor model with materialized items provides simple, predictable iteration that fits the single-LLM-session model without complex streaming or concurrent cursor management.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 997facb6 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 997facb6 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Cursor Protocol Implementation* | **Hash**: 997facb6
@@ -387,7 +399,7 @@ A single-cursor model with materialized items provides simple, predictable itera
 
 The `minimize_requirement_set` tool SHALL be implemented as a helper function with ancestor walking and set pruning.
 
-## Assertions
+### Assertions
 
 A. The minimizer SHALL resolve each ID via the graph index, separating found and not_found IDs.
 
@@ -401,12 +413,13 @@ E. The helper SHALL return `{minimal_set, pruned, not_found, stats}` with serial
 
 F. The MCP tool wrapper SHALL delegate to the helper, performing only parameter parsing and edge_kinds string-to-set conversion.
 
-## Rationale
+### Rationale
 
 Separating the helper from the tool wrapper enables reuse by `discover_requirements` which chains scoped_search with minimize.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 15572ed9 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 15572ed9 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Minimize Requirement Set Implementation* | **Hash**: 15572ed9
@@ -418,7 +431,7 @@ Separating the helper from the tool wrapper enables reuse by `discover_requireme
 
 The `scoped_search` tool SHALL be implemented using scope collection and reusable matching helpers.
 
-## Assertions
+### Assertions
 
 A. Scope collection SHALL return a set of node IDs reachable from scope_id: BFS for "descendants", recursive walk for "ancestors".
 
@@ -432,12 +445,13 @@ E. The helper SHALL return serialized results in the same format as `_search()`,
 
 F. The MCP tool wrapper SHALL delegate to the helper, performing only parameter validation.
 
-## Rationale
+### Rationale
 
 Separating scope collection from search logic enables reuse of `_collect_scope_ids` by other tools and the cursor protocol.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 27a8b0c4 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 27a8b0c4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Scoped Search Implementation* | **Hash**: 27a8b0c4
@@ -449,7 +463,7 @@ Separating scope collection from search logic enables reuse of `_collect_scope_i
 
 The `discover_requirements` tool SHALL be implemented by chaining existing `_scoped_search` and `_minimize_requirement_set` helpers.
 
-## Assertions
+### Assertions
 
 A. Discovery SHALL chain scoped search to get candidate results, then pass them through the minimizer.
 
@@ -459,12 +473,13 @@ C. The helper SHALL preserve `matched_assertions` metadata from scoped_search on
 
 D. The MCP tool wrapper SHALL delegate to the helper, performing only edge_kinds string parsing.
 
-## Rationale
+### Rationale
 
 Chaining existing helpers avoids duplicating search or pruning logic and maintains the single-code-path principle.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | b5683277 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | b5683277 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Discover Requirements Implementation* | **Hash**: b5683277
@@ -476,7 +491,7 @@ Chaining existing helpers avoids duplicating search or pruning logic and maintai
 
 MCP tools SHALL be aware of FILE nodes without exposing them where they do not belong.
 
-## Assertions
+### Assertions
 
 A. Subtree extraction starting from a FILE node SHALL walk CONTAINS edges, producing the file's physical contents view.
 
@@ -490,12 +505,13 @@ E. `_get_graph_status()` SHALL include FILE node counts in its `node_counts` dic
 
 F. MCP serialization of requirement and *Assertion* nodes SHALL produce identical `file` and `line` fields as before the FILE node migration, using `file_node()` and `parse_line`.
 
-## Rationale
+### Rationale
 
 FILE nodes are structural infrastructure. They enhance the graph's completeness but should not pollute requirement-focused query results. Filtered traversal via edge_kinds ensures `get_subtree()` produces the right view depending on the starting node's kind.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | ae564dae | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | ae564dae | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *MCP FILE Node Integration* | **Hash**: ae564dae
@@ -507,7 +523,7 @@ FILE nodes are structural infrastructure. They enhance the graph's completeness 
 
 The MCP server SHALL leverage FederatedGraph's per-repo config access for federation-aware operation.
 
-## Assertions
+### Assertions
 
 A. `get_workspace_info()` SHALL include federation details when multiple repos are present: repo names, paths, error states, and git origins from `iter_repos()`.
 
@@ -517,12 +533,13 @@ C. Node-specific config operations (*Assertion* target normalization, edge mutat
 
 D. Global operations (workspace info, agent instructions, project summary) SHALL continue to use root repo config from `_state["config"]`.
 
-## Rationale
+### Rationale
 
 Without federation-aware config access, all MCP operations use the root repo's config regardless of which repo a node belongs to. Per-repo config access ensures correct ID pattern resolution and changelog settings for multi-repo operations. Federation info in workspace queries helps AI agents understand the multi-repo topology.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 4f16dfc7 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 4f16dfc7 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *MCP Federation Support* | **Hash**: 4f16dfc7
@@ -532,7 +549,7 @@ Without federation-aware config access, all MCP operations use the root repo's c
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00060
 
-## Assertions
+### Assertions
 
 A. The mcp install subcommand SHALL register the elspais MCP server with the Claude CLI, supporting both project-scope and user-scope modes.
 
@@ -548,8 +565,9 @@ F. The --desktop flag SHALL write or remove the MCP server entry in the Claude D
 
 G. All operations SHALL produce a clear error when the underlying CLI command fails.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | f1518d2c | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | f1518d2c | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *MCP Server Install/Uninstall CLI Commands* | **Hash**: f1518d2c

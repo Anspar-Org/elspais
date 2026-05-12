@@ -18,6 +18,11 @@
           "title": "Zero Pad",
           "type": "boolean"
         },
+        "separator": {
+          "default": "-",
+          "title": "Separator",
+          "type": "string"
+        },
         "multi_separator": {
           "default": "+",
           "title": "Multi Separator",
@@ -202,6 +207,14 @@
       "properties": {
         "style": {
           "default": "numeric",
+          "enum": [
+            "numeric",
+            "camelCase",
+            "PascalCase",
+            "snake_case",
+            "kebab-case",
+            "regex"
+          ],
           "title": "Style",
           "type": "string"
         },

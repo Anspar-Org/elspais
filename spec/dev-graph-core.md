@@ -6,7 +6,7 @@
 
 The `core/annotators.py` module SHALL provide standalone annotator functions for enriching graph nodes.
 
-## Assertions
+### Assertions
 
 A. Graph nodes SHALL carry git state annotations (is_uncommitted, is_moved, is_new) in node.metrics.
 
@@ -18,12 +18,13 @@ D. Annotator functions SHALL only operate on REQUIREMENT nodes (skip other node 
 
 E. Annotator functions SHALL be idempotent - calling twice produces same result.
 
-## Rationale
+### Rationale
 
 Per-node annotators enable fine-grained control over which annotations are applied and when.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 8ca0389e | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 8ca0389e | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Node Annotator Functions* | **Hash**: 8ca0389e
@@ -35,7 +36,7 @@ Per-node annotators enable fine-grained control over which annotations are appli
 
 The `core/annotators.py` module SHALL provide aggregate functions that compute statistics from annotated graphs.
 
-## Assertions
+### Assertions
 
 A. The system SHALL provide aggregate requirement counts by level (PRD/OPS/DEV) with active/all breakdown.
 
@@ -49,12 +50,13 @@ E. The system SHALL provide per-requirement coverage status (Full/Partial/Unimpl
 
 F. Aggregate functions SHALL NOT duplicate iteration - they SHALL use graph.all_nodes().
 
-## Rationale
+### Rationale
 
 Aggregate functions provide reusable statistics computation that any output format can use.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 97c0f6fc | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 97c0f6fc | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Graph Aggregate Functions* | **Hash**: 97c0f6fc
@@ -66,7 +68,7 @@ Aggregate functions provide reusable statistics computation that any output form
 
 All output generators SHALL consume TraceGraph directly without creating intermediate data structures.
 
-## Assertions
+### Assertions
 
 A. HTMLGenerator SHALL accept TraceGraph in constructor, not Dict[str, Requirement].
 
@@ -82,12 +84,13 @@ F. Generators SHALL use aggregate functions from annotators module for statistic
 
 G. All file write operations in output commands SHALL specify explicit `encoding="utf-8"` for cross-platform portability.
 
-## Rationale
+### Rationale
 
 Direct graph consumption eliminates data structure conversion overhead and ensures consistency.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | a3575fcc | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | a3575fcc | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Output Generators Consume Graph Directly* | **Hash**: a3575fcc
@@ -99,16 +102,17 @@ Direct graph consumption eliminates data structure conversion overhead and ensur
 
 Output generators SHALL follow a standard annotation pipeline pattern.
 
-## Assertions
+### Assertions
 
 A. The pipeline SHALL be: parse -> build graph -> annotate nodes -> generate output.
 
-## Rationale
+### Rationale
 
 A standard pipeline ensures consistent annotation across all output formats and simplifies debugging.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 0256df47 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 0256df47 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Annotation Pipeline Pattern* | **Hash**: 0256df47
@@ -120,7 +124,7 @@ A standard pipeline ensures consistent annotation across all output formats and 
 
 TraceNode.metrics SHALL be the single extension point for adding data to nodes.
 
-## Assertions
+### Assertions
 
 A. All annotation data SHALL be stored in node.metrics dict.
 
@@ -132,12 +136,13 @@ D. Standard metrics keys SHALL include: is_uncommitted, is_moved, is_new, is_roa
 
 E. Custom metrics MAY be added by specific annotators without modifying TraceNode class.
 
-## Rationale
+### Rationale
 
 Using metrics dict as the extension point enables adding new annotations without modifying the core TraceNode dataclass.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 0073a9c3 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 0073a9c3 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Node Metrics as Extension Point* | **Hash**: 0073a9c3
@@ -149,7 +154,7 @@ Using metrics dict as the extension point enables adding new annotations without
 
 The coverage annotation system SHALL support an INDIRECT coverage source for whole-requirement tests that do not target specific assertions.
 
-## Assertions
+### Assertions
 
 A. `CoverageSource` enum SHALL include an `INDIRECT` value representing whole-requirement test coverage.
 
@@ -173,12 +178,13 @@ J. A `Refines:` relationship SHALL NOT count as coverage in itself, but coverage
 
 K. The system SHALL report coverage gaps on template instance nodes through the standard coverage mechanisms. Instance nodes are normal graph nodes and participate in existing health checks.
 
-## Rationale
+### Rationale
 
 Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* suffix) currently contribute zero *Assertion* coverage. Adding INDIRECT as a separate source allows a "progress indicator" view alongside strict *Traceability*, following the same pattern as INFERRED coverage for requirement-to-requirement relationships.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | e9b5c3f1 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | e9b5c3f1 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Indirect Coverage Source* | **Hash**: e9b5c3f1
@@ -190,7 +196,7 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* 
 
 The interactive trace view SHALL provide a toggle to switch between strict and indirect coverage display modes.
 
-## Assertions
+### Assertions
 
 A. `TreeRow` SHALL include a `coverage_indirect` attribute computed from `indirect_referenced_pct` using the same thresholds as strict coverage (0=none, <100=partial, 100=full).
 
@@ -202,12 +208,13 @@ D. The default display SHALL show strict coverage (toggle OFF).
 
 E. The `has_failures` warning indicator SHALL display regardless of toggle state.
 
-## Rationale
+### Rationale
 
 Users need both a strict *Traceability* view (only *Assertion*-targeted tests count) and a progress indicator view (whole-requirement tests cover all assertions). A toggle lets users switch between modes without regenerating the trace.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 3e5b1766 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 3e5b1766 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Indirect Coverage Toggle Display* | **Hash**: 3e5b1766
@@ -219,7 +226,7 @@ Users need both a strict *Traceability* view (only *Assertion*-targeted tests co
 
 The graph builder SHALL distinguish between root nodes and orphan nodes using a unified classification based on meaningful children.
 
-## Assertions
+### Assertions
 
 A. The graph builder SHALL classify a parentless node as a root only when it has at least one child whose kind is not a satellite kind.
 
@@ -229,12 +236,13 @@ C. Satellite node kinds SHALL be configurable via `[graph].satellite_kinds` in `
 
 D. USER_JOURNEY nodes SHALL follow the same root vs orphan classification rules as REQUIREMENT nodes.
 
-## Rationale
+### Rationale
 
 Currently, all parentless REQUIREMENTs and all USER_JOURNEYs are unconditionally treated as roots, even when disconnected from the rest of the graph. A PRD with only assertions but no OPS/DEV implementations is effectively orphaned — it anchors no subgraph. Unifying the classification rule across all node kinds simplifies the logic and produces more accurate orphan detection.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 4bd239f1 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 4bd239f1 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Unified Root vs Orphan Classification* | **Hash**: 4bd239f1
@@ -246,7 +254,7 @@ Currently, all parentless REQUIREMENTs and all USER_JOURNEYs are unconditionally
 
 The `graph/link_suggest.py` module SHALL implement the link suggestion scoring pipeline using existing graph analysis building blocks.
 
-## Assertions
+### Assertions
 
 A. The suggestion engine SHALL orchestrate all heuristics and return deduplicated suggestions sorted by confidence descending, supporting optional file path and limit filters.
 
@@ -254,12 +262,13 @@ B. The suggestion engine SHALL extract meaningful keywords from test node metada
 
 C. Deduplication SHALL merge suggestions for the same (test, requirement) pair, keeping the highest confidence and combining reasons.
 
-## Rationale
+### Rationale
 
 The core engine composes existing building blocks into a scoring pipeline. Each heuristic reuses proven code rather than reimplementing analysis logic.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 95f09aea | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 95f09aea | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Link Suggestion Core Engine* | **Hash**: 95f09aea
@@ -269,7 +278,7 @@ The core engine composes existing building blocks into a scoring pipeline. Each 
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00051
 
-## Assertions
+### Assertions
 
 A. The keyword extractor SHALL tokenize text into lowercase words, filtering stopwords, short words (fewer than 3 characters), and punctuation, returning a deduplicated list.
 
@@ -281,8 +290,9 @@ D. Keyword search SHALL return nodes matching given keywords with case-insensiti
 
 E. Keyword collection SHALL return a sorted, deduplicated list of all keywords across the graph.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | ebe57660 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | ebe57660 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Keyword Extraction Annotator* | **Hash**: ebe57660
@@ -291,7 +301,7 @@ E. Keyword collection SHALL return a sorted, deduplicated list of all keywords a
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00050
 
-## Assertions
+### Assertions
 
 A. The graph clone operation SHALL create a fully independent deep copy such that mutations to the clone do not affect the original.
 
@@ -305,8 +315,50 @@ E. The clone SHALL preserve graph-level metadata such as repository root.
 
 F. The clone SHALL handle DAG structures with multiple parents without infinite recursion.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | a007d5ed | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | a007d5ed | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *TraceGraph Deep Clone* | **Hash**: a007d5ed
+
+## REQ-d00250: Section Header Depth Canonicalization
+
+**Level**: dev | **Status**: Active | **Implements**: -
+
+The parser MUST recognize section block headers (`Assertions`,
+`Changelog`, named sections) and hash-style sub-headings at any
+markdown depth from H1 through H6. The `fix` command MUST
+canonicalize too-shallow section headers to `parent.depth + 1`,
+preserving legal-but-deeper author choices. The `validate` /
+health-check command MUST flag too-shallow section headers
+as a fixable issue and flag requirements at H6 with section
+blocks as an unfixable issue.
+
+### Assertions
+
+A. Section block headers parse correctly at depths H1 through H6.
+
+B. A section header at depth less than or equal to its parent's
+   heading_level is marked parse_dirty with reason
+   `section_header_depth`.
+
+C. A requirement at H6 with any section block is marked with
+   reason `section_header_depth_unfixable` (stored on
+   `parse_unfixable_reasons`, separate from `parse_dirty_reasons`).
+
+D. Render emits each section header at
+   `max(stored_depth, parent.heading_level + 1)`, clamped to H6.
+
+E. The `fix` command auto-canonicalizes B and reports C to stderr
+   with non-zero exit code.
+
+F. The `validate` / health-check command reports B and C as
+   findings with non-zero exit code.
+
+### Changelog
+
+- 2026-05-11 | 903349d2 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
+- 2026-05-11 | 903349d2 | - | Developer (dev@example.com) | Auto-fix: update hash, add missing changelog section
+
+*End* *Section Header Depth Canonicalization* | **Hash**: 903349d2

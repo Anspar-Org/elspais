@@ -24,6 +24,8 @@ from typing import TYPE_CHECKING
 
 from lark import Lark
 
+from elspais.utilities.patterns import component_regex
+
 if TYPE_CHECKING:
     from elspais.utilities.patterns import IdResolver
 
@@ -65,24 +67,14 @@ class GrammarFactory:
         else:
             type_pattern = "[a-z]"
 
-        # Component/digits pattern
-        comp = cfg.component
-        if comp.style == "numeric":
-            if comp.digits > 0:
-                digits_pattern = rf"\d{{1,{comp.digits}}}"
-            else:
-                digits_pattern = r"\d+"
-        elif comp.style == "named":
-            digits_pattern = comp.pattern or r"[A-Za-z][A-Za-z0-9]+"
-        elif comp.style == "alphanumeric":
-            digits_pattern = comp.pattern or r"[A-Z0-9]+"
-        else:
-            digits_pattern = r"[A-Za-z0-9]+"
+        # Component/digits pattern — single authority (REQ-d00251-G)
+        digits_pattern = component_regex(cfg.component)
 
         # Assertion label
         assertion_label = r._assertion_label_regex_str()
 
-        # Multi-assertion separator
+        # Assertion separator (between component and label) and multi-assertion separator
+        assertion_sep = re.escape(cfg.assertions.separator)
         multi_sep = re.escape(cfg.assertions.multi_separator)
 
         # Build __ID_PATTERN__ from canonical template.
@@ -116,6 +108,7 @@ class GrammarFactory:
             "__DIGITS_PATTERN__": digits_pattern,
             "__ID_PATTERN__": id_pattern,
             "__ASSERTION_LABEL__": assertion_label,
+            "__ASSERTION_SEP__": assertion_sep,
             "__MULTI_SEP__": multi_sep,
         }
 

@@ -38,18 +38,18 @@ class TypeDef:
     aliases: dict[str, str]
 
 
-# Implements: REQ-p00002-A
+# Implements: REQ-p00002-A, REQ-d00251-A
 @dataclass
 class ComponentFormat:
     """Configuration for the component part of an ID."""
 
-    style: str  # "numeric", "named", "alphanumeric"
+    style: str  # one of: numeric, camelCase, PascalCase, snake_case, kebab-case, regex
     digits: int
     leading_zeros: bool
     pattern: str | None
 
 
-# Implements: REQ-p00002-A
+# Implements: REQ-p00002-A, REQ-d00251-E
 @dataclass
 class AssertionFormat:
     """Configuration for assertion labels."""
@@ -58,6 +58,36 @@ class AssertionFormat:
     max_count: int
     zero_pad: bool
     multi_separator: str
+    separator: str = "-"
+
+
+# Implements: REQ-d00251-G
+def component_regex(component: ComponentFormat) -> str:
+    """Resolve a ComponentFormat to its regex string.
+
+    Sole authority for the style → regex mapping. Both ``IdResolver`` and
+    the lark grammar pattern builder call this — no other code path may
+    contain a component-style dispatch.
+    """
+    style = component.style
+    if style == "numeric":
+        if component.digits > 0:
+            return rf"\d{{1,{component.digits}}}"
+        return r"\d+"
+    if style == "camelCase":
+        return r"[a-z][a-zA-Z0-9]+"
+    if style == "PascalCase":
+        return r"[A-Z][a-zA-Z0-9]+"
+    if style == "snake_case":
+        return r"[a-z][a-z0-9]*(?:_[a-z0-9]+)*"
+    if style == "kebab-case":
+        return r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*"
+    if style == "regex":
+        return component.pattern or r"[A-Za-z][A-Za-z0-9]+"
+    # Defensive: schema validation already rejects unknown values, but
+    # if a non-validated path constructs ComponentFormat directly we
+    # fall back to a permissive default rather than crashing.
+    return r"[A-Za-z][A-Za-z0-9]+"
 
 
 # Implements: REQ-p00002-A
@@ -125,11 +155,8 @@ class IdPatternConfig:
             label_style=raw_assert.get("label_style", "uppercase"),
             max_count=raw_assert.get("max_count", 26),
             zero_pad=raw_assert.get("zero_pad", False),
-            multi_separator=(
-                raw_assert.get("separator", {}).get("multi", "+")
-                if isinstance(raw_assert.get("separator"), dict)
-                else raw_assert.get("multi_separator", "+")
-            ),
+            separator=raw_assert.get("separator", "-"),
+            multi_separator=raw_assert.get("multi_separator", "+"),
         )
 
         # Parse output forms
@@ -227,19 +254,8 @@ class IdResolver:
                 val_alt = "|".join(re.escape(v) for v in values)
                 pattern = pattern.replace(match.group(0), f"(?P<type>{val_alt})")
 
-        # {component} -> based on component config
-        comp = self.config.component
-        if comp.style == "numeric":
-            if comp.digits > 0:
-                comp_pattern = rf"\d{{1,{comp.digits}}}"
-            else:
-                comp_pattern = r"\d+"
-        elif comp.style == "named":
-            comp_pattern = comp.pattern or r"[A-Za-z][A-Za-z0-9]+"
-        elif comp.style == "alphanumeric":
-            comp_pattern = comp.pattern or r"[A-Z0-9]+"
-        else:
-            comp_pattern = r"[A-Za-z0-9]+"
+        # {component} -> resolved via the single style→regex helper
+        comp_pattern = component_regex(self.config.component)
         pattern = pattern.replace("{component}", f"(?P<component>{comp_pattern})")
 
         # Assertion suffix (optional)
@@ -252,8 +268,9 @@ class IdResolver:
         """Build optional assertion suffix regex."""
         af = self.config.assertions
         label_pat = self._assertion_label_regex_str()
-        sep = re.escape(af.multi_separator)
-        return rf"(?:-(?P<assertions>{label_pat}(?:{sep}{label_pat})*))?"
+        sep = re.escape(af.separator)
+        multi = re.escape(af.multi_separator)
+        return rf"(?:{sep}(?P<assertions>{label_pat}(?:{multi}{label_pat})*))?"
 
     def _assertion_label_regex_str(self) -> str:
         """Get regex for a single assertion label."""
@@ -360,8 +377,8 @@ class IdResolver:
         result = parsed.fqn
         if parsed.assertions:
             af = self.config.assertions
-            sep = af.multi_separator
-            result += f"-{sep.join(parsed.assertions)}"
+            multi = af.multi_separator
+            result += f"{af.separator}{multi.join(parsed.assertions)}"
         return result
 
     def is_valid(self, raw_id: str) -> bool:
@@ -380,8 +397,8 @@ class IdResolver:
         )
         if parsed_id.assertions:
             af = self.config.assertions
-            sep = af.multi_separator
-            result += f"-{sep.join(parsed_id.assertions)}"
+            multi = af.multi_separator
+            result += f"{af.separator}{multi.join(parsed_id.assertions)}"
         return result
 
     def render_canonical(self, parsed_id: ParsedId) -> str:
@@ -486,6 +503,10 @@ class IdResolver:
         optional assertion labels prevents a trailing lowercase letter
         from being captured as an assertion (e.g. the ``l`` in
         ``REQ_p00001_login``).
+
+        Treats both literal ``-`` and escaped ``\\-`` outside character
+        classes as separators (the assertion suffix uses ``re.escape`` on
+        the configured separator, which yields ``\\-`` for the default).
         """
         pat = self._forms[0][1].pattern
         # Strip ^ and $ anchors
@@ -493,16 +514,23 @@ class IdResolver:
             pat = pat[1:]
         if pat.endswith("$"):
             pat = pat[:-1]
-        # Replace literal hyphens with [-_] to match both separators.
+        # Replace literal/escaped hyphens with [-_] to match both separators.
         # The canonical regex uses literal '-' between groups (namespace-type,
-        # id-assertion).  We need to replace those, but NOT hyphens inside
-        # character classes (e.g. [A-Z]).
+        # id-assertion).  Inside the assertion suffix, the separator is
+        # `re.escape`d, producing `\-`.  We replace both forms, but NOT
+        # hyphens inside character classes (e.g. [A-Z]).
         out: list[str] = []
         in_class = False
         i = 0
         while i < len(pat):
             ch = pat[i]
             if ch == "\\" and i + 1 < len(pat):
+                # Escaped hyphen outside a class behaves like a literal `-`
+                # in the source ID — substitute the same way.
+                if pat[i + 1] == "-" and not in_class:
+                    out.append("[-_]")
+                    i += 2
+                    continue
                 out.append(pat[i : i + 2])
                 i += 2
                 continue

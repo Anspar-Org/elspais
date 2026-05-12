@@ -25,6 +25,19 @@ if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
 
 
+def _effective_depth(stored: int | None, min_depth: int) -> int:
+    """Effective rendered depth: stored, clamped to [min_depth, 6].
+
+    Used during render to canonicalize too-shallow section headers up to
+    `parent.heading_level + 1` while preserving legal-but-deeper author
+    choices. The H6 cap prevents emitting invalid markdown; the builder
+    flags H6-ceiling violations separately as unfixable.
+    """
+    if stored is None:
+        return min(min_depth, 6)
+    return min(max(stored, min_depth), 6)
+
+
 def reconstruct_body_text(node: GraphNode) -> str:
     """Reconstruct body text from STRUCTURES children in render_order.
 
@@ -161,7 +174,14 @@ def _render_requirement(node: GraphNode) -> str:
     lines: list[str] = []
 
     # Header (preserve original heading level)
-    heading_prefix = "#" * (node.get_field("heading_level") or 2)
+    req_depth = node.get_field("heading_level") or 2
+    heading_prefix = "#" * req_depth
+    min_child_depth = req_depth + 1
+    assertions_stored = node.get_field("assertions_heading_level")
+    assertions_depth = _effective_depth(assertions_stored, min_child_depth)
+    assertions_prefix = "#" * assertions_depth
+    changelog_stored = node.get_field("changelog_heading_level")
+    changelog_prefix = "#" * _effective_depth(changelog_stored, min_child_depth)
     lines.append(f"{heading_prefix} {req_id}: {title}")
     lines.append("")
 
@@ -211,7 +231,7 @@ def _render_requirement(node: GraphNode) -> str:
             if not in_assertions:
                 if lines and lines[-1] != "":
                     lines.append("")
-                lines.append("## Assertions")
+                lines.append(f"{assertions_prefix} Assertions")
                 lines.append("")
                 in_assertions = True
             lines.append(f"{label}. {text}")
@@ -236,13 +256,19 @@ def _render_requirement(node: GraphNode) -> str:
                 if not in_assertions:
                     if lines and lines[-1] != "":
                         lines.append("")
-                    lines.append("## Assertions")
+                    lines.append(f"{assertions_prefix} Assertions")
                     lines.append("")
                     in_assertions = True
                 if lines and lines[-1] != "":
                     lines.append("")
                 s = heading_style
-                if s.startswith("#"):
+                if s == "hash":
+                    # Hash sub-heading: depth must be >= effective parent (assertions) + 1
+                    sub_stored = child.get_field("heading_level")
+                    sub_depth = _effective_depth(sub_stored, assertions_depth + 1)
+                    lines.append(f"{'#' * sub_depth} {heading}")
+                elif s.startswith("#"):
+                    # Legacy: heading_style was the literal hash string (e.g. "###")
                     lines.append(f"{s} {heading}")
                 else:
                     lines.append(f"{s}{heading}{s}")
@@ -256,7 +282,9 @@ def _render_requirement(node: GraphNode) -> str:
                 # already blank, e.g. after the last assertion)
                 if lines and lines[-1] != "":
                     lines.append("")
-                lines.append(f"## {heading}")
+                section_stored = child.get_field("heading_level")
+                section_depth = _effective_depth(section_stored, min_child_depth)
+                lines.append(f"{'#' * section_depth} {heading}")
                 lines.append("")
                 if content:
                     lines.append(content)
@@ -268,7 +296,7 @@ def _render_requirement(node: GraphNode) -> str:
         in_assertions = False
         if lines and lines[-1] != "":
             lines.append("")
-        lines.append("## Changelog")
+        lines.append(f"{changelog_prefix} Changelog")
         lines.append("")
         for entry in changelog:
             author_id = entry["author_id"]

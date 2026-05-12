@@ -138,6 +138,8 @@
 | REQ-d00247 | Fenced Code Block Preservation                                | prd-core.md             | 1270eb2b |
 | REQ-d00248 | Fix Command Idempotency                                       | prd-core.md             | 8a92207b |
 | REQ-d00249 | Configured test runner execution                              | dev-cli.md              | 8a579eb1 |
+| REQ-d00250 | Section Header Depth Canonicalization                         | dev-graph-core.md       | 903349d2 |
+| REQ-d00251 | Component Style Vocabulary and Assertion Separator            | dev-graph-config.md     | e04a4e37 |
 
 ## User Journeys
 

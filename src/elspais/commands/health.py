@@ -449,6 +449,52 @@ def check_spec_needs_rewrite(graph: FederatedGraph) -> HealthCheck:
     )
 
 
+# Implements: REQ-d00250-F
+def check_unfixable_issues(graph: FederatedGraph) -> HealthCheck:
+    """Check for requirements with issues that ``--fix`` cannot resolve.
+
+    Currently reports:
+    - ``section_header_depth_unfixable``: a requirement at H6 has section
+      blocks (Assertions/Changelog/named) that would need to live at H7
+      to be canonical, which markdown does not support.
+    """
+    from elspais.graph import NodeKind
+
+    findings: list[HealthFinding] = []
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        reasons = node.get_field("parse_unfixable_reasons") or []
+        if not reasons:
+            continue
+        fn = node.file_node()
+        file_path = fn.get_field("relative_path") if fn is not None else None
+        findings.append(
+            HealthFinding(
+                message=f"Cannot auto-fix: {', '.join(reasons)}",
+                node_id=node.id,
+                file_path=file_path,
+                line=node.get_field("parse_line"),
+            )
+        )
+
+    if findings:
+        return HealthCheck(
+            name="spec.unfixable_issues",
+            passed=False,
+            message=f"{len(findings)} requirement(s) have unfixable issues",
+            category="spec",
+            severity="error",
+            details={"count": len(findings)},
+            findings=findings,
+        )
+
+    return HealthCheck(
+        name="spec.unfixable_issues",
+        passed=True,
+        message="No unfixable issues",
+        category="spec",
+    )
+
+
 def _parse_hierarchy_rules(hierarchy: dict[str, Any]) -> dict[str, list[str]]:
     """Parse hierarchy rules from config.
 
@@ -1804,6 +1850,12 @@ def run_spec_checks(
         checks.append(
             _annotate_findings(
                 check_spec_needs_rewrite(repo_graph),
+                entry.name,
+            )
+        )
+        checks.append(
+            _annotate_findings(
+                check_unfixable_issues(repo_graph),
                 entry.name,
             )
         )

@@ -3083,6 +3083,8 @@ class GraphBuilder:
             "refines_refs": data.get("refines", []),
             "satisfies_refs": data.get("satisfies", []),
             "heading_level": data.get("heading_level", 2),
+            "assertions_heading_level": data.get("assertions_heading_level"),
+            "changelog_heading_level": data.get("changelog_heading_level"),
             "hash_mode": self.hash_mode,
         }
         # Extract rationale from sections for format validation (require_rationale)
@@ -3138,9 +3140,12 @@ class GraphBuilder:
                 "parse_end_line": None,
                 "content_line": section.get("content_line", section_line),
             }
-            # Preserve heading style for assertion sub-headings (* ** _)
+            # Preserve heading style for assertion sub-headings (* ** _ hash)
             if "heading_style" in section:
                 section_node._content["heading_style"] = section["heading_style"]
+            # Preserve heading_level for section depth canonicalization (REQ-d00250-A)
+            if "heading_level" in section:
+                section_node._content["heading_level"] = section["heading_level"]
             self._nodes[section_id] = section_node
             children_with_lines.append((section_line, section_node))
 
@@ -3197,9 +3202,68 @@ class GraphBuilder:
             computed = compute_hash_for_node(node, self.hash_mode)
             if computed and stored_hash != computed:
                 parse_dirty_reasons.append("stale_hash")
+
+        # Section header depth validation (REQ-d00250-B, REQ-d00250-C)
+        req_depth = data.get("heading_level", 2)
+        min_child_depth = req_depth + 1
+        has_section_block = False
+        section_too_shallow = False
+
+        # Assertions block
+        assertions_d = data.get("assertions_heading_level")
+        if assertions_d is not None:
+            has_section_block = True
+            if assertions_d < min_child_depth:
+                section_too_shallow = True
+
+        # Changelog block
+        changelog_d = data.get("changelog_heading_level")
+        if changelog_d is not None:
+            has_section_block = True
+            if changelog_d < min_child_depth:
+                section_too_shallow = True
+
+        # Named sections and hash sub-headings (entries in data["sections"])
+        # Note: preamble has no header so it isn't included in `sections` from
+        # the transformer with a meaningful heading_level — but its dict has
+        # heading="preamble"; skip it defensively.
+        effective_assertions_depth = (
+            min(max(assertions_d, min_child_depth), 6)
+            if assertions_d is not None
+            else min(min_child_depth, 6)
+        )
+        for sec in data.get("sections", []):
+            if sec.get("heading") == "preamble":
+                continue
+            sec_style = sec.get("heading_style")
+            sec_d = sec.get("heading_level")
+            if sec_d is None:
+                continue
+            if sec_style is None:
+                # Named section directly under the requirement.
+                has_section_block = True
+                if sec_d < min_child_depth:
+                    section_too_shallow = True
+            elif sec_style == "hash":
+                # Hash sub-heading inside the assertion block; parent is the
+                # (effective) assertions header.
+                if sec_d < effective_assertions_depth + 1:
+                    section_too_shallow = True
+
+        # H6 ceiling: if req+1 would exceed 6 AND the req has any section
+        # block, the situation is unfixable.
+        unfixable = has_section_block and min_child_depth > 6
+
+        if section_too_shallow and not unfixable:
+            parse_dirty_reasons.append("section_header_depth")
+
         if parse_dirty_reasons:
             node._content["parse_dirty"] = True
             node._content["parse_dirty_reasons"] = parse_dirty_reasons
+
+        if unfixable:
+            existing = node._content.get("parse_unfixable_reasons", [])
+            node._content["parse_unfixable_reasons"] = existing + ["section_header_depth_unfixable"]
 
         # Queue implements/refines links for later resolution
         for impl_ref in data.get("implements", []):

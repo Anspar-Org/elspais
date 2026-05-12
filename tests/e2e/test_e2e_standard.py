@@ -1,5 +1,5 @@
 # Verifies: REQ-p00002, REQ-p00003, REQ-p00004, REQ-p00060,
-#            REQ-d00074-A+B+C+D, REQ-d00080, REQ-d00085-A
+#            REQ-d00074-A+B+C+D, REQ-d00080, REQ-d00085-A, REQ-d00250-E
 """Standard workhorse e2e tests — module-scoped fixture with daemon acceleration.
 
 Tests standard 3-tier hierarchy (REQ-p/o/d), uppercase assertions,
@@ -216,7 +216,7 @@ class TestTraceOutput:
         assert result.returncode == 0
         data = json.loads(result.stdout)
         assert isinstance(data, list)
-        assert len(data) == 10
+        assert len(data) == 11
 
     def test_trace_csv(self, project):
         result = run_elspais("trace", "--format", "csv", cwd=project)
@@ -423,10 +423,10 @@ class TestCrossCommandConsistency:
         trace_data = json.loads(trace.stdout)
         trace_total = len(trace_data)
 
-        # Summary defaults to Active only (8), trace shows all (10)
+        # Summary defaults to Active only (8), trace shows all (11)
         # Both should be internally consistent
         assert summary_total == 8, f"Summary expected 8, got {summary_total}"
-        assert trace_total == 10, f"Trace expected 10, got {trace_total}"
+        assert trace_total == 11, f"Trace expected 11, got {trace_total}"
 
 
 class TestSkipFiles:
@@ -950,11 +950,41 @@ class TestMCPChangedRequirements:
 class TestStandardCLIMutations:
     """Incremental CLI mutation tests — each builds on the prior state."""
 
-    def test_01_fix_corrects_wrong_hash(self, project):
-        """Fix the wrong hash in prd-deprecated.md."""
+    # Verifies: REQ-d00250-E
+    def test_00_section_depth_dry_run_lists_violation(self, project):
+        """fix --dry-run reports REQ-d00299 as needing section-depth canonicalization."""
         spec = project / "spec" / "prd-deprecated.md"
         content = spec.read_text()
-        assert "XXXXXXXX" in content
+        # Pre-fix: REQ-d00299 is at H2 with H2 Assertions (too shallow)
+        assert "## REQ-d00299:" in content, "fixture missing REQ-d00299 H2 header"
+        # The file should have two "## Assertions" lines: one for the H1 req (correct)
+        # and one for the H2 req (too shallow)
+        assert content.count("\n## Assertions") == 2, (
+            "expected two ## Assertions headings in prd-deprecated.md "
+            "(one correct, one too shallow)"
+        )
+
+        result = run_elspais("fix", "--dry-run", cwd=project)
+        assert result.returncode == 0, f"fix --dry-run failed: {result.stderr}"
+        assert (
+            "REQ-d00299" in result.stdout
+        ), f"Expected REQ-d00299 in dry-run output.\nstdout: {result.stdout}"
+        assert "canonicalize section header depth" in result.stdout, (
+            f"Expected 'canonicalize section header depth' in dry-run output.\n"
+            f"stdout: {result.stdout}"
+        )
+        # Dry-run must not modify the file
+        assert spec.read_text() == content, "Dry-run unexpectedly modified prd-deprecated.md"
+
+    def test_01_fix_corrects_wrong_hash(self, project):
+        """Fix wrong hashes AND too-shallow section depth in prd-deprecated.md."""
+        spec = project / "spec" / "prd-deprecated.md"
+        content = spec.read_text()
+        assert "XXXXXXXX" in content, "Pre-fix: expected XXXXXXXX placeholder hash"
+        assert "## REQ-d00299:" in content, "Pre-fix: expected REQ-d00299 H2 header"
+        assert (
+            content.count("\n## Assertions") == 2
+        ), "Pre-fix: expected two ## Assertions (one correct at H1 req, one too-shallow at H2 req)"
 
         result = run_elspais("fix", cwd=project)
         assert result.returncode == 0, f"fix failed: {result.stderr}"
@@ -963,6 +993,12 @@ class TestStandardCLIMutations:
         assert "XXXXXXXX" not in content, "Hash was not corrected by fix"
         match = re.search(r"\*\*Hash\*\*:\s*([0-9a-f]{8})", content)
         assert match, "No valid hash found after fix"
+        # Section depth canonicalized: REQ-d00299's ## Assertions -> ### Assertions
+        # (canonical depth = H2 req.heading_level + 1 = 3)
+        assert "### Assertions" in content, (
+            "Expected '### Assertions' after fix (section depth canonicalization for REQ-d00299).\n"
+            f"Content:\n{content}"
+        )
 
     def test_02_fix_idempotent(self, project):
         """Running fix again should not change anything."""

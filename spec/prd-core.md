@@ -186,7 +186,7 @@ F. All tests marked `@pytest.mark.e2e` SHALL invoke the `elspais` CLI as a subpr
 
 A child requirement refines a parent when it adds specificity, constraints, or commits to mechanisms or guarantees.
 
-## Assertions
+### Assertions
 
 A. A child requirement that adds specificity, constraints, or commits to mechanisms or guarantees SHALL declare its parent requirement using `Implements:` or `Refines:` in its metadata block.
 
@@ -194,8 +194,9 @@ B. `Implements:` and `Refines:` declarations apply to requirements only; code re
 
 C. Multiple requirements MAY exist at the same Level each declaring a relationship to the same parent requirement.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | fc1e85fe | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | fc1e85fe | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Requirement Decomposition Rules* | **Hash**: fc1e85fe
@@ -236,7 +237,7 @@ F. The tool SHALL support an `--overview` flag that generates a stakeholder-orie
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-## Assertions
+### Assertions
 
 A. `TermDictionary.add()` SHALL store a `TermEntry` keyed by normalized (lowercased) term name. If the term already exists, it SHALL return the existing entry without overwriting.
 
@@ -248,8 +249,9 @@ D. `TermDictionary.merge()` SHALL combine two dictionaries and return a list of 
 
 E. `TermRef` SHALL have a `wrong_marking` field (str, default "") that records the incorrect emphasis delimiter used (e.g., `"__"` when the configured markup_styles are `["*", "**"]`). When non-empty, `marked` SHALL be `False`.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 0d0fd97c | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 0d0fd97c | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *TermDictionary Data Model* | **Hash**: 0d0fd97c
@@ -260,14 +262,15 @@ E. `TermRef` SHALL have a `wrong_marking` field (str, default "") that records t
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-## Assertions
+### Assertions
 
 A. The grammar SHALL include a `DEF_LINE` terminal matching `: ` followed by non-newline text, a `CONT_LINE` terminal matching two or more leading spaces followed by non-newline text, and a `definition_block` rule matching `TEXT _NL (DEF_LINE _NL (CONT_LINE _NL)*)+`. Continuation lines SHALL attach to the preceding `DEF_LINE` and be joined with a newline before metadata classification. The `definition_block` rule SHALL be an alternative in `_item`, `preamble_line`, `content_line`, `jny_body_line`, and `jny_content_line` but NOT in `assertion_item` or `changelog_block`.
 
 B. The transformer SHALL handle `definition_block` nodes by extracting the term name from the TEXT token, definition text from DEF_LINE tokens, and metadata flags (Collection, Indexed) from definition lines. It SHALL return a `ParsedContent` with `content_type="definition_block"` and parsed_data containing `term`, `definition`, `collection`, and `indexed` fields.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 6adaa258 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-24 | 6adaa258 | - | Developer (dev@example.com) | Auto-fix: update hash
 - 2026-04-23 | 078ce203 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -277,7 +280,7 @@ B. The transformer SHALL handle `definition_block` nodes by extracting the term 
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-## Assertions
+### Assertions
 
 A. `TraceGraph` SHALL have a `_terms: TermDictionary` field. `GraphBuilder` SHALL handle `content_type == "definition_block"` by creating a REMAINDER node with `content_type` field set to `"definition_block"` and adding a `TermEntry` to the graph's `_terms` dictionary.
 
@@ -287,8 +290,9 @@ C. `FederatedGraph` SHALL merge per-repo `_terms` dictionaries into a single fed
 
 D. `GraphBuilder` SHALL accept a `namespace` parameter (str, default "") and set `TermEntry.namespace` from it during term creation.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 96b5223f | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 96b5223f | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *TraceGraph Terms and GraphBuilder Integration* | **Hash**: 96b5223f
@@ -297,7 +301,7 @@ D. `GraphBuilder` SHALL accept a `namespace` parameter (str, default "") and set
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-## Assertions
+### Assertions
 
 A. `check_term_duplicates()` SHALL return a `HealthCheck` reporting duplicate term definitions across all namespaces, using the configured `duplicate_severity`.
 
@@ -311,8 +315,9 @@ E. A `run_term_checks(graph, config)` aggregator SHALL call `check_term_duplicat
 
 F. `check_unmarked_usage()` SHALL produce distinct messages for wrong-marking references (e.g., "Wrong markup for 'term' (uses __, should use configured style)") versus plain unmarked references (e.g., "Unmarked usage of 'term'").
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 0d96cc34 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 0d96cc34 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Term Health Checks* | **Hash**: 0d96cc34
@@ -321,7 +326,7 @@ F. `check_unmarked_usage()` SHALL produce distinct messages for wrong-marking re
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-## Assertions
+### Assertions
 
 A. `generate_glossary()` SHALL produce an alphabetically-organized Markdown glossary with letter headings, including definition text, `defined_in` attribution, and annotation for collection/non-indexed terms.
 
@@ -331,8 +336,9 @@ C. `generate_collection_manifest()` SHALL produce a standalone manifest file per
 
 D. All generated files SHALL include an auto-generated header comment. Both `--format markdown` and `--format json` SHALL be supported.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | f2da30fb | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | f2da30fb | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Glossary and Term Index Generators* | **Hash**: f2da30fb
@@ -341,14 +347,15 @@ D. All generated files SHALL include an auto-generated header comment. Both `--f
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-## Assertions
+### Assertions
 
 A. `GlossaryArgs` and `TermIndexArgs` dataclasses SHALL be defined in `commands/args.py` with `format` and `output_dir` fields. They SHALL be registered in the `Command` union and `_CMD_MAP`.
 
 B. `elspais fix` SHALL call glossary and term-index generation after existing fix operations when the graph has defined terms.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | d18fc2c9 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | d18fc2c9 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *CLI Registration for Glossary and Term Index* | **Hash**: d18fc2c9
@@ -357,7 +364,7 @@ B. `elspais fix` SHALL call glossary and term-index generation after existing fi
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-## Assertions
+### Assertions
 
 A. `extract_comments(source, ext)` SHALL return a `list[tuple[str, int]]` of (comment_text, line_number) pairs extracted from source code text based on file extension.
 
@@ -373,8 +380,9 @@ F. For markup languages (`.html`, `.xml`, `.svg`), the extractor SHALL extract `
 
 G. For file extensions with no known comment style, `extract_comments()` SHALL return an empty list.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 499123f1 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 499123f1 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Comment Extraction Utilities* | **Hash**: 499123f1
@@ -383,7 +391,7 @@ G. For file extensions with no known comment style, `extract_comments()` SHALL r
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-## Assertions
+### Assertions
 
 A. `scan_text_for_terms(text, td, node_id, namespace, line_offset, markup_styles)` SHALL return a `list[TermRef]` classifying each term occurrence as marked, wrong-marking, or unmarked.
 
@@ -395,8 +403,9 @@ D. For terms with `indexed=True`, the scanner SHALL perform whole-word case-inse
 
 E. Terms with `indexed=False` SHALL be scanned for marked and wrong-marking references only; unmarked scanning SHALL be skipped.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 63cb874b | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 63cb874b | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Term Reference Scanner Core* | **Hash**: 63cb874b
@@ -405,7 +414,7 @@ E. Terms with `indexed=False` SHALL be scanned for marked and wrong-marking refe
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-## Assertions
+### Assertions
 
 A. `scan_graph(terms, nodes, namespace, markup_styles, exclude_files)` SHALL populate `TermEntry.references` by scanning graph nodes for term occurrences.
 
@@ -415,8 +424,9 @@ C. CODE and TEST nodes SHALL be scanned via comment extraction only (not raw sou
 
 D. Files matching any `exclude_files` glob pattern SHALL be skipped during scanning.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | d3a202d4 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | d3a202d4 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Graph-Wide Term Scan* | **Hash**: d3a202d4
@@ -425,14 +435,15 @@ D. Files matching any `exclude_files` glob pattern SHALL be skipped during scann
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-## Assertions
+### Assertions
 
 A. After `FederatedGraph._merge_terms()`, the scanner SHALL run across all repos using the merged `TermDictionary` so that cross-repo term references resolve correctly.
 
 B. Each repo's scan SHALL use its own config for `markup_styles` and `exclude_files`.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 7d9a30c4 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 7d9a30c4 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Federated Graph Term Scanner Pass* | **Hash**: 7d9a30c4
@@ -441,7 +452,7 @@ B. Each repo's scan SHALL use its own config for `markup_styles` and `exclude_fi
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-## Assertions
+### Assertions
 
 A. `check_term_unused(entries, severity)` SHALL return a `HealthCheck` reporting defined terms with zero references. Default severity: `"warning"`. When `severity="off"`, return passed/info.
 
@@ -451,8 +462,9 @@ C. `check_term_collection_empty(entries, severity)` SHALL return a `HealthCheck`
 
 D. `run_term_checks()` SHALL call all six term checks (`duplicates`, `undefined`, `unmarked`, `unused`, `bad_definition`, `collection_empty`) with severity from `config["terms"]["severity"]`.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 76a49db3 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-24 | 76a49db3 | - | Developer (dev@example.com) | Auto-fix: update hash
 - 2026-03-29 | 9788814d | - | Michael Lewis (michael@anspar.org) | Initial creation
 
@@ -462,7 +474,7 @@ D. `run_term_checks()` SHALL call all six term checks (`duplicates`, `undefined`
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-## Assertions
+### Assertions
 
 A. `check_no_traceability(unlinked_files, severity)` SHALL return a `HealthCheck` reporting code and test files with no *Traceability* markers. Default severity: `"warning"`. When `severity="off"`, return passed/info.
 
@@ -470,8 +482,9 @@ B. The check SHALL be wired into `run_code_checks()` using `graph.iter_unlinked(
 
 C. Severity SHALL be read from `[rules.format] no_traceability_severity` (default `"warning"` if None).
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | e1272219 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | e1272219 | - | Michael Lewis (michael@anspar.org) | Auto-fix: sync changelog hash
 - 2026-03-29 | 6e481d63 | - | Michael Lewis (michael@anspar.org) | Initial creation
 
@@ -481,14 +494,15 @@ C. Severity SHALL be read from `[rules.format] no_traceability_severity` (defaul
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-## Assertions
+### Assertions
 
 A. The codebase SHALL provide a `strip_emphasis(s: str) -> str` utility in `utilities/markdown.py` that strips balanced pairs of `**`, `__`, `*`, and `_` from the start and end of `s`, in order of width (widest first). Outer whitespace SHALL be trimmed. Unbalanced wrappers (e.g. `*Foo_`, `**Foo`) SHALL leave the string intact. The function SHALL be idempotent.
 
 B. Lark transformers SHALL use `strip_emphasis()` to normalize all user-text captured from emphasis-decorated spec source: term names extracted from `definition_block` TEXT tokens, value text extracted from journey `Actor`/`Goal`/`Context` metadata fields, and `reference term`/`reference source` definition-block fields. Ad-hoc per-character strip calls (e.g., `.strip("*")`, `.strip("_")`) SHALL NOT remain in the transformer modules.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 16af6c80 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-04 | 16af6c80 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Markdown Emphasis Normalization Utility* | **Hash**: 16af6c80
@@ -497,12 +511,13 @@ B. Lark transformers SHALL use `strip_emphasis()` to normalize all user-text cap
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-## Assertions
+### Assertions
 
 A. Fenced code block content (lines between ``` markers) SHALL be preserved verbatim across the parse-render round trip. Any preprocessing applied to fenced content for grammar matching (e.g., line replacement with neutralization placeholders) SHALL be ephemeral, used only as parser input, and SHALL NOT be persisted to disk via render. The lark spec parser SHALL pass the original un-preprocessed source content to the transformer's `source` parameter so REMAINDER nodes capture the original text.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 1270eb2b | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-04 | 1270eb2b | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Fenced Code Block Preservation* | **Hash**: 1270eb2b
@@ -511,12 +526,13 @@ A. Fenced code block content (lines between ``` markers) SHALL be preserved verb
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-## Assertions
+### Assertions
 
 A. `elspais fix` SHALL be idempotent: running the command twice in succession on the same project SHALL produce identical files. The second invocation SHALL detect no pending changes and SHALL not modify any spec, journey, code, test, or generated artifact file. This invariant SHALL be exercised by a fixture that includes fenced code blocks with markdown emphasis, a glossary term with emphasis-wrapped name, a user journey with emphasized actor field, and a REMAINDER section containing emphasized text.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 8a92207b | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-04 | 8a92207b | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Fix Command Idempotency* | **Hash**: 8a92207b

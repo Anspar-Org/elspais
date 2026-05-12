@@ -340,3 +340,55 @@ class TestFixThenHealthPasses:
 
         health_result = run_elspais("checks", "--lenient", cwd=tmp_path)
         assert health_result.returncode == 0
+
+
+# ---------------------------------------------------------------------------
+# H6 requirement with section blocks cannot be auto-fixed (REQ-d00250-C/E)
+# ---------------------------------------------------------------------------
+
+
+# Verifies: REQ-d00250-C
+# Verifies: REQ-d00250-E
+class TestH6SectionDepthUnfixable:
+    """H6 requirement with section blocks cannot be auto-fixed."""
+
+    @pytest.fixture
+    def h6_project(self, tmp_path):
+        """Standalone project with a single H6 requirement that has Assertions."""
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        (spec_dir / "test.md").write_text(
+            "###### REQ-d00001: H6 Test\n\n"
+            "**Level**: dev | **Status**: Active | **Implements**: -\n\n"
+            "###### Assertions\n\n"
+            "A. The system shall demonstrate the H6 unfixable case.\n\n"
+            "*End* *H6 Test* | **Hash**: -\n"
+        )
+        (tmp_path / ".elspais.toml").write_text(
+            'version = 3\n[project]\nnamespace = "REQ"\n\n'
+            '[scanning.spec]\ndirectories = ["spec"]\n'
+        )
+        return tmp_path
+
+    def test_fix_cannot_resolve_h6_req(self, h6_project):
+        """elspais fix exits 1, prints to stderr, leaves file untouched."""
+        result = run_elspais("fix", cwd=h6_project)
+        assert result.returncode == 1, (
+            f"expected exit 1 for H6 unfixable; got {result.returncode}.\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+        assert "REQ-d00001" in result.stderr
+        assert "section header depth" in result.stderr.lower()
+        content = (h6_project / "spec" / "test.md").read_text()
+        assert "###### REQ-d00001" in content
+        assert "###### Assertions" in content
+
+    def test_health_flags_h6_unfixable(self, h6_project):
+        """elspais checks reports unfixable issue and exits non-zero."""
+        result = run_elspais("checks", cwd=h6_project)
+        assert result.returncode != 0
+        combined = result.stdout + result.stderr
+        assert "unfixable" in combined.lower(), (
+            f"Expected 'unfixable' in checks output.\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )

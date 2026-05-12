@@ -15,7 +15,7 @@ implements = ["req"]
 canonical = "{namespace}-{component}"
 
 [id-patterns.component]
-style = "named"
+style = "regex"
 pattern = "[A-Z][a-zA-Z0-9]+"
 max_length = 32
 
