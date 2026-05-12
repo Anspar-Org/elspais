@@ -405,4 +405,4 @@ both gaps: a single command can execute tests and re-evaluate checks,
 and the checks pass warns when results are out of date even without
 running tests.
 
-*End* *Configured test runner execution* | **Hash**: b75d9360
+*End* *Configured test runner execution* | **Hash**: 8a579eb1
