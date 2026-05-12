@@ -15,6 +15,20 @@ import contextlib
 import io
 from pathlib import Path
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _fake_author(monkeypatch):
+    """Stub git author lookup so the changelog-emitting path works on
+    runners (CI, fresh containers) that lack `git config user.name`."""
+    fake = {"name": "Test Author", "id": "test@example.com"}
+    monkeypatch.setattr(
+        "elspais.commands.fix_cmd._get_author",
+        lambda _config: fake,
+    )
+
+
 CONFIG_TOML = """\
 version = 3
 
