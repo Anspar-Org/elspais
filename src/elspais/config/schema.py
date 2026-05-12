@@ -160,6 +160,14 @@ class CodeScanningConfig(ScanningKindConfig):
     source_roots: list[str] = Field(default_factory=lambda: ["src", ""])
 
 
+class TestRunnerConfig(_StrictModel):
+    """One configured test runner invocation."""
+
+    name: str
+    command: str
+    cwd: str = ""  # relative to repo root; empty = repo root
+
+
 class TestScanningConfig(ScanningKindConfig):
     __test__ = False  # Prevent pytest collection
 
@@ -169,6 +177,7 @@ class TestScanningConfig(ScanningKindConfig):
     prescan_command: str = ""
     reference_keyword: str = "Verifies"
     reference_patterns: list[str] = Field(default_factory=list)
+    runners: list[TestRunnerConfig] = Field(default_factory=list)
 
 
 class ResultScanningConfig(ScanningKindConfig):
