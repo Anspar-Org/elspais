@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -2741,9 +2742,50 @@ def _report_from_dict(data: dict[str, Any]) -> HealthReport:
 def run(args: argparse.Namespace) -> int:
     """Run the health command.
 
-    Uses engine.call for daemon-vs-local, then renders the report.
+    If --run-tests is set, execute configured runners first, then proceed
+    to checks. With --fail-fast, a failing runner skips the checks pass
+    entirely. Final exit code is non-zero if any runner failed OR any
+    check failed.
     """
     from elspais.commands import _engine
+    from elspais.commands.test_runner import run_configured_runners
+    from elspais.config import find_git_root, get_config
+
+    run_tests = getattr(args, "run_tests", False)
+    fail_fast = getattr(args, "fail_fast", False)
+
+    runner_failed = False
+    skip_due_to_fail_fast = False
+
+    if run_tests:
+        config_path = getattr(args, "config", None)
+        try:
+            cfg_dict = get_config(config_path, start_path=Path.cwd())
+        except Exception as exc:
+            print(f"error: failed to load config: {exc}", file=sys.stderr)
+            return 2
+        # _validate_config is defined in this module (health.py near line 35).
+        cfg = _validate_config(cfg_dict)
+        if not cfg.scanning.test.runners:
+            print(
+                "error: --run-tests requires at least one "
+                "[[scanning.test.runners]] entry. "
+                "See docs/cli/checks.md for configuration examples.",
+                file=sys.stderr,
+            )
+            return 2
+        repo_root = find_git_root() or Path.cwd()
+        results = run_configured_runners(cfg, repo_root, fail_fast=fail_fast)
+        runner_failed = any(r.returncode != 0 for r in results)
+        if fail_fast and runner_failed:
+            skip_due_to_fail_fast = True
+
+    if skip_due_to_fail_fast:
+        print(
+            "\nfail-fast: skipping checks due to runner failure.",
+            file=sys.stderr,
+        )
+        return 1
 
     # Build params from args
     params: dict[str, str] = {}
@@ -2762,11 +2804,10 @@ def run(args: argparse.Namespace) -> int:
         params["status"] = ",".join(status_filter)
 
     spec_dir = getattr(args, "spec_dir", None)
-    skip_daemon = bool(spec_dir)
+    # Force fresh build when runners just produced new result files.
+    skip_daemon = bool(spec_dir) or run_tests
 
     if skip_daemon:
-        # Custom spec_dir: build graph directly with the requested dirs,
-        # preserving the original error-handling for config/graph failures.
         data = _run_local_checks(args, params)
     else:
         data = _engine.call(
@@ -2776,13 +2817,12 @@ def run(args: argparse.Namespace) -> int:
             config_path=getattr(args, "config", None),
         )
 
-    # The dict already has the correct "healthy" flag (lenient-aware).
-    # Use it for exit code; reconstruct report only for rendering.
     healthy = data.get("healthy", False)
     graph_source = _format_graph_source(data.get("graph_source"))
     report = _report_from_dict(data)
     print(_format_report(report, args, graph_source=graph_source))
-    return 0 if healthy else 1
+    checks_exit = 0 if healthy else 1
+    return 1 if (runner_failed or checks_exit != 0) else 0
 
 
 def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[str, Any]:
