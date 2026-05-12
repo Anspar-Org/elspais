@@ -569,6 +569,25 @@ class IdResolver:
         sep = af.multi_separator if af.multi_separator else "+"
         return (parsed.fqn, sep.join(parsed.assertions))
 
+    def make_assertion_id(self, req_id: str, label: str) -> str:
+        """Compose an assertion node ID from a requirement ID and label.
+
+        Uses the configured assertion separator so the graph index keys
+        match the user-facing canonical form (e.g. ``EVS-PRD-foo/A`` when
+        ``separator="/"``). Internal == display — no second form to convert.
+        """
+        return f"{req_id}{self.config.assertions.separator}{label}"
+
+    def make_assertion_ref(self, req_id: str, labels: list[str]) -> str:
+        """Compose a multi-assertion reference like ``REQ-X-A+B+C``.
+
+        Uses both the configured ``separator`` (between requirement and the
+        first label) and ``multi_separator`` (between successive labels).
+        With a single label this is identical to ``make_assertion_id``.
+        """
+        af = self.config.assertions
+        return f"{req_id}{af.separator}{af.multi_separator.join(labels)}"
+
     def all_type_alias_values(self) -> list[str]:
         """All unique type alias values (or canonical codes if no aliases).
 

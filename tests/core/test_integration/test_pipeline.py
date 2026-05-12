@@ -1,10 +1,16 @@
 """Integration tests for full Deserializer → MDparser → Graph pipeline."""
 
+import tempfile
+from pathlib import Path
+
+import pytest
+
 from elspais.config import find_config_file, load_config
 from elspais.graph import NodeKind
 from elspais.graph.builder import GraphBuilder
 from elspais.graph.deserializer import DomainFile
 from elspais.graph.parsers.lark import FileDispatcher
+from elspais.graph.render import render_node
 from elspais.utilities.patterns import build_resolver
 
 
@@ -333,3 +339,262 @@ class TestMultiAssertionPipelineExpansion:
         assert "REQ-p00001-A+B+C" in literal_targets, (
             f"Expected broken reference for literal 'REQ-p00001-A+B+C', " f"got {literal_targets}"
         )
+
+
+# Verifies: REQ-d00081-D+E
+class TestMultiAssertionSeparatorRoundTrip:
+    """Regression tests for the configured-separator multi-assertion bug.
+
+    The user reported that with ``[id-patterns.assertions]`` configured as
+    ``separator = "/"`` and ``multi_separator = "/"``, references of the
+    form ``EVS-PRD-event-log/A/B`` silently fail to resolve: the builder
+    creates assertion node IDs using a hardcoded ``-`` (e.g.
+    ``EVS-PRD-event-log-A``) while the multi-assertion expansion path uses
+    the resolver's ``render_canonical()`` which honors the configured
+    separator (producing ``EVS-PRD-event-log/A``). The mismatch lands the
+    refs in ``_broken_references`` and no REFINES edges get wired.
+
+    A symmetric bug exists on the render side: the ``_derive_*_refs``
+    helpers in ``graph/render.py`` hardcode ``-`` between requirement ID
+    and assertion label, and emit one ref per ``assertion_targets`` entry
+    with no multi-assertion aggregation.
+
+    These tests assert the CORRECT post-fix behavior. They are expected to
+    FAIL until both bugs are fixed.
+    """
+
+    # Minimal config common to both parametrizations.
+    _CONFIG_TEMPLATE = """\
+[project]
+namespace = "EVS"
+
+[id-patterns]
+canonical = "{{namespace}}-{{level.letter}}-{{component}}"
+aliases = {{ short = "{{level.letter}}-{{component}}" }}
+
+[id-patterns.component]
+style = "kebab-case"
+
+[id-patterns.assertions]
+label_style = "uppercase"
+separator = "{assert_sep}"
+multi_separator = "{multi_sep}"
+
+[levels.prd]
+rank = 1
+letter = "PRD"
+implements = ["prd"]
+
+[levels.dev]
+rank = 2
+letter = "DEV"
+implements = ["dev", "prd"]
+
+[scanning.spec]
+directories = ["spec"]
+"""
+
+    _PRD_TEMPLATE = """\
+# Event Logging PRD
+
+## EVS-PRD-event-log: Event Logging
+
+**Level**: PRD | **Status**: Active
+
+The system SHALL log events.
+
+## Assertions
+
+A. The system SHALL log login events.
+B. The system SHALL log logout events.
+
+*End* *EVS-PRD-event-log*
+"""
+
+    _DEV_TEMPLATE = """\
+# Event Storage DEV
+
+## EVS-DEV-event-store: Event Storage
+
+**Level**: DEV | **Status**: Active
+
+**Refines**: {refines_ref}
+
+The system SHALL store event records.
+
+*End* *EVS-DEV-event-store*
+"""
+
+    def _build_project(self, tmpdir, assert_sep, multi_sep, refines_ref):
+        """Materialize a spec directory + config and build a graph from it.
+
+        Returns:
+            Tuple ``(graph, dev_node, prd_node)``.
+        """
+        root = Path(tmpdir)
+        spec_dir = root / "spec"
+        spec_dir.mkdir()
+
+        (spec_dir / "prd-event.md").write_text(self._PRD_TEMPLATE)
+        (spec_dir / "dev-event.md").write_text(self._DEV_TEMPLATE.format(refines_ref=refines_ref))
+        (root / ".elspais.toml").write_text(
+            self._CONFIG_TEMPLATE.format(assert_sep=assert_sep, multi_sep=multi_sep)
+        )
+
+        config_path = find_config_file(root)
+        config = load_config(config_path)
+        resolver = build_resolver(config)
+        dispatcher = FileDispatcher(resolver)
+        deserializer = DomainFile(spec_dir, patterns=["*.md"])
+
+        builder = GraphBuilder(
+            repo_root=root,
+            multi_assertion_separator=multi_sep,
+            resolver=resolver,
+            namespace="EVS",
+        )
+        for content in deserializer.dispatch(dispatcher.dispatch_spec):
+            builder.add_parsed_content(content)
+        graph = builder.build()
+
+        prd_node = graph.find_by_id("EVS-PRD-event-log")
+        dev_node = graph.find_by_id("EVS-DEV-event-store")
+        return graph, dev_node, prd_node
+
+    @pytest.mark.parametrize(
+        "assert_sep, multi_sep, refines_ref, expected_assertion_ids",
+        [
+            pytest.param(
+                "/",
+                "/",
+                "EVS-PRD-event-log/A/B",
+                ("EVS-PRD-event-log/A", "EVS-PRD-event-log/B"),
+                id="slash-separator",
+            ),
+            pytest.param(
+                "-",
+                "+",
+                "EVS-PRD-event-log-A+B",
+                ("EVS-PRD-event-log-A", "EVS-PRD-event-log-B"),
+                id="default-plus-separator",
+            ),
+        ],
+    )
+    def test_multi_assertion_wires_refines_edges(
+        self, assert_sep, multi_sep, refines_ref, expected_assertion_ids
+    ):
+        """Multi-assertion refines refs resolve to edges with assertion_targets.
+
+        After the fix, the configured assertion separator must be honored by
+        BOTH assertion node creation and reference expansion, so the lookup
+        finds the assertion's parent requirement and a REFINES edge gets
+        wired with ``assertion_targets`` containing the labels.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            graph, dev_node, prd_node = self._build_project(
+                tmpdir, assert_sep, multi_sep, refines_ref
+            )
+
+            assert prd_node is not None, "PRD requirement must exist"
+            assert dev_node is not None, "DEV requirement must exist"
+
+            # Assertion nodes must be queryable under the configured separator.
+            for assertion_id in expected_assertion_ids:
+                node = graph.find_by_id(assertion_id)
+                assert node is not None, (
+                    f"Assertion node {assertion_id!r} should exist " f"(separator={assert_sep!r})"
+                )
+                assert node.kind == NodeKind.ASSERTION
+
+            # No broken references for the multi-assertion form. The bug
+            # currently records both expanded refs as broken.
+            broken = graph.broken_references()
+            broken_targets = [br.target_id for br in broken]
+            offending = [t for t in broken_targets if t.startswith("EVS-PRD-event-log")]
+            assert not offending, (
+                f"Multi-assertion refs should resolve cleanly, but got "
+                f"broken references: {offending}"
+            )
+
+            # REFINES edge(s) must exist from PRD requirement to DEV
+            # requirement carrying both labels in ``assertion_targets``.
+            refines_targets: list[str] = []
+            for edge in dev_node.iter_incoming_edges():
+                if edge.source.id == prd_node.id and edge.kind.name == "REFINES":
+                    refines_targets.extend(edge.assertion_targets)
+
+            assert sorted(refines_targets) == ["A", "B"], (
+                f"Expected REFINES edge(s) from {prd_node.id} to {dev_node.id} "
+                f"with assertion_targets ['A', 'B'], got {sorted(refines_targets)}"
+            )
+
+    @pytest.mark.parametrize(
+        "assert_sep, multi_sep, refines_ref",
+        [
+            pytest.param("/", "/", "EVS-PRD-event-log/A/B", id="slash-separator"),
+            pytest.param("-", "+", "EVS-PRD-event-log-A+B", id="default-plus-separator"),
+        ],
+    )
+    def test_multi_assertion_round_trips_through_render(self, assert_sep, multi_sep, refines_ref):
+        """Rendering a requirement aggregates multi-assertion refines refs.
+
+        Post-fix, the renderer must:
+        1. Use the configured assertion separator between requirement ID
+           and label (not hardcoded ``-``).
+        2. Aggregate multiple labels for the same target requirement using
+           the configured ``multi_separator`` (e.g.
+           ``EVS-PRD-event-log-A+B``), not emit one ref per label
+           comma-separated.
+
+        Currently:
+        - Slash config: render produces the correct aggregated string by
+          accident, because edges fail to wire (bug #1) so render falls
+          back to the raw stored ``refines_refs`` field.
+        - Default config: edges ARE wired but render emits
+          ``EVS-PRD-event-log-A, EVS-PRD-event-log-B`` (one per label,
+          comma-separated, no aggregation).
+
+        Once bug #1 is fixed for the slash case, edges will wire and this
+        test will exercise the same broken aggregation path that the
+        default config exercises today — so locking down aggregation
+        protects against both regressions.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            graph, dev_node, _prd_node = self._build_project(
+                tmpdir, assert_sep, multi_sep, refines_ref
+            )
+            assert dev_node is not None
+
+            # Pass the graph's resolver so render uses configured separators.
+            # In production this is wired automatically by render_save via the
+            # owning TraceGraph; tests calling render_node directly must pass it.
+            rendered = render_node(dev_node, resolver=graph._resolver)
+
+            # The Refines line must appear in the rendered output.
+            assert "**Refines**:" in rendered, (
+                f"Rendered DEV requirement must contain a Refines line.\n"
+                f"Rendered output:\n{rendered}"
+            )
+
+            aggregated = f"EVS-PRD-event-log{assert_sep}A{multi_sep}B"
+            assert aggregated in rendered, (
+                f"Rendered Refines line must aggregate multi-assertion "
+                f"labels as {aggregated!r}.\n"
+                f"Rendered output:\n{rendered}"
+            )
+
+            # And it must NOT use the wrong (hardcoded ``-``) separator when
+            # the configured separator is different.
+            if assert_sep != "-":
+                wrong_a = "EVS-PRD-event-log-A"
+                wrong_b = "EVS-PRD-event-log-B"
+                assert wrong_a not in rendered, (
+                    f"Rendered output uses hardcoded '-' separator "
+                    f"({wrong_a!r}) instead of configured {assert_sep!r}.\n"
+                    f"Rendered output:\n{rendered}"
+                )
+                assert wrong_b not in rendered, (
+                    f"Rendered output uses hardcoded '-' separator "
+                    f"({wrong_b!r}) instead of configured {assert_sep!r}.\n"
+                    f"Rendered output:\n{rendered}"
+                )

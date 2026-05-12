@@ -88,6 +88,11 @@ class TraceGraph:
     hash_mode: str = field(default="normalized-text")
     satellite_kinds: frozenset = field(default_factory=lambda: _DEFAULT_SATELLITE_KINDS)
 
+    # IdResolver for assertion-ID construction (configured separator).
+    # When None, falls back to the default "-" separator for tests/legacy
+    # code paths that don't have a resolver wired up.
+    _resolver: Any | None = field(default=None, repr=False)
+
     # Internal storage (prefixed) - excluded from constructor
     _roots: list[GraphNode] = field(default_factory=list, init=False)
     _index: dict[str, GraphNode] = field(default_factory=dict, init=False, repr=False)
@@ -148,6 +153,17 @@ class TraceGraph:
             The matching GraphNode, or None if not found.
         """
         return self._index.get(node_id)
+
+    def make_assertion_id(self, req_id: str, label: str) -> str:
+        """Compose an assertion node ID using the configured separator.
+
+        Falls back to the default ``-`` separator when no resolver is wired.
+        Centralizes the convention so internal IDs match user-facing
+        canonical form (e.g. ``EVS-PRD-foo/A`` when ``separator="/"``).
+        """
+        if self._resolver is not None:
+            return self._resolver.make_assertion_id(req_id, label)
+        return f"{req_id}-{label}"
 
     def all_nodes(self) -> Iterator[GraphNode]:
         """Iterate ALL nodes in graph, including orphans.
@@ -1427,7 +1443,7 @@ class TraceGraph:
         if parent.kind != NodeKind.REQUIREMENT:
             raise ValueError(f"Node '{req_id}' is not a requirement")
 
-        assertion_id = f"{req_id}-{label}"
+        assertion_id = self.make_assertion_id(req_id, label)
         if assertion_id in self._index:
             raise ValueError(f"Assertion '{assertion_id}' already exists")
 
@@ -3100,7 +3116,10 @@ class GraphBuilder:
 
         # Create assertion nodes
         for assertion in data.get("assertions", []):
-            assertion_id = f"{req_id}-{assertion['label']}"
+            if self._resolver is not None:
+                assertion_id = self._resolver.make_assertion_id(req_id, assertion["label"])
+            else:
+                assertion_id = f"{req_id}-{assertion['label']}"
             assertion_line = assertion.get("line", content.start_line)
             assertion_node = GraphNode(
                 id=assertion_id,
@@ -3978,6 +3997,7 @@ class GraphBuilder:
             repo_root=self.repo_root,
             hash_mode=self.hash_mode,
             satellite_kinds=self.satellite_kinds,
+            _resolver=self._resolver,
         )
         graph._roots = roots
         graph._index = dict(self._nodes)

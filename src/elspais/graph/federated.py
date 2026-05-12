@@ -765,9 +765,11 @@ class FederatedGraph:
         # Strategy: by_id
         """
         repo_name = self._ownership[req_id]
-        result = self._graph_for(req_id).add_assertion(req_id, label, text)
-        # New assertion gets ownership
-        assertion_id = f"{req_id}-{label}"
+        tg = self._graph_for(req_id)
+        result = tg.add_assertion(req_id, label, text)
+        # New assertion gets ownership — derive ID from the same TraceGraph
+        # convention so federated lookup and graph index agree.
+        assertion_id = tg.make_assertion_id(req_id, label)
         self._ownership[assertion_id] = repo_name
         self._record_mutation(repo_name, result)
         return result
