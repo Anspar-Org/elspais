@@ -159,7 +159,7 @@ N. A `_migrate_v3_to_v4` migration SHALL move flat `duplicate_severity`, `undefi
 *End* *Config Schema v3 Models* | **Hash**: db4ad28c
 ---
 
-## REQ-d00249: Component Style Vocabulary and Assertion Separator
+## REQ-d00251: Component Style Vocabulary and Assertion Separator
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 

@@ -43,7 +43,7 @@ def _legacy_style_message(legacy: str) -> str:
     )
 
 
-# Implements: REQ-d00249-A
+# Implements: REQ-d00251-A
 class ComponentConfig(_StrictModel):
     style: Literal["numeric", "camelCase", "PascalCase", "snake_case", "kebab-case", "regex"] = (
         "numeric"
@@ -61,7 +61,7 @@ class ComponentConfig(_StrictModel):
         return value
 
 
-# Implements: REQ-d00249-E
+# Implements: REQ-d00251-E
 class AssertionConfig(_StrictModel):
     label_style: str = "uppercase"
     max_count: int = 26
@@ -82,7 +82,7 @@ _AMBIGUOUS_LABEL_STYLES = {"numeric", "numeric_1based", "alphanumeric"}
 _STYLE_INTERNAL_SEP = {"snake_case": "_", "kebab-case": "-"}
 
 
-# Implements: REQ-d00212-G, REQ-d00249-C, REQ-d00249-F
+# Implements: REQ-d00212-G, REQ-d00251-C, REQ-d00251-F
 class IdPatternsConfig(_StrictModel):
     canonical: str = "{namespace}-{level.letter}{component}"
     aliases: dict[str, str] = Field(default_factory=lambda: {"short": "{level.letter}{component}"})
@@ -94,13 +94,13 @@ class IdPatternsConfig(_StrictModel):
 
     @model_validator(mode="after")
     def _validate_style_pattern_and_separator(self):
-        # REQ-d00249-C: regex style requires non-empty pattern
+        # REQ-d00251-C: regex style requires non-empty pattern
         if self.component.style == "regex" and not self.component.pattern:
             raise ValueError(
                 'component.style = "regex" requires a non-empty `pattern` field.\n'
                 'Example: pattern = "[A-Z][a-zA-Z0-9]+"'
             )
-        # REQ-d00249-F: snake/kebab with a separator equal to their internal
+        # REQ-d00251-F: snake/kebab with a separator equal to their internal
         # separator is ambiguous unless labels are uppercase-only.
         internal_sep = _STYLE_INTERNAL_SEP.get(self.component.style)
         if (
@@ -231,6 +231,16 @@ class CodeScanningConfig(ScanningKindConfig):
     source_roots: list[str] = Field(default_factory=lambda: ["src", ""])
 
 
+class TestRunnerConfig(_StrictModel):
+    """One configured test runner invocation."""
+
+    __test__ = False  # Prevent pytest from trying to collect this as a test class
+
+    name: str
+    command: str
+    cwd: str = ""  # relative to repo root; empty = repo root
+
+
 class TestScanningConfig(ScanningKindConfig):
     __test__ = False  # Prevent pytest collection
 
@@ -240,6 +250,7 @@ class TestScanningConfig(ScanningKindConfig):
     prescan_command: str = ""
     reference_keyword: str = "Verifies"
     reference_patterns: list[str] = Field(default_factory=list)
+    runners: list[TestRunnerConfig] = Field(default_factory=list)
 
 
 class ResultScanningConfig(ScanningKindConfig):

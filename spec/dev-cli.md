@@ -387,3 +387,35 @@ D. When no UAT results CSV file exists, the uat.results check SHALL report as sk
 - 2026-04-23 | 3a95ff57 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *UAT Health Check Section* | **Hash**: 3a95ff57
+
+## REQ-d00249: Configured test runner execution
+
+**Level**: dev | **Status**: Draft | **Implements**: -
+
+### Assertions
+
+A. The system SHALL execute each entry in `[[scanning.test.runners]]` in declaration order when invoked with `elspais checks --run-tests`, resolving each entry's `cwd` relative to the repository root and rejecting any `cwd` that resolves outside the repository root.
+
+B. The system SHALL stream runner stdout and stderr live to the invoking terminal, emit a per-runner banner before invocation, and a tally line with elapsed seconds and the exit code after invocation.
+
+C. The system SHALL stop at the first failing runner and skip the checks pass entirely when invoked with `elspais checks --run-tests --fail-fast`.
+
+D. When result file patterns are configured but no matching files exist on disk, the system SHALL return the `tests.results` health check with `passed = false` and severity `warning`, flipping the exit code unless `--lenient` is passed.
+
+E. When result files exist but the oldest result file mtime is earlier than the newest scanned spec, code, or test FILE-node mtime, the system SHALL return a separate `tests.results_stale` health check with `passed = false` and severity `warning`, flipping the exit code unless `--lenient` is passed.
+
+F. The system SHALL return exit code 2 and an error message pointing at `docs/cli/checks.md` when `elspais checks --run-tests` is invoked with no runners configured.
+
+G. The system SHALL return a non-zero exit code if any runner failed OR any check failed, and 0 only if all succeeded.
+
+### Rationale
+
+`elspais checks` previously reported verified coverage based on RESULT
+nodes parsed from JUnit XML or pytest JSON files. When those files were
+missing or stale, the report claimed zero or stale coverage without any
+indication that test results were not recent. This requirement closes
+both gaps: a single command can execute tests and re-evaluate checks,
+and the checks pass warns when results are out of date even without
+running tests.
+
+*End* *Configured test runner execution* | **Hash**: 8a579eb1

@@ -116,3 +116,39 @@ def test_fix_h6_dry_run_also_reports_unfixable(tmp_path):
     assert code == 1
     assert "REQ-d00001" in err
     assert "section header depth" in err
+
+
+def test_fix_skips_files_containing_unfixable_reqs(tmp_path):
+    """A fixable REQ in the same FILE as an unfixable REQ must not be silently
+    rewritten — render_save rewrites whole files, so touching such a file
+    would canonicalize the unfixable req alongside the fixable siblings."""
+    # File contains both:
+    #   - REQ-d00001: H6 with section blocks (unfixable)
+    #   - REQ-d00002: H2 with H2 ## Assertions (fixable — section_header_depth)
+    spec = (
+        "###### REQ-d00001: H6 Unfixable\n\n"
+        "**Level**: dev | **Status**: Active | **Implements**: -\n\n"
+        "###### Assertions\n\n"
+        "A. X.\n\n"
+        "*End* *H6 Unfixable* | **Hash**: -\n"
+        "\n---\n\n"
+        "## REQ-d00002: Fixable Sibling\n\n"
+        "**Level**: dev | **Status**: Active | **Implements**: -\n\n"
+        "## Assertions\n\n"
+        "A. Y.\n\n"
+        "*End* *Fixable Sibling* | **Hash**: -\n"
+    )
+    project = _make_project(tmp_path, spec)
+    original = (project / "spec" / "f.md").read_text()
+
+    code, _, err = _run_fix(project, dry_run=False)
+    assert code == 1, f"expected exit 1; got {code}; stderr={err!r}"
+    assert "REQ-d00001" in err  # unfixable cannot-fix line
+    # REQ-d00002 is fixable but should be reported as skipped, not applied
+    assert "REQ-d00002" in err and "unfixable requirement" in err
+
+    after = (project / "spec" / "f.md").read_text()
+    assert after == original, (
+        "File containing an unfixable req must be left untouched even when "
+        "it has fixable siblings."
+    )

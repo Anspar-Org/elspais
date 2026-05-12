@@ -38,7 +38,7 @@ class TypeDef:
     aliases: dict[str, str]
 
 
-# Implements: REQ-p00002-A, REQ-d00249-A
+# Implements: REQ-p00002-A, REQ-d00251-A
 @dataclass
 class ComponentFormat:
     """Configuration for the component part of an ID."""
@@ -49,7 +49,7 @@ class ComponentFormat:
     pattern: str | None
 
 
-# Implements: REQ-p00002-A, REQ-d00249-E
+# Implements: REQ-p00002-A, REQ-d00251-E
 @dataclass
 class AssertionFormat:
     """Configuration for assertion labels."""
@@ -61,7 +61,7 @@ class AssertionFormat:
     separator: str = "-"
 
 
-# Implements: REQ-d00249-G
+# Implements: REQ-d00251-G
 def component_regex(component: ComponentFormat) -> str:
     """Resolve a ComponentFormat to its regex string.
 

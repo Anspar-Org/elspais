@@ -107,7 +107,7 @@ style = "numeric"          # numeric | camelCase | PascalCase | snake_case | keb
 digits = 5                 # Number of digits (0 = variable length, numeric style only)
 leading_zeros = true       # Pad with zeros (00001 vs 1, numeric style only)
 # pattern = "[A-Z]{2}[0-9]{3}"   # Required when style = "regex"; ignored otherwise
-# max_length = 32                 # Optional cap on component length
+# max_length = 0                 # Reserved (not currently enforced)
 
 [id-patterns.assertions]
 label_style = "uppercase"  # "uppercase" | "numeric" | "alphanumeric" | "numeric_1based"
@@ -117,12 +117,14 @@ max_count = 26             # Maximum assertions per requirement
 # multi_separator = "+"    # Separator for multi-assertion syntax (A+B+C)
 ```
 
-**Component style examples:**
+**Component style examples** (with the canonical
+`{namespace}-{level.letter}{component}` template, so the component sits
+directly after the level letter with no extra separator):
   `numeric`      `REQ-p00042`           (NNNNN digits)
-  `camelCase`    `REQ-pUserAuth`        (`[a-z][a-zA-Z0-9]+`)
+  `camelCase`    `REQ-puserAuth`        (`[a-z][a-zA-Z0-9]+`)
   `PascalCase`   `REQ-pUserAuth`        (`[A-Z][a-zA-Z0-9]+`)
-  `snake_case`   `REQ-p-user_auth`      (`[a-z][a-z0-9]*(?:_[a-z0-9]+)*`)
-  `kebab-case`   `REQ-p-user-auth`      (`[a-z][a-z0-9]*(?:-[a-z0-9]+)*`)
+  `snake_case`   `REQ-puser_auth`       (`[a-z][a-z0-9]*(?:_[a-z0-9]+)*`)
+  `kebab-case`   `REQ-puser-auth`       (`[a-z][a-z0-9]*(?:-[a-z0-9]+)*`)
   `regex`        custom — set `pattern`
 
 Some `style` + `label_style` combinations are ambiguous and rejected at config

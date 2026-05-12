@@ -312,6 +312,40 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
         if reasons:
             fixable_nodes.append((node, reasons))
 
+    # Identify FILE nodes containing unfixable REQs. `render_save` rewrites
+    # entire dirty FILE nodes; touching a file that contains an unfixable
+    # requirement would silently re-render the unfixable req alongside any
+    # fixable siblings. Exclude those files from the fixable set entirely —
+    # the author must resolve the unfixable issue first.
+    unfixable_file_ids: set[str] = set()
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if not node.get_field("parse_unfixable_reasons"):
+            continue
+        fn = node.file_node()
+        if fn is not None:
+            unfixable_file_ids.add(fn.id)
+
+    if unfixable_file_ids:
+        skipped = [
+            (n, r)
+            for n, r in fixable_nodes
+            if n.file_node() is not None and n.file_node().id in unfixable_file_ids
+        ]
+        fixable_nodes = [
+            (n, r)
+            for n, r in fixable_nodes
+            if n.file_node() is None or n.file_node().id not in unfixable_file_ids
+        ]
+        for n, _ in skipped:
+            fn = n.file_node()
+            rel = fn.get_field("relative_path") if fn else "?"
+            print(
+                f"Skipping fixable issues in {n.id} ({rel}): "
+                f"file contains an unfixable requirement; "
+                f"resolve it first, then re-run",
+                file=sys.stderr,
+            )
+
     if not fixable_nodes:
         req_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.REQUIREMENT))
         print(f"Validated {req_count} requirements")

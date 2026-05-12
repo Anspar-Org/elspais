@@ -1,11 +1,11 @@
-"""Tests for the Component Style Redesign (REQ-d00249).
+"""Tests for the Component Style Redesign (REQ-d00251).
 
 These tests encode the behavior specified in
 ``docs/superpowers/specs/2026-05-11-component-style-redesign-design.md``,
 which is now implemented in this codebase (config schema, resolver,
 grammar tokens).
 
-Each test function carries a ``# Verifies: REQ-d00249-X`` comment naming
+Each test function carries a ``# Verifies: REQ-d00251-X`` comment naming
 the assertion it exercises.
 """
 
@@ -82,7 +82,7 @@ def _elspais_config_payload(
 
 
 # ---------------------------------------------------------------------------
-# REQ-d00249-A: style vocabulary
+# REQ-d00251-A: style vocabulary
 # ---------------------------------------------------------------------------
 
 
@@ -101,21 +101,21 @@ class TestStyleVocabulary:
         ],
     )
     def test_valid_styles_load(self, style, extra):
-        # Verifies: REQ-d00249-A
+        # Verifies: REQ-d00251-A
         payload = _elspais_config_payload(style=style, **extra)
         cfg = ElspaisConfig.model_validate(payload)
         assert cfg.id_patterns.component.style == style
 
     @pytest.mark.parametrize("legacy_style", ["named", "alphanumeric"])
     def test_legacy_styles_rejected_at_config_load(self, legacy_style):
-        # Verifies: REQ-d00249-A
+        # Verifies: REQ-d00251-A
         payload = _elspais_config_payload(style=legacy_style, pattern="[A-Za-z][A-Za-z0-9]+")
         with pytest.raises(ValidationError):
             ElspaisConfig.model_validate(payload)
 
 
 # ---------------------------------------------------------------------------
-# REQ-d00249-B: fixed regexes per case-style
+# REQ-d00251-B: fixed regexes per case-style
 # ---------------------------------------------------------------------------
 
 
@@ -131,7 +131,7 @@ class TestCamelCaseRegex:
         ],
     )
     def test_camel_case_accepts(self, raw_id, expected_component):
-        # Verifies: REQ-d00249-B
+        # Verifies: REQ-d00251-B
         r = _build_resolver(style="camelCase")
         pid = r.parse(raw_id)
         assert pid is not None, f"camelCase should accept {raw_id}"
@@ -147,7 +147,7 @@ class TestCamelCaseRegex:
         ],
     )
     def test_camel_case_rejects(self, raw_id):
-        # Verifies: REQ-d00249-B
+        # Verifies: REQ-d00251-B
         r = _build_resolver(style="camelCase")
         assert r.parse(raw_id) is None, f"camelCase should reject {raw_id}"
 
@@ -164,7 +164,7 @@ class TestPascalCaseRegex:
         ],
     )
     def test_pascal_case_accepts(self, raw_id, expected_component):
-        # Verifies: REQ-d00249-B
+        # Verifies: REQ-d00251-B
         r = _build_resolver(style="PascalCase")
         pid = r.parse(raw_id)
         assert pid is not None, f"PascalCase should accept {raw_id}"
@@ -180,7 +180,7 @@ class TestPascalCaseRegex:
         ],
     )
     def test_pascal_case_rejects(self, raw_id):
-        # Verifies: REQ-d00249-B
+        # Verifies: REQ-d00251-B
         r = _build_resolver(style="PascalCase")
         assert r.parse(raw_id) is None, f"PascalCase should reject {raw_id}"
 
@@ -198,7 +198,7 @@ class TestSnakeCaseRegex:
         ],
     )
     def test_snake_case_accepts(self, raw_id, expected_component):
-        # Verifies: REQ-d00249-B
+        # Verifies: REQ-d00251-B
         r = _build_resolver(style="snake_case", separator="-", label_style="uppercase")
         pid = r.parse(raw_id)
         assert pid is not None, f"snake_case should accept {raw_id}"
@@ -213,7 +213,7 @@ class TestSnakeCaseRegex:
         ],
     )
     def test_snake_case_rejects(self, raw_id):
-        # Verifies: REQ-d00249-B
+        # Verifies: REQ-d00251-B
         r = _build_resolver(style="snake_case", separator="-", label_style="uppercase")
         assert r.parse(raw_id) is None, f"snake_case should reject {raw_id}"
 
@@ -231,7 +231,7 @@ class TestKebabCaseRegex:
         ],
     )
     def test_kebab_case_accepts(self, raw_id, expected_component):
-        # Verifies: REQ-d00249-B
+        # Verifies: REQ-d00251-B
         r = _build_resolver(style="kebab-case", separator="-", label_style="uppercase")
         pid = r.parse(raw_id)
         assert pid is not None, f"kebab-case should accept {raw_id}"
@@ -246,12 +246,12 @@ class TestKebabCaseRegex:
         ],
     )
     def test_kebab_case_rejects(self, raw_id):
-        # Verifies: REQ-d00249-B
+        # Verifies: REQ-d00251-B
         r = _build_resolver(style="kebab-case", separator="-", label_style="uppercase")
         assert r.parse(raw_id) is None, f"kebab-case should reject {raw_id}"
 
     def test_pattern_field_ignored_for_case_styles(self):
-        # Verifies: REQ-d00249-B
+        # Verifies: REQ-d00251-B
         # Even if the user sets a garbage pattern, the case-style regex wins.
         r = _build_resolver(
             style="kebab-case",
@@ -267,32 +267,32 @@ class TestKebabCaseRegex:
 
 
 # ---------------------------------------------------------------------------
-# REQ-d00249-C: regex style requires a non-empty pattern
+# REQ-d00251-C: regex style requires a non-empty pattern
 # ---------------------------------------------------------------------------
 
 
 class TestRegexStyleRequiresPattern:
     def test_regex_without_pattern_rejected(self):
-        # Verifies: REQ-d00249-C
+        # Verifies: REQ-d00251-C
         payload = _elspais_config_payload(style="regex")
         with pytest.raises(ValidationError):
             ElspaisConfig.model_validate(payload)
 
     def test_regex_with_empty_pattern_rejected(self):
-        # Verifies: REQ-d00249-C
+        # Verifies: REQ-d00251-C
         payload = _elspais_config_payload(style="regex", pattern="")
         with pytest.raises(ValidationError):
             ElspaisConfig.model_validate(payload)
 
     def test_regex_with_pattern_loads(self):
-        # Verifies: REQ-d00249-C
+        # Verifies: REQ-d00251-C
         payload = _elspais_config_payload(style="regex", pattern="[A-Z][a-z]+")
         cfg = ElspaisConfig.model_validate(payload)
         assert cfg.id_patterns.component.style == "regex"
         assert cfg.id_patterns.component.pattern == "[A-Z][a-z]+"
 
     def test_regex_with_pattern_parses(self):
-        # Verifies: REQ-d00249-C
+        # Verifies: REQ-d00251-C
         r = _build_resolver(style="regex", pattern="[A-Z][a-z]+")
         pid = r.parse("EVS-PRD-Foo")
         assert pid is not None
@@ -300,7 +300,7 @@ class TestRegexStyleRequiresPattern:
 
 
 # ---------------------------------------------------------------------------
-# REQ-d00249-D: deprecation/error text
+# REQ-d00251-D: deprecation/error text
 # ---------------------------------------------------------------------------
 
 
@@ -314,13 +314,13 @@ class TestDeprecationErrorText:
         raise AssertionError(f"Expected ValidationError for style={style!r}")
 
     def test_named_error_mentions_regex_and_legacy_pattern(self):
-        # Verifies: REQ-d00249-D
+        # Verifies: REQ-d00251-D
         msg = self._capture_error("named", pattern="[A-Za-z][A-Za-z0-9]+")
         assert "regex" in msg
         assert "[A-Za-z][A-Za-z0-9]+" in msg
 
     def test_named_error_lists_case_style_names(self):
-        # Verifies: REQ-d00249-D
+        # Verifies: REQ-d00251-D
         msg = self._capture_error("named", pattern="[A-Za-z][A-Za-z0-9]+")
         case_styles = ["camelCase", "PascalCase", "snake_case", "kebab-case"]
         present = [s for s in case_styles if s in msg]
@@ -329,19 +329,19 @@ class TestDeprecationErrorText:
         ), f"Expected >=2 case-style names in error, got {present!r}. msg={msg}"
 
     def test_alphanumeric_error_mentions_legacy_pattern(self):
-        # Verifies: REQ-d00249-D
+        # Verifies: REQ-d00251-D
         msg = self._capture_error("alphanumeric", pattern="[A-Z0-9]+")
         assert "[A-Z0-9]+" in msg
 
 
 # ---------------------------------------------------------------------------
-# REQ-d00249-E: configurable assertion separator
+# REQ-d00251-E: configurable assertion separator
 # ---------------------------------------------------------------------------
 
 
 class TestConfigurableAssertionSeparator:
     def test_assertion_config_has_separator_field(self):
-        # Verifies: REQ-d00249-E
+        # Verifies: REQ-d00251-E
         from elspais.config.schema import AssertionConfig
 
         ac = AssertionConfig()
@@ -349,7 +349,7 @@ class TestConfigurableAssertionSeparator:
         assert getattr(ac, "separator", None) == "-"
 
     def test_colon_separator_single_assertion(self):
-        # Verifies: REQ-d00249-E
+        # Verifies: REQ-d00251-E
         r = _build_resolver(style="kebab-case", separator=":", label_style="uppercase")
         pid = r.parse("EVS-PRD-action-dispatch:A")
         assert pid is not None
@@ -357,7 +357,7 @@ class TestConfigurableAssertionSeparator:
         assert pid.assertions == ["A"]
 
     def test_colon_separator_multi_assertion(self):
-        # Verifies: REQ-d00249-E
+        # Verifies: REQ-d00251-E
         r = _build_resolver(style="kebab-case", separator=":", label_style="uppercase")
         pid = r.parse("EVS-PRD-action-dispatch:A+B+C")
         assert pid is not None
@@ -365,7 +365,7 @@ class TestConfigurableAssertionSeparator:
         assert pid.assertions == ["A", "B", "C"]
 
     def test_colon_separator_unlocks_numeric_labels_under_kebab(self):
-        # Verifies: REQ-d00249-E
+        # Verifies: REQ-d00251-E
         r = _build_resolver(style="kebab-case", separator=":", label_style="numeric")
         pid = r.parse("EVS-PRD-action-dispatch:1+2+3")
         assert pid is not None
@@ -373,7 +373,7 @@ class TestConfigurableAssertionSeparator:
         assert pid.assertions == ["1", "2", "3"]
 
     def test_default_dash_separator_still_works(self):
-        # Verifies: REQ-d00249-E
+        # Verifies: REQ-d00251-E
         # Backward compatibility: kebab + "-" separator + uppercase labels
         # remains the supported case.
         r = _build_resolver(style="kebab-case", separator="-", label_style="uppercase")
@@ -384,7 +384,7 @@ class TestConfigurableAssertionSeparator:
 
 
 # ---------------------------------------------------------------------------
-# REQ-d00249-F: ambiguity rejection
+# REQ-d00251-F: ambiguity rejection
 # ---------------------------------------------------------------------------
 
 
@@ -408,11 +408,11 @@ UNAMBIGUOUS_COMBOS = [
 class TestAmbiguityRejection:
     @pytest.mark.parametrize("style,separator,label_style", AMBIGUOUS_COMBOS)
     def test_ambiguous_combos_rejected(self, style, separator, label_style):
-        # Verifies: REQ-d00249-F
+        # Verifies: REQ-d00251-F
         payload = _elspais_config_payload(style=style, separator=separator, label_style=label_style)
         with pytest.raises(ValidationError) as excinfo:
             ElspaisConfig.model_validate(payload)
-        # Per REQ-d00249-F: the error must suggest changing `separator` to a
+        # Per REQ-d00251-F: the error must suggest changing `separator` to a
         # non-overlapping character — i.e. mention `separator` and either
         # the style or label_style values being conflicted.
         msg = str(excinfo.value)
@@ -420,7 +420,7 @@ class TestAmbiguityRejection:
 
     @pytest.mark.parametrize("style,separator,label_style", UNAMBIGUOUS_COMBOS)
     def test_unambiguous_combos_load(self, style, separator, label_style):
-        # Verifies: REQ-d00249-F
+        # Verifies: REQ-d00251-F
         payload = _elspais_config_payload(style=style, separator=separator, label_style=label_style)
         cfg = ElspaisConfig.model_validate(payload)
         assert cfg.id_patterns.component.style == style
@@ -428,13 +428,13 @@ class TestAmbiguityRejection:
 
 
 # ---------------------------------------------------------------------------
-# REQ-d00249-G: helper centralization
+# REQ-d00251-G: helper centralization
 # ---------------------------------------------------------------------------
 
 
 class TestComponentRegexHelper:
     def test_helper_is_importable_from_utilities_patterns(self):
-        # Verifies: REQ-d00249-G
+        # Verifies: REQ-d00251-G
         from elspais.utilities import patterns as patterns_mod
 
         assert hasattr(
@@ -455,7 +455,7 @@ class TestComponentRegexHelper:
         ],
     )
     def test_helper_returns_matching_regex_per_style(self, style, probe, expected):
-        # Verifies: REQ-d00249-G
+        # Verifies: REQ-d00251-G
         import re as _re
 
         from elspais.utilities.patterns import ComponentFormat, component_regex
@@ -469,7 +469,7 @@ class TestComponentRegexHelper:
         )
 
     def test_helper_returns_numeric_regex(self):
-        # Verifies: REQ-d00249-G
+        # Verifies: REQ-d00251-G
         import re as _re
 
         from elspais.utilities.patterns import ComponentFormat, component_regex
@@ -480,7 +480,7 @@ class TestComponentRegexHelper:
         assert _re.fullmatch(regex_str, "abc") is None
 
     def test_helper_returns_user_pattern_for_regex_style(self):
-        # Verifies: REQ-d00249-G
+        # Verifies: REQ-d00251-G
         import re as _re
 
         from elspais.utilities.patterns import ComponentFormat, component_regex
@@ -491,7 +491,7 @@ class TestComponentRegexHelper:
         assert _re.fullmatch(regex_str, "foo") is None
 
     def test_helper_is_sole_authority_no_inline_dispatch_in_lark(self):
-        # Verifies: REQ-d00249-G
+        # Verifies: REQ-d00251-G
         # The lark grammar must call component_regex(), not duplicate the
         # style dispatch. Detect duplication via grep on the source file.
         import inspect

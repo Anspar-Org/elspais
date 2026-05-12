@@ -67,7 +67,7 @@ class GrammarFactory:
         else:
             type_pattern = "[a-z]"
 
-        # Component/digits pattern — single authority (REQ-d00249-G)
+        # Component/digits pattern — single authority (REQ-d00251-G)
         digits_pattern = component_regex(cfg.component)
 
         # Assertion label

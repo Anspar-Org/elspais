@@ -159,6 +159,18 @@ reference_keyword = "Verifies"
 #   [{"file": "path", "function": "name", "class": "Name|null", "line": N}]
 # prescan_command = "dart run tool/list_tests.dart"
 
+# Configured test runners executed by `elspais checks --run-tests`.
+# Each entry runs in declaration order with stdout/stderr passed through
+# to the terminal. Put output where [scanning.result].file_patterns expects.
+[[scanning.test.runners]]
+name = "python"
+command = "pytest --json-report --json-report-file=.elspais/results/pytest.json"
+
+[[scanning.test.runners]]
+name = "flutter"
+command = "flutter test --machine > .elspais/results/flutter.json"
+cwd = "app/"  # optional; relative to repo root
+
 # Test result file scanning (JUnit XML, pytest JSON)
 [scanning.result]
 file_patterns = ["TEST-*.xml", "pytest-results.json"]
