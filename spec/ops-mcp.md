@@ -6,7 +6,7 @@
 
 The MCP server SHALL provide core query tools for graph inspection and requirement lookup.
 
-## Assertions
+### Assertions
 
 A. `get_graph_status()` SHALL return graph staleness state, node counts by kind, and last refresh timestamp.
 
@@ -24,8 +24,9 @@ F. All query tools SHALL read directly from TraceGraph nodes using the iterator-
 
 Core query tools enable AI agents to discover and explore requirements without modifying the graph. These are safe, read-only operations.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 73c31134 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 73c31134 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *MCP Core Query Tools* | **Hash**: 73c31134
@@ -37,7 +38,7 @@ Core query tools enable AI agents to discover and explore requirements without m
 
 The MCP server SHALL provide workspace context tools that describe the current repository and project.
 
-## Assertions
+### Assertions
 
 A. `get_workspace_info()` SHALL return repository path, project name, and configuration summary.
 
@@ -51,8 +52,9 @@ D. Configuration data SHALL be read from the unified config system, not parsed s
 
 AI agents need context about the workspace they're operating in to provide relevant assistance. Workspace tools answer "what repo am I serving?" and "what's the state of this project?"
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 0aa9dff4 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 0aa9dff4 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *MCP Workspace Context Tools* | **Hash**: 0aa9dff4
@@ -64,7 +66,7 @@ AI agents need context about the workspace they're operating in to provide relev
 
 The MCP server SHALL provide mutation tools for in-memory graph modifications with full undo support.
 
-## Assertions
+### Assertions
 
 A. Node mutations SHALL include: rename, update_title, change_status, add_requirement, delete_requirement.
 
@@ -84,8 +86,9 @@ G. `undo_last_mutation()` and `undo_to_mutation(id)` SHALL reverse mutations usi
 
 In-memory mutations enable AI agents to draft requirement changes that can be reviewed before persisting. The undo system provides safety for exploratory editing.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | ef63f424 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | ef63f424 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *MCP Graph Mutation Tools* | **Hash**: ef63f424
@@ -97,7 +100,7 @@ In-memory mutations enable AI agents to draft requirement changes that can be re
 
 The MCP server SHALL provide file mutation tools that persist changes to spec files on disk.
 
-## Assertions
+### Assertions
 
 A. `change_reference_type(req_id, target_id, new_type)` SHALL modify Implements/Refines relationships in spec files.
 
@@ -121,8 +124,9 @@ I. `add_assertion(req_id, label, text)` SHALL add a new *Assertion* to a require
 
 File mutations persist changes to the authoritative spec files. Git safety branches provide rollback capability for destructive operations.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 291497b8 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 291497b8 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *MCP File Mutation Tools* | **Hash**: 291497b8
@@ -134,7 +138,7 @@ File mutations persist changes to the authoritative spec files. Git safety branc
 
 The MCP server SHALL provide test coverage analysis tools for identifying test-requirement relationships and coverage gaps.
 
-## Assertions
+### Assertions
 
 A. `get_test_coverage(req_id)` SHALL return TEST nodes that reference the requirement and their TEST_RESULT nodes.
 
@@ -150,8 +154,9 @@ E. Coverage tools SHALL support filtering by requirement ID or scanning all requ
 
 AI agents performing requirement analysis need to understand test coverage and identify gaps. These tools enable systematic coverage improvement workflows like those in Phase 7 of the master plan.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | e7fd1b43 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | e7fd1b43 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *MCP Test Coverage Analysis Tools* | **Hash**: e7fd1b43
@@ -163,7 +168,7 @@ AI agents performing requirement analysis need to understand test coverage and i
 
 The system SHALL provide an agent-assisted link suggestion engine that analyzes unlinked graph nodes and proposes requirement associations using scoring heuristics.
 
-## Assertions
+### Assertions
 
 A. The suggestion engine SHALL identify unlinked TEST nodes (those without REQUIREMENT parents via VERIFIES edges) as suggestion candidates.
 
@@ -181,8 +186,9 @@ F. The suggestion engine SHALL support applying suggestions by inserting `# Impl
 
 Teams need to not just see what's unlinked but act on it efficiently. Combining existing building blocks (import analyzer, test-code linker, keyword search) into a scoring pipeline enables AI agents and humans to close *Traceability* gaps systematically.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 17851ae2 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 17851ae2 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Agent-Assisted Link Suggestion* | **Hash**: 17851ae2
@@ -194,7 +200,7 @@ Teams need to not just see what's unlinked but act on it efficiently. Combining 
 
 The MCP server SHALL provide a subtree extraction tool for scoped subgraph retrieval.
 
-## Assertions
+### Assertions
 
 A. `get_subtree(root_id, depth, include_kinds, format)` SHALL extract a subgraph rooted at a given node using BFS traversal.
 
@@ -212,8 +218,9 @@ F. The subtree tool SHALL include coverage summary statistics for requirement no
 
 LLM agents need scoped requirement subsets for sub-agent consumption. Extracting a subtree avoids context pollution from the full graph.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | ab29e315 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | ab29e315 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *MCP Subtree Extraction Tool* | **Hash**: ab29e315
@@ -225,7 +232,7 @@ LLM agents need scoped requirement subsets for sub-agent consumption. Extracting
 
 The MCP server SHALL provide a general-purpose cursor protocol for incremental iteration over read query results.
 
-## Assertions
+### Assertions
 
 A. `open_cursor(query, params, batch_size)` SHALL materialize query results and return the first item with metadata.
 
@@ -243,8 +250,9 @@ F. The cursor protocol SHALL support query types: `subtree`, `search`, `hierarch
 
 LLMs benefit from incremental exploration of results, deciding when to stop rather than receiving everything at once. A cursor protocol enables this without modifying existing read tools.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 743877c3 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 743877c3 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *MCP Cursor Protocol* | **Hash**: 743877c3
@@ -256,7 +264,7 @@ LLMs benefit from incremental exploration of results, deciding when to stop rath
 
 The MCP server SHALL provide a `minimize_requirement_set` tool that prunes a set of requirement IDs to their most-specific members by removing ancestors already covered by more-specific descendants.
 
-## Assertions
+### Assertions
 
 A. `minimize_requirement_set(req_ids, edge_kinds)` SHALL accept a list of requirement IDs and an optional edge kinds filter defaulting to "implements,refines".
 
@@ -272,8 +280,9 @@ E. The tool SHALL follow IMPLEMENTS and REFINES edges when determining ancestor 
 
 Agents listing requirements for a ticket often include both specific leaf requirements and their broad ancestors, creating noise. This tool enables automated pruning to the most-specific set.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | c667abd2 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | c667abd2 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *MCP Minimize Requirement Set Tool* | **Hash**: c667abd2
@@ -285,7 +294,7 @@ Agents listing requirements for a ticket often include both specific leaf requir
 
 The MCP server SHALL provide a `scoped_search` tool that restricts keyword search to descendants or ancestors of a scope node.
 
-## Assertions
+### Assertions
 
 A. `scoped_search(query, scope_id, direction, field, regex, include_assertions, limit)` SHALL accept a query string, scope node ID, and direction ("descendants" or "ancestors").
 
@@ -301,8 +310,9 @@ E. The tool SHALL reuse `_matches_query()` for field/regex matching logic, maint
 
 Agents exploring requirements for a ticket need to search within a relevant subgraph rather than the entire graph, which produces too many unrelated matches.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 7f1e6589 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 7f1e6589 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *MCP Scoped Search Tool* | **Hash**: 7f1e6589
@@ -314,7 +324,7 @@ Agents exploring requirements for a ticket need to search within a relevant subg
 
 The MCP server SHALL provide a `discover_requirements` tool that chains scoped search with ancestor pruning to return only the most-specific matches within a subgraph.
 
-## Assertions
+### Assertions
 
 A. `discover_requirements(query, scope_id, direction, field, regex, include_assertions, limit, edge_kinds)` SHALL accept scoped search parameters plus an edge_kinds filter for ancestor pruning.
 
@@ -328,8 +338,9 @@ D. The tool SHALL pass through all results unchanged when no ancestor relationsh
 
 Agents won't compose scoped_search + minimize_requirement_set unprompted. A single wrapper tool is the most discoverable interface for finding the most-specific requirements within a subgraph.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | fea647ee | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | fea647ee | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *MCP Discover Requirements Tool* | **Hash**: fea647ee

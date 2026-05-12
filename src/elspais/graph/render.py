@@ -283,12 +283,7 @@ def _render_requirement(node: GraphNode) -> str:
                 if lines and lines[-1] != "":
                     lines.append("")
                 section_stored = child.get_field("heading_level")
-                # SECTION_HDR grammar supports only #{1,2}, so cap at H2 to
-                # preserve parse-roundtrip stability for deep (H2+) requirements.
-                _SECTION_HDR_MAX_DEPTH = 2
-                section_depth = min(
-                    _effective_depth(section_stored, min_child_depth), _SECTION_HDR_MAX_DEPTH
-                )
+                section_depth = _effective_depth(section_stored, min_child_depth)
                 lines.append(f"{'#' * section_depth} {heading}")
                 lines.append("")
                 if content:

@@ -337,14 +337,15 @@ B. Simple assertion.
         assert "line item 3" in assertions[0]["text"]
         assert assertions[1]["label"] == "B"
 
-    def test_hash_sub_headings_recognized(self):
-        """### sub-headings inside ## Assertions are captured as sub-heading sections.
+    def test_hash_headings_inside_assertions_become_named_sections(self):
+        """With SECTION_HDR=#{1,6}, ### headings inside ## Assertions exit the
+        assertion_block and become named sections (heading_style=None).
 
-        CUR-1199: When assertions are grouped under ### markdown headings (rather
-        than inline **bold**/*italic* markers), the parser must recognize the
-        ### lines as sub-headings inside the assertion_block. All assertions
-        must still be attributed and the hash sub-headings captured with
-        heading_style="hash" and heading_level=3.
+        SECTION_HDR.7 has higher priority than ASSERT_SUB_HASH_HDR.6, so any
+        hash heading in the assertion context is lexed as SECTION_HDR. This
+        terminates the assertion_block; text following the heading (including
+        assertion-like A./B./C. lines) is inside the named section as TEXT,
+        not captured as assertions.
         """
         content = """\
 ## REQ-p00001: With Hash Sub-Headings
@@ -368,43 +369,29 @@ C. Third assertion in group B.
         reqs = [r for r in results if r.content_type == "requirement"]
         assert len(reqs) == 1, f"Expected exactly 1 requirement, got {len(reqs)}"
         d = reqs[0].parsed_data
+        # ### Group A exits the assertion_block; A. B. become TEXT inside the section
         assertions = d["assertions"]
-        assert len(assertions) == 3, (
-            f"Expected 3 assertions, got {len(assertions)}: "
-            f"{[a.get('label') for a in assertions]}"
+        assert len(assertions) == 0, (
+            f"Expected 0 assertions (hash headings exit assertion_block), "
+            f"got {len(assertions)}: {[a.get('label') for a in assertions]}"
         )
-        assert (
-            assertions[0]["label"] == "A"
-        ), f"First assertion label should be A, got {assertions[0]['label']!r}"
-        assert (
-            assertions[1]["label"] == "B"
-        ), f"Second assertion label should be B, got {assertions[1]['label']!r}"
-        assert (
-            assertions[2]["label"] == "C"
-        ), f"Third assertion label should be C, got {assertions[2]['label']!r}"
         sections = d["sections"]
-        # heading_style is now the kind marker "hash"; depth is in heading_level
-        hash_subs = [s for s in sections if s.get("heading_style") == "hash"]
-        info = [
-            (s.get("heading"), s.get("heading_style"), s.get("heading_level")) for s in sections
+        named = [s for s in sections if s.get("heading_style") is None]
+        headings = [s["heading"] for s in named if s.get("heading") in {"Group A", "Group B"}]
+        assert headings == ["Group A", "Group B"], (
+            f"Expected named sections [Group A, Group B] (heading_style=None), "
+            f"got sections: {[(s.get('heading'), s.get('heading_style')) for s in sections]}"
+        )
+        levels = [
+            s.get("heading_level") for s in named if s.get("heading") in {"Group A", "Group B"}
         ]
-        assert (
-            len(hash_subs) == 2
-        ), f"Expected 2 hash sub-heading sections, got {len(hash_subs)}: {info}"
-        headings = [s["heading"] for s in hash_subs]
-        assert headings == [
-            "Group A",
-            "Group B",
-        ], f"Expected sub-headings [Group A, Group B], got {headings}"
-        levels = [s.get("heading_level") for s in hash_subs]
-        assert levels == [3, 3], f"Expected heading_level=3 for both ### sub-headings, got {levels}"
+        assert levels == [3, 3], f"Expected heading_level=3 for ### sections, got {levels}"
 
-    def test_h4_sub_headings_recognized(self):
-        """#### (4-hash) sub-headings inside ## Assertions are captured.
+    def test_h4_headings_inside_assertions_become_named_sections(self):
+        """With SECTION_HDR=#{1,6}, #### headings inside ## Assertions exit the
+        assertion_block and become named sections (heading_style=None, heading_level=4).
 
-        CUR-1199: ###/####/#####/###### are all valid sub-heading styles inside
-        the assertion_block. heading_style is the kind marker "hash" and
-        heading_level captures the numeric depth (4 for ####).
+        Same behavior as ### headings: SECTION_HDR.7 > ASSERT_SUB_HASH_HDR.6.
         """
         content = """\
 ## REQ-p00001: With H4 Sub-Headings
@@ -428,40 +415,36 @@ C. Third assertion in group B.
         reqs = [r for r in results if r.content_type == "requirement"]
         assert len(reqs) == 1, f"Expected exactly 1 requirement, got {len(reqs)}"
         d = reqs[0].parsed_data
+        # #### Group A exits the assertion_block; A./B./C. become TEXT
         assertions = d["assertions"]
-        assert len(assertions) == 3, (
-            f"Expected 3 assertions, got {len(assertions)}: "
-            f"{[a.get('label') for a in assertions]}"
+        assert len(assertions) == 0, (
+            f"Expected 0 assertions (hash headings exit assertion_block), "
+            f"got {len(assertions)}: {[a.get('label') for a in assertions]}"
         )
-        assert [a["label"] for a in assertions] == [
-            "A",
-            "B",
-            "C",
-        ], f"Expected labels [A, B, C], got {[a['label'] for a in assertions]}"
         sections = d["sections"]
-        # heading_style is now the kind marker "hash"; depth is in heading_level
-        h4_subs = [
-            s for s in sections if s.get("heading_style") == "hash" and s.get("heading_level") == 4
+        h4_named = [
+            s for s in sections if s.get("heading_style") is None and s.get("heading_level") == 4
         ]
         info = [
             (s.get("heading"), s.get("heading_style"), s.get("heading_level")) for s in sections
         ]
         assert (
-            len(h4_subs) == 2
-        ), f"Expected 2 #### (heading_level=4) sub-heading sections, got {len(h4_subs)}: {info}"
-        headings = [s["heading"] for s in h4_subs]
+            len(h4_named) == 2
+        ), f"Expected 2 H4 named sections (heading_style=None), got {len(h4_named)}: {info}"
+        headings = [s["heading"] for s in h4_named]
         assert headings == [
             "Group A",
             "Group B",
-        ], f"Expected sub-headings [Group A, Group B], got {headings}"
+        ], f"Expected named sections [Group A, Group B], got {headings}"
 
     def test_mixed_inline_and_hash_sub_headings(self):
-        """Mixing **bold**, *italic*, and ### sub-headings all parse correctly.
+        """Mixing **bold**, *italic* inline sub-headings with a ### hash heading.
 
-        CUR-1199: The three sub-heading styles must coexist in a single
-        assertion_block. Each captured section preserves its original
-        heading_style ("**", "*", or "###") and all assertions remain
-        attributed.
+        With SECTION_HDR=#{1,6}: inline sub-headings (**bold**, *italic*) remain
+        inside the assertion_block (captured via ASSERT_SUB_HDR.6). A ### hash
+        heading exits the assertion_block (SECTION_HDR.7 wins), so assertion C
+        after ### Hash is TEXT inside the named section, not a captured assertion.
+        Only assertions A and B are captured.
         """
         content = """\
 ## REQ-p00001: Mixed Sub-Headings
@@ -488,12 +471,12 @@ C. Third assertion.
         assert len(reqs) == 1, f"Expected exactly 1 requirement, got {len(reqs)}"
         d = reqs[0].parsed_data
         assertions = d["assertions"]
-        assert [a["label"] for a in assertions] == ["A", "B", "C"], (
-            "All three assertions must be attributed across mixed sub-heading styles; "
+        # A and B are inside assertion_block (before ### Hash exits it); C is TEXT
+        assert [a["label"] for a in assertions] == ["A", "B"], (
+            "Only A and B are inside the assertion_block before ### Hash exits it; "
             f"got {[a['label'] for a in assertions]}"
         )
         sections = d["sections"]
-        # Build {heading: heading_style} map filtered to our three sub-headings
         sub_map = {
             s["heading"]: s.get("heading_style")
             for s in sections
@@ -507,16 +490,17 @@ C. Third assertion.
             f"*italic* sub-heading should have heading_style='*', "
             f"got {sub_map.get('italic')!r}; full sections: {sections}"
         )
-        assert sub_map.get("Hash") == "hash", (
-            f"### sub-heading should have heading_style='hash', "
+        # ### Hash exits the assertion_block and becomes a named section (style=None)
+        assert sub_map.get("Hash") is None, (
+            f"### Hash should be a named section (heading_style=None) since "
+            f"SECTION_HDR.7 > ASSERT_SUB_HASH_HDR.6; "
             f"got {sub_map.get('Hash')!r}; full sections: {sections}"
         )
-        # Also verify heading_level=3 for the ### hash sub-heading
         hash_sec = next((s for s in sections if s.get("heading") == "Hash"), None)
         assert hash_sec is not None
         assert (
             hash_sec.get("heading_level") == 3
-        ), f"### sub-heading should have heading_level=3, got {hash_sec.get('heading_level')!r}"
+        ), f"### Hash section should have heading_level=3, got {hash_sec.get('heading_level')!r}"
 
 
 class TestLarkCaseInsensitiveHeaders:

@@ -67,7 +67,7 @@ J. Health check endpoint SHALL be available at `/api/health`.
 
 The Flask review server SHALL expose federation repo metadata and staleness information.
 
-## Assertions
+### Assertions
 
 A. `/api/repos` SHALL return a list of federated repos from `iter_repos()` with name, path, status (ok/error), git_origin, and error fields.
 
@@ -81,8 +81,9 @@ D. Staleness info SHALL be informational only and SHALL NOT affect build or heal
 
 Multi-repo federation users need visibility into which repos are current and which are behind their remotes. The viewer/server surfaces this as informational metadata without gating builds on it.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | b4fae1d0 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | b4fae1d0 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Server Federation and Staleness* | **Hash**: b4fae1d0

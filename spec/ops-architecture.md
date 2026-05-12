@@ -6,7 +6,7 @@
 
 TraceGraphBuilder SHALL be the single entry point for constructing requirement graphs from parsed data.
 
-## Assertions
+### Assertions
 
 A. The system SHALL use TraceGraphBuilder to construct all TraceGraph instances.
 
@@ -22,8 +22,9 @@ E. TraceGraphBuilder SHALL support optional TODO node creation for lossless reco
 
 Centralizing graph construction ensures consistent hierarchy building, cycle detection, and validation across all entry points.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 65d2ad6a | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 65d2ad6a | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Graph Builder as Single Entry Point* | **Hash**: 65d2ad6a
@@ -35,7 +36,7 @@ Centralizing graph construction ensures consistent hierarchy building, cycle det
 
 The system SHALL use a composable annotation pattern where the graph provides iteration and separate annotator functions enrich nodes.
 
-## Assertions
+### Assertions
 
 A. The graph SHALL provide an iterator (`graph.all_nodes()`) for traversing all nodes.
 
@@ -58,8 +59,9 @@ Separating iteration from annotation enables:
 - Easy testing of individual annotators
 - Flexible composition of annotation pipelines
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | c73a6e32 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | c73a6e32 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Composable Annotation Design* | **Hash**: c73a6e32

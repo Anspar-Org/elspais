@@ -3241,12 +3241,8 @@ class GraphBuilder:
                 continue
             if sec_style is None:
                 # Named section directly under the requirement.
-                # SECTION_HDR only parses #{1,2}, so named sections cannot be
-                # canonicalized beyond H2.  Only flag too-shallow when the
-                # minimum valid depth is within the SECTION_HDR range (<= 2).
                 has_section_block = True
-                _SECTION_HDR_MAX_DEPTH = 2
-                if sec_d < min_child_depth and min_child_depth <= _SECTION_HDR_MAX_DEPTH:
+                if sec_d < min_child_depth:
                     section_too_shallow = True
             elif sec_style == "hash":
                 # Hash sub-heading inside the assertion block; parent is the

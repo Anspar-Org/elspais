@@ -152,7 +152,7 @@ JNY_END_MARKER.9: /\*End\*[ \t]+\*JNY-[^*]+\*[^\n]*/
 // through to SECTION_HDR as ordinary named sections.
 ASSERTIONS_HDR.8: /#{1,6}[ \t]+(?:\*\*|\*|_)?[Aa][Ss][Ss][Ee][Rr][Tt][Ii][Oo][Nn][Ss](?:\*\*|\*|_)?[:.]?[ \t]*(?=\n)/
 CHANGELOG_HDR.8: /#{1,6}[ \t]+(?:\*\*|\*|_)?[Cc][Hh][Aa][Nn][Gg][Ee][Ll][Oo][Gg](?:\*\*|\*|_)?[:.]?[ \t]*(?=\n)/
-SECTION_HDR.7: /#{1,2}[ \t]+(?!(?:\*\*|\*|_)?[Aa][Ss][Ss][Ee][Rr][Tt][Ii][Oo][Nn][Ss](?:\*\*|\*|_)?[:.]?[ \t]*\n)(?!(?:\*\*|\*|_)?[Cc][Hh][Aa][Nn][Gg][Ee][Ll][Oo][Gg](?:\*\*|\*|_)?[:.]?[ \t]*\n)[^\n]+/
+SECTION_HDR.7: /#{1,6}[ \t]+(?!(?:\*\*|\*|_)?[Aa][Ss][Ss][Ee][Rr][Tt][Ii][Oo][Nn][Ss](?:\*\*|\*|_)?[:.]?[ \t]*\n)(?!(?:\*\*|\*|_)?[Cc][Hh][Aa][Nn][Gg][Ee][Ll][Oo][Gg](?:\*\*|\*|_)?[:.]?[ \t]*\n)[^\n]+/
 
 // --- Journey section headers (same pattern as SECTION_HDR but distinct terminal) ---
 JNY_SECTION_HDR.7: /#{1,6}[ \t]+[^\n]+/
@@ -181,9 +181,12 @@ PIPE.7: /[ \t]*\|[ \t]*/
 // contextual lexer to bleed ASSERT_SUB_HDR into non-assertion states.
 
 ASSERT_SUB_HDR.6: /(?:\*\*|\*|_)[^\n*_]+(?:\*\*|\*|_)/
-// `### Heading` (3-6 hashes) inside an assertion block is a grouping
-// sub-heading. Active only inside assertion_block via the contextual
-// lexer; outside this state, `### Heading` lexes as TEXT.
+// `#+ Heading` inside an assertion block was historically used for grouping
+// sub-headings (ASSERT_SUB_HASH_HDR, priority 6). With SECTION_HDR now
+// matching #{1,6} at higher priority (7), hash headings inside assertion
+// blocks are lexed as SECTION_HDR and treated as named sections that
+// terminate the assertion_block. ASSERT_SUB_HASH_HDR is kept for grammar
+// completeness but will never win over SECTION_HDR in practice.
 ASSERT_SUB_HASH_HDR.6: /#{1,6}[ \t]+[^\n]+/
 ASSERTION_ENTRY.5: /__ASSERTION_LABEL__\.[ \t]+[^\n]+/
 ASSERT_CONT.2: /[^\n]+/

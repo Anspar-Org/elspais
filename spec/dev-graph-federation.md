@@ -6,7 +6,7 @@
 
 FederatedGraph SHALL wrap one or more TraceGraph instances, each paired with its own configuration and repo root, delegating all read-only TraceGraph methods with documented federation strategies.
 
-## Assertions
+### Assertions
 
 A. FederatedGraph SHALL wrap one or more TraceGraph instances via RepoEntry dataclass containing: name, graph (TraceGraph | None), config (ConfigLoader | None), repo_root (Path), git_origin (str | None), error (str | None).
 
@@ -28,8 +28,9 @@ H. iter_repos() SHALL yield all RepoEntry objects including error-state repos.
 
 FederatedGraph provides config isolation for multi-repo builds while presenting a unified API to consumers. The federation-of-one pattern ensures all code paths go through FederatedGraph, preventing accidental direct TraceGraph usage. Error-state repos (missing associates) are represented in the federation but skipped during aggregation, preserving graceful degradation.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 72471144 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 72471144 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *FederatedGraph Read-Only Delegation* | **Hash**: 72471144
@@ -41,7 +42,7 @@ FederatedGraph provides config isolation for multi-repo builds while presenting 
 
 FederatedGraph SHALL delegate all mutation operations to the appropriate sub-graph, maintain a unified mutation log across repos, and update internal ownership when IDs change.
 
-## Assertions
+### Assertions
 
 A. by_id mutation methods (rename_node, update_title, change_status, delete_requirement, add_assertion, delete_assertion, update_assertion, rename_assertion, rename_file, fix_broken_reference) SHALL look up the owning repo via `_ownership`, delegate to the sub-graph, and update `_ownership` when IDs change.
 
@@ -61,8 +62,9 @@ G. clone() SHALL perform federation-aware deep copy: deep-copy each sub-graph in
 
 Mutation delegation preserves TraceGraph's existing mutation+undo logic while adding federation awareness. The lightweight federated log avoids duplicating MutationEntry data. Ownership tracking ensures by_id lookups remain O(1) after mutations.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 1a0942a4 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 1a0942a4 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *FederatedGraph Mutation Delegation* | **Hash**: 1a0942a4
@@ -74,7 +76,7 @@ Mutation delegation preserves TraceGraph's existing mutation+undo logic while ad
 
 The config system SHALL parse `[associates.<name>]` sections from `.elspais.toml` to declare federated repository associations.
 
-## Assertions
+### Assertions
 
 A. `get_associates_config(config)` SHALL read `[associates]` sections and return a `dict[str, dict]` mapping associate name to `{path: str, git: str | None}`.
 
@@ -88,8 +90,9 @@ D. Associates declaring their own `[associates]` section SHALL be a hard error: 
 
 Associates are declared in the root repo's `.elspais.toml` using a structured TOML section. Each associate specifies a relative filesystem path and optional git remote URL. Transitive federation (associates of associates) is disallowed to keep the topology simple and predictable.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 479dcbb8 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 479dcbb8 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Associates Config Loading* | **Hash**: 479dcbb8
@@ -101,7 +104,7 @@ Associates are declared in the root repo's `.elspais.toml` using a structured TO
 
 The `build_graph()` factory SHALL build separate TraceGraph instances per repository when associates are configured, constructing a multi-repo FederatedGraph.
 
-## Assertions
+### Assertions
 
 A. When `[associates]` config is present, `build_graph()` SHALL create a separate `TraceGraph` per associate repo, each with its own config-derived resolver.
 
@@ -117,8 +120,9 @@ E. The root repo and all valid associates SHALL be combined into a single `Feder
 
 Per-repo building ensures config isolation: each repo's hierarchy rules, format rules, and hash mode apply only to its own nodes. Error-state entries preserve visibility of missing associates in health reports without blocking the build.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 31e019a1 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 31e019a1 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Multi-Repo Build Pipeline* | **Hash**: 31e019a1
@@ -130,7 +134,7 @@ Per-repo building ensures config isolation: each repo's hierarchy rules, format 
 
 Health checks that depend on per-repo configuration SHALL run once per federated repo using that repo's own config, ensuring config isolation in multi-repo federations.
 
-## Assertions
+### Assertions
 
 A. Config-sensitive health checks (hierarchy levels, format rules, reference resolution, structural orphans, changelog checks) SHALL run per-repo using each repo's own `ConfigLoader` from `RepoEntry.config`.
 
@@ -148,8 +152,9 @@ F. `run_spec_checks` SHALL accept a `FederatedGraph` and iterate `iter_repos()` 
 
 Without per-repo delegation, all nodes are validated against the root repo's config. When repos have different hierarchy rules, format rules, or changelog policies, this produces false positives (root config rejects valid associate nodes) or false negatives (root config allows invalid associate nodes). Per-repo delegation ensures each repo is validated by its own rules.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 2313140d | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 2313140d | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Per-Repo Health Check Delegation* | **Hash**: 2313140d

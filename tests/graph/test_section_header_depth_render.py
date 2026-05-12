@@ -97,10 +97,7 @@ def test_assertions_render_depth(tmp_path, req_d, stored_d, expected_d):
     [
         (1, 2, 2),
         (1, 1, 2),
-        # H2 req with H2 named section: SECTION_HDR only supports #{1,2},
-        # so named sections are capped at H2 to preserve parse-roundtrip.
-        # The section stays at H2 (not promoted to H3).
-        (2, 2, 2),
+        (2, 2, 3),
         (2, 3, 3),
         (3, 5, 5),
     ],
@@ -122,29 +119,33 @@ def test_named_section_render_depth(tmp_path, req_d, stored_d, expected_d):
     assert expected_header in rendered, f"Expected `{expected_header}` not in:\n{rendered}"
 
 
-def test_hash_sub_heading_renders_against_effective_parent(tmp_path):
-    """Sub-heading depth is computed against the effective (canonicalized) parent depth.
+def test_hash_heading_inside_assertions_becomes_named_section(tmp_path):
+    """With SECTION_HDR=#{1,6}, a ### heading inside ## Assertions terminates the
+    assertion_block and is treated as a named section (SECTION_HDR wins over
+    ASSERT_SUB_HASH_HDR due to priority 7 > 6).
 
-    H2 req: assertions stored H2 -> effective H3. Sub-heading stored H3 ->
-    effective H4 (assertions_eff+1 = 4). Note: sub-headings at H1/H2 match
-    SECTION_HDR (priority 7) rather than ASSERT_SUB_HASH_HDR (priority 6),
-    so sub-headings must be H3+ for the hash branch to apply.
+    H2 req: ### Core exits the empty assertion block as a named section.
+    Content after ### Core (including assertion-like text) is inside the named
+    section, not captured as assertions. The ## Assertions block is omitted
+    from render since it has no assertions.
     """
     spec = (
         "## REQ-d00001: T\n\n"  # H2 req
         "**Level**: dev | **Status**: Active | **Implements**: -\n\n"
-        "## Assertions\n\n"  # stored H2 -> effective H3 (req+1)
-        "### Core\n\n"  # stored H3 -> effective H4 (assertions_eff+1)
-        "A. X.\n\n"
+        "## Assertions\n\n"  # assertion block starts but has no assertions
+        "### Core\n\n"  # exits assertion block; becomes named section at H3 (req+1)
+        "A. X.\n\n"  # inside the ### Core named section as text, not an assertion
         "*End* *T* | **Hash**: -\n"
     )
     graph = _build(tmp_path, spec)
     node = _find_req(graph, "REQ-d00001")
     rendered = _render(node)
-    assert "### Assertions" in rendered, f"Expected `### Assertions` (H2+1=H3) in:\n{rendered}"
+    # ### Core is a named section rendered at min(stored=3, req+1=3)=H3
+    assert "### Core" in rendered, f"Expected `### Core` (named section at H3) in:\n{rendered}"
+    # The assertions block is empty so ## Assertions is not rendered
     assert (
-        "#### Core" in rendered
-    ), f"Expected `#### Core` (effective-assertions+1=H4) in:\n{rendered}"
+        "Assertions" not in rendered
+    ), f"Assertions block should be absent (empty); found in:\n{rendered}"
 
 
 def test_h1_req_h2_assertions_unchanged(tmp_path):

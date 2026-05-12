@@ -213,8 +213,15 @@ def test_named_section_heading_level_captured(tmp_path):
 
 
 # Verifies: REQ-d00250-A
-def test_hash_sub_heading_uses_kind_marker(tmp_path):
-    """Hash-style sub-headings store heading_style='hash' + heading_level (not '###')."""
+def test_hash_sub_heading_becomes_named_section(tmp_path):
+    """With SECTION_HDR=#{1,6}, hash headings inside assertion blocks exit the
+    assertion_block and become named sections (heading_style=None), because
+    SECTION_HDR.7 has higher priority than ASSERT_SUB_HASH_HDR.6 and both
+    are valid in the contextual lexer's assertion-item state.
+
+    The heading is captured as a REMAINDER named section; any assertion-like
+    text following it is TEXT inside that section, not a captured assertion.
+    """
     spec = (
         "# REQ-d00001: Test\n\n"
         "**Level**: dev | **Status**: Active | **Implements**: -\n\n"
@@ -233,8 +240,12 @@ def test_hash_sub_heading_uses_kind_marker(tmp_path):
         for c in node.iter_children(edge_kinds={EdgeKind.STRUCTURES})
         if c.kind == NodeKind.REMAINDER and c.get_field("heading") == "Core"
     ]
+    # ### Core exits the assertion_block as a named section (not a hash sub-heading)
     assert len(rems) == 1
-    assert rems[0].get_field("heading_style") == "hash"
+    assert rems[0].get_field("heading_style") is None, (
+        "With SECTION_HDR=#{1,6}, ### Core inside assertions becomes a named "
+        "section (style=None), not a hash sub-heading."
+    )
     assert rems[0].get_field("heading_level") == 3
 
 

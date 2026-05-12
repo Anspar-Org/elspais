@@ -6,7 +6,7 @@
 
 All configuration defaults and validation SHALL be provided by the Pydantic `ElspaisConfig` schema. Legacy `DEFAULT_CONFIG` dict and `ConfigLoader` wrapper class SHALL be removed; all consumer code SHALL access configuration via plain dicts produced by `ElspaisConfig.model_dump()`.
 
-## Assertions
+### Assertions
 
 A. `DEFAULT_CONFIG` dict SHALL be removed from `config/__init__.py`; all default values SHALL be defined as Pydantic field defaults in `config/schema.py`.
 
@@ -14,8 +14,9 @@ B. `ConfigLoader` class SHALL be removed; `load_config()` SHALL return a plain `
 
 C. All consumer code that references `ConfigLoader` (type annotations, imports, `.from_dict()`, `.get_raw()`, `.get()`) SHALL be updated to use plain dicts directly.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 8d323813 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 8d323813 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Declarative Config Schema Cleanup* | **Hash**: 8d323813
@@ -27,7 +28,7 @@ C. All consumer code that references `ConfigLoader` (type annotations, imports, 
 
 The `ElspaisConfig` Pydantic model SHALL be exportable as a JSON Schema file for IDE autocomplete (e.g., Taplo). A CLI subcommand SHALL generate the schema on demand, and a committed schema file SHALL stay in sync with the model.
 
-## Assertions
+### Assertions
 
 A. `elspais config schema` SHALL output the JSON Schema to stdout (or to a file with `--output`), generated from `ElspaisConfig.model_json_schema()`.
 
@@ -35,8 +36,9 @@ B. A committed `src/elspais/config/elspais-schema.json` SHALL match the output o
 
 C. The generated JSON Schema SHALL include `$schema` and `title` top-level keys.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 2b82ef02 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 2b82ef02 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *JSON Schema Export for IDE Autocomplete* | **Hash**: 2b82ef02
@@ -48,7 +50,7 @@ C. The generated JSON Schema SHALL include `$schema` and `title` top-level keys.
 
 The `elspais init` command SHALL generate `.elspais.toml` configuration files by walking the `ElspaisConfig` Pydantic model, ensuring generated templates are always in sync with the schema. Hardcoded template strings SHALL be replaced by a schema walker that produces valid TOML from field metadata and defaults.
 
-## Assertions
+### Assertions
 
 A. `generate_config("core")` SHALL produce TOML that passes `ElspaisConfig.model_validate()` without error.
 
@@ -58,8 +60,9 @@ C. The generated TOML SHALL include all sections present in the current hardcode
 
 D. The generated TOML SHALL include human-readable comments derived from Pydantic field descriptions or the current template comments.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | 44aeb496 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 44aeb496 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Schema-Driven Init Template Generation* | **Hash**: 44aeb496
@@ -71,7 +74,7 @@ D. The generated TOML SHALL include human-readable comments derived from Pydanti
 
 The `elspais doctor` command SHALL detect drift between `ElspaisConfig` Pydantic schema fields and `docs/configuration.md`. Undocumented schema fields and stale documentation sections SHALL be reported as health check findings.
 
-## Assertions
+### Assertions
 
 A. `elspais doctor` SHALL include a `docs.config_drift` health check that compares schema top-level sections against documented sections.
 
@@ -79,8 +82,9 @@ B. The drift detection SHALL report undocumented sections (in schema but not in 
 
 C. The drift check SHALL pass when all schema sections are documented and no stale sections exist, and fail otherwise.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | eb94434a | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | eb94434a | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Documentation Drift Detection* | **Hash**: eb94434a
@@ -92,7 +96,7 @@ C. The drift check SHALL pass when all schema sections are documented and no sta
 
 The viewer UI SHALL derive dropdown values and filter labels from `ElspaisConfig` rather than hardcoding them. The Flask template context SHALL include config-derived requirement types, allowed statuses, and user-selectable relationship kinds.
 
-## Assertions
+### Assertions
 
 A. The Flask template context SHALL include a `config_types` variable containing requirement type definitions derived from `ElspaisConfig.id_patterns.types`.
 
@@ -102,8 +106,9 @@ C. The Flask template context SHALL include a `config_statuses` variable contain
 
 D. `StatusRolesConfig` SHALL provide a `sort_by_role()` method that orders a list of status strings by role priority (active first, then provisional, aspirational, and retired last), preserving original order within each role group; unknown statuses SHALL be treated as active.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | a9cc41d2 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | a9cc41d2 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Config-Driven Viewer UI Values* | **Hash**: a9cc41d2
@@ -115,7 +120,7 @@ D. `StatusRolesConfig` SHALL provide a `sort_by_role()` method that orders a lis
 
 The `ElspaisConfig` Pydantic schema SHALL be restructured to v3 shape with first-class level definitions, unified scanning configuration, simplified references, and cleaner changelog sub-models. New models SHALL be strict (`extra="forbid"`) and frozen by default.
 
-## Assertions
+### Assertions
 
 A. A `LevelConfig` model SHALL define per-level properties: `rank` (int), `letter` (str), `display_name` (str, optional), and `implements` (list[str]). Unknown fields SHALL be rejected.
 
@@ -145,8 +150,9 @@ M. `FormatConfig` SHALL include a `no_traceability_severity` field (str | None, 
 
 N. A `_migrate_v3_to_v4` migration SHALL move flat `duplicate_severity`, `undefined_severity`, `unmarked_severity` from `[terms]` into `[terms.severity]` as `duplicate`, `undefined`, `unmarked`. Configs without `[terms]` SHALL pass through unchanged. Configs already having `[terms.severity]` SHALL NOT be double-migrated. `CURRENT_CONFIG_VERSION` SHALL be bumped to 4.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | db4ad28c | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | db4ad28c | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 - 2026-03-29 | c75b87f8 | - | Michael Lewis (michael@anspar.org) | Add assertion N for config migration v3 to v4
 
@@ -159,7 +165,7 @@ N. A `_migrate_v3_to_v4` migration SHALL move flat `duplicate_severity`, `undefi
 
 The `[id-patterns.component].style` configuration SHALL use an explicit case-convention vocabulary rather than a small set of "custom pattern with hidden default" modes. The `[id-patterns.assertions]` section SHALL gain a configurable separator that decouples the component-to-*Assertion* boundary from any character used inside component names, enabling kebab-case and snake_case component styles to work cleanly with numeric *Assertion* labels.
 
-## Assertions
+### Assertions
 
 A. `ComponentConfig.style` SHALL accept exactly six values: `numeric`, `camelCase`, `PascalCase`, `snake_case`, `kebab-case`, and `regex`. The legacy values `named` and `alphanumeric` SHALL be rejected at config validation time.
 
@@ -175,8 +181,9 @@ F. Ambiguous combinations SHALL be rejected at config validation time: `style = 
 
 G. A single helper in `utilities/patterns.py` SHALL resolve a `ComponentFormat` to its regex string. The helper SHALL be the sole authority used by both the `IdResolver` regex compiler (`utilities/patterns.py`) and the lark grammar pattern builder (`graph/parsers/lark/__init__.py`); no other component-style dispatch SHALL exist in the codebase.
 
-## Changelog
+### Changelog
 
+- 2026-05-11 | e04a4e37 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | e04a4e37 | - | Developer (dev@example.com) | Auto-fix: canonicalize term forms, update hash
 - 2026-05-11 | - | - | Developer (dev@example.com) | Initial authoring: introduce explicit case-style vocabulary and configurable assertion separator.
 
