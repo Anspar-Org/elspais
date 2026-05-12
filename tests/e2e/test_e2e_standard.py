@@ -1598,3 +1598,158 @@ class TestStandardMCPMutations:
                 assert isinstance(result, dict)
             finally:
                 stop_mcp(proc)
+
+
+# ===================================================================
+# Group 5: --run-tests / --fail-fast / stale-results e2e tests
+# ===================================================================
+
+
+class TestRunTestsFlag:
+    """Tests for `elspais checks --run-tests` and the no-runners error.
+
+    Uses isolated scratch copies of the shared project to avoid interference
+    from earlier mutation tests that may leave spec files in an unhealthy state.
+
+    Verifies: REQ-d00249-A, REQ-d00249-B, REQ-d00249-F, REQ-d00249-G
+    """
+
+    def test_run_tests_happy_path(self, tmp_path, project):
+        import shutil
+
+        scratch = tmp_path / "happy"
+        shutil.copytree(project, scratch)
+        result_path = scratch / ".elspais" / "results" / "test-results.json"
+        if result_path.exists():
+            result_path.unlink()
+        # Use --tests scope to avoid spec-level errors from the shared (mutated) project.
+        out = run_elspais("checks", "--run-tests", "--tests", "--lenient", cwd=scratch)
+        assert (
+            out.returncode == 0
+        ), f"checks --run-tests failed: stdout={out.stdout!r} stderr={out.stderr!r}"
+        assert result_path.exists(), "stub runner did not write expected result file"
+
+    def test_run_tests_banner_in_output(self, tmp_path, project):
+        import shutil
+
+        scratch = tmp_path / "banner"
+        shutil.copytree(project, scratch)
+        # Use --tests scope to avoid spec-level errors from the shared (mutated) project.
+        out = run_elspais("checks", "--run-tests", "--tests", "--lenient", cwd=scratch)
+        combined = (out.stdout or "") + (out.stderr or "")
+        assert "Running 'stub' runner" in combined
+
+    def test_run_tests_no_runners_configured_exits_2(self, tmp_path, project):
+        import shutil
+
+        scratch = tmp_path / "no_runners"
+        shutil.copytree(project, scratch)
+        toml = (scratch / ".elspais.toml").read_text()
+        # Remove the runners block while preserving [scanning.result].
+        # Use string-split (not regex) to avoid issues with complex command strings.
+        parts = toml.split("\n[[scanning.test.runners]]")
+        if len(parts) > 1:
+            before = parts[0]
+            after = parts[1]
+            result_idx = after.find("\n[scanning.result]")
+            tail = after[result_idx:] if result_idx >= 0 else ""
+            toml = before + tail
+        (scratch / ".elspais.toml").write_text(toml)
+        out = run_elspais("checks", "--run-tests", cwd=scratch)
+        assert out.returncode == 2
+        assert "runners" in (out.stderr or "").lower()
+
+
+class TestRunTestsFailFast:
+    """Verifies: REQ-d00249-C, REQ-d00249-G"""
+
+    def test_fail_fast_skips_remaining_and_checks(self, tmp_path, project):
+        import shutil
+
+        scratch = tmp_path / "fail_fast"
+        shutil.copytree(project, scratch)
+        marker = scratch / "after.txt"
+        # Build a new TOML by stripping any existing runners block and appending
+        # two runners: a failing one and a sentinel that should NOT run.
+        # Use string-split (not regex) to avoid issues with complex command strings
+        # that contain bracket characters.
+        raw = (scratch / ".elspais.toml").read_text()
+        sentinel_cmd = f"touch {marker}"
+        runners_toml = (
+            "\n[[scanning.test.runners]]\n"
+            'name = "bad"\n'
+            'command = "false"\n'
+            "\n[[scanning.test.runners]]\n"
+            'name = "after"\n'
+            f'command = "{sentinel_cmd}"\n'
+        )
+        # Split on the runners block start - safe because the fixture has exactly one
+        parts = raw.split("\n[[scanning.test.runners]]")
+        # parts[0] is everything before the runners; parts[1] has the runners+rest
+        # We need to preserve [scanning.result] which comes after the runners block
+        before_runners = parts[0]
+        after_runners = parts[1] if len(parts) > 1 else ""
+        # Find where [scanning.result] starts in after_runners
+        result_idx = after_runners.find("\n[scanning.result]")
+        if result_idx >= 0:
+            tail = after_runners[result_idx:]
+        else:
+            tail = ""
+        new_toml = before_runners + runners_toml + tail
+        (scratch / ".elspais.toml").write_text(new_toml)
+        out = run_elspais("checks", "--run-tests", "--fail-fast", cwd=scratch)
+        assert out.returncode == 1
+        assert not marker.exists(), "fail-fast did not stop after first failure"
+
+
+class TestStaleResultsWarning:
+    """Verifies: REQ-d00249-E"""
+
+    def test_stale_results_emit_warning(self, tmp_path, project):
+        import os
+        import shutil
+        import time
+
+        scratch = tmp_path / "stale"
+        shutil.copytree(project, scratch)
+        # Write a fresh result file then back-date it.
+        result_dir = scratch / ".elspais" / "results"
+        result_dir.mkdir(parents=True, exist_ok=True)
+        result_file = result_dir / "test-results.json"
+        result_file.write_text(
+            json.dumps(
+                {
+                    "created_at": "fixture",
+                    "summary": {"passed": 1, "failed": 0, "total": 1},
+                    "tests": [
+                        {"nodeid": "test_stub::test_ok", "outcome": "passed", "duration": 0.001}
+                    ],
+                }
+            )
+        )
+        old = time.time() - 7200
+        os.utime(result_file, (old, old))
+        # Touch a spec file so its mtime is now.
+        for spec_md in (scratch / "spec").glob("*.md"):
+            spec_md.touch()
+            break
+        # Use --tests scope to focus on tests.results check only, avoiding
+        # interference from spec mutations in the shared project fixture.
+        out = run_elspais("checks", "--tests", "--format", "json", "--lenient", cwd=scratch)
+        assert (
+            out.returncode == 0
+        ), f"checks --tests failed: stdout={out.stdout!r} stderr={out.stderr!r}"
+        data = json.loads(out.stdout)
+        results_chk = next(
+            (c for c in data.get("checks", []) if c.get("name") == "tests.results"),
+            None,
+        )
+        assert results_chk is not None
+        haystack = (
+            (results_chk.get("message") or "").lower()
+            + " "
+            + " ".join(
+                (f.get("message") or "").lower() for f in (results_chk.get("findings") or [])
+            )
+        )
+        assert "stale" in haystack, f"expected stale in: {haystack!r}"
