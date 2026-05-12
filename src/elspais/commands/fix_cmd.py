@@ -46,9 +46,8 @@ def run(args: argparse.Namespace) -> int:
 
     dry_run = getattr(args, "dry_run", False)
 
-    # Single-pass fix: build graph, detect dirty nodes, add changelog
-    # entries, render_save to disk.
-    _fix_parse_dirty(args, dry_run)
+    # Single-pass fix returns an exit code (1 if unfixable issues exist).
+    exit_code = _fix_parse_dirty(args, dry_run)
 
     # Fix stale INDEX.md if present
     _fix_index(args, dry_run)
@@ -57,7 +56,7 @@ def run(args: argparse.Namespace) -> int:
     # Generate glossary and term index if terms are defined
     _fix_terms(args, dry_run)
 
-    return 0
+    return exit_code
 
 
 _REASON_LABELS: dict[str, str] = {
@@ -69,8 +68,29 @@ _REASON_LABELS: dict[str, str] = {
     "missing_changelog": "add missing changelog section",
     "assertion_spacing": "fix assertion spacing",
     "list_spacing": "fix list spacing",
+    "section_header_depth": "canonicalize section header depth",
+    "section_header_depth_unfixable": "section header depth (req at H6 — move req shallower)",
     "fix_single": "fix requirement",
 }
+
+
+def _scan_and_report_unfixable(graph) -> int:  # noqa: ANN001
+    """Walk `parse_unfixable_reasons` across requirements; print to stderr.
+
+    Returns 1 if any unfixable reasons were found, else 0.
+    """
+    from elspais.graph import NodeKind
+
+    found = False
+    for n in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        rs = n.get_field("parse_unfixable_reasons") or []
+        for r in rs:
+            print(
+                f"Cannot fix {n.id}: {_REASON_LABELS.get(r, r)}",
+                file=sys.stderr,
+            )
+            found = True
+    return 1 if found else 0
 
 
 def _detect_fixable(node, hash_mode: str, changelog_enforce: bool) -> list[str]:  # noqa: ANN001
@@ -230,12 +250,15 @@ def _add_drift_changelog_entries(
     return added
 
 
-def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> None:
+def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
     """Single-pass fix: build graph, detect all fixable issues, render to disk.
 
     Uses _detect_fixable() for comprehensive detection (parse dirty, hash
     mismatch, changelog drift, missing changelog) and render_save() for
     canonical output.
+
+    Returns 1 if there are unfixable issues (e.g. H6 requirements with section
+    blocks), else 0.
     """
     from elspais.config import get_config
     from elspais.graph import NodeKind
@@ -259,9 +282,13 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> None:
     changelog_enforce = typed_config.changelog.hash_current
     hash_mode = getattr(graph, "hash_mode", "full-text")
 
-    # Detect all fixable issues using the unified detection function
+    # Detect all fixable issues using the unified detection function.
+    # Skip nodes that have unfixable reasons — they will be reported via
+    # _scan_and_report_unfixable() and must not be touched by render_save.
     fixable_nodes: list[tuple[Any, list[str]]] = []  # (node, reasons)
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if node.get_field("parse_unfixable_reasons"):
+            continue
         reasons = _detect_fixable(node, hash_mode, changelog_enforce)
         if reasons:
             fixable_nodes.append((node, reasons))
@@ -269,7 +296,7 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> None:
     if not fixable_nodes:
         req_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.REQUIREMENT))
         print(f"Validated {req_count} requirements")
-        return
+        return _scan_and_report_unfixable(graph)
 
     # Report what will be / was fixed
     prefix = "Would fix" if dry_run else "Fixing"
@@ -286,7 +313,7 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> None:
                 print(f"{prefix} {node.id}: {_REASON_LABELS.get(r, r)}")
 
     if dry_run:
-        return
+        return _scan_and_report_unfixable(graph)
 
     # Drift-only nodes (changelog hash mismatch with no other fixable issues)
     # go through _add_drift_changelog_entries; everything else — including
@@ -312,6 +339,7 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> None:
 
     req_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.REQUIREMENT))
     print(f"Validated {req_count} requirements")
+    return _scan_and_report_unfixable(graph)
 
 
 def _fix_single(args: argparse.Namespace, req_id: str) -> int:
