@@ -73,6 +73,19 @@ _REASON_LABELS: dict[str, str] = {
     "fix_single": "fix requirement",
 }
 
+# Reasons that produce a different on-disk rendering but do NOT change the
+# semantic body content (i.e. don't affect the computed hash). When a fix
+# pass produces *only* these reasons, the file is rewritten but no auto-fix
+# changelog entry is emitted — keeping changelogs focused on what the
+# requirement says rather than how it is rendered.
+_FORMATTING_ONLY_REASONS: frozenset[str] = frozenset(
+    {
+        "section_header_depth",
+        "assertion_spacing",
+        "list_spacing",
+    }
+)
+
 
 def _scan_and_report_unfixable(graph) -> int:  # noqa: ANN001
     """Walk `parse_unfixable_reasons` across requirements; print to stderr.
@@ -207,6 +220,12 @@ def _add_autofix_changelog_entries(
         # Drift is handled by _add_drift_changelog_entries; skip drift-only here.
         non_drift = [r for r in reasons if r != "changelog_drift"]
         if not non_drift:
+            continue
+
+        # If every non-drift reason is formatting-only (no semantic body
+        # change), re-render the file but don't bump the changelog —
+        # changelogs record what the requirement says, not how it's rendered.
+        if all(r in _FORMATTING_ONLY_REASONS for r in non_drift):
             continue
 
         # Build a human-readable reason from the detected reasons.
