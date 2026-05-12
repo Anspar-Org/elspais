@@ -310,3 +310,43 @@ F. The clone SHALL handle DAG structures with multiple parents without infinite 
 - 2026-04-23 | a007d5ed | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *TraceGraph Deep Clone* | **Hash**: a007d5ed
+
+## REQ-d00250: Section Header Depth Canonicalization
+
+**Level**: dev | **Status**: Active | **Implements**: -
+
+The parser MUST recognize section block headers (`Assertions`,
+`Changelog`, named sections) and hash-style sub-headings at any
+markdown depth from H1 through H6. The `fix` command MUST
+canonicalize too-shallow section headers to `parent.depth + 1`,
+preserving legal-but-deeper author choices. The `validate` /
+health-check command MUST flag too-shallow section headers
+as a fixable issue and flag requirements at H6 with section
+blocks as an unfixable issue.
+
+## Assertions
+
+A. Section block headers parse correctly at depths H1 through H6.
+
+B. A section header at depth less than or equal to its parent's
+   heading_level is marked parse_dirty with reason
+   `section_header_depth`.
+
+C. A requirement at H6 with any section block is marked with
+   reason `section_header_depth_unfixable` (stored on
+   `parse_unfixable_reasons`, separate from `parse_dirty_reasons`).
+
+D. Render emits each section header at
+   `max(stored_depth, parent.heading_level + 1)`, clamped to H6.
+
+E. The `fix` command auto-canonicalizes B and reports C to stderr
+   with non-zero exit code.
+
+F. The `validate` / health-check command reports B and C as
+   findings with non-zero exit code.
+
+## Changelog
+
+- 2026-05-11 | 903349d2 | - | Developer (dev@example.com) | Auto-fix: update hash, add missing changelog section
+
+*End* *Section Header Depth Canonicalization* | **Hash**: 903349d2
