@@ -163,6 +163,8 @@ class CodeScanningConfig(ScanningKindConfig):
 class TestRunnerConfig(_StrictModel):
     """One configured test runner invocation."""
 
+    __test__ = False  # Prevent pytest from trying to collect this as a test class
+
     name: str
     command: str
     cwd: str = ""  # relative to repo root; empty = repo root
