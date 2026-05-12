@@ -239,7 +239,7 @@ class TestEmptyAssertions:
         cfg = base_config(
             name="no-assertions-named",
             canonical="{namespace}-{level.letter}{component}",
-            component_style="named",
+            component_style="regex",
             types={
                 "prd": {"level": 1, "aliases": {"letter": "p"}},
             },
@@ -250,7 +250,7 @@ class TestEmptyAssertions:
             allow_structural_orphans=True,
         )
         cfg["id-patterns"]["component"] = {
-            "style": "named",
+            "style": "regex",
             "pattern": "[A-Z][a-zA-Z0-9]+",
             "max_length": 32,
         }

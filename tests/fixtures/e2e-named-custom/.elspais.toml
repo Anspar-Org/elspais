@@ -30,9 +30,7 @@ directories = ["src"]
 canonical = "{namespace}-{level.letter}{component}"
 
 [id-patterns.component]
-style = "named"
-digits = 0
-leading_zeros = true
+style = "PascalCase"
 
 [id-patterns.assertions]
 label_style = "numeric"

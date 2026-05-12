@@ -144,17 +144,25 @@ _FIELD_COMMENTS: dict[str, str] = {
     "id-patterns.prefix_optional": "If true, namespace prefix is optional when matching IDs",
     "id-patterns.aliases": "Named shorthand patterns for ID matching",
     "id-patterns.component": "Component (numeric part) of the ID",
-    "id-patterns.component.style": '"numeric" | "alphanumeric" | "named"',
+    "id-patterns.component.style": (
+        '"numeric" | "camelCase" | "PascalCase" | "snake_case" | "kebab-case" | "regex"'
+    ),
     "id-patterns.component.digits": "Number of digits in numeric components",
     "id-patterns.component.leading_zeros": "Pad numeric components with leading zeros",
-    "id-patterns.component.pattern": "Regex pattern (alphanumeric style only)",
-    "id-patterns.component.max_length": "Max length (named style only)",
+    "id-patterns.component.pattern": (
+        'Custom regex (required for `style = "regex"`; ignored otherwise)'
+    ),
+    "id-patterns.component.max_length": "Max length (case-style components only)",
     "id-patterns.assertions": "Assertion label format",
     "id-patterns.assertions.label_style": (
         '"uppercase" (A,B,C) | "numeric" (0,1,2) | "numeric_1based" | "alphanumeric"'
     ),
     "id-patterns.assertions.max_count": "Maximum number of assertions per requirement",
     "id-patterns.assertions.zero_pad": "Pad numeric assertion labels with leading zero",
+    "id-patterns.assertions.separator": (
+        'Character between component and label, default "-". '
+        'Use ":" for snake/kebab + numeric labels.'
+    ),
     "id-patterns.assertions.multi_separator": (
         'Separator for multi-assertion refs (e.g. "+" -> A+B+C)'
     ),

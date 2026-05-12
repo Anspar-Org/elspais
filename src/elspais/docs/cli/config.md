@@ -103,23 +103,37 @@ prefix_optional = false    # Whether namespace prefix is required
 short = "{level.letter}{component}"   # Named alias patterns
 
 [id-patterns.component]
-style = "numeric"          # "numeric" | "alphanumeric" | "named"
-digits = 5                 # Number of digits (0 = variable length)
-leading_zeros = true       # Pad with zeros (00001 vs 1)
-# pattern = "[A-Z]{2}[0-9]{3}"   # For alphanumeric style
-# max_length = 32                 # For named style
+style = "numeric"          # numeric | camelCase | PascalCase | snake_case | kebab-case | regex
+digits = 5                 # Number of digits (0 = variable length, numeric style only)
+leading_zeros = true       # Pad with zeros (00001 vs 1, numeric style only)
+# pattern = "[A-Z]{2}[0-9]{3}"   # Required when style = "regex"; ignored otherwise
+# max_length = 32                 # Optional cap on component length
 
 [id-patterns.assertions]
 label_style = "uppercase"  # "uppercase" | "numeric" | "alphanumeric" | "numeric_1based"
 max_count = 26             # Maximum assertions per requirement
 # zero_pad = false         # Pad numeric labels with zeros
+# separator = "-"          # Character between component and label (use ":" for snake/kebab + numeric labels)
 # multi_separator = "+"    # Separator for multi-assertion syntax (A+B+C)
 ```
+
+**Component style examples:**
+  `numeric`      `REQ-p00042`           (NNNNN digits)
+  `camelCase`    `REQ-pUserAuth`        (`[a-z][a-zA-Z0-9]+`)
+  `PascalCase`   `REQ-pUserAuth`        (`[A-Z][a-zA-Z0-9]+`)
+  `snake_case`   `REQ-p-user_auth`      (`[a-z][a-z0-9]*(?:_[a-z0-9]+)*`)
+  `kebab-case`   `REQ-p-user-auth`      (`[a-z][a-z0-9]*(?:-[a-z0-9]+)*`)
+  `regex`        custom — set `pattern`
+
+Some `style` + `label_style` combinations are ambiguous and rejected at config
+load time: `snake_case` + `separator = "_"` with non-uppercase labels, and
+`kebab-case` + `separator = "-"` with non-uppercase labels. The fix is a
+different `assertions.separator` (commonly `":"`).
 
 **Template Tokens:**
   `{namespace}`      ID prefix (e.g., "REQ")
   `{level.letter}`   Level character (e.g., "p", "o", "d")
-  `{component}`      Numeric or named ID
+  `{component}`      Component per the configured style
 
 ### [scanning] Section
 
@@ -155,6 +169,12 @@ reference_patterns = []          # Additional reference patterns
 prescan_command = ""             # External test discovery command
 # prescan_command receives file paths on stdin, outputs JSON on stdout:
 #   [{"file": "path", "function": "name", "class": "Name|null", "line": N}]
+#
+# Note: function-name refs like `test_REQ_p_event_store_A` rely on `_` being
+# normalized to `-` before lookup. If you've set `[id-patterns.assertions]`
+# `separator = ":"` (or anything other than `"-"`), function-name refs will
+# resolve to the parent requirement only — put assertion-level refs in a
+# comment instead: `# Verifies: REQ-p-event-store:A`.
 
 [scanning.result]
 directories = []

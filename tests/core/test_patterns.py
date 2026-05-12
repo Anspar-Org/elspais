@@ -39,9 +39,9 @@ class TestComponentFormat:
         assert cf.style == "numeric"
         assert cf.digits == 5
 
-    def test_REQ_p00002_A_named_with_pattern(self):
+    def test_REQ_p00002_A_regex_with_pattern(self):
         cf = ComponentFormat(
-            style="named", digits=0, leading_zeros=False, pattern="[A-Z][a-zA-Z0-9]+"
+            style="regex", digits=0, leading_zeros=False, pattern="[A-Z][a-zA-Z0-9]+"
         )
         assert cf.pattern == "[A-Z][a-zA-Z0-9]+"
 
@@ -133,18 +133,18 @@ class TestIdPatternConfig:
         assert config.component.digits == 0
         assert config.component.leading_zeros is False
 
-    def test_REQ_p00002_A_from_dict_named(self):
+    def test_REQ_p00002_A_from_dict_regex(self):
         config = IdPatternConfig.from_dict(
             {
                 "project": {"namespace": "REQ"},
                 "id-patterns": {
                     "canonical": "{namespace}-{component}",
                     "types": {"req": {"level": 1}},
-                    "component": {"style": "named", "pattern": "[A-Z][a-zA-Z0-9]+"},
+                    "component": {"style": "regex", "pattern": "[A-Z][a-zA-Z0-9]+"},
                 },
             }
         )
-        assert config.component.style == "named"
+        assert config.component.style == "regex"
         assert config.component.pattern == "[A-Z][a-zA-Z0-9]+"
 
     def test_REQ_p00002_A_from_dict_defaults(self):
@@ -299,7 +299,7 @@ def _make_named_resolver():
             "id-patterns": {
                 "canonical": "{namespace}-{component}",
                 "types": {"req": {"level": 1}},
-                "component": {"style": "named", "pattern": "[A-Z][a-zA-Z0-9]+"},
+                "component": {"style": "regex", "pattern": "[A-Z][a-zA-Z0-9]+"},
             },
         }
     )

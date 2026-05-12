@@ -152,3 +152,33 @@ N. A `_migrate_v3_to_v4` migration SHALL move flat `duplicate_severity`, `undefi
 
 *End* *Config Schema v3 Models* | **Hash**: db4ad28c
 ---
+
+## REQ-d00249: Component Style Vocabulary and Assertion Separator
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+The `[id-patterns.component].style` configuration SHALL use an explicit case-convention vocabulary rather than a small set of "custom pattern with hidden default" modes. The `[id-patterns.assertions]` section SHALL gain a configurable separator that decouples the component-to-*Assertion* boundary from any character used inside component names, enabling kebab-case and snake_case component styles to work cleanly with numeric *Assertion* labels.
+
+## Assertions
+
+A. `ComponentConfig.style` SHALL accept exactly six values: `numeric`, `camelCase`, `PascalCase`, `snake_case`, `kebab-case`, and `regex`. The legacy values `named` and `alphanumeric` SHALL be rejected at config validation time.
+
+B. Each case-style SHALL have a fixed default regex: `camelCase` matches `[a-z][a-zA-Z0-9]+`; `PascalCase` matches `[A-Z][a-zA-Z0-9]+`; `snake_case` matches `[a-z][a-z0-9]*(?:_[a-z0-9]+)*`; `kebab-case` matches `[a-z][a-z0-9]*(?:-[a-z0-9]+)*`. The four case-style regexes SHALL NOT be overridable via `pattern`.
+
+C. `style = "regex"` SHALL require a non-empty `pattern` field. Config validation SHALL fail when `style = "regex"` and `pattern` is empty.
+
+D. Rejection of the legacy values `named` and `alphanumeric` SHALL produce a fix-it error message listing the four case styles, the `regex` escape hatch, and the literal pattern that reproduces the legacy default (`[A-Za-z][A-Za-z0-9]+` for `named`, `[A-Z0-9]+` for `alphanumeric`).
+
+E. `AssertionConfig` SHALL include a `separator` field (str, default `"-"`) used (with `re.escape`) as the boundary between the component and the optional *Assertion* suffix in the canonical regex.
+
+F. Ambiguous combinations SHALL be rejected at config validation time: `style = "snake_case"` with `separator = "_"` plus a non-uppercase `label_style`; `style = "kebab-case"` with `separator = "-"` plus a non-uppercase `label_style`. The error message SHALL suggest changing `separator` to a non-overlapping character.
+
+G. A single helper in `utilities/patterns.py` SHALL resolve a `ComponentFormat` to its regex string. The helper SHALL be the sole authority used by both the `IdResolver` regex compiler (`utilities/patterns.py`) and the lark grammar pattern builder (`graph/parsers/lark/__init__.py`); no other component-style dispatch SHALL exist in the codebase.
+
+## Changelog
+
+- 2026-05-11 | e04a4e37 | - | Developer (dev@example.com) | Auto-fix: canonicalize term forms, update hash
+- 2026-05-11 | - | - | Developer (dev@example.com) | Initial authoring: introduce explicit case-style vocabulary and configurable assertion separator.
+
+*End* *Component Style Vocabulary and Assertion Separator* | **Hash**: e04a4e37
+---

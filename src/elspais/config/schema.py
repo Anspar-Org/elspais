@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class _StrictModel(BaseModel):
@@ -15,18 +17,65 @@ class ProjectConfig(_StrictModel):
     name: str = ""
 
 
+_VALID_COMPONENT_STYLES = (
+    "numeric",
+    "camelCase",
+    "PascalCase",
+    "snake_case",
+    "kebab-case",
+    "regex",
+)
+
+_LEGACY_STYLE_MIGRATION = {
+    "named": "[A-Za-z][A-Za-z0-9]+",
+    "alphanumeric": "[A-Z0-9]+",
+}
+
+
+def _legacy_style_message(legacy: str) -> str:
+    """Build the migration error message for the deprecated style names.
+
+    Mentions all four case styles, the regex escape hatch, and the literal
+    pattern that reproduces the legacy default.
+    """
+    return (
+        f'component.style "{legacy}" is no longer supported.\n\n'
+        "Choose one of:\n"
+        "  - camelCase  (userAuth)\n"
+        "  - PascalCase (UserAuth)\n"
+        "  - snake_case (user_auth)\n"
+        "  - kebab-case (user-auth)\n"
+        '  - regex      (custom — requires `pattern = "..."`)\n\n'
+        "For your existing config, the equivalent is:\n"
+        '  style = "regex"\n'
+        f'  pattern = "{_LEGACY_STYLE_MIGRATION[legacy]}"'
+    )
+
+
+# Implements: REQ-d00249-A
 class ComponentConfig(_StrictModel):
-    style: str = "numeric"
+    style: Literal["numeric", "camelCase", "PascalCase", "snake_case", "kebab-case", "regex"] = (
+        "numeric"
+    )
     digits: int = 5
     leading_zeros: bool = True
     pattern: str = ""
     max_length: int = 0
 
+    @field_validator("style", mode="before")
+    @classmethod
+    def _reject_legacy_styles(cls, value):
+        if isinstance(value, str) and value in _LEGACY_STYLE_MIGRATION:
+            raise ValueError(_legacy_style_message(value))
+        return value
 
+
+# Implements: REQ-d00249-E
 class AssertionConfig(_StrictModel):
     label_style: str = "uppercase"
     max_count: int = 26
     zero_pad: bool = False
+    separator: str = "-"
     multi_separator: str = "+"
 
 
@@ -38,7 +87,11 @@ class AssociatedPatternConfig(_StrictModel):
     separator: str = "-"
 
 
-# Implements: REQ-d00212-G
+_AMBIGUOUS_LABEL_STYLES = {"numeric", "numeric_1based", "alphanumeric"}
+_STYLE_INTERNAL_SEP = {"snake_case": "_", "kebab-case": "-"}
+
+
+# Implements: REQ-d00212-G, REQ-d00249-C, REQ-d00249-F
 class IdPatternsConfig(_StrictModel):
     canonical: str = "{namespace}-{level.letter}{component}"
     aliases: dict[str, str] = Field(default_factory=lambda: {"short": "{level.letter}{component}"})
@@ -47,6 +100,33 @@ class IdPatternsConfig(_StrictModel):
     associated: AssociatedPatternConfig = Field(default_factory=AssociatedPatternConfig)
     separators: list[str] = Field(default_factory=lambda: ["-", "_"])
     prefix_optional: bool = False
+
+    @model_validator(mode="after")
+    def _validate_style_pattern_and_separator(self):
+        # REQ-d00249-C: regex style requires non-empty pattern
+        if self.component.style == "regex" and not self.component.pattern:
+            raise ValueError(
+                'component.style = "regex" requires a non-empty `pattern` field.\n'
+                'Example: pattern = "[A-Z][a-zA-Z0-9]+"'
+            )
+        # REQ-d00249-F: snake/kebab with a separator equal to their internal
+        # separator is ambiguous unless labels are uppercase-only.
+        internal_sep = _STYLE_INTERNAL_SEP.get(self.component.style)
+        if (
+            internal_sep is not None
+            and self.assertions.separator == internal_sep
+            and self.assertions.label_style in _AMBIGUOUS_LABEL_STYLES
+        ):
+            raise ValueError(
+                f'Ambiguous configuration: style "{self.component.style}" uses '
+                f'"{internal_sep}" inside component names, and assertions.separator '
+                f'is also "{internal_sep}" while label_style is '
+                f'"{self.assertions.label_style}" (non-uppercase).\n'
+                "Pick a different `assertions.separator` "
+                '(e.g. ":") so the parser can tell where the component ends '
+                "and the assertion label begins."
+            )
+        return self
 
 
 # Implements: REQ-d00212-H
