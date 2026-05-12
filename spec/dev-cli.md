@@ -374,3 +374,35 @@ D. When no UAT results CSV file exists, the uat.results check SHALL report as sk
 - 2026-04-23 | 3a95ff57 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *UAT Health Check Section* | **Hash**: 3a95ff57
+
+## REQ-d00249: Configured test runner execution
+
+**Level**: dev | **Status**: Draft | **Implements**: -
+
+## Assertions
+
+A. The system SHALL execute each entry in `[[scanning.test.runners]]` in declaration order when invoked with `elspais checks --run-tests`, resolving each entry's `cwd` relative to the repository root.
+
+B. The system SHALL stream runner stdout and stderr live to the invoking terminal, emit a per-runner banner before invocation, and a tally line with elapsed seconds and the exit code after invocation.
+
+C. The system SHALL stop at the first failing runner and skip the checks pass entirely when invoked with `elspais checks --run-tests --fail-fast`.
+
+D. The system SHALL emit a `tests.results` finding with severity `warning` when no result files are present.
+
+E. The system SHALL emit an additional `tests.results_stale` finding with severity `warning` when the oldest result file mtime is earlier than the newest scanned spec/code/test FILE-node mtime.
+
+F. The system SHALL return exit code 2 and an error message pointing at `docs/cli/checks.md` when `elspais checks --run-tests` is invoked with no runners configured.
+
+G. The system SHALL return a non-zero exit code if any runner failed OR any check failed, and 0 only if all succeeded.
+
+## Rationale
+
+`elspais checks` previously reported verified coverage based on RESULT
+nodes parsed from JUnit XML or pytest JSON files. When those files were
+missing or stale, the report claimed zero or stale coverage without any
+indication that test results were not recent. This requirement closes
+both gaps: a single command can execute tests and re-evaluate checks,
+and the checks pass warns when results are out of date even without
+running tests.
+
+*End* *Configured test runner execution* | **Hash**: b75d9360
