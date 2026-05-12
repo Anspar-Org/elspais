@@ -157,7 +157,11 @@ jobs:
           pip install -e .
 
       - name: Run health checks on specs
-        run: elspais checks
+        # --lenient so the missing-test-results warning (which now flips
+        # exit code under default mode) doesn't fail self-validate.
+        # This step intentionally does not run tests; coverage/staleness
+        # are evaluated by separate test jobs.
+        run: elspais checks --lenient
 
       - name: Generate traceability matrix
         run: |

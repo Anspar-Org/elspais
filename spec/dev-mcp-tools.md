@@ -278,10 +278,11 @@ F. SHALL complement `find_by_keywords()` which searches requirement titles, not 
 
 ## Rationale
 
-*Assertion* keyword search enables AI agents to find assertions related to specific concepts when linking tests to requirements.
+Searching within *Assertion* text enables AI agents to find assertions related to specific concepts when linking tests to requirements.
 
 ## Changelog
 
+- 2026-05-11 | a9b8dff2 | - | Developer (dev@example.com) | Auto-fix: canonicalize term forms
 - 2026-03-30 | a9b8dff2 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Assertion Keyword Search Tool Implementation* | **Hash**: a9b8dff2

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -2282,8 +2283,44 @@ def _read_run_meta(config: dict | None) -> dict:
         return defaults
 
 
+def _collect_file_mtimes(
+    graph: FederatedGraph,
+    file_types: set,
+) -> list[float]:
+    """Collect on-disk mtimes for FILE nodes of the given types.
+
+    Files missing from disk are silently skipped.
+    """
+    from elspais.graph import NodeKind
+
+    mtimes: list[float] = []
+    for node in graph.nodes_by_kind(NodeKind.FILE):
+        ft = node.get_field("file_type", None)
+        if ft not in file_types:
+            continue
+        abs_path = node.get_field("absolute_path", None)
+        if not abs_path:
+            continue
+        try:
+            mtimes.append(Path(abs_path).stat().st_mtime)
+        except OSError:
+            continue
+    return mtimes
+
+
 def check_test_results(graph: FederatedGraph, config: dict | None = None) -> HealthCheck:
-    """Check test result status from JUnit/pytest output."""
+    """Check test result status from JUnit/pytest output.
+
+    Returns one of:
+    - ``tests.results`` severity=info, passed=True -- no patterns configured.
+    - ``tests.results`` severity=warning, passed=False -- patterns configured
+      but no matching files on disk. Flips exit code unless ``--lenient``.
+    - ``tests.results`` severity=warning, passed=False -- some tests failed.
+    - ``tests.results`` severity=info, passed=True -- all tests passing.
+
+    Staleness is reported as a separate :func:`check_test_results_stale` check
+    so consumers can key off the ``tests.results_stale`` name.
+    """
     from elspais.graph import NodeKind
 
     result_nodes = list(graph.nodes_by_kind(NodeKind.RESULT))
@@ -2291,26 +2328,32 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
     deselected = run_meta["deselected_count"]
 
     if not result_nodes:
-        # Check if result scanning is actually configured
         if config:
             _tc = _validate_config(config)
             result_files = _tc.scanning.result.file_patterns
         else:
             result_files = []
         if not result_files:
-            message = "No result files configured"
-        else:
-            message = (
-                f"No test results found ({len(result_files)} result path(s) configured but empty)"
+            return HealthCheck(
+                name="tests.results",
+                passed=True,
+                message="No result files configured",
+                category="tests",
+                severity="info",
             )
         return HealthCheck(
             name="tests.results",
-            passed=True,
-            message=message,
+            passed=False,
+            message=(
+                f"Test result files missing ({len(result_files)} pattern(s) "
+                "configured but no matching files). "
+                "Run `elspais checks --run-tests` or refresh manually."
+            ),
             category="tests",
-            severity="info",
+            severity="warning",
         )
 
+    # Tally
     passed = 0
     failed = 0
     skipped = 0
@@ -2362,6 +2405,7 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
         passed=True,
         message=f"All tests passing: {passed} passed, {skipped} skipped{deselected_suffix}",
         category="tests",
+        severity="info",
         details={
             "passed": passed,
             "failed": failed,
@@ -2369,6 +2413,58 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
             "deselected": deselected,
             "pass_rate": round(pass_rate, 1),
         },
+    )
+
+
+def check_test_results_stale(graph: FederatedGraph) -> HealthCheck:
+    """Emit ``tests.results_stale`` warning when result mtimes lag source mtimes.
+
+    Returns:
+        ``tests.results_stale`` severity=info, passed=True -- results are
+        fresh or no result files exist (a missing-results report is the job
+        of :func:`check_test_results`).
+
+        ``tests.results_stale`` severity=warning, passed=False -- oldest
+        result file mtime is earlier than the newest scanned spec/code/test
+        file mtime. Flips exit code unless ``--lenient``.
+    """
+    from datetime import datetime
+
+    from elspais.graph.GraphNode import FileType
+
+    result_mtimes = _collect_file_mtimes(graph, {FileType.RESULT})
+    source_mtimes = _collect_file_mtimes(graph, {FileType.SPEC, FileType.CODE, FileType.TEST})
+
+    if not result_mtimes or not source_mtimes:
+        return HealthCheck(
+            name="tests.results_stale",
+            passed=True,
+            message="Result freshness not evaluated (no results or no scanned sources)",
+            category="tests",
+            severity="info",
+        )
+
+    if min(result_mtimes) >= max(source_mtimes):
+        return HealthCheck(
+            name="tests.results_stale",
+            passed=True,
+            message="Test results are up to date",
+            category="tests",
+            severity="info",
+        )
+
+    oldest_result = datetime.fromtimestamp(min(result_mtimes)).isoformat(timespec="seconds")
+    newest_source = datetime.fromtimestamp(max(source_mtimes)).isoformat(timespec="seconds")
+    return HealthCheck(
+        name="tests.results_stale",
+        passed=False,
+        message=(
+            f"Test results are stale -- oldest result mtime {oldest_result} "
+            f"is earlier than newest scanned source mtime {newest_source}. "
+            f"Re-run with `elspais checks --run-tests` to refresh."
+        ),
+        category="tests",
+        severity="warning",
     )
 
 
@@ -2557,6 +2653,7 @@ def run_test_checks(
         check_dimension_coverage(graph, "verified", exclude_status=exclude_status, config=config),
         check_unlinked_tests(graph),
         check_test_results(graph, config=config),
+        check_test_results_stale(graph),
         _check_status_references(
             graph, NodeKind.TEST, StatusRole.RETIRED, ref_sev.retired, exclude_status
         ),
@@ -2741,9 +2838,50 @@ def _report_from_dict(data: dict[str, Any]) -> HealthReport:
 def run(args: argparse.Namespace) -> int:
     """Run the health command.
 
-    Uses engine.call for daemon-vs-local, then renders the report.
+    If --run-tests is set, execute configured runners first, then proceed
+    to checks. With --fail-fast, a failing runner skips the checks pass
+    entirely. Final exit code is non-zero if any runner failed OR any
+    check failed.
     """
     from elspais.commands import _engine
+    from elspais.commands.test_runner import run_configured_runners
+    from elspais.config import find_git_root, get_config
+
+    run_tests = getattr(args, "run_tests", False)
+    fail_fast = getattr(args, "fail_fast", False)
+
+    runner_failed = False
+    skip_due_to_fail_fast = False
+
+    if run_tests:
+        config_path = getattr(args, "config", None)
+        try:
+            cfg_dict = get_config(config_path, start_path=Path.cwd())
+        except Exception as exc:
+            print(f"error: failed to load config: {exc}", file=sys.stderr)
+            return 2
+        # _validate_config is defined in this module (health.py near line 35).
+        cfg = _validate_config(cfg_dict)
+        if not cfg.scanning.test.runners:
+            print(
+                "error: --run-tests requires at least one "
+                "[[scanning.test.runners]] entry. "
+                "See docs/cli/checks.md for configuration examples.",
+                file=sys.stderr,
+            )
+            return 2
+        repo_root = find_git_root() or Path.cwd()
+        results = run_configured_runners(cfg, repo_root, fail_fast=fail_fast)
+        runner_failed = any(r.returncode != 0 for r in results)
+        if fail_fast and runner_failed:
+            skip_due_to_fail_fast = True
+
+    if skip_due_to_fail_fast:
+        print(
+            "\nfail-fast: skipping checks due to runner failure.",
+            file=sys.stderr,
+        )
+        return 1
 
     # Build params from args
     params: dict[str, str] = {}
@@ -2762,11 +2900,10 @@ def run(args: argparse.Namespace) -> int:
         params["status"] = ",".join(status_filter)
 
     spec_dir = getattr(args, "spec_dir", None)
-    skip_daemon = bool(spec_dir)
+    # Force fresh build when runners just produced new result files.
+    skip_daemon = bool(spec_dir) or run_tests
 
     if skip_daemon:
-        # Custom spec_dir: build graph directly with the requested dirs,
-        # preserving the original error-handling for config/graph failures.
         data = _run_local_checks(args, params)
     else:
         data = _engine.call(
@@ -2776,13 +2913,12 @@ def run(args: argparse.Namespace) -> int:
             config_path=getattr(args, "config", None),
         )
 
-    # The dict already has the correct "healthy" flag (lenient-aware).
-    # Use it for exit code; reconstruct report only for rendering.
     healthy = data.get("healthy", False)
     graph_source = _format_graph_source(data.get("graph_source"))
     report = _report_from_dict(data)
     print(_format_report(report, args, graph_source=graph_source))
-    return 0 if healthy else 1
+    checks_exit = 0 if healthy else 1
+    return 1 if (runner_failed or checks_exit != 0) else 0
 
 
 def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[str, Any]:
