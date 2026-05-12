@@ -585,6 +585,10 @@ class TestRenderRoundTrip:
             '[scanning.spec]\ndirectories = ["spec"]\n'
             "[rules.format]\nrequire_hash = true\nrequire_assertions = true\n"
         )
+        # Use H1 requirements with H2 Assertions — the canonical depth pairing
+        # (req_depth=1 -> min_child_depth=2 -> ## Assertions is already canonical).
+        # Round-trip identity holds only for already-canonical files; non-canonical
+        # files are intentionally canonicalized by render (REQ-d00250-D).
         content = (
             "# Test Spec\n"
             "\n"
@@ -592,7 +596,7 @@ class TestRenderRoundTrip:
             "\n"
             "---\n"
             "\n"
-            "## REQ-p00001: First Requirement\n"
+            "# REQ-p00001: First Requirement\n"
             "\n"
             "**Level**: prd | **Status**: Active\n"
             "\n"
@@ -608,7 +612,7 @@ class TestRenderRoundTrip:
             "\n"
             "---\n"
             "\n"
-            "## REQ-p00002: Second Requirement\n"
+            "# REQ-p00002: Second Requirement\n"
             "\n"
             "**Level**: prd | **Status**: Draft\n"
             "\n"
