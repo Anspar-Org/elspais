@@ -103,3 +103,27 @@ Separate requirements with a horizontal rule:
 # REQ-p00002: Second Requirement
 ...
 ```
+
+## Section Header Depth Canonicalization
+
+Section headers within a requirement (`## Assertions`, `## Changelog`,
+and named sections like `## Rationale`, plus hash-style sub-headings
+inside assertion blocks) are canonicalized to sit at
+`requirement_heading_level + 1` when shallower than this depth.
+
+When you use `elspais fix`, headers that are too shallow are brought
+to the minimum required level. Headers that are already deeper than
+the minimum are preserved as-is (e.g., an author writing `### Assertions`
+under an H1 requirement keeps the `###`).
+
+**H6 Limitation**: A requirement at heading level H6 (`######`) cannot
+have any section blocks and remain fixable. If a requirement at H6
+contains an `## Assertions`, `## Changelog`, or other section header,
+`fix` will print an error to stderr and exit non-zero:
+
+```
+Cannot fix REQ-h60001: heading at H6 — move requirement to shallower level
+```
+
+Resolve this by moving the H6 requirement to a shallower heading level
+(H1 through H5) so that section headers can fit at H6.
