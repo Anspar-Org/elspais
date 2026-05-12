@@ -25,7 +25,6 @@ Per-node annotators enable fine-grained control over which annotations are appli
 ### Changelog
 
 - 2026-05-11 | 8ca0389e | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-05-11 | 8ca0389e | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 8ca0389e | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Node Annotator Functions* | **Hash**: 8ca0389e
@@ -57,7 +56,6 @@ Aggregate functions provide reusable statistics computation that any output form
 
 ### Changelog
 
-- 2026-05-11 | 97c0f6fc | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 97c0f6fc | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 97c0f6fc | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -93,7 +91,6 @@ Direct graph consumption eliminates data structure conversion overhead and ensur
 ### Changelog
 
 - 2026-05-11 | a3575fcc | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-05-11 | a3575fcc | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | a3575fcc | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Output Generators Consume Graph Directly* | **Hash**: a3575fcc
@@ -115,7 +112,6 @@ A standard pipeline ensures consistent annotation across all output formats and 
 
 ### Changelog
 
-- 2026-05-11 | 0256df47 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 0256df47 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 0256df47 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -146,7 +142,6 @@ Using metrics dict as the extension point enables adding new annotations without
 
 ### Changelog
 
-- 2026-05-11 | 0073a9c3 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 0073a9c3 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 0073a9c3 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -190,7 +185,6 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* 
 ### Changelog
 
 - 2026-05-11 | e9b5c3f1 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-05-11 | e9b5c3f1 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | e9b5c3f1 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Indirect Coverage Source* | **Hash**: e9b5c3f1
@@ -221,7 +215,6 @@ Users need both a strict *Traceability* view (only *Assertion*-targeted tests co
 ### Changelog
 
 - 2026-05-11 | 3e5b1766 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-05-11 | 3e5b1766 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 3e5b1766 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Indirect Coverage Toggle Display* | **Hash**: 3e5b1766
@@ -250,7 +243,6 @@ Currently, all parentless REQUIREMENTs and all USER_JOURNEYs are unconditionally
 ### Changelog
 
 - 2026-05-11 | 4bd239f1 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-05-11 | 4bd239f1 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 4bd239f1 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Unified Root vs Orphan Classification* | **Hash**: 4bd239f1
@@ -276,7 +268,6 @@ The core engine composes existing building blocks into a scoring pipeline. Each 
 
 ### Changelog
 
-- 2026-05-11 | 95f09aea | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 95f09aea | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 95f09aea | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 

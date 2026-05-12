@@ -117,13 +117,14 @@ the minimum are preserved as-is (e.g., an author writing `### Assertions`
 under an H1 requirement keeps the `###`).
 
 **H6 Limitation**: A requirement at heading level H6 (`######`) cannot
-have any section blocks and remain fixable. If a requirement at H6
-contains an `## Assertions`, `## Changelog`, or other section header,
-`fix` will print an error to stderr and exit non-zero:
+have any section blocks and remain fixable — its sections would need
+to live at H7, which markdown does not support. When `fix` encounters
+this, it prints an error to stderr and exits non-zero:
 
 ```
-Cannot fix REQ-h60001: heading at H6 — move requirement to shallower level
+Cannot fix REQ-d00001: section header depth (req at H6 — move req shallower)
 ```
 
-Resolve this by moving the H6 requirement to a shallower heading level
-(H1 through H5) so that section headers can fit at H6.
+`health` / `checks` surfaces the same condition as a `spec.unfixable_issues`
+finding with non-zero exit code. Resolve by moving the H6 requirement to
+a shallower heading level (H1 through H5).

@@ -17,15 +17,6 @@ class ProjectConfig(_StrictModel):
     name: str = ""
 
 
-_VALID_COMPONENT_STYLES = (
-    "numeric",
-    "camelCase",
-    "PascalCase",
-    "snake_case",
-    "kebab-case",
-    "regex",
-)
-
 _LEGACY_STYLE_MIGRATION = {
     "named": "[A-Za-z][A-Za-z0-9]+",
     "alphanumeric": "[A-Z0-9]+",

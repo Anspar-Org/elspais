@@ -80,9 +80,6 @@ C. The viewer SHALL display source files inline in a side panel with syntax-high
 ## Changelog
 
 - 2026-03-30 | b3dd4d1a | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
-- 2026-03-30 | b3dd4d1a | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
-- 2026-03-30 | b3dd4d1a | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
-- 2026-03-30 | b3dd4d1a | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Interactive Traceability Viewer* | **Hash**: b3dd4d1a
 ---
@@ -109,7 +106,6 @@ E. The system SHALL provide a `spec.satisfies_resolve` health check that verifie
 
 ### Changelog
 
-- 2026-05-11 | bae1b85d | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | bae1b85d | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-04 | bae1b85d | - | Developer (dev@example.com) | Auto-fix: canonicalize term forms, update hash
 - 2026-03-30 | 9115ce0d | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
@@ -164,7 +160,6 @@ Multiple data structures lead to synchronization bugs, duplicated logic, and mai
 ### Changelog
 
 - 2026-05-11 | 4a1e5d0b | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-05-11 | 4a1e5d0b | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 4a1e5d0b | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Unified Graph Architecture* | **Hash**: 4a1e5d0b
@@ -194,7 +189,6 @@ AI agents need programmatic access to requirements data for tasks like coverage 
 
 ### Changelog
 
-- 2026-05-11 | 3ebc237a | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 3ebc237a | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 3ebc237a | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 

@@ -263,8 +263,16 @@ SUB_HEADING_CASES = [
 
 
 @pytest.mark.parametrize("ass_d,sub_d", SUB_HEADING_CASES)
-def test_hash_sub_heading_recognized_at_any_depth(ass_d, sub_d, tmp_path):
-    """ASSERT_SUB_HASH_HDR lexes correctly at any 1<=d<=6 depth."""
+def test_hash_heading_inside_assertions_becomes_named_section(ass_d, sub_d, tmp_path):
+    """A `#... Core` line after `#... Assertions` is recognized as a structural
+    heading at any 1<=d<=6 depth.
+
+    With SECTION_HDR (priority 7) wider than ASSERT_SUB_HASH_HDR (priority 6)
+    after the grammar widening, hash-style headings inside an assertion block
+    exit the block and parse as named sections — heading_style is None and
+    the depth is captured in heading_level. ASSERT_SUB_HASH_HDR remains
+    reachable only via the legacy ``*Heading*`` inline-label syntax.
+    """
     spec = (
         f"# REQ-d00001: Test\n\n"
         f"**Level**: dev | **Status**: Active | **Implements**: -\n\n"
@@ -278,12 +286,19 @@ def test_hash_sub_heading_recognized_at_any_depth(ass_d, sub_d, tmp_path):
     assert node is not None
     from elspais.graph import EdgeKind, NodeKind
 
-    sub_heads = [
+    rems = [
         c
         for c in node.iter_children(edge_kinds={EdgeKind.STRUCTURES})
         if c.kind == NodeKind.REMAINDER and c.get_field("heading") == "Core"
     ]
-    assert len(sub_heads) == 1, (
-        f"Expected 1 'Core' sub-heading REMAINDER but got {len(sub_heads)}. "
-        f"`{'#' * sub_d} Core` was not recognized as ASSERT_SUB_HASH_HDR."
+    assert len(rems) == 1, (
+        f"Expected 1 'Core' REMAINDER but got {len(rems)}. "
+        f"`{'#' * sub_d} Core` was not recognized as a structural heading."
     )
+    assert rems[0].get_field("heading_style") is None, (
+        f"Expected `## Core` to lex as a named section (heading_style=None), "
+        f"but got heading_style={rems[0].get_field('heading_style')!r}. "
+        f"SECTION_HDR (priority 7) should win over ASSERT_SUB_HASH_HDR "
+        f"(priority 6) for hash headings inside assertion blocks."
+    )
+    assert rems[0].get_field("heading_level") == sub_d

@@ -84,7 +84,6 @@ Multi-repo federation users need visibility into which repos are current and whi
 ### Changelog
 
 - 2026-05-11 | b4fae1d0 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-05-11 | b4fae1d0 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | b4fae1d0 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Server Federation and Staleness* | **Hash**: b4fae1d0

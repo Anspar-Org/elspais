@@ -1,8 +1,9 @@
-"""Failing tests for the Component Style Redesign (REQ-d00249).
+"""Tests for the Component Style Redesign (REQ-d00249).
 
-These tests encode the not-yet-implemented spec in
-``docs/superpowers/specs/2026-05-11-component-style-redesign-design.md``.
-They MUST fail against the current code; they pass once the refactor lands.
+These tests encode the behavior specified in
+``docs/superpowers/specs/2026-05-11-component-style-redesign-design.md``,
+which is now implemented in this codebase (config schema, resolver,
+grammar tokens).
 
 Each test function carries a ``# Verifies: REQ-d00249-X`` comment naming
 the assertion it exercises.

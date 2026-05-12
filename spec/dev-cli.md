@@ -27,7 +27,6 @@ The previous `validate` command's responsibilities are absorbed by `health`. Ref
 ### Changelog
 
 - 2026-05-11 | ada92a29 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-05-11 | ada92a29 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | ada92a29 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Diagnostic Command Exit Code Contract* | **Hash**: ada92a29
@@ -61,7 +60,6 @@ The previous implementation hardcoded expansion in RequirementParser only, using
 
 ### Changelog
 
-- 2026-05-11 | 313fe52b | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 313fe52b | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 313fe52b | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
@@ -101,7 +99,6 @@ Different projects use different ID conventions, comment styles, and directory s
 ### Changelog
 
 - 2026-05-11 | 89956cd7 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-05-11 | 89956cd7 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 89956cd7 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Unified Reference Configuration* | **Hash**: 89956cd7
@@ -129,7 +126,6 @@ A JSON graph output mode enables programmatic consumption of the full *Traceabil
 
 ### Changelog
 
-- 2026-05-11 | f8f0e0f2 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | f8f0e0f2 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | f8f0e0f2 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
@@ -171,7 +167,6 @@ Report-producing commands (`health`, `trace`, `coverage`, `changed`) currently e
 ### Changelog
 
 - 2026-05-11 | 82d76f1a | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-05-11 | 82d76f1a | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 82d76f1a | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Unified Report Composition* | **Hash**: 82d76f1a
@@ -199,7 +194,6 @@ Coverage data is already computed during graph construction but is only surfaced
 
 ### Changelog
 
-- 2026-05-11 | 2fd4ab13 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 2fd4ab13 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 2fd4ab13 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
@@ -230,7 +224,6 @@ CLI exposure enables both interactive use and CI pipeline integration. JSON outp
 
 ### Changelog
 
-- 2026-05-11 | 44fd54e9 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 44fd54e9 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 44fd54e9 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -265,7 +258,6 @@ In a large requirements DAG, naive metrics like descendant count always favor th
 
 ### Changelog
 
-- 2026-05-11 | 86bb619b | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 86bb619b | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 86bb619b | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
@@ -302,7 +294,6 @@ A CLI command provides immediate visibility into which requirements are most fou
 
 ### Changelog
 
-- 2026-05-11 | 3cd66dbe | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 3cd66dbe | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 3cd66dbe | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 

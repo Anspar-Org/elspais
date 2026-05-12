@@ -106,9 +106,9 @@ def test_assertions_too_shallow_marks_section_header_depth(
 def test_named_section_too_shallow_marks_section_header_depth(
     tmp_path, req_d, sec_d, expect_fixable
 ):
-    # No assertions block here — test probes the named-section (SECTION_HDR) depth rule.
-    # SECTION_HDR only matches #{1,2}, so H3+ named sections without assertions
-    # fall to preamble text and are not checkable here.
+    # No assertions block here — test probes the named-section (SECTION_HDR)
+    # depth rule. SECTION_HDR matches #{1,6}, but cases below H3 keep tests
+    # focused on the canonical (too-shallow) violations.
     spec = (
         f"{'#' * req_d} REQ-d00001: T\n\n"
         f"**Level**: dev | **Status**: Active | **Implements**: -\n\n"

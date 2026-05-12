@@ -25,7 +25,6 @@ FILE nodes are the foundation for representing source files as first-class graph
 ### Changelog
 
 - 2026-05-11 | 664d3990 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-05-11 | 664d3990 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 664d3990 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *FILE Node Data Model* | **Hash**: 664d3990
@@ -55,7 +54,6 @@ Eliminating `add_child()` ensures every relationship in the graph has a typed ed
 
 ### Changelog
 
-- 2026-05-11 | 12964863 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 12964863 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 12964863 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -101,7 +99,6 @@ FILE nodes make source files first-class graph participants. Creating them in fa
 ### Changelog
 
 - 2026-05-11 | 7742f15f | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-05-11 | 7742f15f | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 7742f15f | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *FILE Node Creation in Build Pipeline* | **Hash**: 7742f15f
@@ -136,7 +133,6 @@ SourceLocation duplicates information now available through the graph structure 
 ### Changelog
 
 - 2026-05-11 | 8bd81196 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-05-11 | 8bd81196 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 8bd81196 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *SourceLocation Removal and Consumer Migration* | **Hash**: 8bd81196
@@ -168,7 +164,6 @@ Parameterized roots enable view-specific entry points into the graph: domain con
 
 ### Changelog
 
-- 2026-05-11 | f56f8527 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | f56f8527 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | f56f8527 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -210,7 +205,6 @@ The render protocol is the inverse of parsing: each node kind knows how to seria
 ### Changelog
 
 - 2026-05-11 | c004c62e | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-05-11 | c004c62e | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | c004c62e | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
 *End* *Render Protocol for Graph Nodes* | **Hash**: c004c62e
@@ -243,7 +237,6 @@ Render-based save replaces the brittle text surgery in persistence.py with graph
 ### Changelog
 
 - 2026-05-11 | 7043f7af | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-05-11 | 7043f7af | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 7043f7af | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *Render-Based Save Operation* | **Hash**: 7043f7af
@@ -275,7 +268,6 @@ A single large scenario test that exercises the full mutation API in a realistic
 
 ### Changelog
 
-- 2026-05-11 | be52daed | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | be52daed | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | be52daed | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 

@@ -31,7 +31,6 @@ FederatedGraph provides config isolation for multi-repo builds while presenting 
 ### Changelog
 
 - 2026-05-11 | 72471144 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-05-11 | 72471144 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 72471144 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *FederatedGraph Read-Only Delegation* | **Hash**: 72471144
@@ -66,7 +65,6 @@ Mutation delegation preserves TraceGraph's existing mutation+undo logic while ad
 ### Changelog
 
 - 2026-05-11 | 1a0942a4 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-05-11 | 1a0942a4 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 1a0942a4 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
 *End* *FederatedGraph Mutation Delegation* | **Hash**: 1a0942a4
@@ -94,7 +92,6 @@ Associates are declared in the root repo's `.elspais.toml` using a structured TO
 
 ### Changelog
 
-- 2026-05-11 | 479dcbb8 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 479dcbb8 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 479dcbb8 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -125,7 +122,6 @@ Per-repo building ensures config isolation: each repo's hierarchy rules, format 
 
 ### Changelog
 
-- 2026-05-11 | 31e019a1 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 31e019a1 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 31e019a1 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
@@ -158,7 +154,6 @@ Without per-repo delegation, all nodes are validated against the root repo's con
 
 ### Changelog
 
-- 2026-05-11 | 2313140d | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 2313140d | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 2313140d | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
