@@ -34,7 +34,9 @@ def _normalize_path(path: str) -> str:
     Returns:
         Path with forward slashes and no leading ./ prefix.
     """
-    p = path.replace("\\", "/")
+    from elspais.utilities.paths import normalize_relative_path
+
+    p = normalize_relative_path(path)
     if p.startswith("./"):
         p = p[2:]
     return p
