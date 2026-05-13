@@ -18,6 +18,18 @@ from lark import Token, Tree
 
 # Implements: REQ-d00246-B
 from elspais.graph.parsers import ParsedContent
+from elspais.graph.parsers.patterns import (
+    ACTOR_PATTERN as _ACTOR_RE,
+)
+from elspais.graph.parsers.patterns import (
+    GOAL_PATTERN as _GOAL_RE,
+)
+from elspais.graph.parsers.patterns import (
+    JNY_ID_LINE_PATTERN as _JNY_HEADER_RE,
+)
+from elspais.graph.parsers.patterns import (
+    VALIDATES_PATTERN as _VALIDATES_RE,
+)
 from elspais.utilities.hasher import HASH_VALUE_PATTERN
 from elspais.utilities.markdown import strip_emphasis
 
@@ -32,15 +44,8 @@ _HASH_RE = re.compile(rf"\*\*Hash\*\*:[ \t]*(?P<hash>{HASH_VALUE_PATTERN})")
 _REQ_HEADER_RE = re.compile(
     r"^(?P<hashes>#+)[ \t]*(?P<id>[A-Z]+-[A-Za-z0-9-]+):[ \t]*(?P<title>.+)$"
 )
-_JNY_HEADER_RE = re.compile(r"^#*[ \t]*(?P<id>JNY-[A-Za-z0-9-]+):[ \t]*(?P<title>.+)$")
-
 # Metadata field value extraction
 _FIELD_VALUE_RE = re.compile(r"\*\*\w+\*\*:[ \t]*(.*)")
-
-# Journey field patterns
-_ACTOR_RE = re.compile(r"\*\*Actor\*\*:[ \t]*(?P<actor>.+?)(?:\n|$)")
-_GOAL_RE = re.compile(r"\*\*Goal\*\*:[ \t]*(?P<goal>.+?)(?:\n|$)")
-_VALIDATES_RE = re.compile(r"^Validates:[ \t]*(?P<validates>.+?)$", re.MULTILINE)
 
 # Changelog entry pattern
 _CHANGELOG_ENTRY_RE = re.compile(r"^- (.+?) \| (\S+) \| (.+?) \| (.+?) \(<?(.+?)>?\) \| (.+)$")

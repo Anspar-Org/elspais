@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from elspais.graph.comments import CommentEvent, CommentIndex, CommentThread
-from elspais.graph.relations import EdgeKind
+from elspais.graph.edge_sets import ASSERTION_STRUCTURE_EDGES
 from elspais.utilities.hasher import calculate_hash
 
 if TYPE_CHECKING:
@@ -192,9 +192,6 @@ def load_comment_index(repo_root: Path) -> CommentIndex:
     return index
 
 
-_STRUCTURAL_EDGE_KINDS = frozenset({EdgeKind.STRUCTURES})
-
-
 def validate_anchor(anchor: str, graph: TraceGraph) -> bool:
     """Check if an anchor's target exists in the current graph.
 
@@ -207,13 +204,13 @@ def validate_anchor(anchor: str, graph: TraceGraph) -> bool:
     if frag_type is None:
         return True
     if frag_type == "assertion":
-        for child in node.iter_children(edge_kinds=_STRUCTURAL_EDGE_KINDS):
+        for child in node.iter_children(edge_kinds=ASSERTION_STRUCTURE_EDGES):
             if child.get_field("label") == frag_value:
                 return True
         return False
     if frag_type == "section":
         # Check REMAINDER children linked via STRUCTURES (real graph)
-        for child in node.iter_children(edge_kinds=_STRUCTURAL_EDGE_KINDS):
+        for child in node.iter_children(edge_kinds=ASSERTION_STRUCTURE_EDGES):
             if child.kind.value == "remainder" and child.get_field("heading") == frag_value:
                 return True
         # Fallback: check sections dict field (legacy/test graphs)

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from elspais import __version__
+from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.html.theme import get_catalog
 from elspais.utilities.patterns import INSTANCE_SEPARATOR
 
@@ -1080,8 +1081,6 @@ class HTMLGenerator:
 
     def _collect_journeys(self) -> list[JourneyItem]:
         """Collect all user journey nodes for the journeys tab."""
-        import re
-
         from elspais.graph import NodeKind
         from elspais.graph.relations import EdgeKind
 
@@ -1100,9 +1099,9 @@ class HTMLGenerator:
 
             # Extract descriptor from journey ID: JNY-{descriptor}-{number}
             descriptor = ""
-            match = re.match(r"JNY-(.+)-\d+$", node.id)
+            match = JNY_ID_PATTERN.match(node.id)
             if match:
-                descriptor = match.group(1)
+                descriptor = match.group("descriptor")
 
             # Extract file from FILE parent node
             file = ""

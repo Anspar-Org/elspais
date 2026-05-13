@@ -18,6 +18,9 @@ from typing import Any
 
 from elspais.graph.comment_store import update_anchors_on_rename
 from elspais.graph.comments import CommentIndex, CommentThread
+from elspais.graph.edge_sets import (
+    TRACEABILITY_EDGE_KINDS as _TRACEABILITY_EDGE_KINDS,
+)
 from elspais.graph.GraphNode import (
     FileType,
     GraphNode,
@@ -67,10 +70,6 @@ def _canonicalize_list_spacing(text: str) -> str:
 # Default satellite kinds: children of these types don't count as "meaningful"
 # for determining root vs orphan status. Configurable via [graph].satellite_kinds.
 _DEFAULT_SATELLITE_KINDS = frozenset({NodeKind.ASSERTION, NodeKind.RESULT})
-
-# Traceability edges: all edge kinds except structural (CONTAINS, STRUCTURES)
-_STRUCTURAL_EDGE_KINDS = frozenset({EdgeKind.CONTAINS, EdgeKind.STRUCTURES})
-_TRACEABILITY_EDGE_KINDS = frozenset(k for k in EdgeKind if k not in _STRUCTURAL_EDGE_KINDS)
 
 
 @dataclass

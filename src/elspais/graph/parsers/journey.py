@@ -6,11 +6,17 @@ Parses user journey specifications from markdown.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterator
 from typing import Any
 
 from elspais.graph.parsers import ParseContext, ParsedContent
+from elspais.graph.parsers.patterns import (
+    ACTOR_PATTERN,
+    GOAL_PATTERN,
+    JNY_END_PATTERN,
+    JNY_ID_LINE_PATTERN,
+    VALIDATES_PATTERN,
+)
 
 
 class JourneyParser:
@@ -27,12 +33,11 @@ class JourneyParser:
 
     priority = 60
 
-    # Journey ID pattern: JNY-{Descriptor}-{number}
-    HEADER_PATTERN = re.compile(r"^#*\s*(?P<id>JNY-[A-Za-z0-9-]+):\s*(?P<title>.+)$")
-    ACTOR_PATTERN = re.compile(r"\*\*Actor\*\*:\s*(?P<actor>.+?)(?:\n|$)")
-    GOAL_PATTERN = re.compile(r"\*\*Goal\*\*:\s*(?P<goal>.+?)(?:\n|$)")
-    VALIDATES_PATTERN = re.compile(r"^Validates:\s*(?P<validates>.+?)$", re.MULTILINE)
-    END_MARKER_PATTERN = re.compile(r"^\*End\*\s+\*JNY-[^*]+\*", re.MULTILINE)
+    HEADER_PATTERN = JNY_ID_LINE_PATTERN
+    ACTOR_PATTERN = ACTOR_PATTERN
+    GOAL_PATTERN = GOAL_PATTERN
+    VALIDATES_PATTERN = VALIDATES_PATTERN
+    END_MARKER_PATTERN = JNY_END_PATTERN
 
     def claim_and_parse(
         self,

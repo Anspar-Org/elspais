@@ -9,6 +9,8 @@ from __future__ import annotations
 import hashlib
 import re
 
+from elspais.graph.parsers.patterns import CHANGELOG_HEADER_PATTERN
+
 # Canonical pattern for matching any hash value in a footer.
 # Matches hex hashes (a1b2c3d4), placeholders (XXXXXXXX, TODO, ________), etc.
 # Safe to use after "**Hash**: " prefix — bounded by end-of-line.
@@ -27,7 +29,7 @@ def strip_changelog_section(body: str) -> str:
     Returns:
         Body text with ## Changelog section removed, trailing whitespace stripped.
     """
-    match = re.search(r"^## Changelog\s*$", body, re.MULTILINE)
+    match = CHANGELOG_HEADER_PATTERN.search(body)
     if match:
         return body[: match.start()].rstrip()
     return body

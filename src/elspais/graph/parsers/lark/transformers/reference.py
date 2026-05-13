@@ -29,6 +29,12 @@ from typing import TYPE_CHECKING, Any
 from lark import Tree
 
 from elspais.graph.parsers import ParsedContent
+from elspais.graph.parsers.patterns import (
+    KEYWORD_PATTERN as _KEYWORD_RE,
+)
+from elspais.graph.parsers.patterns import (
+    build_multi_assertion_pattern,
+)
 
 if TYPE_CHECKING:
     from elspais.utilities.patterns import IdResolver
@@ -37,9 +43,6 @@ _log = logging.getLogger(__name__)
 
 # Hardcoded comment styles for empty-comment detection
 _COMMENT_STYLES = ["#", "//", "--"]
-
-# Keyword detection pattern — matches the keyword portion of a reference comment
-_KEYWORD_RE = re.compile(r"(?:implements|verifies|refines)", re.IGNORECASE)
 
 
 class ReferenceTransformer:
@@ -394,11 +397,9 @@ class ReferenceTransformer:
 
     def _extract_ids(self, text: str) -> list[str]:
         """Extract requirement IDs from a reference line (including multi-assertion syntax)."""
-        prefix = self.resolver.config.namespace
-        multi_sep = re.escape(self.resolver.config.assertions.multi_separator or "+")
-        pattern = re.compile(
-            rf"{re.escape(prefix)}[-_][A-Za-z0-9\-_]+(?:{multi_sep}[A-Za-z0-9]+)*",
-            re.IGNORECASE,
+        pattern = build_multi_assertion_pattern(
+            self.resolver.config.namespace,
+            self.resolver.config.assertions.multi_separator,
         )
         refs = []
         for m in pattern.finditer(text):

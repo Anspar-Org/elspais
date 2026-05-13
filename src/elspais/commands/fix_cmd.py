@@ -566,9 +566,9 @@ def _ensure_changelog_section(
         return 0
 
     block = content[start_pos : end_match.start()]
-    import re
+    from elspais.graph.parsers.patterns import CHANGELOG_HEADER_PATTERN
 
-    if re.search(r"^## Changelog\s*$", block, re.MULTILINE):
+    if CHANGELOG_HEADER_PATTERN.search(block):
         print(f"{req_id} hash is already up to date")
         return 0
 
