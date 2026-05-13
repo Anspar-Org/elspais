@@ -1249,37 +1249,19 @@ class TraceGraph:
     # Assertion Mutation API
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _compute_hash(self, req_node: GraphNode) -> str:
-        """Compute the expected hash for a requirement node without modifying it.
-
-        Supports two modes (configurable via [validation].hash_mode):
-        - full-text: hash every line between header and footer (body_text)
-        - normalized-text: hash normalized assertion text only
-        """
-        from elspais.utilities.hasher import calculate_hash, compute_normalized_hash
-
-        if self.hash_mode == "normalized-text":
-            assertions = []
-            for child in req_node.iter_children():
-                if child.kind == NodeKind.ASSERTION:
-                    label = child.get_field("label", "")
-                    text = child.get_label() or ""
-                    if label and text:
-                        assertions.append((label, text))
-            return compute_normalized_hash(assertions)
-        else:
-            from elspais.graph.render import reconstruct_body_text
-
-            body = reconstruct_body_text(req_node)
-            return calculate_hash(body)
-
     def _recompute_requirement_hash(self, req_node: GraphNode) -> str:
         """Recompute and store the hash for a requirement node.
+
+        Delegates to the canonical ``compute_hash_for_node``. Falls back to
+        ``"N/A"`` when no hashable content exists (matches existing
+        render-side convention for empty requirements).
 
         Returns:
             The new hash value.
         """
-        new_hash = self._compute_hash(req_node)
+        from elspais.graph.render import compute_hash_for_node
+
+        new_hash = compute_hash_for_node(req_node, self.hash_mode) or "N/A"
         req_node.set_field("hash", new_hash)
         return new_hash
 
