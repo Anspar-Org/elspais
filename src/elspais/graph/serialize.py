@@ -266,8 +266,10 @@ def to_csv(graph: FederatedGraph) -> str:
 
 
 __all__ = [
-    "serialize_node",
+    "serialize_assertion",
     "serialize_graph",
-    "to_markdown",
+    "serialize_node",
+    "serialize_requirement_summary",
     "to_csv",
+    "to_markdown",
 ]

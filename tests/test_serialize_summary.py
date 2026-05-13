@@ -1,9 +1,12 @@
 # Implements: REQ-d00064-A, REQ-d00064-C
-"""Phase 6 of dry-clean3: public node-summary serializers in graph.serialize.
+"""Public node-summary serializers in ``graph.serialize``.
 
-Moves ``_serialize_requirement_summary``/``_serialize_assertion`` out of
-``mcp/server.py`` into ``elspais.graph.serialize`` and adds an ``extras``
-keyword. Tests are expected to FAIL until Phase 6 lands.
+``serialize_requirement_summary`` and ``serialize_assertion`` are the
+canonical helpers for the ``{id, title, level, status}`` /
+``{id, label, text}`` shapes used by MCP, CLI, server, and HTML
+surfaces. Both accept an ``extras=`` keyword for caller-specific fields.
+Missing fields fall back to ``""`` so consumers don't have to dance
+around nullability.
 """
 
 from __future__ import annotations

@@ -609,17 +609,37 @@ def _deep_merge(base: dict, overlay: dict) -> dict:
 
 _ELSPAIS = _shutil.which("elspais")
 
-REPO_ROOT = (
-    Path(
-        subprocess.run(
+
+def _discover_repo_root() -> Path:
+    """Resolve the repo root, falling back to the worktree path if git can't.
+
+    ``git rev-parse --show-toplevel`` returns a path on success. If the
+    binary exists but the call fails (no repo, shallow checkout outside a
+    work-tree, etc.), stdout may be empty and ``Path("")`` resolves to
+    ``"."`` -- which mis-roots every fixture path. Validate the
+    returncode and stdout before trusting the output.
+    """
+    fallback = Path(__file__).resolve().parents[2]
+    if _shutil.which("git") is None:
+        return fallback
+    try:
+        result = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
             capture_output=True,
             text=True,
-        ).stdout.strip()
-    )
-    if _shutil.which("git")
-    else Path(__file__).resolve().parents[2]
-)
+            check=False,
+        )
+    except OSError:
+        return fallback
+    if result.returncode != 0:
+        return fallback
+    toplevel = result.stdout.strip()
+    if not toplevel:
+        return fallback
+    return Path(toplevel)
+
+
+REPO_ROOT = _discover_repo_root()
 
 
 def run_elspais(

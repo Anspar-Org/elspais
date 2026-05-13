@@ -53,20 +53,33 @@ def _extract_prefix(req_id: str) -> str:
 def _find_end_marker_line(content: str, start_pos: int) -> tuple[int, int, EndMarker] | None:
     """Find the next ``*End* *Title* | **Hash**: ...`` line after ``start_pos``.
 
-    Returns (line_start, line_end, parsed) or None if no such line exists.
-    Only matches lines whose hash segment is present (so callers replacing
-    the hash know they're not corrupting a malformed line).
+    Returns ``(line_start, terminator_start, parsed)`` where
+    ``terminator_start`` points to the first character of the line
+    terminator (``\\r``, ``\\n``, or end-of-content). Slicing
+    ``content[:line_start] + new_line + content[terminator_start:]``
+    preserves the original line ending (LF or CRLF), avoiding silent
+    line-ending conversion on Windows files.
+
+    Only matches lines whose hash segment is present (so callers
+    replacing the hash know they're not corrupting a malformed line).
     """
     pos = start_pos
     while pos < len(content):
-        line_end = content.find("\n", pos)
-        if line_end == -1:
-            line_end = len(content)
-        line = content[pos:line_end]
+        lf_pos = content.find("\n", pos)
+        if lf_pos == -1:
+            next_pos = len(content)
+            terminator_start = len(content)
+        else:
+            next_pos = lf_pos + 1
+            terminator_start = lf_pos
+            # Preserve CRLF by treating the \r as part of the terminator.
+            if terminator_start > pos and content[terminator_start - 1] == "\r":
+                terminator_start -= 1
+        line = content[pos:terminator_start]
         parsed = parse_end_marker(line)
         if parsed is not None and parsed.hash_value is not None:
-            return (pos, line_end, parsed)
-        pos = line_end + 1
+            return (pos, terminator_start, parsed)
+        pos = next_pos
     return None
 
 
@@ -108,7 +121,11 @@ def update_hash_in_file(
         A descriptive error string if the update failed.
     """
     file_path = Path(file_path)
-    content = file_path.read_text(encoding="utf-8")
+    # Read with newline="" so CRLF line endings are preserved verbatim
+    # (universal-newline mode would strip the \r and writing back would
+    # silently convert the whole file to LF).
+    with open(file_path, encoding="utf-8", newline="") as f:
+        content = f.read()
 
     header_match = _find_req_header(content, req_id)
     if not header_match:
@@ -128,7 +145,8 @@ def update_hash_in_file(
     new_line = render_end_marker(parsed.title, new_hash)
     new_content = content[:line_start] + new_line + content[line_end:]
 
-    file_path.write_text(new_content, encoding="utf-8")
+    with open(file_path, "w", encoding="utf-8", newline="") as f:
+        f.write(new_content)
     return None
 
 
