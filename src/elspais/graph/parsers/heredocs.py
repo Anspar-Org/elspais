@@ -99,12 +99,12 @@ class HeredocsParser:
             ParsedContent for each claimed heredoc block.
         """
         file_type = _get_file_type(context.file_path)
-        contains_req = _build_contains_req(context.config)
-
+        # Build the predicate lazily -- IdResolver construction is non-trivial
+        # and we'd otherwise pay it for every skipped file (markdown, spec, etc.).
         if file_type == "python":
-            yield from self._parse_python_heredocs(lines, contains_req)
+            yield from self._parse_python_heredocs(lines, _build_contains_req(context.config))
         elif file_type == "shell":
-            yield from self._parse_shell_heredocs(lines, contains_req)
+            yield from self._parse_shell_heredocs(lines, _build_contains_req(context.config))
         # Skip markdown, spec files, etc.
 
     # Implements: REQ-d00054-A
