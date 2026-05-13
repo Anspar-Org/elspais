@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os as _os
 import re
+import shutil as _shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -605,32 +607,47 @@ def _deep_merge(base: dict, overlay: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 
+_ELSPAIS = _shutil.which("elspais")
+
+REPO_ROOT = (
+    Path(
+        subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    )
+    if _shutil.which("git")
+    else Path(__file__).resolve().parents[2]
+)
+
+
 def run_elspais(
     *args: str,
     cwd: str | Path | None = None,
     timeout: int = 120,
     env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess:
-    """Run elspais CLI as a subprocess."""
-    import os
-    import shutil
+    """Run the elspais CLI as a subprocess.
 
-    exe = shutil.which("elspais")
-    if exe is None:
+    ``cwd`` defaults to the repo root so tests don't have to repeat that
+    boilerplate. Pass an explicit ``cwd`` (typically a tmp_path project)
+    to override.
+    """
+    if _ELSPAIS is None:
         import pytest
 
         pytest.skip("elspais CLI not found on PATH")
 
     run_env = None
     if env:
-        run_env = os.environ.copy()
-        run_env.update(env)
+        run_env = {**_os.environ, **env}
 
     return subprocess.run(
-        [exe, *args],
+        [_ELSPAIS, *args],
         capture_output=True,
         text=True,
-        cwd=cwd,
+        cwd=cwd or REPO_ROOT,
         timeout=timeout,
         env=run_env,
     )
