@@ -95,6 +95,11 @@ def pytest_sessionfinish(session, exitstatus):
         return
     if session.config.getoption("keyword"):
         return
+    # Collection-only / setup-only modes don't execute tests, so a 0
+    # exit status doesn't mean tests passed — don't prime the cache.
+    for opt in ("collectonly", "setuponly", "setupplan"):
+        if session.config.getoption(opt, default=False):
+            return
 
     markexpr = session.config.getoption("markexpr") or ""
     if markexpr == "not e2e and not browser":
@@ -104,11 +109,10 @@ def pytest_sessionfinish(session, exitstatus):
     else:
         return
 
-    repo_root = Path(__file__).parent.parent
     testpaths = session.config.getini("testpaths") or []
     try:
         arg_paths = {Path(a).resolve() for a in session.config.args}
-        tp_paths = {(repo_root / p).resolve() for p in testpaths}
+        tp_paths = {(_REPO_ROOT / p).resolve() for p in testpaths}
     except OSError:
         return
     if arg_paths != tp_paths:
@@ -121,7 +125,7 @@ def pytest_sessionfinish(session, exitstatus):
         git_dir = Path(
             subprocess.check_output(
                 ["git", "rev-parse", "--git-dir"],
-                cwd=str(repo_root),
+                cwd=str(_REPO_ROOT),
                 text=True,
                 stderr=subprocess.DEVNULL,
             ).strip()
@@ -129,7 +133,7 @@ def pytest_sessionfinish(session, exitstatus):
     except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         return
     if not git_dir.is_absolute():
-        git_dir = (repo_root / git_dir).resolve()
+        git_dir = (_REPO_ROOT / git_dir).resolve()
     real_index = git_dir / "index"
     if not real_index.is_file():
         return
@@ -141,14 +145,14 @@ def pytest_sessionfinish(session, exitstatus):
         env = {**os.environ, "GIT_INDEX_FILE": tmp_path}
         subprocess.check_call(
             ["git", "add", "-A"],
-            cwd=str(repo_root),
+            cwd=str(_REPO_ROOT),
             env=env,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
         tree_hash = subprocess.check_output(
             ["git", "write-tree"],
-            cwd=str(repo_root),
+            cwd=str(_REPO_ROOT),
             env=env,
             text=True,
             stderr=subprocess.DEVNULL,
@@ -161,7 +165,7 @@ def pytest_sessionfinish(session, exitstatus):
         except OSError:
             pass
 
-    cache_dir = repo_root / ".results"
+    cache_dir = _REPO_ROOT / ".results"
     try:
         cache_dir.mkdir(exist_ok=True)
         (cache_dir / cache_name).write_text(tree_hash)
