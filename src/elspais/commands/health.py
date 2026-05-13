@@ -2147,13 +2147,13 @@ def _check_status_references(
     """
     from elspais.config import get_status_roles
     from elspais.graph import NodeKind
-    from elspais.graph.relations import EdgeKind
+    from elspais.graph.edge_sets import REACHABILITY_TRACEABILITY_EDGES
 
     roles_cfg = get_status_roles({})
     category = "code" if source_kind == NodeKind.CODE else "tests"
     check_name = f"{category}.{role.value}_references"
 
-    _TRACEABILITY_EDGES = {EdgeKind.IMPLEMENTS, EdgeKind.VERIFIES, EdgeKind.VALIDATES}
+    _TRACEABILITY_EDGES = REACHABILITY_TRACEABILITY_EDGES
 
     findings: list[HealthFinding] = []
     for node in graph.nodes_by_kind(source_kind):
