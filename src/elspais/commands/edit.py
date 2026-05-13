@@ -345,14 +345,14 @@ def _add_initial_changelog(file_path: Path, req_id: str) -> None:
 
     from elspais.utilities.git import get_author_info
     from elspais.utilities.patterns import find_req_header as _find_req_header
-    from elspais.utilities.spec_writer import _find_end_marker, add_changelog_entry
+    from elspais.utilities.spec_writer import _find_end_marker_line, add_changelog_entry
 
     content = file_path.read_text(encoding="utf-8")
     header = _find_req_header(content, req_id)
     if not header:
         return
-    end = _find_end_marker(content, header.end())
-    current_hash = end.group(2) if end else "________"
+    end = _find_end_marker_line(content, header.end())
+    current_hash = end[2].hash_value if end else "________"
 
     try:
         author = get_author_info()

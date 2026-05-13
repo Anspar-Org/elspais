@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Any
 
 from elspais.graph.parsers.patterns import CHANGELOG_HEADER_PATTERN
-from elspais.utilities.hasher import HASH_VALUE_PATTERN
+from elspais.graph.render import EndMarker, parse_end_marker, render_end_marker
 from elspais.utilities.patterns import BLANK_LINE_CLEANUP_RE
 from elspais.utilities.patterns import find_req_header as _find_req_header
 
@@ -50,15 +50,24 @@ def _extract_prefix(req_id: str) -> str:
     return req_id[:dash] if dash > 0 else ""
 
 
-def _find_end_marker(content: str, start_pos: int) -> re.Match | None:
-    """Find an End marker with **Hash** after the given position.
+def _find_end_marker_line(content: str, start_pos: int) -> tuple[int, int, EndMarker] | None:
+    """Find the next ``*End* *Title* | **Hash**: ...`` line after ``start_pos``.
 
-    Matches: *End* *Title* | **Hash**: <any-value>
-    Group 1 = prefix (everything before hash value)
-    Group 2 = hash value
+    Returns (line_start, line_end, parsed) or None if no such line exists.
+    Only matches lines whose hash segment is present (so callers replacing
+    the hash know they're not corrupting a malformed line).
     """
-    pattern = re.compile(rf"(\*End\*\s+\*.+?\*\s*\|\s*\*\*Hash\*\*:\s*)({HASH_VALUE_PATTERN})")
-    return pattern.search(content, pos=start_pos)
+    pos = start_pos
+    while pos < len(content):
+        line_end = content.find("\n", pos)
+        if line_end == -1:
+            line_end = len(content)
+        line = content[pos:line_end]
+        parsed = parse_end_marker(line)
+        if parsed is not None and parsed.hash_value is not None:
+            return (pos, line_end, parsed)
+        pos = line_end + 1
+    return None
 
 
 def _find_next_req_header(content: str, start_pos: int, prefix: str) -> re.Match | None:
@@ -107,16 +116,17 @@ def update_hash_in_file(
 
     start_pos = header_match.end()
 
-    end_match = _find_end_marker(content, start_pos)
-    if not end_match:
+    end_marker = _find_end_marker_line(content, start_pos)
+    if not end_marker:
         return f"No End marker with **Hash** found for {req_id} in {file_path.name}"
+    line_start, line_end, parsed = end_marker
 
     next_header_match = _find_next_req_header(content, start_pos, _extract_prefix(req_id))
-    if next_header_match and next_header_match.start() < end_match.start():
+    if next_header_match and next_header_match.start() < line_start:
         return f"End marker for {req_id} belongs to a different requirement in {file_path.name}"
 
-    # Replace just the hash value
-    new_content = content[: end_match.start(2)] + new_hash + content[end_match.end(2) :]
+    new_line = render_end_marker(parsed.title, new_hash)
+    new_content = content[:line_start] + new_line + content[line_end:]
 
     file_path.write_text(new_content, encoding="utf-8")
     return None
@@ -1021,14 +1031,15 @@ def add_changelog_entry(
 
     start_pos = header_match.end()
 
-    end_match = _find_end_marker(content, start_pos)
-    if not end_match:
+    end_marker = _find_end_marker_line(content, start_pos)
+    if not end_marker:
         return f"No End marker found for {req_id} in {file_path.name}"
+    end_line_start, _end_line_end, _parsed = end_marker
 
     entry_line = _format_changelog_entry(entry)
 
     # Look for existing ## Changelog section between header and end marker
-    req_block = content[start_pos : end_match.start()]
+    req_block = content[start_pos:end_line_start]
     changelog_match = CHANGELOG_HEADER_PATTERN.search(req_block)
 
     if changelog_match:
@@ -1043,7 +1054,7 @@ def add_changelog_entry(
         new_content = content[:insert_pos] + entry_line + "\n" + content[insert_pos:]
     else:
         # Create ## Changelog section before End marker
-        insert_pos = end_match.start()
+        insert_pos = end_line_start
         # Ensure proper spacing
         section = f"\n## Changelog\n\n{entry_line}\n\n"
         new_content = content[:insert_pos] + section + content[insert_pos:]
@@ -1207,7 +1218,7 @@ def add_requirement_to_file(
         f"\n"
         f"## Assertions\n"
         f"\n"
-        f"*End* *{title}* | **Hash**: {hash_value}\n"
+        f"{render_end_marker(title, hash_value)}\n"
         f"---\n"
     )
 

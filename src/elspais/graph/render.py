@@ -14,15 +14,59 @@ their CONTAINS children, replacing the old persistence.py text surgery.
 
 from __future__ import annotations
 
+import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from elspais.graph.GraphNode import GraphNode, NodeKind, make_file_id
 from elspais.graph.relations import EdgeKind
-from elspais.utilities.hasher import calculate_hash, compute_normalized_hash
+from elspais.utilities.hasher import HASH_VALUE_PATTERN, calculate_hash, compute_normalized_hash
 
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
+
+
+# --- End/Hash footer: single render + parse pair --------------------------- #
+#
+# Every REQUIREMENT block ends with ``*End* *<title>* | **Hash**: <hash>``.
+# Journeys use the no-hash form ``*End* *<title>*``. This pair is the single
+# source of truth for both rendering and parsing.
+
+
+@dataclass(frozen=True)
+class EndMarker:
+    """Parsed end-marker line. ``hash_value`` is None for journey footers."""
+
+    title: str
+    hash_value: str | None
+
+
+_END_MARKER_RE = re.compile(
+    rf"^\*End\*\s+\*(?P<title>[^*]+)\*"
+    rf"(?:\s*\|\s*\*\*Hash\*\*:\s*(?P<hash>{HASH_VALUE_PATTERN}))?\s*$"
+)
+
+
+def render_end_marker(title: str, hash_value: str | None) -> str:
+    """Render the canonical ``*End* *<title>*`` (optionally `` | **Hash**: <hash>``)."""
+    if hash_value is None:
+        return f"*End* *{title}*"
+    return f"*End* *{title}* | **Hash**: {hash_value}"
+
+
+def parse_end_marker(line: str) -> EndMarker | None:
+    """Parse an End marker line. Returns None if the line is not an End marker.
+
+    Strictly rejects malformed pipe-followed-by-no-hash lines: the regex
+    requires either no pipe at all, or pipe + full ``**Hash**: <value>``
+    segment. This guards ``update_hash_in_file`` against silent data
+    corruption when a partially-written file is re-saved.
+    """
+    m = _END_MARKER_RE.match(line)
+    if not m:
+        return None
+    return EndMarker(title=m.group("title"), hash_value=m.group("hash"))
 
 
 def _effective_depth(stored: int | None, min_depth: int) -> int:
@@ -318,7 +362,7 @@ def _render_requirement(node: GraphNode, resolver: Any | None = None) -> str:
         hash_val = compute_normalized_hash(assertions) if assertions else "N/A"
 
     # End marker (separator is a REMAINDER node, not part of the requirement)
-    lines.append(f"*End* *{title}* | **Hash**: {hash_val}")
+    lines.append(render_end_marker(title, hash_val))
 
     return "\n".join(lines)
 

@@ -34,7 +34,7 @@ from elspais.graph.GraphNode import (
 from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.relations import EdgeKind, Stereotype
-from elspais.graph.render import format_definition_block
+from elspais.graph.render import format_definition_block, render_end_marker
 from elspais.graph.terms import TermDictionary, TermEntry, compute_definition_hash
 from elspais.utilities.patterns import INSTANCE_SEPARATOR
 from elspais.utilities.test_identity import build_test_id
@@ -2232,7 +2232,7 @@ class TraceGraph:
             lines.append(f"## {section['name']}")
             lines.extend(section["content"].splitlines())
         lines.append("")
-        lines.append(f"*End* *{node.id}*")
+        lines.append(render_end_marker(node.id, None))
         return "\n".join(lines)
 
     def update_journey_field(self, node_id: str, field_name: str, value: str) -> MutationEntry:
@@ -2712,7 +2712,7 @@ class TraceGraph:
             "context": None,
             "body_lines": [],
             "sections": [],
-            "body": f"## {journey_id}: {title}\n\n*End* *{journey_id}*",
+            "body": f"## {journey_id}: {title}\n\n{render_end_marker(journey_id, None)}",
             "parse_line": 0,
             "parse_end_line": 0,
         }

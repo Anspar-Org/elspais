@@ -199,20 +199,3 @@ def compute_normalized_hash(
         raise ValueError(f"Unsupported hash algorithm: {algorithm}")
 
     return hash_obj.hexdigest()[:length]
-
-
-def extract_hash_from_footer(footer_text: str) -> str | None:
-    """Extract hash value from requirement footer line.
-
-    Looks for pattern: **Hash**: XXXXXXXX
-
-    Args:
-        footer_text: The footer line text
-
-    Returns:
-        Hash string if found, None otherwise
-    """
-    match = re.search(rf"\*\*Hash\*\*:\s*({HASH_VALUE_PATTERN})", footer_text)
-    if match:
-        return match.group(1)
-    return None
