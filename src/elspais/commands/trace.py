@@ -224,20 +224,21 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
         ("uat_verified", "uat_verified", False, False),
     ]
 
-    data: dict = {
-        "id": node.id,
-        "title": node.get_label() or "",
-        "level": node.level or "",
-        "status": node.status or "",
-        "implements": impl_ids,
-        "hash": node.hash or "",
-        "file": (node.file_node().get_field("relative_path") if node.file_node() else ""),
-        "body": node.get_field("body", "") or "",
-        "assertions": assertions,
-        "code_refs": code_refs,
-        "test_refs": test_refs,
-        "test_refs_grouped": test_refs_grouped,
-    }
+    from elspais.graph.serialize import serialize_requirement_summary
+
+    data: dict = serialize_requirement_summary(
+        node,
+        extras={
+            "implements": impl_ids,
+            "hash": node.hash or "",
+            "file": (node.file_node().get_field("relative_path") if node.file_node() else ""),
+            "body": node.get_field("body", "") or "",
+            "assertions": assertions,
+            "code_refs": code_refs,
+            "test_refs": test_refs,
+            "test_refs_grouped": test_refs_grouped,
+        },
+    )
 
     if rollup:
         for key, attr, use_ind_count, use_ind_labels in _DIMS:
