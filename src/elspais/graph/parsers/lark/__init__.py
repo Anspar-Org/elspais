@@ -330,11 +330,18 @@ class FileDispatcher:
         parser = self._get_ref_parser()
         tree = parser.parse(content)
 
+        from elspais.graph.parsers.patterns import (
+            KEYWORD_PATTERN,
+            build_multi_assertion_pattern,
+        )
+
         file_default_verifies: list[str] = []
         expected_broken_count = 0
         import re as _re
 
         prefix = self._resolver.config.namespace
+        multi_sep = self._resolver.config.assertions.multi_separator
+        multi_assertion_pattern = build_multi_assertion_pattern(prefix, multi_sep)
         for child in tree.children:
             if not hasattr(child, "data"):
                 continue
@@ -352,20 +359,14 @@ class FileDispatcher:
                 # File-level reference comments become default verifies for
                 # all test functions in the file.  Only 'Verifies' is valid
                 # in test files; 'Implements'/'Refines' are skipped.
-                kw_match = _re.search(r"(?:implements|verifies|refines)", text, _re.IGNORECASE)
+                kw_match = KEYWORD_PATTERN.search(text)
                 if kw_match:
                     kw = kw_match.group(0).lower()
                     if kw != "verifies":
                         # Silently skip — test fixtures contain cross-type
                         # keywords in string literals
                         continue
-                    # Include multi-assertion separator (+) in pattern
-                    multi_sep = _re.escape(self._resolver.config.assertions.multi_separator)
-                    for ref_match in _re.finditer(
-                        rf"{_re.escape(prefix)}[-_][A-Za-z0-9\-_]+(?:{multi_sep}[A-Za-z0-9]+)*",
-                        text,
-                        _re.IGNORECASE,
-                    ):
+                    for ref_match in multi_assertion_pattern.finditer(text):
                         ref = self._resolver.normalize_ref(ref_match.group(0))
                         if ref not in file_default_verifies:
                             file_default_verifies.append(ref)

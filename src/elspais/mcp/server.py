@@ -69,6 +69,7 @@ from elspais.graph.factory import build_graph
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode
 from elspais.graph.mutations import MutationEntry
+from elspais.graph.parsers.patterns import JNY_DESCRIPTOR_PATTERN
 from elspais.graph.relations import EdgeKind
 from elspais.graph.terms import TermDictionary
 from elspais.mcp.search import ParsedQuery, matches_node, parse_query, score_node
@@ -386,7 +387,7 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
         }
     elif kind == NodeKind.USER_JOURNEY:
         descriptor = None
-        m = re.match(r"JNY-(.+)-\d+$", node.id)
+        m = JNY_DESCRIPTOR_PATTERN.match(node.id)
         if m:
             descriptor = m.group(1)
         properties = {

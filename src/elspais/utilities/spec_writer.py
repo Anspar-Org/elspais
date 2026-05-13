@@ -34,6 +34,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from elspais.graph.parsers.patterns import CHANGELOG_HEADER_PATTERN
 from elspais.utilities.hasher import HASH_VALUE_PATTERN
 from elspais.utilities.patterns import BLANK_LINE_CLEANUP_RE
 from elspais.utilities.patterns import find_req_header as _find_req_header
@@ -1028,7 +1029,7 @@ def add_changelog_entry(
 
     # Look for existing ## Changelog section between header and end marker
     req_block = content[start_pos : end_match.start()]
-    changelog_match = re.search(r"^## Changelog\s*$", req_block, re.MULTILINE)
+    changelog_match = CHANGELOG_HEADER_PATTERN.search(req_block)
 
     if changelog_match:
         # Insert after the ## Changelog heading (+ blank line)

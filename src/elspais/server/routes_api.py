@@ -1162,7 +1162,7 @@ async def api_mutate_journey_section(request: Request) -> JSONResponse:
 
 async def api_mutate_journey_add(request: Request) -> JSONResponse:
     """POST /api/mutate/journey/add - Create new journey."""
-    import re
+    from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 
     state = _st(request)
     data = await request.json()
@@ -1175,8 +1175,8 @@ async def api_mutate_journey_add(request: Request) -> JSONResponse:
             status_code=400,
         )
 
-    # Validate JNY ID format (same pattern as parser: JNY-[A-Za-z0-9-]+)
-    if not re.match(r"^JNY-[A-Za-z0-9-]+$", journey_id):
+    # Validate JNY ID format (canonical pattern lives in parsers.patterns)
+    if not JNY_ID_PATTERN.fullmatch(journey_id):
         return JSONResponse(
             {
                 "success": False,
