@@ -30,15 +30,12 @@ from elspais.graph.parsers.patterns import (
 from elspais.graph.parsers.patterns import (
     VALIDATES_PATTERN as _VALIDATES_RE,
 )
-from elspais.utilities.hasher import HASH_VALUE_PATTERN
+from elspais.graph.render import parse_end_marker
 from elspais.utilities.markdown import strip_emphasis
 
 if TYPE_CHECKING:
     from elspais.utilities.patterns import IdResolver
 
-
-# Footer hash extraction (only regex still needed -- footer structure is complex)
-_HASH_RE = re.compile(rf"\*\*Hash\*\*:[ \t]*(?P<hash>{HASH_VALUE_PATTERN})")
 
 # Header parsing
 _REQ_HEADER_RE = re.compile(
@@ -235,10 +232,9 @@ class RequirementTransformer:
 
             elif child.data == "end_block":
                 footer_token = child.children[0]  # END_MARKER
-                footer_text = str(footer_token)
-                hash_match = _HASH_RE.search(footer_text)
-                if hash_match:
-                    hash_value = hash_match.group("hash")
+                parsed = parse_end_marker(str(footer_token))
+                if parsed is not None and parsed.hash_value is not None:
+                    hash_value = parsed.hash_value
                 end_line = footer_token.line  # type: ignore[attr-defined]
 
         # Build raw_text for hash computation

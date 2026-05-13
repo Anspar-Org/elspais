@@ -433,6 +433,31 @@ class TestEncodingConsistency:
         assert "hacer algo" in content
         assert "**Hash**: deadbeef" in content
 
+    def test_REQ_o00063_A_preserves_crlf_line_endings(self, tmp_path: Path):
+        """CRLF line endings survive update_hash_in_file.
+
+        Regression: full-line replacement of the End marker must not
+        silently convert CRLF to LF on the touched line (or anywhere
+        else in the file).
+        """
+        spec = tmp_path / "crlf.md"
+        crlf_content = MINIMAL_SPEC.replace("\n", "\r\n")
+        # newline="" prevents Python from translating line endings on write.
+        spec.write_text(crlf_content, encoding="utf-8", newline="")
+
+        err = update_hash_in_file(spec, "REQ-t00001", "deadbeef")
+        assert err is None
+
+        after = spec.read_bytes()
+        assert b"**Hash**: deadbeef" in after
+        # CRLF count is preserved; no stray bare LF on the End-marker line.
+        crlf_before = crlf_content.encode("utf-8").count(b"\r\n")
+        crlf_after = after.count(b"\r\n")
+        assert crlf_after == crlf_before, (
+            f"CRLF count changed: {crlf_before} -> {crlf_after} "
+            "(End-marker line ending was rewritten as LF)"
+        )
+
 
 # ---------------------------------------------------------------------------
 # add_changelog_entry  (REQ-p00004-A)

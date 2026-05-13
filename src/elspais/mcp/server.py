@@ -71,6 +71,12 @@ from elspais.graph.GraphNode import GraphNode
 from elspais.graph.mutations import MutationEntry
 from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.graph.relations import EdgeKind
+from elspais.graph.serialize import (
+    serialize_assertion as _serialize_assertion,
+)
+from elspais.graph.serialize import (
+    serialize_requirement_summary as _serialize_requirement_summary,
+)
 from elspais.graph.terms import TermDictionary
 from elspais.mcp.search import ParsedQuery, matches_node, parse_query, score_node
 from elspais.utilities.patterns import build_resolver
@@ -230,29 +236,6 @@ def _serialize_code_info(code_node: Any, graph: FederatedGraph) -> dict[str, Any
 # ─────────────────────────────────────────────────────────────────────────────
 # Serializers (REQ-d00064)
 # ─────────────────────────────────────────────────────────────────────────────
-
-
-def _serialize_requirement_summary(node: Any) -> dict[str, Any]:
-    """Serialize a requirement node to summary format.
-
-    REQ-d00064-A: Returns id, title, level, status only.
-    REQ-d00064-C: Reads from node.get_field() and node.get_label().
-    """
-    return {
-        "id": node.id,
-        "title": node.get_label(),
-        "level": node.get_field("level"),
-        "status": node.get_field("status"),
-    }
-
-
-def _serialize_assertion(node: Any) -> dict[str, Any]:
-    """Serialize an assertion node."""
-    return {
-        "id": node.id,
-        "label": node.get_field("label"),
-        "text": node.get_label(),
-    }
 
 
 def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> dict[str, Any]:

@@ -222,6 +222,28 @@ class IdResolver:
         self._renderers: dict[str, str] = {"canonical": config.canonical_template}
         self._renderers.update(config.aliases)
 
+        # Loose detection regex used by quick "does this text contain a
+        # REQ-id?" pre-filters such as the heredoc-claim detector. Matches
+        # any token starting with the configured namespace OR any
+        # configured type code, followed by `-` or `_` and word chars.
+        prefixes: set[str] = {config.namespace, *config.types.keys()} - {""}
+        if prefixes:
+            alt = "|".join(re.escape(p) for p in sorted(prefixes, key=len, reverse=True))
+            self._loose_id_regex: re.Pattern = re.compile(rf"\b(?:{alt})[-_]\w+", re.IGNORECASE)
+        else:
+            # No prefixes configured -- never match (parser will not claim).
+            self._loose_id_regex = re.compile(r"(?!)")
+
+    def contains_id_reference(self, text: str) -> bool:
+        """Return True if ``text`` contains any token shaped like a configured REQ id.
+
+        Used as a fast pre-filter by parsers that need to decide whether a
+        chunk of text (e.g. an embedded heredoc) is worth claiming. Does
+        not validate the id beyond the prefix and shape; full validation
+        happens in ``parse()``.
+        """
+        return self._loose_id_regex.search(text) is not None
+
     @staticmethod
     def _extract_type_alias_name(template: str) -> str | None:
         """Extract alias name from template.

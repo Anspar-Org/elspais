@@ -44,6 +44,19 @@ def _get_file_type(file_path: str) -> str:
         return "other"
 
 
+def _build_contains_req(config: dict):
+    """Return a `(text) -> bool` predicate that detects configured REQ-ids.
+
+    Honours the project's configured namespace / type codes via
+    ``IdResolver``, so FDA-style ``PRD-/OPS-/DEV-`` and Jira-style IDs
+    are detected as well as the default ``REQ-``.
+    """
+    from elspais.utilities.patterns import IdPatternConfig, IdResolver
+
+    resolver = IdResolver(IdPatternConfig.from_dict(config))
+    return resolver.contains_id_reference
+
+
 # Implements: REQ-d00054-A
 class HeredocsParser:
     """Parser for heredoc/multiline string blocks containing requirement patterns.
@@ -56,9 +69,6 @@ class HeredocsParser:
 
     # Priority 10 - runs early to claim heredocs before requirement parser
     priority: int = 10
-
-    # Pattern to detect requirement IDs
-    REQ_PATTERN = re.compile(r"REQ[-_][A-Za-z]?\d+", re.IGNORECASE)
 
     # Python triple-quote start patterns
     PYTHON_HEREDOC_START = re.compile(
@@ -89,24 +99,25 @@ class HeredocsParser:
             ParsedContent for each claimed heredoc block.
         """
         file_type = _get_file_type(context.file_path)
-
+        # Build the predicate lazily -- IdResolver construction is non-trivial
+        # and we'd otherwise pay it for every skipped file (markdown, spec, etc.).
         if file_type == "python":
-            yield from self._parse_python_heredocs(lines, context)
+            yield from self._parse_python_heredocs(lines, _build_contains_req(context.config))
         elif file_type == "shell":
-            yield from self._parse_shell_heredocs(lines, context)
+            yield from self._parse_shell_heredocs(lines, _build_contains_req(context.config))
         # Skip markdown, spec files, etc.
 
     # Implements: REQ-d00054-A
     def _parse_python_heredocs(
         self,
         lines: list[tuple[int, str]],
-        context: ParseContext,
+        contains_req,
     ) -> Iterator[ParsedContent]:
         """Parse Python triple-quoted strings containing REQ patterns.
 
         Args:
             lines: List of (line_number, content) tuples.
-            context: Parse context.
+            contains_req: Predicate ``(text) -> bool`` for REQ-id detection.
 
         Yields:
             ParsedContent for each heredoc block.
@@ -128,7 +139,7 @@ class HeredocsParser:
                 rest = content[match.end() :]
                 if quote_char in rest:
                     # Single line heredoc - check for REQ pattern
-                    if self.REQ_PATTERN.search(content):
+                    if contains_req(content):
                         yield ParsedContent(
                             content_type="heredoc",
                             start_line=line_num,
@@ -153,7 +164,7 @@ class HeredocsParser:
 
                 # Check if heredoc contains REQ pattern
                 full_text = "\n".join(heredoc_lines)
-                if self.REQ_PATTERN.search(full_text):
+                if contains_req(full_text):
                     yield ParsedContent(
                         content_type="heredoc",
                         start_line=line_num,
@@ -170,13 +181,13 @@ class HeredocsParser:
     def _parse_shell_heredocs(
         self,
         lines: list[tuple[int, str]],
-        context: ParseContext,
+        contains_req,
     ) -> Iterator[ParsedContent]:
         """Parse shell-style heredocs containing REQ patterns.
 
         Args:
             lines: List of (line_number, content) tuples.
-            context: Parse context.
+            contains_req: Predicate ``(text) -> bool`` for REQ-id detection.
 
         Yields:
             ParsedContent for each heredoc block.
@@ -207,7 +218,7 @@ class HeredocsParser:
 
                 # Check if heredoc contains REQ pattern
                 full_text = "\n".join(heredoc_lines)
-                if self.REQ_PATTERN.search(full_text):
+                if contains_req(full_text):
                     yield ParsedContent(
                         content_type="heredoc",
                         start_line=line_num,

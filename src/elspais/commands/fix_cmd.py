@@ -559,13 +559,14 @@ def _ensure_changelog_section(
 
     start_pos = header_match.end()
     # Find end marker
-    from elspais.utilities.spec_writer import _find_end_marker
+    from elspais.utilities.spec_writer import _find_end_marker_line
 
-    end_match = _find_end_marker(content, start_pos)
-    if not end_match:
+    end_marker = _find_end_marker_line(content, start_pos)
+    if not end_marker:
         return 0
+    line_start, _line_end, _parsed = end_marker
 
-    block = content[start_pos : end_match.start()]
+    block = content[start_pos:line_start]
     from elspais.graph.parsers.patterns import CHANGELOG_HEADER_PATTERN
 
     if CHANGELOG_HEADER_PATTERN.search(block):

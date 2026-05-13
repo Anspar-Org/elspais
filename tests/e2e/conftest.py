@@ -11,42 +11,12 @@ from pathlib import Path
 
 import pytest
 
-_ELSPAIS = shutil.which("elspais")
-
-REPO_ROOT = (
-    Path(
-        subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-    )
-    if shutil.which("git")
-    else Path(__file__).resolve().parents[2]
-)
+# Canonical subprocess helper / paths live in tests/e2e/helpers.py.
+# Re-exported here so existing ``from tests.e2e.conftest import ...`` users
+# keep working.
+from tests.e2e.helpers import _ELSPAIS, REPO_ROOT, run_elspais  # noqa: F401
 
 FIXTURES_DIR = REPO_ROOT / "tests" / "fixtures"
-
-
-def run_elspais(
-    *args: str,
-    cwd: str | Path | None = None,
-    env: dict[str, str] | None = None,
-) -> subprocess.CompletedProcess:
-    """Run elspais as a subprocess and return the CompletedProcess."""
-    if _ELSPAIS is None:
-        pytest.skip("elspais CLI not found on PATH")
-    run_env = None
-    if env is not None:
-        run_env = {**os.environ, **env}
-    return subprocess.run(
-        [_ELSPAIS, *args],
-        capture_output=True,
-        text=True,
-        cwd=cwd or REPO_ROOT,
-        timeout=120,
-        env=run_env,
-    )
 
 
 requires_elspais = pytest.mark.skipif(

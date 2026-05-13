@@ -17,6 +17,47 @@ if TYPE_CHECKING:
     from elspais.graph.GraphNode import GraphNode
 
 
+def serialize_requirement_summary(
+    node: GraphNode, *, extras: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Canonical ``{id, title, level, status}`` summary for a REQUIREMENT or USER_JOURNEY.
+
+    Missing fields fall back to ``""`` (not ``None``) so JSON/HTML/CLI
+    consumers don't have to dance around nullability. Callers wanting
+    explicit nulls can pass ``extras={"level": None}`` to override.
+
+    Args:
+        node: A REQUIREMENT or USER_JOURNEY node.
+        extras: Optional extra fields merged on top (extras override base keys).
+    """
+    base: dict[str, Any] = {
+        "id": node.id,
+        "title": node.get_label() or "",
+        "level": node.get_field("level") or "",
+        "status": node.get_field("status") or "",
+    }
+    if extras:
+        base.update(extras)
+    return base
+
+
+def serialize_assertion(node: GraphNode, *, extras: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Canonical ``{id, label, text}`` dict for an ASSERTION node.
+
+    Assertion body text lives in the node's label (``get_label()``); the
+    ``label`` key holds the short identifier (``A``, ``B``, ``001``, ...).
+    Missing fields fall back to ``""``.
+    """
+    base: dict[str, Any] = {
+        "id": node.id,
+        "label": node.get_field("label") or "",
+        "text": node.get_label() or "",
+    }
+    if extras:
+        base.update(extras)
+    return base
+
+
 def serialize_node(node: GraphNode) -> dict[str, Any]:
     """Serialize a GraphNode to a JSON-compatible dict.
 
@@ -225,8 +266,10 @@ def to_csv(graph: FederatedGraph) -> str:
 
 
 __all__ = [
-    "serialize_node",
+    "serialize_assertion",
     "serialize_graph",
-    "to_markdown",
+    "serialize_node",
+    "serialize_requirement_summary",
     "to_csv",
+    "to_markdown",
 ]

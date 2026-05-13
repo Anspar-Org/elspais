@@ -7,7 +7,6 @@ from elspais.utilities.hasher import (
     calculate_hash,
     clean_requirement_body,
     compute_normalized_hash,
-    extract_hash_from_footer,
     normalize_assertion_text,
     strip_changelog_section,
     verify_hash,
@@ -112,30 +111,6 @@ class TestVerifyHash:
         content = "Test content"
         hash_val = calculate_hash(content)
         assert verify_hash(content, hash_val.upper()) is True
-
-
-class TestExtractHashFromFooter:
-    """Tests for extract_hash_from_footer function."""
-
-    # Implements: REQ-p00002-C
-    def test_extracts_hash(self):
-        footer = "**Hash**: abc12345"
-        assert extract_hash_from_footer(footer) == "abc12345"
-
-    # Implements: REQ-p00002-C
-    def test_extracts_hash_with_extra_text(self):
-        footer = "Some text **Hash**: abc12345 more text"
-        assert extract_hash_from_footer(footer) == "abc12345"
-
-    # Implements: REQ-p00002-C
-    def test_returns_none_when_no_hash(self):
-        footer = "No hash here"
-        assert extract_hash_from_footer(footer) is None
-
-    # Implements: REQ-p00002-C
-    def test_handles_uppercase_hash(self):
-        footer = "**Hash**: ABC12345"
-        assert extract_hash_from_footer(footer) == "ABC12345"
 
 
 class TestNormalizeAssertionText:

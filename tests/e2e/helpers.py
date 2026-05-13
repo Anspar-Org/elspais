@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os as _os
 import re
+import shutil as _shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -605,32 +607,67 @@ def _deep_merge(base: dict, overlay: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 
+_ELSPAIS = _shutil.which("elspais")
+
+
+def _discover_repo_root() -> Path:
+    """Resolve the repo root, falling back to the worktree path if git can't.
+
+    ``git rev-parse --show-toplevel`` returns a path on success. If the
+    binary exists but the call fails (no repo, shallow checkout outside a
+    work-tree, etc.), stdout may be empty and ``Path("")`` resolves to
+    ``"."`` -- which mis-roots every fixture path. Validate the
+    returncode and stdout before trusting the output.
+    """
+    fallback = Path(__file__).resolve().parents[2]
+    if _shutil.which("git") is None:
+        return fallback
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return fallback
+    if result.returncode != 0:
+        return fallback
+    toplevel = result.stdout.strip()
+    if not toplevel:
+        return fallback
+    return Path(toplevel)
+
+
+REPO_ROOT = _discover_repo_root()
+
+
 def run_elspais(
     *args: str,
     cwd: str | Path | None = None,
     timeout: int = 120,
     env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess:
-    """Run elspais CLI as a subprocess."""
-    import os
-    import shutil
+    """Run the elspais CLI as a subprocess.
 
-    exe = shutil.which("elspais")
-    if exe is None:
+    ``cwd`` defaults to the repo root so tests don't have to repeat that
+    boilerplate. Pass an explicit ``cwd`` (typically a tmp_path project)
+    to override.
+    """
+    if _ELSPAIS is None:
         import pytest
 
         pytest.skip("elspais CLI not found on PATH")
 
     run_env = None
     if env:
-        run_env = os.environ.copy()
-        run_env.update(env)
+        run_env = {**_os.environ, **env}
 
     return subprocess.run(
-        [exe, *args],
+        [_ELSPAIS, *args],
         capture_output=True,
         text=True,
-        cwd=cwd,
+        cwd=cwd or REPO_ROOT,
         timeout=timeout,
         env=run_env,
     )

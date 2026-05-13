@@ -136,13 +136,9 @@ def _regex_matches(node, field: str, pattern: re.Pattern) -> bool:
 
 def _summarize(node, score: float) -> dict:
     """Create a summary dict for a requirement node."""
-    return {
-        "id": node.id,
-        "title": node.get_label() or "",
-        "level": node.get_field("level") or "",
-        "status": node.get_field("status") or "",
-        "score": score,
-    }
+    from elspais.graph.serialize import serialize_requirement_summary
+
+    return serialize_requirement_summary(node, extras={"score": score})
 
 
 def _render(results: list[dict], fmt: str) -> str:

@@ -34,7 +34,7 @@ from elspais.graph.GraphNode import (
 from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.relations import EdgeKind, Stereotype
-from elspais.graph.render import format_definition_block
+from elspais.graph.render import format_definition_block, render_end_marker
 from elspais.graph.terms import TermDictionary, TermEntry, compute_definition_hash
 from elspais.utilities.patterns import INSTANCE_SEPARATOR
 from elspais.utilities.test_identity import build_test_id
@@ -1249,37 +1249,19 @@ class TraceGraph:
     # Assertion Mutation API
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _compute_hash(self, req_node: GraphNode) -> str:
-        """Compute the expected hash for a requirement node without modifying it.
-
-        Supports two modes (configurable via [validation].hash_mode):
-        - full-text: hash every line between header and footer (body_text)
-        - normalized-text: hash normalized assertion text only
-        """
-        from elspais.utilities.hasher import calculate_hash, compute_normalized_hash
-
-        if self.hash_mode == "normalized-text":
-            assertions = []
-            for child in req_node.iter_children():
-                if child.kind == NodeKind.ASSERTION:
-                    label = child.get_field("label", "")
-                    text = child.get_label() or ""
-                    if label and text:
-                        assertions.append((label, text))
-            return compute_normalized_hash(assertions)
-        else:
-            from elspais.graph.render import reconstruct_body_text
-
-            body = reconstruct_body_text(req_node)
-            return calculate_hash(body)
-
     def _recompute_requirement_hash(self, req_node: GraphNode) -> str:
         """Recompute and store the hash for a requirement node.
+
+        Delegates to the canonical ``compute_hash_for_node``. Falls back to
+        ``"N/A"`` when no hashable content exists (matches existing
+        render-side convention for empty requirements).
 
         Returns:
             The new hash value.
         """
-        new_hash = self._compute_hash(req_node)
+        from elspais.graph.render import compute_hash_for_node
+
+        new_hash = compute_hash_for_node(req_node, self.hash_mode) or "N/A"
         req_node.set_field("hash", new_hash)
         return new_hash
 
@@ -2232,7 +2214,7 @@ class TraceGraph:
             lines.append(f"## {section['name']}")
             lines.extend(section["content"].splitlines())
         lines.append("")
-        lines.append(f"*End* *{node.id}*")
+        lines.append(render_end_marker(node.id, None))
         return "\n".join(lines)
 
     def update_journey_field(self, node_id: str, field_name: str, value: str) -> MutationEntry:
@@ -2712,7 +2694,7 @@ class TraceGraph:
             "context": None,
             "body_lines": [],
             "sections": [],
-            "body": f"## {journey_id}: {title}\n\n*End* *{journey_id}*",
+            "body": f"## {journey_id}: {title}\n\n{render_end_marker(journey_id, None)}",
             "parse_line": 0,
             "parse_end_line": 0,
         }

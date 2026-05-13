@@ -82,6 +82,17 @@ def clean_requirement_body(content: str, normalize_whitespace: bool = False) -> 
         return "\n".join(lines)
 
 
+def _select_hasher(algorithm: str):
+    """Return the ``hashlib`` constructor for the named algorithm."""
+    if algorithm == "sha256":
+        return hashlib.sha256
+    if algorithm == "sha1":
+        return hashlib.sha1
+    if algorithm == "md5":
+        return hashlib.md5
+    raise ValueError(f"Unsupported hash algorithm: {algorithm}")
+
+
 def calculate_hash(
     content: str,
     length: int = 8,
@@ -100,17 +111,7 @@ def calculate_hash(
         Hexadecimal hash string of specified length
     """
     cleaned = clean_requirement_body(content, normalize_whitespace=normalize_whitespace)
-
-    if algorithm == "sha256":
-        hash_obj = hashlib.sha256(cleaned.encode("utf-8"))
-    elif algorithm == "sha1":
-        hash_obj = hashlib.sha1(cleaned.encode("utf-8"))
-    elif algorithm == "md5":
-        hash_obj = hashlib.md5(cleaned.encode("utf-8"))
-    else:
-        raise ValueError(f"Unsupported hash algorithm: {algorithm}")
-
-    return hash_obj.hexdigest()[:length]
+    return _select_hasher(algorithm)(cleaned.encode("utf-8")).hexdigest()[:length]
 
 
 def verify_hash(
@@ -188,31 +189,4 @@ def compute_normalized_hash(
     """
     normalized_lines = [normalize_assertion_text(label, text) for label, text in assertions]
     content = "\n".join(normalized_lines)
-
-    if algorithm == "sha256":
-        hash_obj = hashlib.sha256(content.encode("utf-8"))
-    elif algorithm == "sha1":
-        hash_obj = hashlib.sha1(content.encode("utf-8"))
-    elif algorithm == "md5":
-        hash_obj = hashlib.md5(content.encode("utf-8"))
-    else:
-        raise ValueError(f"Unsupported hash algorithm: {algorithm}")
-
-    return hash_obj.hexdigest()[:length]
-
-
-def extract_hash_from_footer(footer_text: str) -> str | None:
-    """Extract hash value from requirement footer line.
-
-    Looks for pattern: **Hash**: XXXXXXXX
-
-    Args:
-        footer_text: The footer line text
-
-    Returns:
-        Hash string if found, None otherwise
-    """
-    match = re.search(rf"\*\*Hash\*\*:\s*({HASH_VALUE_PATTERN})", footer_text)
-    if match:
-        return match.group(1)
-    return None
+    return _select_hasher(algorithm)(content.encode("utf-8")).hexdigest()[:length]

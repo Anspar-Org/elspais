@@ -272,8 +272,10 @@ def _find_unlinked_tests(
             _fn = node.file_node()
             if not _fn:
                 continue
-            node_path = (_fn.get_field("relative_path") or "").replace("\\", "/")
-            filter_path = file_path.replace("\\", "/")
+            from elspais.utilities.paths import normalize_relative_path
+
+            node_path = normalize_relative_path(_fn.get_field("relative_path") or "")
+            filter_path = normalize_relative_path(file_path)
             if filter_path not in node_path and node_path not in filter_path:
                 continue
 
