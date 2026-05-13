@@ -127,8 +127,10 @@ TRACEABILITY_KINDS = (
 
 
 class TestTraceabilityEdgeKinds:
-    """All 7 traceability kinds must be honored by TRACEABILITY_EDGE_KINDS;
-    structural kinds (CONTAINS/STRUCTURES) must be excluded."""
+    """All 8 traceability kinds (IMPLEMENTS, REFINES, SATISFIES, VERIFIES,
+    VALIDATES, INSTANCE, DEFINES, YIELDS) must be honored by
+    TRACEABILITY_EDGE_KINDS; structural kinds (CONTAINS/STRUCTURES) must
+    be excluded."""
 
     def test_walk_traverses_every_traceability_kind(self):
         center = _node("center", NodeKind.REQUIREMENT)

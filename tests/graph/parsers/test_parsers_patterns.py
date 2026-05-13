@@ -21,27 +21,32 @@ import pytest
 from elspais.graph.parsers import patterns
 
 # ---------------------------------------------------------------------------
-# JNY_ID_PATTERN -- matches a bare JNY-<slug> identifier (case-insensitive)
+# JNY_ID_PATTERN -- anchored, captures <descriptor> and <number>.
+# Serves both "is this a valid journey ID?" (fullmatch) and "extract the
+# descriptor slug" (match + named group) use cases.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
-    "text",
+    "text, expected_descriptor, expected_number",
     [
-        "JNY-checkout-001",
-        "JNY-x-1",
-        "JNY-FOO-99",
-        "jny-foo-99",  # lowercase
-        "Jny-Mixed-Case-7",  # mixed case
-        "JNY-multi-part-slug-12",
+        ("JNY-checkout-001", "checkout", "001"),
+        ("JNY-x-1", "x", "1"),
+        ("JNY-FOO-99", "FOO", "99"),
+        ("jny-foo-99", "foo", "99"),  # case-insensitive
+        ("Jny-Mixed-Case-7", "Mixed-Case", "7"),  # mixed case + multi-segment descriptor
+        ("JNY-multi-part-slug-12", "multi-part-slug", "12"),
+        ("JNY-x-y-z-99", "x-y-z", "99"),
+        ("JNY-with-many-parts-42", "with-many-parts", "42"),
     ],
 )
-def test_jny_id_pattern_accepts_valid_ids(text: str) -> None:
-    m = patterns.JNY_ID_PATTERN.search(text)
+def test_jny_id_pattern_accepts_and_captures(
+    text: str, expected_descriptor: str, expected_number: str
+) -> None:
+    m = patterns.JNY_ID_PATTERN.fullmatch(text)
     assert m is not None, f"expected match for {text!r}"
-    # The match should cover the whole token (anchored start) -- the pattern
-    # may be used as either match() or search(), so check span via fullmatch.
-    assert patterns.JNY_ID_PATTERN.fullmatch(text) is not None
+    assert m.group("descriptor") == expected_descriptor
+    assert m.group("number") == expected_number
 
 
 @pytest.mark.parametrize(
@@ -53,9 +58,12 @@ def test_jny_id_pattern_accepts_valid_ids(text: str) -> None:
         "",
         "JNY",  # no slug
         "JNY-",  # empty slug
+        "JNY-no-trailing-digits",  # missing -<number>
+        "JNY-x",  # missing -<number>
+        "Just prose with JNY-foo-1 inside",  # anchored: substring must not match
     ],
 )
-def test_jny_id_pattern_rejects_non_journey_tokens(text: str) -> None:
+def test_jny_id_pattern_rejects_invalid(text: str) -> None:
     assert patterns.JNY_ID_PATTERN.fullmatch(text) is None
 
 
@@ -123,41 +131,6 @@ def test_jny_end_pattern_accepts_journey_footers(line: str) -> None:
 )
 def test_jny_end_pattern_rejects_non_journey_footers(line: str) -> None:
     assert patterns.JNY_END_PATTERN.match(line) is None
-
-
-# ---------------------------------------------------------------------------
-# JNY_DESCRIPTOR_PATTERN -- captures the slug from ``JNY-<slug>-<digits>``
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "text, expected_descriptor",
-    [
-        ("JNY-checkout-001", "checkout"),
-        ("JNY-x-y-z-99", "x-y-z"),
-        ("JNY-single-1", "single"),
-        ("JNY-with-many-parts-42", "with-many-parts"),
-    ],
-)
-def test_jny_descriptor_pattern_captures_slug(text: str, expected_descriptor: str) -> None:
-    m = patterns.JNY_DESCRIPTOR_PATTERN.match(text)
-    assert m is not None, f"expected match for {text!r}"
-    # Whichever group name is used, the first group should be the descriptor.
-    assert m.group(1) == expected_descriptor
-
-
-@pytest.mark.parametrize(
-    "text",
-    [
-        "JNY-no-trailing-digits",  # no trailing -<digits>
-        "REQ-d00001-A",  # not a journey
-        "JNY-",
-        "",
-        "JNY-x",  # missing -digits
-    ],
-)
-def test_jny_descriptor_pattern_rejects_invalid(text: str) -> None:
-    assert patterns.JNY_DESCRIPTOR_PATTERN.match(text) is None
 
 
 # ---------------------------------------------------------------------------
@@ -333,3 +306,18 @@ def test_build_multi_assertion_pattern_is_case_insensitive() -> None:
     pattern = patterns.build_multi_assertion_pattern("REQ", "+")
     assert pattern.search("req-d00001-a+b") is not None
     assert pattern.search("Req-D00001-A+B") is not None
+
+
+@pytest.mark.parametrize("empty_sep", [None, ""])
+def test_build_multi_assertion_pattern_defaults_empty_separator_to_plus(empty_sep) -> None:
+    """Callers shouldn't need ``... or '+'`` -- the builder defaults empty/None.
+
+    A misconfigured ``multi_separator`` (None or '') would otherwise crash
+    ``re.escape`` or produce an over-broad pattern. The canonical helper
+    is the place to enforce the default.
+    """
+    pattern = patterns.build_multi_assertion_pattern("REQ", empty_sep)
+    # Default-to-"+" behaviour: matches REQ-x-A+B as a 2-assertion ref.
+    m = pattern.search("REQ-d00001-A+B")
+    assert m is not None
+    assert m.group(0) == "REQ-d00001-A+B"

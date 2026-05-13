@@ -399,7 +399,7 @@ class ReferenceTransformer:
         """Extract requirement IDs from a reference line (including multi-assertion syntax)."""
         pattern = build_multi_assertion_pattern(
             self.resolver.config.namespace,
-            self.resolver.config.assertions.multi_separator or "+",
+            self.resolver.config.assertions.multi_separator,
         )
         refs = []
         for m in pattern.finditer(text):
