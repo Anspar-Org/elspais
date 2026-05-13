@@ -141,6 +141,34 @@ class TestHeredocsParserEdgeCases:
         assert len(results) == 0
 
     # Implements: REQ-d00128-G
+    def test_claims_heredoc_with_configured_fda_prefix(self):
+        """FDA-style configured prefixes (PRD/OPS/DEV) are detected, not just REQ.
+
+        Regression for the previously-hardcoded ``REQ[-_][A-Za-z]?\\d+`` pattern.
+        """
+        lines = [
+            (1, 'TEST_PRD = """'),
+            (2, "## PRD-00001: FDA Product Requirement"),
+            (3, "**Level**: PRD | **Status**: Active"),
+            (4, '"""'),
+        ]
+        fda_config = {
+            "project": {"namespace": "REQ"},
+            "levels": {
+                "PRD": {"rank": 1, "letter": "P"},
+                "OPS": {"rank": 2, "letter": "O"},
+                "DEV": {"rank": 3, "letter": "D"},
+            },
+        }
+        context = ParseContext(file_path="tests/fda_fixture.py", config=fda_config)
+        parser = HeredocsParser()
+
+        results = list(parser.claim_and_parse(lines, context))
+
+        assert len(results) == 1
+        assert "PRD-00001" in results[0].raw_text
+
+    # Implements: REQ-d00128-G
     def test_preserves_raw_text(self):
         """Preserves the raw text content in the result."""
         lines = [
