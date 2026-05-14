@@ -108,7 +108,10 @@ class TestFixChangelog:
     """
 
     @patch("sys.stdin")
-    @patch("elspais.utilities.git.get_author_info", return_value=MOCK_AUTHOR)
+    @patch(
+        "elspais.utilities.changelog_author.resolve_changelog_author",
+        return_value=MOCK_AUTHOR,
+    )
     def test_REQ_p00004_A_fix_active_req_autogenerates_message(
         self, mock_author, mock_stdin, tmp_path: Path
     ):
@@ -141,7 +144,10 @@ class TestFixChangelog:
         assert "## Changelog" in content, "Changelog section should be added"
         assert "Auto-fix:" in content, "Auto-generated reason should be present"
 
-    @patch("elspais.utilities.git.get_author_info", return_value=MOCK_AUTHOR)
+    @patch(
+        "elspais.utilities.changelog_author.resolve_changelog_author",
+        return_value=MOCK_AUTHOR,
+    )
     def test_REQ_p00004_A_fix_active_req_with_message(self, mock_author, tmp_path: Path):
         """Fix an Active req with stale hash and -m "reason" should update
         hash AND add changelog entry with the message.
@@ -173,7 +179,10 @@ class TestFixChangelog:
         assert "Updated assertion wording" in content
         assert "Test User" in content
 
-    @patch("elspais.utilities.git.get_author_info", return_value=MOCK_AUTHOR)
+    @patch(
+        "elspais.utilities.changelog_author.resolve_changelog_author",
+        return_value=MOCK_AUTHOR,
+    )
     def test_REQ_p00004_A_fix_draft_req_no_message_needed(self, mock_author, tmp_path: Path):
         """Fix a Draft req with stale hash should update hash silently
         without requiring a message.
@@ -203,7 +212,10 @@ class TestFixChangelog:
         # No changelog section should be added for Draft reqs
         assert "## Changelog" not in content
 
-    @patch("elspais.utilities.git.get_author_info", return_value=MOCK_AUTHOR)
+    @patch(
+        "elspais.utilities.changelog_author.resolve_changelog_author",
+        return_value=MOCK_AUTHOR,
+    )
     def test_REQ_p00004_A_fix_adds_missing_changelog_section(self, mock_author, tmp_path: Path):
         """Fix an Active req whose hash is correct but has no ## Changelog
         section should add the section.
@@ -275,7 +287,10 @@ A. The system SHALL do X.
         # Hash should remain correct (not changed)
         assert correct_hash in content
 
-    @patch("elspais.utilities.git.get_author_info", return_value=MOCK_AUTHOR)
+    @patch(
+        "elspais.utilities.changelog_author.resolve_changelog_author",
+        return_value=MOCK_AUTHOR,
+    )
     def test_REQ_p00004_A_batch_fix_persists_missing_changelog(self, mock_author, tmp_path: Path):
         """``elspais fix`` (batch mode, no req_id) must actually write
         changelog sections to disk for Active reqs that lack them.

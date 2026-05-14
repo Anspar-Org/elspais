@@ -660,25 +660,34 @@ def _add_changelog_for_active_mutations(
     repo_root: Path,
     config: dict,
     message: str,
-) -> None:
-    """Add changelog entries for mutated Active requirements after save."""
+) -> dict[str, Any]:
+    """Add changelog entries for mutated Active requirements after save.
+
+    Returns a status dict: ``{"success": True, "added": N}`` on success,
+    or ``{"success": False, "error": "..."}`` when the changelog author
+    cannot be resolved. The caller must propagate failure — silently
+    skipping changelog entries breaks the attribution chain.
+    """
     from datetime import date
 
     from elspais.graph.render import compute_hash_for_node
-    from elspais.utilities.git import get_author_info
+    from elspais.utilities.changelog_author import (
+        AuthorResolutionError,
+        resolve_changelog_author,
+    )
     from elspais.utilities.spec_writer import add_changelog_entry
 
     active_ids = _get_active_mutated_reqs(graph)
     if not active_ids:
-        return
+        return {"success": True, "added": 0}
 
     typed_config = _validate_config(config) if isinstance(config, dict) else config
-    id_source = typed_config.changelog.id_source
     try:
-        author = get_author_info(id_source)
-    except ValueError:
-        return
+        author = resolve_changelog_author(typed_config.changelog)
+    except AuthorResolutionError as exc:
+        return {"success": False, "error": str(exc)}
 
+    added = 0
     for req_id in active_ids:
         node = graph.find_by_id(req_id)
         if node is None:
@@ -697,6 +706,8 @@ def _add_changelog_for_active_mutations(
             "reason": message,
         }
         add_changelog_entry(file_path, req_id, entry)
+        added += 1
+    return {"success": True, "added": added}
 
 
 def _refresh_graph(
@@ -5648,9 +5659,18 @@ def create_server(
             graph, _state["working_dir"], resolver=_build_resolver_for_save(config)
         )
 
-        # Add changelog entries for Active requirements after save
+        # Add changelog entries for Active requirements after save. Failure
+        # to resolve the author MUST propagate — a successful render with a
+        # missing changelog row breaks attribution.
         if result.get("success") and changelog_enforce and message:
-            _add_changelog_for_active_mutations(graph, _state["working_dir"], config, message)
+            cl_result = _add_changelog_for_active_mutations(
+                graph, _state["working_dir"], config, message
+            )
+            if not cl_result.get("success", True):
+                return {
+                    "success": False,
+                    "error": cl_result.get("error", "Changelog author resolution failed"),
+                }
 
         # REQ-o00063-F: Refresh graph after file mutations
         if result.get("success"):

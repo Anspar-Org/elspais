@@ -141,6 +141,36 @@ def run_single_edit(
 
     # Apply status change
     if hasattr(args, "status") and args.status:
+        # A Draft → Active transition must record an initial changelog
+        # entry, and that entry needs author identity. Resolve the
+        # author BEFORE flipping the status so the operation is atomic:
+        # either both happen (status + changelog) or neither does.
+        is_draft_active = False
+        if not dry_run and args.status.lower() == "active":
+            current_status = _read_current_status(file_path, req_id)
+            is_draft_active = current_status.lower() == "draft"
+
+        if is_draft_active:
+            from elspais.config import config_defaults, load_config
+            from elspais.utilities.changelog_author import (
+                AuthorResolutionError,
+                resolve_changelog_author,
+            )
+
+            config_path = getattr(args, "config", None)
+            cfg = (
+                load_config(config_path)
+                if config_path and Path(config_path).exists()
+                else config_defaults()
+            )
+            try:
+                author = resolve_changelog_author(cfg.get("changelog"))
+            except AuthorResolutionError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+        else:
+            author = None
+
         result = modify_status(file_path, req_id, args.status, dry_run=dry_run)
         results.append(("status", result))
 
@@ -150,8 +180,9 @@ def run_single_edit(
             and not dry_run
             and result.get("old_status", "").lower() == "draft"
             and result.get("new_status", "").lower() == "active"
+            and author is not None
         ):
-            _add_initial_changelog(file_path, req_id)
+            _add_initial_changelog(file_path, req_id, author)
 
     # Apply move
     if hasattr(args, "move_to") and args.move_to:
@@ -339,11 +370,38 @@ def batch_edit(
     return results
 
 
-def _add_initial_changelog(file_path: Path, req_id: str) -> None:
-    """Add first changelog entry when a requirement transitions Draft → Active."""
+def _read_current_status(file_path: Path, req_id: str) -> str:
+    """Read the current Status value for a requirement from disk.
+
+    Returns empty string if the requirement or its status line cannot be
+    located. Used to detect Draft → Active transitions before mutating
+    the file.
+    """
+    import re
+
+    from elspais.utilities.patterns import find_req_header as _find_req_header
+
+    content = file_path.read_text(encoding="utf-8")
+    header = _find_req_header(content, req_id)
+    if not header:
+        return ""
+    block = content[header.end() : header.end() + 2000]
+    match = re.search(r"\*\*Status\*\*:\s*([A-Za-z][A-Za-z0-9_-]*)", block)
+    return match.group(1) if match else ""
+
+
+def _add_initial_changelog(
+    file_path: Path,
+    req_id: str,
+    author: dict[str, str],
+) -> None:
+    """Add the first changelog entry on Draft → Active transition.
+
+    The caller resolves ``author`` up-front (so failure refuses the
+    status flip rather than silently dropping attribution).
+    """
     from datetime import date
 
-    from elspais.utilities.git import get_author_info
     from elspais.utilities.patterns import find_req_header as _find_req_header
     from elspais.utilities.spec_writer import _find_end_marker_line, add_changelog_entry
 
@@ -353,12 +411,6 @@ def _add_initial_changelog(file_path: Path, req_id: str) -> None:
         return
     end = _find_end_marker_line(content, header.end())
     current_hash = end[2].hash_value if end else "________"
-
-    try:
-        author = get_author_info()
-    except ValueError:
-        # Can't resolve author — skip silently
-        return
 
     entry = {
         "date": date.today().isoformat(),
