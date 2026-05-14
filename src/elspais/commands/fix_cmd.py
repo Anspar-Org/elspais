@@ -59,6 +59,32 @@ def _abort_if_duplicates(graph) -> int:  # noqa: ANN001
     return 1
 
 
+def _precheck_duplicates(args: argparse.Namespace) -> int:
+    """Build the graph once and abort if cross-file duplicate REQ IDs exist.
+
+    Duplicate REQ IDs invalidate every fix sub-pass (parse-dirty rewrites
+    spec files; INDEX and term generation would include the synthetic IDs).
+    So we check once at the top of `run()` and skip all sub-passes together.
+    Unrelated unfixable conditions inside `_fix_parse_dirty` (e.g. section
+    header depth at H6) still let `_fix_index` / `_fix_terms` run, since
+    those are orthogonal.
+    """
+    from elspais.graph.factory import build_graph
+
+    spec_dir = getattr(args, "spec_dir", None)
+    config_path = getattr(args, "config", None)
+    repo_root = getattr(args, "git_root", None) or Path.cwd()
+
+    graph = build_graph(
+        spec_dirs=[spec_dir] if spec_dir else None,
+        config_path=config_path,
+        repo_root=repo_root,
+        scan_code=False,
+        scan_tests=False,
+    )
+    return _abort_if_duplicates(graph)
+
+
 def run(args: argparse.Namespace) -> int:
     """Run the fix command.
 
@@ -75,14 +101,15 @@ def run(args: argparse.Namespace) -> int:
 
     dry_run = getattr(args, "dry_run", False)
 
-    # Single-pass fix returns an exit code (1 if unfixable issues exist).
-    exit_code = _fix_parse_dirty(args, dry_run)
+    # Duplicate-ID precondition: check once before any sub-pass runs.
+    rc = _precheck_duplicates(args)
+    if rc:
+        return rc
 
-    # If the main pass aborted (e.g. duplicate REQ IDs detected), skip the
-    # downstream index/term passes — they share the same duplicate guard and
-    # would just re-print the same error.
-    if exit_code:
-        return exit_code
+    # Single-pass fix returns an exit code (1 if unfixable issues exist).
+    # Other unfixable conditions don't suppress INDEX/term generation — only
+    # the duplicate-ID case does, and that's handled above.
+    exit_code = _fix_parse_dirty(args, dry_run)
 
     # Fix stale INDEX.md if present
     _fix_index(args, dry_run)

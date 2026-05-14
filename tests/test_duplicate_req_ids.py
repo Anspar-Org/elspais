@@ -311,6 +311,57 @@ def test_fix_command_aborts_when_duplicates_exist(tmp_path: Path, capsys) -> Non
     ), f"stderr should list file B as a colliding source; got: {stderr!r}"
 
 
+# Implements: REQ-d00085-I
+def test_non_duplicate_fix_failure_still_runs_index_and_term_passes(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """A non-duplicate failure in ``_fix_parse_dirty`` must not suppress
+    ``_fix_index`` and ``_fix_terms``.
+
+    Regression for a bug where the run-loop early-returned on any non-zero
+    parse-dirty exit code, conflating duplicate aborts (which should suppress
+    INDEX/term generation because synthetic IDs would leak into outputs) with
+    unrelated unfixable conditions (e.g. section header depth at H6), where
+    INDEX/term generation must still run.
+    """
+    from elspais.commands import fix_cmd
+
+    project = _make_dup_project(tmp_path)
+    # Drop the colliding file B so there are no duplicates — the precheck
+    # passes and we can exercise the post-precheck path.
+    (project / "spec" / "dev-file-b.md").unlink()
+
+    args = argparse.Namespace(
+        req_id=None,
+        dry_run=False,
+        spec_dir=project / "spec",
+        config=project / ".elspais.toml",
+        git_root=project,
+        verbose=False,
+        quiet=False,
+        message=None,
+    )
+
+    # Simulate a non-duplicate failure: _fix_parse_dirty returns 1 as if
+    # there were unfixable section depth issues. _fix_index and _fix_terms
+    # should still be invoked.
+    call_log: list[str] = []
+    monkeypatch.setattr(
+        fix_cmd, "_fix_parse_dirty", lambda *a, **kw: (call_log.append("parse"), 1)[1]
+    )
+    monkeypatch.setattr(fix_cmd, "_fix_index", lambda *a, **kw: call_log.append("index"))
+    monkeypatch.setattr(fix_cmd, "_fix_terms", lambda *a, **kw: call_log.append("terms"))
+
+    rc = fix_run(args)
+
+    assert rc == 1, f"non-duplicate failure should propagate the failing exit code; got {rc}"
+    assert call_log == ["parse", "index", "terms"], (
+        f"all three sub-passes must run when the failure is not a duplicate abort; "
+        f"got call order: {call_log!r}"
+    )
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 5. Defense-in-depth: render_save skips colliding files
 # ─────────────────────────────────────────────────────────────────────────────
@@ -342,6 +393,10 @@ def test_render_save_skips_files_in_duplicates(tmp_path: Path) -> None:
     canonical.mark_parse_dirty("duplicate_refs")
     synthetic.mark_parse_dirty("duplicate_refs")
 
+    # Snapshot mutation-log length before render_save so we can assert it is
+    # preserved (not cleared) when duplicate-induced skips block the save.
+    before_log_len = sum(1 for _ in graph.mutation_log.iter_entries())
+
     result = render_save(graph, repo_root=project)
 
     assert result["saved_count"] == 0, (
@@ -356,6 +411,23 @@ def test_render_save_skips_files_in_duplicates(tmp_path: Path) -> None:
     assert (
         "dev-file-b.md" in skipped_text
     ), f"file B must appear in skipped list; got: {result.get('skipped')!r}"
+
+    # Duplicate-skipped files are also reported as errors so callers can
+    # detect the failure programmatically. ``success`` must be False and
+    # the mutation log must be preserved — losing queued mutations because
+    # of a duplicate elsewhere in the project would silently destroy work.
+    assert result["success"] is False, (
+        "render_save must report success=False when duplicate collisions " "prevented any save"
+    )
+    errors_text = "\n".join(result.get("errors", []))
+    assert (
+        "duplicate" in errors_text.lower()
+    ), f"errors must mention the duplicate condition; got: {result.get('errors')!r}"
+    after_log_len = sum(1 for _ in graph.mutation_log.iter_entries())
+    assert after_log_len == before_log_len, (
+        f"mutation log must be preserved when duplicates blocked all saves "
+        f"(was {before_log_len}, now {after_log_len})"
+    )
 
     assert file_a_path.read_bytes() == before_a, "file A must be unchanged on disk"
     assert file_b_path.read_bytes() == before_b, "file B must be unchanged on disk"

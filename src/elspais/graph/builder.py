@@ -3100,6 +3100,20 @@ class GraphBuilder:
             while synthetic_id in self._nodes:
                 synthetic_id = f"{req_id}#{file_stem}__{n}"
                 n += 1
+            # Guard against a configured ID resolver (e.g. a permissive
+            # `component.style = "regex"` pattern) that would accept the
+            # synthetic form as a real canonical ID. If that ever happened, a
+            # later human-authored ID could collide with the synthetic and
+            # disguise itself as a duplicate. Refuse to build with a clear
+            # message rather than silently producing wrong duplicate reports.
+            if self._resolver is not None and self._resolver.is_valid(synthetic_id):
+                raise ValueError(
+                    f"Cannot disambiguate duplicate REQ ID {canonical_id!r}: "
+                    f"the configured ID resolver accepts the synthetic form "
+                    f"{synthetic_id!r} as a real ID. Tighten the configured "
+                    f"`component.style` pattern so it cannot match a '#' "
+                    f"character, or resolve the source-file collision."
+                )
             data["id"] = synthetic_id
             req_id = synthetic_id
 
