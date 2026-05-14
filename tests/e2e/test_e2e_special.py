@@ -392,3 +392,148 @@ class TestH6SectionDepthUnfixable:
             f"Expected 'unfixable' in checks output.\n"
             f"stdout: {result.stdout}\nstderr: {result.stderr}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Fix must fail loudly when changelog author cannot be resolved
+# Verifies: REQ-p00004-A, REQ-d00231-E
+# ---------------------------------------------------------------------------
+
+
+def _make_active_project_no_author(tmp_path: Path) -> tuple[Path, dict[str, str]]:
+    """Build a project with one Active req whose hash is stale, configured
+    so ``elspais fix`` will fail to resolve the changelog author.
+
+    Returns a ``(project_root, env)`` tuple. ``env`` is the dict callers
+    should pass to ``run_elspais(env=...)`` to ensure no inherited
+    git/GH_* identity leaks in.
+    """
+    # Config: id_source = "git" so gh CLI is never consulted. hash_current
+    # is on so an Active req with a stale hash triggers the changelog path.
+    (tmp_path / ".elspais.toml").write_text(
+        "version = 3\n"
+        "\n"
+        "[project]\n"
+        'name = "no-author"\n'
+        'namespace = "REQ"\n'
+        "\n"
+        "[scanning.spec]\n"
+        'directories = ["spec"]\n'
+        "\n"
+        "[changelog]\n"
+        "hash_current = true\n"
+        'id_source = "git"\n'
+    )
+    (tmp_path / "spec").mkdir()
+    (tmp_path / "spec" / "requirements.md").write_text(
+        "# REQ-d00001: Test Req\n"
+        "\n"
+        "**Level**: DEV | **Status**: Active | **Implements**: -\n"
+        "\n"
+        "## Assertions\n"
+        "\n"
+        "A. The system SHALL do X.\n"
+        "\n"
+        "*End* *Test Req* | **Hash**: 00000000\n"
+        "---\n"
+    )
+
+    # Initialise git WITH author identity so the initial commit succeeds.
+    subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"], cwd=tmp_path, capture_output=True
+    )
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, capture_output=True)
+    subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "initial"], cwd=tmp_path, capture_output=True)
+
+    # Now strip the per-repo user identity so resolve_changelog_author will
+    # find nothing.
+    subprocess.run(["git", "config", "--unset", "user.name"], cwd=tmp_path, capture_output=True)
+    subprocess.run(["git", "config", "--unset", "user.email"], cwd=tmp_path, capture_output=True)
+
+    # Redirect git's global config to /dev/null so any ~/.gitconfig
+    # cannot supply identity either. Keep HOME intact -- changing it
+    # breaks Python's user-site-packages discovery for the subprocess.
+    env = {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        # Strip any GIT_AUTHOR_* / GIT_COMMITTER_* by setting them empty.
+        # run_elspais merges these into os.environ, so empty strings make
+        # git treat them as unset.
+        "GIT_AUTHOR_NAME": "",
+        "GIT_AUTHOR_EMAIL": "",
+        "GIT_COMMITTER_NAME": "",
+        "GIT_COMMITTER_EMAIL": "",
+        # Force the git fallback path so gh CLI (which has its own
+        # auth cache) cannot supply identity either.
+        "GH_TOKEN": "",
+        "GITHUB_TOKEN": "",
+    }
+    return tmp_path, env
+
+
+class TestFixFailsWhenAuthorMissing:
+    """End-to-end check that ``elspais fix`` exits 1 and leaves files
+    untouched when changelog author identity is unresolvable.
+    """
+
+    def test_fix_exits_1_and_leaves_file_unchanged(self, tmp_path):
+        project, env = _make_active_project_no_author(tmp_path)
+        spec_file = project / "spec" / "requirements.md"
+        before = spec_file.read_text()
+
+        result = run_elspais("fix", cwd=project, env=env)
+        assert result.returncode == 1, (
+            f"expected exit 1, got {result.returncode}.\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+
+        combined = result.stdout + result.stderr
+        assert ("author_name" in combined) or ("author_id" in combined), (
+            "Expected stderr to mention the missing author field. "
+            f"stdout: {result.stdout!r}\nstderr: {result.stderr!r}"
+        )
+
+        after = spec_file.read_text()
+        assert after == before, "fix must not write to disk on author failure"
+
+    def test_fix_succeeds_when_hash_current_false(self, tmp_path):
+        project, env = _make_active_project_no_author(tmp_path)
+        # Flip hash_current = false; author check should not trigger.
+        config = project / ".elspais.toml"
+        config.write_text(config.read_text().replace("hash_current = true", "hash_current = false"))
+
+        spec_file = project / "spec" / "requirements.md"
+        result = run_elspais("fix", cwd=project, env=env)
+        assert result.returncode == 0, (
+            f"fix should succeed when hash_current=false; got {result.returncode}.\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+        content = spec_file.read_text()
+        assert "00000000" not in content, "stale hash should have been fixed"
+
+    def test_fix_succeeds_when_author_name_not_required(self, tmp_path):
+        project, env = _make_active_project_no_author(tmp_path)
+        # Re-add user.email but leave user.name unset, then mark author_name
+        # as not required.
+        subprocess.run(
+            ["git", "config", "user.email", "real@example.com"],
+            cwd=project,
+            capture_output=True,
+        )
+        config = project / ".elspais.toml"
+        config.write_text(
+            config.read_text() + "\n[changelog.require]\nauthor_name = false\nauthor_id = true\n"
+        )
+
+        spec_file = project / "spec" / "requirements.md"
+        result = run_elspais("fix", "REQ-d00001", "-m", "tracked", cwd=project, env=env)
+        assert result.returncode == 0, (
+            f"fix should succeed when author_name is not required; "
+            f"got {result.returncode}.\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+        content = spec_file.read_text()
+        assert "## Changelog" in content
+        assert "real@example.com" in content

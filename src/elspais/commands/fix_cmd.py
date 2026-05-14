@@ -152,16 +152,42 @@ def _detect_fixable(node, hash_mode: str, changelog_enforce: bool) -> list[str]:
     return reasons
 
 
-def _get_author(config: dict[str, Any]) -> dict[str, str] | None:
-    """Look up author info from config. Returns None on failure."""
-    from elspais.utilities.git import get_author_info
+def _get_author(config: dict[str, Any]) -> dict[str, str]:
+    """Resolve changelog author info from config.
+
+    Routes through ``utilities.changelog_author.resolve_changelog_author``
+    so the required-field rules (``ChangelogRequireConfig``) apply
+    uniformly across CLI/MCP/edit paths. Raises
+    ``AuthorResolutionError`` if a required field is missing — callers
+    must surface the message and abort, never silently drop changelog
+    entries.
+    """
+    from elspais.utilities.changelog_author import resolve_changelog_author
 
     typed_config = _validate_config(config)
-    id_source = typed_config.changelog.id_source
-    try:
-        return get_author_info(id_source)
-    except ValueError:
-        return None
+    return resolve_changelog_author(typed_config.changelog)
+
+
+def _active_needing_changelog(
+    fixable_nodes: list[tuple[Any, list[str]]],
+) -> list[Any]:
+    """Identify Active requirements that will receive a changelog entry.
+
+    Mirrors the filtering in ``_add_autofix_changelog_entries`` and
+    ``_add_drift_changelog_entries``: Active nodes whose non-drift
+    reasons are not exclusively formatting-only. Used to decide whether
+    author resolution must succeed before any file write.
+    """
+    result: list[Any] = []
+    for node, reasons in fixable_nodes:
+        status = (node.get_field("status") or "").lower()
+        if status != "active":
+            continue
+        non_drift = [r for r in reasons if r != "changelog_drift"]
+        if non_drift and all(r in _FORMATTING_ONLY_REASONS for r in non_drift):
+            continue
+        result.append(node)
+    return result
 
 
 def _make_changelog_entry(
@@ -186,6 +212,7 @@ def _add_autofix_changelog_entries(
     graph,  # noqa: ANN001 — FederatedGraph
     node_reasons: list[tuple[Any, list[str]]],
     config: dict[str, Any],
+    author: dict[str, str],
 ) -> int:
     """Add changelog entries for auto-fixed requirements.
 
@@ -197,6 +224,9 @@ def _add_autofix_changelog_entries(
     ``missing_changelog`` is discovered by ``_detect_fixable`` and isn't
     reflected in the graph builder's parse-time flags.
 
+    The caller is responsible for resolving ``author`` up-front (so a
+    missing identity aborts before any file write).
+
     Returns the number of entries added.
     """
     typed_config = _validate_config(config)
@@ -204,10 +234,6 @@ def _add_autofix_changelog_entries(
         return 0
 
     from elspais.graph.render import compute_hash_for_node
-
-    author = _get_author(config)
-    if author is None:
-        return 0
 
     hash_mode = getattr(graph, "hash_mode", "full-text")
     added = 0
@@ -246,17 +272,16 @@ def _add_drift_changelog_entries(
     graph,  # noqa: ANN001 — FederatedGraph
     drift_nodes: list,
     config: dict[str, Any],
+    author: dict[str, str],
 ) -> int:
     """Add changelog entries for requirements with stale changelog hashes.
 
     When a requirement's most recent changelog hash doesn't match the
     stored End marker hash (e.g. after a format migration), adds a new
-    changelog entry with the current hash.  Returns the count added.
+    changelog entry with the current hash.  The caller resolves
+    ``author`` up-front. Returns the count added.
     """
-    author = _get_author(config)
-    if author is None:
-        return 0
-
+    del config  # author is resolved by caller; signature kept for symmetry
     added = 0
     for node in drift_nodes:
         stored = node.hash or ""
@@ -375,13 +400,30 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
     drift_only_nodes = [n for n, reasons in fixable_nodes if reasons == ["changelog_drift"]]
     autofix_items = [(n, reasons) for n, reasons in fixable_nodes if reasons != ["changelog_drift"]]
 
+    # Resolve the changelog author up-front when changelog enforcement is on
+    # AND at least one Active req would receive a new entry. Failure here
+    # must abort before any disk write so the fix is atomic from the user's
+    # perspective: never a state where the hash drifted but no changelog row
+    # landed. Draft-only changes and formatting-only fixes skip this check.
+    author: dict[str, str] = {"name": "", "id": ""}
+    if changelog_enforce:
+        needing_author = _active_needing_changelog(fixable_nodes) + list(drift_only_nodes)
+        if needing_author:
+            from elspais.utilities.changelog_author import AuthorResolutionError
+
+            try:
+                author = _get_author(config)
+            except AuthorResolutionError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+
     # Mark fixable nodes dirty first so render_save picks up their files.
     for node, reasons in fixable_nodes:
         for r in reasons:
             node.mark_parse_dirty(r)
 
-    _add_autofix_changelog_entries(graph, autofix_items, config)
-    _add_drift_changelog_entries(graph, drift_only_nodes, config)
+    _add_autofix_changelog_entries(graph, autofix_items, config, author)
+    _add_drift_changelog_entries(graph, drift_only_nodes, config, author)
 
     result = render_save(graph, repo_root=repo_root)
     saved = result.get("saved_count", 0)
@@ -510,9 +552,12 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
         else:
             reason = "Adding missing Changelog section"
 
-        author = _get_author(config)
-        if author is None:
-            print("Error: Could not determine author info", file=sys.stderr)
+        from elspais.utilities.changelog_author import AuthorResolutionError
+
+        try:
+            author = _get_author(config)
+        except AuthorResolutionError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
             return 1
 
         cl_entry = _make_changelog_entry(effective_hash, reason, author)
@@ -578,11 +623,13 @@ def _ensure_changelog_section(
         return 0
 
     # Auto-add with default message
+    from elspais.utilities.changelog_author import AuthorResolutionError
     from elspais.utilities.spec_writer import add_changelog_entry
 
-    author = _get_author(config)
-    if author is None:
-        print("Error: Could not determine author info", file=sys.stderr)
+    try:
+        author = _get_author(config)
+    except AuthorResolutionError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
         return 1
 
     entry = _make_changelog_entry(current_hash, "Adding missing Changelog section", author)

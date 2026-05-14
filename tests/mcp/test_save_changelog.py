@@ -71,7 +71,7 @@ class TestMcpChangelogEnforcement:
         assert "REQ-d00001" in active
 
     @patch(
-        "elspais.utilities.git.get_author_info",
+        "elspais.utilities.changelog_author.resolve_changelog_author",
         return_value=MOCK_AUTHOR,
     )
     def test_REQ_p00004_A_adds_changelog_after_save(self, mock_author, tmp_path: Path):
