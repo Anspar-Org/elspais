@@ -598,6 +598,24 @@ class FederatedGraph:
         """
         return any(graph.has_broken_references() for _name, graph in self._live_graphs())
 
+    def duplicate_req_ids(self) -> dict[str, list[str]]:
+        """Aggregate cross-file duplicate REQ IDs across all repos.
+
+        # Strategy: aggregate
+        """
+        result: dict[str, list[str]] = {}
+        for _name, graph in self._live_graphs():
+            for canonical, sources in graph.duplicate_req_ids().items():
+                result.setdefault(canonical, []).extend(sources)
+        return result
+
+    def has_duplicate_req_ids(self) -> bool:
+        """Check if any repo has cross-file duplicate REQ IDs.
+
+        # Strategy: aggregate
+        """
+        return any(graph.has_duplicate_req_ids() for _name, graph in self._live_graphs())
+
     def is_reachable_to_requirement(self, node: GraphNode) -> bool:
         """Check if node can reach a REQUIREMENT via traceability edges.
 

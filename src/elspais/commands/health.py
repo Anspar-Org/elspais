@@ -202,27 +202,20 @@ def check_spec_files_parseable(graph: FederatedGraph) -> HealthCheck:
 
 
 def check_spec_no_duplicates(graph: FederatedGraph) -> HealthCheck:
-    """Check for duplicate requirement IDs."""
-    from elspais.graph import NodeKind
+    """Check for cross-file duplicate requirement IDs.
 
-    seen_ids: dict[str, list[str]] = {}
-
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        node_id = node.id
-        source = node.get_field("source_file", "unknown")
-
-        if node_id in seen_ids:
-            seen_ids[node_id].append(source)
-        else:
-            seen_ids[node_id] = [source]
-
-    duplicates = {k: v for k, v in seen_ids.items() if len(v) > 1}
+    Reads the build-time collision record from the graph, since by the time
+    this check runs the in-memory node index has already disambiguated
+    subsequent occurrences with synthetic IDs. The collision record preserves
+    every source file that defined each canonical ID.
+    """
+    duplicates = graph.duplicate_req_ids()
 
     if duplicates:
         findings = [
             HealthFinding(
                 message=f"Duplicate ID {req_id} in {', '.join(files)}",
-                file_path=files[0],
+                file_path=files[0] if files else None,
                 node_id=req_id,
             )
             for req_id, files in duplicates.items()

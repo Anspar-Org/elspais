@@ -99,6 +99,9 @@ class TraceGraph:
     # Detection: orphans and broken references (populated at build time)
     _orphaned_ids: set[str] = field(default_factory=set, init=False)
     _broken_references: list[BrokenReference] = field(default_factory=list, init=False)
+    # Detection: duplicate REQ IDs across files (populated at build time).
+    # Maps canonical REQ ID -> ordered list of source paths defining it.
+    _duplicate_req_ids: dict[str, list[str]] = field(default_factory=dict, init=False, repr=False)
 
     # Implements: REQ-d00222-A
     _terms: TermDictionary = field(default_factory=TermDictionary, init=False)
@@ -272,6 +275,21 @@ class TraceGraph:
     def has_broken_references(self) -> bool:
         """Check if the graph has broken references."""
         return len(self._broken_references) > 0
+
+    def duplicate_req_ids(self) -> dict[str, list[str]]:
+        """Return cross-file duplicate REQ IDs detected at build time.
+
+        Maps the canonical REQ ID (the first occurrence's real ID) to the
+        ordered list of source file paths that defined it. Subsequent
+        occurrences are present in the graph under synthetic IDs of the form
+        ``<canonical>#<file-stem>`` and carry ``is_duplicate=True`` in their
+        content fields.
+        """
+        return {k: list(v) for k, v in self._duplicate_req_ids.items()}
+
+    def has_duplicate_req_ids(self) -> bool:
+        """Check if the graph has any cross-file duplicate REQ IDs."""
+        return len(self._duplicate_req_ids) > 0
 
     # ─────────────────────────────────────────────────────────────────────────
     # Reachability API
@@ -2944,6 +2962,11 @@ class GraphBuilder:
         self._satisfies_links: list[tuple[str, str]] = []  # (declaring_id, template_id)
         # Detection: broken references
         self._broken_references: list[BrokenReference] = []
+        # Detection: duplicate REQ IDs across files. Maps the canonical (real)
+        # requirement ID -> ordered list of source paths that defined it. First
+        # occurrence keeps the real ID; subsequent occurrences get a synthetic
+        # ID (see _add_requirement) but their source paths are recorded here.
+        self._duplicate_req_ids: dict[str, list[str]] = {}
 
     # Implements: REQ-d00128-D
     def register_file_node(self, file_node: GraphNode) -> None:
@@ -3057,6 +3080,39 @@ class GraphBuilder:
         data = content.parsed_data
         req_id = data["id"]
 
+        # Cross-file REQ ID collision: when the same canonical ID is defined in
+        # two source files, the first definition keeps the real ID and any
+        # subsequent definition gets a synthetic ID like ``REQ-X#<file-stem>``.
+        # The ``#`` is invalid in all canonical component styles (numeric,
+        # camelCase, PascalCase, snake_case, kebab-case), so the synthetic ID
+        # cannot collide with a real ID. Both nodes carry their own content,
+        # assertions, and parent edges; nothing is merged.
+        source_ctx = getattr(content, "source_context", None)
+        source_path_raw = source_ctx.source_id if source_ctx else ""
+        source_path_rel = self._to_relative_path(source_path_raw) if source_path_raw else ""
+        canonical_id = req_id
+        is_duplicate_occurrence = False
+        if req_id in self._nodes:
+            is_duplicate_occurrence = True
+            file_stem = Path(source_path_rel).stem if source_path_rel else "dup"
+            synthetic_id = f"{req_id}#{file_stem}"
+            n = 2
+            while synthetic_id in self._nodes:
+                synthetic_id = f"{req_id}#{file_stem}__{n}"
+                n += 1
+            data["id"] = synthetic_id
+            req_id = synthetic_id
+
+        if is_duplicate_occurrence:
+            entry = self._duplicate_req_ids.setdefault(canonical_id, [])
+            if not entry:
+                first_node = self._nodes.get(canonical_id)
+                first_source = first_node.get_field("source_file", "") if first_node else ""
+                if first_source:
+                    entry.append(first_source)
+            if source_path_rel:
+                entry.append(source_path_rel)
+
         # Implements: REQ-d00129-A, REQ-d00129-B
         # Create requirement node
         node = GraphNode(
@@ -3083,7 +3139,13 @@ class GraphBuilder:
             "assertions_heading_level": data.get("assertions_heading_level"),
             "changelog_heading_level": data.get("changelog_heading_level"),
             "hash_mode": self.hash_mode,
+            # Track source file path so a subsequent collision can record where
+            # this (first) definition came from.
+            "source_file": source_path_rel,
         }
+        if is_duplicate_occurrence:
+            node._content["is_duplicate"] = True
+            node._content["original_id"] = canonical_id
         # Extract rationale from sections for format validation (require_rationale)
         for section in data.get("sections", []):
             if section.get("heading", "").lower() == "rationale":
@@ -3984,6 +4046,7 @@ class GraphBuilder:
         graph._index = dict(self._nodes)
         graph._orphaned_ids = orphaned_ids
         graph._broken_references = list(self._broken_references)
+        graph._duplicate_req_ids = {k: list(v) for k, v in self._duplicate_req_ids.items()}
 
         # Implements: REQ-d00222-A, REQ-d00222-B
         # Populate _terms from pending definition data, resolving defined_in

@@ -30,6 +30,35 @@ def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
     return ElspaisConfig.model_validate(filtered)
 
 
+def _abort_if_duplicates(graph) -> int:  # noqa: ANN001
+    """Refuse to run any fix path when cross-file duplicate REQ IDs exist.
+
+    Returns 1 (and prints a clear error to stderr) if duplicates are present;
+    returns 0 if the graph is clean and fix may proceed.
+
+    Without this guard, the disambiguated synthetic IDs would be written back
+    to disk by render_save, corrupting the source files. Authors must resolve
+    the collision (rename or delete one of the colliding definitions) before
+    elspais fix can safely render.
+    """
+    dups = graph.duplicate_req_ids()
+    if not dups:
+        return 0
+    print(
+        "Cannot run elspais fix: duplicate REQ IDs across files.",
+        file=sys.stderr,
+    )
+    for canonical, files in dups.items():
+        print(f"  {canonical} defined in:", file=sys.stderr)
+        for fp in files:
+            print(f"    - {fp}", file=sys.stderr)
+    print(
+        "Resolve the collisions (rename or remove a duplicate definition), " "then re-run.",
+        file=sys.stderr,
+    )
+    return 1
+
+
 def run(args: argparse.Namespace) -> int:
     """Run the fix command.
 
@@ -48,6 +77,12 @@ def run(args: argparse.Namespace) -> int:
 
     # Single-pass fix returns an exit code (1 if unfixable issues exist).
     exit_code = _fix_parse_dirty(args, dry_run)
+
+    # If the main pass aborted (e.g. duplicate REQ IDs detected), skip the
+    # downstream index/term passes — they share the same duplicate guard and
+    # would just re-print the same error.
+    if exit_code:
+        return exit_code
 
     # Fix stale INDEX.md if present
     _fix_index(args, dry_run)
@@ -322,6 +357,10 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
         scan_tests=False,
     )
 
+    rc = _abort_if_duplicates(graph)
+    if rc:
+        return rc
+
     typed_config = _validate_config(config)
     changelog_enforce = typed_config.changelog.hash_current
     hash_mode = getattr(graph, "hash_mode", "full-text")
@@ -467,6 +506,10 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
         scan_code=False,
         scan_tests=False,
     )
+
+    rc = _abort_if_duplicates(graph)
+    if rc:
+        return rc
 
     hash_mode = getattr(graph, "hash_mode", "full-text")
 
@@ -669,6 +712,9 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
         scan_tests=False,
     )
 
+    if _abort_if_duplicates(graph):
+        return
+
     output_path, expected, _req_count, _jny_count = _build_index_content(graph, all_spec_dirs)
     if output_path.exists():
         current = output_path.read_text(encoding="utf-8")
@@ -700,6 +746,9 @@ def _fix_terms(args: argparse.Namespace, dry_run: bool) -> None:
         scan_code=False,
         scan_tests=False,
     )
+
+    if _abort_if_duplicates(graph):
+        return
 
     # Get terms from the graph
     td = None
