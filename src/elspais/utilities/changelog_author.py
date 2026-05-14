@@ -10,6 +10,7 @@ fails loudly in one place instead of being silently dropped in three.
 
 from __future__ import annotations
 
+import os
 import subprocess
 from typing import Any
 
@@ -104,27 +105,36 @@ def _extract(
 def _lookup_raw(id_source: str) -> tuple[str, str]:
     """Look up ``(name, id)`` without enforcement.
 
-    Returns empty strings for fields that cannot be resolved. The caller
-    decides whether emptiness is fatal.
+    Resolution order, highest precedence first:
+      1. ``GIT_AUTHOR_NAME`` / ``GIT_AUTHOR_EMAIL`` — standard git env
+         vars that override config when committing. CI runners, release
+         bots, and the test suite set these to pin the identity without
+         touching git config.
+      2. ``gh api user`` — only when ``id_source == "gh"``.
+      3. ``git config user.name`` / ``user.email``.
+
+    Returns empty strings for fields that cannot be resolved. The
+    caller decides whether emptiness is fatal.
     """
-    name = ""
-    ident = ""
+    name = os.environ.get("GIT_AUTHOR_NAME", "") or ""
+    ident = os.environ.get("GIT_AUTHOR_EMAIL", "") or ""
 
-    if id_source == "gh":
-        try:
-            import json as _json
+    if not name or not ident:
+        if id_source == "gh":
+            try:
+                import json as _json
 
-            result = subprocess.run(
-                ["gh", "api", "user"],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            data = _json.loads(result.stdout)
-            name = data.get("name") or ""
-            ident = data.get("email") or ""
-        except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
-            pass
+                result = subprocess.run(
+                    ["gh", "api", "user"],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                data = _json.loads(result.stdout)
+                name = name or data.get("name") or ""
+                ident = ident or data.get("email") or ""
+            except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
+                pass
 
     if not name:
         name = _git_config("user.name")

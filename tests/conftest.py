@@ -31,6 +31,19 @@ def pytest_configure(config):
     os.environ.pop("GIT_DIR", None)
     os.environ.pop("GIT_WORK_TREE", None)
     os.environ["GIT_CEILING_DIRECTORIES"] = "/"
+
+    # Pin a deterministic changelog-author identity for the whole
+    # session via the standard git env vars. Without this, fix/edit/
+    # save_mutations consult `gh api user` and `git config user.*`,
+    # which vary by developer machine / CI runner — making the
+    # "no author configured" failure mode impossible to reproduce
+    # locally and breaking CI on machines without git config set.
+    # Tests that need to exercise the missing-author path strip these
+    # vars explicitly (see tests/e2e/test_e2e_special.py::
+    # _make_active_project_no_author).
+    os.environ.setdefault("GIT_AUTHOR_NAME", "Test User")
+    os.environ.setdefault("GIT_AUTHOR_EMAIL", "test@test.org")
+
     config.addinivalue_line(
         "markers",
         "incremental: mark test class for sequential execution with xfail on prior failure",
