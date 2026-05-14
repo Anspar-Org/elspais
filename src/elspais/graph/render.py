@@ -778,6 +778,36 @@ def render_save(
             "skipped": ["No dirty files to save"],
         }
 
+    # Defense-in-depth against cross-file REQ ID collisions: any file that
+    # participated in a duplicate must not be rendered, because the
+    # disambiguated synthetic IDs in the graph would be written back to disk
+    # as headings/references. The `elspais fix` CLI is the primary gate; this
+    # is the backstop for direct callers of render_save (mutation API, GUI).
+    # Treat each skipped file as an error so the mutation log is preserved
+    # below — direct callers (mutation API, GUI) must not lose queued work
+    # just because a duplicate elsewhere in the project blocked the save.
+    duplicate_source_paths: set[str] = set()
+    if hasattr(graph, "duplicate_req_ids"):
+        for _canonical, sources in graph.duplicate_req_ids().items():
+            for sp in sources:
+                if sp:
+                    duplicate_source_paths.add(sp)
+    if duplicate_source_paths:
+        filtered: set[str] = set()
+        for file_id in dirty_file_ids:
+            file_node = graph.find_by_id(file_id)
+            rel = file_node.get_field("relative_path") if file_node else None
+            if rel and rel in duplicate_source_paths:
+                msg = (
+                    f"{file_id}: file participates in a cross-file duplicate "
+                    f"REQ ID collision; resolve the collision before saving"
+                )
+                skipped.append(msg)
+                errors.append(msg)
+                continue
+            filtered.add(file_id)
+        dirty_file_ids = filtered
+
     # Handle file renames on disk before rendering
     for entry in graph.mutation_log.iter_entries():
         if entry.operation == "rename_file":

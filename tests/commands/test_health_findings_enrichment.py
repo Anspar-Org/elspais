@@ -63,9 +63,10 @@ class TestCheckSpecNoDuplicatesFindings:
     """Findings should identify each duplicate requirement with node_id and file_path."""
 
     def test_REQ_d00085_I_duplicates_have_findings(self, tmp_path: Path) -> None:
-        # The graph builder deduplicates by ID (dict keyed by ID), so we
-        # construct the graph manually with two nodes sharing the same .id
-        # but stored under different index keys.
+        # check_spec_no_duplicates now reads the build-time collision record
+        # at graph._duplicate_req_ids (subsequent occurrences are stored under
+        # synthetic IDs and the canonical-id index entry no longer reveals the
+        # duplication). Populate the record directly to exercise the check.
         graph = TraceGraph()
         node_a = GraphNode(
             id="REQ-p00001",
@@ -74,14 +75,19 @@ class TestCheckSpecNoDuplicatesFindings:
         )
         node_a.set_field("source_file", "spec/file_a.md")
         node_b = GraphNode(
-            id="REQ-p00001",
+            id="REQ-p00001#file_b",
             kind=NodeKind.REQUIREMENT,
             label="Second Copy",
         )
         node_b.set_field("source_file", "spec/file_b.md")
-        # Store under different keys so both survive in the index
-        graph._index["REQ-p00001__dup1"] = node_a
-        graph._index["REQ-p00001__dup2"] = node_b
+        node_b.set_field("is_duplicate", True)
+        node_b.set_field("original_id", "REQ-p00001")
+        graph._index["REQ-p00001"] = node_a
+        graph._index["REQ-p00001#file_b"] = node_b
+        # Populate the build-time collision record the check reads from.
+        graph._duplicate_req_ids = {
+            "REQ-p00001": ["spec/file_a.md", "spec/file_b.md"],
+        }
 
         check = check_spec_no_duplicates(graph)
 
