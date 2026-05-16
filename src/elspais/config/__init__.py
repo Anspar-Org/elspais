@@ -196,12 +196,20 @@ def load_config(config_path: Path) -> dict[str, Any]:
     content = config_path.read_text(encoding="utf-8")
     user_config = _parse_toml(content)
     merged = _merge_configs(config_defaults(), user_config)
+    # `[levels]` is a hierarchy declaration. When the user supplies their own
+    # levels, take only the user's keys (so a custom uppercase `[levels.PRD]`
+    # doesn't coexist with the lowercase default `[levels.prd]`). For
+    # user-keys that happen to match a default key, the per-field defaults
+    # still fill in missing values (e.g. `implements`) — this is the same
+    # pattern as the rest of the schema.
+    _override_levels(merged, user_config)
 
     # Deep-merge developer-local overrides if present
     local_path = config_path.parent / ".elspais.local.toml"
     if local_path.is_file():
         local_config = _parse_toml(local_path.read_text(encoding="utf-8"))
         merged = _merge_configs(merged, local_config)
+        _override_levels(merged, local_config)
 
     merged = _apply_env_overrides(merged)
 
@@ -342,6 +350,31 @@ def find_config_file(start_path: Path) -> Path | None:
         current = current.parent
 
     return None
+
+
+def _override_levels(merged: dict[str, Any], user_config: dict[str, Any]) -> None:
+    """If user_config supplies a non-empty [levels] table, replace merged's
+    levels with only those keys. Per-field defaults from the matching default
+    level (if any) are preserved for missing fields, so a user can write
+    `[levels.prd] { rank, letter }` without re-stating `implements`.
+    """
+    user_levels = user_config.get("levels")
+    if not isinstance(user_levels, dict) or not user_levels:
+        return
+    default_levels = merged.get("levels") or {}
+    new_levels: dict[str, Any] = {}
+    for key, user_entry in user_levels.items():
+        if not isinstance(user_entry, dict):
+            new_levels[key] = user_entry
+            continue
+        default_entry = default_levels.get(key)
+        if isinstance(default_entry, dict):
+            combined = dict(default_entry)
+            combined.update(user_entry)
+            new_levels[key] = combined
+        else:
+            new_levels[key] = dict(user_entry)
+    merged["levels"] = new_levels
 
 
 def _merge_configs(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:

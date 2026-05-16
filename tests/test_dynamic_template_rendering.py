@@ -81,8 +81,9 @@ def test_header_template_emits_one_badge_per_level(jinja_env, typed_5_level_conf
         assert f"{key.upper()}:" in html
     # No literal "Core:" anywhere
     assert "Core:" not in html
-    # Local namespace label appears
-    assert "Callisto:" in html
+    # Local namespace label is the namespace code, not the project name
+    assert "CAL:" in html
+    assert "Callisto:" not in html
 
 
 def test_status_badges_css_emits_selector_per_status(jinja_env, typed_5_level_config):
@@ -156,7 +157,7 @@ def test_header_namespace_badge_uses_local_label(jinja_env, typed_5_level_config
         mode="view",
         catalog=type("C", (), {"themes": []})(),
     )
-    # is_local entry's label is "Callisto" (from project.name)
-    assert "Callisto:" in html
+    # Local namespace badge shows the namespace code, not the project name
+    assert "CAL:" in html
     # data-namespace attribute set to the local namespace code
     assert 'data-namespace="CAL"' in html

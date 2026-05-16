@@ -79,20 +79,20 @@ def build_levels(typed) -> list[dict[str, Any]]:
 def build_namespaces(typed) -> list[dict[str, Any]]:
     """List of namespaces (local first, then associates) with resolved colors.
 
-    Exactly one entry has ``is_local=true``. The local entry's code is the
-    project's namespace; associates contribute one entry each in declared
-    order.
+    Exactly one entry has ``is_local=true``. Each entry's ``label`` is the
+    namespace code (e.g. "DIARY", "CAL"); the project's friendly name is
+    exposed separately as ``project_name`` so the header can show it once.
     """
     from elspais.utilities.color import resolve_color
 
     items: list[dict[str, Any]] = []
     local_code = typed.project.namespace
-    local_label = typed.project.name or local_code
     local_rc = resolve_color(local_code, typed.project.color)
     items.append(
         {
             "code": local_code,
-            "label": local_label,
+            "label": local_code,
+            "project_name": typed.project.name or local_code,
             "bg": local_rc.bg,
             "text": local_rc.text,
             "is_local": True,
@@ -103,7 +103,8 @@ def build_namespaces(typed) -> list[dict[str, Any]]:
         items.append(
             {
                 "code": entry.namespace,
-                "label": name,
+                "label": entry.namespace,
+                "project_name": name,
                 "bg": rc.bg,
                 "text": rc.text,
                 "is_local": False,

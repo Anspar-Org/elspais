@@ -68,10 +68,33 @@ def test_build_namespaces_local_first():
     assert sum(1 for n in out if n["is_local"]) == 1
 
 
-def test_build_namespaces_label_falls_back_to_namespace():
-    typed = _typed({"project": {"namespace": "CAL"}})
+def test_load_config_replaces_default_levels_when_user_provides_levels(tmp_path):
+    """Regression: a user config with uppercase [levels.PRD] must not coexist
+    with the lowercase default [levels.prd] in the merged config."""
+    from elspais.config import load_config
+
+    cfg_path = tmp_path / ".elspais.toml"
+    cfg_path.write_text(
+        "version = 4\n"
+        '[project]\nnamespace = "DIARY"\n'
+        '[levels.PRD]\nrank = 1\nletter = "p"\nimplements = ["PRD"]\n'
+        '[levels.DEV]\nrank = 2\nletter = "d"\nimplements = ["DEV", "PRD"]\n'
+    )
+    cfg = load_config(cfg_path)
+    assert set(cfg["levels"].keys()) == {
+        "PRD",
+        "DEV",
+    }, f"Expected only user-defined levels; got {list(cfg['levels'].keys())}"
+
+
+def test_build_namespaces_label_is_namespace_code():
+    typed = _typed({"project": {"namespace": "CAL", "name": "Callisto"}})
     out = build_namespaces(typed)
+    # Label is the namespace code (used for header badge). The friendly project
+    # name is exposed separately so a single project_name can be rendered
+    # elsewhere (e.g. the page title).
     assert out[0]["label"] == "CAL"
+    assert out[0]["project_name"] == "Callisto"
 
 
 def test_build_statuses_uses_configured_color_for_named_status():

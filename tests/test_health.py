@@ -291,7 +291,7 @@ namespace = "REQ"
 [levels.prd]
 rank = 1
 letter = "p"
-implements = []
+implements = ["prd"]
 
 [id-patterns]
 canonical = "{namespace}-{level.letter}{component}"

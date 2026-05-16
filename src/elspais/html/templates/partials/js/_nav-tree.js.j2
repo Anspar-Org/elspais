@@ -238,20 +238,17 @@ function updateHeaderStats() {
             resultBadge.style.display = 'none';
         }
 
-        // Build a name+color map from server NAMESPACES (excluding the local one).
-        var nameMap = {};
-        var colorMap = {};
+        // Render one repo chip per non-local NAMESPACES entry (always, even
+        // if the tree has zero rows from that namespace yet — the user still
+        // wants the toggle visible). NAMESPACES is the server-injected
+        // catalog from [project] + [associates.*].
         var nsList = data.namespaces || NAMESPACES || [];
-        for (var j = 0; j < nsList.length; j++) {
-            if (nsList[j].is_local) continue;
-            nameMap[nsList[j].code] = nsList[j].label;
-            colorMap[nsList[j].code] = {bg: nsList[j].bg, text: nsList[j].text};
-        }
+        var assocList = nsList.filter(function(n){ return !n.is_local; });
         var container = document.getElementById('repo-badges-container');
         var sep = document.getElementById('repo-sep');
         if (!container) return;
         container.innerHTML = '';
-        var repoPrefixes = Object.keys(repoCounts).sort();
+        var repoPrefixes = assocList.map(function(n){ return n.code; });
         editState.knownRepos = repoPrefixes;
         if (repoPrefixes.length === 0) {
             if (sep) sep.style.display = 'none';
@@ -271,24 +268,20 @@ function updateHeaderStats() {
             return;
         }
         if (sep) sep.style.display = '';
-        for (var k = 0; k < repoPrefixes.length; k++) {
-            var code = repoPrefixes[k];
-            var fullName = nameMap[code];
-            var displayName = fullName ? fullName.charAt(0).toUpperCase() + fullName.slice(1) : code;
-            var count = repoCounts[code];
+        for (var k = 0; k < assocList.length; k++) {
+            var ns = assocList[k];
+            var code = ns.code;
+            var count = repoCounts[code] || 0;
             var badge = document.createElement('span');
             badge.className = 'stat-badge repo filter-btn on';
             badge.id = 'stat-repo-' + code;
-            badge.title = 'Click to toggle ' + displayName + ' requirements (Shift+click to solo)';
-            badge.textContent = displayName + ': ' + count;
+            badge.title = 'Click to toggle ' + code + ' requirements (Shift+click to solo)';
+            badge.textContent = code + ': ' + count;
             badge.setAttribute('data-group', 'repo');
             badge.setAttribute('data-key', code.toLowerCase());
             badge.setAttribute('data-repo', code);
-            var col = colorMap[code];
-            if (col) {
-                badge.style.backgroundColor = col.bg;
-                badge.style.color = col.text;
-            }
+            badge.style.backgroundColor = ns.bg;
+            badge.style.color = ns.text;
             badge.onclick = (function(repoCode) {
                 return function(event) {
                     if (filterGroups.repo) filterGroups.repo.handleClick(repoCode.toLowerCase(), event);
