@@ -490,14 +490,20 @@ def _add_table(
 
     tbl = tomlkit.table()
     for k, v in value.items():
+        if v is None:
+            continue
         field_path = f"{key}.{k}"
         if isinstance(v, dict):
             sub = tomlkit.table()
             for sk, sv in v.items():
+                if sv is None:
+                    continue
                 sub_field_path = f"{field_path}.{sk}"
                 if isinstance(sv, dict):
                     inner = tomlkit.table()
                     for ik, iv in sv.items():
+                        if iv is None:
+                            continue
                         _add_field_comment(inner, f"{sub_field_path}.{ik}")
                         inner.add(ik, iv)
                     sub.add(sk, inner)

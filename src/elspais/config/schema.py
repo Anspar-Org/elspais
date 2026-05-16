@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+_HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def _validate_hex_color(value: str | None) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not _HEX_COLOR_RE.match(value):
+        raise ValueError(f'color must be a 6-digit hex string like "#1b3a5c"; got {value!r}')
+    return value
 
 
 class _StrictModel(BaseModel):
@@ -15,6 +26,12 @@ class _StrictModel(BaseModel):
 class ProjectConfig(_StrictModel):
     namespace: str = "REQ"
     name: str = ""
+    color: str | None = None
+
+    @field_validator("color")
+    @classmethod
+    def _v_color(cls, v):
+        return _validate_hex_color(v)
 
 
 _LEGACY_STYLE_MIGRATION = {
@@ -210,6 +227,12 @@ class LevelConfig(_StrictModel):
     letter: str
     display_name: str = ""
     implements: list[str]
+    color: str | None = None
+
+    @field_validator("color")
+    @classmethod
+    def _v_color(cls, v):
+        return _validate_hex_color(v)
 
 
 # Implements: REQ-d00212-B
@@ -313,6 +336,23 @@ class ChangelogConfig(_StrictModel):
 class AssociateEntryConfig(_StrictModel):
     path: str
     namespace: str
+    color: str | None = None
+
+    @field_validator("color")
+    @classmethod
+    def _v_color(cls, v):
+        return _validate_hex_color(v)
+
+
+class StatusConfig(_StrictModel):
+    """Optional per-status metadata. Keys match status names from status_roles."""
+
+    color: str | None = None
+
+    @field_validator("color")
+    @classmethod
+    def _v_color(cls, v):
+        return _validate_hex_color(v)
 
 
 # Implements: REQ-d00212-L
@@ -366,6 +406,7 @@ class ElspaisConfig(_StrictModel):
     output: OutputConfig = Field(default_factory=OutputConfig)
     terms: TermsConfig = Field(default_factory=TermsConfig)
     associates: dict[str, AssociateEntryConfig] = Field(default_factory=dict)
+    statuses: dict[str, StatusConfig] = Field(default_factory=dict)
     stats: str = Field(default="", description="File path for MCP tool usage statistics")
     cli_ttl: int = Field(
         default=30,

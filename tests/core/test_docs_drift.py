@@ -33,6 +33,7 @@ EXPECTED_SCHEMA_SECTIONS = {
     "changelog",
     "terms",
     "output",
+    "statuses",
     "stats",
     "cli_ttl",
 }
