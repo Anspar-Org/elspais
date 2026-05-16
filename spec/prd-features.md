@@ -112,8 +112,12 @@ H. When a requirement declares `Satisfies:` against a template owned by an assoc
 
 J. When a cross-repository `Satisfies:` target is not claimed by any associated repository, the federated graph builder SHALL emit a typed `BrokenReference` whose diagnostic names the target ID, lists the currently-declared associates (or states that none are declared), and points authors at the `[associates.<name>]` block in `.elspais.toml`. When transitively walking `SATISFIES` and `INSTANCE` edges produces a cycle, the federated graph builder SHALL emit a typed `BrokenReference` whose diagnostic contains the word `cycle` and the cycle path; reporting one cycle per build is sufficient.
 
+K. Coverage on `INSTANCE` *Assertions* SHALL be computed as inherited coverage over the `INSTANCE` edge: an instance *Assertion*'s effective coverage equals its template original's direct coverage (inbound `IMPLEMENTS`/`VERIFIES`/`VALIDATES` edges). A satisfier requirement's coverage rollup SHALL combine its own concrete-*Assertion* coverage with the inherited coverage of the templates it satisfies, so that cross-cutting evidence on a template flows to every satisfier without per-instance re-implementation. Each cross-repo `INSTANCE` clone SHALL record the owning template repository name in a `template_repo` field so viewers can display the template's provenance.
+
 ### Changelog
 
+- 2026-05-16 | c7521067 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms, update hash
+- 2026-05-16 | - | - | Michael Lewis (michael@anspar.org) | CUR-1353 Phase 5: add inherited-coverage assertion (K) for INSTANCE assertions and satisfier rollups
 - 2026-05-16 | ed72021a | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-05-16 | - | - | Michael Lewis (michael@anspar.org) | CUR-1353 Phase 4: add federated diagnostics (J) for missing associates and Satisfies cycles
 - 2026-05-16 | - | - | Michael Lewis (michael@anspar.org) | CUR-1353 Phase 3: add federated cross-repo template instantiation (H)
@@ -123,7 +127,7 @@ J. When a cross-repository `Satisfies:` target is not claimed by any associated 
 - 2026-05-04 | bae1b85d | - | Developer (dev@example.com) | Auto-fix: canonicalize term forms, update hash
 - 2026-03-30 | 9115ce0d | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
-*End* *Satisfies Relationship* | **Hash**: ed72021a
+*End* *Satisfies Relationship* | **Hash**: c7521067
 ---
 
 ## REQ-p00016: NOT APPLICABLE Status

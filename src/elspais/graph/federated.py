@@ -1357,6 +1357,11 @@ class FederatedGraph:
                         if key != "stereotype":
                             clone.set_field(key, value)
                     clone.set_field("stereotype", Stereotype.INSTANCE)
+                    # Implements: REQ-p00014-K
+                    # Record the template's owning repo so viewers can show
+                    # "Template defined in <repo>" provenance without needing
+                    # to walk the cross-graph INSTANCE edge.
+                    clone.set_field("template_repo", target_repo_name)
                     # Source files live in foreign repo; do NOT copy parse_line.
                     clone.set_field("parse_line", None)
                     clone.set_field("parse_end_line", None)

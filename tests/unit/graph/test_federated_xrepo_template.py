@@ -237,6 +237,29 @@ class TestCrossRepoCloneShape:
         assert clone is not None
         assert clone.file_node() is None
 
+    def test_clone_records_template_repo_field(self, tmp_path: Path) -> None:
+        """Every cross-repo clone (root + assertions) records the template's repo name.
+
+        Phase 5 (CUR-1353, REQ-p00014-K): viewers need provenance --
+        "Template defined in `{repo_name}`" -- without re-walking the
+        cross-graph INSTANCE edge for every render. The federated
+        builder writes ``template_repo`` on each clone at instantiation
+        time. This invariant ensures the field is set on both the
+        cloned root REQ and each cloned assertion.
+        """
+        fed = _build_federation(tmp_path)
+        for composite in (
+            "APP-p00001::LIB-p00001",
+            "APP-p00001::LIB-p00001-A",
+            "APP-p00001::LIB-p00001-B",
+        ):
+            node = fed.find_by_id(composite)
+            assert node is not None, f"expected clone {composite} to exist"
+            assert node.get_field("template_repo") == "library", (
+                f"clone {composite} should record template_repo='library', "
+                f"got {node.get_field('template_repo')!r}"
+            )
+
     def test_broken_ref_is_resolved(self, tmp_path: Path) -> None:
         """The Satisfies broken-ref against the foreign template is consumed."""
         fed = _build_federation(tmp_path)
