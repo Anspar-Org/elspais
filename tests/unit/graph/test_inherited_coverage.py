@@ -196,3 +196,170 @@ def test_satisfier_rollup_combines_own_and_inherited(tmp_path: Path) -> None:
     assert (
         0 < rollup.covered_fraction < 1.0
     ), f"expected partial fraction, got {rollup.covered_fraction!r}"
+
+
+def _build_multi(tmp_path: Path):
+    """Federation with TWO library templates and a single multi-template satisfier.
+
+    Topology:
+      library: LIB-p00001 (Template, A) + LIB-p00002 (Template, A, B)
+               library CODE implements LIB-p00001-A
+               library TEST verifies LIB-p00002-A
+               (LIB-p00002-B is intentionally uncovered)
+      app:     APP-p00001 (Satisfies: LIB-p00001, LIB-p00002; own assertion A)
+               app CODE implements APP-p00001-A
+    """
+    from elspais.graph.factory import build_graph
+
+    library = tmp_path / "library"
+    app = tmp_path / "app"
+    library.mkdir()
+    app.mkdir()
+
+    _write(
+        library,
+        ".elspais.toml",
+        """
+        version = 3
+        [project]
+        name = "library"
+        namespace = "LIB"
+        [levels.prd]
+        rank = 1
+        letter = "p"
+        implements = ["prd"]
+        [scanning.spec]
+        directories = ["spec"]
+        [scanning.code]
+        directories = ["src"]
+        [scanning.test]
+        enabled = true
+        directories = ["tests"]
+        """,
+    )
+    _write(
+        library,
+        "spec/prd-library.md",
+        """
+        # LIB-p00001: Action Dispatch
+
+        **Level**: PRD | **Status**: Approved | **Template**
+
+        ### Assertions
+
+        A. SHALL parse.
+
+        *End* *Action Dispatch*
+
+        # LIB-p00002: Logging
+
+        **Level**: PRD | **Status**: Approved | **Template**
+
+        ### Assertions
+
+        A. SHALL log invocations.
+        B. SHALL log failures.
+
+        *End* *Logging*
+        """,
+    )
+    _write(
+        library,
+        "src/lib.py",
+        """
+        # Implements: LIB-p00001-A
+        def parse(p):
+            return p
+        """,
+    )
+    _write(
+        library,
+        "tests/test_lib.py",
+        """
+        # Verifies: LIB-p00002-A
+        def test_log_invocation():
+            assert True
+        """,
+    )
+    _git_init(library)
+
+    _write(
+        app,
+        ".elspais.toml",
+        """
+        version = 3
+        [project]
+        name = "app"
+        namespace = "APP"
+        [levels.prd]
+        rank = 1
+        letter = "p"
+        implements = ["prd"]
+        [scanning.spec]
+        directories = ["spec"]
+        [scanning.code]
+        directories = ["src"]
+        [scanning.test]
+        enabled = false
+        directories = []
+        [associates.library]
+        path = "../library"
+        namespace = "LIB"
+        """,
+    )
+    _write(
+        app,
+        "spec/prd-app.md",
+        """
+        # APP-p00001: Concrete Action
+
+        **Level**: PRD | **Status**: Approved
+        **Satisfies**: LIB-p00001, LIB-p00002
+
+        ### Assertions
+
+        A. SHALL be admin-only.
+
+        *End* *Concrete Action*
+        """,
+    )
+    _write(
+        app,
+        "src/app.py",
+        """
+        # Implements: APP-p00001-A
+        def app_action(p):
+            return p
+        """,
+    )
+    _git_init(app)
+
+    return build_graph(repo_root=app, scan_code=True, scan_tests=True)
+
+
+def test_satisfier_rollup_with_multi_template_satisfaction(tmp_path: Path) -> None:
+    """A concrete REQ that satisfies TWO templates accumulates the denominator from both.
+
+    Expected satisfier_rollup(APP-p00001):
+      total = 1 (own A) + 1 (LIB-p00001-A) + 2 (LIB-p00002-A, LIB-p00002-B) = 4
+      covered = 1 (own A) + 1 (LIB-p00001-A inherited) + 1 (LIB-p00002-A inherited) = 3
+      covered_fraction = 3/4 = 0.75
+    """
+    from elspais.graph.metrics import satisfier_rollup
+
+    fed = _build_multi(tmp_path)
+    satisfier = fed.find_by_id("APP-p00001")
+    assert satisfier is not None
+
+    rollup = satisfier_rollup(satisfier)
+    assert rollup.total == 4, (
+        f"expected total=4 (1 own + 1 LIB-p00001 assertion + 2 LIB-p00002 assertions), "
+        f"got total={rollup.total}"
+    )
+    assert rollup.covered == 3, (
+        f"expected covered=3 (own A covered + LIB-p00001-A inherited + LIB-p00002-A inherited), "
+        f"got covered={rollup.covered}"
+    )
+    assert (
+        abs(rollup.covered_fraction - 0.75) < 0.001
+    ), f"expected covered_fraction=0.75, got {rollup.covered_fraction!r}"
