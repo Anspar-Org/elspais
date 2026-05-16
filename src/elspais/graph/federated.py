@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from elspais.graph.builder import TraceGraph
     from elspais.graph.comments import CommentThread
     from elspais.graph.terms import TermDictionary
+    from elspais.utilities.patterns import IdResolver
 
 
 # Implements: REQ-d00201-B
@@ -167,6 +168,12 @@ class FederatedGraph:
                             f"'{existing_repo}' and '{entry.name}'"
                         )
                     self._ownership[node_id] = entry.name
+        # Cache of per-repo IdResolvers, populated on first access by
+        # ``_resolver_for``.  Cross-repo ownership / canonicalisation
+        # probes hit this cache instead of rebuilding the resolver on
+        # every call.  Lazy so repos with ``config is None`` (error
+        # state) and repos never probed pay no cost.
+        self._resolver_cache: dict[str, IdResolver] = {}
         # Wire cross-graph edges after ownership is established.
         #
         # Federation passes:
@@ -1226,6 +1233,25 @@ class FederatedGraph:
             if graph is not None:
                 graph._roots = [r for r in graph._roots if r.id not in source_ids]
 
+    def _resolver_for(self, entry: RepoEntry) -> IdResolver | None:
+        """Return the cached ``IdResolver`` for ``entry``'s repo.
+
+        Builds and memoises the resolver on first access. Returns
+        ``None`` when the repo has no config (error-state repos can't
+        be probed). Used by every federation pass that needs ID-format
+        tolerance: ``_claim_for``, ``_instantiate_cross_repo_satisfies``,
+        and ``_annotate_presumed_foreign_refs``.
+        """
+        if entry.config is None:
+            return None
+        cached = self._resolver_cache.get(entry.name)
+        if cached is None:
+            from elspais.utilities.patterns import build_resolver
+
+            cached = build_resolver(entry.config)
+            self._resolver_cache[entry.name] = cached
+        return cached
+
     # Implements: REQ-p00014-H
     def _claim_for(self, target_id: str) -> tuple[str, str] | None:
         """Ask each associated repo's resolver whether it claims ``target_id``.
@@ -1237,12 +1263,12 @@ class FederatedGraph:
         (e.g.  ID written in a non-canonical form like uppercase or
         different padding).
         """
-        from elspais.utilities.patterns import build_resolver
-
         for entry in self._repos.values():
-            if entry.graph is None or entry.config is None:
+            if entry.graph is None:
                 continue
-            resolver = build_resolver(entry.config)
+            resolver = self._resolver_for(entry)
+            if resolver is None:
+                continue
             if not resolver.is_local_id(target_id):
                 continue
             parsed = resolver.parse(target_id)
@@ -1270,14 +1296,12 @@ class FederatedGraph:
         """
         from elspais.graph.GraphNode import GraphNode
         from elspais.graph.relations import Stereotype
-        from elspais.utilities.patterns import INSTANCE_SEPARATOR, build_resolver
+        from elspais.utilities.patterns import INSTANCE_SEPARATOR
 
         for source_entry in self._repos.values():
             if source_entry.graph is None:
                 continue
-            resolver = (
-                build_resolver(source_entry.config) if source_entry.config is not None else None
-            )
+            resolver = self._resolver_for(source_entry)
             resolved_indices: list[int] = []
 
             for i, br in enumerate(source_entry.graph._broken_references):
@@ -1509,12 +1533,12 @@ class FederatedGraph:
 
         Skipped for repos with no config (annotation requires pattern knowledge).
         """
-        from elspais.utilities.patterns import build_resolver
-
         for source_entry in self._repos.values():
-            if source_entry.graph is None or source_entry.config is None:
+            if source_entry.graph is None:
                 continue
-            resolver = build_resolver(source_entry.config)
+            resolver = self._resolver_for(source_entry)
+            if resolver is None:
+                continue
             refs = source_entry.graph._broken_references
             for i, br in enumerate(refs):
                 if not br.presumed_foreign and not resolver.is_local_id(br.target_id):

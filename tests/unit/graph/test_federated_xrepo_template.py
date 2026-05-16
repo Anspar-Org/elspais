@@ -558,6 +558,59 @@ class TestClaimForResolverProbe:
         assert "LIB-p001" not in fed._ownership
         assert fed._claim_for("LIB-p001") == ("library", "LIB-p00001")
 
+    def test_claim_for_caches_resolvers(self, tmp_path: Path) -> None:
+        """``_claim_for`` must not rebuild ``IdResolver`` on every call.
+
+        Phase 8 of CUR-1353: cross-repo broken-ref probes are O(repos *
+        broken_refs) in the pre-cache implementation because each call
+        to ``_claim_for`` invokes ``build_resolver(entry.config)`` once
+        per associated repo. Caching resolvers at federation
+        construction (lazy, keyed by repo name) turns this into a
+        one-time O(repos) cost.
+
+        This test pins the cache invariant: any cold-path probe should
+        populate the cache for the matched repo, and subsequent probes
+        must reuse the same resolver instance (identity check, not
+        equality) — guaranteeing no per-call rebuilds.
+        """
+        fed = _build_federation(tmp_path)
+
+        # Cache is lazy: nothing built yet until ``_claim_for`` is called
+        # against a non-canonical ID that misses ``_ownership``.  Build
+        # passes (``_instantiate_cross_repo_satisfies``,
+        # ``_annotate_presumed_foreign_refs``) populate the cache during
+        # __init__, so we just snapshot what's already there and verify
+        # subsequent calls reuse those exact instances.
+        pre_call = dict(fed._resolver_cache)
+        # The library was probed during cross-repo Satisfies instantiation,
+        # so it must already be cached.
+        assert "library" in pre_call, (
+            f"expected 'library' resolver to be cached after build; "
+            f"cache keys: {sorted(pre_call.keys())}"
+        )
+
+        # Cold-path call — must hit the cache, not rebuild.
+        fed._claim_for("LIB-p1")
+        post_call = fed._resolver_cache
+
+        # Same set of repos cached, same resolver instances (identity).
+        assert set(post_call.keys()) == set(pre_call.keys()), (
+            "_claim_for must not change the set of cached repos; "
+            f"pre={sorted(pre_call.keys())} post={sorted(post_call.keys())}"
+        )
+        for name, resolver in pre_call.items():
+            assert post_call[name] is resolver, (
+                f"_claim_for rebuilt the IdResolver for repo {name!r} — "
+                "cache must return the same instance across calls."
+            )
+
+        # And a second probe still doesn't rebuild.
+        fed._claim_for("LIB-p1")
+        for name, resolver in pre_call.items():
+            assert (
+                fed._resolver_cache[name] is resolver
+            ), f"second _claim_for rebuilt the IdResolver for repo {name!r}."
+
     def test_claim_for_returns_none_when_no_repo_claims(self, tmp_path: Path) -> None:
         """``_claim_for`` returns ``None`` when the ID parses for no associated repo.
 
