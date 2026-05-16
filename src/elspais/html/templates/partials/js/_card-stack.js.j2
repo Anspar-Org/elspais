@@ -726,6 +726,23 @@ function buildCardHtml(nodeId, data, collapsed) {
     html += '<span class="card-meta-value" style="font-family:monospace;font-size:0.75rem;">' + hash + '</span>';
     html += '</div>';
 
+    // Combined coverage rollup (satisfier REQs only): own concrete-assertion
+    // coverage merged with inherited template-assertion coverage. Surfaced
+    // by _serialize_node_generic when the REQ has outbound SATISFIES edges
+    // and the rollup total is non-zero. See CUR-1353 Phase 11.
+    if (props.satisfier_rollup && props.satisfier_rollup.total > 0) {
+        var sr = props.satisfier_rollup;
+        var pct = Math.round((sr.covered_fraction || 0) * 100);
+        html += '<div class="card-meta-item satisfier-rollup" ' +
+            'title="Combined own + inherited assertion coverage for this satisfier REQ">';
+        html += '<span class="card-meta-key">Combined coverage:</span>';
+        html += '<span class="card-meta-value">' +
+            sr.covered + '/' + sr.total + ' (' + pct + '%)' +
+            ' <span style="font-size:0.7rem;color:var(--secondary-text);">' +
+            '— includes inherited from satisfied templates</span></span>';
+        html += '</div>';
+    }
+
     // Template provenance (cross-repo INSTANCE): show where the template is
     // defined and link back to the template original. See REQ-p00014-K.
     if ((props.stereotype || '').toLowerCase() === 'instance' && (props.template_id || props.template_repo)) {

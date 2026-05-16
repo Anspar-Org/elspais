@@ -403,6 +403,23 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
                     break
             if template_id is not None:
                 properties["template_id"] = template_id
+        # CUR-1353 Phase 11: satisfier REQs (those declaring `Satisfies:`)
+        # expose a combined own-plus-inherited coverage rollup so the
+        # viewer can show how much of the satisfier obligation is met by
+        # the satisfier's own concrete assertions vs the inherited
+        # template evidence. Skip when total is 0 to avoid noise on
+        # uninteresting nodes.
+        is_satisfier = any(e.kind == EK.SATISFIES for e in node.iter_outgoing_edges())
+        if is_satisfier:
+            from elspais.graph.metrics import satisfier_rollup
+
+            rollup = satisfier_rollup(node)
+            if rollup.total > 0:
+                properties["satisfier_rollup"] = {
+                    "covered": rollup.covered,
+                    "total": rollup.total,
+                    "covered_fraction": rollup.covered_fraction,
+                }
     elif kind == NodeKind.USER_JOURNEY:
         descriptor = None
         m = JNY_ID_PATTERN.match(node.id)

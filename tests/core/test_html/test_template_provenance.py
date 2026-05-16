@@ -249,3 +249,221 @@ class TestTemplateProvenanceInRenderedHTML:
                 f"expected inherited_coverage=1 (mirrors template's direct coverage), "
                 f"got {a['inherited_coverage']!r}"
             )
+
+
+# ─── CUR-1353 Phase 11: uniform template_repo + satisfier rollup ─────────────
+
+
+def _build_in_repo_satisfies(tmp_path: Path) -> tuple[Path, object]:
+    """Build a single-repo fixture with an in-repo Satisfies declaration."""
+    repo = tmp_path / "solo"
+    repo.mkdir()
+    _write(
+        repo,
+        ".elspais.toml",
+        """
+        version = 3
+        [project]
+        name = "solo-repo"
+        namespace = "URS"
+        [levels.prd]
+        rank = 1
+        letter = "p"
+        implements = ["prd"]
+        [scanning.spec]
+        directories = ["spec"]
+        [scanning.code]
+        directories = []
+        [scanning.test]
+        enabled = false
+        directories = []
+        """,
+    )
+    _write(
+        repo,
+        "spec/spec.md",
+        """
+        # URS-p00001: Cross-Cutting Template
+
+        **Level**: PRD | **Status**: Approved | **Template**
+
+        ### Assertions
+
+        A. SHALL validate.
+
+        *End* *Cross-Cutting Template*
+
+        # URS-p00002: Concrete Satisfier
+
+        **Level**: PRD | **Status**: Approved
+        **Satisfies**: URS-p00001
+
+        ### Assertions
+
+        A. SHALL be admin-only.
+
+        *End* *Concrete Satisfier*
+        """,
+    )
+    _git_init(repo)
+    return repo, build_graph(repo_root=repo, scan_code=False, scan_tests=False)
+
+
+class TestPhase11InRepoTemplateRepo:
+    """In-repo INSTANCE clones carry template_repo set to the local project name."""
+
+    def test_in_repo_instance_clone_has_template_repo_field(self, tmp_path):
+        """Phase 11: in-repo clones tag template_repo with [project].name."""
+        _repo, graph = _build_in_repo_satisfies(tmp_path)
+
+        # Locate the cloned root via the local TraceGraph (single repo).
+        clone_id = "URS-p00002::URS-p00001"
+        clone = graph.find_by_id(clone_id)
+        assert clone is not None, f"expected in-repo INSTANCE clone {clone_id}"
+
+        got = clone.get_field("template_repo")
+        assert got == "solo-repo", (
+            f"expected in-repo clone template_repo='solo-repo' "
+            f"(matches [project].name), got {got!r}"
+        )
+
+        # Cloned assertion should also carry the field (the cloner copies
+        # all content fields then sets stereotype, plus the new template_repo).
+        clone_a = graph.find_by_id("URS-p00002::URS-p00001-A")
+        assert clone_a is not None, "expected cloned assertion URS-p00002::URS-p00001-A"
+        assert clone_a.get_field("template_repo") == "solo-repo", (
+            f"expected cloned-assertion template_repo='solo-repo', "
+            f"got {clone_a.get_field('template_repo')!r}"
+        )
+
+
+class TestPhase11SatisfierRollupSerialized:
+    """satisfier_rollup data appears in the per-node JSON for satisfier REQs."""
+
+    def test_satisfier_req_json_has_rollup(self, federation):
+        """The app's satisfier REQ exposes a satisfier_rollup property."""
+        html = HTMLGenerator(federation).generate(embed_content=True)
+        nodes = _extract_node_index(html)
+
+        sat_id = "APP-p00001"
+        assert sat_id in nodes, f"expected satisfier REQ {sat_id} in node-index"
+        props = nodes[sat_id].get("properties") or {}
+
+        assert "satisfier_rollup" in props, (
+            f"expected satisfier_rollup on satisfier REQ {sat_id}, "
+            f"got props keys: {sorted(props)}"
+        )
+        sr = props["satisfier_rollup"]
+        # Fixture: APP-p00001 has 1 own assertion (A, uncovered) and
+        # SATISFIES LIB-p00001 (1 template assertion, covered by lib.py).
+        # So rollup = covered=1 / total=2.
+        assert sr["total"] == 2, f"expected total=2 (1 own + 1 inherited), got {sr['total']}"
+        assert (
+            sr["covered"] == 1
+        ), f"expected covered=1 (template assertion only), got {sr['covered']}"
+        assert (
+            0.0 < sr["covered_fraction"] < 1.0
+        ), f"expected partial covered_fraction in (0,1), got {sr['covered_fraction']}"
+
+    def test_non_satisfier_req_has_no_rollup(self, federation):
+        """REQs without outbound SATISFIES edges must not carry the field."""
+        html = HTMLGenerator(federation).generate(embed_content=True)
+        nodes = _extract_node_index(html)
+
+        # LIB-p00001 is the template (no SATISFIES out), so no rollup.
+        props = nodes["LIB-p00001"].get("properties") or {}
+        assert "satisfier_rollup" not in props, (
+            f"expected no satisfier_rollup on non-satisfier REQ LIB-p00001, "
+            f"got {props.get('satisfier_rollup')!r}"
+        )
+
+
+class TestPhase11SatisfierRollupRendered:
+    """Rendered HTML for a satisfier REQ surfaces the combined-coverage row."""
+
+    def test_combined_coverage_string_appears_in_rendered_html(self, federation):
+        """The literal 'Combined coverage' label is wired into the card template."""
+        html = HTMLGenerator(federation).generate(embed_content=True)
+        # The JS partial contains the literal label; it must be present in
+        # the inlined script bundle the generator emits.
+        assert "Combined coverage:" in html, (
+            "expected 'Combined coverage:' label in rendered HTML "
+            "(satisfier rollup card row not wired in)"
+        )
+        # The rollup-class hook used by the card row must be present too.
+        assert "satisfier-rollup" in html, "expected 'satisfier-rollup' CSS class in rendered HTML"
+
+    def test_satisfier_rollup_lands_in_html_node_index(self, federation):
+        """End-to-end: build the library+app federation, generate HTML, parse
+        the embedded node-index JSON, find APP-p00001 (the satisfier REQ), and
+        assert its satisfier_rollup field has the expected numerics.
+
+        This is a stronger sibling to ``test_combined_coverage_string_appears_in_rendered_html``:
+        that test only proves the JS template literal exists (it's compiled in
+        regardless of fixture content). This test proves the data path
+        end-to-end:
+
+            builder -> metrics.satisfier_rollup
+                    -> mcp.server._serialize_node_generic
+                    -> html.generator._build_node_index
+                    -> <script id="node-index"> in trace_unified.html.j2
+
+        It combines positive (rollup present + correctly shaped + correct
+        numerics) and negative (counter-check on the template) into a single
+        end-to-end assertion so a regression anywhere on that path fails here.
+        """
+        html = HTMLGenerator(federation).generate(embed_content=True)
+        node_index = _extract_node_index(html)
+
+        # --- Positive: satisfier REQ carries a well-shaped rollup ---------
+        sat_id = "APP-p00001"
+        assert sat_id in node_index, (
+            f"{sat_id} missing from node-index; available (first 10): " f"{sorted(node_index)[:10]}"
+        )
+        props = node_index[sat_id].get("properties") or {}
+        rollup = props.get("satisfier_rollup")
+        assert rollup is not None, (
+            f"{sat_id} is a satisfier REQ but its node-index entry has no "
+            f"satisfier_rollup in properties; properties keys: {sorted(props)}"
+        )
+        assert isinstance(rollup, dict), (
+            f"expected satisfier_rollup to be a dict (covered/total/covered_fraction), "
+            f"got {type(rollup).__name__}"
+        )
+        assert set(rollup.keys()) >= {"covered", "total", "covered_fraction"}, (
+            f"satisfier_rollup missing required keys; "
+            f"expected at minimum {{covered, total, covered_fraction}}, "
+            f"got {sorted(rollup.keys())}"
+        )
+
+        # Fixture-specific numerics (locks in real data-path output):
+        # APP-p00001 has 1 own concrete assertion A (uncovered: no code in
+        # the app repo) and Satisfies LIB-p00001 which has 1 assertion A
+        # covered by library/src/lib.py. So combined coverage is 1 / 2.
+        assert rollup["total"] == 2, (
+            f"expected total=2 (1 own concrete + 1 inherited template), "
+            f"got {rollup['total']} (rollup={rollup})"
+        )
+        assert rollup["covered"] == 1, (
+            f"expected covered=1 (only the template assertion is covered), "
+            f"got {rollup['covered']} (rollup={rollup})"
+        )
+        assert 0.0 < rollup["covered_fraction"] < 1.0, (
+            f"expected partial covered_fraction in (0, 1) for 1-of-2 coverage, "
+            f"got {rollup['covered_fraction']!r}"
+        )
+        # 1/2 specifically, with float tolerance.
+        assert (
+            abs(rollup["covered_fraction"] - 0.5) < 1e-9
+        ), f"expected covered_fraction ~= 0.5 (1 of 2), got {rollup['covered_fraction']!r}"
+
+        # --- Counter-check: non-satisfier REQs do NOT carry the field ---
+        # LIB-p00001 is a Template; it has no outbound SATISFIES edges, so
+        # the serializer must skip the rollup. If this fires it means
+        # _serialize_node_generic is leaking the field onto wrong nodes.
+        assert "LIB-p00001" in node_index, "expected LIB-p00001 in node-index"
+        lib_props = node_index["LIB-p00001"].get("properties") or {}
+        assert "satisfier_rollup" not in lib_props, (
+            f"LIB-p00001 is a template (no Satisfies edges), should not have "
+            f"satisfier_rollup; got {lib_props.get('satisfier_rollup')!r}"
+        )

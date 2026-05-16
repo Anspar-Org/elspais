@@ -2922,6 +2922,7 @@ class GraphBuilder:
         multi_assertion_separator: str = "+",
         resolver: Any | None = None,
         namespace: str = "",
+        project_name: str = "",
     ) -> None:
         """Initialize the graph builder.
 
@@ -2938,10 +2939,16 @@ class GraphBuilder:
                 When provided, uses resolver.parse()/expand()/render_canonical()
                 instead of string splitting.
             namespace: Repository namespace for TermEntry attribution.
+            project_name: Human-readable repo/project name (from
+                ``[project].name`` in config). Used to tag in-repo
+                INSTANCE clones with ``template_repo`` so the viewer's
+                provenance affordance fires uniformly for both in-repo
+                and cross-repo INSTANCE nodes (CUR-1353 Phase 11).
         """
         self.repo_root = repo_root or Path.cwd()
         self.hash_mode = hash_mode
         self._namespace = namespace
+        self._project_name = project_name
         self._multi_assertion_separator = multi_assertion_separator
         self._resolver = resolver
         if satellite_kinds is not None:
@@ -3792,6 +3799,15 @@ class GraphBuilder:
                     if key != "stereotype":
                         clone.set_field(key, value)
                 clone.set_field("stereotype", Stereotype.INSTANCE)
+                # CUR-1353 Phase 11: tag in-repo clones with the current
+                # repo's project name so the viewer's provenance row fires
+                # uniformly for all INSTANCE nodes (cross-repo and in-repo
+                # alike). The cross-repo path sets this in
+                # FederatedGraph._instantiate_cross_repo_satisfies; without
+                # this branch the viewer would silently skip the row for
+                # in-repo Satisfies clones.
+                if self._project_name:
+                    clone.set_field("template_repo", self._project_name)
                 # Implements: REQ-d00129-C -- copy parse_line fields from original
                 if orig.get_field("parse_line") is not None:
                     clone.set_field("parse_line", orig.get_field("parse_line"))
