@@ -452,12 +452,14 @@ class TestTopicIndex:
 
     def test_REQ_p00080_D_topics_from_filename(self):
         """Topics are extracted from filenames stripping level prefix."""
-        topics = MarkdownAssembler._topics_from_filename("spec/prd-pdf-generation.md")
+        asm = MarkdownAssembler(_make_graph())
+        topics = asm._topics_from_filename("spec/prd-pdf-generation.md")
         assert topics == ["pdf", "generation"]
 
     def test_REQ_p00080_D_topics_from_filename_numeric(self):
         """Numeric prefixes are stripped."""
-        topics = MarkdownAssembler._topics_from_filename("spec/07-graph-architecture.md")
+        asm = MarkdownAssembler(_make_graph())
+        topics = asm._topics_from_filename("spec/07-graph-architecture.md")
         assert topics == ["graph", "architecture"]
 
     def test_REQ_p00080_D_topics_from_remainder(self):

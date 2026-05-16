@@ -80,8 +80,23 @@ def _collect_coverage(graph: FederatedGraph, config: dict | None = None) -> dict
     roles = get_status_roles(config or {})
     exclude_status = roles.coverage_excluded_statuses()
 
+    # Build level list from config, sorted by rank. Falls back to prd/ops/dev
+    # if config is absent or has no [levels] section.
+    levels_cfg = (config or {}).get("levels") or {}
+    if isinstance(levels_cfg, dict) and levels_cfg:
+        ordered = sorted(
+            (
+                (k, (v or {}).get("rank") if isinstance(v, dict) else None)
+                for k, v in levels_cfg.items()
+            ),
+            key=lambda x: x[1] if x[1] is not None else 9999,
+        )
+        level_keys = [k for k, _ in ordered if _ is not None] or ["prd", "ops", "dev"]
+    else:
+        level_keys = ["prd", "ops", "dev"]
+
     # Group requirements by level manually (node.level is lowercase)
-    level_groups: dict[str, list] = {"prd": [], "ops": [], "dev": []}
+    level_groups: dict[str, list] = {k: [] for k in level_keys}
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         lvl = (node.level or "").lower()
         if lvl in level_groups:
@@ -90,7 +105,8 @@ def _collect_coverage(graph: FederatedGraph, config: dict | None = None) -> dict
     levels = []
     excluded_counts: dict[str, int] = {}
 
-    for level_key, display_name in (("prd", "PRD"), ("ops", "OPS"), ("dev", "DEV")):
+    for level_key in level_keys:
+        display_name = level_key.upper()
         nodes = level_groups[level_key]
         active_nodes = [n for n in nodes if n.status not in exclude_status]
         excluded = len(nodes) - len(active_nodes)

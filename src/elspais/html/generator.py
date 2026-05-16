@@ -525,6 +525,10 @@ class HTMLGenerator:
         visited_at_depth: dict[tuple[str, int, str | None], bool] = {}
         visited_node_ids: set[str] = set()  # Track all rendered node IDs
 
+        level_prefixes = tuple(
+            f"{k.lower()}-" for k in (self.config.get("levels") or {}).keys()
+        ) or ("prd-", "ops-", "dev-")
+
         def get_topic(node: GraphNode) -> str:
             """Extract topic from file path."""
             _fn = node.file_node()
@@ -534,8 +538,7 @@ class HTMLGenerator:
             # Extract filename without extension
             # e.g., "spec/prd-system.md" -> "prd-system" -> "system"
             filename = Path(path).stem
-            # Remove level prefix if present
-            for prefix in ("prd-", "ops-", "dev-"):
+            for prefix in level_prefixes:
                 if filename.lower().startswith(prefix):
                     return filename[len(prefix) :]
             return filename

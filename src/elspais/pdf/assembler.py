@@ -17,16 +17,65 @@ from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.utilities.patterns import IdResolver, build_resolver
 
-# Level display names and sort order
-_LEVEL_ORDER = {"PRD": 0, "OPS": 1, "DEV": 2}
-_LEVEL_HEADINGS = {
+# Default level display names and sort order. Used when no config is passed
+# to MarkdownAssembler (keeps test fixtures working). Per-project levels are
+# resolved at assembler construction time from `[levels]` config.
+_DEFAULT_LEVEL_ORDER = {"PRD": 0, "OPS": 1, "DEV": 2}
+_DEFAULT_LEVEL_HEADINGS = {
     "PRD": "Product Requirements",
     "OPS": "Operational Requirements",
     "DEV": "Development Requirements",
 }
+_DEFAULT_LEVEL_PREFIX_PATTERN = re.compile(r"^(?:prd|ops|dev|\d+)-?", re.IGNORECASE)
 
-# Prefixes stripped for topic extraction
-_LEVEL_PREFIXES = re.compile(r"^(?:prd|ops|dev|\d+)-?", re.IGNORECASE)
+
+def _build_level_metadata(
+    config: dict | None,
+) -> tuple[dict[str, int], dict[str, str], re.Pattern[str]]:
+    """Return (order, headings, prefix_re) derived from `[levels]` config.
+
+    Order: uppercase level key -> rank.
+    Headings: uppercase level key -> display_name + " Requirements" fallback.
+    prefix_re: regex matching `<level_key>-` or numeric prefix at filename start.
+    """
+    if not config:
+        return (
+            dict(_DEFAULT_LEVEL_ORDER),
+            dict(_DEFAULT_LEVEL_HEADINGS),
+            _DEFAULT_LEVEL_PREFIX_PATTERN,
+        )
+
+    levels_cfg = config.get("levels") or {}
+    if not isinstance(levels_cfg, dict) or not levels_cfg:
+        return (
+            dict(_DEFAULT_LEVEL_ORDER),
+            dict(_DEFAULT_LEVEL_HEADINGS),
+            _DEFAULT_LEVEL_PREFIX_PATTERN,
+        )
+
+    order: dict[str, int] = {}
+    headings: dict[str, str] = {}
+    keys: list[str] = []
+    for key, entry in levels_cfg.items():
+        rank = (entry or {}).get("rank") if isinstance(entry, dict) else None
+        if rank is None:
+            continue
+        upper = key.upper()
+        order[upper] = int(rank)
+        display = (entry or {}).get("display_name") if isinstance(entry, dict) else None
+        headings[upper] = f"{display or key.title()} Requirements"
+        keys.append(re.escape(key.lower()))
+    if not order:
+        return (
+            dict(_DEFAULT_LEVEL_ORDER),
+            dict(_DEFAULT_LEVEL_HEADINGS),
+            _DEFAULT_LEVEL_PREFIX_PATTERN,
+        )
+
+    alt = "|".join(keys)
+    prefix_re = re.compile(rf"^(?:{alt}|\d+)-?", re.IGNORECASE)
+    return order, headings, prefix_re
+
 
 # Matches requirement heading lines at any heading level: # REQ-xxx or ## REQ-xxx
 _REQ_HEADING_RE = re.compile(r"^(#{1,3})\s+(REQ-\S+)")
@@ -55,6 +104,7 @@ class MarkdownAssembler:
         overview: bool = False,
         max_depth: int | None = None,
         resolver: IdResolver | None = None,
+        config: dict | None = None,
     ) -> None:
         self._graph = graph
         self._overview = overview
@@ -68,6 +118,10 @@ class MarkdownAssembler:
         if resolver is None:
             resolver = build_resolver({})
         self._resolver = resolver
+        order, headings, prefix_re = _build_level_metadata(config)
+        self._level_order = order
+        self._level_headings = headings
+        self._level_prefix_re = prefix_re
 
     def assemble(self) -> str:
         """Assemble the complete Markdown document.
@@ -111,7 +165,7 @@ class MarkdownAssembler:
             if not files:
                 continue
 
-            heading = _LEVEL_HEADINGS.get(level, level)
+            heading = self._level_headings.get(level, level)
             parts.append(f"# {heading}")
             parts.append("")
 
@@ -347,8 +401,7 @@ class MarkdownAssembler:
                 buckets[min_level].append(path)
         return dict(buckets)
 
-    @staticmethod
-    def _min_level_for_nodes(nodes: list[GraphNode]) -> str | None:
+    def _min_level_for_nodes(self, nodes: list[GraphNode]) -> str | None:
         """Return the highest-priority level name among nodes.
 
         Level values from the graph may be lowercase (prd/ops/dev).
@@ -360,8 +413,8 @@ class MarkdownAssembler:
             level = node.level
             if level:
                 level_upper = level.upper()
-                if level_upper in _LEVEL_ORDER:
-                    order = _LEVEL_ORDER[level_upper]
+                if level_upper in self._level_order:
+                    order = self._level_order[level_upper]
                     if order < best_order:
                         best_order = order
                         best_level = level_upper
@@ -512,8 +565,7 @@ class MarkdownAssembler:
 
         return lines
 
-    @staticmethod
-    def _topics_from_filename(file_path: str) -> list[str]:
+    def _topics_from_filename(self, file_path: str) -> list[str]:
         """Extract topics from a filename by stripping level prefix and splitting on '-'.
 
         Examples:
@@ -522,8 +574,7 @@ class MarkdownAssembler:
             '07-graph-architecture.md' → ['graph', 'architecture']
         """
         stem = Path(file_path).stem
-        # Strip level prefix (prd-, ops-, dev-, numeric prefixes like 07-)
-        cleaned = _LEVEL_PREFIXES.sub("", stem)
+        cleaned = self._level_prefix_re.sub("", stem)
         if not cleaned:
             return []
         words = [w for w in cleaned.split("-") if w]
