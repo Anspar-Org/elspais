@@ -108,15 +108,22 @@ F. `BrokenReference` SHALL carry an optional `diagnostic` field that explains wh
 
 G. The graph builder SHALL enforce a static validation matrix at build time, raising typed `BrokenReference` diagnostics for each invalid combination: `Satisfies:` against a target that exists but is not marked `**Template**`; `Satisfies:` against an `INSTANCE` target (chained instantiation); `Refines:` against a `TEMPLATE` target (compositing templates); `Refines:` against an `INSTANCE` target (refining instance content); `Implements:` from CODE against an `INSTANCE` target; `Verifies:` from TEST against an `INSTANCE` target; a REQ marked `**Template**` that declares its own `Implements:`/`Refines:` metadata targeting nodes outside its template subtree; a REQ marked `**Template**` that is targeted by an inbound `Refines:`. `Implements:` from CODE and `Verifies:` from TEST against a `TEMPLATE` target SHALL be permitted (cross-cutting evidence, *Assertion* D).
 
+H. When a requirement declares `Satisfies:` against a template owned by an associated repository, the federated graph builder SHALL clone the template REQ subtree (root REQ plus its directly-attached assertions) into the declaring repo's index with composite IDs of the form `declaring_id::original_id`, wire intra-graph `SATISFIES`, `STRUCTURES`, and `DEFINES` edges, and wire a cross-graph `INSTANCE` edge from each clone to its template original. When the as-authored target ID is non-canonical (e.g. unpadded), the federated graph builder SHALL fall back to per-repo `IdResolver` probing to canonicalize the target before cloning, so that all satisfiers of the same template produce composites using the same canonical original ID.
+
+J. When a cross-repository `Satisfies:` target is not claimed by any associated repository, the federated graph builder SHALL emit a typed `BrokenReference` whose diagnostic names the target ID, lists the currently-declared associates (or states that none are declared), and points authors at the `[associates.<name>]` block in `.elspais.toml`. When transitively walking `SATISFIES` and `INSTANCE` edges produces a cycle, the federated graph builder SHALL emit a typed `BrokenReference` whose diagnostic contains the word `cycle` and the cycle path; reporting one cycle per build is sufficient.
+
 ### Changelog
 
+- 2026-05-16 | ed72021a | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
+- 2026-05-16 | - | - | Michael Lewis (michael@anspar.org) | CUR-1353 Phase 4: add federated diagnostics (J) for missing associates and Satisfies cycles
+- 2026-05-16 | - | - | Michael Lewis (michael@anspar.org) | CUR-1353 Phase 3: add federated cross-repo template instantiation (H)
 - 2026-05-16 | 6e4308ff | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms, update hash
 - 2026-05-16 | - | - | Michael Lewis (michael@anspar.org) | CUR-1353 Phase 2: add Template marker (E), diagnostic field (F), validation matrix (G); rewrite D to reflect the removal of file-based attribution
 - 2026-05-11 | bae1b85d | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-04 | bae1b85d | - | Developer (dev@example.com) | Auto-fix: canonicalize term forms, update hash
 - 2026-03-30 | 9115ce0d | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
-*End* *Satisfies Relationship* | **Hash**: 6e4308ff
+*End* *Satisfies Relationship* | **Hash**: ed72021a
 ---
 
 ## REQ-p00016: NOT APPLICABLE Status

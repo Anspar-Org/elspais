@@ -551,3 +551,287 @@ class TestClaimForResolverProbe:
         # The library resolver PARSES LIB-p99999, but the canonical form is
         # not in the library's _index, so _claim_for must still return None.
         assert fed._claim_for("LIB-p99999") is None
+
+
+# ---------------------------------------------------------------------------
+# Federated diagnostics: missing associate + Satisfies cycle (Phase 4)
+# ---------------------------------------------------------------------------
+
+
+# Verifies: REQ-p00014-J
+class TestFederatedDiagnostics:
+    """Phase 4: typed diagnostics for federation-level Satisfies failures.
+
+    Two new failure modes covered here:
+
+    1. Missing-associate: a cross-repo ``Satisfies:`` target's namespace is
+       not declared in any ``[associates.*]`` block. The diagnostic must
+       point authors at the target ID, the ``[associates.<name>]`` config
+       knob, ``.elspais.toml``, and list the currently-available associates
+       (or explicitly state none are declared).
+
+    2. Satisfies cycle: two repos' templates satisfy each other (or any
+       transitive cycle over SATISFIES + INSTANCE edges). Federated build
+       must surface a typed cycle diagnostic via a ``BrokenReference``.
+    """
+
+    def test_missing_associate_diagnostic(self, tmp_path: Path) -> None:
+        """Single-repo app references a namespace that no associate covers.
+
+        Because ``[associates.*]`` is empty, the diagnostic must include the
+        phrase ``No associates declared`` to make the actionable fix obvious
+        (authors must add an associate, not switch namespaces).
+        """
+        app = tmp_path / "app"
+        app.mkdir()
+        _write(
+            app,
+            ".elspais.toml",
+            """
+            version = 3
+            [project]
+            name = "app"
+            namespace = "APP"
+            [levels.prd]
+            rank = 1
+            letter = "p"
+            implements = ["prd"]
+            [scanning.spec]
+            directories = ["spec"]
+            [scanning.code]
+            directories = []
+            [scanning.test]
+            enabled = false
+            directories = []
+            """,
+        )
+        _write(
+            app,
+            "spec/prd-app.md",
+            """
+            # APP-p00001: Orphan Satisfier
+
+            **Level**: PRD | **Status**: Approved
+            **Satisfies**: EVS-p00001
+
+            ### Assertions
+
+            A. SHALL satisfy nothing.
+
+            *End* *Orphan Satisfier*
+            """,
+        )
+        _git_init(app)
+
+        fed = build_graph(repo_root=app, scan_code=False, scan_tests=False)
+        brs = [
+            br
+            for br in fed.broken_references()
+            if br.source_id == "APP-p00001" and br.edge_kind == EdgeKind.SATISFIES.value
+        ]
+        assert brs, (
+            "expected a broken-ref for APP-p00001 satisfies EVS-p00001; "
+            f"got {[(b.source_id, b.target_id, b.edge_kind) for b in fed.broken_references()]}"
+        )
+        diag = brs[0].diagnostic
+        assert "EVS-p00001" in diag, f"target ID missing from diagnostic: {diag!r}"
+        assert "[associates" in diag, f"[associates hint missing: {diag!r}"
+        assert ".elspais.toml" in diag, f".elspais.toml hint missing: {diag!r}"
+        assert (
+            "No associates declared" in diag
+        ), f"expected 'No associates declared' phrasing when no associates exist: {diag!r}"
+
+    def test_missing_associate_diagnostic_with_other_associates(self, tmp_path: Path) -> None:
+        """When other associates exist, diagnostic names them.
+
+        The library is declared as an associate. The app's Satisfies points
+        at a DIFFERENT namespace (``EVS``) that no associate covers, so the
+        diagnostic must still fire — but now list ``library`` as an
+        available associate to clarify what IS declared.
+        """
+        library = _make_library(tmp_path)
+        del library  # only the side-effect (writing the library repo) matters
+        app = tmp_path / "app"
+        app.mkdir()
+        _write(
+            app,
+            ".elspais.toml",
+            """
+            version = 3
+            [project]
+            name = "app"
+            namespace = "APP"
+            [levels.prd]
+            rank = 1
+            letter = "p"
+            implements = ["prd"]
+            [scanning.spec]
+            directories = ["spec"]
+            [scanning.code]
+            directories = []
+            [scanning.test]
+            enabled = false
+            directories = []
+            [associates.library]
+            path = "../library"
+            namespace = "LIB"
+            """,
+        )
+        _write(
+            app,
+            "spec/prd-app.md",
+            """
+            # APP-p00001: Wrong Namespace Satisfier
+
+            **Level**: PRD | **Status**: Approved
+            **Satisfies**: EVS-p00001
+
+            ### Assertions
+
+            A. SHALL look elsewhere.
+
+            *End* *Wrong Namespace Satisfier*
+            """,
+        )
+        _git_init(app)
+
+        fed = build_graph(repo_root=app, scan_code=False, scan_tests=False)
+        brs = [
+            br
+            for br in fed.broken_references()
+            if br.source_id == "APP-p00001" and br.edge_kind == EdgeKind.SATISFIES.value
+        ]
+        assert brs, (
+            "expected a broken-ref for APP-p00001 satisfies EVS-p00001; "
+            f"got {[(b.source_id, b.target_id, b.edge_kind) for b in fed.broken_references()]}"
+        )
+        diag = brs[0].diagnostic
+        assert "EVS-p00001" in diag, f"target ID missing from diagnostic: {diag!r}"
+        assert "library" in diag, f"available associate name missing: {diag!r}"
+        assert "[associates" in diag, f"[associates hint missing: {diag!r}"
+        assert ".elspais.toml" in diag, f".elspais.toml hint missing: {diag!r}"
+
+    def test_satisfies_cycle_emits_broken_ref(self, tmp_path: Path) -> None:
+        """Two repos whose templates satisfy each other form a cycle.
+
+        Federated build walks SATISFIES then INSTANCE edges; when DFS
+        re-enters a node already on the path, a typed BrokenReference with
+        ``cycle`` in its diagnostic is emitted (one per build).
+
+        We assemble the federation by hand from per-repo
+        federation-of-one builds (``_build_associates=False``), bypassing
+        the on-disk transitive-associates guard so we can construct a
+        topology that the standard CLI path would refuse to load. This is
+        the same pattern as
+        ``test_two_satisfiers_get_independent_clones``.
+        """
+        a = tmp_path / "repo_a"
+        b = tmp_path / "repo_b"
+        a.mkdir()
+        b.mkdir()
+        _write(
+            a,
+            ".elspais.toml",
+            """
+            version = 3
+            [project]
+            name = "repo_a"
+            namespace = "AAA"
+            [levels.prd]
+            rank = 1
+            letter = "p"
+            implements = ["prd"]
+            [scanning.spec]
+            directories = ["spec"]
+            [scanning.code]
+            directories = []
+            [scanning.test]
+            enabled = false
+            directories = []
+            """,
+        )
+        _write(
+            a,
+            "spec/prd.md",
+            """
+            # AAA-p00001: A Template
+
+            **Level**: PRD | **Status**: Approved | **Template**
+            **Satisfies**: BBB-p00001
+
+            ### Assertions
+
+            A. SHALL be A.
+
+            *End* *A Template*
+            """,
+        )
+        _write(
+            b,
+            ".elspais.toml",
+            """
+            version = 3
+            [project]
+            name = "repo_b"
+            namespace = "BBB"
+            [levels.prd]
+            rank = 1
+            letter = "p"
+            implements = ["prd"]
+            [scanning.spec]
+            directories = ["spec"]
+            [scanning.code]
+            directories = []
+            [scanning.test]
+            enabled = false
+            directories = []
+            """,
+        )
+        _write(
+            b,
+            "spec/prd.md",
+            """
+            # BBB-p00001: B Template
+
+            **Level**: PRD | **Status**: Approved | **Template**
+            **Satisfies**: AAA-p00001
+
+            ### Assertions
+
+            A. SHALL be B.
+
+            *End* *B Template*
+            """,
+        )
+        _git_init(a)
+        _git_init(b)
+
+        a_fed = build_graph(repo_root=a, scan_code=False, scan_tests=False, _build_associates=False)
+        b_fed = build_graph(repo_root=b, scan_code=False, scan_tests=False, _build_associates=False)
+        a_entry = next(iter(a_fed.iter_repos()))
+        b_entry = next(iter(b_fed.iter_repos()))
+
+        fed = FederatedGraph(
+            repos=[
+                RepoEntry(
+                    name="repo_a",
+                    graph=a_entry.graph,
+                    config=a_entry.config,
+                    repo_root=a,
+                ),
+                RepoEntry(
+                    name="repo_b",
+                    graph=b_entry.graph,
+                    config=b_entry.config,
+                    repo_root=b,
+                ),
+            ],
+            root_repo="repo_a",
+        )
+
+        brs = list(fed.broken_references())
+        cycle_brs = [br for br in brs if "cycle" in br.diagnostic.lower()]
+        assert cycle_brs, (
+            f"expected a cycle diagnostic, got: "
+            f"{[(b.source_id, b.target_id, b.diagnostic) for b in brs]}"
+        )

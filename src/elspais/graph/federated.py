@@ -20,13 +20,12 @@ from elspais.graph.GraphNode import (
     GraphNode,
     NodeKind,
 )
-from elspais.graph.mutations import MutationEntry
+from elspais.graph.mutations import BrokenReference, MutationEntry
 from elspais.graph.relations import EdgeKind
 
 if TYPE_CHECKING:
     from elspais.graph.builder import TraceGraph
     from elspais.graph.comments import CommentThread
-    from elspais.graph.mutations import BrokenReference
     from elspais.graph.terms import TermDictionary
 
 
@@ -168,11 +167,17 @@ class FederatedGraph:
                             f"'{existing_repo}' and '{entry.name}'"
                         )
                     self._ownership[node_id] = entry.name
-        # Wire cross-graph edges after ownership is established
+        # Wire cross-graph edges after ownership is established.
+        # Single-repo case still runs _instantiate_cross_repo_satisfies so
+        # the missing-associate diagnostic fires when a lone repo declares
+        # a Satisfies: against an unknown namespace; the cross-graph edge
+        # pass is a no-op when there's only one repo.
         if len([e for e in repos if e.graph is not None]) > 1:
             self._wire_cross_graph_edges()
-            # Implements: REQ-p00014-H
-            self._instantiate_cross_repo_satisfies()
+        # Implements: REQ-p00014-H
+        self._instantiate_cross_repo_satisfies()
+        # Implements: REQ-p00014-J
+        self._detect_satisfies_cycles()
         self._annotate_presumed_foreign_refs()
         # Implements: REQ-d00201-B
         self._federated_log = FederatedMutationLog()
@@ -1279,9 +1284,37 @@ class FederatedGraph:
                     claim = self._claim_for(br.target_id)
                     if claim is not None:
                         target_repo_name, target_id_canonical = claim
-                if target_repo_name is None or target_repo_name == source_entry.name:
-                    # Missing-associate (Phase 4 will diagnose) or in-repo
-                    # (already handled by the per-repo builder).
+                if target_repo_name is None:
+                    # Missing-associate: no associated repo claims this
+                    # target ID. Emit a typed diagnostic naming the
+                    # currently-available associates so the author knows
+                    # what IS declared (and what's missing).
+                    # Implements: REQ-p00014-J
+                    available = sorted(
+                        name for name in self._repos.keys() if name != source_entry.name
+                    )
+                    available_str = (
+                        f"Available associates: {', '.join(available)}. "
+                        if available
+                        else "No associates declared. "
+                    )
+                    new_br = BrokenReference(
+                        source_id=br.source_id,
+                        target_id=br.target_id,
+                        edge_kind=br.edge_kind,
+                        presumed_foreign=True,
+                        diagnostic=(
+                            f"{br.source_id} satisfies {br.target_id}; "
+                            f"no associated repo claims this ID. "
+                            f"{available_str}"
+                            f"If {br.target_id} lives in a repo not yet declared, "
+                            f"add `[associates.<repo>]` to .elspais.toml."
+                        ),
+                    )
+                    source_entry.graph._broken_references[i] = new_br
+                    continue
+                if target_repo_name == source_entry.name:
+                    # In-repo (already handled by the per-repo builder).
                     continue
 
                 target_entry = self._repos[target_repo_name]
@@ -1378,6 +1411,80 @@ class FederatedGraph:
             for idx in reversed(resolved_indices):
                 source_entry.graph._broken_references.pop(idx)
 
+    # Implements: REQ-p00014-J
+    def _detect_satisfies_cycles(self) -> None:
+        """Detect Satisfies cycles via DFS over SATISFIES + INSTANCE edges.
+
+        A cycle exists when walking SATISFIES (declaring -> clone) then
+        INSTANCE (clone -> template) then any outbound SATISFIES from
+        that template eventually returns to a node already on the path.
+
+        Emits one typed ``BrokenReference`` per build (with ``cycle`` in
+        its diagnostic) on the owning repo of the first node in the
+        detected cycle, then returns. Reporting one cycle per build keeps
+        the output legible; once the author breaks the first cycle,
+        subsequent builds reveal any remaining ones.
+
+        Implementation notes:
+        - Three-colour DFS (WHITE/GRAY/BLACK) prevents infinite recursion
+          and revisits.
+        - INSTANCE edges are only traversed from INSTANCE-stereotype
+          nodes (the cloned roots/assertions), preserving the
+          "satisfies-then-resolves" semantics.
+        - Iterates ``_index`` from each live repo so cycles spanning
+          multiple repos are reachable regardless of where DFS starts.
+        """
+        from elspais.graph.relations import Stereotype
+
+        WHITE, GRAY, BLACK = 0, 1, 2
+        colour: dict[str, int] = {}
+        on_path: list[str] = []
+
+        def dfs(node: GraphNode) -> list[str] | None:
+            existing = colour.get(node.id, WHITE)
+            if existing == GRAY:
+                idx = on_path.index(node.id)
+                return on_path[idx:] + [node.id]
+            if existing == BLACK:
+                return None
+            colour[node.id] = GRAY
+            on_path.append(node.id)
+            stereotype = node.get_field("stereotype")
+            is_instance = stereotype is not None and stereotype == Stereotype.INSTANCE
+            for edge in node.iter_outgoing_edges():
+                if edge.kind == EdgeKind.SATISFIES:
+                    cycle = dfs(edge.target)
+                    if cycle:
+                        return cycle
+                elif edge.kind == EdgeKind.INSTANCE and is_instance:
+                    cycle = dfs(edge.target)
+                    if cycle:
+                        return cycle
+            on_path.pop()
+            colour[node.id] = BLACK
+            return None
+
+        for entry in self._repos.values():
+            if entry.graph is None:
+                continue
+            for node_id, node in list(entry.graph._index.items()):
+                if node.kind != NodeKind.REQUIREMENT:
+                    continue
+                if colour.get(node_id, WHITE) != WHITE:
+                    continue
+                cycle = dfs(node)
+                if cycle:
+                    # Emit a typed broken-ref on the originating repo.
+                    entry.graph._broken_references.append(
+                        BrokenReference(
+                            source_id=cycle[0],
+                            target_id=cycle[-1],
+                            edge_kind=EdgeKind.SATISFIES.value,
+                            diagnostic=(f"Satisfies cycle detected: {' -> '.join(cycle)}"),
+                        )
+                    )
+                    return  # one cycle per build to keep output sane
+
     def _annotate_presumed_foreign_refs(self) -> None:
         """Mark remaining broken references whose target doesn't match the source repo's ID pattern.
 
@@ -1388,7 +1495,6 @@ class FederatedGraph:
 
         Skipped for repos with no config (annotation requires pattern knowledge).
         """
-        from elspais.graph.mutations import BrokenReference
         from elspais.utilities.patterns import build_resolver
 
         for source_entry in self._repos.values():
