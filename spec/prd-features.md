@@ -96,7 +96,7 @@ Cross-cutting concerns — regulatory compliance frameworks, security policies, 
 
 A. The system SHALL support a `Satisfies:` metadata field on requirements. The target MAY be a requirement or a specific *Assertion*.
 
-B. When a requirement declares `Satisfies: X`, the graph builder SHALL clone the template's REQ subtree (all descendant REQs and their assertions) with composite IDs of the form `declaring_id::original_id`. The cloned root SHALL be linked to the declaring requirement via a SATISFIES edge. Internal edges and assertions SHALL be preserved exactly as in the original. Coverage of cloned nodes SHALL use the standard coverage mechanism — no special computation is needed.
+B. When a requirement declares `Satisfies: X`, the graph builder SHALL clone the template REQ plus its directly-attached *Assertions* (single-REQ scope; templates SHALL NOT have descendant REQs — see *Assertion* G) with composite IDs of the form `declaring_id::original_id`. The cloned root SHALL be linked to the declaring requirement via a SATISFIES edge. Each clone SHALL be linked to its template original via an INSTANCE edge. The cloned subtree SHALL preserve *Assertion* content and STRUCTURES edges from the template. Coverage of cloned nodes SHALL use the standard coverage mechanism — no special computation is needed (see *Assertion* K for the inherited-coverage rule that supplements this for cross-cutting evidence).
 
 C. The system SHALL classify nodes using a `Stereotype` field: `CONCRETE` (default), `TEMPLATE` (original nodes targeted by Satisfies), or `INSTANCE` (cloned copies). Each instance node SHALL have an INSTANCE edge to its template original.
 
@@ -116,6 +116,9 @@ K. Coverage on `INSTANCE` *Assertions* SHALL be computed as inherited coverage o
 
 ### Changelog
 
+- 2026-05-16 | 6c1d002c | - | Michael Lewis (michael@anspar.org) | Auto-fix: sync changelog hash
+- 2026-05-16 | - | - | Michael Lewis (michael@anspar.org) | CUR-1353 Phase 10: refresh assertion B to match single-REQ scope (no descendant REQs)
+- 2026-05-16 | 6c1d002c | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-05-16 | c7521067 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms, update hash
 - 2026-05-16 | - | - | Michael Lewis (michael@anspar.org) | CUR-1353 Phase 5: add inherited-coverage assertion (K) for INSTANCE assertions and satisfier rollups
 - 2026-05-16 | ed72021a | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
@@ -127,7 +130,7 @@ K. Coverage on `INSTANCE` *Assertions* SHALL be computed as inherited coverage o
 - 2026-05-04 | bae1b85d | - | Developer (dev@example.com) | Auto-fix: canonicalize term forms, update hash
 - 2026-03-30 | 9115ce0d | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
-*End* *Satisfies Relationship* | **Hash**: c7521067
+*End* *Satisfies Relationship* | **Hash**: 6c1d002c
 ---
 
 ## REQ-p00016: NOT APPLICABLE Status
