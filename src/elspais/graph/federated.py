@@ -168,10 +168,19 @@ class FederatedGraph:
                         )
                     self._ownership[node_id] = entry.name
         # Wire cross-graph edges after ownership is established.
-        # Single-repo case still runs _instantiate_cross_repo_satisfies so
-        # the missing-associate diagnostic fires when a lone repo declares
-        # a Satisfies: against an unknown namespace; the cross-graph edge
-        # pass is a no-op when there's only one repo.
+        #
+        # Federation passes:
+        #   - _wire_cross_graph_edges is gated on multi-repo (it's a no-op
+        #     for single-repo since there are no foreign repos to wire to).
+        #   - _instantiate_cross_repo_satisfies runs unconditionally because
+        #     a single-repo build can still produce SATISFIES broken-refs
+        #     whose target is unknown to any associate (single-repo author
+        #     wrote Satisfies: against a foreign namespace they haven't
+        #     declared as an associate). Phase 4's missing-associate
+        #     diagnostic needs to fire in that case.
+        #   - _detect_satisfies_cycles also runs unconditionally; cycles can
+        #     in principle exist inside a single repo via in-repo Satisfies
+        #     chains, though Phase-2 validation usually prevents that.
         if len([e for e in repos if e.graph is not None]) > 1:
             self._wire_cross_graph_edges()
         # Implements: REQ-p00014-H
