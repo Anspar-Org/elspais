@@ -82,13 +82,13 @@ filterGroups.status = new FilterGroup({
     name: 'status',
     container: document.getElementById('status-filter-buttons'),
     buttons: [
-        {% for status in statuses %}
-        {key: '{{ status | lower }}', label: '{{ status }}'},
+        {% for s in statuses %}
+        {key: '{{ s.key | lower }}', label: '{{ s.label }}'},
         {% endfor %}
     ],
     defaultOn: new Set([
-        {% for status in statuses %}
-        {% if status not in default_hidden_statuses %}'{{ status | lower }}',{% endif %}
+        {% for s in statuses %}
+        {% if s.key not in default_hidden_statuses %}'{{ s.key | lower }}',{% endif %}
         {% endfor %}
     ]),
     sensitiveEvents: new Set(['mutation-status', 'refresh']),

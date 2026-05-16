@@ -120,6 +120,30 @@ def test_nav_tree_js_injects_levels_and_namespaces(jinja_env, typed_5_level_conf
     assert "!== 'CORE'" not in js
 
 
+def test_nav_tree_status_filtergroup_emits_valid_js(jinja_env, typed_5_level_config):
+    """Regression: the status FilterGroup must emit `{key: '<lower>', label: '<title>'}`
+    objects, not the Python repr of the status dict (which crashes the page with
+    `SyntaxError: Unexpected identifier 'key'`)."""
+    from elspais.server.routes_ui import build_levels, build_statuses
+
+    levels = build_levels(typed_5_level_config)
+    statuses = build_statuses(typed_5_level_config)
+    tmpl = jinja_env.get_template("partials/js/_nav-tree.js.j2")
+    js = tmpl.render(
+        levels=levels,
+        namespaces=[],
+        statuses=statuses,
+        config_types=[],
+        default_hidden_statuses=[],
+    )
+    # The buttons array entries must look like `{key: '<lower>', label: '<label>'}`
+    assert "{key: 'active', label: 'Active'}" in js
+    assert "{key: 'legacy', label: 'Legacy'}" in js
+    # And the broken Python-repr stringification must not appear
+    assert "'key': 'active'" not in js
+    assert "'bg':" not in js
+
+
 def test_header_namespace_badge_uses_local_label(jinja_env, typed_5_level_config):
     namespaces = build_namespaces(typed_5_level_config)
     tmpl = jinja_env.get_template("partials/_header.html.j2")
