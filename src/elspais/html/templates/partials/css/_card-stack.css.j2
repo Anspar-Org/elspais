@@ -200,10 +200,9 @@
     text-transform: uppercase;
 }
 
-.status-badge.draft { background: var(--status-draft-bg); color: var(--status-draft-text); }
-.status-badge.active { background: var(--status-active-bg); color: var(--status-active-text); }
-.status-badge.deprecated { background: var(--status-deprecated-bg); color: var(--status-deprecated-text); }
-.status-badge.proposed { background: var(--status-proposed-bg); color: var(--status-proposed-text); }
+{% for s in statuses %}
+.status-badge.{{ s.key|lower }} { background: {{ s.bg }}; color: {{ s.text }}; }
+{% endfor %}
 
 /* Parent Links */
 .card-parents {

@@ -60,11 +60,12 @@
             <div class="filter-group" data-group="status">
                 <span class="filter-group-label">Status</span>
                 <div class="filter-group-buttons" id="status-filter-buttons">
-                    {% for status in statuses %}
-                    <button class="filter-btn{% if status not in default_hidden_statuses %} on{% endif %}"
-                            data-group="status" data-key="{{ status | lower }}"
-                            onclick="filterGroups.status.handleClick('{{ status | lower }}', event)"
-                            title="Toggle {{ status }} requirements">{{ status }}</button>
+                    {% for s in statuses %}
+                    <button class="filter-btn{% if s.key not in default_hidden_statuses %} on{% endif %}"
+                            data-group="status" data-key="{{ s.key | lower }}"
+                            style="--status-bg: {{ s.bg }}; --status-text: {{ s.text }};"
+                            onclick="filterGroups.status.handleClick('{{ s.key | lower }}', event)"
+                            title="Toggle {{ s.label }} requirements">{{ s.label }}</button>
                     {% endfor %}
                 </div>
             </div>
