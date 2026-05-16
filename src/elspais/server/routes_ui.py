@@ -18,8 +18,10 @@ def _extract_viewer_config(config: dict[str, Any]) -> dict[str, Any]:
     """Extract viewer-relevant values from the config dict.
 
     Returns a dict with keys suitable for unpacking into the Jinja2
-    template context: config_types, config_relationship_kinds,
-    config_statuses.
+    template context. Includes legacy `config_types` / `config_statuses` for
+    backward compatibility, plus the dynamic `levels` / `namespaces` /
+    `statuses` lists (each item carrying resolved bg/text colors) that the
+    templates and API responses consume.
     """
     from elspais.config.schema import ElspaisConfig
 
@@ -48,7 +50,112 @@ def _extract_viewer_config(config: dict[str, Any]) -> dict[str, Any]:
         "config_types": config_types,
         "config_relationship_kinds": list(_USER_RELATIONSHIP_KINDS),
         "config_statuses": config_statuses,
+        "levels": build_levels(typed),
+        "namespaces": build_namespaces(typed),
     }
+
+
+def build_levels(typed) -> list[dict[str, Any]]:
+    """List of level entries with resolved colors, sorted by rank."""
+    from elspais.utilities.color import resolve_color
+
+    items: list[dict[str, Any]] = []
+    for key, level_cfg in typed.levels.items():
+        rc = resolve_color(key, level_cfg.color)
+        items.append(
+            {
+                "key": key,
+                "label": level_cfg.display_name or key,
+                "rank": level_cfg.rank,
+                "letter": level_cfg.letter or key[0],
+                "bg": rc.bg,
+                "text": rc.text,
+            }
+        )
+    items.sort(key=lambda x: x["rank"])
+    return items
+
+
+def build_namespaces(typed) -> list[dict[str, Any]]:
+    """List of namespaces (local first, then associates) with resolved colors.
+
+    Exactly one entry has ``is_local=true``. The local entry's code is the
+    project's namespace; associates contribute one entry each in declared
+    order.
+    """
+    from elspais.utilities.color import resolve_color
+
+    items: list[dict[str, Any]] = []
+    local_code = typed.project.namespace
+    local_label = typed.project.name or local_code
+    local_rc = resolve_color(local_code, typed.project.color)
+    items.append(
+        {
+            "code": local_code,
+            "label": local_label,
+            "bg": local_rc.bg,
+            "text": local_rc.text,
+            "is_local": True,
+        }
+    )
+    for name, entry in typed.associates.items():
+        rc = resolve_color(entry.namespace, entry.color)
+        items.append(
+            {
+                "code": entry.namespace,
+                "label": name,
+                "bg": rc.bg,
+                "text": rc.text,
+                "is_local": False,
+            }
+        )
+    return items
+
+
+def build_statuses(typed, candidates: list[str] | None = None) -> list[dict[str, Any]]:
+    """List of statuses with resolved colors.
+
+    If ``candidates`` is provided, that order is preserved (typically the
+    role-sorted list of statuses actually used in the graph). Otherwise the
+    list is derived from the ``status_roles`` union, sorted by key.
+    """
+    from elspais.utilities.color import resolve_color
+
+    if candidates is None:
+        seen: dict[str, None] = {}
+        for statuses in typed.rules.format.status_roles.values():
+            if isinstance(statuses, list):
+                for s in statuses:
+                    seen[s] = None
+            elif isinstance(statuses, str):
+                seen[statuses] = None
+        candidates = sorted(seen.keys())
+
+    items: list[dict[str, Any]] = []
+    for key in candidates:
+        cfg_entry = typed.statuses.get(key)
+        configured = cfg_entry.color if cfg_entry else None
+        rc = resolve_color(key, configured)
+        items.append(
+            {
+                "key": key,
+                "label": key,
+                "bg": rc.bg,
+                "text": rc.text,
+            }
+        )
+    return items
+
+
+def local_namespace_from_config(config: dict[str, Any]) -> str:
+    """Return the local repo's namespace code from typed config."""
+    from elspais.config.schema import ElspaisConfig
+
+    try:
+        typed = ElspaisConfig.model_validate(config)
+    except Exception:
+        typed = ElspaisConfig.model_validate({})
+    return typed.project.namespace
 
 
 async def index(request: Request):
@@ -72,11 +179,19 @@ async def index(request: Request):
         journeys = gen._collect_journeys()
         stats.journey_count = len(journeys)
         roles = get_status_roles(state.config)
-        statuses = roles.sort_by_role(list(gen._collect_unique_values("status")))
+        status_keys = roles.sort_by_role(list(gen._collect_unique_values("status")))
         topics = sorted(gen._collect_unique_values("topic"))
         default_hidden = roles.default_hidden_statuses()
 
         viewer_cfg = _extract_viewer_config(state.config)
+        # Build status entries with resolved colors, preserving role-sorted order.
+        from elspais.config.schema import ElspaisConfig
+
+        try:
+            typed = ElspaisConfig.model_validate(state.config)
+        except Exception:
+            typed = ElspaisConfig.model_validate({})
+        statuses = build_statuses(typed, candidates=status_keys)
 
         context = {
             "request": request,

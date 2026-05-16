@@ -240,6 +240,7 @@ def _compute_link_data(
 async def api_status(request: Request) -> JSONResponse:
     """GET /api/status - Graph status with federation repo info."""
     from elspais import __version__
+    from elspais.server.routes_ui import build_levels, build_namespaces, build_statuses
 
     state = _st(request)
     result = _get_graph_status(state.graph)
@@ -263,6 +264,20 @@ async def api_status(request: Request) -> JSONResponse:
         result["repos"] = repos_info
     else:
         result["repos"] = []
+
+    # Dynamic category catalogs for the viewer UI. Each entry carries the
+    # resolved (configured or hashed) bg/text colors so clients can render
+    # badges without knowing how the colors were derived.
+    from elspais.config.schema import ElspaisConfig
+
+    try:
+        typed = ElspaisConfig.model_validate(state.config)
+    except Exception:
+        typed = ElspaisConfig.model_validate({})
+    result["levels"] = build_levels(typed)
+    result["namespaces"] = build_namespaces(typed)
+    result["statuses"] = build_statuses(typed)
+
     return JSONResponse(result)
 
 
@@ -438,9 +453,11 @@ async def api_tree_data(request: Request) -> JSONResponse:
     import re
 
     from elspais.html.generator import compute_coverage_tiers
+    from elspais.server.routes_ui import local_namespace_from_config
 
     state = _st(request)
     g = state.graph
+    local_ns = local_namespace_from_config(state.config)
     rows: list[dict[str, Any]] = []
     visited: set[tuple[str, str]] = set()
 
@@ -457,11 +474,16 @@ async def api_tree_data(request: Request) -> JSONResponse:
                     if nid:
                         unsaved_ids.add(nid)
 
+    # "CORE" is the legacy sentinel for "local repo" set by annotators.py; the
+    # JSON we emit uses the actual local namespace string instead so JS clients
+    # can compare `repo_prefix` against the configured namespace.
+    _LOCAL_SENTINEL = "CORE"
+
     def _is_associated(node) -> bool:
         if re.match(r"^REQ-[A-Z]{2,4}-[a-z]", node.id):
             return True
         rp = node.get_metric("repo_prefix", "")
-        if rp and rp != "CORE":
+        if rp and rp != _LOCAL_SENTINEL and rp != local_ns:
             return True
         _fn = node.file_node()
         if _fn and _fn.get_field("repo"):
@@ -470,7 +492,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
 
     def _get_repo_prefix(node) -> str:
         rp = node.get_metric("repo_prefix", "")
-        if rp and rp != "CORE":
+        if rp and rp != _LOCAL_SENTINEL:
             return rp
         _fn = node.file_node()
         if _fn and _fn.get_field("repo"):
@@ -478,7 +500,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
         m = re.match(r"^REQ-([A-Z]{2,4})-[a-z]", node.id)
         if m:
             return m.group(1)
-        return rp or "CORE"
+        return local_ns
 
     def _walk(node, depth: int, parent_id: str | None) -> None:
         from elspais.graph.relations import EdgeKind
@@ -588,7 +610,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
                 "is_test_result": False,
                 "is_journey": True,
                 "result_status": "",
-                "repo_prefix": "CORE",
+                "repo_prefix": local_ns,
                 "source_file": source_file,
                 "source_line": source_line,
                 "actor": node.get_field("actor", ""),
