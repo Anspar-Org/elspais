@@ -3352,6 +3352,15 @@ class GraphBuilder:
         for sat_ref in data.get("satisfies", []):
             self._satisfies_links.append((req_id, sat_ref))
 
+        # Implements: REQ-p00014-E
+        # Author-declared TEMPLATE marker: stamp the REQ and its assertions
+        # so the parser-only Stereotype is correct before subtree-cloning runs.
+        if data.get("template"):
+            node.set_field("stereotype", Stereotype.TEMPLATE)
+            for _line_num, child_node in children_with_lines:
+                if child_node.kind == NodeKind.ASSERTION:
+                    child_node.set_field("stereotype", Stereotype.TEMPLATE)
+
     def _add_journey(self, content: ParsedContent) -> None:
         """Add a user journey node."""
         data = content.parsed_data
@@ -3691,7 +3700,8 @@ class GraphBuilder:
                 final_links.append((source_id, target_id, edge_kind))
         self._pending_links = final_links
 
-        # Sub-pass 1: Mark templates
+        # Sub-pass 1: Verify templates are marked (validation in Phase 2)
+        # Implements: REQ-p00014-E
         for template_id in template_roots:
             template_node = self._nodes.get(template_id)
             if not template_node:
@@ -3705,9 +3715,17 @@ class GraphBuilder:
                         )
                     )
                 continue
-            # Mark template root and all descendants
-            for node in template_node.walk():
-                node.set_field("stereotype", Stereotype.TEMPLATE)
+            if template_node.get_field("stereotype") != Stereotype.TEMPLATE:
+                # TODO(CUR-1353 Phase 2): replace with typed BrokenReference.
+                # Why this fallback exists: pre-CUR-1353 specs declare
+                # `Satisfies: <id>` against requirements that were never
+                # marked `**Template**`. Removing the fallback now would
+                # immediately break every such graph and prevent INSTANCE
+                # subtrees from being cloned. Phase 2 introduces the typed
+                # error AND adds the validation matrix entry that surfaces
+                # via `elspais health` so authors can migrate.
+                for node in template_node.walk():
+                    node.set_field("stereotype", Stereotype.TEMPLATE)
 
         # Sub-pass 2: Clone & link
         for declaring_id, template_id in self._satisfies_links:

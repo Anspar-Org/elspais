@@ -158,6 +158,8 @@ class RequirementTransformer:
         has_redundant_refs = False
         assertions_depth: int | None = None
         changelog_depth: int | None = None
+        # Implements: REQ-p00014-E
+        is_template = False
 
         for child in node.children[1:]:
             if not isinstance(child, Tree):
@@ -192,6 +194,9 @@ class RequirementTransformer:
                             satisfies.append(ref)
                     if len(satisfies) < old_len + len(meta["satisfies"]):
                         has_redundant_refs = True
+                # Implements: REQ-p00014-E
+                if meta.get("template"):
+                    is_template = True
                 end_line = self._last_line(child)
 
             elif child.data == "assertion_block":
@@ -262,6 +267,8 @@ class RequirementTransformer:
             "implements": implements,
             "refines": refines,
             "satisfies": satisfies,
+            # Implements: REQ-p00014-E
+            "template": is_template,
             "assertions": assertions,
             "sections": sections,
             "changelog": changelog,
@@ -309,6 +316,9 @@ class RequirementTransformer:
                 # Implements: REQ-p00014-A
                 elif child.type == "SATISFIES_FIELD":
                     result["satisfies"] = self._parse_refs(val)
+                # Implements: REQ-p00014-E
+                elif child.type == "TEMPLATE_FIELD":
+                    result["template"] = True
                 # PIPE tokens are ignored
         return result
 

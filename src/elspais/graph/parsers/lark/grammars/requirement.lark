@@ -38,11 +38,13 @@ requirement: REQ_HEADER _NL preamble_line* block* end_block?
 metadata_line: _field (PIPE _field)* _NL
 
 // Implements: REQ-p00014-A
+// Implements: REQ-p00014-E
 _field: LEVEL_FIELD
       | STATUS_FIELD
       | IMPLEMENTS_FIELD
       | REFINES_FIELD
       | SATISFIES_FIELD
+      | TEMPLATE_FIELD
 
 body_line: TEXT _NL
          | _NL
@@ -172,6 +174,9 @@ STATUS_FIELD.7: /(?:\*\*|\*|_)?[Ss][Tt][Aa][Tt][Uu][Ss](?:\*\*|\*|_)?[:= \t]\s*\
 IMPLEMENTS_FIELD.7: /(?:\*\*|\*|_)?[Ii][Mm][Pp][Ll][Ee][Mm][Ee][Nn][Tt][Ss](?:\*\*|\*|_)?[:= \t]\s*[^|\n]+/
 REFINES_FIELD.7: /(?:\*\*|\*|_)?[Rr][Ee][Ff][Ii][Nn][Ee][Ss](?:\*\*|\*|_)?[:= \t]\s*[^|\n]+/
 SATISFIES_FIELD.7: /(?:\*\*|\*|_)?[Ss][Aa][Tt][Ii][Ss][Ff][Ii][Ee][Ss](?:\*\*|\*|_)?[:= \t]\s*[^|\n]+/
+// --- Template marker (no-value flag on the metadata line) ---
+// Implements: REQ-p00014-E
+TEMPLATE_FIELD.8: /(?:\*\*|\*|_)?[Tt][Ee][Mm][Pp][Ll][Aa][Tt][Ee](?:\*\*|\*|_)?/
 PIPE.7: /[ \t]*\|[ \t]*/
 
 // --- Assertion content (only active inside assertion_block) ---
