@@ -246,58 +246,54 @@ function updateHeaderStats() {
         var assocList = nsList.filter(function(n){ return !n.is_local; });
         var container = document.getElementById('repo-badges-container');
         var sep = document.getElementById('repo-sep');
+        var headerStats = document.getElementById('header-stats');
         if (!container) return;
         container.innerHTML = '';
-        var repoPrefixes = assocList.map(function(n){ return n.code; });
-        editState.knownRepos = repoPrefixes;
-        if (repoPrefixes.length === 0) {
+        var assocPrefixes = assocList.map(function(n){ return n.code; });
+        // All namespace codes (local first, then assocs) for the FilterGroup
+        // — the local main badge (`#stat-main`) is also a `.filter-btn` in
+        // the same group so toggling it filters local-repo rows in/out.
+        var allPrefixes = [];
+        if (LOCAL_NS) allPrefixes.push(LOCAL_NS);
+        for (var ap = 0; ap < assocPrefixes.length; ap++) allPrefixes.push(assocPrefixes[ap]);
+        editState.knownRepos = assocPrefixes;
+        if (assocPrefixes.length === 0) {
             if (sep) sep.style.display = 'none';
-            // Initialize empty repo group
-            if (!filterGroups.repo) {
-                filterGroups.repo = new FilterGroup({
-                    name: 'repo',
-                    container: container,
-                    buttons: [],
-                    defaultOn: new Set(),
-                    sensitiveEvents: new Set(['refresh']),
-                    countFn: function() { return 0; },
-                    matchFn: function() { return 'main'; },
-                    onChange: function() { renderNavTree(); saveState(); },
-                });
+        } else {
+            if (sep) sep.style.display = '';
+            for (var k = 0; k < assocList.length; k++) {
+                var ns = assocList[k];
+                var code = ns.code;
+                var count = repoCounts[code] || 0;
+                var badge = document.createElement('span');
+                badge.className = 'stat-badge repo filter-btn on';
+                badge.id = 'stat-repo-' + code;
+                badge.title = 'Click to toggle ' + code + ' requirements (Shift+click to solo)';
+                badge.textContent = code + ': ' + count;
+                badge.setAttribute('data-group', 'repo');
+                badge.setAttribute('data-key', code.toLowerCase());
+                badge.setAttribute('data-repo', code);
+                badge.style.backgroundColor = ns.bg;
+                badge.style.color = ns.text;
+                badge.onclick = (function(repoCode) {
+                    return function(event) {
+                        if (filterGroups.repo) filterGroups.repo.handleClick(repoCode.toLowerCase(), event);
+                    };
+                })(code);
+                container.appendChild(badge);
             }
-            return;
-        }
-        if (sep) sep.style.display = '';
-        for (var k = 0; k < assocList.length; k++) {
-            var ns = assocList[k];
-            var code = ns.code;
-            var count = repoCounts[code] || 0;
-            var badge = document.createElement('span');
-            badge.className = 'stat-badge repo filter-btn on';
-            badge.id = 'stat-repo-' + code;
-            badge.title = 'Click to toggle ' + code + ' requirements (Shift+click to solo)';
-            badge.textContent = code + ': ' + count;
-            badge.setAttribute('data-group', 'repo');
-            badge.setAttribute('data-key', code.toLowerCase());
-            badge.setAttribute('data-repo', code);
-            badge.style.backgroundColor = ns.bg;
-            badge.style.color = ns.text;
-            badge.onclick = (function(repoCode) {
-                return function(event) {
-                    if (filterGroups.repo) filterGroups.repo.handleClick(repoCode.toLowerCase(), event);
-                };
-            })(code);
-            container.appendChild(badge);
         }
 
-        // Initialize or recreate repo FilterGroup
+        // Initialize or recreate repo FilterGroup. Container is the whole
+        // header-stats div so the FilterGroup's render() finds both the
+        // local `#stat-main` badge and the dynamically-rendered assoc chips.
         filterGroups.repo = new FilterGroup({
             name: 'repo',
-            container: container,
-            buttons: repoPrefixes.map(function(code) {
+            container: headerStats || container,
+            buttons: allPrefixes.map(function(code) {
                 return {key: code.toLowerCase(), label: code};
             }),
-            defaultOn: new Set(repoPrefixes.map(function(c) { return c.toLowerCase(); })),
+            defaultOn: new Set(allPrefixes.map(function(c) { return c.toLowerCase(); })),
             sensitiveEvents: new Set(['refresh']),
             countFn: function(key, rows) {
                 var count = 0;
@@ -306,7 +302,7 @@ function updateHeaderStats() {
                 }
                 return count;
             },
-            matchFn: function(row) { return (row.repo_prefix || 'main').toLowerCase(); },
+            matchFn: function(row) { return (row.repo_prefix || '').toLowerCase(); },
             onChange: function() { renderNavTree(); saveState(); },
         });
         filterGroups.repo.recompute(rows);
