@@ -479,7 +479,23 @@ async def api_tree_data(request: Request) -> JSONResponse:
     # can compare `repo_prefix` against the configured namespace.
     _LOCAL_SENTINEL = "CORE"
 
+    def _repo_namespace(node) -> str | None:
+        """Resolve the node's owning-repo namespace via the federated graph.
+        Returns None if the graph isn't federated or the lookup fails.
+        """
+        try:
+            entry = g.repo_for(node.id)
+        except (KeyError, AttributeError):
+            return None
+        if entry is None or entry.config is None:
+            return None
+        ns = (entry.config.get("project") or {}).get("namespace")
+        return ns or None
+
     def _is_associated(node) -> bool:
+        ns = _repo_namespace(node)
+        if ns is not None:
+            return ns != local_ns
         if re.match(r"^REQ-[A-Z]{2,4}-[a-z]", node.id):
             return True
         rp = node.get_metric("repo_prefix", "")
@@ -491,6 +507,9 @@ async def api_tree_data(request: Request) -> JSONResponse:
         return bool(node.get_field("associated", False))
 
     def _get_repo_prefix(node) -> str:
+        ns = _repo_namespace(node)
+        if ns is not None:
+            return ns
         rp = node.get_metric("repo_prefix", "")
         if rp and rp != _LOCAL_SENTINEL:
             return rp
