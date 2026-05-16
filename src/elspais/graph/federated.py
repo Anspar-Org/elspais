@@ -171,6 +171,8 @@ class FederatedGraph:
         # Wire cross-graph edges after ownership is established
         if len([e for e in repos if e.graph is not None]) > 1:
             self._wire_cross_graph_edges()
+            # Implements: REQ-p00014-H
+            self._instantiate_cross_repo_satisfies()
         self._annotate_presumed_foreign_refs()
         # Implements: REQ-d00201-B
         self._federated_log = FederatedMutationLog()
@@ -1179,6 +1181,13 @@ class FederatedGraph:
                 continue
             resolved: list[int] = []  # indices to remove
             for i, br in enumerate(source_entry.graph._broken_references):
+                # SATISFIES is handled by _instantiate_cross_repo_satisfies,
+                # which clones the template subtree instead of wiring a
+                # direct cross-graph edge.  Skip it here so the broken-ref
+                # survives for the Phase-A pass to consume.
+                # Implements: REQ-p00014-H
+                if br.edge_kind == EdgeKind.SATISFIES.value:
+                    continue
                 target_repo_name = self._ownership.get(br.target_id)
                 if target_repo_name and target_repo_name != source_entry.name:
                     target_entry = self._repos[target_repo_name]
@@ -1202,6 +1211,172 @@ class FederatedGraph:
             graph = self._repos[repo_name].graph
             if graph is not None:
                 graph._roots = [r for r in graph._roots if r.id not in source_ids]
+
+    # Implements: REQ-p00014-H
+    def _claim_for(self, target_id: str) -> tuple[str, str] | None:
+        """Ask each associated repo's resolver whether it claims ``target_id``.
+
+        Returns ``(repo_name, canonical_id_in_that_repo)`` or ``None``.
+
+        Probes in declaration order; first claimant wins.  Cold-path
+        fallback for when exact-match ``_ownership`` lookup misses
+        (e.g.  ID written in a non-canonical form like uppercase or
+        different padding).
+        """
+        from elspais.utilities.patterns import build_resolver
+
+        for entry in self._repos.values():
+            if entry.graph is None or entry.config is None:
+                continue
+            resolver = build_resolver(entry.config)
+            if not resolver.is_local_id(target_id):
+                continue
+            parsed = resolver.parse(target_id)
+            if parsed is None:
+                continue
+            canonical = resolver.render_canonical(parsed)
+            if canonical in entry.graph._index:
+                return entry.name, canonical
+        return None
+
+    # Implements: REQ-p00014-H
+    def _instantiate_cross_repo_satisfies(self) -> None:
+        """Phase A: clone cross-repo Satisfies templates into declaring repos.
+
+        For each per-repo broken-ref with ``edge_kind == SATISFIES`` whose
+        target lives in another federated repo, clone the template REQ
+        plus its directly-attached assertions into the declaring repo's
+        ``_nodes`` / ``_index`` with composite IDs (``declaring::original``),
+        wire intra-graph SATISFIES + STRUCTURES + DEFINES edges, and wire
+        cross-graph INSTANCE edges back to the template originals.
+
+        Single-REQ scope (CUR-1353 Phase 2): only the template root REQ
+        and its STRUCTURES-children-that-are-assertions are cloned.
+        Templates may not have descendant REQs (rule 8).
+        """
+        from elspais.graph.GraphNode import GraphNode
+        from elspais.graph.relations import Stereotype
+        from elspais.utilities.patterns import INSTANCE_SEPARATOR, build_resolver
+
+        for source_entry in self._repos.values():
+            if source_entry.graph is None:
+                continue
+            resolver = (
+                build_resolver(source_entry.config) if source_entry.config is not None else None
+            )
+            resolved_indices: list[int] = []
+
+            for i, br in enumerate(source_entry.graph._broken_references):
+                if br.edge_kind != EdgeKind.SATISFIES.value:
+                    continue
+
+                # Resolve the target's owning repo.  Try exact-match
+                # ownership lookup first, then fall back to per-repo
+                # IdResolver probing for ID-format tolerance.
+                target_repo_name = self._ownership.get(br.target_id)
+                target_id_canonical = br.target_id
+                if target_repo_name is None:
+                    claim = self._claim_for(br.target_id)
+                    if claim is not None:
+                        target_repo_name, target_id_canonical = claim
+                if target_repo_name is None or target_repo_name == source_entry.name:
+                    # Missing-associate (Phase 4 will diagnose) or in-repo
+                    # (already handled by the per-repo builder).
+                    continue
+
+                target_entry = self._repos[target_repo_name]
+                if target_entry.graph is None:
+                    continue
+                template_node = target_entry.graph._index.get(target_id_canonical)
+                if template_node is None:
+                    continue
+                if template_node.get_field("stereotype") != Stereotype.TEMPLATE:
+                    # Target exists but isn't marked **Template**.  Leave
+                    # the broken-ref in place; downstream validation will
+                    # attach a rule-1 diagnostic.
+                    continue
+
+                declaring_node = source_entry.graph._index.get(br.source_id)
+                if declaring_node is None:
+                    continue
+
+                # CUR-1353 Phase 2: single-REQ scope.  A template is the
+                # one REQ root plus its directly-attached assertions
+                # (STRUCTURES children).  Do not walk further.
+                template_nodes: list[GraphNode] = [template_node]
+                for child in template_node.iter_children(edge_kinds={EdgeKind.STRUCTURES}):
+                    if child.kind == NodeKind.ASSERTION:
+                        template_nodes.append(child)
+
+                clone_map: dict[str, GraphNode] = {}
+                for orig in template_nodes:
+                    clone_id = (
+                        resolver.build_instance_id(br.source_id, orig.id)
+                        if resolver is not None
+                        else f"{br.source_id}{INSTANCE_SEPARATOR}{orig.id}"
+                    )
+                    clone = GraphNode(
+                        id=clone_id,
+                        kind=orig.kind,
+                        label=orig.get_label(),
+                    )
+                    for key, value in orig.get_all_content().items():
+                        if key != "stereotype":
+                            clone.set_field(key, value)
+                    clone.set_field("stereotype", Stereotype.INSTANCE)
+                    # Source files live in foreign repo; do NOT copy parse_line.
+                    clone.set_field("parse_line", None)
+                    clone.set_field("parse_end_line", None)
+
+                    source_entry.graph._index[clone_id] = clone
+                    self._ownership[clone_id] = source_entry.name
+                    clone_map[orig.id] = clone
+
+                    # Cross-graph INSTANCE edge: clone -> template original.
+                    # Use .link() directly so the edge crosses repo
+                    # boundaries (TraceGraph.add_edge with target_graph
+                    # would place the edge on target.link(source), which
+                    # would invert the direction we want here).
+                    clone.link(orig, EdgeKind.INSTANCE)
+
+                # Intra-graph STRUCTURES edges: cloned REQ -> cloned assertions.
+                #
+                # Note: unlike the in-repo path in builder.py
+                # (`_instantiate_satisfies_templates`), we DO NOT generically copy
+                # `orig.iter_outgoing_edges()` here. Under the Phase-2 single-REQ
+                # scope, the only outgoing edges from a template REQ are
+                # STRUCTURES edges to its directly-attached assertions, and the
+                # cloned assertions themselves have no outgoing edges between
+                # cloned nodes. The parent-loop below is therefore sufficient.
+                # If a future phase widens the template scope (e.g. allow
+                # cloned cross-REQ refinements or assertion-to-assertion edges),
+                # this omission must be revisited to avoid losing those edges --
+                # or, conversely, re-introducing the generic outgoing-edge pass
+                # without removing this loop would double-link STRUCTURES.
+                for orig in template_nodes:
+                    if orig.kind != NodeKind.ASSERTION:
+                        continue
+                    clone_assertion = clone_map[orig.id]
+                    for parent in orig.iter_parents():
+                        parent_clone = clone_map.get(parent.id)
+                        if parent_clone is not None:
+                            parent_clone.link(clone_assertion, EdgeKind.STRUCTURES)
+
+                # Intra-graph SATISFIES edge: declaring REQ -> cloned root.
+                cloned_root = clone_map.get(template_node.id)
+                if cloned_root is not None:
+                    declaring_node.link(cloned_root, EdgeKind.SATISFIES)
+
+                # Intra-graph DEFINES edges: declaring FILE -> every clone.
+                declaring_file = declaring_node.file_node()
+                if declaring_file is not None:
+                    for clone in clone_map.values():
+                        declaring_file.link(clone, EdgeKind.DEFINES)
+
+                resolved_indices.append(i)
+
+            for idx in reversed(resolved_indices):
+                source_entry.graph._broken_references.pop(idx)
 
     def _annotate_presumed_foreign_refs(self) -> None:
         """Mark remaining broken references whose target doesn't match the source repo's ID pattern.
