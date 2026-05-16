@@ -1,0 +1,44 @@
+version = 3
+cli_ttl = 2
+
+[project]
+name = "app"
+namespace = "APP"
+
+[levels.prd]
+rank = 1
+letter = "p"
+implements = ["prd"]
+
+[levels.dev]
+rank = 3
+letter = "d"
+implements = ["dev", "prd"]
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = ["src"]
+
+[scanning.test]
+directories = ["tests"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
+
+[id-patterns.component]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[id-patterns.assertions]
+label_style = "uppercase"
+max_count = 26
+
+[changelog]
+hash_current = false
+
+[associates.library]
+path = "../library"
+namespace = "LIB"

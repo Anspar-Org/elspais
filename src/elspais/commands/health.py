@@ -1707,7 +1707,6 @@ def check_associate_paths(
                 HealthFinding(
                     message=f"Associate '{assoc_name}' path does not exist: {path_str}",
                     node_id=assoc_name,
-                    severity="error",
                 )
             )
         else:
@@ -1719,7 +1718,6 @@ def check_associate_paths(
                     HealthFinding(
                         message=f"Associate '{assoc_name}' is misconfigured: {disc_result}",
                         node_id=assoc_name,
-                        severity="error",
                     )
                 )
             else:
@@ -1732,7 +1730,6 @@ def check_associate_paths(
                                 f" in {disc_result.spec_path}"
                             ),
                             node_id=assoc_name,
-                            severity="error",
                         )
                     )
 
