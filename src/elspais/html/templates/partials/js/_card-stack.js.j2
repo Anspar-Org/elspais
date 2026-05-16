@@ -540,7 +540,23 @@ function buildAssertionHtml(nodeId, a, data) {
             btnLabel + '</button>';
     });
     if (!anyBadge) {
-        h += '<span class="assertion-no-coverage" title="No direct assertion-level coverage" style="font-size:0.6rem;color:var(--secondary-text);opacity:0.5;">no direct coverage</span>';
+        // INSTANCE assertions inherit coverage from the template original
+        // (see REQ-p00014-K). Show that instead of the bare "no direct coverage"
+        // hint so the viewer reflects the satisfier-rollup invariant.
+        var aTplId = a.template_id || '';
+        var aTplRepo = a.template_repo || '';
+        var aInherited = (a.inherited_coverage != null) ? a.inherited_coverage : null;
+        if (aTplId || aTplRepo || aInherited != null) {
+            var inheritedText = 'inherits from template';
+            if (aTplId) inheritedText = 'inherits from ' + aTplId;
+            var inheritedTip = aTplRepo ? ('Template defined in ' + aTplRepo) : 'Coverage inherited from template';
+            if (aInherited != null) inheritedTip += ' — ' + aInherited + ' direct link(s) on template';
+            h += '<span class="assertion-inherited-coverage" title="' + escapeAttr(inheritedTip) + '" ' +
+                'style="font-size:0.6rem;color:var(--secondary-text);font-style:italic;">' +
+                escapeHtml(inheritedText) + '</span>';
+        } else {
+            h += '<span class="assertion-no-coverage" title="No direct assertion-level coverage" style="font-size:0.6rem;color:var(--secondary-text);opacity:0.5;">no direct coverage</span>';
+        }
     }
     h += '</span>'; // close .assertion-badges-area
     h += '<button class="assertion-delete-btn edit-only" ' +
@@ -709,6 +725,27 @@ function buildCardHtml(nodeId, data, collapsed) {
     html += '<span class="card-meta-key">Hash:</span>';
     html += '<span class="card-meta-value" style="font-family:monospace;font-size:0.75rem;">' + hash + '</span>';
     html += '</div>';
+
+    // Template provenance (cross-repo INSTANCE): show where the template is
+    // defined and link back to the template original. See REQ-p00014-K.
+    if ((props.stereotype || '').toLowerCase() === 'instance' && (props.template_id || props.template_repo)) {
+        var tplRepo = props.template_repo || '';
+        var tplId = props.template_id || '';
+        html += '<div class="card-meta-item template-provenance" title="This is a cross-repo instance of a template requirement">';
+        html += '<span class="card-meta-key">Template:</span>';
+        html += '<span class="card-meta-value">';
+        if (tplId) {
+            html += '<a class="template-origin-link" href="#" ' +
+                'onclick="event.preventDefault(); openCard(\'' + escapeAttr(tplId) + '\')">' +
+                escapeHtml(tplId) + '</a>';
+        }
+        if (tplRepo) {
+            html += ' <span class="template-repo-badge" style="font-size:0.7rem;color:var(--secondary-text);">(defined in ' +
+                escapeHtml(tplRepo) + ')</span>';
+        }
+        html += '</span>';
+        html += '</div>';
+    }
 
     html += '</div></div>';
 

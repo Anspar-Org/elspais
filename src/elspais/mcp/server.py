@@ -271,6 +271,26 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
             }
             if ro is not None:
                 entry["render_order"] = ro
+            # Implements: REQ-p00014-K
+            # INSTANCE-cloned assertions: expose template_repo, the
+            # template original's assertion ID, and the inherited
+            # coverage count (from the template's direct coverage).
+            # Viewers display a small "inherited" affordance instead
+            # of "no direct coverage" when these are present.
+            from elspais.graph.relations import Stereotype
+
+            child_stereotype = child.get_field("stereotype")
+            if child_stereotype == Stereotype.INSTANCE:
+                from elspais.graph.metrics import inherited_coverage_for
+
+                child_template_repo = child.get_field("template_repo")
+                if child_template_repo:
+                    entry["template_repo"] = child_template_repo
+                for c_edge in child.iter_outgoing_edges():
+                    if c_edge.kind == EK.INSTANCE:
+                        entry["template_id"] = c_edge.target.id
+                        break
+                entry["inherited_coverage"] = inherited_coverage_for(child)
             children.append(entry)
         elif child.kind == NodeKind.REMAINDER:
             entry = {
@@ -357,6 +377,7 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
     keywords = node.get_field("keywords", []) or []
 
     # ── Kind-specific properties ──
+    # Implements: REQ-p00014-K (cross-repo template provenance affordance)
     properties: dict[str, Any] = {}
     if kind == NodeKind.REQUIREMENT:
         from elspais.graph.relations import Stereotype
@@ -368,6 +389,20 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
             "hash": node.get_field("hash"),
             "stereotype": stereotype.value if isinstance(stereotype, Stereotype) else stereotype,
         }
+        # Cross-repo INSTANCE clones: surface the template's repo plus
+        # the template original's ID so viewers can render a
+        # "Template defined in <repo>" affordance and link back.
+        if stereotype == Stereotype.INSTANCE:
+            template_repo = node.get_field("template_repo")
+            if template_repo:
+                properties["template_repo"] = template_repo
+            template_id = None
+            for edge in node.iter_outgoing_edges():
+                if edge.kind == EK.INSTANCE:
+                    template_id = edge.target.id
+                    break
+            if template_id is not None:
+                properties["template_id"] = template_id
     elif kind == NodeKind.USER_JOURNEY:
         descriptor = None
         m = JNY_ID_PATTERN.match(node.id)
@@ -399,10 +434,33 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
             "function_line": node.get_field("function_line", 0),
         }
     elif kind == NodeKind.ASSERTION:
+        from elspais.graph.relations import Stereotype
+
         properties = {
             "label": node.get_field("label"),
             "text": node.get_label(),
         }
+        # Implements: REQ-p00014-K
+        # INSTANCE assertion cards: expose template provenance and
+        # inherited coverage so viewers can show "Template defined in
+        # <repo>" + "inherited from <template_id>".
+        node_stereotype = node.get_field("stereotype")
+        if node_stereotype == Stereotype.INSTANCE:
+            from elspais.graph.metrics import inherited_coverage_for
+
+            properties["stereotype"] = (
+                node_stereotype.value
+                if isinstance(node_stereotype, Stereotype)
+                else node_stereotype
+            )
+            template_repo = node.get_field("template_repo")
+            if template_repo:
+                properties["template_repo"] = template_repo
+            for edge in node.iter_outgoing_edges():
+                if edge.kind == EK.INSTANCE:
+                    properties["template_id"] = edge.target.id
+                    break
+            properties["inherited_coverage"] = inherited_coverage_for(node)
     elif kind == NodeKind.REMAINDER:
         properties = {
             "heading": node.get_field("heading"),
