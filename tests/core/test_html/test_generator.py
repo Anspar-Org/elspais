@@ -181,8 +181,10 @@ class TestHTMLGeneratorStats:
 
         result = generator.generate()
 
-        # Total count should be shown (Core badge shows non-associated count)
-        assert "Core:" in result
+        # Local-namespace badge label is the project namespace (default "REQ"),
+        # not the legacy hardcoded "Core" string.
+        assert "REQ:" in result
+        assert "Core:" not in result
 
 
 class TestHTMLGeneratorTreeStructure:

@@ -1,6 +1,17 @@
 // Partial: _nav-tree.js.j2 — Nav tree rendering, tabs, header stats, FilterGroup integration
 
 // =====================================================================
+// Server-injected category catalogs (levels, namespaces, statuses).
+// These come from routes_ui._extract_viewer_config() and carry resolved
+// bg/text colors. JS code reads from these rather than hardcoding names.
+// =====================================================================
+
+var LEVELS = {{ levels | tojson }};
+var NAMESPACES = {{ namespaces | tojson }};
+var LOCAL_NS = (NAMESPACES.find(function(n){ return n.is_local; }) || {code: '', label: ''}).code;
+var LOCAL_NS_LABEL = (NAMESPACES.find(function(n){ return n.is_local; }) || {code: '', label: ''}).label;
+
+// =====================================================================
 // FilterGroup Instances
 // =====================================================================
 
@@ -157,7 +168,9 @@ function updateHeaderStats() {
     var rows = editState.treeData;
     if (!rows || rows.length === 0) return;
     var seen = {};
-    var counts = { {% for t in config_types | default([{"name":"prd"},{"name":"ops"},{"name":"dev"}]) %}{{ t.name }}: 0, {% endfor %}main: 0};
+    var counts = {};
+    for (var li = 0; li < LEVELS.length; li++) counts[LEVELS[li].key] = 0;
+    counts.main = 0;
     var repoCounts = {};  // { "CAL": 3, "TTN": 2 }
     for (var i = 0; i < rows.length; i++) {
         var r = rows[i];
@@ -167,33 +180,34 @@ function updateHeaderStats() {
             var lev = r.level.toLowerCase();
             if (counts[lev] !== undefined) counts[lev]++;
             if (!r.is_associated) counts.main++;
-            // Track associated repo prefixes
-            if (r.is_associated && r.repo_prefix && r.repo_prefix !== 'CORE') {
+            // Track associated repo prefixes (anything not the local namespace)
+            if (r.is_associated && r.repo_prefix && r.repo_prefix !== LOCAL_NS) {
                 repoCounts[r.repo_prefix] = (repoCounts[r.repo_prefix] || 0) + 1;
             }
         }
     }
-    document.getElementById('stat-prd').textContent = 'PRD: ' + counts.prd;
-    document.getElementById('stat-ops').textContent = 'OPS: ' + counts.ops;
-    document.getElementById('stat-dev').textContent = 'DEV: ' + counts.dev;
-    document.getElementById('stat-main').textContent = 'Core: ' + counts.main;
+    for (var li2 = 0; li2 < LEVELS.length; li2++) {
+        var lkey = LEVELS[li2].key;
+        var el = document.getElementById('stat-level-' + lkey);
+        if (el) el.textContent = lkey.toUpperCase() + ': ' + counts[lkey];
+    }
+    var mainEl = document.getElementById('stat-main');
+    if (mainEl) mainEl.textContent = (LOCAL_NS_LABEL || LOCAL_NS || 'Local') + ': ' + counts.main;
 
-    // Initialize level FilterGroup (in header)
+    // Initialize level FilterGroup (in header), driven by injected LEVELS.
     if (!filterGroups.level) {
+        var levelButtons = LEVELS.map(function(l){ return {key: l.key, label: l.label.toUpperCase()}; });
+        var defaultLevelOn = new Set(LEVELS.map(function(l){ return l.key; }));
         filterGroups.level = new FilterGroup({
             name: 'level',
             container: document.getElementById('header-stats'),
-            buttons: [
-                {key: 'prd', label: 'PRD'},
-                {key: 'ops', label: 'OPS'},
-                {key: 'dev', label: 'DEV'},
-            ],
-            defaultOn: new Set(['prd', 'ops', 'dev']),
+            buttons: levelButtons,
+            defaultOn: defaultLevelOn,
             sensitiveEvents: new Set(['refresh']),
             countFn: function(key, rows) {
                 var count = 0;
                 for (var i = 0; i < rows.length; i++) {
-                    if (rows[i].level === key.toUpperCase()) count++;
+                    if ((rows[i].level || '').toLowerCase() === key) count++;
                 }
                 return count;
             },
@@ -224,11 +238,14 @@ function updateHeaderStats() {
             resultBadge.style.display = 'none';
         }
 
-        var assocRepos = data.associated_repos || [];
-        // Build name lookup from API: { "CAL": "callisto", ... }
+        // Build a name+color map from server NAMESPACES (excluding the local one).
         var nameMap = {};
-        for (var j = 0; j < assocRepos.length; j++) {
-            nameMap[assocRepos[j].code] = assocRepos[j].name;
+        var colorMap = {};
+        var nsList = data.namespaces || NAMESPACES || [];
+        for (var j = 0; j < nsList.length; j++) {
+            if (nsList[j].is_local) continue;
+            nameMap[nsList[j].code] = nsList[j].label;
+            colorMap[nsList[j].code] = {bg: nsList[j].bg, text: nsList[j].text};
         }
         var container = document.getElementById('repo-badges-container');
         var sep = document.getElementById('repo-sep');
@@ -267,6 +284,11 @@ function updateHeaderStats() {
             badge.setAttribute('data-group', 'repo');
             badge.setAttribute('data-key', code.toLowerCase());
             badge.setAttribute('data-repo', code);
+            var col = colorMap[code];
+            if (col) {
+                badge.style.backgroundColor = col.bg;
+                badge.style.color = col.text;
+            }
             badge.onclick = (function(repoCode) {
                 return function(event) {
                     if (filterGroups.repo) filterGroups.repo.handleClick(repoCode.toLowerCase(), event);

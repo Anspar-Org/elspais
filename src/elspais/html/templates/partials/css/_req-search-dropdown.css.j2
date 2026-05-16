@@ -85,9 +85,9 @@
     flex-shrink: 0;
 }
 
-.req-picker-item-level.prd { background: var(--picker-level-prd-bg); color: var(--picker-level-prd-text); }
-.req-picker-item-level.ops { background: var(--picker-level-ops-bg); color: var(--picker-level-ops-text); }
-.req-picker-item-level.dev { background: var(--picker-level-dev-bg); color: var(--picker-level-dev-text); }
+{% for l in levels %}
+.req-picker-item-level.{{ l.key }} { background: {{ l.bg }}; color: {{ l.text }}; }
+{% endfor %}
 
 .req-picker-empty {
     padding: 10px;

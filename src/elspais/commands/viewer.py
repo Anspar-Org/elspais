@@ -280,6 +280,7 @@ def _run_static(args: argparse.Namespace) -> int:
             getattr(args, "embed_content", False),
             base_path=str(repo_root),
             repo_name=config.get("project", {}).get("name"),
+            config=config,
         )
     except ImportError as e:
         print(f"Error: {e}", file=sys.stderr)

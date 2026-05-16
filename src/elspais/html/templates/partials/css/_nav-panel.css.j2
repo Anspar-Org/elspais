@@ -142,9 +142,9 @@
     flex-shrink: 0;
 }
 
-.nav-tree-level.prd { background: var(--nav-level-prd-bg); color: var(--nav-level-prd-text); }
-.nav-tree-level.ops { background: var(--nav-level-ops-bg); color: var(--nav-level-ops-text); }
-.nav-tree-level.dev { background: var(--nav-level-dev-bg); color: var(--nav-level-dev-text); }
+{% for l in levels %}
+.nav-tree-level.{{ l.key }} { background: {{ l.bg }}; color: {{ l.text }}; }
+{% endfor %}
 
 /* Test and result rows in nav tree */
 .nav-tree-test {
