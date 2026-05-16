@@ -687,8 +687,16 @@ def check_broken_references(graph: FederatedGraph, config=None) -> HealthCheck:
             except KeyError:
                 repo_name = None
 
+            # Implements: REQ-p00014-F
+            # Surface the optional diagnostic verbatim so authors see the
+            # specific guidance attached by the validation matrix.
+            base_msg = f"Broken reference: {br.source_id} -> {br.target_id} ({br.edge_kind})"
+            if br.diagnostic:
+                msg = f"{base_msg}: {br.diagnostic}"
+            else:
+                msg = base_msg
             finding = HealthFinding(
-                message=f"Broken reference: {br.source_id} -> {br.target_id} ({br.edge_kind})",
+                message=msg,
                 node_id=br.source_id,
                 repo=repo_name,
             )

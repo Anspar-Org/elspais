@@ -27,12 +27,19 @@ class BrokenReference:
         presumed_foreign: True when target_id does not match the source repo's
             ID pattern, indicating a likely cross-repo reference to a repo that
             isn't configured or available.
+        diagnostic: Optional human-readable explanation of why the reference
+            is broken. Used by the template-marker validation matrix to give
+            authors actionable guidance (e.g. "X is not marked **Template**;
+            mark X with **Template** if it's intended to be satisfiable.").
+            Empty string for plain "target does not exist" broken-refs.
     """
 
     source_id: str
     target_id: str
     edge_kind: str
     presumed_foreign: bool = False
+    # Implements: REQ-p00014-F
+    diagnostic: str = ""
 
     def __str__(self) -> str:
         """Human-readable representation."""

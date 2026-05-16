@@ -10,7 +10,6 @@ traceability graph from parsed content.
 
 from __future__ import annotations
 
-import itertools
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -38,11 +37,6 @@ from elspais.graph.render import format_definition_block, render_end_marker
 from elspais.graph.terms import TermDictionary, TermEntry, compute_definition_hash
 from elspais.utilities.patterns import INSTANCE_SEPARATOR
 from elspais.utilities.test_identity import build_test_id
-
-
-def _chain_self_and_ancestors(node: GraphNode) -> Iterator[GraphNode]:
-    """Yield node itself, then all its ancestors."""
-    return itertools.chain([node], node.ancestors())
 
 
 def _canonicalize_list_spacing(text: str) -> str:
@@ -3669,43 +3663,23 @@ class GraphBuilder:
             # but keep the full ref for later use
             template_roots.setdefault(template_id, []).append(declaring_id)
 
-        # Pre-resolve REFINES edges that target template nodes so walk()
-        # can traverse the full template subtree before cloning.
-        template_ids = set(template_roots.keys())
-        remaining_links: list[tuple[str, str, EdgeKind]] = []
-        for source_id, target_id, edge_kind in self._pending_links:
-            if edge_kind == EdgeKind.REFINES and target_id in template_ids:
-                source = self._nodes.get(source_id)
-                target = self._nodes.get(target_id)
-                if source and target:
-                    target.link(source, edge_kind)
-                    # Also resolve further REFINES links to these children
-                    template_ids.add(source_id)
-                else:
-                    remaining_links.append((source_id, target_id, edge_kind))
-            else:
-                remaining_links.append((source_id, target_id, edge_kind))
-        # Second pass for REFINES targeting newly added template members
-        final_links: list[tuple[str, str, EdgeKind]] = []
-        for source_id, target_id, edge_kind in remaining_links:
-            if edge_kind == EdgeKind.REFINES and target_id in template_ids:
-                source = self._nodes.get(source_id)
-                target = self._nodes.get(target_id)
-                if source and target:
-                    target.link(source, edge_kind)
-                    template_ids.add(source_id)
-                else:
-                    final_links.append((source_id, target_id, edge_kind))
-            else:
-                final_links.append((source_id, target_id, edge_kind))
-        self._pending_links = final_links
+        # CUR-1353 Phase 2 (single-REQ scope): a template is one REQ root plus
+        # its directly-attached assertions. We do NOT pre-resolve REFINES into
+        # templates — any such inbound REFINES is invalid (rule 8) and will be
+        # rejected when pending links are resolved later in ``build()``.
 
-        # Sub-pass 1: Verify templates are marked (validation in Phase 2)
-        # Implements: REQ-p00014-E
-        for template_id in template_roots:
+        # Sub-pass 1: Validate template-marker on each Satisfies target.
+        # Implements: REQ-p00014-F, REQ-p00014-G
+        # Composite targets (containing INSTANCE_SEPARATOR) are deferred to
+        # sub-pass 2 — their INSTANCE may be cloned by a sibling satisfier
+        # later in this same call.
+        for template_id in list(template_roots.keys()):
             template_node = self._nodes.get(template_id)
             if not template_node:
-                # Broken reference — record it
+                if INSTANCE_SEPARATOR in template_id:
+                    # Defer to sub-pass 2; the INSTANCE may yet be cloned.
+                    continue
+                # Genuinely missing — record a plain broken-ref and skip clone.
                 for declaring_id in template_roots[template_id]:
                     self._broken_references.append(
                         BrokenReference(
@@ -3714,31 +3688,90 @@ class GraphBuilder:
                             edge_kind=EdgeKind.SATISFIES.value,
                         )
                     )
+                template_roots[template_id] = []
                 continue
-            if template_node.get_field("stereotype") != Stereotype.TEMPLATE:
-                # TODO(CUR-1353 Phase 2): replace with typed BrokenReference.
-                # Why this fallback exists: pre-CUR-1353 specs declare
-                # `Satisfies: <id>` against requirements that were never
-                # marked `**Template**`. Removing the fallback now would
-                # immediately break every such graph and prevent INSTANCE
-                # subtrees from being cloned. Phase 2 introduces the typed
-                # error AND adds the validation matrix entry that surfaces
-                # via `elspais health` so authors can migrate.
-                for node in template_node.walk():
-                    node.set_field("stereotype", Stereotype.TEMPLATE)
+            stereotype = template_node.get_field("stereotype")
+            if stereotype != Stereotype.TEMPLATE:
+                # Rule 1 (CUR-1353): Satisfies target exists but is not marked
+                # **Template**. Emit a typed diagnostic and skip cloning so
+                # we don't manufacture an INSTANCE subtree against a concrete
+                # node.
+                for declaring_id in template_roots[template_id]:
+                    self._broken_references.append(
+                        BrokenReference(
+                            source_id=declaring_id,
+                            target_id=template_id,
+                            edge_kind=EdgeKind.SATISFIES.value,
+                            diagnostic=(
+                                f"{template_id} is not marked **Template**; "
+                                f"mark {template_id} with **Template** if it's "
+                                f"intended to be satisfiable."
+                            ),
+                        )
+                    )
+                template_roots[template_id] = []
 
-        # Sub-pass 2: Clone & link
-        for declaring_id, template_id in self._satisfies_links:
+        # Sub-pass 2: Clone & link. Skip any satisfies-link whose template was
+        # rejected in sub-pass 1 (template_roots[t] emptied).
+        cloneable_links = [(d, t) for d, t in self._satisfies_links if template_roots.get(t)]
+        for declaring_id, template_id in cloneable_links:
             template_node = self._nodes.get(template_id)
             declaring_node = self._nodes.get(declaring_id)
             if not template_node or not declaring_node:
+                # Composite that still doesn't resolve after cloning passes —
+                # genuinely broken.
+                if not template_node and INSTANCE_SEPARATOR in template_id:
+                    self._broken_references.append(
+                        BrokenReference(
+                            source_id=declaring_id,
+                            target_id=template_id,
+                            edge_kind=EdgeKind.SATISFIES.value,
+                        )
+                    )
+                continue
+            # Rule 2 (CUR-1353): chained instantiation. The composite target
+            # resolved to an INSTANCE node (typically cloned earlier in this
+            # very loop by a sibling satisfier). Refuse to clone again.
+            if template_node.get_field("stereotype") == Stereotype.INSTANCE:
+                self._broken_references.append(
+                    BrokenReference(
+                        source_id=declaring_id,
+                        target_id=template_id,
+                        edge_kind=EdgeKind.SATISFIES.value,
+                        diagnostic=(
+                            "Chained instantiation is not supported. "
+                            "Satisfy the original template directly."
+                        ),
+                    )
+                )
+                continue
+            # Defensive: a composite that resolves to a non-TEMPLATE non-
+            # INSTANCE node would have been blanked in sub-pass 1 for the
+            # non-composite case. For composites this is still possible —
+            # emit rule-1 diagnostic.
+            if template_node.get_field("stereotype") != Stereotype.TEMPLATE:
+                self._broken_references.append(
+                    BrokenReference(
+                        source_id=declaring_id,
+                        target_id=template_id,
+                        edge_kind=EdgeKind.SATISFIES.value,
+                        diagnostic=(
+                            f"{template_id} is not marked **Template**; "
+                            f"mark {template_id} with **Template** if it's "
+                            f"intended to be satisfiable."
+                        ),
+                    )
+                )
                 continue
 
-            # Collect template subtree nodes (REQs and assertions only)
-            template_nodes: list[GraphNode] = []
-            for node in template_node.walk():
-                if node.kind in (NodeKind.REQUIREMENT, NodeKind.ASSERTION):
-                    template_nodes.append(node)
+            # CUR-1353 Phase 2: single-REQ scope. A template is one REQ root
+            # plus its directly-attached assertions (STRUCTURES children).
+            # No transitive walk -- child REQs cannot be part of the template
+            # (rule 8 forbids inbound REFINES against a template).
+            template_nodes: list[GraphNode] = [template_node]
+            for child in template_node.iter_children(edge_kinds={EdgeKind.STRUCTURES}):
+                if child.kind == NodeKind.ASSERTION:
+                    template_nodes.append(child)
 
             # Map original IDs to cloned nodes
             clone_map: dict[str, GraphNode] = {}
@@ -3801,151 +3834,60 @@ class GraphBuilder:
                 for clone in clone_map.values():
                     declaring_file.link(clone, EdgeKind.DEFINES)
 
-    # Implements: REQ-p00014-D
-    def _attribute_template_refs(
-        self,
-        links: list[tuple[str, str, EdgeKind]],
-    ) -> list[tuple[str, str, EdgeKind]]:
-        """Redirect Implements: refs targeting TEMPLATE nodes to instance clones.
+    # Implements: REQ-p00014-G
+    def _validate_template_marker_consistency(self) -> None:
+        """Validate template-marker rules that need full graph context.
 
-        For each link targeting a TEMPLATE node:
-        1. Find the template root (walk up REFINES edges)
-        2. Find sibling Implements: refs in the same source file targeting CONCRETE nodes
-        3. Walk each concrete target's ancestors to find a SATISFIES declaration
-           matching the template root
-        4. First match wins — redirect to instance clone ID
+        Phase 2 of CUR-1353: walk the graph after link resolution and emit
+        typed ``BrokenReference`` diagnostics for templates that violate
+        the static validation matrix.
 
-        Returns:
-            Updated link list with template refs redirected.
+        Rule 7: A REQ marked ``**Template**`` may not declare behavioural
+        claims (``Implements:`` or ``Refines:`` metadata) targeting ANY
+        node. Templates are single-REQ scope -- they are pure specs with
+        no descendants, so any outbound behavioural metadata is invalid.
+
+        We use the parsed-and-stored ``implements_refs`` / ``refines_refs``
+        on each TEMPLATE REQ to identify the original declarations.
+
+        Rule 3/4/5/6/8 are detected in the link-resolution loop where we
+        have access to the would-be edge before it lands; they do not need
+        a post-pass.
         """
-        if not self._satisfies_links:
-            return links
-
-        # Implements: REQ-d00129-D -- Build file -> source_ids index from nodes
-        file_to_sources: dict[str, set[str]] = {}
-        for node_id, node in self._nodes.items():
-            fn = node.file_node()
-            if fn:
-                rp = fn.get_field("relative_path") or ""
-                if rp:
-                    file_to_sources.setdefault(rp, set()).add(node_id)
-
-        # Build source_id -> file index from link source nodes
-        source_file_map: dict[str, str] = {}
-        for source_id, _, _ in links:
-            node = self._nodes.get(source_id)
-            if node:
-                fn = node.file_node()
-                if fn:
-                    rp = fn.get_field("relative_path") or ""
-                    if rp:
-                        source_file_map[source_id] = rp
-
-        # Group links by source file
-        file_links: dict[str, list[int]] = {}  # file -> list of indices
-        for idx, (source_id, _, _) in enumerate(links):
-            file_path = source_file_map.get(source_id)
-            if file_path:
-                file_links.setdefault(file_path, []).append(idx)
-
-        # Find template root for a given node (walk up REFINES edges)
-        def find_template_root(node: GraphNode) -> GraphNode:
-            current = node
-            # Walk up through parents connected by REFINES
-            while True:
-                found_parent = False
-                for edge in current.iter_incoming_edges():
-                    if edge.kind == EdgeKind.REFINES:
-                        current = edge.source
-                        found_parent = True
-                        break
-                if not found_parent:
-                    break
-            return current
-
-        result = list(links)
-
-        for _file_path, indices in file_links.items():
-            # Separate template and concrete targets in this file
-            template_indices: list[int] = []
-            concrete_targets: list[str] = []
-
-            for idx in indices:
-                _, target_id, _ = result[idx]
-                target = self._nodes.get(target_id)
-                if target and target.get_field("stereotype") == Stereotype.TEMPLATE:
-                    template_indices.append(idx)
-                elif target and target.get_field("stereotype") != Stereotype.TEMPLATE:
-                    concrete_targets.append(target_id)
-
-            if not template_indices:
+        for node_id, node in list(self._nodes.items()):
+            if node.kind != NodeKind.REQUIREMENT:
                 continue
+            if node.get_field("stereotype") != Stereotype.TEMPLATE:
+                continue
+            # Rule 7: a template declared behavioural metadata.
+            for ref_id in node.get_field("implements_refs") or []:
+                self._emit_template_metadata_diagnostic(node_id, ref_id, EdgeKind.IMPLEMENTS)
+            for ref_id in node.get_field("refines_refs") or []:
+                self._emit_template_metadata_diagnostic(node_id, ref_id, EdgeKind.REFINES)
 
-            for idx in template_indices:
-                source_id, target_id, edge_kind = result[idx]
-                target = self._nodes.get(target_id)
-                if not target:
-                    continue
+    def _emit_template_metadata_diagnostic(
+        self, template_id: str, ref_id: str, edge_kind: EdgeKind
+    ) -> None:
+        """Emit rule-7 broken-ref for any behavioural metadata on a TEMPLATE.
 
-                # Find which template root this target belongs to
-                # For assertions, find parent REQ first, then walk up
-                if target.kind == NodeKind.ASSERTION:
-                    parent_reqs = [
-                        p for p in target.iter_parents() if p.kind == NodeKind.REQUIREMENT
-                    ]
-                    template_root = find_template_root(parent_reqs[0]) if parent_reqs else target
-                else:
-                    template_root = find_template_root(target)
-
-                # Find attribution through concrete siblings
-                attributed = False
-                for concrete_id in concrete_targets:
-                    concrete = self._nodes.get(concrete_id)
-                    if not concrete:
-                        continue
-                    # Walk up concrete target and its ancestors to find SATISFIES
-                    # matching the template root
-                    for ancestor in _chain_self_and_ancestors(concrete):
-                        for edge in ancestor.iter_outgoing_edges():
-                            if edge.kind == EdgeKind.SATISFIES:
-                                # Check if this SATISFIES clone's INSTANCE edge
-                                # points to our template root
-                                clone = edge.target
-                                for inst_edge in clone.iter_outgoing_edges():
-                                    if (
-                                        inst_edge.kind == EdgeKind.INSTANCE
-                                        and inst_edge.target.id == template_root.id
-                                    ):
-                                        # Found it! Redirect to instance ID
-                                        instance_id = (
-                                            self._resolver.build_instance_id(ancestor.id, target_id)
-                                            if self._resolver
-                                            else f"{ancestor.id}{INSTANCE_SEPARATOR}{target_id}"
-                                        )
-                                        if self._nodes.get(instance_id):
-                                            result[idx] = (source_id, instance_id, edge_kind)
-                                            attributed = True
-                                            break
-                                if attributed:
-                                    break
-                        if attributed:
-                            break
-                    if attributed:
-                        break
-
-                if not attributed:
-                    # No attribution found — record as broken reference
-                    self._broken_references.append(
-                        BrokenReference(
-                            source_id=source_id,
-                            target_id=target_id,
-                            edge_kind=edge_kind.value,
-                        )
-                    )
-                    # Remove the link so it doesn't create an edge to the template
-                    result[idx] = (source_id, f"__unattributed__{target_id}", edge_kind)
-
-        return result
+        Single-REQ scope (CUR-1353): templates are pure specs with no
+        descendants, so any outbound Implements/Refines is invalid --
+        including targeting another template.
+        """
+        # Expand multi-assertion refs (e.g. REQ-X-A+B+C) to base targets.
+        for expanded in self._expand_multi_assertion(ref_id):
+            self._broken_references.append(
+                BrokenReference(
+                    source_id=template_id,
+                    target_id=expanded,
+                    edge_kind=edge_kind.value,
+                    diagnostic=(
+                        f"Templates are pure specs; remove "
+                        f"behavioural-claim metadata or remove the "
+                        f"**Template** flag on {template_id}."
+                    ),
+                )
+            )
 
     def build(self) -> TraceGraph:
         """Build the final TraceGraph.
@@ -3965,16 +3907,102 @@ class GraphBuilder:
             for resolved_target in self._expand_multi_assertion(target_id):
                 expanded_links.append((source_id, resolved_target, edge_kind))
 
-        # Implements: REQ-p00014-D
-        # Phase 3: File-based attribution for template references
-        expanded_links = self._attribute_template_refs(expanded_links)
-
         # Resolve pending links
         for source_id, target_id, edge_kind in expanded_links:
             source = self._nodes.get(source_id)
             target = self._nodes.get(target_id)
 
             if source and target:
+                # Implements: REQ-p00014-G
+                # CUR-1353 Phase 2 validation matrix: reject invalid edge
+                # combinations BEFORE creating the edge so the graph never
+                # contains structurally-inconsistent traceability.
+                target_stereotype = target.get_field("stereotype")
+                if edge_kind == EdgeKind.REFINES and target_stereotype == Stereotype.TEMPLATE:
+                    # Rules 3 and 8 both fire for Refines:TEMPLATE — by design.
+                    # Rule 3 names the source-side mistake ("don't refine
+                    # templates"); rule 8 names the target-side invariant
+                    # ("templates have no descendants"). Both surface in
+                    # `elspais health` so authors see the rule that matches
+                    # their perspective. Asserted by
+                    # test_template_targeted_by_refines_from_another_template_errors.
+                    # Rule 3 (source perspective): compositing templates.
+                    self._broken_references.append(
+                        BrokenReference(
+                            source_id=source_id,
+                            target_id=target_id,
+                            edge_kind=edge_kind.value,
+                            diagnostic=(
+                                "Compositing templates is not supported. "
+                                "Use Satisfies: and refine the concrete REQ."
+                            ),
+                        )
+                    )
+                    # Rule 8 (target perspective): templates may not have
+                    # descendants. Same edge, target-perspective diagnostic.
+                    self._broken_references.append(
+                        BrokenReference(
+                            source_id=source_id,
+                            target_id=target_id,
+                            edge_kind=edge_kind.value,
+                            diagnostic=(
+                                f"Templates may not have descendants. Either "
+                                f"drop the **Template** flag on {target_id}, "
+                                f"or stop refining {target_id} from {source_id}."
+                            ),
+                        )
+                    )
+                    continue
+                if edge_kind == EdgeKind.REFINES and target_stereotype == Stereotype.INSTANCE:
+                    # Rule 4: refining instance content is not supported.
+                    self._broken_references.append(
+                        BrokenReference(
+                            source_id=source_id,
+                            target_id=target_id,
+                            edge_kind=edge_kind.value,
+                            diagnostic=(
+                                "Refining instance content is not supported. "
+                                "Instance subtrees are read-only synthetic "
+                                "content with no canonical on-disk identifier. "
+                                "To add detail, Satisfies: the template AND "
+                                "Refines: a concrete REQ in your own repo."
+                            ),
+                        )
+                    )
+                    continue
+                if edge_kind == EdgeKind.IMPLEMENTS and target_stereotype == Stereotype.INSTANCE:
+                    # Rule 5: composite IDs are not authoring syntax.
+                    self._broken_references.append(
+                        BrokenReference(
+                            source_id=source_id,
+                            target_id=target_id,
+                            edge_kind=edge_kind.value,
+                            diagnostic=(
+                                "Instance assertions have no canonical "
+                                "on-disk identifier; target the template "
+                                "assertion directly or add a concrete "
+                                "assertion to your satisfier."
+                            ),
+                        )
+                    )
+                    continue
+                if edge_kind == EdgeKind.VERIFIES and target_stereotype == Stereotype.INSTANCE:
+                    # Rule 6: same reasoning as rule 5, TEST source.
+                    self._broken_references.append(
+                        BrokenReference(
+                            source_id=source_id,
+                            target_id=target_id,
+                            edge_kind=edge_kind.value,
+                            diagnostic=(
+                                "Instance assertions have no canonical "
+                                "on-disk identifier; target the template "
+                                "assertion directly or add a concrete "
+                                "assertion to your satisfier."
+                            ),
+                        )
+                    )
+                    continue
+
                 # If target is an assertion, link from its parent requirement
                 # with assertion_targets set, so the child appears under the
                 # parent REQ (not the assertion node) with assertion badges
@@ -4019,6 +4047,11 @@ class GraphBuilder:
                         edge_kind=edge_kind.value,
                     )
                 )
+
+        # Phase 2.5 (CUR-1353): Validate template-marker consistency over the
+        # fully-resolved graph. Catches rules that need post-link context
+        # (currently rule 7: template REQs declaring behavioural metadata).
+        self._validate_template_marker_consistency()
 
         # Populate _expected_broken_targets from nodes with the marker
         for br in self._broken_references:
