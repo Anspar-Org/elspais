@@ -35,6 +35,24 @@ def config_defaults() -> dict[str, Any]:
     return ElspaisConfig.model_validate({}).model_dump(by_alias=True)
 
 
+def default_level_keys() -> list[str]:
+    """Return the default level keys (rank-sorted) for use as a fallback.
+
+    Single source of truth for "what to fall back to when a config is missing
+    or has no `[levels]` section". Consumers like `commands/summary.py`,
+    `pdf/assembler.py`, and `html/generator.py` use this rather than hard-coding
+    `["prd", "ops", "dev"]`.
+    """
+    levels = config_defaults().get("levels") or {}
+    if not isinstance(levels, dict) or not levels:
+        return []
+    ranked = sorted(
+        ((k, v.get("rank", 9999) if isinstance(v, dict) else 9999) for k, v in levels.items()),
+        key=lambda kv: kv[1],
+    )
+    return [k for k, _r in ranked]
+
+
 def _migrate_legacy_patterns(config: dict[str, Any]) -> dict[str, Any]:
     """Migrate legacy [patterns] config to [id-patterns] + [levels] format.
 
@@ -890,6 +908,7 @@ def get_ignore_config(config: dict[str, Any]) -> IgnoreConfig:
 __all__ = [
     "IgnoreConfig",
     "config_defaults",
+    "default_level_keys",
     "load_config",
     "find_config_file",
     "find_git_root",

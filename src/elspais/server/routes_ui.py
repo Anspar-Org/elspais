@@ -101,7 +101,22 @@ def build_namespaces(typed) -> list[dict[str, Any]]:
             "is_local": True,
         }
     )
+    seen_codes = {local_code}
     for name, entry in typed.associates.items():
+        if entry.namespace in seen_codes:
+            # Associate's namespace collides with the local project or with a
+            # previously-listed associate. Skip — downstream consumers (CSS
+            # selectors, ns_catalog dict, the JS LOCAL_NS exclusion) all assume
+            # unique codes.
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "associate %r namespace %r collides with an existing entry; skipped",
+                name,
+                entry.namespace,
+            )
+            continue
+        seen_codes.add(entry.namespace)
         rc = resolve_color(entry.namespace, entry.color)
         items.append(
             {

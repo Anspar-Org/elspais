@@ -80,8 +80,10 @@ def _collect_coverage(graph: FederatedGraph, config: dict | None = None) -> dict
     roles = get_status_roles(config or {})
     exclude_status = roles.coverage_excluded_statuses()
 
-    # Build level list from config, sorted by rank. Falls back to prd/ops/dev
-    # if config is absent or has no [levels] section.
+    # Build level list from config, sorted by rank. Falls back to the schema's
+    # default level keys when config is absent or has no [levels] section.
+    from elspais.config import default_level_keys
+
     levels_cfg = (config or {}).get("levels") or {}
     if isinstance(levels_cfg, dict) and levels_cfg:
         ordered = sorted(
@@ -89,14 +91,17 @@ def _collect_coverage(graph: FederatedGraph, config: dict | None = None) -> dict
                 (k, (v or {}).get("rank") if isinstance(v, dict) else None)
                 for k, v in levels_cfg.items()
             ),
-            key=lambda x: x[1] if x[1] is not None else 9999,
+            key=lambda kv: kv[1] if kv[1] is not None else 9999,
         )
-        level_keys = [k for k, _ in ordered if _ is not None] or ["prd", "ops", "dev"]
+        level_keys = [k for k, rank in ordered if rank is not None] or default_level_keys()
     else:
-        level_keys = ["prd", "ops", "dev"]
+        level_keys = default_level_keys()
 
-    # Group requirements by level manually (node.level is lowercase)
-    level_groups: dict[str, list] = {k: [] for k in level_keys}
+    # Group requirements by level. `node.level` is normalized upstream (see
+    # api_tree_data's upper-casing); user-defined `[levels.<key>]` keys may be
+    # any case, so we compare case-insensitively by keying groups on the
+    # lowercased version of the user's key.
+    level_groups: dict[str, list] = {k.lower(): [] for k in level_keys}
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         lvl = (node.level or "").lower()
         if lvl in level_groups:
@@ -107,7 +112,7 @@ def _collect_coverage(graph: FederatedGraph, config: dict | None = None) -> dict
 
     for level_key in level_keys:
         display_name = level_key.upper()
-        nodes = level_groups[level_key]
+        nodes = level_groups[level_key.lower()]
         active_nodes = [n for n in nodes if n.status not in exclude_status]
         excluded = len(nodes) - len(active_nodes)
         if excluded > 0:

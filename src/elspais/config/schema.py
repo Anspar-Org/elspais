@@ -8,6 +8,10 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 _HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+# Namespace strings end up in CSS attribute selectors, JS string literals, ID
+# attributes, and URL paths. Restrict them to alphanumerics, underscore, and
+# dash so we never have to escape or quote-special-case anywhere downstream.
+_NAMESPACE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*$")
 
 
 def _validate_hex_color(value: str | None) -> str | None:
@@ -15,6 +19,16 @@ def _validate_hex_color(value: str | None) -> str | None:
         return None
     if not isinstance(value, str) or not _HEX_COLOR_RE.match(value):
         raise ValueError(f'color must be a 6-digit hex string like "#1b3a5c"; got {value!r}')
+    return value
+
+
+def _validate_namespace(value: str) -> str:
+    if not isinstance(value, str) or not _NAMESPACE_RE.match(value):
+        raise ValueError(
+            f"namespace must start with a letter and contain only "
+            f'letters/digits/"_"/"-" (got {value!r}). Restricting this avoids '
+            "CSS-selector / URL / JS escaping bugs across UI surfaces."
+        )
     return value
 
 
@@ -27,6 +41,11 @@ class ProjectConfig(_StrictModel):
     namespace: str = "REQ"
     name: str = ""
     color: str | None = None
+
+    @field_validator("namespace")
+    @classmethod
+    def _v_namespace(cls, v):
+        return _validate_namespace(v)
 
     @field_validator("color")
     @classmethod
@@ -337,6 +356,11 @@ class AssociateEntryConfig(_StrictModel):
     path: str
     namespace: str
     color: str | None = None
+
+    @field_validator("namespace")
+    @classmethod
+    def _v_namespace(cls, v):
+        return _validate_namespace(v)
 
     @field_validator("color")
     @classmethod

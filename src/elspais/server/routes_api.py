@@ -58,7 +58,7 @@ from elspais.mcp.server import (
     _query_nodes,
     _undo_last_mutation,
 )
-from elspais.server.routes_ui import build_namespaces
+from elspais.server.routes_ui import build_levels, build_namespaces, build_statuses
 from elspais.utilities.git import get_author_info
 from elspais.utilities.patterns import build_resolver
 
@@ -243,7 +243,6 @@ def _compute_link_data(
 async def api_status(request: Request) -> JSONResponse:
     """GET /api/status - Graph status with federation repo info."""
     from elspais import __version__
-    from elspais.server.routes_ui import build_levels, build_namespaces, build_statuses
 
     state = _st(request)
     result = _get_graph_status(state.graph)
@@ -271,8 +270,6 @@ async def api_status(request: Request) -> JSONResponse:
     # Dynamic category catalogs for the viewer UI. Each entry carries the
     # resolved (configured or hashed) bg/text colors so clients can render
     # badges without knowing how the colors were derived.
-    from elspais.config.schema import ElspaisConfig
-
     try:
         typed = ElspaisConfig.model_validate(state.config)
     except Exception:
@@ -543,9 +540,14 @@ async def api_tree_data(request: Request) -> JSONResponse:
         return bool(node.get_field("associated", False))
 
     def _get_repo_prefix(node) -> str:
+        # 1. Federation-aware lookup wins — the FederatedGraph knows which
+        #    repo each node came from.
         ns = _repo_namespace(node)
         if ns is not None:
             return ns
+        # 2. Fall back to the per-node `repo_prefix` metric set by
+        #    annotators.py, except for the legacy "CORE" sentinel which means
+        #    "local repo" — handled below.
         rp = node.get_metric("repo_prefix", "")
         if rp and rp != _LOCAL_SENTINEL:
             return rp
@@ -555,6 +557,13 @@ async def api_tree_data(request: Request) -> JSONResponse:
         m = re.match(r"^REQ-([A-Z]{2,4})-[a-z]", node.id)
         if m:
             return m.group(1)
+        # 3. Final fallback: treat as local. Previously emitted the literal
+        #    "CORE" sentinel; we now emit the configured local namespace so
+        #    JS clients can compare `repo_prefix` against the same string they
+        #    receive in NAMESPACES. Any pre-existing "CORE"-marked node that
+        #    survived the metric-replace step (line 547) is relabelled to the
+        #    local namespace here — that's intentional and matches the new
+        #    "no `CORE` literal anywhere on the wire" invariant.
         return local_ns
 
     def _walk(node, depth: int, parent_id: str | None) -> None:

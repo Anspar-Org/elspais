@@ -11,7 +11,11 @@
             {% endfor %}
             <span class="stat-sep">|</span>
             {% set local_ns_entry = (namespaces | selectattr('is_local') | list | first) if namespaces else None %}
-            <span class="stat-badge main namespace-badge repo filter-btn on" id="stat-main" data-group="repo" data-key="{{ (local_ns_entry.code if local_ns_entry else '') | lower }}" data-namespace="{{ local_ns_entry.code if local_ns_entry else '' }}" data-repo="{{ local_ns_entry.code if local_ns_entry else '' }}" onclick="if(filterGroups.repo)filterGroups.repo.handleClick('{{ (local_ns_entry.code if local_ns_entry else '') | lower }}',event)" title="Click to toggle {{ local_ns_entry.label if local_ns_entry else 'Local' }} requirements (Shift+click to solo)">{{ local_ns_entry.label if local_ns_entry else 'Local' }}: --</span>
+            {% if local_ns_entry %}
+            <span class="stat-badge main namespace-badge repo filter-btn on" id="stat-main" data-group="repo" data-key="{{ local_ns_entry.code | lower }}" data-namespace="{{ local_ns_entry.code }}" data-repo="{{ local_ns_entry.code }}" onclick="if(filterGroups.repo)filterGroups.repo.handleClick('{{ local_ns_entry.code | lower }}',event)" title="Click to toggle {{ local_ns_entry.label }} requirements (Shift+click to solo)">{{ local_ns_entry.label }}: --</span>
+            {% else %}
+            <span class="stat-badge main namespace-badge" id="stat-main" title="Local requirement count">Local: --</span>
+            {% endif %}
             <span class="stat-sep">|</span>
             <span class="stat-badge tests" id="stat-tests" style="display:none;" title="Test count (from graph)">Tests: --</span>
             <span class="stat-badge results" id="stat-results" style="display:none;" title="Result count (from graph)">Results: --</span>
