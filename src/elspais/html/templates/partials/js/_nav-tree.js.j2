@@ -11,6 +11,9 @@ var NAMESPACES = {{ namespaces | tojson }};
 var LOCAL_NS = (NAMESPACES.find(function(n){ return n.is_local; }) || {code: '', label: ''}).code;
 var LOCAL_NS_LABEL = (NAMESPACES.find(function(n){ return n.is_local; }) || {code: '', label: ''}).label;
 
+var TREE_DISPLAY_MODES = ['compact', 'title-only', 'id-only', 'full', 'ns-bg', 'level-last'];
+var DEFAULT_TREE_DISPLAY_MODE = 'compact';
+
 // =====================================================================
 // FilterGroup Instances
 // =====================================================================
@@ -156,6 +159,15 @@ function updateCounterTooltip() {
 function toggleShowHiddenParents() {
     renderNavTree();
     saveState();
+}
+
+function setTreeDisplayMode(mode) {
+    if (TREE_DISPLAY_MODES.indexOf(mode) === -1) mode = DEFAULT_TREE_DISPLAY_MODE;
+    editState.treeDisplayMode = mode;
+    var container = document.getElementById('nav-tree-container');
+    if (container) container.dataset.mode = mode;
+    try { localStorage.setItem('elspais.treeDisplayMode', mode); } catch (e) {}
+    if (typeof renderNavTree === 'function') renderNavTree();
 }
 
 // =====================================================================
@@ -951,3 +963,15 @@ function setViewMode(mode) {
     renderNavTree();
     saveState();
 }
+
+// On script load, restore the tree display mode from localStorage (if any).
+(function initTreeDisplayMode() {
+    var saved = null;
+    try { saved = localStorage.getItem('elspais.treeDisplayMode'); } catch (e) {}
+    if (TREE_DISPLAY_MODES.indexOf(saved) === -1) saved = DEFAULT_TREE_DISPLAY_MODE;
+    editState.treeDisplayMode = saved;
+    var sel = document.getElementById('tree-display-mode');
+    if (sel) sel.value = saved;
+    var container = document.getElementById('nav-tree-container');
+    if (container) container.dataset.mode = saved;
+})();
