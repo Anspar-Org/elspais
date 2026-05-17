@@ -13,7 +13,25 @@ import hashlib
 import re
 from dataclasses import dataclass
 
-_HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+# Backward-compatible alias for the private name; external consumers should
+# import HEX_COLOR_RE instead.
+_HEX_RE = HEX_COLOR_RE
+
+
+def validate_hex_color(value: str | None) -> str | None:
+    """Return ``value`` if it is a valid ``#RRGGBB`` hex string (or ``None``);
+    raise ``ValueError`` otherwise.
+
+    Single authority for the hex-color shape — pydantic field validators in
+    `config/schema.py` reuse this so there's only one regex.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str) or not HEX_COLOR_RE.match(value):
+        raise ValueError(f'color must be a 6-digit hex string like "#1b3a5c"; got {value!r}')
+    return value
+
 
 # Bounded HSL ranges keep fallback backgrounds dark enough for #ffffff text
 # while still producing visually distinct hues across keys.

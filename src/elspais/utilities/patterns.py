@@ -24,6 +24,26 @@ INSTANCE_SEPARATOR = "::"
 # Matches 3+ consecutive newlines for cleanup (collapse to double-newline)
 BLANK_LINE_CLEANUP_RE = re.compile(r"\n{3,}")
 
+# Pattern for `[project].namespace` and `[associates.*].namespace`.
+# Namespaces appear in CSS attribute selectors, JS string literals, ID
+# attributes, and URL paths; restricting them to a plain identifier shape
+# means none of those surfaces ever needs special quoting or escaping.
+NAMESPACE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*$")
+
+
+def validate_namespace(value: str) -> str:
+    """Return ``value`` if it is a valid namespace string; raise ``ValueError``
+    otherwise. Single authority for the namespace shape — pydantic field
+    validators in `config/schema.py` reuse this so there's only one regex.
+    """
+    if not isinstance(value, str) or not NAMESPACE_RE.match(value):
+        raise ValueError(
+            f"namespace must start with a letter and contain only "
+            f'letters/digits/"_"/"-" (got {value!r}). Restricting this avoids '
+            "CSS-selector / URL / JS escaping bugs across UI surfaces."
+        )
+    return value
+
 
 # --- New ID Pattern System (Tasks 1-4) ---
 
