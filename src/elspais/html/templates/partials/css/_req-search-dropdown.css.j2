@@ -86,7 +86,7 @@
 }
 
 {% for l in levels %}
-.req-picker-item-level.{{ l.key }} { background: {{ l.bg }}; color: {{ l.text }}; }
+.req-picker-item-level.{{ l.key|lower }} { background: {{ l.bg }}; color: {{ l.text }}; }
 {% endfor %}
 
 .req-picker-empty {

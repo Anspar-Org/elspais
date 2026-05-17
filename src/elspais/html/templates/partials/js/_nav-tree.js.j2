@@ -168,8 +168,10 @@ function updateHeaderStats() {
     var rows = editState.treeData;
     if (!rows || rows.length === 0) return;
     var seen = {};
+    // Level keys are user-defined and case-preserved; comparisons against
+    // row.level (uppercased by the server) are done in UPPER case.
     var counts = {};
-    for (var li = 0; li < LEVELS.length; li++) counts[LEVELS[li].key] = 0;
+    for (var li = 0; li < LEVELS.length; li++) counts[LEVELS[li].key.toUpperCase()] = 0;
     counts.main = 0;
     var repoCounts = {};  // { "CAL": 3, "TTN": 2 }
     for (var i = 0; i < rows.length; i++) {
@@ -177,7 +179,7 @@ function updateHeaderStats() {
         if (seen[r.id]) continue;
         seen[r.id] = true;
         if (r.level) {
-            var lev = r.level.toLowerCase();
+            var lev = (r.level || '').toUpperCase();
             if (counts[lev] !== undefined) counts[lev]++;
             if (!r.is_associated) counts.main++;
             // Track associated repo prefixes (anything not the local namespace)
@@ -189,7 +191,7 @@ function updateHeaderStats() {
     for (var li2 = 0; li2 < LEVELS.length; li2++) {
         var lkey = LEVELS[li2].key;
         var el = document.getElementById('stat-level-' + lkey);
-        if (el) el.textContent = lkey.toUpperCase() + ': ' + counts[lkey];
+        if (el) el.textContent = lkey.toUpperCase() + ': ' + counts[lkey.toUpperCase()];
     }
     var mainEl = document.getElementById('stat-main');
     if (mainEl) mainEl.textContent = (LOCAL_NS_LABEL || LOCAL_NS || 'Local') + ': ' + counts.main;
@@ -204,14 +206,24 @@ function updateHeaderStats() {
             buttons: levelButtons,
             defaultOn: defaultLevelOn,
             sensitiveEvents: new Set(['refresh']),
+            // Compare case-insensitively against the user's level key — the
+            // server uppercases row.level and the user may have either case
+            // in their config (lowercase 'prd' or uppercase 'PRD').
             countFn: function(key, rows) {
+                var k = key.toUpperCase();
                 var count = 0;
                 for (var i = 0; i < rows.length; i++) {
-                    if ((rows[i].level || '').toLowerCase() === key) count++;
+                    if ((rows[i].level || '').toUpperCase() === k) count++;
                 }
                 return count;
             },
-            matchFn: function(row) { return (row.level || '').toLowerCase(); },
+            matchFn: function(row) {
+                var v = (row.level || '').toUpperCase();
+                for (var i = 0; i < LEVELS.length; i++) {
+                    if (LEVELS[i].key.toUpperCase() === v) return LEVELS[i].key;
+                }
+                return v;
+            },
             onChange: function() { renderNavTree(); saveState(); },
         });
     }

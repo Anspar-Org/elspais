@@ -143,7 +143,7 @@
 }
 
 {% for l in levels %}
-.nav-tree-level.{{ l.key }} { background: {{ l.bg }}; color: {{ l.text }}; }
+.nav-tree-level.{{ l.key|lower }} { background: {{ l.bg }}; color: {{ l.text }}; }
 {% endfor %}
 
 /* Test and result rows in nav tree */
