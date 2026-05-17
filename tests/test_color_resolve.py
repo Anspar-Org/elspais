@@ -70,3 +70,36 @@ def test_resolved_color_is_frozen():
     rc = resolve_color("prd", None)
     with pytest.raises(FrozenInstanceError):
         rc.bg = "#000000"  # type: ignore[misc]
+
+
+def test_hex_with_alpha_basic():
+    from elspais.utilities.color import hex_with_alpha
+
+    assert hex_with_alpha("#1b3a5c", 0.12) == "rgba(27, 58, 92, 0.12)"
+
+
+def test_hex_with_alpha_uppercase_input():
+    from elspais.utilities.color import hex_with_alpha
+
+    assert hex_with_alpha("#1B3A5C", 0.5) == "rgba(27, 58, 92, 0.5)"
+
+
+def test_hex_with_alpha_rounds_alpha_to_3_decimals():
+    from elspais.utilities.color import hex_with_alpha
+
+    assert hex_with_alpha("#000000", 0.123456) == "rgba(0, 0, 0, 0.123)"
+
+
+def test_hex_with_alpha_clamps_alpha_to_unit_interval():
+    from elspais.utilities.color import hex_with_alpha
+
+    assert hex_with_alpha("#000000", -0.5) == "rgba(0, 0, 0, 0.0)"
+    assert hex_with_alpha("#000000", 1.5) == "rgba(0, 0, 0, 1.0)"
+
+
+@pytest.mark.parametrize("bad", ["red", "#abc", "#abcdefg", ""])
+def test_hex_with_alpha_rejects_bad_hex(bad):
+    from elspais.utilities.color import hex_with_alpha
+
+    with pytest.raises(ValueError):
+        hex_with_alpha(bad, 0.5)

@@ -62,3 +62,19 @@ def _contrast_text(bg_hex: str) -> str:
     b = int(bg_hex[5:7], 16) / 255.0
     luminance = 0.299 * r + 0.587 * g + 0.114 * b
     return _LIGHT_TEXT if luminance < 0.5 else _DARK_TEXT
+
+
+def hex_with_alpha(bg_hex: str, alpha: float) -> str:
+    """Return an `rgba(r, g, b, a)` CSS string from a `#RRGGBB` hex and unit alpha.
+
+    Useful for deriving translucent overlays (e.g. namespace background tints)
+    that need to blend against any theme background.
+    """
+    if not _HEX_RE.match(bg_hex or ""):
+        raise ValueError(f'bg_hex must be a 6-digit hex string like "#1b3a5c"; got {bg_hex!r}')
+    r = int(bg_hex[1:3], 16)
+    g = int(bg_hex[3:5], 16)
+    b = int(bg_hex[5:7], 16)
+    a = max(0.0, min(1.0, float(alpha)))
+    a_str = f"{round(a, 3)}"
+    return f"rgba({r}, {g}, {b}, {a_str})"
