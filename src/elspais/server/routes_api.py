@@ -17,6 +17,7 @@ from typing import Any
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from elspais.config.schema import ElspaisConfig
 from elspais.graph import FILE_ID_PREFIX, NodeKind
 from elspais.graph.comment_store import (
     append_event,
@@ -57,7 +58,9 @@ from elspais.mcp.server import (
     _query_nodes,
     _undo_last_mutation,
 )
+from elspais.server.routes_ui import build_namespaces
 from elspais.utilities.git import get_author_info
+from elspais.utilities.patterns import build_resolver
 
 
 def _st(request: Request) -> Any:
@@ -460,10 +463,6 @@ async def api_tree_data(request: Request) -> JSONResponse:
     local_ns = local_namespace_from_config(state.config)
 
     # Build one IdResolver per repo for component-extraction (federation-safe).
-    from elspais.config.schema import ElspaisConfig
-    from elspais.server.routes_ui import build_namespaces
-    from elspais.utilities.patterns import build_resolver
-
     try:
         _typed_cfg = ElspaisConfig.model_validate(state.config)
     except Exception:
@@ -492,7 +491,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
         r = _resolver_for(node)
         if r is None:
             return node.id
-        parsed = r.parse(node.id) if hasattr(r, "parse") else None
+        parsed = r.parse(node.id)
         return parsed.component if (parsed and parsed.component) else node.id
 
     rows: list[dict[str, Any]] = []
