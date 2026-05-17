@@ -458,6 +458,43 @@ async def api_tree_data(request: Request) -> JSONResponse:
     state = _st(request)
     g = state.graph
     local_ns = local_namespace_from_config(state.config)
+
+    # Build one IdResolver per repo for component-extraction (federation-safe).
+    from elspais.config.schema import ElspaisConfig
+    from elspais.server.routes_ui import build_namespaces
+    from elspais.utilities.patterns import build_resolver
+
+    try:
+        _typed_cfg = ElspaisConfig.model_validate(state.config)
+    except Exception:
+        _typed_cfg = ElspaisConfig.model_validate({})
+    ns_catalog: dict[str, dict] = {n["code"]: n for n in build_namespaces(_typed_cfg)}
+
+    _resolver_cache: dict[int, Any] = {}
+
+    def _resolver_for(node):
+        try:
+            entry = g.repo_for(node.id)
+        except (KeyError, AttributeError):
+            entry = None
+        cfg = entry.config if (entry and entry.config) else state.config
+        cache_key = id(cfg)
+        if cache_key in _resolver_cache:
+            return _resolver_cache[cache_key]
+        try:
+            r = build_resolver(cfg)
+        except Exception:
+            r = None
+        _resolver_cache[cache_key] = r
+        return r
+
+    def _component_for(node) -> str:
+        r = _resolver_for(node)
+        if r is None:
+            return node.id
+        parsed = r.parse(node.id) if hasattr(r, "parse") else None
+        return parsed.component if (parsed and parsed.component) else node.id
+
     rows: list[dict[str, Any]] = []
     visited: set[tuple[str, str]] = set()
 
@@ -553,6 +590,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
             "full" if _cc == "green" else ("partial" if _cc in ("yellow", "orange") else "none")
         )
 
+        _ns_entry = ns_catalog.get(_get_repo_prefix(node)) or {}
         rows.append(
             {
                 "id": node.id,
@@ -574,6 +612,10 @@ async def api_tree_data(request: Request) -> JSONResponse:
                 "is_test_result": False,
                 "result_status": "",
                 "repo_prefix": _get_repo_prefix(node),
+                "component": _component_for(node),
+                "ns_bg": _ns_entry.get("bg", ""),
+                "ns_text": _ns_entry.get("text", ""),
+                "ns_tint": _ns_entry.get("tint", ""),
                 "has_comments": _has_direct_comments,
                 "source_file": node.get_field("source_file", ""),
                 "source_line": node.get_field("source_line", 0),
@@ -604,6 +646,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
             _walk(root, 0, None)
 
     # Add USER_JOURNEY nodes
+    _jn_entry = ns_catalog.get(local_ns) or {}
     for node in sorted(g.nodes_by_kind(NodeKind.USER_JOURNEY), key=lambda n: n.id):
         _fn = node.file_node()
         source_file = _fn.get_field("relative_path") if _fn else ""
@@ -630,6 +673,10 @@ async def api_tree_data(request: Request) -> JSONResponse:
                 "is_journey": True,
                 "result_status": "",
                 "repo_prefix": local_ns,
+                "component": node.id,
+                "ns_bg": _jn_entry.get("bg", ""),
+                "ns_text": _jn_entry.get("text", ""),
+                "ns_tint": _jn_entry.get("tint", ""),
                 "source_file": source_file,
                 "source_line": source_line,
                 "actor": node.get_field("actor", ""),
