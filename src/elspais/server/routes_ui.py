@@ -83,7 +83,9 @@ def build_namespaces(typed) -> list[dict[str, Any]]:
     namespace code (e.g. "DIARY", "CAL"); the project's friendly name is
     exposed separately as ``project_name`` so the header can show it once.
     """
-    from elspais.utilities.color import resolve_color
+    from elspais.utilities.color import hex_with_alpha, resolve_color
+
+    _TINT_ALPHA = 0.12
 
     items: list[dict[str, Any]] = []
     local_code = typed.project.namespace
@@ -95,6 +97,7 @@ def build_namespaces(typed) -> list[dict[str, Any]]:
             "project_name": typed.project.name or local_code,
             "bg": local_rc.bg,
             "text": local_rc.text,
+            "tint": hex_with_alpha(local_rc.bg, _TINT_ALPHA),
             "is_local": True,
         }
     )
@@ -107,6 +110,7 @@ def build_namespaces(typed) -> list[dict[str, Any]]:
                 "project_name": name,
                 "bg": rc.bg,
                 "text": rc.text,
+                "tint": hex_with_alpha(rc.bg, _TINT_ALPHA),
                 "is_local": False,
             }
         )

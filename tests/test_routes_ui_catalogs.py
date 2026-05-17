@@ -144,3 +144,18 @@ def test_local_namespace_from_config():
 def test_extract_viewer_config_tolerates_invalid():
     out = _extract_viewer_config({"levels": "not a dict"})
     assert isinstance(out["levels"], list)
+
+
+def test_build_namespaces_includes_tint():
+    typed = _typed(
+        {
+            "project": {"namespace": "CAL", "color": "#1b3a5c"},
+            "associates": {"diary": {"path": "../d", "namespace": "DIARY"}},
+        }
+    )
+    out = build_namespaces(typed)
+    for entry in out:
+        assert "tint" in entry, f"missing tint on {entry['code']}"
+        assert entry["tint"].startswith("rgba("), entry["tint"]
+    # Configured local color produces a tint derived from that hex
+    assert out[0]["tint"] == "rgba(27, 58, 92, 0.12)"
