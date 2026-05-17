@@ -543,7 +543,6 @@ function renderNavTree() {
             var flrow = flatFiltered[fli];
             var flSelected = editState.openCards.has(flrow.id) ? ' selected' : '';
             var fllevelClass = flrow.level ? flrow.level.toLowerCase() : '';
-            var flshortId = flrow.id.replace('REQ-', '');
             var flvalColor = flrow.validation_color || '';
             var flvalTip = flrow.validation_tip || '';
             var flvalClass = flvalColor ? ' val-' + flvalColor : '';
@@ -565,12 +564,25 @@ function renderNavTree() {
             flind += '<span class="nav-tree-indicator' + (flrow.is_changed ? ' changed' : '') + '"' +
                 (flrow.is_changed ? ' title="Changed on this branch vs main"' : '') +
                 '>' + (flrow.is_changed ? '&#x25C6;' : '') + '</span>';
+            var __flmode = editState.treeDisplayMode || DEFAULT_TREE_DISPLAY_MODE;
+            var __flRowTitleAttr = '';
+            if (__flmode === 'title-only' || __flmode === 'ns-bg') {
+                __flRowTitleAttr = ' title="' + escapeHtml(flrow.id) + '"';
+            } else if (__flmode === 'id-only') {
+                __flRowTitleAttr = ' title="' + escapeHtml(flrow.title || '') + '"';
+            }
+            var __flRowStyleAttr = flrow.ns_tint ? ' style="--row-ns-tint:' + flrow.ns_tint + ';"' : '';
+            var __flSliverStyleAttr = flrow.ns_bg ? ' style="background:' + flrow.ns_bg + ';"' : '';
             flatHtml += '<div class="nav-tree-row' + flSelected + '" ' +
                 'data-id="' + flrow.id + '" ' +
                 'data-kind="requirement" ' +
-                'onclick="openCard(\'' + flrow.id + '\')">' +
+                'data-ns="' + (flrow.repo_prefix || '') + '"' +
+                __flRowTitleAttr + __flRowStyleAttr +
+                ' onclick="openCard(\'' + flrow.id + '\')">' +
+                '<span class="nav-tree-ns-sliver"' + __flSliverStyleAttr + '></span>' +
                 (fllevelClass ? '<span class="nav-tree-level ' + fllevelClass + '">' + flrow.level + '</span>' : '') +
-                '<span class="nav-tree-id">' + flshortId + '</span>' +
+                '<span class="nav-tree-id-full">' + escapeHtml(flrow.id) + '</span>' +
+                '<span class="nav-tree-id-component">' + escapeHtml(flrow.component || flrow.id) + '</span>' +
                 '<span class="nav-tree-title">' + escapeHtml(flrow.title || '') + '</span>' +
                 '<span class="nav-tree-indicators">' + flind + '</span>' +
                 flstatusBadge +
@@ -743,7 +755,6 @@ function renderNavTree() {
 
         // ── REQUIREMENT row rendering ──
         const levelClass = row.level ? row.level.toLowerCase() : '';
-        const shortId = row.id.replace('REQ-', '');
 
         // Status badge — color driven by combined (all) coverage
         var statusBadge = '';
@@ -771,17 +782,32 @@ function renderNavTree() {
             (row.is_changed ? ' title="Changed on this branch vs main"' : '') +
             '>' + (row.is_changed ? '&#x25C6;' : '') + '</span>';
 
+        // Per-mode hover tooltip text (full ID, title, or none)
+        var __mode = editState.treeDisplayMode || DEFAULT_TREE_DISPLAY_MODE;
+        var __rowTitleAttr = '';
+        if (__mode === 'title-only' || __mode === 'ns-bg') {
+            __rowTitleAttr = ' title="' + escapeHtml(row.id) + '"';
+        } else if (__mode === 'id-only') {
+            __rowTitleAttr = ' title="' + escapeHtml(row.title || '') + '"';
+        }
+        var __rowStyleAttr = row.ns_tint ? ' style="--row-ns-tint:' + row.ns_tint + ';"' : '';
+        var __sliverStyleAttr = row.ns_bg ? ' style="background:' + row.ns_bg + ';"' : '';
+
         html += '<div class="nav-tree-row' + selectedClass + dimClass + '" ' +
             'data-id="' + row.id + '" ' +
             'data-parent="' + (row.parent_id || '') + '" ' +
             'data-depth="' + row.depth + '" ' +
             'data-kind="requirement" ' +
-            'onclick="openCard(\'' + row.id + '\')">' +
+            'data-ns="' + (row.repo_prefix || '') + '"' +
+            __rowTitleAttr + __rowStyleAttr +
+            ' onclick="openCard(\'' + row.id + '\')">' +
             indents.join('') +
             '<button class="' + toggleClass + '" onclick="event.stopPropagation(); toggleTreeNode(\'' + row.id + '\')">' +
             toggleIcon + '</button>' +
+            '<span class="nav-tree-ns-sliver"' + __sliverStyleAttr + '></span>' +
             (levelClass ? '<span class="nav-tree-level ' + levelClass + '">' + row.level + '</span>' : '') +
-            '<span class="nav-tree-id">' + shortId + '</span>' +
+            '<span class="nav-tree-id-full">' + escapeHtml(row.id) + '</span>' +
+            '<span class="nav-tree-id-component">' + escapeHtml(row.component || row.id) + '</span>' +
             '<span class="nav-tree-title">' + escapeHtml(row.title || '') + '</span>' +
             '<span class="nav-tree-indicators">' + indicators + '</span>' +
             statusBadge +

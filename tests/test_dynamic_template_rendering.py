@@ -179,3 +179,31 @@ def test_toolbar_emits_tree_display_mode_select(jinja_env, typed_5_level_config)
     assert 'id="tree-display-mode"' in html
     for value in ("compact", "title-only", "id-only", "full", "ns-bg", "level-last"):
         assert f'value="{value}"' in html, f"missing option value '{value}'"
+
+
+def test_nav_tree_row_template_emits_dual_id_and_sliver(jinja_env, typed_5_level_config):
+    """Each requirement row must include both id spans + the ns sliver placeholder,
+    plus per-mode title= / data-ns / --row-ns-tint plumbing. CSS toggles which
+    pieces are visible per mode."""
+    levels = build_levels(typed_5_level_config)
+    namespaces = build_namespaces(typed_5_level_config)
+    tmpl = jinja_env.get_template("partials/js/_nav-tree.js.j2")
+    js = tmpl.render(levels=levels, namespaces=namespaces, statuses=[], config_types=[])
+    # Both id spans present
+    assert "nav-tree-id-full" in js
+    assert "nav-tree-id-component" in js
+    # Server-provided fields consumed
+    assert "row.component" in js
+    assert "row.ns_bg" in js
+    assert "row.ns_tint" in js
+    # Sliver element rendered
+    assert "nav-tree-ns-sliver" in js
+    # Per-row data-ns attribute
+    assert "data-ns" in js
+    # Per-row --row-ns-tint CSS custom property
+    assert "--row-ns-tint" in js
+    # Legacy single `<span class="nav-tree-id">` no longer used for requirement rows
+    # (journey-row block is allowed to keep it; requirement rows must not).
+    # We check there's no `'<span class="nav-tree-id">' + shortId` pattern left.
+    assert "shortId" not in js
+    assert "flshortId" not in js
