@@ -229,6 +229,16 @@ dir = ""
 # ASSOCIATES - Cross-Repository Federation
 # Each associate is a named entry with `path` and `namespace`.
 # Relative paths resolve from the canonical repo root (worktree-safe).
+#
+# Declaring an associate also enables cross-repo template instantiation:
+# a downstream `Satisfies: <UPSTREAM>` clones the upstream **Template**
+# REQ subtree into this repo with composite IDs (declaring_id::original_id)
+# and wires a cross-graph INSTANCE edge to the original. CODE/TEST in the
+# upstream repo may target template assertions directly (Implements:,
+# Verifies:); that evidence is "cross-cutting" -- it applies to every
+# satisfier of the template via the INSTANCE edges, so coverage flows
+# automatically without per-instance re-implementation. See
+# `elspais docs satisfies` for the full pattern and validation matrix.
 #──────────────────────────────────────────────────────────────────────────────
 
 [associates.callisto]

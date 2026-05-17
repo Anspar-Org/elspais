@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from elspais.graph.GraphNode import GraphNode, NodeKind, make_file_id
-from elspais.graph.relations import EdgeKind
+from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.utilities.hasher import HASH_VALUE_PATTERN, calculate_hash, compute_normalized_hash
 
 if TYPE_CHECKING:
@@ -234,6 +234,9 @@ def _render_requirement(node: GraphNode, resolver: Any | None = None) -> str:
 
     # Metadata line
     meta_parts = [f"**Level**: {level}", f"**Status**: {status}"]
+    # Implements: REQ-p00014-E
+    if node.get_field("stereotype") == Stereotype.TEMPLATE:
+        meta_parts.append("**Template**")
     if implements_refs:
         impl_str = ", ".join(implements_refs)
         meta_parts.append(f"**Implements**: {impl_str}")
@@ -247,9 +250,10 @@ def _render_requirement(node: GraphNode, resolver: Any | None = None) -> str:
         lines.append(f"**Refines**: {refines_str}")
 
     # Satisfies line (if present)
+    # Implements: REQ-p00014-E
     if satisfies_refs:
         sat_str = ", ".join(satisfies_refs)
-        lines.append(f"Satisfies: {sat_str}")
+        lines.append(f"**Satisfies**: {sat_str}")
 
     # Walk STRUCTURES children sorted by render_order (set during build).
     # Collect assertions for hashing while rendering sections in order.
