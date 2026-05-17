@@ -6,12 +6,33 @@ This module defines the data structures for centralized coverage tracking:
 - CoverageContribution: A single coverage claim on an assertion
 - CoverageDimension: Uniform metrics for one coverage dimension
 - RollupMetrics: Aggregated metrics for a requirement node
+
+It also exposes lightweight inherited-coverage query helpers used by the
+template / Satisfies pattern (CUR-1353 Phase 5):
+
+- direct_coverage_for(node): count coverage evidence on a node, dispatched
+  by NodeKind. For ASSERTIONs, walks the parent REQ's outgoing
+  IMPLEMENTS/VERIFIES/VALIDATES edges filtered by ``assertion_targets``.
+  For REQUIREMENTs, counts outgoing coverage edges directly. For CODE,
+  TEST, FILE, and JOURNEY nodes, counts incoming coverage edges.
+- inherited_coverage_for(node): for an INSTANCE node, return the template
+  original's direct coverage; for any other node, fall back to direct.
+- satisfier_rollup(node): combine a satisfier REQ's own concrete-assertion
+  coverage with the inherited coverage from the templates it satisfies.
+
+These helpers are queries over the live graph -- they do not persist any
+new metric on the node, so the INSTANCE coverage story stays consistent
+with the "instance coverage == template coverage" invariant.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from elspais.graph.GraphNode import GraphNode
 
 
 class CoverageSource(Enum):
@@ -255,9 +276,170 @@ class RollupMetrics:
         )
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Inherited-coverage query helpers (CUR-1353 Phase 5 / REQ-p00014-K)
+# ──────────────────────────────────────────────────────────────────────────
+
+
+# Implements: REQ-p00014-K
+def direct_coverage_for(node: GraphNode) -> int:
+    """Count coverage-contributing evidence for ``node``.
+
+    The edge model used by the builder wires IMPLEMENTS/VERIFIES/VALIDATES
+    edges as **outgoing** from the parent REQUIREMENT to CODE/TEST/JNY
+    nodes, carrying ``assertion_targets`` to scope the coverage to a
+    subset of the parent's assertions. So a node's "direct coverage" is
+    not just its inbound edges -- for an ASSERTION we have to walk the
+    parent REQ's outgoing coverage edges and count those whose
+    ``assertion_targets`` contains this assertion's label (or is empty,
+    meaning whole-REQ blanket coverage).
+
+    For non-ASSERTION nodes, the direction matters and is dispatched by
+    :class:`NodeKind`:
+
+    - ``REQUIREMENT``: count only **outgoing** coverage edges (REQ ->
+      CODE/TEST/JNY is the wiring convention).
+    - All other kinds (``CODE``, ``TEST``, ``FILE``, ``JOURNEY``, ...):
+      count only **incoming** coverage edges -- i.e. the evidence
+      *received* by this node. This avoids miscounting an outgoing
+      IMPLEMENTS edge from a CODE node as "the CODE node being covered".
+
+    Args:
+        node: Any graph node.
+
+    Returns:
+        The count of coverage-contributing evidence for this node.
+    """
+    from elspais.graph.GraphNode import NodeKind
+
+    if node.kind == NodeKind.ASSERTION:
+        label = node.get_field("label")
+        count = 0
+        for parent in node.iter_parents():
+            if parent.kind != NodeKind.REQUIREMENT:
+                continue
+            for edge in parent.iter_outgoing_edges():
+                if not edge.kind.contributes_to_coverage():
+                    continue
+                # Edge with no assertion_targets covers all assertions (blanket).
+                # Edge with assertion_targets covers only those labels.
+                if not edge.assertion_targets or label in edge.assertion_targets:
+                    count += 1
+        return count
+
+    if node.kind == NodeKind.REQUIREMENT:
+        # REQ -> CODE/TEST/JNY is the outgoing convention.
+        return sum(1 for e in node.iter_outgoing_edges() if e.kind.contributes_to_coverage())
+
+    # CODE, TEST, FILE, JOURNEY, ... -- count incoming evidence-of-coverage edges.
+    return sum(1 for e in node.iter_incoming_edges() if e.kind.contributes_to_coverage())
+
+
+# Implements: REQ-p00014-K
+def inherited_coverage_for(node: GraphNode) -> int:
+    """Return coverage for ``node``, inheriting from the template if INSTANCE.
+
+    For an ``INSTANCE`` node, walks the outbound ``INSTANCE`` edge to find
+    the template original and returns *that* node's
+    :func:`direct_coverage_for` count. For any other node, returns
+    ``direct_coverage_for(node)`` unchanged.
+
+    This implements the "instance coverage == template coverage" invariant
+    without persisting a derived metric on the INSTANCE node: it stays a
+    query over the live graph, so the answer is always consistent with
+    the current state of the template's inbound IMPLEMENTS/VERIFIES edges.
+
+    Args:
+        node: Any graph node.
+
+    Returns:
+        The inherited or direct coverage count.
+    """
+    from elspais.graph.relations import EdgeKind, Stereotype
+
+    if node.get_field("stereotype") != Stereotype.INSTANCE:
+        return direct_coverage_for(node)
+    for edge in node.iter_outgoing_edges():
+        if edge.kind == EdgeKind.INSTANCE:
+            return direct_coverage_for(edge.target)
+    return 0
+
+
+@dataclass(frozen=True)
+class SatisfierRollup:
+    """Result of :func:`satisfier_rollup`.
+
+    Attributes:
+        covered: Number of assertions (own + template) with coverage > 0.
+        total: Total assertions counted (own concrete + cloned template).
+    """
+
+    covered: int
+    total: int
+
+    @property
+    def covered_fraction(self) -> float:
+        """Fraction in ``[0, 1]``; ``0.0`` when ``total == 0``."""
+        return self.covered / self.total if self.total else 0.0
+
+
+# Implements: REQ-p00014-K
+def satisfier_rollup(node: GraphNode) -> SatisfierRollup:
+    """Combine a satisfier REQ's own and inherited coverage.
+
+    Walks two layers:
+
+    1. Own concrete-assertion coverage: every STRUCTURES child that is
+       an ASSERTION with :func:`direct_coverage_for` > 0.
+    2. Inherited template coverage: for each outbound ``SATISFIES`` edge
+       (declaring REQ -> cloned root), walk that clone's STRUCTURES
+       children (the instance assertions), and count each whose
+       :func:`inherited_coverage_for` is > 0.
+
+    The denominator is ``len(own_assertions) + len(template_assertions)``,
+    so a satisfier that adds its own assertion *on top of* a fully
+    covered template only reports full coverage once that own assertion
+    is also covered. This makes satisfier-specific work visible without
+    discarding the cross-cutting evidence the template already provides.
+
+    Args:
+        node: A satisfier REQUIREMENT node (declaring `Satisfies:`).
+
+    Returns:
+        A :class:`SatisfierRollup` with combined counts and fraction.
+    """
+    from elspais.graph.GraphNode import NodeKind
+    from elspais.graph.relations import EdgeKind
+
+    own_assertions = [
+        c
+        for c in node.iter_children(edge_kinds={EdgeKind.STRUCTURES})
+        if c.kind == NodeKind.ASSERTION
+    ]
+    own_covered = sum(1 for a in own_assertions if direct_coverage_for(a) > 0)
+
+    satisfied_clones = [
+        e.target for e in node.iter_outgoing_edges() if e.kind == EdgeKind.SATISFIES
+    ]
+    template_assertions: list[GraphNode] = []
+    for clone in satisfied_clones:
+        for ce in clone.iter_outgoing_edges():
+            if ce.kind == EdgeKind.STRUCTURES and ce.target.kind == NodeKind.ASSERTION:
+                template_assertions.append(ce.target)
+    template_covered = sum(1 for a in template_assertions if inherited_coverage_for(a) > 0)
+
+    total = len(own_assertions) + len(template_assertions)
+    covered = own_covered + template_covered
+    return SatisfierRollup(covered=covered, total=total)
+
+
 __all__ = [
     "CoverageDimension",
     "CoverageSource",
     "CoverageContribution",
     "RollupMetrics",
+    "SatisfierRollup",
+    "direct_coverage_for",
+    "inherited_coverage_for",
+    "satisfier_rollup",
 ]

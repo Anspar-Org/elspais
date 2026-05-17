@@ -97,6 +97,15 @@ def load_associated_fixture(dest: Path) -> Path:
     return dest / "core"
 
 
+def load_xrepo_template_fixture(dest: Path) -> Path:
+    """Copy the e2e-xrepo-template fixture, git init each repo, return app root."""
+    src = FIXTURES_DIR / "e2e-xrepo-template"
+    shutil.copytree(src, dest, dirs_exist_ok=True)
+    for repo_dir in (dest / "library", dest / "app", dest / "tenant"):
+        _git_init(repo_dir)
+    return dest / "app"
+
+
 def ensure_fixture_daemon(root: Path) -> None:
     """Start a daemon for a fixture project if cli_ttl allows."""
     try:

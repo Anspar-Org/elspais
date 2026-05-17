@@ -90,27 +90,47 @@ C. The viewer SHALL display source files inline in a side panel with syntax-high
 
 ### Rationale
 
-Cross-cutting concerns — regulatory compliance frameworks, security policies, accessibility standards, operational baselines — define obligations that multiple independent subsystems must satisfy. The `Satisfies:` relationship enables a template-instance pattern: a set of requirements is defined once as a reusable template, and individual subsystems declare that they satisfy it. When a requirement declares `Satisfies: X`, the graph builder clones the template's REQ subtree with composite IDs, creating instance nodes that participate in normal coverage computation. A `Stereotype` enum (`CONCRETE`, `TEMPLATE`, `INSTANCE`) classifies nodes, and an `INSTANCE` edge connects each clone to its template original.
+Cross-cutting concerns — regulatory compliance frameworks, security policies, accessibility standards, operational baselines — define obligations that multiple independent subsystems must satisfy. The `Satisfies:` relationship enables a template-instance pattern: a set of requirements is defined once as a reusable template, and individual subsystems declare that they satisfy it. When a requirement declares `Satisfies: X`, the graph builder clones the template's REQ subtree with composite IDs, creating instance nodes that participate in normal coverage computation. A `Stereotype` enum (`CONCRETE`, `TEMPLATE`, `INSTANCE`) classifies nodes, and an `INSTANCE` edge connects each clone to its template original. Templates are declared explicitly with a `**Template**` metadata-line marker so authors opt in deliberately and so the validator can catch mis-targeted `Satisfies:`/`Refines:`/`Implements:` references at build time.
 
 ### Assertions
 
 A. The system SHALL support a `Satisfies:` metadata field on requirements. The target MAY be a requirement or a specific *Assertion*.
 
-B. When a requirement declares `Satisfies: X`, the graph builder SHALL clone the template's REQ subtree (all descendant REQs and their assertions) with composite IDs of the form `declaring_id::original_id`. The cloned root SHALL be linked to the declaring requirement via a SATISFIES edge. Internal edges and assertions SHALL be preserved exactly as in the original. Coverage of cloned nodes SHALL use the standard coverage mechanism — no special computation is needed.
+B. When a requirement declares `Satisfies: X`, the graph builder SHALL clone the template REQ plus its directly-attached *Assertions* (single-REQ scope; templates SHALL NOT have descendant REQs — see *Assertion* G) with composite IDs of the form `declaring_id::original_id`. The cloned root SHALL be linked to the declaring requirement via a SATISFIES edge. Each clone SHALL be linked to its template original via an INSTANCE edge. The cloned subtree SHALL preserve *Assertion* content and STRUCTURES edges from the template. Coverage of cloned nodes SHALL use the standard coverage mechanism — no special computation is needed (see *Assertion* K for the inherited-coverage rule that supplements this for cross-cutting evidence).
 
 C. The system SHALL classify nodes using a `Stereotype` field: `CONCRETE` (default), `TEMPLATE` (original nodes targeted by Satisfies), or `INSTANCE` (cloned copies). Each instance node SHALL have an INSTANCE edge to its template original.
 
-D. The system SHALL attribute `Implements:` references to template assertions to the correct instance by finding a sibling `Implements:` reference to a CONCRETE node in the same source file, walking that node's ancestors to the first node with a `Satisfies:` declaration matching the template, and constructing the instance ID from the declaring node's ID and the referenced node's ID.
+D. CODE that declares `Implements: <template-assertion>` and TEST that declares `Verifies: <template-assertion>` SHALL produce a direct IMPLEMENTS or VERIFIES edge to the template *Assertion*. The evidence is cross-cutting: a single implementation or test against a template *Assertion* is understood to apply to every satisfier of that template via the INSTANCE edges that connect each clone to its original.
 
-E. The system SHALL provide a `spec.satisfies_resolve` health check that verifies every `Satisfies:` target on a requirement resolves to an existing requirement or *Assertion* in the graph. Unresolved targets SHALL be reported as warnings (matching the severity of `spec.implements_resolve` and `spec.refines_resolve`).
+E. Authors SHALL mark a requirement as a template by adding the no-value `**Template**` flag (markdown decoration optional) anywhere on the pipe-separated metadata line. The parser SHALL set `Stereotype.TEMPLATE` on the resulting REQ and on each of its *Assertions*. The render protocol SHALL emit the flag verbatim on the metadata line for any node with `Stereotype.TEMPLATE`.
+
+F. `BrokenReference` SHALL carry an optional `diagnostic` field that explains why a reference is invalid. The `elspais checks` command SHALL surface the diagnostic verbatim in its health-finding message so authors get actionable guidance (e.g. *"REQ-A is not marked **Template**; mark REQ-A with **Template** if it's intended to be satisfiable."*).
+
+G. The graph builder SHALL enforce a static validation matrix at build time, raising typed `BrokenReference` diagnostics for each invalid combination: `Satisfies:` against a target that exists but is not marked `**Template**`; `Satisfies:` against an `INSTANCE` target (chained instantiation); `Refines:` against a `TEMPLATE` target (compositing templates); `Refines:` against an `INSTANCE` target (refining instance content); `Implements:` from CODE against an `INSTANCE` target; `Verifies:` from TEST against an `INSTANCE` target; a REQ marked `**Template**` that declares its own `Implements:`/`Refines:` metadata targeting nodes outside its template subtree; a REQ marked `**Template**` that is targeted by an inbound `Refines:`. `Implements:` from CODE and `Verifies:` from TEST against a `TEMPLATE` target SHALL be permitted (cross-cutting evidence, *Assertion* D).
+
+H. When a requirement declares `Satisfies:` against a template owned by an associated repository, the federated graph builder SHALL clone the template REQ subtree (root REQ plus its directly-attached assertions) into the declaring repo's index with composite IDs of the form `declaring_id::original_id`, wire intra-graph `SATISFIES`, `STRUCTURES`, and `DEFINES` edges, and wire a cross-graph `INSTANCE` edge from each clone to its template original. When the as-authored target ID is non-canonical (e.g. unpadded), the federated graph builder SHALL fall back to per-repo `IdResolver` probing to canonicalize the target before cloning, so that all satisfiers of the same template produce composites using the same canonical original ID.
+
+J. When a cross-repository `Satisfies:` target is not claimed by any associated repository, the federated graph builder SHALL emit a typed `BrokenReference` whose diagnostic names the target ID, lists the currently-declared associates (or states that none are declared), and points authors at the `[associates.<name>]` block in `.elspais.toml`. When transitively walking `SATISFIES` and `INSTANCE` edges produces a cycle, the federated graph builder SHALL emit a typed `BrokenReference` whose diagnostic contains the word `cycle` and the cycle path; reporting one cycle per build is sufficient.
+
+K. Coverage on `INSTANCE` *Assertions* SHALL be computed as inherited coverage over the `INSTANCE` edge: an instance *Assertion*'s effective coverage equals its template original's direct coverage (inbound `IMPLEMENTS`/`VERIFIES`/`VALIDATES` edges). A satisfier requirement's coverage rollup SHALL combine its own concrete-*Assertion* coverage with the inherited coverage of the templates it satisfies, so that cross-cutting evidence on a template flows to every satisfier without per-instance re-implementation. Each cross-repo `INSTANCE` clone SHALL record the owning template repository name in a `template_repo` field so viewers can display the template's provenance.
 
 ### Changelog
 
+- 2026-05-16 | 6c1d002c | - | Michael Lewis (michael@anspar.org) | Auto-fix: sync changelog hash
+- 2026-05-16 | - | - | Michael Lewis (michael@anspar.org) | CUR-1353 Phase 10: refresh assertion B to match single-REQ scope (no descendant REQs)
+- 2026-05-16 | 6c1d002c | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
+- 2026-05-16 | c7521067 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms, update hash
+- 2026-05-16 | - | - | Michael Lewis (michael@anspar.org) | CUR-1353 Phase 5: add inherited-coverage assertion (K) for INSTANCE assertions and satisfier rollups
+- 2026-05-16 | ed72021a | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
+- 2026-05-16 | - | - | Michael Lewis (michael@anspar.org) | CUR-1353 Phase 4: add federated diagnostics (J) for missing associates and Satisfies cycles
+- 2026-05-16 | - | - | Michael Lewis (michael@anspar.org) | CUR-1353 Phase 3: add federated cross-repo template instantiation (H)
+- 2026-05-16 | 6e4308ff | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms, update hash
+- 2026-05-16 | - | - | Michael Lewis (michael@anspar.org) | CUR-1353 Phase 2: add Template marker (E), diagnostic field (F), validation matrix (G); rewrite D to reflect the removal of file-based attribution
 - 2026-05-11 | bae1b85d | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-05-04 | bae1b85d | - | Developer (dev@example.com) | Auto-fix: canonicalize term forms, update hash
 - 2026-03-30 | 9115ce0d | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
-*End* *Satisfies Relationship* | **Hash**: bae1b85d
+*End* *Satisfies Relationship* | **Hash**: 6c1d002c
 ---
 
 ## REQ-p00016: NOT APPLICABLE Status

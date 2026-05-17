@@ -117,6 +117,7 @@ def make_requirement(
     start_line: int = 1,
     end_line: int = 10,
     hash_value: str | None = None,
+    template: bool = False,
 ) -> ParsedContent:
     """Factory for creating test requirements.
 
@@ -133,6 +134,7 @@ def make_requirement(
         start_line: Start line in source
         end_line: End line in source
         hash_value: Optional content hash
+        template: Whether this requirement is marked as a template (CUR-1353)
 
     Returns:
         ParsedContent ready for GraphBuilder.add_parsed_content()
@@ -158,6 +160,7 @@ def make_requirement(
             "satisfies": satisfies or [],
             "assertions": assertions or [],
             "hash": hash_value,
+            "template": template,
         },
     )
     content.source_context = MockSourceContext(source_id=source_path)

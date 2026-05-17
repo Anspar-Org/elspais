@@ -411,6 +411,7 @@ def build_graph(
         multi_assertion_separator=str(mas),
         resolver=default_resolver,
         namespace=typed_config.project.namespace,
+        project_name=typed_config.project.name,
     )
 
     # Get ignore configuration for code/test scanning (main project only)
