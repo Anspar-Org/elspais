@@ -13,6 +13,17 @@
                    onchange="toggleShowHiddenParents()">
             <span>Show hidden parents</span>
         </label>
+        <label class="tree-display-mode-label" for="tree-display-mode">
+            Display:
+            <select id="tree-display-mode" onchange="setTreeDisplayMode(this.value)">
+                <option value="compact">Compact ID + title</option>
+                <option value="title-only">Title only</option>
+                <option value="id-only">Compact ID only</option>
+                <option value="full">Full ID + title</option>
+                <option value="ns-bg">Namespace background</option>
+                <option value="level-last">Level at end</option>
+            </select>
+        </label>
     </div>
 
     <div class="toolbar-divider"></div>

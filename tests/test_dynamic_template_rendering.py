@@ -161,3 +161,21 @@ def test_header_namespace_badge_uses_local_label(jinja_env, typed_5_level_config
     assert "CAL:" in html
     # data-namespace attribute set to the local namespace code
     assert 'data-namespace="CAL"' in html
+
+
+def test_toolbar_emits_tree_display_mode_select(jinja_env, typed_5_level_config):
+    """The toolbar must render a six-option <select id='tree-display-mode'>
+    so users can pick the nav-tree row layout."""
+    levels = build_levels(typed_5_level_config)
+    namespaces = build_namespaces(typed_5_level_config)
+    statuses = build_statuses(typed_5_level_config)
+    tmpl = jinja_env.get_template("partials/_toolbar.html.j2")
+    html = tmpl.render(
+        levels=levels,
+        namespaces=namespaces,
+        statuses=statuses,
+        default_hidden_statuses=[],
+    )
+    assert 'id="tree-display-mode"' in html
+    for value in ("compact", "title-only", "id-only", "full", "ns-bg", "level-last"):
+        assert f'value="{value}"' in html, f"missing option value '{value}'"
