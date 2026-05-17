@@ -185,8 +185,10 @@
     background: var(--row-ns-tint, transparent);
 }
 
-/* Mode: level-last — push the level badge to the end of the row via flex order. */
-#nav-tree-container[data-mode="level-last"] .nav-tree-level {
+/* "Level at end" — orthogonal toggle that moves the level badge to the end of
+   the row regardless of which display mode is active. Driven by `data-level-pos`
+   on `#nav-tree-container` (set by setLevelAtEnd in _nav-tree.js.j2). */
+#nav-tree-container[data-level-pos="end"] .nav-tree-level {
     order: 9;
     margin-left: 6px;
 }

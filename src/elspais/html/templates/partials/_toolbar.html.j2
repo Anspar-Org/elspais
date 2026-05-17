@@ -21,8 +21,12 @@
                 <option value="id-only">Compact ID only</option>
                 <option value="full">Full ID + title</option>
                 <option value="ns-bg">Namespace background</option>
-                <option value="level-last">Level at end</option>
             </select>
+        </label>
+        <label class="toggle-inline">
+            <input type="checkbox" id="toggle-level-at-end"
+                   onchange="setLevelAtEnd(this.checked)">
+            <span>Level at end</span>
         </label>
     </div>
 

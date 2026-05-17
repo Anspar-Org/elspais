@@ -11,8 +11,12 @@ var NAMESPACES = {{ namespaces | tojson }};
 var LOCAL_NS = (NAMESPACES.find(function(n){ return n.is_local; }) || {code: '', label: ''}).code;
 var LOCAL_NS_LABEL = (NAMESPACES.find(function(n){ return n.is_local; }) || {code: '', label: ''}).label;
 
-var TREE_DISPLAY_MODES = ['compact', 'title-only', 'id-only', 'full', 'ns-bg', 'level-last'];
+var TREE_DISPLAY_MODES = ['compact', 'title-only', 'id-only', 'full', 'ns-bg'];
 var DEFAULT_TREE_DISPLAY_MODE = 'compact';
+// "Level at end" is an orthogonal toggle that re-orders the level badge to the
+// end of the row regardless of which display mode is active. Stored separately
+// from `treeDisplayMode` so users can combine it freely (e.g. ns-bg + level-at-end).
+var DEFAULT_LEVEL_AT_END = false;
 
 // =====================================================================
 // FilterGroup Instances
@@ -168,6 +172,15 @@ function setTreeDisplayMode(mode) {
     if (container) container.dataset.mode = mode;
     try { localStorage.setItem('elspais.treeDisplayMode', mode); } catch (e) {}
     if (typeof renderNavTree === 'function') renderNavTree();
+}
+
+function setLevelAtEnd(enabled) {
+    var flag = !!enabled;
+    editState.levelAtEnd = flag;
+    var container = document.getElementById('nav-tree-container');
+    if (container) container.dataset.levelPos = flag ? 'end' : 'start';
+    try { localStorage.setItem('elspais.levelAtEnd', flag ? '1' : '0'); } catch (e) {}
+    // No re-render needed — purely CSS-driven by data-level-pos.
 }
 
 // =====================================================================
@@ -990,14 +1003,26 @@ function setViewMode(mode) {
     saveState();
 }
 
-// On script load, restore the tree display mode from localStorage (if any).
-(function initTreeDisplayMode() {
-    var saved = null;
-    try { saved = localStorage.getItem('elspais.treeDisplayMode'); } catch (e) {}
-    if (TREE_DISPLAY_MODES.indexOf(saved) === -1) saved = DEFAULT_TREE_DISPLAY_MODE;
-    editState.treeDisplayMode = saved;
+// On script load, restore the tree display mode + "level at end" toggle
+// from localStorage (if any).
+(function initTreeDisplayState() {
+    var savedMode = null;
+    try { savedMode = localStorage.getItem('elspais.treeDisplayMode'); } catch (e) {}
+    if (TREE_DISPLAY_MODES.indexOf(savedMode) === -1) savedMode = DEFAULT_TREE_DISPLAY_MODE;
+    editState.treeDisplayMode = savedMode;
     var sel = document.getElementById('tree-display-mode');
-    if (sel) sel.value = saved;
+    if (sel) sel.value = savedMode;
+
+    var savedLvl = null;
+    try { savedLvl = localStorage.getItem('elspais.levelAtEnd'); } catch (e) {}
+    var levelAtEnd = savedLvl === '1' ? true : (savedLvl === '0' ? false : DEFAULT_LEVEL_AT_END);
+    editState.levelAtEnd = levelAtEnd;
+    var lvlCb = document.getElementById('toggle-level-at-end');
+    if (lvlCb) lvlCb.checked = levelAtEnd;
+
     var container = document.getElementById('nav-tree-container');
-    if (container) container.dataset.mode = saved;
+    if (container) {
+        container.dataset.mode = savedMode;
+        container.dataset.levelPos = levelAtEnd ? 'end' : 'start';
+    }
 })();

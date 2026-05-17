@@ -177,8 +177,11 @@ def test_toolbar_emits_tree_display_mode_select(jinja_env, typed_5_level_config)
         default_hidden_statuses=[],
     )
     assert 'id="tree-display-mode"' in html
-    for value in ("compact", "title-only", "id-only", "full", "ns-bg", "level-last"):
+    for value in ("compact", "title-only", "id-only", "full", "ns-bg"):
         assert f'value="{value}"' in html, f"missing option value '{value}'"
+    # "Level at end" is now a separate checkbox toggle, not a display-mode option.
+    assert 'value="level-last"' not in html, "level-last should be a toggle, not a mode"
+    assert 'id="toggle-level-at-end"' in html, "missing 'Level at end' checkbox"
 
 
 def test_nav_tree_row_template_emits_dual_id_and_sliver(jinja_env, typed_5_level_config):
