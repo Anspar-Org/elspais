@@ -4,7 +4,7 @@
 
 const COOKIE_NAME = 'elspais_trace_state';
 const COOKIE_DAYS = 30;
-const COOKIE_VERSION = 15;  // v15: viewMode (flat/tree) toggle, removed coverageMode
+const COOKIE_VERSION = 16;  // v16: + treeDisplayMode, levelAtEnd (folded in from localStorage)
 
 function saveState() {
     // Serialize filter groups
@@ -31,6 +31,8 @@ function saveState() {
         cardViewMode: editState.cardViewMode,
         assertionBadgeMode: editState.assertionBadgeMode,
         viewMode: editState.viewMode || 'tree',
+        treeDisplayMode: editState.treeDisplayMode,
+        levelAtEnd: !!editState.levelAtEnd,
         navPanelWidth: document.getElementById('nav-panel').style.width || null,
         fileViewerWidth: document.getElementById('file-viewer-panel').style.width || null
     };
