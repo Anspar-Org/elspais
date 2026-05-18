@@ -16,7 +16,8 @@
 .nav-panel {
     width: 320px;
     min-width: 200px;
-    max-width: 600px;
+    /* Max width is enforced by the divider's JS clamp (viewport-relative); no
+       CSS cap so the JS is the single authority. */
     background: var(--panel-bg);
     border-right: 1px solid var(--panel-border);
     display: flex;
