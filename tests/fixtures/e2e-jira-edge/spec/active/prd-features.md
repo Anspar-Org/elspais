@@ -1,6 +1,6 @@
 # PROJ-1: First Feature
 
-**Level**: PRD | **Status**: Active
+**Level**: REQ | **Status**: Active
 
 ## Assertions
 
@@ -12,7 +12,7 @@
 
 # PROJ-2: Second Feature
 
-**Level**: PRD | **Status**: Draft
+**Level**: REQ | **Status**: Draft
 
 ## Assertions
 
@@ -23,7 +23,7 @@
 
 # PROJ-4: Deprecated Feature
 
-**Level**: PRD | **Status**: Deprecated
+**Level**: REQ | **Status**: Deprecated
 
 ## Assertions
 
@@ -34,7 +34,7 @@
 
 # PROJ-5: Proposed Feature
 
-**Level**: PRD | **Status**: Proposed
+**Level**: REQ | **Status**: Proposed
 
 ## Assertions
 

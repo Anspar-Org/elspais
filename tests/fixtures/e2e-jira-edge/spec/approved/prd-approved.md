@@ -1,6 +1,6 @@
 # PROJ-6: Approved Feature
 
-**Level**: PRD | **Status**: Active
+**Level**: REQ | **Status**: Active
 
 ## Assertions
 
