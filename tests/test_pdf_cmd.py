@@ -13,6 +13,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from elspais.cli import parse_args
 from elspais.commands.pdf_cmd import _check_tool
+from elspais.graph import GraphNode, NodeKind
+from elspais.graph.builder import TraceGraph
+from elspais.graph.federated import FederatedGraph, RepoEntry
 
 
 class TestPdfCommandRegistration:
@@ -124,3 +127,116 @@ class TestOverviewArgs:
         """The --max-depth flag defaults to None."""
         args = parse_args(["pdf"])
         assert args.max_depth is None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers for the resource-path test class below
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _make_graph_with_req(repo_root: Path, node_id: str) -> TraceGraph:
+    """Build a minimal TraceGraph with a single requirement node."""
+    g = TraceGraph(repo_root=repo_root)
+    node = GraphNode(id=node_id, kind=NodeKind.REQUIREMENT, label="T")
+    node._content = {"level": "PRD", "status": "Active", "hash": "deadbeef"}
+    g._roots = [node]
+    g._index = {node_id: node}
+    return g
+
+
+class TestResourcePathsCallSite:
+    """Validates REQ-p00080-C: pdf command forwards every repo's root and
+    spec/ directory to render_pdf via resource_paths, de-duplicated.
+    """
+
+    def test_REQ_p00080_C_single_repo_forwards_root_and_spec(self, tmp_path):
+        """A federation-of-one yields exactly two resource paths: the repo
+        root and <repo_root>/spec, both fully resolved.
+        """
+        from elspais.commands import pdf_cmd
+
+        repo_root = tmp_path / "solo"
+        repo_root.mkdir()
+        (repo_root / "spec").mkdir()
+
+        graph = _make_graph_with_req(repo_root, "REQ-p00001")
+        fed = FederatedGraph.from_single(graph, config={}, repo_root=repo_root)
+
+        captured = {}
+
+        def fake_render_pdf(markdown, **kwargs):
+            captured["kwargs"] = kwargs
+            return 0
+
+        args = parse_args(["pdf"])
+
+        with (
+            patch("elspais.commands.pdf_cmd._check_tool", return_value="/usr/bin/x"),
+            patch("elspais.graph.factory.build_graph", return_value=fed),
+            patch("elspais.pdf.assembler.MarkdownAssembler") as MockAsm,
+            patch("elspais.pdf.renderer.render_pdf", side_effect=fake_render_pdf),
+        ):
+            MockAsm.return_value.assemble.return_value = "# fake"
+            rc = pdf_cmd.run(args)
+
+        assert rc == 0
+        rp = captured["kwargs"]["resource_paths"]
+        assert isinstance(rp, list)
+        assert all(isinstance(p, Path) for p in rp)
+        expected_root = repo_root.resolve()
+        expected_spec = (repo_root / "spec").resolve()
+        assert expected_root in rp
+        assert expected_spec in rp
+        # No duplicates.
+        assert len(rp) == len(set(rp))
+        # Exactly the two expected entries for a single-repo federation.
+        assert set(rp) == {expected_root, expected_spec}
+
+    def test_REQ_p00080_C_multi_repo_forwards_all_repos_dedup(self, tmp_path):
+        """Each repo in a multi-repo federation contributes its repo_root
+        and <repo_root>/spec. Duplicates (across or within repos) are
+        collapsed.
+        """
+        from elspais.commands import pdf_cmd
+
+        root_dir = tmp_path / "root"
+        assoc_dir = tmp_path / "assoc"
+        (root_dir / "spec").mkdir(parents=True)
+        (assoc_dir / "spec").mkdir(parents=True)
+
+        root_graph = _make_graph_with_req(root_dir, "REQ-p00001")
+        assoc_graph = _make_graph_with_req(assoc_dir, "REQ-a00001")
+
+        root_entry = RepoEntry(name="root", graph=root_graph, config={}, repo_root=root_dir)
+        assoc_entry = RepoEntry(name="assoc", graph=assoc_graph, config={}, repo_root=assoc_dir)
+        fed = FederatedGraph([root_entry, assoc_entry], root_repo="root")
+
+        captured = {}
+
+        def fake_render_pdf(markdown, **kwargs):
+            captured["kwargs"] = kwargs
+            return 0
+
+        args = parse_args(["pdf"])
+
+        with (
+            patch("elspais.commands.pdf_cmd._check_tool", return_value="/usr/bin/x"),
+            patch("elspais.graph.factory.build_graph", return_value=fed),
+            patch("elspais.pdf.assembler.MarkdownAssembler") as MockAsm,
+            patch("elspais.pdf.renderer.render_pdf", side_effect=fake_render_pdf),
+        ):
+            MockAsm.return_value.assemble.return_value = "# fake"
+            rc = pdf_cmd.run(args)
+
+        assert rc == 0
+        rp = captured["kwargs"]["resource_paths"]
+        expected = {
+            root_dir.resolve(),
+            (root_dir / "spec").resolve(),
+            assoc_dir.resolve(),
+            (assoc_dir / "spec").resolve(),
+        }
+        assert set(rp) == expected
+        # No duplicates and ordering preserved (root pair before assoc pair).
+        assert len(rp) == len(set(rp))
+        assert rp.index(root_dir.resolve()) < rp.index(assoc_dir.resolve())

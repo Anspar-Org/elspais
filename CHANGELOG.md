@@ -6,6 +6,7 @@ All notable changes to elspais will be documented in this file.
 
 ### Fixed
 
+- **PDF relative image paths** — `elspais pdf` now passes `--resource-path` to pandoc with every federated repo's root and `spec/` directory (de-duplicated). Pandoc previously resolved relative image references against the temporary assembled-markdown file's directory in `/tmp/`, silently dropping every non-mermaid image (e.g. `![alt](../docs/images/foo.png)`). Mermaid images were unaffected because the assembler already rewrites those to absolute paths.
 - **Viewer file-content cross-repo resolution** (CUR-1357) — `/api/file-content` now accepts an optional `node_id` query parameter and uses `FederatedGraph.repo_root_for(node_id)` to resolve files against the owning associate's repo root, fixing "Failed to load file" for any card whose source lives outside the federation root. JS callers in `_file-viewer.js.j2` and `_card-stack.js.j2` thread the node id through `showSource()`. Path-only callers (the `vscode://` intercept and term-reference links) fall back to `state.repo_root` unchanged, preserving prior behaviour for root-repo paths. Security guard (`state.allowed_roots`) is unaffected.
 
 ### Changed
