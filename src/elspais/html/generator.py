@@ -525,9 +525,10 @@ class HTMLGenerator:
         visited_at_depth: dict[tuple[str, int, str | None], bool] = {}
         visited_node_ids: set[str] = set()  # Track all rendered node IDs
 
-        level_prefixes = tuple(
-            f"{k.lower()}-" for k in (self.config.get("levels") or {}).keys()
-        ) or ("prd-", "ops-", "dev-")
+        from elspais.config import default_level_keys
+
+        _level_keys = list((self.config.get("levels") or {}).keys()) or default_level_keys()
+        level_prefixes = tuple(f"{k.lower()}-" for k in _level_keys)
 
         def get_topic(node: GraphNode) -> str:
             """Extract topic from file path."""

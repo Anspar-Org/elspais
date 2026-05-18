@@ -507,7 +507,7 @@ class TestOverviewMode:
         asm = MarkdownAssembler(graph, overview=True)
         output = asm.assemble()
         assert "# Product Requirements" in output
-        assert "# Operational Requirements" not in output
+        assert "# Operations Requirements" not in output
         assert "# Development Requirements" not in output
 
     def test_REQ_p00080_F_includes_associated_prd(self, tmp_path):
@@ -582,5 +582,5 @@ class TestOverviewMode:
         asm = MarkdownAssembler(graph)
         output = asm.assemble()
         assert "# Product Requirements" in output
-        assert "# Operational Requirements" in output
+        assert "# Operations Requirements" in output
         assert "# Development Requirements" in output

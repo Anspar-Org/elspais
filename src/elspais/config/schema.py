@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -160,6 +160,20 @@ class FormatConfig(_StrictModel):
     )
     no_assertions_severity: str = "warning"
     no_traceability_severity: str = "warning"
+
+    @field_validator("status_roles")
+    @classmethod
+    def _v_status_role_values(cls, v: dict[str, Any]) -> dict[str, Any]:
+        # Each status name listed here ends up as a key in `.status-badge.{name}`
+        # CSS selectors, JS string literals, and `data-key` attributes — same
+        # identifier shape as namespaces / level keys.
+        for _role, names in (v or {}).items():
+            if isinstance(names, list):
+                for name in names:
+                    _validate_namespace(name)
+            elif isinstance(names, str):
+                _validate_namespace(names)
+        return v
 
 
 class CoverageSeverityConfig(_StrictModel):
@@ -412,6 +426,27 @@ class ElspaisConfig(_StrictModel):
     associates: dict[str, AssociateEntryConfig] = Field(default_factory=dict)
     statuses: dict[str, StatusConfig] = Field(default_factory=dict)
     stats: str = Field(default="", description="File path for MCP tool usage statistics")
+
+    @field_validator("levels")
+    @classmethod
+    def _v_level_keys(cls, v: dict[str, Any]) -> dict[str, Any]:
+        # Level keys are interpolated into CSS attribute selectors, CSS class
+        # names, and single-quoted JS string literals inside HTML attributes.
+        # Restrict them to the same identifier shape as namespaces.
+        for key in v or {}:
+            _validate_namespace(key)
+        return v
+
+    @field_validator("statuses")
+    @classmethod
+    def _v_status_keys(cls, v: dict[str, Any]) -> dict[str, Any]:
+        # Status keys flow into `.status-badge.{key|lower}` CSS class selectors,
+        # JS string literals, and `data-key` attributes. Same identifier shape
+        # as namespaces / levels.
+        for key in v or {}:
+            _validate_namespace(key)
+        return v
+
     cli_ttl: int = Field(
         default=30,
         description="CLI daemon TTL in minutes (>0=auto-start, 0=disabled, <0=no timeout)",

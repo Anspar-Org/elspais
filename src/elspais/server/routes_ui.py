@@ -67,7 +67,7 @@ def build_levels(typed) -> list[dict[str, Any]]:
                 "key": key,
                 "label": level_cfg.display_name or key,
                 "rank": level_cfg.rank,
-                "letter": level_cfg.letter or key[0],
+                "letter": level_cfg.letter,
                 "bg": rc.bg,
                 "text": rc.text,
             }
@@ -139,17 +139,31 @@ def build_statuses(typed, candidates: list[str] | None = None) -> list[dict[str,
     role-sorted list of statuses actually used in the graph). Otherwise the
     list is derived from the ``status_roles`` union, sorted by key.
     """
+    import logging
+
     from elspais.utilities.color import resolve_color
 
+    # Union of status names declared in [rules.format.status_roles].
+    role_names: set[str] = set()
+    for statuses_list in typed.rules.format.status_roles.values():
+        if isinstance(statuses_list, list):
+            role_names.update(statuses_list)
+        elif isinstance(statuses_list, str):
+            role_names.add(statuses_list)
+
+    # Warn (once per build) about [statuses.<key>] entries naming a status
+    # that isn't present in any role. Catches typos like [statuses.Activ].
+    log = logging.getLogger(__name__)
+    for cfg_key in typed.statuses:
+        if cfg_key not in role_names:
+            log.warning(
+                "[statuses.%s] is not present in any [rules.format.status_roles] "
+                "list; the entry will have no effect (check for a typo)",
+                cfg_key,
+            )
+
     if candidates is None:
-        seen: dict[str, None] = {}
-        for statuses in typed.rules.format.status_roles.values():
-            if isinstance(statuses, list):
-                for s in statuses:
-                    seen[s] = None
-            elif isinstance(statuses, str):
-                seen[statuses] = None
-        candidates = sorted(seen.keys())
+        candidates = sorted(role_names)
 
     items: list[dict[str, Any]] = []
     for key in candidates:

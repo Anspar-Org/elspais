@@ -467,20 +467,29 @@ async def api_tree_data(request: Request) -> JSONResponse:
         _typed_cfg = ElspaisConfig.model_validate({})
     ns_catalog: dict[str, dict] = {n["code"]: n for n in build_namespaces(_typed_cfg)}
 
-    _resolver_cache: dict[int, Any] = {}
+    # Cache resolvers per repo. Keyed by namespace string (stable across the
+    # request) rather than `id(cfg)` (object ids can be reused by Python after
+    # GC, which would alias resolvers across distinct configs in long-running
+    # servers).
+    _LOCAL_KEY = "__local__"
+    _resolver_cache: dict[str, Any] = {}
 
     def _resolver_for(node):
         try:
             entry = g.repo_for(node.id)
-        except (KeyError, AttributeError):
+        except Exception:  # noqa: BLE001 - fail-soft per row, never break /api/tree-data
             entry = None
-        cfg = entry.config if (entry and entry.config) else state.config
-        cache_key = id(cfg)
+        if entry is not None and entry.config is not None:
+            cfg = entry.config
+            cache_key = (cfg.get("project") or {}).get("namespace") or _LOCAL_KEY
+        else:
+            cfg = state.config
+            cache_key = _LOCAL_KEY
         if cache_key in _resolver_cache:
             return _resolver_cache[cache_key]
         try:
             r = build_resolver(cfg)
-        except Exception:
+        except Exception:  # noqa: BLE001 - degrade to full-id component
             r = None
         _resolver_cache[cache_key] = r
         return r
@@ -515,11 +524,13 @@ async def api_tree_data(request: Request) -> JSONResponse:
 
     def _repo_namespace(node) -> str | None:
         """Resolve the node's owning-repo namespace via the federated graph.
-        Returns None if the graph isn't federated or the lookup fails.
+        Returns None if the graph isn't federated or the lookup fails. Catches
+        any exception so a single problematic node can't break the whole
+        /api/tree-data response.
         """
         try:
             entry = g.repo_for(node.id)
-        except (KeyError, AttributeError):
+        except Exception:  # noqa: BLE001 - fail-soft per row
             return None
         if entry is None or entry.config is None:
             return None

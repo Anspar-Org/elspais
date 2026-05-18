@@ -17,17 +17,6 @@ from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.utilities.patterns import IdResolver, build_resolver
 
-# Default level display names and sort order. Used when no config is passed
-# to MarkdownAssembler (keeps test fixtures working). Per-project levels are
-# resolved at assembler construction time from `[levels]` config.
-_DEFAULT_LEVEL_ORDER = {"PRD": 0, "OPS": 1, "DEV": 2}
-_DEFAULT_LEVEL_HEADINGS = {
-    "PRD": "Product Requirements",
-    "OPS": "Operational Requirements",
-    "DEV": "Development Requirements",
-}
-_DEFAULT_LEVEL_PREFIX_PATTERN = re.compile(r"^(?:prd|ops|dev|\d+)-?", re.IGNORECASE)
-
 
 def _build_level_metadata(
     config: dict | None,
@@ -37,21 +26,16 @@ def _build_level_metadata(
     Order: uppercase level key -> rank.
     Headings: uppercase level key -> display_name + " Requirements" fallback.
     prefix_re: regex matching `<level_key>-` or numeric prefix at filename start.
-    """
-    if not config:
-        return (
-            dict(_DEFAULT_LEVEL_ORDER),
-            dict(_DEFAULT_LEVEL_HEADINGS),
-            _DEFAULT_LEVEL_PREFIX_PATTERN,
-        )
 
-    levels_cfg = config.get("levels") or {}
+    Falls back to the schema's default `[levels]` block (via
+    `elspais.config.config_defaults()`) when no config is passed, so the
+    fallback table is the single source of truth from the pydantic schema.
+    """
+    from elspais.config import config_defaults
+
+    levels_cfg = (config or {}).get("levels") if config else None
     if not isinstance(levels_cfg, dict) or not levels_cfg:
-        return (
-            dict(_DEFAULT_LEVEL_ORDER),
-            dict(_DEFAULT_LEVEL_HEADINGS),
-            _DEFAULT_LEVEL_PREFIX_PATTERN,
-        )
+        levels_cfg = config_defaults().get("levels") or {}
 
     order: dict[str, int] = {}
     headings: dict[str, str] = {}
@@ -65,12 +49,10 @@ def _build_level_metadata(
         display = (entry or {}).get("display_name") if isinstance(entry, dict) else None
         headings[upper] = f"{display or key.title()} Requirements"
         keys.append(re.escape(key.lower()))
-    if not order:
-        return (
-            dict(_DEFAULT_LEVEL_ORDER),
-            dict(_DEFAULT_LEVEL_HEADINGS),
-            _DEFAULT_LEVEL_PREFIX_PATTERN,
-        )
+
+    if not keys:
+        # Final defensive fallback: numeric prefixes only.
+        return order, headings, re.compile(r"^\d+-?", re.IGNORECASE)
 
     alt = "|".join(keys)
     prefix_re = re.compile(rf"^(?:{alt}|\d+)-?", re.IGNORECASE)
