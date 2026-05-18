@@ -4,6 +4,10 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Pipe-table rendering in the viewer** — markdown pipe tables in requirement bodies, journey context, and the file-viewer's "rendered" mode now render as full-grid HTML tables with a thin 1px border on every cell (internal and external). New JS partial `_md-table.js.j2` provides `extractMdTables(lines, cellTransform)` and `reinsertMdTables(output, chunks)`; `simpleMarkdown` and `fvRenderMarkdown` extract tables before their per-line pipelines run, term-annotate cell content per-cell, and reinsert the rendered table HTML so the global term-annotation pass doesn't touch table markup. Styles live in a new `_md-tables.css.j2` partial with dark-theme variants.
+
 ### Fixed
 
 - **PDF cross-repo content rendering** — `elspais pdf` now embeds requirement bodies from associate repos instead of only referencing them. `MarkdownAssembler` threads each file's owning-repo root through `_render_file`, `_resolve_path`, `_resolve_mermaid_images`, and `_topics_from_file` so paths resolve against the associate's filesystem when known, with an `iter_repos()` fallback for callers without ownership context. The Topic Index now prefixes cross-repo entries with `[<repo_name>]` (e.g. `[callisto] [REQ-p00099](#REQ-p00099)`); root-repo entries render unchanged. Legacy callers that pass a bare `TraceGraph` retain prior single-repo behaviour via `getattr`-guarded federation lookups.

@@ -208,7 +208,23 @@ function setFileViewMode(mode) {
 // =====================================================================
 
 function fvRenderMarkdown(text) {
-    var html = text
+    // Extract pipe tables first so the per-line regex pipeline doesn't
+    // mangle them. The cellTransform here escapes and applies inline
+    // emphasis so cell content renders consistently with non-table text.
+    var cellTransform = function(cellText) {
+        return cellText
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.+?)\*/g, '<em>$1</em>')
+            .replace(/`([^`]+)`/g, '<code>$1</code>');
+    };
+    var extracted = extractMdTables(text.split('\n'), cellTransform);
+    var pipelineText = extracted.lines.join('\n');
+
+    var html = pipelineText
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
@@ -224,7 +240,7 @@ function fvRenderMarkdown(text) {
         .replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>')
         .replace(/\n\n/g, '</p><p>')
         .replace(/\n/g, '<br>');
-    return '<p>' + html + '</p>';
+    return '<p>' + reinsertMdTables(html, extracted.chunks) + '</p>';
 }
 
 // =====================================================================

@@ -1,0 +1,38 @@
+/* Partial: _md-tables.css.j2 — pipe-table rendering in viewer
+ * Full-grid thin borders (internal + external) on every cell.
+ */
+
+.md-table-wrap {
+    overflow-x: auto;
+    margin: 0.5rem 0;
+}
+
+.md-table {
+    border-collapse: collapse;
+    width: auto;
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+.md-table th,
+.md-table td {
+    border: 1px solid #ced4da;
+    padding: 4px 8px;
+    vertical-align: top;
+    text-align: left;
+}
+
+.md-table thead th {
+    background: #f8f9fa;
+    font-weight: 600;
+}
+
+/* Dark theme: keep grid visible against dark background. */
+html.theme-dark .md-table th,
+html.theme-dark .md-table td {
+    border-color: #495057;
+}
+
+html.theme-dark .md-table thead th {
+    background: #2b3035;
+}

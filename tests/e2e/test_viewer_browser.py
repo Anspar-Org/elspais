@@ -194,3 +194,151 @@ class TestViewerInteraction:
         # Check that some detail content appeared (panel, modal, or new content)
         body_text = page.text_content("body") or ""
         assert len(body_text.strip()) > 100, "Expected detail content after clicking a requirement"
+
+
+# ---------------------------------------------------------------------------
+# Pipe-table rendering fixture + browser test
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def viewer_url_tables(tmp_path_factory):
+    """Start an elspais viewer server against the viewer-tables fixture.
+
+    Copies tests/fixtures/viewer-tables/ to a tmp dir and runs git init
+    so the viewer treats it as a standalone project (its own daemon,
+    own .elspais.toml). Yields the base URL.
+    """
+    elspais_bin = shutil.which("elspais")
+    if elspais_bin is None:
+        pytest.skip("elspais CLI not found on PATH")
+
+    src = REPO_ROOT / "tests" / "fixtures" / "viewer-tables"
+    if not src.exists():
+        pytest.skip(f"viewer-tables fixture not present at {src}")
+
+    dest = tmp_path_factory.mktemp("viewer-tables-run")
+    # Copy fixture contents (not the dir itself) into dest.
+    for item in src.iterdir():
+        if item.is_dir():
+            shutil.copytree(item, dest / item.name)
+        else:
+            shutil.copy2(item, dest / item.name)
+
+    # git init so the viewer's repo-root detection settles on `dest`.
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "test",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "test",
+        "GIT_COMMITTER_EMAIL": "t@t",
+    }
+    subprocess.run(["git", "init"], cwd=dest, capture_output=True, env=env)
+    subprocess.run(["git", "add", "."], cwd=dest, capture_output=True, env=env)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=dest, capture_output=True, env=env)
+
+    port = _find_free_port()
+    base_url = f"http://127.0.0.1:{port}"
+
+    proc = subprocess.Popen(
+        [elspais_bin, "viewer", "--server", "--port", str(port), "--path", str(dest)],
+        cwd=str(dest),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+
+    try:
+        _wait_for_server(base_url)
+        yield base_url
+    finally:
+        # Graceful shutdown via API
+        try:
+            import urllib.request
+
+            req = urllib.request.Request(f"{base_url}/api/shutdown", method="POST")
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            pass
+
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                proc.wait(timeout=5)
+
+
+@pytest.fixture()
+def page_tables(viewer_url_tables):
+    """Launch headless Chromium against the tables-fixture viewer."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context()
+        pg = context.new_page()
+        pg.set_default_timeout(10_000)
+        yield pg
+        browser.close()
+
+
+class TestTableRendering:
+    """Validates REQ-d00010: pipe tables in spec body sections render as
+    HTML tables with a full grid in the live viewer."""
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00010_table_renders_with_full_grid(self, page_tables, viewer_url_tables):
+        """Open REQ-p00001 in the viewer; assert the rendered card contains
+        a <table class="md-table"> with the expected headers, the expected
+        first body cell, and a 1px border on all four sides of a <td>."""
+        page_tables.goto(viewer_url_tables, wait_until="networkidle")
+
+        # Body sections (where the pipe table lives) are only rendered
+        # when cardViewMode === 'complete'. Force that mode before opening
+        # the card so the Rationale section — which contains the table —
+        # gets rendered.
+        page_tables.evaluate("() => { editState.cardViewMode = 'complete'; }")
+
+        # Drive the viewer JS directly: openCard(nodeId) is exposed globally
+        # by _card-stack.js.j2 and is the canonical entry point used by the
+        # nav tree, hash router, etc.
+        page_tables.evaluate("() => window.openCard('REQ-p00001')")
+
+        # Wait for the rendered table to appear in the card stack.
+        table_locator = page_tables.locator("#card-stack-body table.md-table").first
+        table_locator.wait_for(state="visible", timeout=10_000)
+
+        # Headers
+        ths = page_tables.locator("#card-stack-body table.md-table thead th")
+        assert ths.count() == 3, f"Expected 3 <th> cells, got {ths.count()}"
+        assert ths.nth(0).inner_text().strip() == "Column A"
+        assert ths.nth(1).inner_text().strip() == "Column B"
+        assert ths.nth(2).inner_text().strip() == "Column C"
+
+        # First body row, first cell
+        tds = page_tables.locator("#card-stack-body table.md-table tbody tr").first.locator("td")
+        assert tds.count() >= 1, "Expected at least one <td> in first body row"
+        assert tds.first.inner_text().strip() == "a1"
+
+        # Border on all four sides of a <td> must compute to 1px.
+        border_widths = page_tables.evaluate(
+            """() => {
+                const td = document.querySelector(
+                    '#card-stack-body table.md-table tbody td'
+                );
+                if (!td) return null;
+                const cs = getComputedStyle(td);
+                return {
+                    top: cs.borderTopWidth,
+                    right: cs.borderRightWidth,
+                    bottom: cs.borderBottomWidth,
+                    left: cs.borderLeftWidth,
+                };
+            }"""
+        )
+        assert border_widths is not None, "No <td> found for border width check"
+        for side, width in border_widths.items():
+            assert width == "1px", f"Expected 1px border on {side} side of <td>, got {width!r}"
