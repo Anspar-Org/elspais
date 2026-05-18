@@ -2101,8 +2101,17 @@ function buildTermCardHtml(cardId, data, collapsed) {
     html += '<div class="card-section"><div class="card-section-label">Source</div>';
     html += '<div class="card-meta">';
     if (data.defined_in) {
+        // `defined_in` holds the FILE node id (e.g. `file:spec/glossary.md`).
+        // Strip the `file:` prefix for the path passed to showSource so it
+        // resolves against the federation; pass the full node id as the
+        // optional node_id so the server can route through repo_root_for
+        // when the term originates from an associate repo.
+        var definedInPath = data.defined_in.replace(/^file:/, '');
+        var definedLine = data.defined_line || 1;
         html += '<div class="card-meta-item"><span class="card-meta-key">Defined in:</span>';
-        html += '<a class="card-meta-value" href="#" onclick="event.preventDefault(); openCard(\'' + escapeAttr(data.defined_in) + '\')">' + escapeHtml(data.defined_in) + '</a>';
+        html += '<a class="card-meta-value" href="#" onclick="event.preventDefault(); showSource(\'' +
+            escapeAttr(definedInPath) + '\', ' + definedLine + ', \'' +
+            escapeAttr(data.defined_in) + '\')">' + escapeHtml(definedInPath) + '</a>';
         html += '</div>';
     }
     if (data.namespace) {
