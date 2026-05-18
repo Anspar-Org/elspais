@@ -362,6 +362,35 @@ def _extract_file_comments(file_node) -> list[tuple[str, int]] | None:  # noqa: 
 _CODE_SPAN_RE = re.compile(r"`[^`]+`")
 
 
+_EMPHASIS_SPAN_PATTERNS: tuple[re.Pattern[str], ...] = (
+    # ``**...**`` and ``__...__`` — strong emphasis (bold). Non-greedy
+    # so adjacent bold phrases on the same line don't fuse into one span.
+    re.compile(r"\*\*[^\n]+?\*\*"),
+    re.compile(r"__[^\n]+?__"),
+    # ``*...*`` and ``_..._`` — light emphasis (italic). Lookarounds
+    # require the delimiter not to be adjacent to another of the same
+    # kind, so the strong-emphasis spans aren't matched again as
+    # italics.
+    re.compile(r"(?<!\*)\*(?!\*)[^\n*]+?(?<!\*)\*(?!\*)"),
+    re.compile(r"(?<!_)_(?!_)[^\n_]+?(?<!_)_(?!_)"),
+)
+
+
+def _find_emphasis_spans(text: str) -> list[tuple[int, int]]:
+    """Return ``(start, end)`` ranges of every emphasis span in *text*.
+
+    Used by ``_canonicalize_text`` to prevent the auto-marker from
+    wrapping a term occurrence that's already inside a larger bold or
+    italic phrase. Without this guard ``**Diary Start Day**`` with
+    defined term ``Diary`` becomes ``****Diary** Start Day**``,
+    which pandoc renders as literal asterisks.
+    """
+    spans: list[tuple[int, int]] = []
+    for pat in _EMPHASIS_SPAN_PATTERNS:
+        spans.extend((m.start(), m.end()) for m in pat.finditer(text))
+    return spans
+
+
 def _canonicalize_text(
     text: str, td: TermDictionary, markup_style: str, styles_set: set[str]
 ) -> tuple[str, list[tuple[str, str]]]:
@@ -375,6 +404,19 @@ def _canonicalize_text(
 
     def _in_code_span(start: int, end: int) -> bool:
         return any(ps <= start and end <= pe for ps, pe in protected)
+
+    # Spans of existing emphasis. Refreshed every time *text* mutates so
+    # later term iterations see up-to-date span ranges.
+    emphasis_spans: list[tuple[int, int]] = _find_emphasis_spans(text)
+
+    def _in_outer_emphasis(start: int, end: int) -> bool:
+        """True when [start, end) is strictly inside some emphasis span
+        larger than the match itself — i.e. the match isn't the bold
+        phrase, it's inside one."""
+        for s, e in emphasis_spans:
+            if s < start and end < e:
+                return True
+        return False
 
     # Track spans already claimed by emphasis matches
     claimed: list[tuple[int, int]] = []
@@ -416,10 +458,14 @@ def _canonicalize_text(
             if new_text:
                 new_text.append(text[last_end:])
                 text = "".join(new_text)
-                # Recompute protected spans after text mutation
+                # Recompute protected and emphasis spans after text mutation
                 protected = [(m.start(), m.end()) for m in _CODE_SPAN_RE.finditer(text)]
+                emphasis_spans = _find_emphasis_spans(text)
 
-        # Phase 2: fix unmarked occurrences (skip claimed and code spans)
+        # Phase 2: fix unmarked occurrences (skip claimed, code spans,
+        # and matches that sit inside a larger emphasis span — wrapping
+        # a term that's already inside **...** would emit garbage like
+        # ``****term** ...**``).
         word_pat = re.compile(r"\b" + re.escape(term) + r"\b", re.IGNORECASE)
         new_text = []
         last_end = 0
@@ -427,6 +473,8 @@ def _canonicalize_text(
             if _in_code_span(m.start(), m.end()):
                 continue
             if any(not (m.end() <= cs or m.start() >= ce) for cs, ce in claimed):
+                continue
+            if _in_outer_emphasis(m.start(), m.end()):
                 continue
             old_form = m.group(0)
             new_text.append(text[last_end : m.start()])
@@ -438,6 +486,7 @@ def _canonicalize_text(
             new_text.append(text[last_end:])
             text = "".join(new_text)
             protected = [(m.start(), m.end()) for m in _CODE_SPAN_RE.finditer(text)]
+            emphasis_spans = _find_emphasis_spans(text)
 
     return text, replacements
 
