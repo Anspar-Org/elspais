@@ -591,13 +591,16 @@ implements = ["dev", "ops", "prd"]
         consumers that know the owning RepoEntry name can pass it to
         force strict resolution against that repo's root.
         """
-        client, _state, _core_root, _assoc_root = federated_client
+        client, _state, _core_root, assoc_root = federated_client
         resp = client.get("/api/file-content?path=spec/assoc.md&repo_name=assoc")
         assert resp.status_code == 200, resp.text
         data = resp.json()
         # Body distinguishable from the core repo's spec/test.md.
         assert data["lines"][0].startswith("# REQ-p00099")
         assert any("distinguishable from root" in line for line in data["lines"])
+        # `abs_path` resolves to the associate's on-disk file so the
+        # file-viewer's `vscode://` link targets the right location.
+        assert data["abs_path"] == str((assoc_root / "spec" / "assoc.md").resolve())
 
     # Verifies: REQ-d00200-G
     def test_file_content_repo_name_overrides_node_id(self, federated_client):

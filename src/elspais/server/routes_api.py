@@ -825,6 +825,12 @@ async def api_file_content(request: Request) -> JSONResponse:
             "pending_mutation_count": len(affected_node_ids),
             "affected_nodes": sorted(affected_node_ids),
             "mtime": os.path.getmtime(abs_path),
+            # Absolute resolved path so the file viewer's `vscode://` link
+            # can target the actual on-disk file (including in associate
+            # repos) without re-deriving the path from a single
+            # `document.body.dataset.basePath`, which only knows the
+            # federation root.
+            "abs_path": str(abs_path),
         }
     )
 

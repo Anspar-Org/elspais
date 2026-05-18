@@ -86,9 +86,15 @@ async function showSource(filePath, lineNumber, nodeId, repoName) {
     // Language badge
     langEl.textContent = data.language || '';
 
-    // VS Code link
-    var basePath = document.body.dataset.basePath || '';
-    var absPath = basePath ? (basePath + '/' + filePath) : filePath;
+    // VS Code link — prefer the server's resolved absolute path so
+    // associate-repo files target the correct on-disk location. Falls
+    // back to `document.body.dataset.basePath` + relative path only when
+    // the server didn't supply an `abs_path` (older deployments).
+    var absPath = data.abs_path || '';
+    if (!absPath) {
+        var basePath = document.body.dataset.basePath || '';
+        absPath = basePath ? (basePath + '/' + filePath) : filePath;
+    }
     vscodeLink.href = 'vscode://file/' + absPath + ':' + (lineNumber || 1) + ':1';
     vscodeLink.style.display = '';
 
