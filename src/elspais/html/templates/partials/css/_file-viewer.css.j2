@@ -216,6 +216,35 @@
     background: var(--fv-line-num-bg);
 }
 
+/* Stacked gutter for multi-line rendered blocks (pipe tables, etc.) —
+ * the gutter cell holds one positioned line number per source line.
+ * Numbers are absolutely positioned post-render by `_alignTableGutter`
+ * so each aligns vertically with the rendered table row it sourced. */
+.line-num-stack {
+    display: table-cell;
+    width: 1px;
+    min-width: 40px;
+    padding: 0 12px 0 8px;
+    text-align: right;
+    color: var(--fv-line-num-text);
+    user-select: none;
+    white-space: nowrap;
+    vertical-align: top;
+    border-right: 1px solid var(--fv-line-num-border);
+    background: var(--fv-line-num-bg);
+    position: relative;
+}
+.line-num-stack .line-num {
+    display: block;
+    width: auto;
+    min-width: 0;
+    padding: 0;
+    border-right: none;
+    background: none;
+    position: absolute;
+    right: 12px;
+}
+
 .line-content {
     display: table-cell;
     padding: 0 12px;

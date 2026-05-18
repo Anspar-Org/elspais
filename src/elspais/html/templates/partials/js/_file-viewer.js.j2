@@ -106,18 +106,62 @@ function fvRenderContent(data, lineNumber) {
     var body = document.getElementById('fv-body');
 
     if (fvState.fileViewMode === 'rendered' && fvState.currentFile && fvState.currentFile.endsWith('.md')) {
-        // Rendered markdown view
+        // Rendered markdown view. Single-line content keeps the per-line
+        // gutter (one number + one rendered line). Multi-line constructs
+        // (pipe tables for now) are extracted as a block so the parser
+        // sees the header + separator + body together; their gutter
+        // becomes a stacked list of every source line covered, so the
+        // line-number column stays intact and scroll-to-line still works
+        // for every source line inside the block.
         var rawLines = data.lines || [];
-        var html = '<div class="source-lines">';
-        for (var i = 0; i < rawLines.length; i++) {
+        var htmlOut = '<div class="source-lines">';
+        var i = 0;
+        while (i < rawLines.length) {
+            if (
+                i + 1 < rawLines.length &&
+                _isMdTableLine(rawLines[i]) &&
+                !_isMdTableSeparator(rawLines[i]) &&
+                _isMdTableSeparator(rawLines[i + 1])
+            ) {
+                var j = i + 2;
+                while (
+                    j < rawLines.length &&
+                    _isMdTableLine(rawLines[j]) &&
+                    !_isMdTableSeparator(rawLines[j])
+                ) {
+                    j++;
+                }
+                var blockHtml = fvRenderMarkdown(rawLines.slice(i, j).join('\n'));
+                var gutter = '';
+                for (var k = i; k < j; k++) {
+                    gutter += '<span class="line-num" data-line="' + (k + 1) +
+                        '" id="fv-line-' + (k + 1) + '">' + (k + 1) + '</span>';
+                }
+                htmlOut += '<div class="source-line source-line-block" data-line="' +
+                    (i + 1) + '">' +
+                    '<span class="line-num-stack">' + gutter + '</span>' +
+                    '<div class="line-content rendered-line">' + blockHtml + '</div>' +
+                    '</div>';
+                i = j;
+                continue;
+            }
             var num = i + 1;
-            html += '<div class="source-line" data-line="' + num + '" id="fv-line-' + num + '">' +
+            htmlOut += '<div class="source-line" data-line="' + num +
+                '" id="fv-line-' + num + '">' +
                 '<span class="line-num">' + num + '</span>' +
-                '<div class="line-content rendered-line">' + fvRenderMarkdown(rawLines[i]) + '</div>' +
+                '<div class="line-content rendered-line">' +
+                fvRenderMarkdown(rawLines[i]) + '</div>' +
                 '</div>';
+            i++;
         }
-        html += '</div>';
-        body.innerHTML = html;
+        htmlOut += '</div>';
+        body.innerHTML = htmlOut;
+        // After layout, align each table block's gutter line numbers to
+        // the vertical position of the rendered row they sourced.
+        var blocks = body.querySelectorAll('.source-line-block');
+        for (var b = 0; b < blocks.length; b++) {
+            _alignTableGutter(blocks[b]);
+        }
         fvScrollAndFlash(body, lineNumber);
         return;
     }
@@ -206,6 +250,39 @@ function setFileViewMode(mode) {
 // =====================================================================
 // Markdown Renderer (simple inline)
 // =====================================================================
+
+function _alignTableGutter(block) {
+    // Source-line gutter for a rendered pipe table: header line → thead tr,
+    // separator line → between header and first body row, body lines → tbody
+    // tr in order. Each line-num span is positioned absolutely within the
+    // .line-num-stack cell so it aligns with its corresponding rendered row.
+    var stack = block.querySelector('.line-num-stack');
+    var tbl = block.querySelector('table.md-table');
+    if (!stack || !tbl) return;
+    var nums = stack.querySelectorAll('.line-num');
+    if (nums.length === 0) return;
+    var blockTop = block.getBoundingClientRect().top;
+    var headerRow = tbl.querySelector('thead tr');
+    // Exclude the visual separator row when listing data body rows so the
+    // first data line maps to the first data row, not the separator.
+    var bodyRows = tbl.querySelectorAll('tbody tr:not(.md-table-separator)');
+    var sepRow = tbl.querySelector('tr.md-table-separator');
+    function centerOf(row, num) {
+        var rowRect = row.getBoundingClientRect();
+        return (rowRect.top - blockTop) + (rowRect.height - num.offsetHeight) / 2;
+    }
+    var targets = new Array(nums.length);
+    if (headerRow) targets[0] = centerOf(headerRow, nums[0]);
+    if (nums.length >= 2 && sepRow) targets[1] = centerOf(sepRow, nums[1]);
+    for (var k = 0; k < bodyRows.length; k++) {
+        if (k + 2 < nums.length) targets[k + 2] = centerOf(bodyRows[k], nums[k + 2]);
+    }
+    for (var i = 0; i < nums.length; i++) {
+        if (typeof targets[i] === 'number') {
+            nums[i].style.top = targets[i] + 'px';
+        }
+    }
+}
 
 function fvRenderMarkdown(text) {
     // Extract pipe tables first so the per-line regex pipeline doesn't

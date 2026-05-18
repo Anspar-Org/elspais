@@ -318,16 +318,19 @@ class TestTableRendering:
         assert ths.nth(1).inner_text().strip() == "Column B"
         assert ths.nth(2).inner_text().strip() == "Column C"
 
-        # First body row, first cell
-        tds = page_tables.locator("#card-stack-body table.md-table tbody tr").first.locator("td")
-        assert tds.count() >= 1, "Expected at least one <td> in first body row"
+        # First data body row, first cell (skip the visual separator row
+        # emitted between <thead> and the data rows).
+        tds = page_tables.locator(
+            "#card-stack-body table.md-table tbody tr:not(.md-table-separator)"
+        ).first.locator("td")
+        assert tds.count() >= 1, "Expected at least one <td> in first data body row"
         assert tds.first.inner_text().strip() == "a1"
 
-        # Border on all four sides of a <td> must compute to 1px.
+        # Border on all four sides of a data <td> must compute to 1px.
         border_widths = page_tables.evaluate(
             """() => {
                 const td = document.querySelector(
-                    '#card-stack-body table.md-table tbody td'
+                    '#card-stack-body table.md-table tbody tr:not(.md-table-separator) td'
                 );
                 if (!td) return null;
                 const cs = getComputedStyle(td);

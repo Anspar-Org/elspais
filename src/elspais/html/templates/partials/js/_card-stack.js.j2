@@ -138,12 +138,19 @@ function renderCardStack() {
     // Re-apply cached coverage colors after DOM rebuild
     recolorCachedButtons();
 
-    // Re-apply edit mode state after DOM rebuild
-    if (editState.enabled) {
-        document.querySelectorAll('.card-assertion-text').forEach(function(el) {
+    // Re-apply edit mode state after DOM rebuild. In edit mode each
+    // assertion's body must show raw source (so textContent roundtrips
+    // through onAssertionBlur unchanged); in view mode it shows the
+    // markdown-rendered HTML produced by simpleMarkdown.
+    document.querySelectorAll('.card-assertion-text').forEach(function(el) {
+        var raw = el.dataset.original || '';
+        if (editState.enabled) {
             el.contentEditable = 'true';
-        });
-    }
+            el.innerHTML = escapeHtml(raw);
+        } else {
+            el.contentEditable = 'false';
+        }
+    });
 
     // Re-apply cached comment indicators after DOM rebuild
     editState.openCardOrder.forEach(function(nodeId) {
@@ -508,11 +515,19 @@ function buildAssertionHtml(nodeId, a, data) {
     h += '<div class="card-assertion-wrapper" data-assertion-id="' + assertionId + '" data-anchor="' + nodeId + '#' + label + '">';
     h += '<div class="card-assertion">';
     h += '<span class="card-assertion-label">' + label + '</span>';
+    // Assertion text — rendered through simpleMarkdown in view mode so
+    // pipe tables and inline bold render. In edit mode the span swaps to
+    // raw escaped text via _activateEditMode/_deactivateEditMode so the
+    // user types against the markdown source (textContent roundtrips
+    // back to the same source on blur).
+    var initialBody = editState.enabled
+        ? escapeHtml(text)
+        : simpleMarkdown(text, true);
     h += '<span class="card-assertion-text editable-field" ' +
         'contenteditable="false" data-assertion-id="' + assertionId + '" ' +
         'data-field="assertion" data-original="' + escapeAttr(text) + '" ' +
         'onblur="onAssertionBlur(this)" onkeydown="onEditableKeydown(event)">' +
-        escapeHtml(text) + '</span>';
+        initialBody + '</span>';
     // 6 dimension badges — only shown when direct assertion-level links exist
     h += '<span class="assertion-badges-area">';
     var badgeMode = editState.assertionBadgeMode || 'abbrev';

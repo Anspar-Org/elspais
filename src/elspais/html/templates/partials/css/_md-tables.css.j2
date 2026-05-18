@@ -27,6 +27,21 @@
     font-weight: 600;
 }
 
+/* Thin separator row — visual analogue of the `| --- |` markdown line,
+ * also serves as the alignment target for the gutter's separator line
+ * number in the file viewer's rendered mode. Height matches the gutter
+ * number's line-height so the centered line-num doesn't bleed into the
+ * adjacent rows. */
+.md-table .md-table-separator td {
+    padding: 0;
+    height: 1.4em;
+    background: #e9ecef;
+}
+
+html.theme-dark .md-table .md-table-separator td {
+    background: #343a40;
+}
+
 /* Dark theme: keep grid visible against dark background. */
 html.theme-dark .md-table th,
 html.theme-dark .md-table td {

@@ -127,8 +127,12 @@ function _activateEditMode() {
     editState.enabled = true;
     document.body.classList.add('edit-mode');
     document.getElementById('edit-toggle').classList.add('active');
+    // Swap each assertion span from rendered markdown to raw escaped
+    // source so the user edits the markdown directly. onAssertionBlur
+    // reads `el.textContent` which roundtrips back to the same source.
     document.querySelectorAll('.card-assertion-text').forEach(function(el) {
         el.contentEditable = 'true';
+        el.innerHTML = escapeHtml(el.dataset.original || '');
     });
     // Show comment mode button
     var commentBtn = document.getElementById('btn-comment-mode');
@@ -140,8 +144,12 @@ function _deactivateEditMode() {
     editState.enabled = false;
     document.body.classList.remove('edit-mode');
     document.getElementById('edit-toggle').classList.remove('active');
+    // Re-render each assertion's text through simpleMarkdown so pipe
+    // tables and bold appear in view mode. data-original holds the
+    // canonical raw source — last write wins via onAssertionBlur.
     document.querySelectorAll('.card-assertion-text').forEach(function(el) {
         el.contentEditable = 'false';
+        el.innerHTML = simpleMarkdown(el.dataset.original || '', true);
     });
     // Hide comment mode button and exit comment mode if active
     var commentBtn = document.getElementById('btn-comment-mode');
