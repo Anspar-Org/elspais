@@ -95,6 +95,7 @@ def generate_glossary(td: TermDictionary, format: str = "markdown") -> str:
             source_note = f" ({entry.reference_source})" if entry.reference_source else ""
             lines.append(f"*Reference Term: {entry.reference_term}{source_note}*")
         lines.append(f"*Defined in: {entry.defined_in} ({entry.namespace})*")
+        lines.append("")
 
     # References section
     if references:
