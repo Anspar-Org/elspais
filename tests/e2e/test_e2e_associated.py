@@ -457,7 +457,6 @@ class TestFileContentCrossRepo:
         """GET /api/file-content?path=spec/prd-assoc.md&node_id=REQ-p00099
         returns the on-disk content of the associate's source file."""
         import json
-        import urllib.error
         import urllib.request
 
         from elspais.mcp.daemon import ensure_daemon, get_daemon_info

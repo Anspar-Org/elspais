@@ -7,6 +7,9 @@
 
 var fvState = {
     currentFile: null,
+    currentNodeId: null,      // persists the optional node_id from showSource
+                              // so refresh paths route through the same
+                              // associate repo on re-fetch.
     fileViewMode: 'source',  // 'source' or 'rendered'
     lastData: null            // cached API response for re-rendering
 };
@@ -26,6 +29,7 @@ async function showSource(filePath, lineNumber, nodeId) {
     var body = document.getElementById('fv-body');
 
     fvState.currentFile = filePath;
+    fvState.currentNodeId = nodeId || null;
     var fileName = filePath.split('/').pop();
     var isMarkdown = fileName.endsWith('.md');
 
@@ -334,13 +338,16 @@ function fvRenderMarkdown(text) {
 function refreshFileViewer() {
     var panel = document.getElementById('file-viewer-panel');
     if (!panel || !panel.classList.contains('open')) return;
-    if (fvState.currentFile) { showSource(fvState.currentFile); }
+    if (fvState.currentFile) {
+        showSource(fvState.currentFile, null, fvState.currentNodeId);
+    }
 }
 
 function closeFileViewer() {
     document.getElementById('file-viewer-panel').classList.remove('open');
     document.getElementById('divider-right').style.display = 'none';
     fvState.currentFile = null;
+    fvState.currentNodeId = null;
     fvState.lastData = null;
 }
 
