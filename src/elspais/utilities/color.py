@@ -14,9 +14,6 @@ import re
 from dataclasses import dataclass
 
 HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
-# Backward-compatible alias for the private name; external consumers should
-# import HEX_COLOR_RE instead.
-_HEX_RE = HEX_COLOR_RE
 
 
 def validate_hex_color(value: str | None) -> str | None:
@@ -56,7 +53,7 @@ def resolve_color(key: str, configured: str | None = None) -> ResolvedColor:
     Otherwise, a deterministic HSL color is derived from sha256(key).
     """
     if configured is not None:
-        if not _HEX_RE.match(configured):
+        if not HEX_COLOR_RE.match(configured):
             raise ValueError(
                 f'configured color must be a 6-digit hex string like "#1b3a5c"; got {configured!r}'
             )
@@ -88,7 +85,7 @@ def hex_with_alpha(bg_hex: str, alpha: float) -> str:
     Useful for deriving translucent overlays (e.g. namespace background tints)
     that need to blend against any theme background.
     """
-    if not _HEX_RE.match(bg_hex or ""):
+    if not HEX_COLOR_RE.match(bg_hex or ""):
         raise ValueError(f'bg_hex must be a 6-digit hex string like "#1b3a5c"; got {bg_hex!r}')
     r = int(bg_hex[1:3], 16)
     g = int(bg_hex[3:5], 16)
