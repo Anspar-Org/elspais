@@ -433,15 +433,28 @@ function renderNavTree() {
             container.innerHTML = '<div style="padding:20px;color:#adb5bd;text-align:center;font-size:0.85rem;">No journey data available.</div>';
             return;
         }
+        var jmode = editState.treeDisplayMode || DEFAULT_TREE_DISPLAY_MODE;
         var jhtml = '';
         for (var ji = 0; ji < journeys.length; ji++) {
             var j = journeys[ji];
             var jSelected = editState.openCards.has(j.id) ? ' selected' : '';
+            var __jRowTitleAttr = '';
+            if (jmode === 'title-only' || jmode === 'ns-bg') {
+                __jRowTitleAttr = ' title="' + escapeHtml(j.id) + '"';
+            } else if (jmode === 'id-only') {
+                __jRowTitleAttr = ' title="' + escapeHtml(j.title || '') + '"';
+            }
+            var __jRowStyleAttr = j.ns_tint ? ' style="--row-ns-tint:' + j.ns_tint + ';"' : '';
+            var __jSliverStyleAttr = j.ns_bg ? ' style="background:' + j.ns_bg + ';"' : '';
             jhtml += '<div class="nav-tree-row nav-tree-journey' + jSelected + '" ' +
                 'data-id="' + j.id + '" data-kind="journey" ' +
-                'onclick="openCard(\'' + j.id + '\')">' +
+                'data-ns="' + (j.repo_prefix || '') + '"' +
+                __jRowTitleAttr + __jRowStyleAttr +
+                ' onclick="openCard(\'' + j.id + '\')">' +
+                '<span class="nav-tree-ns-sliver"' + __jSliverStyleAttr + '></span>' +
                 '<span class="nav-tree-kind-icon">&#x1F9ED;</span>' +
-                '<span class="nav-tree-id" style="color:#6c757d;">' + escapeHtml(j.id) + '</span>' +
+                '<span class="nav-tree-id-full">' + escapeHtml(j.id) + '</span>' +
+                '<span class="nav-tree-id-component">' + escapeHtml(j.component || j.id) + '</span>' +
                 '<span class="nav-tree-title">' + escapeHtml(j.title) + '</span>' +
                 '</div>';
         }
