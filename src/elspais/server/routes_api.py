@@ -721,10 +721,16 @@ async def api_tree_data(request: Request) -> JSONResponse:
 async def api_file_content(request: Request) -> JSONResponse:
     """GET /api/file-content?path=<path>&node_id=<id> - Read a file from disk.
 
-    When ``node_id`` is supplied and the federated graph knows the node,
-    the file is resolved against that node's owning repo root via
-    ``FederatedGraph.repo_root_for``. Otherwise resolution falls back to
-    the federation root (``state.repo_root``).
+    Resolution order for a relative path:
+
+    1. If ``node_id`` is supplied and the federated graph knows the node,
+       resolve against ``FederatedGraph.repo_root_for(node_id)``.
+    2. Otherwise resolve against the federation root
+       (``state.repo_root``).
+    3. If neither produces an existing file, try every
+       ``state.allowed_roots`` entry — covers the case where a caller has
+       a bare path to an associate file but no node id (e.g. test
+       references whose graph node id wasn't captured).
     """
     import os
 
@@ -744,7 +750,16 @@ async def api_file_content(request: Request) -> JSONResponse:
             base_root = owning_root
 
     p = Path(rel_path)
-    abs_path = (p if p.is_absolute() else (base_root / rel_path)).resolve()
+    if p.is_absolute():
+        abs_path = p.resolve()
+    else:
+        abs_path = (base_root / rel_path).resolve()
+        if not abs_path.exists():
+            for root in state.allowed_roots:
+                candidate = (root / rel_path).resolve()
+                if candidate.exists() and candidate.is_relative_to(root):
+                    abs_path = candidate
+                    break
 
     # Security: path must be under repo root or an allowed associate dir
     if not any(abs_path.is_relative_to(root) for root in state.allowed_roots):

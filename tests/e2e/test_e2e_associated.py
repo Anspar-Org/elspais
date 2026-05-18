@@ -473,19 +473,20 @@ class TestFileContentCrossRepo:
         sanity = urllib.request.urlopen(f"http://127.0.0.1:{port}/api/status", timeout=5)
         assert sanity.status == 200
 
-        # Without node_id: the server would resolve against core/, where
-        # spec/prd-assoc.md does not exist → 404.
-        bad_req = urllib.request.Request(
+        # Without node_id: the file isn't in core/, so the server falls
+        # back through state.allowed_roots and finds it in the associate.
+        # This unblocks the test/code reference callers that have a raw
+        # file path but no graph node id.
+        fb_req = urllib.request.Request(
             f"http://127.0.0.1:{port}/api/file-content?path=spec/prd-assoc.md"
         )
-        try:
-            urllib.request.urlopen(bad_req, timeout=5)
-            raise AssertionError("expected 404 without node_id")
-        except urllib.error.HTTPError as e:
-            assert e.code == 404
+        fb_resp = urllib.request.urlopen(fb_req, timeout=5)
+        assert fb_resp.status == 200
+        fb_data = json.loads(fb_resp.read().decode("utf-8"))
+        on_disk = (assoc_root / "spec" / "prd-assoc.md").read_text().splitlines()
+        assert fb_data["lines"] == on_disk
 
-        # With node_id: the server resolves against the associate root
-        # and returns the file content.
+        # With node_id: same content, resolved explicitly via repo_root_for.
         ok_req = urllib.request.Request(
             f"http://127.0.0.1:{port}/api/file-content"
             f"?path=spec/prd-assoc.md&node_id=REQ-p00099"
@@ -493,9 +494,6 @@ class TestFileContentCrossRepo:
         resp = urllib.request.urlopen(ok_req, timeout=5)
         assert resp.status == 200
         data = json.loads(resp.read().decode("utf-8"))
-
-        # On-disk content matches the lines returned by the API.
-        on_disk = (assoc_root / "spec" / "prd-assoc.md").read_text().splitlines()
         assert data["lines"] == on_disk
         # Content is distinguishable from the root repo's file.
         assert any("REQ-p00099" in line for line in data["lines"])

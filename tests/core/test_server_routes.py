@@ -564,9 +564,14 @@ implements = ["dev", "ops", "prd"]
         assert node is not None, "federated fixture must produce REQ-p00099"
         assert state.graph.repo_root_for("REQ-p00099") == assoc_root.resolve()
 
-        # Without node_id: server tries to read core/spec/assoc.md (does not exist).
-        bad = client.get("/api/file-content?path=spec/assoc.md")
-        assert bad.status_code == 404
+        # Without node_id: server tries the core root first (file does not
+        # exist there) and then falls back through state.allowed_roots,
+        # finding the file in the associate. This covers the test/code
+        # callers that have a raw file path but no graph node id.
+        fallback = client.get("/api/file-content?path=spec/assoc.md")
+        assert fallback.status_code == 200, fallback.text
+        fallback_data = fallback.json()
+        assert any("distinguishable from root" in line for line in fallback_data["lines"])
 
         # With node_id: server reads assoc/spec/assoc.md and returns its content.
         resp = client.get("/api/file-content?path=spec/assoc.md&node_id=REQ-p00099")
