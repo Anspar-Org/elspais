@@ -10,6 +10,10 @@ var fvState = {
     currentNodeId: null,      // persists the optional node_id from showSource
                               // so refresh paths route through the same
                               // associate repo on re-fetch.
+    currentRepoName: null,    // explicit federated-repo disambiguator —
+                              // takes precedence over currentNodeId for
+                              // FILE-id callers (term card "Defined in"),
+                              // since FILE ids collide across repos.
     fileViewMode: 'source',  // 'source' or 'rendered'
     lastData: null            // cached API response for re-rendering
 };
@@ -18,7 +22,7 @@ var fvState = {
 // Show Source File
 // =====================================================================
 
-async function showSource(filePath, lineNumber, nodeId) {
+async function showSource(filePath, lineNumber, nodeId, repoName) {
     var panel = document.getElementById('file-viewer-panel');
     var divider = document.getElementById('divider-right');
     var pathEl = document.getElementById('fv-path');
@@ -30,6 +34,7 @@ async function showSource(filePath, lineNumber, nodeId) {
 
     fvState.currentFile = filePath;
     fvState.currentNodeId = nodeId || null;
+    fvState.currentRepoName = repoName || null;
     var fileName = filePath.split('/').pop();
     var isMarkdown = fileName.endsWith('.md');
 
@@ -54,6 +59,7 @@ async function showSource(filePath, lineNumber, nodeId) {
 
     var url = '/api/file-content?path=' + encodeURIComponent(filePath);
     if (nodeId) url += '&node_id=' + encodeURIComponent(nodeId);
+    if (repoName) url += '&repo_name=' + encodeURIComponent(repoName);
     var data = await apiFetch(url);
     if (!data) {
         body.innerHTML = '<div style="padding:24px;color:#dc3545;text-align:center;">' +
@@ -339,7 +345,7 @@ function refreshFileViewer() {
     var panel = document.getElementById('file-viewer-panel');
     if (!panel || !panel.classList.contains('open')) return;
     if (fvState.currentFile) {
-        showSource(fvState.currentFile, null, fvState.currentNodeId);
+        showSource(fvState.currentFile, null, fvState.currentNodeId, fvState.currentRepoName);
     }
 }
 
@@ -348,6 +354,7 @@ function closeFileViewer() {
     document.getElementById('divider-right').style.display = 'none';
     fvState.currentFile = null;
     fvState.currentNodeId = null;
+    fvState.currentRepoName = null;
     fvState.lastData = null;
 }
 

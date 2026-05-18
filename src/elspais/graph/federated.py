@@ -209,13 +209,23 @@ class FederatedGraph:
 
     # Implements: REQ-d00222-C
     def _merge_terms(self) -> None:
-        """Merge per-repo _terms into a single federated TermDictionary."""
+        """Merge per-repo _terms into a single federated TermDictionary.
+
+        Each TermEntry is stamped with the owning repo's name before
+        merging so the API layer can disambiguate cross-repo file
+        resolution for terms whose ``defined_in`` is a FILE id (FILE ids
+        legitimately collide across federated repos; see
+        ``_ownership`` setup above).
+        """
         from elspais.graph.terms import TermDictionary
 
         merged = TermDictionary()
         self._term_duplicates: list[tuple] = []
         for entry in self._repos.values():
             if entry.graph is not None:
+                for term_entry in entry.graph._terms.iter_all():
+                    if not term_entry.repo_name:
+                        term_entry.repo_name = entry.name
                 dupes = merged.merge(entry.graph._terms)
                 self._term_duplicates.extend(dupes)
         self._terms = merged

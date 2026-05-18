@@ -719,18 +719,24 @@ async def api_tree_data(request: Request) -> JSONResponse:
 
 
 async def api_file_content(request: Request) -> JSONResponse:
-    """GET /api/file-content?path=<path>&node_id=<id> - Read a file from disk.
+    """GET /api/file-content?path=<path>&node_id=<id>&repo_name=<name>.
 
     Resolution order for a relative path:
 
-    1. If ``node_id`` is supplied and the federated graph knows the node,
-       resolve against ``FederatedGraph.repo_root_for(node_id)``.
-    2. Otherwise resolve against the federation root
-       (``state.repo_root``).
-    3. If neither produces an existing file, try every
-       ``state.allowed_roots`` entry — covers the case where a caller has
-       a bare path to an associate file but no node id (e.g. test
-       references whose graph node id wasn't captured).
+    1. ``repo_name`` (highest priority) — when supplied, look up the
+       owning federated repo by name via ``iter_repos()`` and resolve
+       strictly against its root. This bypasses ``_ownership`` for
+       FILE-id-based callers (FILE ids legitimately collide across
+       federated repos; ownership map keeps only the first-iterated
+       repo, which can be wrong).
+    2. ``node_id`` — when supplied and the federated graph knows the
+       node, resolve via ``FederatedGraph.repo_root_for(node_id)``.
+       Reliable for non-structural node ids (REQ/ASSERTION/CODE/TEST —
+       collisions raise FederationError) but unreliable for FILE ids.
+    3. Federation root (``state.repo_root``).
+    4. Fallback: scan every ``state.allowed_roots`` entry — covers raw
+       file paths sent without any disambiguator (test/code references
+       whose graph node id wasn't captured).
     """
     import os
 
@@ -743,8 +749,20 @@ async def api_file_content(request: Request) -> JSONResponse:
         return JSONResponse({"error": "path parameter required"}, status_code=400)
 
     node_id = request.query_params.get("node_id", "")
+    repo_name = request.query_params.get("repo_name", "")
     base_root = state.repo_root
-    if node_id:
+    strict_root = False
+    if repo_name:
+        # Explicit repo_name takes precedence and disables the
+        # allowed_roots fallback (we know which repo owns the file).
+        iter_repos = getattr(state.graph, "iter_repos", None)
+        if callable(iter_repos):
+            for repo_entry in iter_repos():
+                if repo_entry.name == repo_name:
+                    base_root = repo_entry.repo_root
+                    strict_root = True
+                    break
+    elif node_id:
         owning_root = state.graph.repo_root_for(node_id)
         if owning_root is not None:
             base_root = owning_root
@@ -754,7 +772,7 @@ async def api_file_content(request: Request) -> JSONResponse:
         abs_path = p.resolve()
     else:
         abs_path = (base_root / rel_path).resolve()
-        if not abs_path.exists():
+        if not abs_path.exists() and not strict_root:
             for root in state.allowed_roots:
                 candidate = (root / rel_path).resolve()
                 if candidate.exists() and candidate.is_relative_to(root):
@@ -1871,6 +1889,7 @@ async def api_terms(request: Request) -> JSONResponse:
                 "definition_short": defn_short,
                 "defined_in": entry.defined_in,
                 "namespace": entry.namespace,
+                "repo_name": entry.repo_name,
                 "collection": entry.collection,
                 "indexed": entry.indexed,
                 "ref_count": len(entry.references),
@@ -1915,13 +1934,34 @@ async def api_term(request: Request) -> JSONResponse:
             if file_n:
                 ref_data["file_path"] = file_n.get_field("relative_path") or ""
         refs.append(ref_data)
+
+    # Resolve `defined_in` (a node id — REQUIREMENT or FILE) into a concrete
+    # (file_path, line) pair for the file-viewer link in the term card.
+    # REQ ids are always unique across the federation (collisions raise
+    # FederationError); FILE ids are not, so the JS also uses `repo_name`
+    # to disambiguate when calling /api/file-content.
+    defined_in_path = ""
+    defined_in_line = entry.defined_at_line or 1
+    if entry.defined_in:
+        defined_node = state.graph.find_by_id(entry.defined_in)
+        if defined_node is not None:
+            if defined_node.kind == NodeKind.FILE:
+                defined_in_path = defined_node.get_field("relative_path") or ""
+            else:
+                file_n = defined_node.file_node()
+                if file_n is not None:
+                    defined_in_path = file_n.get_field("relative_path") or ""
+
     return JSONResponse(
         {
             "term": entry.term,
             "key": entry.term.lower(),
             "definition": entry.definition,
             "defined_in": entry.defined_in,
+            "defined_in_path": defined_in_path,
+            "defined_in_line": defined_in_line,
             "namespace": entry.namespace,
+            "repo_name": entry.repo_name,
             "collection": entry.collection,
             "indexed": entry.indexed,
             "is_reference": entry.is_reference,

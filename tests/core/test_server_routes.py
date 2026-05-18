@@ -580,3 +580,100 @@ implements = ["dev", "ops", "prd"]
         assert data["lines"][0].startswith("# REQ-p00099")
         # Content distinguishable from the root repo's file.
         assert any("distinguishable from root" in line for line in data["lines"])
+
+    # Verifies: REQ-d00200-G
+    def test_file_content_repo_name_routes_to_associate(self, federated_client):
+        """repo_name=assoc routes path resolution to the associate repo root.
+
+        CUR-1357 Copilot feedback: ``node_id`` is unreliable for FILE node
+        ids (they legitimately collide across federated repos). The
+        ``repo_name`` query param is the canonical disambiguator —
+        consumers that know the owning RepoEntry name can pass it to
+        force strict resolution against that repo's root.
+        """
+        client, _state, _core_root, _assoc_root = federated_client
+        resp = client.get("/api/file-content?path=spec/assoc.md&repo_name=assoc")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        # Body distinguishable from the core repo's spec/test.md.
+        assert data["lines"][0].startswith("# REQ-p00099")
+        assert any("distinguishable from root" in line for line in data["lines"])
+
+    # Verifies: REQ-d00200-G
+    def test_file_content_repo_name_overrides_node_id(self, federated_client):
+        """When both repo_name and node_id are supplied, repo_name wins.
+
+        The REQ-p00001 node lives in the core repo, but the caller
+        explicitly says ``repo_name=assoc`` — the server must route to
+        the associate and return its ``spec/assoc.md``, not the core's
+        ``spec/test.md``.
+        """
+        client, state, _core_root, _assoc_root = federated_client
+        # Sanity check: REQ-p00001 lives in the core repo (would otherwise
+        # send us to the core repo's spec/assoc.md, which doesn't exist).
+        assert state.graph.find_by_id("REQ-p00001") is not None
+
+        resp = client.get("/api/file-content?path=spec/assoc.md&node_id=REQ-p00001&repo_name=assoc")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        # We got the associate's file, not anything from the core repo.
+        assert data["lines"][0].startswith("# REQ-p00099")
+        assert any("distinguishable from root" in line for line in data["lines"])
+
+    # Verifies: REQ-d00200-G
+    def test_file_content_repo_name_strict_no_fallback(self, tmp_path: Path):
+        """repo_name disables the allowed_roots fallback (strict resolution).
+
+        Setup: a file ``spec/shared.md`` exists in the *root* repo but
+        NOT in the associate. Without ``repo_name`` the allowed_roots
+        fallback finds it in root. With ``repo_name=assoc`` the server
+        resolves strictly against the associate and returns 404.
+        """
+        from elspais.server.app import create_app
+        from elspais.server.state import AppState
+
+        core_root = tmp_path / "core"
+        assoc_root = tmp_path / "assoc"
+        core_root.mkdir()
+        assoc_root.mkdir()
+
+        (core_root / ".elspais.toml").write_text(self._CORE_CONFIG_WITH_ASSOC)
+        (core_root / "spec").mkdir()
+        # Core has both its own test.md and a "shared"-named file.
+        (core_root / "spec" / "test.md").write_text(self._VALID_SPEC)
+        (core_root / "spec" / "shared.md").write_text(self._VALID_SPEC)
+
+        (assoc_root / ".elspais.toml").write_text(self._ASSOC_CONFIG)
+        (assoc_root / "spec").mkdir()
+        (assoc_root / "spec" / "assoc.md").write_text(self._ASSOC_SPEC)
+        # Note: assoc has NO spec/shared.md — that file only exists in core.
+
+        state = AppState.from_config(repo_root=core_root)
+        client = TestClient(create_app(state=state, mount_mcp=False))
+
+        # Without repo_name: the file is found via allowed_roots fallback
+        # (core is the first allowed_root, so it resolves there).
+        no_repo = client.get("/api/file-content?path=spec/shared.md")
+        assert no_repo.status_code == 200, no_repo.text
+
+        # With repo_name=assoc: strict mode, no fallback → 404 because
+        # the file does not exist in the associate.
+        strict = client.get("/api/file-content?path=spec/shared.md&repo_name=assoc")
+        assert strict.status_code == 404, strict.text
+
+    # Verifies: REQ-d00200-G
+    def test_file_content_unknown_repo_name_falls_back(self, federated_client):
+        """An unknown repo_name is handled gracefully — falls back to state.repo_root.
+
+        When ``repo_name`` matches no RepoEntry, the loop in
+        ``api_file_content`` leaves ``base_root`` as ``state.repo_root``
+        and ``strict_root=False``, so resolution proceeds normally
+        against the core repo (with allowed_roots fallback still
+        enabled). Should never 500.
+        """
+        client, _state, _core_root, _assoc_root = federated_client
+        # spec/test.md exists in the core repo (state.repo_root).
+        resp = client.get("/api/file-content?path=spec/test.md&repo_name=nonexistent")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["lines"][0].startswith("# REQ-p00001")

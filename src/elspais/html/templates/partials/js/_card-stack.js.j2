@@ -2100,18 +2100,18 @@ function buildTermCardHtml(cardId, data, collapsed) {
     // Source section
     html += '<div class="card-section"><div class="card-section-label">Source</div>';
     html += '<div class="card-meta">';
-    if (data.defined_in) {
-        // `defined_in` holds the FILE node id (e.g. `file:spec/glossary.md`).
-        // Strip the `file:` prefix for the path passed to showSource so it
-        // resolves against the federation; pass the full node id as the
-        // optional node_id so the server can route through repo_root_for
-        // when the term originates from an associate repo.
-        var definedInPath = data.defined_in.replace(/^file:/, '');
-        var definedLine = data.defined_line || 1;
+    // `defined_in` is a node id (REQUIREMENT or FILE); the server resolves it
+    // into a concrete (defined_in_path, defined_in_line) pair so we can open
+    // the file viewer directly. `repo_name` disambiguates FILE-id collisions
+    // across federated repos (which `repo_root_for` cannot do on its own).
+    if (data.defined_in_path) {
+        var definedInPath = data.defined_in_path;
+        var definedLine = data.defined_in_line || 1;
         html += '<div class="card-meta-item"><span class="card-meta-key">Defined in:</span>';
         html += '<a class="card-meta-value" href="#" onclick="event.preventDefault(); showSource(\'' +
             escapeAttr(definedInPath) + '\', ' + definedLine + ', \'' +
-            escapeAttr(data.defined_in) + '\')">' + escapeHtml(definedInPath) + '</a>';
+            escapeAttr(data.defined_in || '') + '\', \'' +
+            escapeAttr(data.repo_name || '') + '\')">' + escapeHtml(definedInPath) + '</a>';
         html += '</div>';
     }
     if (data.namespace) {
