@@ -2078,7 +2078,17 @@ function buildTermCardHtml(cardId, data, collapsed) {
     }
     html += '</div></div>';
 
-    // References section (collapsible)
+    // References section (collapsible). Skipped entirely for terms marked
+    // `Indexed: false`. Such terms are typically ubiquitous (e.g. "Assertion"
+    // appearing thousands of times) where a per-card reference list adds
+    // noise without value. The flag also stops the scanner from collecting
+    // plain-word references (term_scanner.py:282-285), so hiding the panel
+    // is consistent with the data model.
+    if (data.indexed === false) {
+        // Close req-card-body and req-card and return early.
+        html += '</div></div>';
+        return html;
+    }
     var refs = data.references || [];
     var refSectionId = 'term-refs-' + escapeAttr(cardId);
     html += '<div class="card-section term-references">';

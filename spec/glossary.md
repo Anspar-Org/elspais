@@ -5,6 +5,7 @@ Traceability
 
 Assertion
 : A testable statement within a requirement that declares a single, verifiable behavior the system must exhibit.
+: Indexed: false
 
 Traceability Matrix
 : A tabular representation linking requirements to their implementations, tests, and verification results across all hierarchy levels.

@@ -184,6 +184,22 @@ def test_toolbar_emits_tree_display_mode_select(jinja_env, typed_5_level_config)
     assert 'id="toggle-level-at-end"' in html, "missing 'Level at end' checkbox"
 
 
+def test_term_card_skips_references_when_not_indexed(jinja_env, typed_5_level_config):
+    """Term cards for non-indexed terms must omit the References section.
+    Mirrors the term scanner's behaviour: `Indexed: false` suppresses
+    plain-word reference collection upstream; the card view follows suit."""
+    tmpl = jinja_env.get_template("partials/js/_card-stack.js.j2")
+    js = tmpl.render(
+        levels=build_levels(typed_5_level_config),
+        namespaces=build_namespaces(typed_5_level_config),
+        statuses=build_statuses(typed_5_level_config),
+    )
+    # The conditional short-circuit + early return is present.
+    assert "data.indexed === false" in js, "missing the indexed=false guard"
+    # The early return closes both wrapping divs (req-card-body + req-card).
+    assert "html += '</div></div>';" in js
+
+
 def test_nav_tree_row_template_emits_dual_id_and_sliver(jinja_env, typed_5_level_config):
     """Each requirement row must include both id spans + the ns sliver placeholder,
     plus per-mode title= / data-ns / --row-ns-tint plumbing. CSS toggles which
