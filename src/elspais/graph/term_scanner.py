@@ -7,6 +7,7 @@ Implements: REQ-d00238
 
 from __future__ import annotations
 
+import functools
 import io
 import os
 import re
@@ -184,11 +185,16 @@ _ALL_EMPHASIS_DELIMITERS: list[str] = ["**", "__", "*", "_"]
 _DEFAULT_MARKUP_STYLES: list[str] = ["*", "**"]
 
 
+@functools.cache
 def _build_emphasis_pattern(delimiter: str, term: str) -> re.Pattern[str]:
     """Build a regex that matches *term* wrapped in *delimiter*.
 
     For ``*`` we need negative lookahead/behind for extra ``*`` to avoid
-    matching inside ``**term**``.
+    matching inside ``**term**``. The result is cached so each
+    ``(delimiter, term)`` pair is compiled exactly once per process —
+    ``scan_text_for_terms`` is called per-text-region inside
+    ``scan_graph`` and would otherwise re-compile every pattern on
+    every region for every term.
     """
     esc = re.escape(delimiter)
     esc_term = re.escape(term)
