@@ -16,7 +16,8 @@
 .nav-panel {
     width: 320px;
     min-width: 200px;
-    max-width: 600px;
+    /* Max width is enforced by the divider's JS clamp (viewport-relative); no
+       CSS cap so the JS is the single authority. */
     background: var(--panel-bg);
     border-right: 1px solid var(--panel-border);
     display: flex;
@@ -117,13 +118,6 @@
     visibility: hidden;
 }
 
-.nav-tree-id {
-    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-    font-size: 0.75rem;
-    color: var(--primary);
-    flex-shrink: 0;
-}
-
 .nav-tree-title {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -142,9 +136,60 @@
     flex-shrink: 0;
 }
 
-.nav-tree-level.prd { background: var(--nav-level-prd-bg); color: var(--nav-level-prd-text); }
-.nav-tree-level.ops { background: var(--nav-level-ops-bg); color: var(--nav-level-ops-text); }
-.nav-tree-level.dev { background: var(--nav-level-dev-bg); color: var(--nav-level-dev-text); }
+/* Namespace sliver — small vertical color bar glued to the left of the level badge.
+   The sliver's background is set inline from row.ns_bg by the JS row template. */
+.nav-tree-ns-sliver {
+    width: 4px;
+    align-self: stretch;
+    flex-shrink: 0;
+    border-radius: 2px 0 0 2px;
+}
+
+/* Both ID spans share the same visual styling; CSS picks which to show per mode. */
+.nav-tree-id-full,
+.nav-tree-id-component {
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-size: 0.75rem;
+    color: var(--primary);
+    flex-shrink: 0;
+}
+
+/* Default mode (no data-mode or data-mode="compact"): show component, hide full. */
+#nav-tree-container .nav-tree-id-full      { display: none; }
+#nav-tree-container .nav-tree-id-component { display: inline; }
+
+/* Mode: full — show full ID, hide component, hide sliver. */
+#nav-tree-container[data-mode="full"] .nav-tree-id-full      { display: inline; }
+#nav-tree-container[data-mode="full"] .nav-tree-id-component { display: none; }
+#nav-tree-container[data-mode="full"] .nav-tree-ns-sliver    { display: none; }
+
+/* Mode: title-only — hide both ID spans (full ID is in row title= attr for hover). */
+#nav-tree-container[data-mode="title-only"] .nav-tree-id-full      { display: none; }
+#nav-tree-container[data-mode="title-only"] .nav-tree-id-component { display: none; }
+
+/* Mode: id-only — hide title; ID stays as component. */
+#nav-tree-container[data-mode="id-only"] .nav-tree-title { display: none; }
+
+/* Mode: ns-bg — hide both IDs and the sliver; tint row background from --row-ns-tint
+   (set inline per-row by the JS template using row.ns_tint). */
+#nav-tree-container[data-mode="ns-bg"] .nav-tree-id-full      { display: none; }
+#nav-tree-container[data-mode="ns-bg"] .nav-tree-id-component { display: none; }
+#nav-tree-container[data-mode="ns-bg"] .nav-tree-ns-sliver    { display: none; }
+#nav-tree-container[data-mode="ns-bg"] .nav-tree-row {
+    background: var(--row-ns-tint, transparent);
+}
+
+/* "Level at end" — orthogonal toggle that moves the level badge to the end of
+   the row regardless of which display mode is active. Driven by `data-level-pos`
+   on `#nav-tree-container` (set by setLevelAtEnd in _nav-tree.js.j2). */
+#nav-tree-container[data-level-pos="end"] .nav-tree-level {
+    order: 9;
+    margin-left: 6px;
+}
+
+{% for l in levels %}
+.nav-tree-level.{{ l.key|lower }} { background: {{ l.bg }}; color: {{ l.text }}; }
+{% endfor %}
 
 /* Test and result rows in nav tree */
 .nav-tree-test {

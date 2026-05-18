@@ -13,6 +13,21 @@
                    onchange="toggleShowHiddenParents()">
             <span>Show hidden parents</span>
         </label>
+        <label class="tree-display-mode-label" for="tree-display-mode">
+            Display:
+            <select id="tree-display-mode" onchange="setTreeDisplayMode(this.value)">
+                <option value="compact">Compact ID + title</option>
+                <option value="title-only">Title only</option>
+                <option value="id-only">Compact ID only</option>
+                <option value="full">Full ID + title</option>
+                <option value="ns-bg">Namespace background</option>
+            </select>
+        </label>
+        <label class="toggle-inline">
+            <input type="checkbox" id="toggle-level-at-end"
+                   onchange="setLevelAtEnd(this.checked)">
+            <span>Level at end</span>
+        </label>
     </div>
 
     <div class="toolbar-divider"></div>
@@ -60,11 +75,12 @@
             <div class="filter-group" data-group="status">
                 <span class="filter-group-label">Status</span>
                 <div class="filter-group-buttons" id="status-filter-buttons">
-                    {% for status in statuses %}
-                    <button class="filter-btn{% if status not in default_hidden_statuses %} on{% endif %}"
-                            data-group="status" data-key="{{ status | lower }}"
-                            onclick="filterGroups.status.handleClick('{{ status | lower }}', event)"
-                            title="Toggle {{ status }} requirements">{{ status }}</button>
+                    {% for s in statuses %}
+                    <button class="filter-btn{% if s.key not in default_hidden_statuses %} on{% endif %}"
+                            data-group="status" data-key="{{ s.key | lower }}"
+                            style="--status-bg: {{ s.bg }}; --status-text: {{ s.text }};"
+                            onclick="filterGroups.status.handleClick('{{ s.key | lower }}', event)"
+                            title="Toggle {{ s.label }} requirements">{{ s.label }}</button>
                     {% endfor %}
                 </div>
             </div>

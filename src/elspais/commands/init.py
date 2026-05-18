@@ -137,6 +137,10 @@ _FIELD_COMMENTS: dict[str, str] = {
     "project": "Project identity",
     "project.namespace": "Prefix for requirement IDs (e.g. REQ -> REQ-p00001)",
     "project.name": "Project display name",
+    "project.color": (
+        'Optional badge color for this project\'s namespace (hex "#RRGGBB"); '
+        "omit for a deterministic hash-derived color"
+    ),
     # --- [id-patterns] ---
     "id-patterns": "Requirement ID format and type definitions",
     "id-patterns.canonical": "ID template; vars: {namespace}, {level.letter}, {component}",
@@ -178,6 +182,9 @@ _FIELD_COMMENTS: dict[str, str] = {
     "levels.*.letter": "Single letter used in IDs (e.g. p -> REQ-p00001)",
     "levels.*.display_name": "Human-readable name for reports",
     "levels.*.implements": "Which levels this level can implement (list of level names)",
+    "levels.*.color": (
+        'Optional badge color (hex "#RRGGBB"); omit for a deterministic ' "hash-derived color"
+    ),
     # --- [scanning] ---
     "scanning": "File scanning configuration",
     "scanning.skip": "Global skip patterns (applied to all scan kinds)",
@@ -322,6 +329,18 @@ _FIELD_COMMENTS: dict[str, str] = {
     "associates": "Associated repository definitions for cross-repo federation",
     "associates.*.path": "Path to the associated repository (absolute or relative to repo root)",
     "associates.*.namespace": "Namespace prefix for the associated repo's requirements",
+    "associates.*.color": (
+        'Optional badge color for this namespace (hex "#RRGGBB"); omit for a '
+        "deterministic hash-derived color"
+    ),
+    "statuses": (
+        "Optional per-status metadata. Keys match status names from "
+        '[rules.format.status_roles]; each entry may set `color = "#RRGGBB"`.'
+    ),
+    "statuses.*.color": (
+        'Optional badge color for this status (hex "#RRGGBB"); omit for a '
+        "deterministic hash-derived color"
+    ),
 }
 
 # Per-project-type overrides applied on top of schema defaults.
@@ -490,14 +509,20 @@ def _add_table(
 
     tbl = tomlkit.table()
     for k, v in value.items():
+        if v is None:
+            continue
         field_path = f"{key}.{k}"
         if isinstance(v, dict):
             sub = tomlkit.table()
             for sk, sv in v.items():
+                if sv is None:
+                    continue
                 sub_field_path = f"{field_path}.{sk}"
                 if isinstance(sv, dict):
                     inner = tomlkit.table()
                     for ik, iv in sv.items():
+                        if iv is None:
+                            continue
                         _add_field_comment(inner, f"{sub_field_path}.{ik}")
                         inner.add(ik, iv)
                     sub.add(sk, inner)
@@ -574,7 +599,7 @@ def generate_config(project_type: str, associated_prefix: str | None = None) -> 
     else:
         overrides = _CORE_OVERRIDES
         sections = _CORE_SECTIONS
-        label = "Core Repository"
+        label = "Main Repository"
         gen_by = f"elspais init (v{__version__})"
 
     data = _deep_merge(defaults, overrides)

@@ -1,6 +1,6 @@
 # PROJ-98: Archived Excluded
 
-**Level**: PRD | **Status**: Deprecated
+**Level**: REQ | **Status**: Deprecated
 
 ## Assertions
 

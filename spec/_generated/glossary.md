@@ -4,7 +4,7 @@
 
 ## A
 
-**Assertion**
+**Assertion** *(not indexed)*
 : A testable statement within a requirement that declares a single, verifiable behavior the system must exhibit.
 *Defined in: file:spec/glossary.md (REQ)*
 

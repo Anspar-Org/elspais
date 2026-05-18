@@ -35,6 +35,24 @@ def config_defaults() -> dict[str, Any]:
     return ElspaisConfig.model_validate({}).model_dump(by_alias=True)
 
 
+def default_level_keys() -> list[str]:
+    """Return the default level keys (rank-sorted) for use as a fallback.
+
+    Single source of truth for "what to fall back to when a config is missing
+    or has no `[levels]` section". Consumers like `commands/summary.py`,
+    `pdf/assembler.py`, and `html/generator.py` use this rather than hard-coding
+    `["prd", "ops", "dev"]`.
+    """
+    levels = config_defaults().get("levels") or {}
+    if not isinstance(levels, dict) or not levels:
+        return []
+    ranked = sorted(
+        ((k, v.get("rank", 9999) if isinstance(v, dict) else 9999) for k, v in levels.items()),
+        key=lambda kv: kv[1],
+    )
+    return [k for k, _r in ranked]
+
+
 def _migrate_legacy_patterns(config: dict[str, Any]) -> dict[str, Any]:
     """Migrate legacy [patterns] config to [id-patterns] + [levels] format.
 
@@ -196,12 +214,20 @@ def load_config(config_path: Path) -> dict[str, Any]:
     content = config_path.read_text(encoding="utf-8")
     user_config = _parse_toml(content)
     merged = _merge_configs(config_defaults(), user_config)
+    # `[levels]` is a hierarchy declaration. When the user supplies their own
+    # levels, take only the user's keys (so a custom uppercase `[levels.PRD]`
+    # doesn't coexist with the lowercase default `[levels.prd]`). For
+    # user-keys that happen to match a default key, the per-field defaults
+    # still fill in missing values (e.g. `implements`) — this is the same
+    # pattern as the rest of the schema.
+    _override_levels(merged, user_config)
 
     # Deep-merge developer-local overrides if present
     local_path = config_path.parent / ".elspais.local.toml"
     if local_path.is_file():
         local_config = _parse_toml(local_path.read_text(encoding="utf-8"))
         merged = _merge_configs(merged, local_config)
+        _override_levels(merged, local_config)
 
     merged = _apply_env_overrides(merged)
 
@@ -342,6 +368,31 @@ def find_config_file(start_path: Path) -> Path | None:
         current = current.parent
 
     return None
+
+
+def _override_levels(merged: dict[str, Any], user_config: dict[str, Any]) -> None:
+    """If user_config supplies a non-empty [levels] table, replace merged's
+    levels with only those keys. Per-field defaults from the matching default
+    level (if any) are preserved for missing fields, so a user can write
+    `[levels.prd] { rank, letter }` without re-stating `implements`.
+    """
+    user_levels = user_config.get("levels")
+    if not isinstance(user_levels, dict) or not user_levels:
+        return
+    default_levels = merged.get("levels") or {}
+    new_levels: dict[str, Any] = {}
+    for key, user_entry in user_levels.items():
+        if not isinstance(user_entry, dict):
+            new_levels[key] = user_entry
+            continue
+        default_entry = default_levels.get(key)
+        if isinstance(default_entry, dict):
+            combined = dict(default_entry)
+            combined.update(user_entry)
+            new_levels[key] = combined
+        else:
+            new_levels[key] = dict(user_entry)
+    merged["levels"] = new_levels
 
 
 def _merge_configs(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -857,6 +908,7 @@ def get_ignore_config(config: dict[str, Any]) -> IgnoreConfig:
 __all__ = [
     "IgnoreConfig",
     "config_defaults",
+    "default_level_keys",
     "load_config",
     "find_config_file",
     "find_git_root",

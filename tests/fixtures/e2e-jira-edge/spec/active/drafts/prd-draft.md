@@ -1,6 +1,6 @@
 # PROJ-99: Draft Excluded
 
-**Level**: PRD | **Status**: Draft
+**Level**: REQ | **Status**: Draft
 
 ## Assertions
 

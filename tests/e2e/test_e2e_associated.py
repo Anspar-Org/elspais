@@ -171,6 +171,28 @@ class TestCrossRepoImplements:
 
 
 # ---------------------------------------------------------------------------
+# Test: Dynamic namespace surfacing in HTML (Verifies: REQ-d00211)
+# ---------------------------------------------------------------------------
+
+
+class TestDynamicNamespaceInHtml:
+    """`elspais viewer --static` surfaces the configured namespaces
+    (project + associates) and no longer emits the legacy 'Core:' literal."""
+
+    def test_static_html_has_no_core_literal(self, project):
+        result = run_elspais("viewer", "--static", cwd=project)
+        assert result.returncode == 0, f"viewer --static failed: {result.stderr}"
+        assert "Core:" not in result.stdout, "Legacy 'Core:' string should be gone"
+
+    def test_static_html_exposes_namespaces_constant(self, project):
+        result = run_elspais("viewer", "--static", cwd=project)
+        assert result.returncode == 0
+        assert "var NAMESPACES = " in result.stdout
+        # is_local marker must be present on exactly one namespace entry
+        assert '"is_local": true' in result.stdout
+
+
+# ---------------------------------------------------------------------------
 # Test: Associate auto-discovery (from TestAssociateAutoDiscovery)
 # Unique layout — keeps per-test build.
 # ---------------------------------------------------------------------------

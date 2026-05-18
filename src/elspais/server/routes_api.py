@@ -17,6 +17,7 @@ from typing import Any
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from elspais.config.schema import ElspaisConfig
 from elspais.graph import FILE_ID_PREFIX, NodeKind
 from elspais.graph.comment_store import (
     append_event,
@@ -25,6 +26,7 @@ from elspais.graph.comment_store import (
     parse_anchor,
 )
 from elspais.graph.comments import CommentEvent, CommentThread
+from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.mcp.server import (
     _get_assertion_code_map,
     _get_assertion_refines_map,
@@ -57,7 +59,9 @@ from elspais.mcp.server import (
     _query_nodes,
     _undo_last_mutation,
 )
+from elspais.server.routes_ui import build_levels, build_namespaces, build_statuses
 from elspais.utilities.git import get_author_info
+from elspais.utilities.patterns import build_resolver
 
 
 def _st(request: Request) -> Any:
@@ -263,6 +267,18 @@ async def api_status(request: Request) -> JSONResponse:
         result["repos"] = repos_info
     else:
         result["repos"] = []
+
+    # Dynamic category catalogs for the viewer UI. Each entry carries the
+    # resolved (configured or hashed) bg/text colors so clients can render
+    # badges without knowing how the colors were derived.
+    try:
+        typed = ElspaisConfig.model_validate(state.config)
+    except Exception:
+        typed = ElspaisConfig.model_validate({})
+    result["levels"] = build_levels(typed)
+    result["namespaces"] = build_namespaces(typed)
+    result["statuses"] = build_statuses(typed)
+
     return JSONResponse(result)
 
 
@@ -438,9 +454,53 @@ async def api_tree_data(request: Request) -> JSONResponse:
     import re
 
     from elspais.html.generator import compute_coverage_tiers
+    from elspais.server.routes_ui import local_namespace_from_config
 
     state = _st(request)
     g = state.graph
+    local_ns = local_namespace_from_config(state.config)
+
+    # Build one IdResolver per repo for component-extraction (federation-safe).
+    try:
+        _typed_cfg = ElspaisConfig.model_validate(state.config)
+    except Exception:
+        _typed_cfg = ElspaisConfig.model_validate({})
+    ns_catalog: dict[str, dict] = {n["code"]: n for n in build_namespaces(_typed_cfg)}
+
+    # Cache resolvers per repo. Keyed by namespace string (stable across the
+    # request) rather than `id(cfg)` (object ids can be reused by Python after
+    # GC, which would alias resolvers across distinct configs in long-running
+    # servers).
+    _LOCAL_KEY = "__local__"
+    _resolver_cache: dict[str, Any] = {}
+
+    def _resolver_for(node):
+        try:
+            entry = g.repo_for(node.id)
+        except Exception:  # noqa: BLE001 - fail-soft per row, never break /api/tree-data
+            entry = None
+        if entry is not None and entry.config is not None:
+            cfg = entry.config
+            cache_key = (cfg.get("project") or {}).get("namespace") or _LOCAL_KEY
+        else:
+            cfg = state.config
+            cache_key = _LOCAL_KEY
+        if cache_key in _resolver_cache:
+            return _resolver_cache[cache_key]
+        try:
+            r = build_resolver(cfg)
+        except Exception:  # noqa: BLE001 - degrade to full-id component
+            r = None
+        _resolver_cache[cache_key] = r
+        return r
+
+    def _component_for(node) -> str:
+        r = _resolver_for(node)
+        if r is None:
+            return node.id
+        parsed = r.parse(node.id)
+        return parsed.component if (parsed and parsed.component) else node.id
+
     rows: list[dict[str, Any]] = []
     visited: set[tuple[str, str]] = set()
 
@@ -457,11 +517,34 @@ async def api_tree_data(request: Request) -> JSONResponse:
                     if nid:
                         unsaved_ids.add(nid)
 
+    # "CORE" is the legacy sentinel for "local repo" set by annotators.py; the
+    # JSON we emit uses the actual local namespace string instead so JS clients
+    # can compare `repo_prefix` against the configured namespace.
+    _LOCAL_SENTINEL = "CORE"
+
+    def _repo_namespace(node) -> str | None:
+        """Resolve the node's owning-repo namespace via the federated graph.
+        Returns None if the graph isn't federated or the lookup fails. Catches
+        any exception so a single problematic node can't break the whole
+        /api/tree-data response.
+        """
+        try:
+            entry = g.repo_for(node.id)
+        except Exception:  # noqa: BLE001 - fail-soft per row
+            return None
+        if entry is None or entry.config is None:
+            return None
+        ns = (entry.config.get("project") or {}).get("namespace")
+        return ns or None
+
     def _is_associated(node) -> bool:
+        ns = _repo_namespace(node)
+        if ns is not None:
+            return ns != local_ns
         if re.match(r"^REQ-[A-Z]{2,4}-[a-z]", node.id):
             return True
         rp = node.get_metric("repo_prefix", "")
-        if rp and rp != "CORE":
+        if rp and rp != _LOCAL_SENTINEL and rp != local_ns:
             return True
         _fn = node.file_node()
         if _fn and _fn.get_field("repo"):
@@ -469,8 +552,16 @@ async def api_tree_data(request: Request) -> JSONResponse:
         return bool(node.get_field("associated", False))
 
     def _get_repo_prefix(node) -> str:
+        # 1. Federation-aware lookup wins — the FederatedGraph knows which
+        #    repo each node came from.
+        ns = _repo_namespace(node)
+        if ns is not None:
+            return ns
+        # 2. Fall back to the per-node `repo_prefix` metric set by
+        #    annotators.py, except for the legacy "CORE" sentinel which means
+        #    "local repo" — handled below.
         rp = node.get_metric("repo_prefix", "")
-        if rp and rp != "CORE":
+        if rp and rp != _LOCAL_SENTINEL:
             return rp
         _fn = node.file_node()
         if _fn and _fn.get_field("repo"):
@@ -478,7 +569,14 @@ async def api_tree_data(request: Request) -> JSONResponse:
         m = re.match(r"^REQ-([A-Z]{2,4})-[a-z]", node.id)
         if m:
             return m.group(1)
-        return rp or "CORE"
+        # 3. Final fallback: treat as local. Previously emitted the literal
+        #    "CORE" sentinel; we now emit the configured local namespace so
+        #    JS clients can compare `repo_prefix` against the same string they
+        #    receive in NAMESPACES. Any pre-existing "CORE"-marked node that
+        #    survived the metric-replace step (line 547) is relabelled to the
+        #    local namespace here — that's intentional and matches the new
+        #    "no `CORE` literal anywhere on the wire" invariant.
+        return local_ns
 
     def _walk(node, depth: int, parent_id: str | None) -> None:
         from elspais.graph.relations import EdgeKind
@@ -512,6 +610,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
             "full" if _cc == "green" else ("partial" if _cc in ("yellow", "orange") else "none")
         )
 
+        _ns_entry = ns_catalog.get(_get_repo_prefix(node)) or {}
         rows.append(
             {
                 "id": node.id,
@@ -533,6 +632,10 @@ async def api_tree_data(request: Request) -> JSONResponse:
                 "is_test_result": False,
                 "result_status": "",
                 "repo_prefix": _get_repo_prefix(node),
+                "component": _component_for(node),
+                "ns_bg": _ns_entry.get("bg", ""),
+                "ns_text": _ns_entry.get("text", ""),
+                "ns_tint": _ns_entry.get("tint", ""),
                 "has_comments": _has_direct_comments,
                 "source_file": node.get_field("source_file", ""),
                 "source_line": node.get_field("source_line", 0),
@@ -563,6 +666,18 @@ async def api_tree_data(request: Request) -> JSONResponse:
             _walk(root, 0, None)
 
     # Add USER_JOURNEY nodes
+    _jn_entry = ns_catalog.get(local_ns) or {}
+
+    def _journey_component(node_id: str) -> str:
+        """Strip the literal "JNY-" prefix from a journey ID so the compact
+        display mode shows e.g. "LOGIN-01" instead of "JNY-LOGIN-01".
+        Falls back to the full ID if the canonical pattern doesn't match.
+        """
+        m = JNY_ID_PATTERN.match(node_id)
+        if m:
+            return f"{m.group('descriptor')}-{m.group('number')}"
+        return node_id
+
     for node in sorted(g.nodes_by_kind(NodeKind.USER_JOURNEY), key=lambda n: n.id):
         _fn = node.file_node()
         source_file = _fn.get_field("relative_path") if _fn else ""
@@ -588,7 +703,11 @@ async def api_tree_data(request: Request) -> JSONResponse:
                 "is_test_result": False,
                 "is_journey": True,
                 "result_status": "",
-                "repo_prefix": "CORE",
+                "repo_prefix": local_ns,
+                "component": _journey_component(node.id),
+                "ns_bg": _jn_entry.get("bg", ""),
+                "ns_text": _jn_entry.get("text", ""),
+                "ns_tint": _jn_entry.get("tint", ""),
                 "source_file": source_file,
                 "source_line": source_line,
                 "actor": node.get_field("actor", ""),

@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+# Hex-color and namespace patterns live in the utilities lib so all consumers
+# share a single regex. See `utilities/color.py` and `utilities/patterns.py`.
+from elspais.utilities.color import validate_hex_color as _validate_hex_color
+from elspais.utilities.patterns import validate_namespace as _validate_namespace
 
 
 class _StrictModel(BaseModel):
@@ -15,6 +20,17 @@ class _StrictModel(BaseModel):
 class ProjectConfig(_StrictModel):
     namespace: str = "REQ"
     name: str = ""
+    color: str | None = None
+
+    @field_validator("namespace")
+    @classmethod
+    def _v_namespace(cls, v):
+        return _validate_namespace(v)
+
+    @field_validator("color")
+    @classmethod
+    def _v_color(cls, v):
+        return _validate_hex_color(v)
 
 
 _LEGACY_STYLE_MIGRATION = {
@@ -145,6 +161,20 @@ class FormatConfig(_StrictModel):
     no_assertions_severity: str = "warning"
     no_traceability_severity: str = "warning"
 
+    @field_validator("status_roles")
+    @classmethod
+    def _v_status_role_values(cls, v: dict[str, Any]) -> dict[str, Any]:
+        # Each status name listed here ends up as a key in `.status-badge.{name}`
+        # CSS selectors, JS string literals, and `data-key` attributes — same
+        # identifier shape as namespaces / level keys.
+        for _role, names in (v or {}).items():
+            if isinstance(names, list):
+                for name in names:
+                    _validate_namespace(name)
+            elif isinstance(names, str):
+                _validate_namespace(names)
+        return v
+
 
 class CoverageSeverityConfig(_StrictModel):
     """Severity mapping for a single coverage dimension's tier states.
@@ -210,6 +240,12 @@ class LevelConfig(_StrictModel):
     letter: str
     display_name: str = ""
     implements: list[str]
+    color: str | None = None
+
+    @field_validator("color")
+    @classmethod
+    def _v_color(cls, v):
+        return _validate_hex_color(v)
 
 
 # Implements: REQ-d00212-B
@@ -313,6 +349,28 @@ class ChangelogConfig(_StrictModel):
 class AssociateEntryConfig(_StrictModel):
     path: str
     namespace: str
+    color: str | None = None
+
+    @field_validator("namespace")
+    @classmethod
+    def _v_namespace(cls, v):
+        return _validate_namespace(v)
+
+    @field_validator("color")
+    @classmethod
+    def _v_color(cls, v):
+        return _validate_hex_color(v)
+
+
+class StatusConfig(_StrictModel):
+    """Optional per-status metadata. Keys match status names from status_roles."""
+
+    color: str | None = None
+
+    @field_validator("color")
+    @classmethod
+    def _v_color(cls, v):
+        return _validate_hex_color(v)
 
 
 # Implements: REQ-d00212-L
@@ -366,7 +424,29 @@ class ElspaisConfig(_StrictModel):
     output: OutputConfig = Field(default_factory=OutputConfig)
     terms: TermsConfig = Field(default_factory=TermsConfig)
     associates: dict[str, AssociateEntryConfig] = Field(default_factory=dict)
+    statuses: dict[str, StatusConfig] = Field(default_factory=dict)
     stats: str = Field(default="", description="File path for MCP tool usage statistics")
+
+    @field_validator("levels")
+    @classmethod
+    def _v_level_keys(cls, v: dict[str, Any]) -> dict[str, Any]:
+        # Level keys are interpolated into CSS attribute selectors, CSS class
+        # names, and single-quoted JS string literals inside HTML attributes.
+        # Restrict them to the same identifier shape as namespaces.
+        for key in v or {}:
+            _validate_namespace(key)
+        return v
+
+    @field_validator("statuses")
+    @classmethod
+    def _v_status_keys(cls, v: dict[str, Any]) -> dict[str, Any]:
+        # Status keys flow into `.status-badge.{key|lower}` CSS class selectors,
+        # JS string literals, and `data-key` attributes. Same identifier shape
+        # as namespaces / levels.
+        for key in v or {}:
+            _validate_namespace(key)
+        return v
+
     cli_ttl: int = Field(
         default=30,
         description="CLI daemon TTL in minutes (>0=auto-start, 0=disabled, <0=no timeout)",

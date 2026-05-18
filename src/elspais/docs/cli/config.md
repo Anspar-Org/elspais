@@ -62,12 +62,19 @@ version = 4   # Config schema version (required)
 [project]
 namespace = "REQ"          # ID prefix (e.g. "REQ" -> REQ-p00001)
 name = "my-project"        # Project name (used in reports)
+# color = "#1b3a5c"        # Optional badge color for the local namespace
+                            #   (hex "#RRGGBB"). Omit for a deterministic
+                            #   hash-derived color.
 ```
 
 ### [levels] Section
 
 Defines requirement levels with rank, letter, display name, and
-hierarchy rules. Lower rank = higher in hierarchy.
+hierarchy rules. Lower rank = higher in hierarchy. The set of levels is
+fully user-defined — there is no built-in "prd/ops/dev" requirement; you
+can declare any number of levels with any keys, and the viewer, trace
+HTML, and PDF assembler all derive their level labels and orderings from
+this section.
 
 ```toml
 [levels.prd]
@@ -75,6 +82,8 @@ rank = 1                   # Hierarchy rank (1 = highest)
 letter = "p"               # Character in ID (REQ-p00001)
 display_name = "Product"   # Display name in reports
 implements = ["prd"]       # Which levels this level may implement
+# color = "#1b3a5c"        # Optional badge color (hex "#RRGGBB"); omit
+                            #   for a deterministic hash-derived color.
 
 [levels.ops]
 rank = 2
@@ -278,6 +287,8 @@ Each entry has a name, path, and namespace.
 [associates.callisto]
 path = "../callisto"     # Relative to canonical repo root
 namespace = "CAL"        # Namespace prefix for this repo
+# color = "#7c3aed"      # Optional badge color (hex "#RRGGBB"); omit for
+                          #   a deterministic hash-derived color.
 
 [associates.phoenix]
 path = "../phoenix"
@@ -287,6 +298,30 @@ namespace = "PHX"
 Relative paths resolve from the **canonical** repository root,
 so they work correctly from git worktrees. Each path must contain
 a `.elspais.toml` with its own configuration.
+
+The viewer renders one toggle per namespace (local repo first, then each
+associate in declared order). Namespace badge colors are taken from
+`[project].color` and `[associates.<key>].color`, falling back to a
+deterministic hash if omitted.
+
+### [statuses] Section
+
+Optional per-status metadata. Keys match status names that appear in
+`[rules.format.status_roles]`. Each entry may set `color = "#RRGGBB"` to
+override the deterministic-hash fallback used by the viewer's status
+filter chips and card badges.
+
+```toml
+[statuses.Active]
+color = "#198754"
+
+[statuses.Legacy]
+color = "#6c757d"
+```
+
+Statuses not listed here still appear in the UI; they just inherit a
+hashed color. Keys not present in `status_roles` are accepted but
+logged as a warning at config load.
 
 ## Config Commands
 

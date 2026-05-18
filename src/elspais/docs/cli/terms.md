@@ -35,7 +35,14 @@ Level
 | Flag | Default | Effect |
 |------|---------|--------|
 | `Collection: true` | `false` | Term gets its own collection manifest file |
-| `Indexed: false` | `true` | Suppresses index entries and unmarked-usage health check |
+| `Indexed: false` | `true` | Term is excluded from the glossary index, the unmarked-usage scan, the canonical-form auto-fix, and the term card's References panel in the viewer. Use this for ubiquitous keywords (e.g. `Assertion`) where the panel would list thousands of references and the unmarked-usage warnings would be noise. |
+
+Note: `Indexed: false` is currently a single flag that bundles four
+effects together (glossary inclusion, unmarked-usage scan, canonical-form
+auto-fix, term-card References panel). A finer-grained replacement
+(`Check Unmarked`, `Show References`, `Syntax Word`) is tracked in
+CUR-1358. In the meantime, prefer `Indexed: false` only for ubiquitous
+keywords where all four effects are wanted together.
 
 ## Referencing Terms
 

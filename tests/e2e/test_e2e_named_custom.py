@@ -101,6 +101,36 @@ class TestNamedComponentIds:
 
 
 # ---------------------------------------------------------------------------
+# Dynamic level/namespace surfacing in static viewer (Verifies: REQ-d00211)
+# ---------------------------------------------------------------------------
+
+
+class TestDynamicCategoriesInStaticViewer:
+    """`elspais viewer --static` derives level + namespace badges and CSS from
+    [levels] / [project] config rather than baked-in prd/ops/dev names."""
+
+    def test_static_viewer_has_no_core_literal(self, project):
+        result = run_elspais("viewer", "--static", cwd=project)
+        assert result.returncode == 0, f"viewer --static failed: {result.stderr}"
+        assert "Core:" not in result.stdout, "Legacy 'Core:' string should be gone"
+
+    def test_static_viewer_emits_levels_constant(self, project):
+        result = run_elspais("viewer", "--static", cwd=project)
+        assert result.returncode == 0
+        assert "var LEVELS = " in result.stdout
+        # Configured levels appear by key
+        for key in ("prd", "ops", "dev"):
+            assert f'"{key}"' in result.stdout
+
+    def test_static_viewer_emits_level_css_selectors(self, project):
+        result = run_elspais("viewer", "--static", cwd=project)
+        assert result.returncode == 0
+        # Per-level CSS selectors generated from [levels]
+        for key in ("prd", "ops", "dev"):
+            assert f'.stat-badge.level-badge[data-key="{key}"]' in result.stdout
+
+
+# ---------------------------------------------------------------------------
 # Numeric 1-based assertion labels
 # ---------------------------------------------------------------------------
 

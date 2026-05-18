@@ -71,6 +71,7 @@ def run(args: argparse.Namespace) -> int:
         overview=overview,
         max_depth=max_depth,
         resolver=resolver,
+        config=config,
     )
     markdown_content = assembler.assemble()
 

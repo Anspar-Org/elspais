@@ -296,12 +296,14 @@ class HTMLGenerator:
         version: str | None = None,
         repo_name: str | None = None,
         namespace: str = "REQ",
+        config: dict | None = None,
     ) -> None:
         self.graph = graph
         self.base_path = base_path
         self.version = version if version is not None else __version__
         self.repo_name = repo_name
         self.namespace = namespace
+        self.config = config or {}
 
     def generate(self, embed_content: bool = False) -> str:
         """Generate the complete HTML report.
@@ -351,13 +353,26 @@ class HTMLGenerator:
         # Update journey count in stats
         stats.journey_count = len(journeys)
 
+        # Build dynamic category catalogs (levels/namespaces/statuses with
+        # resolved colors). Same shape used by the live viewer routes.
+        from elspais.config.schema import ElspaisConfig
+        from elspais.server.routes_ui import build_levels, build_namespaces, build_statuses
+
+        try:
+            typed_cfg = ElspaisConfig.model_validate(self.config)
+        except Exception:
+            typed_cfg = ElspaisConfig.model_validate({})
+        levels_ctx = build_levels(typed_cfg)
+        namespaces_ctx = build_namespaces(typed_cfg)
+        statuses_ctx = build_statuses(typed_cfg, candidates=sorted(statuses))
+
         # Render template
         html_content = template.render(
             mode="view",
             stats=stats,
             rows=rows,
             journeys=journeys,
-            statuses=sorted(statuses),
+            statuses=statuses_ctx,
             topics=sorted(topics),
             tree_data=tree_data,
             source_files=source_files,
@@ -373,6 +388,8 @@ class HTMLGenerator:
             ),
             catalog=get_catalog(),
             default_hidden_statuses=[],
+            levels=levels_ctx,
+            namespaces=namespaces_ctx,
         )
 
         return html_content
@@ -508,6 +525,11 @@ class HTMLGenerator:
         visited_at_depth: dict[tuple[str, int, str | None], bool] = {}
         visited_node_ids: set[str] = set()  # Track all rendered node IDs
 
+        from elspais.config import default_level_keys
+
+        _level_keys = list((self.config.get("levels") or {}).keys()) or default_level_keys()
+        level_prefixes = tuple(f"{k.lower()}-" for k in _level_keys)
+
         def get_topic(node: GraphNode) -> str:
             """Extract topic from file path."""
             _fn = node.file_node()
@@ -517,8 +539,7 @@ class HTMLGenerator:
             # Extract filename without extension
             # e.g., "spec/prd-system.md" -> "prd-system" -> "system"
             filename = Path(path).stem
-            # Remove level prefix if present
-            for prefix in ("prd-", "ops-", "dev-"):
+            for prefix in level_prefixes:
                 if filename.lower().startswith(prefix):
                     return filename[len(prefix) :]
             return filename

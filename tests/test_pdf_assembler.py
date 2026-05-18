@@ -452,12 +452,14 @@ class TestTopicIndex:
 
     def test_REQ_p00080_D_topics_from_filename(self):
         """Topics are extracted from filenames stripping level prefix."""
-        topics = MarkdownAssembler._topics_from_filename("spec/prd-pdf-generation.md")
+        asm = MarkdownAssembler(_make_graph())
+        topics = asm._topics_from_filename("spec/prd-pdf-generation.md")
         assert topics == ["pdf", "generation"]
 
     def test_REQ_p00080_D_topics_from_filename_numeric(self):
         """Numeric prefixes are stripped."""
-        topics = MarkdownAssembler._topics_from_filename("spec/07-graph-architecture.md")
+        asm = MarkdownAssembler(_make_graph())
+        topics = asm._topics_from_filename("spec/07-graph-architecture.md")
         assert topics == ["graph", "architecture"]
 
     def test_REQ_p00080_D_topics_from_remainder(self):
@@ -505,7 +507,7 @@ class TestOverviewMode:
         asm = MarkdownAssembler(graph, overview=True)
         output = asm.assemble()
         assert "# Product Requirements" in output
-        assert "# Operational Requirements" not in output
+        assert "# Operations Requirements" not in output
         assert "# Development Requirements" not in output
 
     def test_REQ_p00080_F_includes_associated_prd(self, tmp_path):
@@ -580,5 +582,5 @@ class TestOverviewMode:
         asm = MarkdownAssembler(graph)
         output = asm.assemble()
         assert "# Product Requirements" in output
-        assert "# Operational Requirements" in output
+        assert "# Operations Requirements" in output
         assert "# Development Requirements" in output

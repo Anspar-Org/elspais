@@ -52,23 +52,9 @@ info-bg = "#cff4fc"
 info-text = "#055160"
 info-border = "#b6effb"
 
-# Level badges
-level-prd-bg = "#1b3a5c"
-level-prd-text = "#ffffff"
-level-ops-bg = "#fd7e14"
-level-ops-text = "#ffffff"
-level-dev-bg = "#20c997"
-level-dev-text = "#ffffff"
-
-# Status badges
-status-draft-bg = "#6c757d"
-status-draft-text = "#ffffff"
-status-active-bg = "#198754"
-status-active-text = "#ffffff"
-status-deprecated-bg = "#dc3545"
-status-deprecated-text = "#ffffff"
-status-proposed-bg = "#e8a317"
-status-proposed-text = "#ffffff"
+# Level and status badge colors are now per-key, resolved at render time from
+# [levels.<key>].color / [statuses.<key>].color (or deterministic hash). The
+# theme no longer pins specific level/status palette colors.
 
 # Validation tiers (active badge overlays)
 val-green-bg = "#198754"
@@ -393,12 +379,8 @@ picker-dropdown-border = "#dee2e6"
 picker-item-hover = "#e7f1ff"
 picker-item-id = "#0d6efd"
 picker-item-title = "#495057"
-picker-level-prd-bg = "#cfe2ff"
-picker-level-prd-text = "#084298"
-picker-level-ops-bg = "#d1e7dd"
-picker-level-ops-text = "#0f5132"
-picker-level-dev-bg = "#fff3cd"
-picker-level-dev-text = "#664d03"
+# Picker level chip colors are now per-key (resolved from [levels.<key>].color
+# or deterministic hash). No theme entries.
 picker-empty = "#adb5bd"
 picker-loading = "#6c757d"
 picker-selected-bg = "#e7f1ff"
@@ -431,13 +413,8 @@ assertion-btn-text = "#6c757d"
 assertion-btn-hover-bg = "#f8f9fa"
 assertion-btn-hover-border = "#adb5bd"
 
-# Nav tree level (duplicated from stat badges for nav-specific context)
-nav-level-prd-bg = "#212529"
-nav-level-prd-text = "#ffffff"
-nav-level-ops-bg = "#fd7e14"
-nav-level-ops-text = "#ffffff"
-nav-level-dev-bg = "#20c997"
-nav-level-dev-text = "#ffffff"
+# Nav-tree level colors are per-key (resolved from [levels.<key>].color or
+# deterministic hash). No theme entries.
 
 # ---------------------------------------------------------------------------
 # Dark theme
@@ -488,23 +465,8 @@ info-bg = "#1a3040"
 info-text = "#6ea8fe"
 info-border = "#2d4a6e"
 
-# Level badges
-level-prd-bg = "#1b3a5c"
-level-prd-text = "#ffffff"
-level-ops-bg = "#fd7e14"
-level-ops-text = "#ffffff"
-level-dev-bg = "#20c997"
-level-dev-text = "#ffffff"
-
-# Status badges
-status-draft-bg = "#6c757d"
-status-draft-text = "#ffffff"
-status-active-bg = "#198754"
-status-active-text = "#ffffff"
-status-deprecated-bg = "#dc3545"
-status-deprecated-text = "#ffffff"
-status-proposed-bg = "#e8a317"
-status-proposed-text = "#ffffff"
+# Level and status badge colors are now per-key (resolved at render time).
+# No theme entries.
 
 # Validation tiers
 val-green-bg = "#146c43"
@@ -829,12 +791,7 @@ picker-dropdown-border = "#495057"
 picker-item-hover = "#1a2d42"
 picker-item-id = "#6ea8fe"
 picker-item-title = "#adb5bd"
-picker-level-prd-bg = "#1a2d42"
-picker-level-prd-text = "#6ea8fe"
-picker-level-ops-bg = "#1a3328"
-picker-level-ops-text = "#5cb85c"
-picker-level-dev-bg = "#3d3019"
-picker-level-dev-text = "#f0c75e"
+# Picker level chip colors are per-key. No theme entries.
 picker-empty = "#6c757d"
 picker-loading = "#868e96"
 picker-selected-bg = "#1a2d42"
@@ -867,13 +824,7 @@ assertion-btn-text = "#868e96"
 assertion-btn-hover-bg = "#343a40"
 assertion-btn-hover-border = "#6c757d"
 
-# Nav tree level
-nav-level-prd-bg = "#1b3a5c"
-nav-level-prd-text = "#ffffff"
-nav-level-ops-bg = "#fd7e14"
-nav-level-ops-text = "#ffffff"
-nav-level-dev-bg = "#20c997"
-nav-level-dev-text = "#ffffff"
+# Nav-tree level colors are per-key. No theme entries.
 
 
 # ---------------------------------------------------------------------------

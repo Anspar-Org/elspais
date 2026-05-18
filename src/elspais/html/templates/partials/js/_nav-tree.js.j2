@@ -1,6 +1,24 @@
 // Partial: _nav-tree.js.j2 — Nav tree rendering, tabs, header stats, FilterGroup integration
 
 // =====================================================================
+// Server-injected category catalogs (levels, namespaces, statuses).
+// These come from routes_ui._extract_viewer_config() and carry resolved
+// bg/text colors. JS code reads from these rather than hardcoding names.
+// =====================================================================
+
+var LEVELS = {{ levels | tojson }};
+var NAMESPACES = {{ namespaces | tojson }};
+var LOCAL_NS = (NAMESPACES.find(function(n){ return n.is_local; }) || {code: '', label: ''}).code;
+var LOCAL_NS_LABEL = (NAMESPACES.find(function(n){ return n.is_local; }) || {code: '', label: ''}).label;
+
+var TREE_DISPLAY_MODES = ['compact', 'title-only', 'id-only', 'full', 'ns-bg'];
+var DEFAULT_TREE_DISPLAY_MODE = 'compact';
+// "Level at end" is an orthogonal toggle that re-orders the level badge to the
+// end of the row regardless of which display mode is active. Stored separately
+// from `treeDisplayMode` so users can combine it freely (e.g. ns-bg + level-at-end).
+var DEFAULT_LEVEL_AT_END = false;
+
+// =====================================================================
 // FilterGroup Instances
 // =====================================================================
 
@@ -71,13 +89,13 @@ filterGroups.status = new FilterGroup({
     name: 'status',
     container: document.getElementById('status-filter-buttons'),
     buttons: [
-        {% for status in statuses %}
-        {key: '{{ status | lower }}', label: '{{ status }}'},
+        {% for s in statuses %}
+        {key: '{{ s.key | lower }}', label: '{{ s.label }}'},
         {% endfor %}
     ],
     defaultOn: new Set([
-        {% for status in statuses %}
-        {% if status not in default_hidden_statuses %}'{{ status | lower }}',{% endif %}
+        {% for s in statuses %}
+        {% if s.key not in default_hidden_statuses %}'{{ s.key | lower }}',{% endif %}
         {% endfor %}
     ]),
     sensitiveEvents: new Set(['mutation-status', 'refresh']),
@@ -147,6 +165,24 @@ function toggleShowHiddenParents() {
     saveState();
 }
 
+function setTreeDisplayMode(mode) {
+    if (TREE_DISPLAY_MODES.indexOf(mode) === -1) mode = DEFAULT_TREE_DISPLAY_MODE;
+    editState.treeDisplayMode = mode;
+    var container = document.getElementById('nav-tree-container');
+    if (container) container.dataset.mode = mode;
+    if (typeof saveState === 'function') saveState();
+    if (typeof renderNavTree === 'function') renderNavTree();
+}
+
+function setLevelAtEnd(enabled) {
+    var flag = !!enabled;
+    editState.levelAtEnd = flag;
+    var container = document.getElementById('nav-tree-container');
+    if (container) container.dataset.levelPos = flag ? 'end' : 'start';
+    if (typeof saveState === 'function') saveState();
+    // No re-render needed — purely CSS-driven by data-level-pos.
+}
+
 // =====================================================================
 // Header Stats
 // =====================================================================
@@ -157,47 +193,62 @@ function updateHeaderStats() {
     var rows = editState.treeData;
     if (!rows || rows.length === 0) return;
     var seen = {};
-    var counts = { {% for t in config_types | default([{"name":"prd"},{"name":"ops"},{"name":"dev"}]) %}{{ t.name }}: 0, {% endfor %}main: 0};
+    // Level keys are user-defined and case-preserved; comparisons against
+    // row.level (uppercased by the server) are done in UPPER case.
+    var counts = {};
+    for (var li = 0; li < LEVELS.length; li++) counts[LEVELS[li].key.toUpperCase()] = 0;
+    counts.main = 0;
     var repoCounts = {};  // { "CAL": 3, "TTN": 2 }
     for (var i = 0; i < rows.length; i++) {
         var r = rows[i];
         if (seen[r.id]) continue;
         seen[r.id] = true;
         if (r.level) {
-            var lev = r.level.toLowerCase();
+            var lev = (r.level || '').toUpperCase();
             if (counts[lev] !== undefined) counts[lev]++;
             if (!r.is_associated) counts.main++;
-            // Track associated repo prefixes
-            if (r.is_associated && r.repo_prefix && r.repo_prefix !== 'CORE') {
+            // Track associated repo prefixes (anything not the local namespace)
+            if (r.is_associated && r.repo_prefix && r.repo_prefix !== LOCAL_NS) {
                 repoCounts[r.repo_prefix] = (repoCounts[r.repo_prefix] || 0) + 1;
             }
         }
     }
-    document.getElementById('stat-prd').textContent = 'PRD: ' + counts.prd;
-    document.getElementById('stat-ops').textContent = 'OPS: ' + counts.ops;
-    document.getElementById('stat-dev').textContent = 'DEV: ' + counts.dev;
-    document.getElementById('stat-main').textContent = 'Core: ' + counts.main;
+    for (var li2 = 0; li2 < LEVELS.length; li2++) {
+        var lkey = LEVELS[li2].key;
+        var el = document.getElementById('stat-level-' + lkey);
+        if (el) el.textContent = lkey.toUpperCase() + ': ' + counts[lkey.toUpperCase()];
+    }
+    var mainEl = document.getElementById('stat-main');
+    if (mainEl) mainEl.textContent = (LOCAL_NS_LABEL || LOCAL_NS || 'Local') + ': ' + counts.main;
 
-    // Initialize level FilterGroup (in header)
+    // Initialize level FilterGroup (in header), driven by injected LEVELS.
     if (!filterGroups.level) {
+        var levelButtons = LEVELS.map(function(l){ return {key: l.key, label: l.label.toUpperCase()}; });
+        var defaultLevelOn = new Set(LEVELS.map(function(l){ return l.key; }));
         filterGroups.level = new FilterGroup({
             name: 'level',
             container: document.getElementById('header-stats'),
-            buttons: [
-                {key: 'prd', label: 'PRD'},
-                {key: 'ops', label: 'OPS'},
-                {key: 'dev', label: 'DEV'},
-            ],
-            defaultOn: new Set(['prd', 'ops', 'dev']),
+            buttons: levelButtons,
+            defaultOn: defaultLevelOn,
             sensitiveEvents: new Set(['refresh']),
+            // Compare case-insensitively against the user's level key — the
+            // server uppercases row.level and the user may have either case
+            // in their config (lowercase 'prd' or uppercase 'PRD').
             countFn: function(key, rows) {
+                var k = key.toUpperCase();
                 var count = 0;
                 for (var i = 0; i < rows.length; i++) {
-                    if (rows[i].level === key.toUpperCase()) count++;
+                    if ((rows[i].level || '').toUpperCase() === k) count++;
                 }
                 return count;
             },
-            matchFn: function(row) { return (row.level || '').toLowerCase(); },
+            matchFn: function(row) {
+                var v = (row.level || '').toUpperCase();
+                for (var i = 0; i < LEVELS.length; i++) {
+                    if (LEVELS[i].key.toUpperCase() === v) return LEVELS[i].key;
+                }
+                return v;
+            },
             onChange: function() { renderNavTree(); saveState(); },
         });
     }
@@ -224,65 +275,62 @@ function updateHeaderStats() {
             resultBadge.style.display = 'none';
         }
 
-        var assocRepos = data.associated_repos || [];
-        // Build name lookup from API: { "CAL": "callisto", ... }
-        var nameMap = {};
-        for (var j = 0; j < assocRepos.length; j++) {
-            nameMap[assocRepos[j].code] = assocRepos[j].name;
-        }
+        // Render one repo chip per non-local NAMESPACES entry (always, even
+        // if the tree has zero rows from that namespace yet — the user still
+        // wants the toggle visible). NAMESPACES is the server-injected
+        // catalog from [project] + [associates.*].
+        var nsList = data.namespaces || NAMESPACES || [];
+        var assocList = nsList.filter(function(n){ return !n.is_local; });
         var container = document.getElementById('repo-badges-container');
         var sep = document.getElementById('repo-sep');
+        var headerStats = document.getElementById('header-stats');
         if (!container) return;
         container.innerHTML = '';
-        var repoPrefixes = Object.keys(repoCounts).sort();
-        editState.knownRepos = repoPrefixes;
-        if (repoPrefixes.length === 0) {
+        var assocPrefixes = assocList.map(function(n){ return n.code; });
+        // All namespace codes (local first, then assocs) for the FilterGroup
+        // — the local main badge (`#stat-main`) is also a `.filter-btn` in
+        // the same group so toggling it filters local-repo rows in/out.
+        var allPrefixes = [];
+        if (LOCAL_NS) allPrefixes.push(LOCAL_NS);
+        for (var ap = 0; ap < assocPrefixes.length; ap++) allPrefixes.push(assocPrefixes[ap]);
+        editState.knownRepos = assocPrefixes;
+        if (assocPrefixes.length === 0) {
             if (sep) sep.style.display = 'none';
-            // Initialize empty repo group
-            if (!filterGroups.repo) {
-                filterGroups.repo = new FilterGroup({
-                    name: 'repo',
-                    container: container,
-                    buttons: [],
-                    defaultOn: new Set(),
-                    sensitiveEvents: new Set(['refresh']),
-                    countFn: function() { return 0; },
-                    matchFn: function() { return 'main'; },
-                    onChange: function() { renderNavTree(); saveState(); },
-                });
+        } else {
+            if (sep) sep.style.display = '';
+            for (var k = 0; k < assocList.length; k++) {
+                var ns = assocList[k];
+                var code = ns.code;
+                var count = repoCounts[code] || 0;
+                var badge = document.createElement('span');
+                badge.className = 'stat-badge repo filter-btn on';
+                badge.id = 'stat-repo-' + code;
+                badge.title = 'Click to toggle ' + code + ' requirements (Shift+click to solo)';
+                badge.textContent = code + ': ' + count;
+                badge.setAttribute('data-group', 'repo');
+                badge.setAttribute('data-key', code.toLowerCase());
+                badge.setAttribute('data-repo', code);
+                badge.style.backgroundColor = ns.bg;
+                badge.style.color = ns.text;
+                badge.onclick = (function(repoCode) {
+                    return function(event) {
+                        if (filterGroups.repo) filterGroups.repo.handleClick(repoCode.toLowerCase(), event);
+                    };
+                })(code);
+                container.appendChild(badge);
             }
-            return;
-        }
-        if (sep) sep.style.display = '';
-        for (var k = 0; k < repoPrefixes.length; k++) {
-            var code = repoPrefixes[k];
-            var fullName = nameMap[code];
-            var displayName = fullName ? fullName.charAt(0).toUpperCase() + fullName.slice(1) : code;
-            var count = repoCounts[code];
-            var badge = document.createElement('span');
-            badge.className = 'stat-badge repo filter-btn on';
-            badge.id = 'stat-repo-' + code;
-            badge.title = 'Click to toggle ' + displayName + ' requirements (Shift+click to solo)';
-            badge.textContent = displayName + ': ' + count;
-            badge.setAttribute('data-group', 'repo');
-            badge.setAttribute('data-key', code.toLowerCase());
-            badge.setAttribute('data-repo', code);
-            badge.onclick = (function(repoCode) {
-                return function(event) {
-                    if (filterGroups.repo) filterGroups.repo.handleClick(repoCode.toLowerCase(), event);
-                };
-            })(code);
-            container.appendChild(badge);
         }
 
-        // Initialize or recreate repo FilterGroup
+        // Initialize or recreate repo FilterGroup. Container is the whole
+        // header-stats div so the FilterGroup's render() finds both the
+        // local `#stat-main` badge and the dynamically-rendered assoc chips.
         filterGroups.repo = new FilterGroup({
             name: 'repo',
-            container: container,
-            buttons: repoPrefixes.map(function(code) {
+            container: headerStats || container,
+            buttons: allPrefixes.map(function(code) {
                 return {key: code.toLowerCase(), label: code};
             }),
-            defaultOn: new Set(repoPrefixes.map(function(c) { return c.toLowerCase(); })),
+            defaultOn: new Set(allPrefixes.map(function(c) { return c.toLowerCase(); })),
             sensitiveEvents: new Set(['refresh']),
             countFn: function(key, rows) {
                 var count = 0;
@@ -291,7 +339,7 @@ function updateHeaderStats() {
                 }
                 return count;
             },
-            matchFn: function(row) { return (row.repo_prefix || 'main').toLowerCase(); },
+            matchFn: function(row) { return (row.repo_prefix || '').toLowerCase(); },
             onChange: function() { renderNavTree(); saveState(); },
         });
         filterGroups.repo.recompute(rows);
@@ -385,15 +433,28 @@ function renderNavTree() {
             container.innerHTML = '<div style="padding:20px;color:#adb5bd;text-align:center;font-size:0.85rem;">No journey data available.</div>';
             return;
         }
+        var jmode = editState.treeDisplayMode || DEFAULT_TREE_DISPLAY_MODE;
         var jhtml = '';
         for (var ji = 0; ji < journeys.length; ji++) {
             var j = journeys[ji];
             var jSelected = editState.openCards.has(j.id) ? ' selected' : '';
+            var __jRowTitleAttr = '';
+            if (jmode === 'title-only' || jmode === 'ns-bg') {
+                __jRowTitleAttr = ' title="' + escapeHtml(j.id) + '"';
+            } else if (jmode === 'id-only') {
+                __jRowTitleAttr = ' title="' + escapeHtml(j.title || '') + '"';
+            }
+            var __jRowStyleAttr = j.ns_tint ? ' style="--row-ns-tint:' + j.ns_tint + ';"' : '';
+            var __jSliverStyleAttr = j.ns_bg ? ' style="background:' + j.ns_bg + ';"' : '';
             jhtml += '<div class="nav-tree-row nav-tree-journey' + jSelected + '" ' +
                 'data-id="' + j.id + '" data-kind="journey" ' +
-                'onclick="openCard(\'' + j.id + '\')">' +
+                'data-ns="' + (j.repo_prefix || '') + '"' +
+                __jRowTitleAttr + __jRowStyleAttr +
+                ' onclick="openCard(\'' + j.id + '\')">' +
+                '<span class="nav-tree-ns-sliver"' + __jSliverStyleAttr + '></span>' +
                 '<span class="nav-tree-kind-icon">&#x1F9ED;</span>' +
-                '<span class="nav-tree-id" style="color:#6c757d;">' + escapeHtml(j.id) + '</span>' +
+                '<span class="nav-tree-id-full">' + escapeHtml(j.id) + '</span>' +
+                '<span class="nav-tree-id-component">' + escapeHtml(j.component || j.id) + '</span>' +
                 '<span class="nav-tree-title">' + escapeHtml(j.title) + '</span>' +
                 '</div>';
         }
@@ -508,7 +569,6 @@ function renderNavTree() {
             var flrow = flatFiltered[fli];
             var flSelected = editState.openCards.has(flrow.id) ? ' selected' : '';
             var fllevelClass = flrow.level ? flrow.level.toLowerCase() : '';
-            var flshortId = flrow.id.replace('REQ-', '');
             var flvalColor = flrow.validation_color || '';
             var flvalTip = flrow.validation_tip || '';
             var flvalClass = flvalColor ? ' val-' + flvalColor : '';
@@ -530,12 +590,25 @@ function renderNavTree() {
             flind += '<span class="nav-tree-indicator' + (flrow.is_changed ? ' changed' : '') + '"' +
                 (flrow.is_changed ? ' title="Changed on this branch vs main"' : '') +
                 '>' + (flrow.is_changed ? '&#x25C6;' : '') + '</span>';
+            var __flmode = editState.treeDisplayMode || DEFAULT_TREE_DISPLAY_MODE;
+            var __flRowTitleAttr = '';
+            if (__flmode === 'title-only' || __flmode === 'ns-bg') {
+                __flRowTitleAttr = ' title="' + escapeHtml(flrow.id) + '"';
+            } else if (__flmode === 'id-only') {
+                __flRowTitleAttr = ' title="' + escapeHtml(flrow.title || '') + '"';
+            }
+            var __flRowStyleAttr = flrow.ns_tint ? ' style="--row-ns-tint:' + flrow.ns_tint + ';"' : '';
+            var __flSliverStyleAttr = flrow.ns_bg ? ' style="background:' + flrow.ns_bg + ';"' : '';
             flatHtml += '<div class="nav-tree-row' + flSelected + '" ' +
                 'data-id="' + flrow.id + '" ' +
                 'data-kind="requirement" ' +
-                'onclick="openCard(\'' + flrow.id + '\')">' +
+                'data-ns="' + (flrow.repo_prefix || '') + '"' +
+                __flRowTitleAttr + __flRowStyleAttr +
+                ' onclick="openCard(\'' + flrow.id + '\')">' +
+                '<span class="nav-tree-ns-sliver"' + __flSliverStyleAttr + '></span>' +
                 (fllevelClass ? '<span class="nav-tree-level ' + fllevelClass + '">' + flrow.level + '</span>' : '') +
-                '<span class="nav-tree-id">' + flshortId + '</span>' +
+                '<span class="nav-tree-id-full">' + escapeHtml(flrow.id) + '</span>' +
+                '<span class="nav-tree-id-component">' + escapeHtml(flrow.component || flrow.id) + '</span>' +
                 '<span class="nav-tree-title">' + escapeHtml(flrow.title || '') + '</span>' +
                 '<span class="nav-tree-indicators">' + flind + '</span>' +
                 flstatusBadge +
@@ -708,7 +781,6 @@ function renderNavTree() {
 
         // ── REQUIREMENT row rendering ──
         const levelClass = row.level ? row.level.toLowerCase() : '';
-        const shortId = row.id.replace('REQ-', '');
 
         // Status badge — color driven by combined (all) coverage
         var statusBadge = '';
@@ -736,17 +808,32 @@ function renderNavTree() {
             (row.is_changed ? ' title="Changed on this branch vs main"' : '') +
             '>' + (row.is_changed ? '&#x25C6;' : '') + '</span>';
 
+        // Per-mode hover tooltip text (full ID, title, or none)
+        var __mode = editState.treeDisplayMode || DEFAULT_TREE_DISPLAY_MODE;
+        var __rowTitleAttr = '';
+        if (__mode === 'title-only' || __mode === 'ns-bg') {
+            __rowTitleAttr = ' title="' + escapeHtml(row.id) + '"';
+        } else if (__mode === 'id-only') {
+            __rowTitleAttr = ' title="' + escapeHtml(row.title || '') + '"';
+        }
+        var __rowStyleAttr = row.ns_tint ? ' style="--row-ns-tint:' + row.ns_tint + ';"' : '';
+        var __sliverStyleAttr = row.ns_bg ? ' style="background:' + row.ns_bg + ';"' : '';
+
         html += '<div class="nav-tree-row' + selectedClass + dimClass + '" ' +
             'data-id="' + row.id + '" ' +
             'data-parent="' + (row.parent_id || '') + '" ' +
             'data-depth="' + row.depth + '" ' +
             'data-kind="requirement" ' +
-            'onclick="openCard(\'' + row.id + '\')">' +
+            'data-ns="' + (row.repo_prefix || '') + '"' +
+            __rowTitleAttr + __rowStyleAttr +
+            ' onclick="openCard(\'' + row.id + '\')">' +
             indents.join('') +
             '<button class="' + toggleClass + '" onclick="event.stopPropagation(); toggleTreeNode(\'' + row.id + '\')">' +
             toggleIcon + '</button>' +
+            '<span class="nav-tree-ns-sliver"' + __sliverStyleAttr + '></span>' +
             (levelClass ? '<span class="nav-tree-level ' + levelClass + '">' + row.level + '</span>' : '') +
-            '<span class="nav-tree-id">' + shortId + '</span>' +
+            '<span class="nav-tree-id-full">' + escapeHtml(row.id) + '</span>' +
+            '<span class="nav-tree-id-component">' + escapeHtml(row.component || row.id) + '</span>' +
             '<span class="nav-tree-title">' + escapeHtml(row.title || '') + '</span>' +
             '<span class="nav-tree-indicators">' + indicators + '</span>' +
             statusBadge +
@@ -928,3 +1015,28 @@ function setViewMode(mode) {
     renderNavTree();
     saveState();
 }
+
+// On script load, restore the tree display mode + "level at end" toggle from
+// the shared cookie state (see _cookie-persistence.js.j2). One persistence
+// mechanism for all viewer settings — no separate localStorage path.
+(function initTreeDisplayState() {
+    var saved = (typeof loadState === 'function') ? loadState() : null;
+    var savedMode = saved ? saved.treeDisplayMode : null;
+    if (TREE_DISPLAY_MODES.indexOf(savedMode) === -1) savedMode = DEFAULT_TREE_DISPLAY_MODE;
+    editState.treeDisplayMode = savedMode;
+    var sel = document.getElementById('tree-display-mode');
+    if (sel) sel.value = savedMode;
+
+    var levelAtEnd = saved && typeof saved.levelAtEnd === 'boolean'
+        ? saved.levelAtEnd
+        : DEFAULT_LEVEL_AT_END;
+    editState.levelAtEnd = levelAtEnd;
+    var lvlCb = document.getElementById('toggle-level-at-end');
+    if (lvlCb) lvlCb.checked = levelAtEnd;
+
+    var container = document.getElementById('nav-tree-container');
+    if (container) {
+        container.dataset.mode = savedMode;
+        container.dataset.levelPos = levelAtEnd ? 'end' : 'start';
+    }
+})();

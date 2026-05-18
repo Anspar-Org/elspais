@@ -231,11 +231,12 @@ class TestIndexRouteStatusOrdering:
 
         assert "statuses" in captured_context, "index() must pass 'statuses' to template context"
         statuses = captured_context["statuses"]
-        assert statuses == [
+        keys = [s["key"] for s in statuses]
+        assert keys == [
             "Zactive",
             "Aretired",
         ], (
-            f"Expected role-sorted order ['Zactive', 'Aretired'] but got {statuses}. "
+            f"Expected role-sorted order ['Zactive', 'Aretired'] but got {keys}. "
             "Alphabetical sort would yield ['Aretired', 'Zactive']."
         )
 
@@ -283,9 +284,10 @@ class TestIndexRouteStatusOrdering:
             asyncio.run(index(mock_request))
 
         statuses = captured_context.get("statuses", [])
-        rejected_idx = statuses.index("Rejected") if "Rejected" in statuses else -1
-        roadmap_idx = statuses.index("Roadmap") if "Roadmap" in statuses else -1
+        keys = [s["key"] for s in statuses]
+        rejected_idx = keys.index("Rejected") if "Rejected" in keys else -1
+        roadmap_idx = keys.index("Roadmap") if "Roadmap" in keys else -1
         assert roadmap_idx < rejected_idx, (
             f"Roadmap (aspirational) should come before Rejected (retired) by role order. "
-            f"Got statuses={statuses}"
+            f"Got status keys={keys}"
         )

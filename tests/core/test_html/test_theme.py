@@ -90,9 +90,9 @@ class TestCSSVariableGeneration:
     def test_REQ_p00006_A_all_tokens_present(self):
         catalog = get_catalog()
         css = catalog.css_variables()
-        # Spot-check key tokens
+        # Spot-check key tokens. Per-status palette entries are removed in
+        # favor of per-key dynamic colors (resolved at render time).
         assert "--primary:" in css
-        assert "--status-active-bg:" in css
         assert "--val-green-bg:" in css
 
 

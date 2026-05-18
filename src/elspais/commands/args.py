@@ -366,8 +366,8 @@ class AnalysisArgs:
     show: Literal["foundations", "leaves", "all"] = "all"
     """Which sections to show."""
 
-    level: Literal["prd", "ops", "dev"] | None = None
-    """Filter results by requirement level."""
+    level: str | None = None
+    """Filter results by requirement level (any key from [levels] config)."""
 
     include_code: bool = False
     """Include CODE nodes in the analysis."""

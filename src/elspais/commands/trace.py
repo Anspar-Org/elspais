@@ -517,6 +517,7 @@ def format_view(
     embed_content: bool = False,
     base_path: str = "",
     repo_name: str | None = None,
+    config: dict | None = None,
 ) -> str:
     """Generate interactive HTML via HTMLGenerator."""
     try:
@@ -526,7 +527,7 @@ def format_view(
             "HTMLGenerator requires the trace-view extra. "
             "Install with: pip install elspais[trace-view]"
         ) from err
-    generator = HTMLGenerator(graph, base_path=base_path, repo_name=repo_name)
+    generator = HTMLGenerator(graph, base_path=base_path, repo_name=repo_name, config=config)
     return generator.generate(embed_content=embed_content)
 
 

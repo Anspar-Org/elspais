@@ -244,10 +244,24 @@ dir = ""
 [associates.callisto]
 path = "../callisto"
 namespace = "CAL"
+# color = "#7c3aed"                  # Optional: badge color for this namespace
 
 [associates.phoenix]
 path = "../phoenix"
 namespace = "PHX"
+
+#──────────────────────────────────────────────────────────────────────────────
+# STATUSES - Optional Per-Status Metadata
+# Attach color (and future metadata) to status names referenced by
+# [rules.format.status_roles]. Unspecified statuses fall back to a
+# deterministic hash-derived color.
+#──────────────────────────────────────────────────────────────────────────────
+
+[statuses.Active]
+color = "#198754"
+
+[statuses.Legacy]
+color = "#6c757d"
 
 #──────────────────────────────────────────────────────────────────────────────
 # VALIDATION RULES
