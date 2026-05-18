@@ -286,10 +286,12 @@ function _alignTableGutter(block) {
 
 function fvRenderMarkdown(text) {
     // Extract pipe tables first so the per-line regex pipeline doesn't
-    // mangle them. The cellTransform here escapes and applies inline
-    // emphasis so cell content renders consistently with non-table text.
+    // mangle them. The cellTransform escapes, applies inline emphasis,
+    // and annotates defined terms so cell content links into the term
+    // cards. `_annotateTermsInString` is defined in `_card-stack.js.j2`
+    // and is a no-op when `editState.termsLookup` is empty.
     var cellTransform = function(cellText) {
-        return cellText
+        var safe = cellText
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
@@ -297,6 +299,7 @@ function fvRenderMarkdown(text) {
             .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
             .replace(/\*(.+?)\*/g, '<em>$1</em>')
             .replace(/`([^`]+)`/g, '<code>$1</code>');
+        return _annotateTermsInString(safe);
     };
     var extracted = extractMdTables(text.split('\n'), cellTransform);
     var pipelineText = extracted.lines.join('\n');
@@ -317,6 +320,10 @@ function fvRenderMarkdown(text) {
         .replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>')
         .replace(/\n\n/g, '</p><p>')
         .replace(/\n/g, '<br>');
+    // Term-annotate non-table content. Table HTML chunks are reinserted
+    // after this pass so cells (already annotated above) are not double-
+    // wrapped and `class="md-table"`-style attribute strings stay safe.
+    html = _annotateTermsInString(html);
     return '<p>' + reinsertMdTables(html, extracted.chunks) + '</p>';
 }
 

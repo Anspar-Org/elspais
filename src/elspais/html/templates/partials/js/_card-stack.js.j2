@@ -1195,19 +1195,18 @@ function _buildTermsRegex() {
     editState.termsRegex = new RegExp('\\b(' + escaped.join('|') + ')\\b', 'gi');
 }
 
-// Implements: REQ-d00245-B — delegated click handler for .defined-term spans
+// Implements: REQ-d00245-B — delegated click handler for .defined-term spans.
+// Scoped to document.body so clicks land for terms surfaced anywhere —
+// card stack, file-viewer Rendered pane, etc.
 document.addEventListener('DOMContentLoaded', function() {
-    var body = document.getElementById('card-stack-body');
-    if (body) {
-        body.addEventListener('click', function(e) {
-            var span = e.target.closest('.defined-term');
-            if (span) {
-                e.preventDefault();
-                var key = span.getAttribute('data-term-key');
-                if (key) openTermCard(key);
-            }
-        });
-    }
+    document.body.addEventListener('click', function(e) {
+        var span = e.target.closest('.defined-term');
+        if (span) {
+            e.preventDefault();
+            var key = span.getAttribute('data-term-key');
+            if (key) openTermCard(key);
+        }
+    });
 });
 
 // =====================================================================
