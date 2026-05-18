@@ -72,3 +72,36 @@ def test_tree_rows_fallback_to_full_id_when_unparseable(tmp_path):
     rows = _run_endpoint(state)
     for r in rows:
         assert r["component"], f"row {r['id']} has empty component"
+
+
+def test_journey_row_component_strips_jny_prefix(tmp_path):
+    """Journey rows should expose `component` as the descriptor-number
+    portion so the compact display mode hides the literal `JNY-` prefix."""
+    spec = tmp_path / "spec"
+    spec.mkdir()
+    (spec / "journeys.md").write_text(
+        "## JNY-Onboarding-01: New user onboarding\n\n"
+        "**Actor**: New user\n\n"
+        "**Goal**: Sign up\n\n"
+        "*End* *JNY-Onboarding-01*\n"
+    )
+    (tmp_path / ".elspais.toml").write_text(
+        "version = 4\n"
+        '[project]\nnamespace = "REQ"\n'
+        '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n'
+        '[scanning.spec]\ndirectories = ["spec"]\n'
+        '[scanning.journey]\ndirectories = ["spec"]\n'
+        "[changelog]\nhash_current = false\n"
+    )
+    graph = build_graph(repo_root=tmp_path)
+    state = MagicMock()
+    state.graph = graph
+    state.repo_root = tmp_path
+    from elspais.config import get_config
+
+    state.config = get_config(start_path=tmp_path, quiet=True)
+    rows = _run_endpoint(state)
+    journeys = [r for r in rows if r.get("kind") == "journey"]
+    assert journeys, "expected at least one journey row"
+    j = next(r for r in journeys if r["id"] == "JNY-Onboarding-01")
+    assert j["component"] == "Onboarding-01", j

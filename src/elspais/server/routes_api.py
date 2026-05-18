@@ -26,6 +26,7 @@ from elspais.graph.comment_store import (
     parse_anchor,
 )
 from elspais.graph.comments import CommentEvent, CommentThread
+from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.mcp.server import (
     _get_assertion_code_map,
     _get_assertion_refines_map,
@@ -655,6 +656,17 @@ async def api_tree_data(request: Request) -> JSONResponse:
 
     # Add USER_JOURNEY nodes
     _jn_entry = ns_catalog.get(local_ns) or {}
+
+    def _journey_component(node_id: str) -> str:
+        """Strip the literal "JNY-" prefix from a journey ID so the compact
+        display mode shows e.g. "LOGIN-01" instead of "JNY-LOGIN-01".
+        Falls back to the full ID if the canonical pattern doesn't match.
+        """
+        m = JNY_ID_PATTERN.match(node_id)
+        if m:
+            return f"{m.group('descriptor')}-{m.group('number')}"
+        return node_id
+
     for node in sorted(g.nodes_by_kind(NodeKind.USER_JOURNEY), key=lambda n: n.id):
         _fn = node.file_node()
         source_file = _fn.get_field("relative_path") if _fn else ""
@@ -681,7 +693,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
                 "is_journey": True,
                 "result_status": "",
                 "repo_prefix": local_ns,
-                "component": node.id,
+                "component": _journey_component(node.id),
                 "ns_bg": _jn_entry.get("bg", ""),
                 "ns_text": _jn_entry.get("text", ""),
                 "ns_tint": _jn_entry.get("tint", ""),
