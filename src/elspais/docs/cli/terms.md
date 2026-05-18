@@ -67,6 +67,10 @@ Each occurrence of a defined term in prose is classified into one of three categ
 
 The `markup_styles` config option (default: `["*", "**"]`) controls which Markdown emphasis delimiters count as "marked". Any emphasis delimiter not in this list produces a wrong-marking finding.
 
+### Auto-marking guard
+
+`elspais fix` auto-wraps unmarked occurrences of indexed terms, but **skips matches that already sit strictly inside an outer emphasis span**. A defined term `Diary` inside the bold phrase `**Diary Start Day**` is left as-is rather than rewritten to `****Diary** Start Day**` (which pandoc would render as literal asterisks). The outer emphasis already satisfies the marking convention; the auto-marker only touches plain-text occurrences in non-emphasized prose.
+
 ## Placement Rules
 
 Definition blocks are allowed in:
