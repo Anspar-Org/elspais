@@ -164,8 +164,10 @@ def generate_term_index(td: TermDictionary, format: str = "markdown") -> str:
 
         for ns in sorted(refs_by_ns):
             lines.append(f"**{ns}:**")
+            lines.append("")
             for node_id in refs_by_ns[ns]:
                 lines.append(f"- {node_id}")
+            lines.append("")
 
     lines.append("")
     return "\n".join(lines)
@@ -205,6 +207,7 @@ def generate_collection_manifest(entry: TermEntry, format: str = "markdown") -> 
 
     for ns in sorted(refs_by_ns):
         lines.append(f"**{ns}:**")
+        lines.append("")
         for node_id in refs_by_ns[ns]:
             lines.append(f"- {node_id}")
         lines.append("")

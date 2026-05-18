@@ -152,6 +152,20 @@ class TestGlossaryCmd:
         bad = re.search(r"\*Defined in: [^\n]+\n\*\*", output)
         assert bad is None, f"Found adjacent term blocks with no blank line: {bad.group(0)!r}"
 
+    def test_REQ_d00224_A_glossary_blank_line_before_term_index_bullets(self) -> None:
+        """Term-index namespace headers are separated from their bullet list
+        by a blank line so pandoc treats the bullets as a list rather than
+        paragraph continuation of the bold header."""
+        _, generate_term_index, _ = _import_generators()
+        td = _build_test_dictionary()
+        output = generate_term_index(td)
+        # The `**ns:**` line must be followed by a blank line before the
+        # first `- node_id` bullet.
+        import re
+
+        bad = re.search(r"\*\*[^*\n]+:\*\*\n- ", output)
+        assert bad is None, f"Namespace header without blank-line separator: {bad.group(0)!r}"
+
     # -- REQ-d00224-B: term index ---------------------------------------------
 
     def test_REQ_d00224_B_term_index_only_indexed(self) -> None:
