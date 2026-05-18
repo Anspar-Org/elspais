@@ -392,6 +392,116 @@ class TestMCPAssociatedSubtree:
 
 
 # ---------------------------------------------------------------------------
+# Test: Cross-repo /api/file-content lookup (CUR-1357)
+# Verifies: REQ-d00200-G
+# Unique layout — keeps per-test build so we can drive a fresh daemon
+# against a federated project with named (allowed_roots-aware) associates.
+# Read-only — must run BEFORE the mutation block below.
+# ---------------------------------------------------------------------------
+
+
+class TestFileContentCrossRepo:
+    """REQ-d00200-G: /api/file-content resolves associate-repo files via node_id.
+
+    Phase 1 of CUR-1357 adds an optional ``node_id`` query parameter to
+    ``/api/file-content``. When supplied, the server resolves the file
+    against the owning repo's root via ``FederatedGraph.repo_root_for``
+    instead of the federation root. This e2e test drives the change
+    against a real daemon over HTTP.
+    """
+
+    def _build_federated_project(self, tmp_path):
+        """Build a 2-repo federation (core + assoc) using named associate format."""
+        core_root = tmp_path / "core"
+        assoc_root = tmp_path / "assoc"
+
+        core_cfg = base_config(name="cur1357-core")
+        # Named associate format → AppState._compute_allowed_roots picks up
+        # the associate root, so /api/file-content's security guard allows
+        # reading from it.
+        core_cfg["associates"] = {
+            "assoc": {"path": "../assoc", "namespace": "REQ"},
+        }
+        core_prd = Requirement(
+            "REQ-p00001",
+            "Core PRD",
+            "PRD",
+            assertions=[("A", "The system SHALL exist.")],
+        )
+        build_project(
+            core_root,
+            core_cfg,
+            spec_files={"spec/prd-core.md": [core_prd]},
+        )
+
+        # Associate uses the same namespace but a distinct numeric ID so
+        # the parser accepts it under the canonical {namespace}-{level}{n}
+        # pattern. The file content is distinguishable from the root.
+        assoc_prd = Requirement(
+            "REQ-p00099",
+            "Associate PRD",
+            "PRD",
+            assertions=[("A", "Cross-repo file content SHALL resolve.")],
+        )
+        build_associate(
+            assoc_root,
+            "assoc",
+            "XX",
+            "../core",
+            spec_files={"spec/prd-assoc.md": [assoc_prd]},
+            init_git=True,
+        )
+        return core_root, assoc_root
+
+    def test_file_content_resolves_associate_repo(self, tmp_path):
+        """GET /api/file-content?path=spec/prd-assoc.md&node_id=REQ-p00099
+        returns the on-disk content of the associate's source file."""
+        import json
+        import urllib.error
+        import urllib.request
+
+        from elspais.mcp.daemon import ensure_daemon, get_daemon_info
+
+        core_root, assoc_root = self._build_federated_project(tmp_path)
+        ensure_daemon(core_root)
+        info = get_daemon_info(core_root)
+        assert info is not None, "daemon failed to start for federated fixture"
+        port = info["port"]
+
+        # Sanity check the node exists in the federated graph and routes
+        # to the associate repo.
+        sanity = urllib.request.urlopen(f"http://127.0.0.1:{port}/api/status", timeout=5)
+        assert sanity.status == 200
+
+        # Without node_id: the server would resolve against core/, where
+        # spec/prd-assoc.md does not exist → 404.
+        bad_req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/file-content?path=spec/prd-assoc.md"
+        )
+        try:
+            urllib.request.urlopen(bad_req, timeout=5)
+            raise AssertionError("expected 404 without node_id")
+        except urllib.error.HTTPError as e:
+            assert e.code == 404
+
+        # With node_id: the server resolves against the associate root
+        # and returns the file content.
+        ok_req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/file-content"
+            f"?path=spec/prd-assoc.md&node_id=REQ-p00099"
+        )
+        resp = urllib.request.urlopen(ok_req, timeout=5)
+        assert resp.status == 200
+        data = json.loads(resp.read().decode("utf-8"))
+
+        # On-disk content matches the lines returned by the API.
+        on_disk = (assoc_root / "spec" / "prd-assoc.md").read_text().splitlines()
+        assert data["lines"] == on_disk
+        # Content is distinguishable from the root repo's file.
+        assert any("REQ-p00099" in line for line in data["lines"])
+
+
+# ---------------------------------------------------------------------------
 # Mutation tests — run LAST, after all read-only tests above.
 # ---------------------------------------------------------------------------
 

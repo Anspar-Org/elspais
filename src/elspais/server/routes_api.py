@@ -719,7 +719,13 @@ async def api_tree_data(request: Request) -> JSONResponse:
 
 
 async def api_file_content(request: Request) -> JSONResponse:
-    """GET /api/file-content?path=<path> - Read a file from disk."""
+    """GET /api/file-content?path=<path>&node_id=<id> - Read a file from disk.
+
+    When ``node_id`` is supplied and the federated graph knows the node,
+    the file is resolved against that node's owning repo root via
+    ``FederatedGraph.repo_root_for``. Otherwise resolution falls back to
+    the federation root (``state.repo_root``).
+    """
     import os
 
     from elspais.graph.mutations import MutationLog
@@ -730,8 +736,15 @@ async def api_file_content(request: Request) -> JSONResponse:
     if not rel_path:
         return JSONResponse({"error": "path parameter required"}, status_code=400)
 
+    node_id = request.query_params.get("node_id", "")
+    base_root = state.repo_root
+    if node_id:
+        owning_root = state.graph.repo_root_for(node_id)
+        if owning_root is not None:
+            base_root = owning_root
+
     p = Path(rel_path)
-    abs_path = (p if p.is_absolute() else (state.repo_root / rel_path)).resolve()
+    abs_path = (p if p.is_absolute() else (base_root / rel_path)).resolve()
 
     # Security: path must be under repo root or an allowed associate dir
     if not any(abs_path.is_relative_to(root) for root in state.allowed_roots):

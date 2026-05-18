@@ -690,7 +690,7 @@ function buildCardHtml(nodeId, data, collapsed) {
     if (sourcePath) {
         reqSourceLink = '<span style="margin-left:auto;display:flex;align-items:baseline;gap:4px;text-transform:none;">' +
             '<a href="#" onclick="event.preventDefault(); showSource(\'' +
-            escapeHtml(sourcePath) + '\', ' + sourceLine + ')" ' +
+            escapeHtml(sourcePath) + '\', ' + sourceLine + ', \'' + nodeId + '\')" ' +
             'style="color:#0d6efd;cursor:pointer;font-size:0.7rem;text-decoration:none;">' +
             escapeHtml(sourcePath.split('/').pop()) + ':' + sourceLine + '</a>' +
             '<button class="card-move-file-btn edit-only" ' +
@@ -921,7 +921,7 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
     var sourceLink = '';
     if (sourcePath) {
         sourceLink = '<a href="#" onclick="event.preventDefault(); showSource(\'' +
-            escapeHtml(sourcePath) + '\', ' + sourceLine + ')" ' +
+            escapeHtml(sourcePath) + '\', ' + sourceLine + ', \'' + nodeId + '\')" ' +
             'style="color:#0d6efd;cursor:pointer;font-size:0.7rem;text-decoration:none;text-transform:none;margin-left:auto;">' +
             escapeHtml(sourcePath.split('/').pop()) + ':' + sourceLine + '</a>';
         sourceLink += '<button class="edit-only journey-move-btn" onclick="event.preventDefault(); onMoveToFile(\'' + nodeId + '\')" style="margin-left:4px;">Move</button>';
@@ -1060,7 +1060,7 @@ function buildGenericCardHtml(nodeId, data, collapsed) {
         html += '<div class="card-section"><div class="card-section-label">Source</div>';
         html += '<div class="card-meta"><div class="card-meta-item">';
         html += '<a class="card-meta-value" href="#" onclick="event.preventDefault(); showSource(\'' +
-            escapeHtml(sourcePath) + '\', ' + sourceLine + ')" ' +
+            escapeHtml(sourcePath) + '\', ' + sourceLine + ', \'' + nodeId + '\')" ' +
             'style="color:#0d6efd;cursor:pointer;font-size:0.75rem;text-decoration:none;">' +
             escapeHtml(sourcePath.split('/').pop()) + ':' + sourceLine + '</a>';
         html += '</div></div></div>';
@@ -1331,7 +1331,7 @@ function renderAssertionTests(panel, reqId, label, data) {
         html += '<span class="assertion-test-icon">' + statusIcon + '</span>';
         if (t.file) {
             html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
-                escapeHtml(t.file) + '\', ' + (t.line || 0) + ')">' + testLabel + '</a>';
+                escapeHtml(t.file) + '\', ' + (t.line || 0) + ', \'' + escapeAttr(t.id || '') + '\')">' + testLabel + '</a>';
         } else {
             html += '<span class="assertion-test-link">' + testLabel + '</span>';
         }
@@ -1339,7 +1339,7 @@ function renderAssertionTests(panel, reqId, label, data) {
         if (hasResults && t.results[0].file) {
             html += ' <a class="assertion-result-file-link" href="#" onclick="event.preventDefault(); showSource(\'' +
                 escapeHtml(t.results[0].file) + '\', ' + (t.results[0].line || 0) +
-                ')" title="View result in ' + escapeHtml(t.results[0].file) + '">[result]</a>';
+                ', \'' + escapeAttr(t.id || '') + '\')" title="View result in ' + escapeHtml(t.results[0].file) + '">[result]</a>';
         }
         html += '</div>';
     }
@@ -1394,7 +1394,7 @@ function renderAssertionResults(panel, reqId, label, data) {
         var t = tests[i];
         if (t.results && t.results.length > 0) {
             for (var j = 0; j < t.results.length; j++) {
-                resultItems.push({ result: t.results[j], testLabel: t.label || t.id });
+                resultItems.push({ result: t.results[j], testLabel: t.label || t.id, testId: t.id });
             }
         }
     }
@@ -1423,7 +1423,7 @@ function renderAssertionResults(panel, reqId, label, data) {
         html += '<span class="assertion-test-icon">' + statusIcon + '</span>';
         if (r.file) {
             html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
-                escapeHtml(r.file) + '\', ' + (r.line || 0) + ')">' +
+                escapeHtml(r.file) + '\', ' + (r.line || 0) + ', \'' + escapeAttr(resultItems[k].testId || '') + '\')">' +
                 escapeHtml(tLabel) + ' [' + escapeHtml(r.status) + ']</a>';
         } else {
             html += '<span class="assertion-test-link">' + escapeHtml(tLabel) + ' [' + escapeHtml(r.status) + ']</span>';
@@ -1545,7 +1545,7 @@ function renderAssertionCode(panel, reqId, label, data) {
         html += '<span class="assertion-test-icon">&#x1F4C4;</span>';
         if (c.file) {
             html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
-                escapeHtml(c.file) + '\', ' + (c.line || 0) + ')">' +
+                escapeHtml(c.file) + '\', ' + (c.line || 0) + ', \'' + escapeAttr(c.id || '') + '\')">' +
                 escapeHtml(fileName) + ':' + (c.line || 1) + '</a>';
         } else {
             html += '<span class="assertion-test-link">' + escapeHtml(c.label || c.id) + '</span>';
@@ -1812,7 +1812,7 @@ function renderAssertionUatResults(panel, reqId, label, data) {
         html += '<span class="assertion-test-icon">' + statusIcon + '</span>';
         if (res.file) {
             html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
-                escapeHtml(res.file) + '\', ' + (res.line || 0) + ')">' +
+                escapeHtml(res.file) + '\', ' + (res.line || 0) + ', \'' + escapeAttr(resultItems[r].jnyId || '') + '\')">' +
                 escapeHtml(jLabel) + ' [' + escapeHtml(res.status) + ']</a>';
         } else {
             html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
@@ -1879,7 +1879,7 @@ function toggleReqLevelLinks(badge, reqId, dimKey, assertLinkKey) {
             html += '<span class="assertion-test-icon">' + statusIcon + icon + '</span>';
             if (link.file) {
                 html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
-                    escapeHtml(link.file) + '\', ' + (link.line || 0) + ')">' + escapeHtml(link.title) + '</a>';
+                    escapeHtml(link.file) + '\', ' + (link.line || 0) + ', \'' + escapeAttr(link.id || '') + '\')">' + escapeHtml(link.title) + '</a>';
             } else {
                 html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
                     escapeHtml(link.id) + '\')">' + escapeHtml(link.title) + '</a>';

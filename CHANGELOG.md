@@ -4,6 +4,10 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Viewer file-content cross-repo resolution** (CUR-1357) — `/api/file-content` now accepts an optional `node_id` query parameter and uses `FederatedGraph.repo_root_for(node_id)` to resolve files against the owning associate's repo root, fixing "Failed to load file" for any card whose source lives outside the federation root. JS callers in `_file-viewer.js.j2` and `_card-stack.js.j2` thread the node id through `showSource()`. Path-only callers (the `vscode://` intercept and term-reference links) fall back to `state.repo_root` unchanged, preserving prior behaviour for root-repo paths. Security guard (`state.allowed_roots`) is unaffected.
+
 ### Changed
 
 - **BREAKING: `Satisfies:` now requires `**Template**` on the target** (CUR-1353) — a `Satisfies: X` declaration where `X` is not marked with `**Template**` on its metadata line now emits a typed broken-reference diagnostic and fails `elspais checks`. Previously any requirement could be a `Satisfies:` target (the pre-CUR-1353 auto-mark fallback silently stereotyped any satisfied target as a template). **Migration**: add `**Template**` to the pipe-separated metadata line of every requirement used as a `Satisfies:` target. The diagnostic message names the missing flag verbatim: *"X is not marked **Template**; mark X with **Template** if it's intended to be satisfiable."* See REQ-p00014 for the full validation matrix.

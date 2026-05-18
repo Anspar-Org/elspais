@@ -15,7 +15,7 @@ var fvState = {
 // Show Source File
 // =====================================================================
 
-async function showSource(filePath, lineNumber) {
+async function showSource(filePath, lineNumber, nodeId) {
     var panel = document.getElementById('file-viewer-panel');
     var divider = document.getElementById('divider-right');
     var pathEl = document.getElementById('fv-path');
@@ -48,7 +48,9 @@ async function showSource(filePath, lineNumber) {
     // Show loading state
     body.innerHTML = '<div style="padding:24px;color:#adb5bd;text-align:center;">Loading...</div>';
 
-    var data = await apiFetch('/api/file-content?path=' + encodeURIComponent(filePath));
+    var url = '/api/file-content?path=' + encodeURIComponent(filePath);
+    if (nodeId) url += '&node_id=' + encodeURIComponent(nodeId);
+    var data = await apiFetch(url);
     if (!data) {
         body.innerHTML = '<div style="padding:24px;color:#dc3545;text-align:center;">' +
             'Failed to load file</div>';
