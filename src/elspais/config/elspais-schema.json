@@ -621,7 +621,7 @@
           "type": "string"
         },
         "name": {
-          "default": "",
+          "default": "example",
           "title": "Name",
           "type": "string"
         },

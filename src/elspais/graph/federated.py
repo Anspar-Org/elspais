@@ -119,9 +119,10 @@ class RepoEntry:
 
     Attributes:
         name: Repository name. For the host repo, the value of
-            ``[project].name`` (guaranteed populated because
-            ``load_config()`` rejects empty/missing names at the config
-            boundary). For associates, the key under ``[associates]``.
+            ``[project].name`` from the config (``load_config()`` rejects
+            empty/missing names at the TOML boundary; ``config_defaults()``
+            provides ``"example"`` for the fresh-directory / no-config-file
+            path). For associates, the key under ``[associates]``.
         graph: The repo's TraceGraph, or None if repo unavailable.
         config: The repo's config dict, or None if repo unavailable.
         repo_root: Expected local filesystem path.

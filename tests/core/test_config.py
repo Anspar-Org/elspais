@@ -241,10 +241,12 @@ class TestProjectNameBoundary:
 
     The "no fallbacks" rule applies at the boundary where user configs enter
     the system. Bare ProjectConfig()/ElspaisConfig() construction in tests and
-    internal helpers still defaults name to '' (preserved at the schema level
-    so partial-dict validation in _validate_config() helpers keeps working).
+    internal helpers still gets a schema default (currently ``"example"``) so
+    partial-dict validation in _validate_config() helpers keeps working and
+    the MCP server's no-config-file degraded mode keeps a non-empty repo name.
     Only configs loaded from disk through load_config() must declare a real
-    project name.
+    project name -- and the check inspects the pre-merge user TOML so the
+    schema placeholder never masks a missing field.
     """
 
     def test_load_config_rejects_missing_project_name(self, tmp_path):
@@ -271,6 +273,36 @@ class TestProjectNameBoundary:
         cfg_path.write_text("version = 4\n" "[project]\n" 'name = "demo"\n' 'namespace = "REQ"\n')
         cfg = load_config(cfg_path)
         assert cfg["project"]["name"] == "demo"
+
+    def test_config_defaults_provides_non_empty_project_name(self):
+        """config_defaults() must populate a non-empty [project].name.
+
+        Production callers (viewer, MCP daemon, pdf, factory.build_graph,
+        server/state) read config['project']['name'] directly. When no
+        .elspais.toml is discoverable, get_config() returns config_defaults()
+        — that fresh-directory path must still produce a usable repo name so
+        the UI/API never silently shows ''.
+        """
+        from elspais.config import config_defaults
+
+        defaults = config_defaults()
+        assert defaults["project"]["name"]
+        assert defaults["project"]["name"].strip()
+
+    def test_load_config_rejects_missing_project_name_with_local_override(self, tmp_path):
+        """Local override supplying name rescues a main TOML without name.
+
+        The boundary check must accept the local override as the source of
+        [project].name (mirroring how docker-compose.override.yml supplies
+        missing fields). Without this, the .elspais.local.toml escape hatch
+        would be useless for the project name.
+        """
+        cfg_path = tmp_path / ".elspais.toml"
+        cfg_path.write_text("version = 4\n" "[project]\n" 'namespace = "REQ"\n')
+        local_path = tmp_path / ".elspais.local.toml"
+        local_path.write_text('[project]\nname = "from-local"\n')
+        cfg = load_config(cfg_path)
+        assert cfg["project"]["name"] == "from-local"
 
 
 class TestChangelogConfig:

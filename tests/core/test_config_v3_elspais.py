@@ -218,10 +218,17 @@ class TestProjectConfigSimplified:
         assert isinstance(cfg.namespace, str)
 
     def test_REQ_d00212_J_has_name(self):
-        """ProjectConfig has 'name' field (str, default empty)."""
+        """ProjectConfig has 'name' field (str, non-empty default).
+
+        Default is the placeholder used by ``config_defaults()`` for the
+        no-config-file path (e.g., MCP server invoked outside any project).
+        ``load_config()``'s pre-merge boundary check rejects a user TOML
+        that omits ``[project].name`` regardless of the schema default.
+        """
         assert "name" in ProjectConfig.model_fields
         cfg = ProjectConfig()
-        assert cfg.name == ""
+        assert isinstance(cfg.name, str)
+        assert cfg.name.strip() != ""
 
     def test_REQ_d00212_J_no_version_field(self):
         """ProjectConfig does NOT have a 'version' field."""

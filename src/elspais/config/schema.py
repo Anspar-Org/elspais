@@ -19,7 +19,13 @@ class _StrictModel(BaseModel):
 # Implements: REQ-d00212-J
 class ProjectConfig(_StrictModel):
     namespace: str = "REQ"
-    name: str = ""
+    # Sentinel for the no-config-file path (used by MCP server in degraded mode
+    # when invoked outside any elspais project). `load_config()` rejects empty
+    # or missing names at the TOML-parsing boundary, so this default only
+    # surfaces when `get_config()` returns `config_defaults()` because no
+    # `.elspais.toml` was discoverable. Keeping a non-empty value here means
+    # callers that inline `config["project"]["name"]` never see "" silently.
+    name: str = "example"
     color: str | None = None
 
     @field_validator("namespace")

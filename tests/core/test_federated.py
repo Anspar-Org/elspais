@@ -124,6 +124,21 @@ class TestFederatedGraphReadOnly:
         assert repos[0].config is config
         assert repos[0].repo_root == Path("/repo/core")
 
+    def test_REQ_d00200_B_from_single_raises_on_missing_project_name(self) -> None:
+        """KeyError signals a caller bug: from_single requires config['project']['name'].
+
+        The host-repo-name refactor (CUR-1357) deleted the resolve_host_repo_name
+        fallback so production code reads the project name directly. A config
+        without [project] (or with no name field) means the caller didn't go
+        through load_config()/get_config() — that's a code bug to surface
+        rather than silently substitute a placeholder.
+        """
+        graph = TraceGraph()
+        with pytest.raises(KeyError):
+            FederatedGraph.from_single(graph, {}, Path("."))
+        with pytest.raises(KeyError):
+            FederatedGraph.from_single(graph, {"project": {}}, Path("."))
+
     def test_REQ_d00200_D_find_by_id_delegates(
         self, simple_graph: TraceGraph, config: dict
     ) -> None:

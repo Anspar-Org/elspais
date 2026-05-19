@@ -452,15 +452,22 @@ class TestGetWorkspaceInfo:
         assert result["repo_path"] == str(tmp_path)
 
     def test_REQ_o00061_A_returns_project_name(self, tmp_path):
-        """REQ-o00061-A: Returns 'unknown' when no config project name set."""
+        """REQ-o00061-A: Returns a non-empty project name when no config present.
+
+        ``config_defaults()`` supplies ``"example"`` so production callers
+        that inline ``config["project"]["name"]`` never get an empty string;
+        the MCP server's ``or "unknown"`` legacy fallback only triggers if a
+        future change reintroduces an empty default.
+        """
         pytest.importorskip("mcp")
         from elspais.mcp.server import _get_workspace_info
 
         result = _get_workspace_info(tmp_path)
 
         assert "project_name" in result
-        # Falls back to "unknown" when no config
-        assert result["project_name"] == "unknown"
+        # Whatever the no-config default is, it must be a non-empty string.
+        assert isinstance(result["project_name"], str)
+        assert result["project_name"].strip() != ""
 
     def test_REQ_o00061_A_returns_config_summary(self, tmp_path):
         """REQ-o00061-A: Returns configuration summary."""
