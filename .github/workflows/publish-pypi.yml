@@ -103,6 +103,7 @@ jobs:
       contents: read
 
     steps:
+      # Required for slack-notify (reads .github/slack-channels.yml).
       - uses: actions/checkout@v4
 
       - name: Extract version
@@ -150,23 +151,42 @@ jobs:
           RUN_URL="${SERVER_URL}/${REPOSITORY}/actions/runs/${RUN_ID}"
           PUBLISHED="Published to <https://pypi.org/project/elspais/${VERSION}/|PyPI>"
 
+          # printf rather than embedded literal newlines so every line of
+          # the run: block scalar stays at one indent (YAML doesn't allow
+          # zero-indented continuation lines inside a `|` block).
           if [ "$PR_FOUND" = "true" ]; then
-            MSG=":white_check_mark: *elspais v${VERSION} released*\n\n${PUBLISHED}\n*PR:* <${PR_URL}|#${PR_NUM} ${PR_TITLE}>\n*Run:* <${RUN_URL}|View run>"
+            MSG=$(printf '%s\n\n%s\n%s\n%s' \
+              ":white_check_mark: *elspais v${VERSION} released*" \
+              "${PUBLISHED}" \
+              "*PR:* <${PR_URL}|#${PR_NUM} ${PR_TITLE}>" \
+              "*Run:* <${RUN_URL}|View run>")
           else
-            MSG=":white_check_mark: *elspais v${VERSION} released*\n\n${PUBLISHED}\n*Run:* <${RUN_URL}|View run>"
+            MSG=$(printf '%s\n\n%s\n%s' \
+              ":white_check_mark: *elspais v${VERSION} released*" \
+              "${PUBLISHED}" \
+              "*Run:* <${RUN_URL}|View run>")
           fi
 
-          echo "text=${MSG}" >> "$GITHUB_OUTPUT"
+          # Multiline output via heredoc — the shared slack-notify action
+          # receives `text` as a plain string input, so it needs real
+          # newlines (not the literal "\n" the old YAML-payload path
+          # relied on).
+          {
+            echo "text<<EOF"
+            echo "$MSG"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Send Slack notification
-        uses: slackapi/slack-github-action@v2.1.1
+        # Pinned to current hht_workflows main. Bot scopes required:
+        # chat:write, channels:read, channels:join, bookmarks:read,
+        # bookmarks:write.
+        uses: Cure-HHT/hht_workflows/.github/actions/slack-notify@bfe3d57b66429f300d11496b541c91d2934ceada
         with:
-          method: chat.postMessage
-          token: ${{ secrets.SLACK_APP_OATH_TOKEN }}
-          errors: true
-          payload: |
-            channel: "${{ secrets.SLACK_CHANNEL_DEV }}"
-            text: "${{ steps.message.outputs.text }}"
+          event: release-success
+          text: ${{ steps.message.outputs.text }}
+          bookmark-title: elspais latest release
+          slack-token: ${{ secrets.SLACK_APP_OATH_TOKEN }}
 
   notify-failure:
     name: Notify on Failure
@@ -177,6 +197,7 @@ jobs:
       contents: read
 
     steps:
+      # Required for slack-notify (reads .github/slack-channels.yml).
       - uses: actions/checkout@v4
 
       - name: Extract version
@@ -217,65 +238,13 @@ jobs:
             LOGIN=$(echo "$PR_JSON" | jq -r '.user.login')
             echo "number=$(echo "$PR_JSON" | jq -r '.number')" >> "$GITHUB_OUTPUT"
             echo "title=$(echo "$PR_JSON" | jq -r '.title')" >> "$GITHUB_OUTPUT"
-            echo "author=${LOGIN}" >> "$GITHUB_OUTPUT"
             echo "url=$(echo "$PR_JSON" | jq -r '.html_url')" >> "$GITHUB_OUTPUT"
             echo "found=true" >> "$GITHUB_OUTPUT"
 
-            # Resolve display name from GitHub profile
             DISPLAY_NAME=$(gh api "users/${LOGIN}" --jq '.name // empty' 2>/dev/null || echo "")
             echo "author_name=${DISPLAY_NAME:-${LOGIN}}" >> "$GITHUB_OUTPUT"
           else
             echo "found=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Lookup Slack user by email
-        id: slack_user
-        if: steps.pr.outputs.found == 'true'
-        env:
-          SLACK_TOKEN: ${{ secrets.SLACK_APP_OATH_TOKEN }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          AUTHOR="${{ steps.pr.outputs.author }}"
-
-          # Get email from GitHub profile
-          EMAIL=$(gh api "users/${AUTHOR}" --jq '.email // empty' 2>/dev/null || echo "")
-
-          # Fallback: try commit author email
-          if [ -z "$EMAIL" ]; then
-            EMAIL=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}" \
-              --jq '.commit.author.email // empty' 2>/dev/null || echo "")
-          fi
-
-          # Filter out noreply addresses
-          if echo "$EMAIL" | grep -q 'noreply'; then
-            EMAIL=""
-          fi
-
-          if [ -n "$EMAIL" ]; then
-            SLACK_RESPONSE=$(curl -s -H "Authorization: Bearer ${SLACK_TOKEN}" \
-              "https://slack.com/api/users.lookupByEmail?email=${EMAIL}")
-
-            if [ "$(echo "$SLACK_RESPONSE" | jq -r '.ok')" = "true" ]; then
-              echo "user_id=$(echo "$SLACK_RESPONSE" | jq -r '.user.id')" >> "$GITHUB_OUTPUT"
-              echo "found=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "found=false" >> "$GITHUB_OUTPUT"
-            fi
-          else
-            echo "found=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Determine Slack channel
-        id: channel
-        env:
-          SLACK_USER_FOUND: ${{ steps.slack_user.outputs.found }}
-          SLACK_USER_ID: ${{ steps.slack_user.outputs.user_id }}
-          FALLBACK_CHANNEL: ${{ secrets.SLACK_CHANNEL_DEV }}
-        run: |
-          if [ "$SLACK_USER_FOUND" = "true" ]; then
-            echo "id=${SLACK_USER_ID}" >> "$GITHUB_OUTPUT"
-          else
-            echo "id=${FALLBACK_CHANNEL}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build notification message
@@ -296,24 +265,33 @@ jobs:
         run: |
           RUN_URL="${SERVER_URL}/${REPOSITORY}/actions/runs/${RUN_ID}"
 
-          # Resolve display name for actor fallback
           ACTOR_NAME=$(gh api "users/${ACTOR}" --jq '.name // empty' 2>/dev/null || echo "")
           ACTOR_NAME="${ACTOR_NAME:-${ACTOR}}"
 
           if [ "$PR_FOUND" = "true" ]; then
-            MSG=":rotating_light: *Publish failed* for elspais v${VERSION}\n\n*Failed:* ${FAILED_STEPS}\n*PR:* <${PR_URL}|#${PR_NUM} ${PR_TITLE}>\n*Run:* <${RUN_URL}|View failed run>\n*Author:* ${PR_AUTHOR_NAME}"
+            MSG=$(printf '%s\n\n%s\n%s\n%s\n%s' \
+              ":rotating_light: *Publish failed* for elspais v${VERSION}" \
+              "*Failed:* ${FAILED_STEPS}" \
+              "*PR:* <${PR_URL}|#${PR_NUM} ${PR_TITLE}>" \
+              "*Run:* <${RUN_URL}|View failed run>" \
+              "*Author:* ${PR_AUTHOR_NAME}")
           else
-            MSG=":rotating_light: *Publish failed* for elspais v${VERSION}\n\n*Failed:* ${FAILED_STEPS}\n*Run:* <${RUN_URL}|View failed run>\n*Triggered by:* ${ACTOR_NAME}"
+            MSG=$(printf '%s\n\n%s\n%s\n%s' \
+              ":rotating_light: *Publish failed* for elspais v${VERSION}" \
+              "*Failed:* ${FAILED_STEPS}" \
+              "*Run:* <${RUN_URL}|View failed run>" \
+              "*Triggered by:* ${ACTOR_NAME}")
           fi
 
-          echo "text=${MSG}" >> "$GITHUB_OUTPUT"
+          {
+            echo "text<<EOF"
+            echo "$MSG"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Send Slack notification
-        uses: slackapi/slack-github-action@v2.1.1
+        uses: Cure-HHT/hht_workflows/.github/actions/slack-notify@bfe3d57b66429f300d11496b541c91d2934ceada
         with:
-          method: chat.postMessage
-          token: ${{ secrets.SLACK_APP_OATH_TOKEN }}
-          errors: true
-          payload: |
-            channel: "${{ steps.channel.outputs.id }}"
-            text: "${{ steps.message.outputs.text }}"
+          event: release-failure
+          text: ${{ steps.message.outputs.text }}
+          slack-token: ${{ secrets.SLACK_APP_OATH_TOKEN }}

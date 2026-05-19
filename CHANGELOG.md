@@ -4,6 +4,10 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **CI: Slack notifications use shared `slack-notify` action with bookmarks** (CUR-1360) — `publish-pypi.yml` and `test-slack.yml` now route through `Cure-HHT/hht_workflows/.github/actions/slack-notify`, driven by a new `.github/slack-channels.yml` (all events routed to `#dev`). Successful release notifications upsert a channel bookmark titled "elspais latest release" pointing at the new message permalink (replaces the legacy "pin the deploy message" pattern). DM-on-failure logic in `publish-pypi.yml` was dropped (failures now post straight to `#dev`); the dispatchable DM test in `test-slack.yml` is retained on `slackapi/slack-github-action` since the shared action only routes named channels. Removes dependency on `SLACK_CHANNEL_DEV` / `SLACK_CHANNEL_DEVOPS` / `SLACK_CHANNEL_INCIDENTS` channel-ID secrets. Requires bot scopes `channels:read`, `channels:join`, `bookmarks:read`, `bookmarks:write` in addition to existing `chat:write`.
+
 ### Added
 
 - **Defined-term hyperlinks in the file-viewer Rendered pane** — `fvRenderMarkdown` now passes its output (and every pipe-table cell) through `_annotateTermsInString`, so terms matched in a `.md` file's rendered view become clickable `.defined-term` spans with the same hover-tooltip and click-to-open-term-card behaviour as the card stack. The delegated click handler is scoped to `document.body` instead of `#card-stack-body` so clicks land regardless of which pane the term appears in.

@@ -3,14 +3,6 @@ name: Test Slack Notifications
 on:
   workflow_dispatch:
     inputs:
-      channel:
-        description: 'Channel to send test message to'
-        type: choice
-        options:
-          - dev
-          - devops
-          - incidents
-        default: dev
       test_dm:
         description: 'Also send a test DM to yourself'
         type: boolean
@@ -20,16 +12,9 @@ jobs:
   test-channel:
     name: Test Channel Message
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
     steps:
-      - name: Select channel secret
-        id: channel
-        run: |
-          case "${{ inputs.channel }}" in
-            dev)       echo "id=${{ secrets.SLACK_CHANNEL_DEV }}" >> "$GITHUB_OUTPUT" ;;
-            devops)    echo "id=${{ secrets.SLACK_CHANNEL_DEVOPS }}" >> "$GITHUB_OUTPUT" ;;
-            incidents) echo "id=${{ secrets.SLACK_CHANNEL_INCIDENTS }}" >> "$GITHUB_OUTPUT" ;;
-          esac
+      # Required for slack-notify (reads .github/slack-channels.yml).
+      - uses: actions/checkout@v4
 
       - name: Get user display name
         id: user
@@ -39,15 +24,33 @@ jobs:
           NAME=$(gh api "users/${{ github.actor }}" --jq '.name // empty' 2>/dev/null || echo "")
           echo "name=${NAME:-${{ github.actor }}}" >> "$GITHUB_OUTPUT"
 
+      - name: Build test message
+        id: message
+        env:
+          ACTOR_NAME: ${{ steps.user.outputs.name }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          # printf so the run: block scalar stays one-indent (YAML
+          # disallows zero-indent continuation inside a `|` block).
+          MSG=$(printf '%s\n\n%s\n%s' \
+            ":test_tube: *Slack integration test*" \
+            "*Triggered by:* ${ACTOR_NAME}" \
+            "*Run:* <${SERVER_URL}/${REPOSITORY}/actions/runs/${RUN_ID}|View run>")
+
+          {
+            echo "text<<EOF"
+            echo "$MSG"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Send test message
-        uses: slackapi/slack-github-action@v2.1.1
+        uses: Cure-HHT/hht_workflows/.github/actions/slack-notify@bfe3d57b66429f300d11496b541c91d2934ceada
         with:
-          method: chat.postMessage
-          token: ${{ secrets.SLACK_APP_OATH_TOKEN }}
-          errors: true
-          payload: |
-            channel: "${{ steps.channel.outputs.id }}"
-            text: ":test_tube: *Slack integration test*\n\n*Channel:* #${{ inputs.channel }}\n*Triggered by:* ${{ steps.user.outputs.name }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>"
+          event: slack-test
+          text: ${{ steps.message.outputs.text }}
+          slack-token: ${{ secrets.SLACK_APP_OATH_TOKEN }}
 
   test-dm:
     name: Test Direct Message
@@ -90,6 +93,9 @@ jobs:
             exit 1
           fi
 
+      # DMs target a user ID, not a channel name — the shared
+      # slack-notify action only routes named channels, so DMs stay on
+      # slackapi/slack-github-action.
       - name: Send test DM
         uses: slackapi/slack-github-action@v2.1.1
         with:

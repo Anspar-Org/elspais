@@ -1,0 +1,18 @@
+# Slack channel routing for elspais CI notifications.
+# Consumed by Cure-HHT/hht_workflows/.github/actions/slack-notify.
+#
+# `channels` maps role keys to Slack channel names (the action resolves
+# names to channel IDs via conversations.list, so the name must match
+# Slack's view exactly). `routing` maps event keys to a role key (or
+# list, for fan-out).
+#
+# All elspais traffic currently lands in #dev; add more role keys here
+# if/when notifications need to fan out elsewhere.
+
+channels:
+  SLACK_DEV_CH: "#dev"
+
+routing:
+  release-success: SLACK_DEV_CH
+  release-failure: SLACK_DEV_CH
+  slack-test:      SLACK_DEV_CH
