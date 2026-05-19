@@ -1091,12 +1091,19 @@ class TestStandardCLIMutations:
         """Config unset removes a key."""
         import tomlkit
 
+        # ``project`` is module-scoped — subsequent tests in the module
+        # invoke the elspais CLI against it, and ``load_config()`` requires
+        # non-empty ``[project].namespace``. Restore the value after the
+        # assertion so the shared fixture stays loadable.
         result = run_elspais("config", "unset", "project.namespace", cwd=project)
         assert result.returncode == 0
 
         content = (project / ".elspais.toml").read_text()
         data = tomlkit.loads(content)
         assert "namespace" not in data.get("project", {})
+
+        restore = run_elspais("config", "set", "project.namespace", "REQ", cwd=project)
+        assert restore.returncode == 0
 
     def test_09_edit_status(self, project):
         """Edit command modifies requirement status in-place."""
