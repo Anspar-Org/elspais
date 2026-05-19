@@ -15,15 +15,17 @@ from pathlib import Path
 
 from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
+from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import FileType
 from elspais.graph.relations import EdgeKind
 
 
-def _build_graph_with_spec(tmp_path: Path) -> tuple[TraceGraph, Path, GraphNode]:
-    """Build a TraceGraph with a real spec file on disk.
+def _build_graph_with_spec(tmp_path: Path) -> tuple[FederatedGraph, Path, GraphNode]:
+    """Build a FederatedGraph with a real spec file on disk.
 
-    Creates a minimal graph with FILE node, requirement, and assertions.
-    Returns (graph, spec_file_path, file_node).
+    Creates a minimal graph with FILE node, requirement, and assertions,
+    then wraps it in a single-repo FederatedGraph.
+    Returns (federated_graph, spec_file_path, file_node).
     """
     spec_file = tmp_path / "test_spec.md"
     spec_file.write_text("placeholder", encoding="utf-8")
@@ -89,7 +91,8 @@ def _build_graph_with_spec(tmp_path: Path) -> tuple[TraceGraph, Path, GraphNode]
         "REQ-t00001-B": a2,
     }
 
-    return graph, spec_file, file_node
+    fed = FederatedGraph.from_single(graph, {"project": {"name": "test"}}, tmp_path)
+    return fed, spec_file, file_node
 
 
 class TestRenderSaveDirtyFiles:
@@ -250,10 +253,12 @@ class TestRenderSaveEdgeDerivation:
 
         graph, spec_file, file_node = _build_graph_with_spec(tmp_path)
 
-        # Add a second PRD
+        # Add a second PRD directly to the inner sub-graph, then refresh
+        # ownership so the federated graph routes look-ups correctly.
         prd2 = GraphNode(id="REQ-p00002", kind=NodeKind.REQUIREMENT, label="PRD 2")
         prd2._content = {"level": "PRD", "status": "Active"}
-        graph._index["REQ-p00002"] = prd2
+        graph.repo_for("REQ-t00001").graph._index["REQ-p00002"] = prd2
+        graph._rebuild_ownership()
 
         # Add edge: REQ-t00001 implements REQ-p00002
         graph.add_edge("REQ-t00001", "REQ-p00002", EdgeKind.IMPLEMENTS)
@@ -314,9 +319,10 @@ class TestConsistencyCheck:
         req = GraphNode(id="REQ-t00001", kind=NodeKind.REQUIREMENT, label="WRONG Title")
         req._content = {"level": "DEV", "status": "Draft", "hash": "00000000"}
         bad_graph._index = {"REQ-t00001": req}
+        bad_fed = FederatedGraph.from_single(bad_graph, {"project": {"name": "test"}}, tmp_path)
 
         def rebuild_fn():
-            return {}, bad_graph
+            return {}, bad_fed
 
         result = render_save(graph, tmp_path, consistency_check=True, rebuild_fn=rebuild_fn)
 

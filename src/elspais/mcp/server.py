@@ -817,14 +817,11 @@ def _refresh_graph(
         raise
 
     # REQ-d00205-B: Extract root config from rebuilt graph for handler to sync.
-    # Test fixtures (tests/mcp/test_mcp_core.py) patch build_graph to return a
-    # bare TraceGraph; guard so those tests keep working.
     root_config = None
-    if hasattr(new_graph, "iter_repos"):
-        for entry in new_graph.iter_repos():
-            if entry.config is not None:
-                root_config = entry.config
-                break
+    for entry in new_graph.iter_repos():
+        if entry.config is not None:
+            root_config = entry.config
+            break
 
     return {
         "success": True,
@@ -1989,9 +1986,7 @@ def _get_workspace_info(
         Workspace information dict with profile-specific sections.
     """
     # REQ-d00205-D: Derive root config from graph when not provided.
-    # Test fixtures (tests/mcp/test_mcp_core.py) sometimes pass a bare
-    # TraceGraph; guard iter_repos() so those tests keep working.
-    if config is None and graph is not None and hasattr(graph, "iter_repos"):
+    if config is None and graph is not None:
         for entry in graph.iter_repos():
             if entry.config is not None:
                 config = entry.config
@@ -2002,7 +1997,7 @@ def _get_workspace_info(
     base = _build_base_workspace_info(working_dir, config)
 
     # REQ-d00205-A: Include federation details when multi-repo graph present
-    if graph is not None and hasattr(graph, "iter_repos"):
+    if graph is not None:
         repos_info = []
         for entry in graph.iter_repos():
             repo_info: dict[str, Any] = {

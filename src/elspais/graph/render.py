@@ -791,13 +791,10 @@ def render_save(
     # below — direct callers (mutation API, GUI) must not lose queued work
     # just because a duplicate elsewhere in the project blocked the save.
     duplicate_source_paths: set[str] = set()
-    # Test fixtures (tests/core/test_render_save.py) pass a bare TraceGraph,
-    # which lacks duplicate_req_ids(); guard so those tests continue to work.
-    if hasattr(graph, "duplicate_req_ids"):
-        for _canonical, sources in graph.duplicate_req_ids().items():
-            for sp in sources:
-                if sp:
-                    duplicate_source_paths.add(sp)
+    for _canonical, sources in graph.duplicate_req_ids().items():
+        for sp in sources:
+            if sp:
+                duplicate_source_paths.add(sp)
     if duplicate_source_paths:
         filtered: set[str] = set()
         for file_id in dirty_file_ids:
@@ -820,16 +817,13 @@ def render_save(
             old_rel = entry.before_state.get("relative_path", "")
             new_rel = entry.after_state.get("relative_path", "")
             if old_rel and new_rel:
-                # Resolve rename paths via owning repo's root. Test fixtures
-                # (tests/core/test_render_save.py) pass a bare TraceGraph,
-                # which lacks repo_for(); fall back to repo_root in that case.
+                # Resolve rename paths via owning repo's root.
                 rename_root = repo_root
-                if hasattr(graph, "repo_for"):
-                    new_file_id = entry.after_state.get("id", "")
-                    try:
-                        rename_root = graph.repo_for(new_file_id).repo_root
-                    except KeyError:
-                        pass
+                new_file_id = entry.after_state.get("id", "")
+                try:
+                    rename_root = graph.repo_for(new_file_id).repo_root
+                except KeyError:
+                    pass
                 old_path = rename_root / old_rel
                 new_path = rename_root / new_rel
                 if old_path.exists() and not new_path.exists():
@@ -848,32 +842,26 @@ def render_save(
             skipped.append(f"{file_id}: no relative_path")
             continue
 
-        # Resolve absolute path using owning repo's root. Test fixtures
-        # (tests/core/test_render_save.py) pass a bare TraceGraph, which
-        # lacks repo_for(); fall back to repo_root in that case.
+        # Resolve absolute path using owning repo's root.
         abs_path = Path(rel_path)
         if not abs_path.is_absolute():
             file_root = repo_root
-            if hasattr(graph, "repo_for"):
-                try:
-                    file_root = graph.repo_for(file_id).repo_root
-                except KeyError:
-                    pass
+            try:
+                file_root = graph.repo_for(file_id).repo_root
+            except KeyError:
+                pass
             abs_path = file_root / rel_path
 
         try:
             # Prefer caller-supplied resolver; otherwise pull from the TraceGraph
             # that owns this file so citations use the configured separator.
-            # Test fixtures may pass a bare TraceGraph (no repo_for()).
             file_resolver = resolver
-            if file_resolver is None and hasattr(graph, "repo_for"):
+            if file_resolver is None:
                 try:
                     owning_tg = graph.repo_for(file_id).graph
                     file_resolver = getattr(owning_tg, "_resolver", None)
                 except KeyError:
                     pass
-            if file_resolver is None:
-                file_resolver = getattr(graph, "_resolver", None)
             content = render_file(file_node, resolver=file_resolver)
             # Ensure file ends with newline
             if content and not content.endswith("\n"):

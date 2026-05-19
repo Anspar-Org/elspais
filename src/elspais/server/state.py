@@ -9,7 +9,10 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from elspais.graph.federated import FederatedGraph
 
 
 @dataclass
@@ -51,7 +54,7 @@ class AppState:
 
     def __init__(
         self,
-        graph: Any,
+        graph: FederatedGraph,
         repo_root: Path,
         config: dict[str, Any],
         allowed_roots: list[Path] | None = None,

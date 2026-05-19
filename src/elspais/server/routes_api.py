@@ -250,25 +250,20 @@ async def api_status(request: Request) -> JSONResponse:
     result["version"] = __version__
     # Implements: REQ-d00206-C
     # Include federation repo metadata from iter_repos().
-    # Test fixtures (tests/test_server_app.py) pass a bare TraceGraph via
-    # AppState; guard so those tests keep working.
     graph = state.graph
-    if hasattr(graph, "iter_repos"):
-        repos_info = []
-        for entry in graph.iter_repos():
-            repo_info: dict[str, Any] = {
-                "name": entry.name,
-                "path": str(entry.repo_root),
-                "status": "error" if entry.graph is None else "ok",
-            }
-            if entry.git_origin:
-                repo_info["git_origin"] = entry.git_origin
-            if entry.error:
-                repo_info["error"] = entry.error
-            repos_info.append(repo_info)
-        result["repos"] = repos_info
-    else:
-        result["repos"] = []
+    repos_info = []
+    for entry in graph.iter_repos():
+        repo_info: dict[str, Any] = {
+            "name": entry.name,
+            "path": str(entry.repo_root),
+            "status": "error" if entry.graph is None else "ok",
+        }
+        if entry.git_origin:
+            repo_info["git_origin"] = entry.git_origin
+        if entry.error:
+            repo_info["error"] = entry.error
+        repos_info.append(repo_info)
+    result["repos"] = repos_info
 
     # Dynamic category catalogs for the viewer UI. Each entry carries the
     # resolved (configured or hashed) bg/text colors so clients can render
@@ -290,35 +285,32 @@ async def api_repos(request: Request) -> JSONResponse:
     state = _st(request)
     graph = state.graph
     repos: list[dict] = []
-    # Test fixtures (tests/test_server_app.py) pass a bare TraceGraph via
-    # AppState; guard iter_repos() so those tests keep working.
-    if hasattr(graph, "iter_repos"):
-        for entry in graph.iter_repos():
-            repo_info: dict = {
-                "name": entry.name,
-                "path": str(entry.repo_root),
-                "status": "error" if entry.graph is None else "ok",
-            }
-            if entry.git_origin:
-                repo_info["git_origin"] = entry.git_origin
-            if entry.error:
-                repo_info["error"] = entry.error
+    for entry in graph.iter_repos():
+        repo_info: dict = {
+            "name": entry.name,
+            "path": str(entry.repo_root),
+            "status": "error" if entry.graph is None else "ok",
+        }
+        if entry.git_origin:
+            repo_info["git_origin"] = entry.git_origin
+        if entry.error:
+            repo_info["error"] = entry.error
 
-            # REQ-d00206-B: Staleness info for repos with git_origin
-            if entry.git_origin and entry.graph is not None:
-                try:
-                    from elspais.utilities.git import git_status_summary
+        # REQ-d00206-B: Staleness info for repos with git_origin
+        if entry.git_origin and entry.graph is not None:
+            try:
+                from elspais.utilities.git import git_status_summary
 
-                    summary = git_status_summary(entry.repo_root)
-                    repo_info["staleness"] = {
-                        "branch": summary.get("branch"),
-                        "remote_diverged": summary.get("remote_diverged", False),
-                        "fast_forward_possible": summary.get("fast_forward_possible", False),
-                    }
-                except Exception:
-                    repo_info["staleness"] = None
+                summary = git_status_summary(entry.repo_root)
+                repo_info["staleness"] = {
+                    "branch": summary.get("branch"),
+                    "remote_diverged": summary.get("remote_diverged", False),
+                    "fast_forward_possible": summary.get("fast_forward_possible", False),
+                }
+            except Exception:
+                repo_info["staleness"] = None
 
-            repos.append(repo_info)
+        repos.append(repo_info)
     return JSONResponse({"repos": repos})
 
 
