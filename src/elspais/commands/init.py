@@ -72,8 +72,19 @@ def run(args: argparse.Namespace) -> int:
         print("Error: --associated-prefix required for associated repositories")
         return 1
 
+    # Derive project name from the user's original invocation directory.
+    # cli.py chdir's to the git root before dispatching, so Path.cwd() here
+    # points at the git root, not where the user typed `elspais init`.
+    # For a nested-init scenario (`cd ~/repos/myrepo/sub/dir && elspais init`)
+    # the user almost certainly wants "dir" as the project name, not the git
+    # root's basename. `args.original_cwd` is stashed by cli.py; tests that
+    # bypass cli.py (calling init.run directly) will not set it, in which
+    # case generate_config falls back to Path.cwd().name.
+    original_cwd = getattr(args, "original_cwd", None)
+    project_name = original_cwd.name if original_cwd else None
+
     # Generate configuration
-    config_content = generate_config(project_type, associated_prefix)
+    config_content = generate_config(project_type, associated_prefix, project_name=project_name)
 
     # Write file
     config_path.write_text(config_content, encoding="utf-8")
@@ -562,6 +573,11 @@ def generate_config(
     defaults = config_defaults()
 
     # Derive a real project name (never empty -- load_config() rejects empty names).
+    # NOTE: when called via the CLI, project_name is already set from
+    # args.original_cwd (the user's invocation directory, not the git root
+    # that cli.py chdir's to). This Path.cwd() fallback only fires for
+    # direct callers (e.g. tests calling generate_config()/run() with no
+    # original_cwd on args).
     if project_name is None or not project_name.strip():
         project_name = Path.cwd().name or "my-project"
 

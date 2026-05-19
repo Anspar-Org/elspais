@@ -369,6 +369,11 @@ def main(argv: list[str] | None = None) -> int:
 
     # Store roots on args for commands to use
     args.git_root = git_root
+    # Preserve the user's actual invocation directory (pre-chdir). Commands
+    # like `init` use this for auto-derived defaults (project name from
+    # basename) because Path.cwd() now points at git_root, not where the
+    # user typed the command.
+    args.original_cwd = original_cwd
 
     # Global --output: redirect stdout to file
     output_file = None

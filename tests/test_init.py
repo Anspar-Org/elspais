@@ -34,6 +34,13 @@ class TestInitConfig:
         assert "[project]" in content
         assert "version = 4" in content
 
+        # Round-trip: init's output must be accepted by load_config()
+        # (load_config now enforces non-empty [project].name).
+        from elspais.config import load_config
+
+        cfg = load_config(config_path)
+        assert cfg["project"]["name"]  # non-empty -- round-trip works
+
     # Implements: REQ-d00209-A
     def test_init_core_type(self, tmp_path: Path, monkeypatch):
         """Test init with explicit core type."""
@@ -74,9 +81,17 @@ class TestInitConfig:
         result = run(args)
 
         assert result == 0
-        content = (tmp_path / ".elspais.toml").read_text()
+        config_path = tmp_path / ".elspais.toml"
+        content = config_path.read_text()
         assert "version = 4" in content
         assert 'namespace = "CAL"' in content
+
+        # Round-trip: init's output must be accepted by load_config()
+        # (load_config now enforces non-empty [project].name).
+        from elspais.config import load_config
+
+        cfg = load_config(config_path)
+        assert cfg["project"]["name"]  # non-empty -- round-trip works
 
     # Implements: REQ-d00209-B
     def test_init_associated_requires_prefix(self, tmp_path: Path, monkeypatch, capsys):
