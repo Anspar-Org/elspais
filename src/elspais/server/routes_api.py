@@ -249,7 +249,9 @@ async def api_status(request: Request) -> JSONResponse:
     result = _get_graph_status(state.graph)
     result["version"] = __version__
     # Implements: REQ-d00206-C
-    # Include federation repo metadata from iter_repos()
+    # Include federation repo metadata from iter_repos().
+    # Test fixtures (tests/test_server_app.py) pass a bare TraceGraph via
+    # AppState; guard so those tests keep working.
     graph = state.graph
     if hasattr(graph, "iter_repos"):
         repos_info = []
@@ -288,6 +290,8 @@ async def api_repos(request: Request) -> JSONResponse:
     state = _st(request)
     graph = state.graph
     repos: list[dict] = []
+    # Test fixtures (tests/test_server_app.py) pass a bare TraceGraph via
+    # AppState; guard iter_repos() so those tests keep working.
     if hasattr(graph, "iter_repos"):
         for entry in graph.iter_repos():
             repo_info: dict = {
@@ -755,13 +759,11 @@ async def api_file_content(request: Request) -> JSONResponse:
     if repo_name:
         # Explicit repo_name takes precedence and disables the
         # allowed_roots fallback (we know which repo owns the file).
-        iter_repos = getattr(state.graph, "iter_repos", None)
-        if callable(iter_repos):
-            for repo_entry in iter_repos():
-                if repo_entry.name == repo_name:
-                    base_root = repo_entry.repo_root
-                    strict_root = True
-                    break
+        for repo_entry in state.graph.iter_repos():
+            if repo_entry.name == repo_name:
+                base_root = repo_entry.repo_root
+                strict_root = True
+                break
     elif node_id:
         owning_root = state.graph.repo_root_for(node_id)
         if owning_root is not None:

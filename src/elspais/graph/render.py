@@ -791,6 +791,8 @@ def render_save(
     # below — direct callers (mutation API, GUI) must not lose queued work
     # just because a duplicate elsewhere in the project blocked the save.
     duplicate_source_paths: set[str] = set()
+    # Test fixtures (tests/core/test_render_save.py) pass a bare TraceGraph,
+    # which lacks duplicate_req_ids(); guard so those tests continue to work.
     if hasattr(graph, "duplicate_req_ids"):
         for _canonical, sources in graph.duplicate_req_ids().items():
             for sp in sources:
@@ -818,7 +820,9 @@ def render_save(
             old_rel = entry.before_state.get("relative_path", "")
             new_rel = entry.after_state.get("relative_path", "")
             if old_rel and new_rel:
-                # Resolve rename paths via owning repo's root
+                # Resolve rename paths via owning repo's root. Test fixtures
+                # (tests/core/test_render_save.py) pass a bare TraceGraph,
+                # which lacks repo_for(); fall back to repo_root in that case.
                 rename_root = repo_root
                 if hasattr(graph, "repo_for"):
                     new_file_id = entry.after_state.get("id", "")
@@ -844,7 +848,9 @@ def render_save(
             skipped.append(f"{file_id}: no relative_path")
             continue
 
-        # Resolve absolute path using owning repo's root
+        # Resolve absolute path using owning repo's root. Test fixtures
+        # (tests/core/test_render_save.py) pass a bare TraceGraph, which
+        # lacks repo_for(); fall back to repo_root in that case.
         abs_path = Path(rel_path)
         if not abs_path.is_absolute():
             file_root = repo_root
@@ -858,6 +864,7 @@ def render_save(
         try:
             # Prefer caller-supplied resolver; otherwise pull from the TraceGraph
             # that owns this file so citations use the configured separator.
+            # Test fixtures may pass a bare TraceGraph (no repo_for()).
             file_resolver = resolver
             if file_resolver is None and hasattr(graph, "repo_for"):
                 try:

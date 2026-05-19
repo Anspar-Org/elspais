@@ -14,16 +14,12 @@ from elspais.mcp.server import _get_mutation_log
 
 # Implements: REQ-d00201-A
 def _iter_repo_entries(state: Any) -> list[tuple[str, Path, dict | None]]:
-    """Yield (name, repo_root, config) for all repos in the graph.
-    Works for both FederatedGraph (iter_repos) and plain TraceGraph (root only).
-    """
-    if hasattr(state.graph, "iter_repos"):
-        return [
-            (e.name, e.repo_root, e.config)
-            for e in state.graph.iter_repos()
-            if e.error is None and e.graph is not None
-        ]
-    return [(state.config["project"]["name"], state.repo_root, state.config)]
+    """Yield (name, repo_root, config) for all repos in the graph."""
+    return [
+        (e.name, e.repo_root, e.config)
+        for e in state.graph.iter_repos()
+        if e.error is None and e.graph is not None
+    ]
 
 
 # Implements: REQ-d00201-A

@@ -282,12 +282,15 @@ class TestProjectNameBoundary:
         .elspais.toml is discoverable, get_config() returns config_defaults()
         — that fresh-directory path must still produce a usable repo name so
         the UI/API never silently shows ''.
+
+        The literal ``"example"`` is pinned: a future revert to ``""`` would
+        silently break the MCP no-config-file path; a generic non-empty
+        assertion would not catch that regression.
         """
         from elspais.config import config_defaults
 
         defaults = config_defaults()
-        assert defaults["project"]["name"]
-        assert defaults["project"]["name"].strip()
+        assert defaults["project"]["name"] == "example"
 
     def test_load_config_rejects_missing_project_name_with_local_override(self, tmp_path):
         """Local override supplying name rescues a main TOML without name.

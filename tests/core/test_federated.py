@@ -139,6 +139,20 @@ class TestFederatedGraphReadOnly:
         with pytest.raises(KeyError):
             FederatedGraph.from_single(graph, {"project": {}}, Path("."))
 
+    def test_empty_graph_repo_name_visible_at_call_site(self) -> None:
+        """REQ-d00200-B: FederatedGraph.empty(name=...) makes the degraded-state
+        sentinel visible — its name flows to iter_repos() and root_repo_name.
+
+        Both MCP error-recovery sites pass "<unconfigured>"; the keyword-only
+        parameter is the contract that surfaces the degraded state at the
+        call site instead of hiding it behind a default.
+        """
+        g = FederatedGraph.empty(name="<unconfigured>")
+        repos = list(g.iter_repos())
+        assert len(repos) == 1
+        assert repos[0].name == "<unconfigured>"
+        assert g.root_repo_name == "<unconfigured>"
+
     def test_REQ_d00200_D_find_by_id_delegates(
         self, simple_graph: TraceGraph, config: dict
     ) -> None:

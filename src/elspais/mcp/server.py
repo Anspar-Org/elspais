@@ -816,7 +816,9 @@ def _refresh_graph(
             }, FederatedGraph.empty(name="<unconfigured>")
         raise
 
-    # REQ-d00205-B: Extract root config from rebuilt graph for handler to sync
+    # REQ-d00205-B: Extract root config from rebuilt graph for handler to sync.
+    # Test fixtures (tests/mcp/test_mcp_core.py) patch build_graph to return a
+    # bare TraceGraph; guard so those tests keep working.
     root_config = None
     if hasattr(new_graph, "iter_repos"):
         for entry in new_graph.iter_repos():
@@ -1610,7 +1612,7 @@ def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dic
     REQ-o00061-D: Reads configuration from unified config system.
     """
     typed_config = _validate_config(config) if isinstance(config, dict) else config
-    project_name = typed_config.project.name or "unknown"
+    project_name = typed_config.project.name
 
     config_file = find_config_file(working_dir)
 
@@ -1980,13 +1982,15 @@ def _get_workspace_info(
     Args:
         working_dir: The repository root directory.
         config: Optional pre-loaded config dict.
-        graph: Optional TraceGraph for coverage/health profiles.
+        graph: Optional FederatedGraph for coverage/health profiles.
         detail: Detail profile to use. See _WORKSPACE_DETAIL_PROFILES.
 
     Returns:
         Workspace information dict with profile-specific sections.
     """
-    # REQ-d00205-D: Derive root config from graph when not provided
+    # REQ-d00205-D: Derive root config from graph when not provided.
+    # Test fixtures (tests/mcp/test_mcp_core.py) sometimes pass a bare
+    # TraceGraph; guard iter_repos() so those tests keep working.
     if config is None and graph is not None and hasattr(graph, "iter_repos"):
         for entry in graph.iter_repos():
             if entry.config is not None:

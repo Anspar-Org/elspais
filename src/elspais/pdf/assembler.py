@@ -130,18 +130,14 @@ class MarkdownAssembler:
         # Map each file path to its owning repo (root or associate). Files
         # whose nodes span multiple repos are extraordinarily rare; the
         # first node wins (matches _group_by_file's document order).
-        # Non-federated graphs (legacy callers passing a bare TraceGraph)
-        # surface as an empty owner map; everything renders as root.
         file_owners: dict[str, str] = {}
-        repo_for = getattr(self._graph, "repo_for", None)
-        if callable(repo_for):
-            for fp, nodes in file_groups.items():
-                for node in nodes:
-                    try:
-                        file_owners[fp] = repo_for(node.id).name
-                        break
-                    except KeyError:
-                        continue
+        for fp, nodes in file_groups.items():
+            for node in nodes:
+                try:
+                    file_owners[fp] = self._graph.repo_for(node.id).name
+                    break
+                except KeyError:
+                    continue
         level_buckets = self._partition_by_level(file_groups)
 
         # Emit each level group
@@ -291,10 +287,7 @@ class MarkdownAssembler:
         """Look up the on-disk root for a named federated repo, if any."""
         if not owner_name:
             return None
-        iter_repos = getattr(self._graph, "iter_repos", None)
-        if not callable(iter_repos):
-            return None
-        for entry in iter_repos():
+        for entry in self._graph.iter_repos():
             if entry.name == owner_name:
                 return entry.repo_root
         return None
@@ -322,12 +315,10 @@ class MarkdownAssembler:
         # Fall back: search every federated repo (cross-repo file with
         # no ownership context — rare in normal callers but needed for
         # mermaid blocks emitted from preamble-style global text).
-        iter_repos = getattr(self._graph, "iter_repos", None)
-        if callable(iter_repos):
-            for entry in iter_repos():
-                candidate = entry.repo_root / file_path
-                if candidate.exists():
-                    return candidate
+        for entry in self._graph.iter_repos():
+            candidate = entry.repo_root / file_path
+            if candidate.exists():
+                return candidate
         return None
 
     # ------------------------------------------------------------------
@@ -586,13 +577,9 @@ class MarkdownAssembler:
         index: dict[str, set[tuple[str, str, str]]] = defaultdict(set)
         owners = file_owners or {}
 
-        repo_for = getattr(self._graph, "repo_for", None)
-
         def _repo_for_node(node: GraphNode, fallback: str) -> str:
-            if not callable(repo_for):
-                return fallback
             try:
-                return repo_for(node.id).name
+                return self._graph.repo_for(node.id).name
             except KeyError:
                 return fallback
 

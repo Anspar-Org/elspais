@@ -244,12 +244,20 @@ class TestResolveRepoRoot:
 
         from elspais.server.routes_git import _resolve_repo_root
 
+        # Host repo is the first iter_repos() entry in a single-repo graph.
+        host_entry = MagicMock()
+        host_entry.name = "demo"
+        host_entry.repo_root = tmp_path
+        host_entry.config = {"project": {"name": "demo"}}
+        host_entry.error = None
+        host_entry.graph = MagicMock()
         state = MagicMock()
         state.repo_root = tmp_path
         state.config = {"project": {"name": "demo"}}
-        state.graph = MagicMock(spec=[])  # No iter_repos
+        state.graph.iter_repos.return_value = iter([host_entry])
         assert _resolve_repo_root(state, None) == tmp_path
         # Host is addressable by its configured [project].name.
+        state.graph.iter_repos.return_value = iter([host_entry])
         assert _resolve_repo_root(state, "demo") == tmp_path
 
     def test_resolve_named_repo(self, tmp_path):
