@@ -286,6 +286,7 @@ The system SHALL do something.
 version = 3
 
 [project]
+name = "test"
 namespace = "REQ"
 
 [levels.prd]

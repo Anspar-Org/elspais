@@ -19,6 +19,7 @@ from starlette.testclient import TestClient
 
 from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
+from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import FileType
 from elspais.graph.relations import EdgeKind
 from elspais.server.app import create_app
@@ -29,9 +30,14 @@ from elspais.server.state import AppState
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _wrap(graph: TraceGraph, repo_root: Path) -> FederatedGraph:
+    """Wrap a TraceGraph in a single-repo FederatedGraph for tests."""
+    return FederatedGraph.from_single(graph, {"project": {"name": "test"}}, repo_root)
+
+
 @pytest.fixture
 def sample_graph():
-    """Create a sample TraceGraph for testing."""
+    """Create a sample single-repo FederatedGraph for testing."""
     graph = TraceGraph(repo_root=Path("/test/repo"))
 
     # Create PRD requirement with assertions
@@ -88,13 +94,15 @@ def sample_graph():
         "REQ-o00001": ops_node,
     }
 
-    return graph
+    return _wrap(graph, Path("/test/repo"))
 
 
 @pytest.fixture
 def app(sample_graph):
     """Create Starlette test app."""
-    state = AppState(graph=sample_graph, repo_root=Path("/test/repo"), config={})
+    state = AppState(
+        graph=sample_graph, repo_root=Path("/test/repo"), config={"project": {"name": "test"}}
+    )
     return create_app(state, mount_mcp=False)
 
 
@@ -140,13 +148,15 @@ def coverage_graph():
         "test:test_encrypt.py::test_encrypt": test_node,
         "result:test_encrypt": result_node,
     }
-    return graph
+    return _wrap(graph, Path("/test/repo"))
 
 
 @pytest.fixture
 def coverage_app(coverage_graph):
     """Create Starlette test app with coverage graph."""
-    state = AppState(graph=coverage_graph, repo_root=Path("/test/repo"), config={})
+    state = AppState(
+        graph=coverage_graph, repo_root=Path("/test/repo"), config={"project": {"name": "test"}}
+    )
     return create_app(state, mount_mcp=False)
 
 
@@ -168,7 +178,9 @@ class TestAppFactory:
         """App factory returns a Starlette application."""
         from starlette.applications import Starlette
 
-        state = AppState(graph=sample_graph, repo_root=Path("/test/repo"), config={})
+        state = AppState(
+            graph=sample_graph, repo_root=Path("/test/repo"), config={"project": {"name": "test"}}
+        )
         app = create_app(state, mount_mcp=False)
         assert isinstance(app, Starlette)
 
@@ -324,7 +336,11 @@ class TestGetSearch:
             big_graph._index[node.id] = node
             big_graph._roots.append(node)
 
-        big_state = AppState(graph=big_graph, repo_root=Path("/test/repo"), config={})
+        big_state = AppState(
+            graph=_wrap(big_graph, Path("/test/repo")),
+            repo_root=Path("/test/repo"),
+            config={"project": {"name": "test"}},
+        )
         big_app = create_app(big_state, mount_mcp=False)
         big_client = TestClient(big_app)
 
@@ -769,7 +785,11 @@ class TestGetFileContent:
     def test_REQ_p00006_A_file_content_returns_highlighted_lines(self, tmp_path):
         """API returns highlighted_lines and language for a Python file."""
         graph = TraceGraph(repo_root=tmp_path)
-        state = AppState(graph=graph, repo_root=tmp_path, config={})
+        state = AppState(
+            graph=_wrap(graph, tmp_path),
+            repo_root=tmp_path,
+            config={"project": {"name": "test"}},
+        )
         app = create_app(state, mount_mcp=False)
 
         py_file = tmp_path / "example.py"
@@ -791,7 +811,11 @@ class TestGetFileContent:
     def test_REQ_p00006_A_file_content_mutation_tracking(self, tmp_path):
         """API still returns mutation tracking alongside highlighting."""
         graph = TraceGraph(repo_root=tmp_path)
-        state = AppState(graph=graph, repo_root=tmp_path, config={})
+        state = AppState(
+            graph=_wrap(graph, tmp_path),
+            repo_root=tmp_path,
+            config={"project": {"name": "test"}},
+        )
         app = create_app(state, mount_mcp=False)
 
         md_file = tmp_path / "README.md"
@@ -837,7 +861,10 @@ class TestGetFileContent:
         spec_file.write_text("# REQ-A-p00001: Test Requirement\n")
 
         # Config registers the associate repo path for discovery
-        config = {"associates": {"assoc": {"path": str(assoc_repo), "namespace": "A"}}}
+        config = {
+            "project": {"name": "test"},
+            "associates": {"assoc": {"path": str(assoc_repo), "namespace": "A"}},
+        }
 
         # Build graph with a node whose source path is the absolute path
         # (this is what happens when associated repos are outside the main repo)
@@ -851,7 +878,11 @@ class TestGetFileContent:
         graph._index[node.id] = node
         graph._roots.append(node)
 
-        state = AppState(graph=graph, repo_root=main_repo, config=config)
+        state = AppState(
+            graph=FederatedGraph.from_single(graph, config, main_repo),
+            repo_root=main_repo,
+            config=config,
+        )
         app = create_app(state, mount_mcp=False)
 
         c = TestClient(app)
@@ -875,7 +906,11 @@ class TestGetFileContent:
 
         try:
             graph = TraceGraph(repo_root=main_repo)
-            state = AppState(graph=graph, repo_root=main_repo, config={})
+            state = AppState(
+                graph=_wrap(graph, main_repo),
+                repo_root=main_repo,
+                config={"project": {"name": "test"}},
+            )
             app = create_app(state, mount_mcp=False)
 
             c = TestClient(app)
@@ -971,7 +1006,8 @@ class TestGetNode:
             id="JNY-Login-01", kind=NodeKind.USER_JOURNEY, label="User Login Journey"
         )
         journey._content = {"actor": "End User", "goal": "Log into the system"}
-        sample_graph._index["JNY-Login-01"] = journey
+        sample_graph.repo_for("REQ-p00001").graph._index["JNY-Login-01"] = journey
+        sample_graph._rebuild_ownership()
 
         resp = client.get("/api/node/JNY-Login-01")
         assert resp.status_code == 200
@@ -1045,7 +1081,8 @@ class TestTreeDataJourneys:
         """Journey nodes appear in tree-data with kind=journey and is_journey=True."""
         journey = GraphNode(id="JNY-Browse-01", kind=NodeKind.USER_JOURNEY, label="Browse Catalog")
         journey._content = {"actor": "Shopper", "goal": "Find products"}
-        sample_graph._index["JNY-Browse-01"] = journey
+        sample_graph.repo_for("REQ-p00001").graph._index["JNY-Browse-01"] = journey
+        sample_graph._rebuild_ownership()
 
         resp = client.get("/api/tree-data")
         assert resp.status_code == 200
@@ -1469,9 +1506,10 @@ def _make_disk_app(tmp_path, spec_content=DISK_SPEC, two_reqs=False):
     graph._roots = [prd]
     graph._index = index
 
-    state = AppState(graph=graph, repo_root=tmp_path, config={})
+    fed = _wrap(graph, tmp_path)
+    state = AppState(graph=fed, repo_root=tmp_path, config={"project": {"name": "test"}})
     application = create_app(state, mount_mcp=False)
-    return application, graph, spec_file
+    return application, fed, spec_file
 
 
 @pytest.fixture
@@ -1509,7 +1547,8 @@ class TestMutateSaveRoundTrip:
         app, graph, spec_file = disk_app_with_graph
         client = TestClient(app)
 
-        # Add a second PRD node directly on the graph (same Python object)
+        # Add a second PRD node directly on the inner sub-graph and refresh
+        # federation ownership so the API resolves the new ID.
         str(spec_file.relative_to(graph.repo_root))
         prd2 = GraphNode(
             id="REQ-p00002",
@@ -1517,8 +1556,10 @@ class TestMutateSaveRoundTrip:
             label="Second PRD",
         )
         prd2._content = {"level": "PRD", "status": "Active", "hash": "11111111"}
-        graph._index["REQ-p00002"] = prd2
-        graph._roots.append(prd2)
+        inner = graph.repo_for("REQ-t00001").graph
+        inner._index["REQ-p00002"] = prd2
+        inner._roots.append(prd2)
+        graph._rebuild_ownership()
 
         resp = client.post(
             "/api/mutate/edge",
@@ -1631,7 +1672,7 @@ class TestMutateSaveRoundTrip:
         app, graph, spec_file = disk_app_with_graph
         client = TestClient(app)
 
-        # Add a second PRD target directly on the graph
+        # Add a second PRD target on the inner sub-graph; refresh federation.
         str(spec_file.relative_to(graph.repo_root))
         prd2 = GraphNode(
             id="REQ-p00002",
@@ -1639,8 +1680,10 @@ class TestMutateSaveRoundTrip:
             label="PRD 2",
         )
         prd2._content = {"level": "PRD", "status": "Active", "hash": "22222222"}
-        graph._index["REQ-p00002"] = prd2
-        graph._roots.append(prd2)
+        inner = graph.repo_for("REQ-t00001").graph
+        inner._index["REQ-p00002"] = prd2
+        inner._roots.append(prd2)
+        graph._rebuild_ownership()
 
         resp = client.post(
             "/api/mutate/edge",
@@ -1914,7 +1957,7 @@ class TestMutateSaveRoundTrip:
         app, graph, spec_file = disk_app_with_graph
         client = TestClient(app)
 
-        # Add a second PRD target
+        # Add a second PRD target via the inner graph; refresh federation.
         str(spec_file.relative_to(graph.repo_root))
         prd2 = GraphNode(
             id="REQ-p00002",
@@ -1922,8 +1965,10 @@ class TestMutateSaveRoundTrip:
             label="PRD 2",
         )
         prd2._content = {"level": "PRD", "status": "Active", "hash": "22222222"}
-        graph._index["REQ-p00002"] = prd2
-        graph._roots.append(prd2)
+        inner = graph.repo_for("REQ-t00001").graph
+        inner._index["REQ-p00002"] = prd2
+        inner._roots.append(prd2)
+        graph._rebuild_ownership()
 
         # Change existing IMPLEMENTS to REFINES
         resp = client.post(
@@ -2198,11 +2243,15 @@ def _make_freshness_app(tmp_path, spec_subdir="spec"):
         "REQ-p00001-A": a1,
     }
 
-    config = {"scanning": {"spec": {"directories": [spec_subdir]}}}
-    state = AppState(graph=graph, repo_root=tmp_path, config=config)
+    config = {
+        "project": {"name": "test"},
+        "scanning": {"spec": {"directories": [spec_subdir]}},
+    }
+    fed = FederatedGraph.from_single(graph, config, tmp_path)
+    state = AppState(graph=fed, repo_root=tmp_path, config=config)
     app = create_app(state, mount_mcp=False)
 
-    return app, graph, spec_dir
+    return app, fed, spec_dir
 
 
 @pytest.fixture
@@ -2354,7 +2403,9 @@ class TestGitCheckoutCommit:
         """POST /api/git/checkout-commit sets AppState.is_detached=True on success."""
         from unittest.mock import patch
 
-        state = AppState(graph=sample_graph, repo_root=Path("/test/repo"), config={})
+        state = AppState(
+            graph=sample_graph, repo_root=Path("/test/repo"), config={"project": {"name": "test"}}
+        )
         app = create_app(state, mount_mcp=False)
         client = TestClient(app)
 
@@ -2372,7 +2423,7 @@ class TestGitCheckoutCommit:
 
         assert resp.status_code == 200
         assert state.is_detached is True
-        ds = state.get_detached_state("root")
+        ds = state.get_detached_state("test")
         assert ds.originating_branch == "main"
         assert ds.originating_head == "HEAD123"
 
@@ -2380,7 +2431,9 @@ class TestGitCheckoutCommit:
         """When branch not in body, falls back to get_current_branch."""
         from unittest.mock import patch
 
-        state = AppState(graph=sample_graph, repo_root=Path("/test/repo"), config={})
+        state = AppState(
+            graph=sample_graph, repo_root=Path("/test/repo"), config={"project": {"name": "test"}}
+        )
         app = create_app(state, mount_mcp=False)
         client = TestClient(app)
 
@@ -2393,7 +2446,7 @@ class TestGitCheckoutCommit:
             resp = client.post("/api/git/checkout-commit", json={"hash": "def5678"})
 
         assert resp.status_code == 200
-        ds = state.get_detached_state("root")
+        ds = state.get_detached_state("test")
         assert ds.originating_branch == "detected-branch"
 
     def test_git_checkout_commit_empty_hash_returns_400(self, client):
@@ -2425,8 +2478,10 @@ class TestGitStatusDetached:
         """GET /api/git/status includes is_detached, originating_branch, etc."""
         from unittest.mock import patch
 
-        state = AppState(graph=sample_graph, repo_root=Path("/test/repo"), config={})
-        state.enter_detached("root", branch="main", head_commit="deadbeef")
+        state = AppState(
+            graph=sample_graph, repo_root=Path("/test/repo"), config={"project": {"name": "test"}}
+        )
+        state.enter_detached("test", branch="main", head_commit="deadbeef")
         app = create_app(state, mount_mcp=False)
         client = TestClient(app)
 
@@ -2479,8 +2534,10 @@ class TestDetachedGuardMiddleware:
 
     def test_mutate_blocked_when_detached(self, sample_graph):
         """POST /api/mutate/title returns 409 when in detached HEAD mode."""
-        state = AppState(graph=sample_graph, repo_root=Path("/test/repo"), config={})
-        state.enter_detached("root", branch="main", head_commit="deadbeef")
+        state = AppState(
+            graph=sample_graph, repo_root=Path("/test/repo"), config={"project": {"name": "test"}}
+        )
+        state.enter_detached("test", branch="main", head_commit="deadbeef")
         app = create_app(state, mount_mcp=False)
         client = TestClient(app)
 
@@ -2613,11 +2670,15 @@ class TestSpecFiles:
             NodeKind.FILE: [spec_file1, spec_file2, code_file, test_file],
         }
 
-        return graph
+        return _wrap(graph, Path("/test/repo"))
 
     @pytest.fixture
     def spec_files_client(self, spec_files_graph):
-        state = AppState(graph=spec_files_graph, repo_root=Path("/test/repo"), config={})
+        state = AppState(
+            graph=spec_files_graph,
+            repo_root=Path("/test/repo"),
+            config={"project": {"name": "test"}},
+        )
         app = create_app(state, mount_mcp=False)
         return TestClient(app)
 
@@ -2672,7 +2733,11 @@ class TestSpecFiles:
         graph._index = {"file:src/main.py": code_file}
         graph._kind_index = {NodeKind.FILE: [code_file]}
 
-        state = AppState(graph=graph, repo_root=Path("/test/repo"), config={})
+        state = AppState(
+            graph=_wrap(graph, Path("/test/repo")),
+            repo_root=Path("/test/repo"),
+            config={"project": {"name": "test"}},
+        )
         app = create_app(state, mount_mcp=False)
         client = TestClient(app)
 

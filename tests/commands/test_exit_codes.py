@@ -75,7 +75,7 @@ class TestDoctorExitCodes:
         monkeypatch.chdir(tmp_path)
         config = tmp_path / ".elspais.toml"
         config.write_text(
-            'version = 3\n[project]\nnamespace = "REQ"\n'
+            'version = 3\n[project]\nname = "test"\nnamespace = "REQ"\n'
             '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n'
             "[id-patterns]\n"
             'canonical = "{namespace}-{level.letter}{component}"\n'

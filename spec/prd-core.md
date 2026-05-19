@@ -49,7 +49,7 @@ The validation system enforces:
 
 - **Format compliance**: Headers, metadata, *Assertion* sections, and hash footers follow the canonical grammar
 - **Hierarchy integrity**: Child requirements correctly reference parents; no circular dependencies
-- ****Traceability** completeness**: All requirements are reachable from root-level product requirements
+- **Traceability completeness**: All requirements are reachable from root-level product requirements
 - **Content freshness**: Hashes match current content; changes are intentional
 
 ## Assertions

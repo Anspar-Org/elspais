@@ -27,6 +27,7 @@ import pytest
 
 from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
+from elspais.graph.federated import FederatedGraph
 from elspais.graph.relations import EdgeKind
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -36,7 +37,7 @@ from elspais.graph.relations import EdgeKind
 
 @pytest.fixture
 def sample_graph():
-    """Create a sample TraceGraph for testing."""
+    """Create a sample single-repo FederatedGraph for testing."""
     graph = TraceGraph(repo_root=Path("/test/repo"))
 
     # Create PRD requirement with assertions
@@ -106,7 +107,7 @@ def sample_graph():
         "REQ-d00001": dev_node,
     }
 
-    return graph
+    return FederatedGraph.from_single(graph, {"project": {"name": "test"}}, Path("/test/repo"))
 
 
 @pytest.fixture
@@ -380,8 +381,10 @@ class TestGetHierarchy:
             label="Platform Compliance",
         )
         prd2._content = {"level": "PRD", "status": "Active", "hash": "zzz99999"}
-        sample_graph._index["REQ-p00002"] = prd2
-        sample_graph._roots.append(prd2)
+        inner = sample_graph.repo_for("REQ-p00001").graph
+        inner._index["REQ-p00002"] = prd2
+        inner._roots.append(prd2)
+        sample_graph._rebuild_ownership()
 
         # Link OPS to second PRD as well
         ops_node = sample_graph.find_by_id("REQ-o00001")
@@ -452,15 +455,22 @@ class TestGetWorkspaceInfo:
         assert result["repo_path"] == str(tmp_path)
 
     def test_REQ_o00061_A_returns_project_name(self, tmp_path):
-        """REQ-o00061-A: Returns 'unknown' when no config project name set."""
+        """REQ-o00061-A: Returns a non-empty project name when no config present.
+
+        ``config_defaults()`` supplies ``"example"`` so production callers
+        that inline ``config["project"]["name"]`` never get an empty string;
+        the MCP server's ``or "unknown"`` legacy fallback only triggers if a
+        future change reintroduces an empty default.
+        """
         pytest.importorskip("mcp")
         from elspais.mcp.server import _get_workspace_info
 
         result = _get_workspace_info(tmp_path)
 
         assert "project_name" in result
-        # Falls back to "unknown" when no config
-        assert result["project_name"] == "unknown"
+        # Whatever the no-config default is, it must be a non-empty string.
+        assert isinstance(result["project_name"], str)
+        assert result["project_name"].strip() != ""
 
     def test_REQ_o00061_A_returns_config_summary(self, tmp_path):
         """REQ-o00061-A: Returns configuration summary."""
@@ -1367,6 +1377,7 @@ class TestGetProjectSummaryChanges:
         from elspais.mcp.server import _get_project_summary
         from elspais.utilities.git import GitChangeInfo
 
+        inner = sample_graph.repo_for("REQ-p00001").graph
         for node_id, path in [
             ("REQ-p00001", "spec/prd.md"),
             ("REQ-o00001", "spec/ops.md"),
@@ -1379,8 +1390,9 @@ class TestGetProjectSummaryChanges:
                 fn.set_field("file_type", FileType.SPEC)
                 fn.set_field("repo", None)
                 fn.link(node, EdgeKind.CONTAINS)
-                sample_graph._index[fn.id] = fn
+                inner._index[fn.id] = fn
                 node.set_field("parse_line", 1)
+        sample_graph._rebuild_ownership()
 
         git_info = GitChangeInfo(
             modified_files={"spec/prd.md"},
@@ -1412,6 +1424,7 @@ class TestGetChangedRequirements:
         from elspais.mcp.server import _get_changed_requirements
         from elspais.utilities.git import GitChangeInfo
 
+        inner = sample_graph.repo_for("REQ-p00001").graph
         for node_id, path in [
             ("REQ-p00001", "spec/prd.md"),
             ("REQ-o00001", "spec/ops.md"),
@@ -1424,8 +1437,9 @@ class TestGetChangedRequirements:
                 fn.set_field("file_type", FileType.SPEC)
                 fn.set_field("repo", None)
                 fn.link(node, EdgeKind.CONTAINS)
-                sample_graph._index[fn.id] = fn
+                inner._index[fn.id] = fn
                 node.set_field("parse_line", 1)
+        sample_graph._rebuild_ownership()
 
         git_info = GitChangeInfo(
             modified_files={"spec/prd.md"},

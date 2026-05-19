@@ -205,7 +205,11 @@ class TestApiStatusRepos:
     def test_REQ_d00206_C_api_status_single_repo(self):
         """GET /api/status with single-repo federation has one repos entry."""
         graph = _make_graph(Path("/test/repo"), "REQ-p00001", "Test Req")
-        fed = FederatedGraph.from_single(graph, config=None, repo_root=Path("/test/repo"))
+        fed = FederatedGraph.from_single(
+            graph,
+            config={"project": {"name": "root"}},
+            repo_root=Path("/test/repo"),
+        )
         client = _make_client(fed)
 
         response = client.get("/api/status")

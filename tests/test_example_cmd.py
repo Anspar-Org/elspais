@@ -130,6 +130,7 @@ class TestExampleCommand:
 version = 3
 
 [project]
+name = "test"
 namespace = "SPEC"
 
 [levels.prd]

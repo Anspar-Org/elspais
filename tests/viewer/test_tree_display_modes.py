@@ -22,7 +22,7 @@ def _make_state(tmp_path):
     )
     (tmp_path / ".elspais.toml").write_text(
         "version = 4\n"
-        '[project]\nnamespace = "REQ"\n'
+        '[project]\nname = "test"\nnamespace = "REQ"\n'
         '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n'
         '[id-patterns]\ncanonical = "{namespace}-{level.letter}{component}"\n'
         '[id-patterns.component]\nstyle = "numeric"\ndigits = 5\nleading_zeros = true\n'
@@ -87,7 +87,7 @@ def test_journey_row_component_strips_jny_prefix(tmp_path):
     )
     (tmp_path / ".elspais.toml").write_text(
         "version = 4\n"
-        '[project]\nnamespace = "REQ"\n'
+        '[project]\nname = "test"\nnamespace = "REQ"\n'
         '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n'
         '[scanning.spec]\ndirectories = ["spec"]\n'
         '[scanning.journey]\ndirectories = ["spec"]\n'

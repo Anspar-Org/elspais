@@ -35,7 +35,7 @@ def _make_graph(*nodes: GraphNode) -> FederatedGraph:
         tg._index[node.id] = node
         if node.kind == NodeKind.REQUIREMENT:
             tg._roots.append(node)
-    return FederatedGraph.from_single(tg, config=None, repo_root=Path("."))
+    return FederatedGraph.from_single(tg, config={"project": {"name": "test"}}, repo_root=Path("."))
 
 
 # =============================================================================

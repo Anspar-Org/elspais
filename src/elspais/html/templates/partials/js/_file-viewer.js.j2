@@ -7,6 +7,13 @@
 
 var fvState = {
     currentFile: null,
+    currentNodeId: null,      // persists the optional node_id from showSource
+                              // so refresh paths route through the same
+                              // associate repo on re-fetch.
+    currentRepoName: null,    // explicit federated-repo disambiguator —
+                              // takes precedence over currentNodeId for
+                              // FILE-id callers (term card "Defined in"),
+                              // since FILE ids collide across repos.
     fileViewMode: 'source',  // 'source' or 'rendered'
     lastData: null            // cached API response for re-rendering
 };
@@ -15,7 +22,7 @@ var fvState = {
 // Show Source File
 // =====================================================================
 
-async function showSource(filePath, lineNumber) {
+async function showSource(filePath, lineNumber, nodeId, repoName) {
     var panel = document.getElementById('file-viewer-panel');
     var divider = document.getElementById('divider-right');
     var pathEl = document.getElementById('fv-path');
@@ -26,6 +33,8 @@ async function showSource(filePath, lineNumber) {
     var body = document.getElementById('fv-body');
 
     fvState.currentFile = filePath;
+    fvState.currentNodeId = nodeId || null;
+    fvState.currentRepoName = repoName || null;
     var fileName = filePath.split('/').pop();
     var isMarkdown = fileName.endsWith('.md');
 
@@ -48,7 +57,10 @@ async function showSource(filePath, lineNumber) {
     // Show loading state
     body.innerHTML = '<div style="padding:24px;color:#adb5bd;text-align:center;">Loading...</div>';
 
-    var data = await apiFetch('/api/file-content?path=' + encodeURIComponent(filePath));
+    var url = '/api/file-content?path=' + encodeURIComponent(filePath);
+    if (nodeId) url += '&node_id=' + encodeURIComponent(nodeId);
+    if (repoName) url += '&repo_name=' + encodeURIComponent(repoName);
+    var data = await apiFetch(url);
     if (!data) {
         body.innerHTML = '<div style="padding:24px;color:#dc3545;text-align:center;">' +
             'Failed to load file</div>';
@@ -74,9 +86,15 @@ async function showSource(filePath, lineNumber) {
     // Language badge
     langEl.textContent = data.language || '';
 
-    // VS Code link
-    var basePath = document.body.dataset.basePath || '';
-    var absPath = basePath ? (basePath + '/' + filePath) : filePath;
+    // VS Code link — prefer the server's resolved absolute path so
+    // associate-repo files target the correct on-disk location. Falls
+    // back to `document.body.dataset.basePath` + relative path only when
+    // the server didn't supply an `abs_path` (older deployments).
+    var absPath = data.abs_path || '';
+    if (!absPath) {
+        var basePath = document.body.dataset.basePath || '';
+        absPath = basePath ? (basePath + '/' + filePath) : filePath;
+    }
     vscodeLink.href = 'vscode://file/' + absPath + ':' + (lineNumber || 1) + ':1';
     vscodeLink.style.display = '';
 
@@ -104,18 +122,62 @@ function fvRenderContent(data, lineNumber) {
     var body = document.getElementById('fv-body');
 
     if (fvState.fileViewMode === 'rendered' && fvState.currentFile && fvState.currentFile.endsWith('.md')) {
-        // Rendered markdown view
+        // Rendered markdown view. Single-line content keeps the per-line
+        // gutter (one number + one rendered line). Multi-line constructs
+        // (pipe tables for now) are extracted as a block so the parser
+        // sees the header + separator + body together; their gutter
+        // becomes a stacked list of every source line covered, so the
+        // line-number column stays intact and scroll-to-line still works
+        // for every source line inside the block.
         var rawLines = data.lines || [];
-        var html = '<div class="source-lines">';
-        for (var i = 0; i < rawLines.length; i++) {
+        var htmlOut = '<div class="source-lines">';
+        var i = 0;
+        while (i < rawLines.length) {
+            if (
+                i + 1 < rawLines.length &&
+                _isMdTableLine(rawLines[i]) &&
+                !_isMdTableSeparator(rawLines[i]) &&
+                _isMdTableSeparator(rawLines[i + 1])
+            ) {
+                var j = i + 2;
+                while (
+                    j < rawLines.length &&
+                    _isMdTableLine(rawLines[j]) &&
+                    !_isMdTableSeparator(rawLines[j])
+                ) {
+                    j++;
+                }
+                var blockHtml = fvRenderMarkdown(rawLines.slice(i, j).join('\n'));
+                var gutter = '';
+                for (var k = i; k < j; k++) {
+                    gutter += '<span class="line-num" data-line="' + (k + 1) +
+                        '" id="fv-line-' + (k + 1) + '">' + (k + 1) + '</span>';
+                }
+                htmlOut += '<div class="source-line source-line-block" data-line="' +
+                    (i + 1) + '">' +
+                    '<span class="line-num-stack">' + gutter + '</span>' +
+                    '<div class="line-content rendered-line">' + blockHtml + '</div>' +
+                    '</div>';
+                i = j;
+                continue;
+            }
             var num = i + 1;
-            html += '<div class="source-line" data-line="' + num + '" id="fv-line-' + num + '">' +
+            htmlOut += '<div class="source-line" data-line="' + num +
+                '" id="fv-line-' + num + '">' +
                 '<span class="line-num">' + num + '</span>' +
-                '<div class="line-content rendered-line">' + fvRenderMarkdown(rawLines[i]) + '</div>' +
+                '<div class="line-content rendered-line">' +
+                fvRenderMarkdown(rawLines[i]) + '</div>' +
                 '</div>';
+            i++;
         }
-        html += '</div>';
-        body.innerHTML = html;
+        htmlOut += '</div>';
+        body.innerHTML = htmlOut;
+        // After layout, align each table block's gutter line numbers to
+        // the vertical position of the rendered row they sourced.
+        var blocks = body.querySelectorAll('.source-line-block');
+        for (var b = 0; b < blocks.length; b++) {
+            _alignTableGutter(blocks[b]);
+        }
         fvScrollAndFlash(body, lineNumber);
         return;
     }
@@ -155,10 +217,22 @@ function fvScrollAndFlash(container, lineNumber) {
             }
         }
 
+        // Primary lookup: a per-line `.source-line` wrapper. For lines
+        // inside a multi-line rendered block (e.g. a pipe table), the
+        // wrapper only carries the block's FIRST source line; the inner
+        // source lines are addressable only via their gutter span's
+        // `id="fv-line-N"`. Fall back to that and highlight the nearest
+        // enclosing `.source-line` so the table block still flashes.
         var target = container.querySelector('.source-line[data-line="' + lineNumber + '"]');
-        if (!target) return;
+        var scrollTarget = target;
+        if (!target) {
+            var inner = container.querySelector('#fv-line-' + lineNumber);
+            if (!inner) return;
+            target = inner.closest('.source-line') || inner;
+            scrollTarget = inner;
+        }
 
-        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
         target.classList.add('highlighted');
 
         // Flash after scroll completes
@@ -205,8 +279,60 @@ function setFileViewMode(mode) {
 // Markdown Renderer (simple inline)
 // =====================================================================
 
+function _alignTableGutter(block) {
+    // Source-line gutter for a rendered pipe table: header line → thead tr,
+    // separator line → between header and first body row, body lines → tbody
+    // tr in order. Each line-num span is positioned absolutely within the
+    // .line-num-stack cell so it aligns with its corresponding rendered row.
+    var stack = block.querySelector('.line-num-stack');
+    var tbl = block.querySelector('table.md-table');
+    if (!stack || !tbl) return;
+    var nums = stack.querySelectorAll('.line-num');
+    if (nums.length === 0) return;
+    var blockTop = block.getBoundingClientRect().top;
+    var headerRow = tbl.querySelector('thead tr');
+    // Exclude the visual separator row when listing data body rows so the
+    // first data line maps to the first data row, not the separator.
+    var bodyRows = tbl.querySelectorAll('tbody tr:not(.md-table-separator)');
+    var sepRow = tbl.querySelector('tr.md-table-separator');
+    function centerOf(row, num) {
+        var rowRect = row.getBoundingClientRect();
+        return (rowRect.top - blockTop) + (rowRect.height - num.offsetHeight) / 2;
+    }
+    var targets = new Array(nums.length);
+    if (headerRow) targets[0] = centerOf(headerRow, nums[0]);
+    if (nums.length >= 2 && sepRow) targets[1] = centerOf(sepRow, nums[1]);
+    for (var k = 0; k < bodyRows.length; k++) {
+        if (k + 2 < nums.length) targets[k + 2] = centerOf(bodyRows[k], nums[k + 2]);
+    }
+    for (var i = 0; i < nums.length; i++) {
+        if (typeof targets[i] === 'number') {
+            nums[i].style.top = targets[i] + 'px';
+        }
+    }
+}
+
 function fvRenderMarkdown(text) {
-    var html = text
+    // Extract pipe tables first so the per-line regex pipeline doesn't
+    // mangle them. The cellTransform escapes, applies inline emphasis,
+    // and annotates defined terms so cell content links into the term
+    // cards. `_annotateTermsInString` is defined in `_card-stack.js.j2`
+    // and is a no-op when `editState.termsLookup` is empty.
+    var cellTransform = function(cellText) {
+        var safe = cellText
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.+?)\*/g, '<em>$1</em>')
+            .replace(/`([^`]+)`/g, '<code>$1</code>');
+        return _annotateTermsInString(safe);
+    };
+    var extracted = extractMdTables(text.split('\n'), cellTransform);
+    var pipelineText = extracted.lines.join('\n');
+
+    var html = pipelineText
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
@@ -222,7 +348,11 @@ function fvRenderMarkdown(text) {
         .replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>')
         .replace(/\n\n/g, '</p><p>')
         .replace(/\n/g, '<br>');
-    return '<p>' + html + '</p>';
+    // Term-annotate non-table content. Table HTML chunks are reinserted
+    // after this pass so cells (already annotated above) are not double-
+    // wrapped and `class="md-table"`-style attribute strings stay safe.
+    html = _annotateTermsInString(html);
+    return '<p>' + reinsertMdTables(html, extracted.chunks) + '</p>';
 }
 
 // =====================================================================
@@ -232,13 +362,17 @@ function fvRenderMarkdown(text) {
 function refreshFileViewer() {
     var panel = document.getElementById('file-viewer-panel');
     if (!panel || !panel.classList.contains('open')) return;
-    if (fvState.currentFile) { showSource(fvState.currentFile); }
+    if (fvState.currentFile) {
+        showSource(fvState.currentFile, null, fvState.currentNodeId, fvState.currentRepoName);
+    }
 }
 
 function closeFileViewer() {
     document.getElementById('file-viewer-panel').classList.remove('open');
     document.getElementById('divider-right').style.display = 'none';
     fvState.currentFile = null;
+    fvState.currentNodeId = null;
+    fvState.currentRepoName = null;
     fvState.lastData = null;
 }
 

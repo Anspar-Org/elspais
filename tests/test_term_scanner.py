@@ -11,7 +11,12 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from elspais.graph.GraphNode import FileType, NodeKind
-from elspais.graph.term_scanner import extract_comments, scan_graph, scan_text_for_terms
+from elspais.graph.term_scanner import (
+    _canonicalize_text,
+    extract_comments,
+    scan_graph,
+    scan_text_for_terms,
+)
 from elspais.graph.terms import TermDictionary, TermEntry, TermRef
 
 # -- REQ-d00236-A: returns list of (comment_text, line_number) pairs -----------
@@ -854,3 +859,58 @@ def test_REQ_d00239_B_scan_terms_passes_per_repo_config():
         call_b = calls_by_ns["repo-b"]
         assert call_b.kwargs.get("markup_styles") == ["**"]
         assert call_b.kwargs.get("exclude_files") == []
+
+
+# -- REQ-d00237-D: auto-marker skips terms inside outer emphasis spans -------
+# Without this guard, a term occurrence inside a longer **bold phrase**
+# gets wrapped again, producing `****term**...**` which pandoc renders
+# as literal asterisks.
+
+
+def _td_with_term(term: str) -> TermDictionary:
+    td = TermDictionary()
+    td.add(
+        TermEntry(
+            term=term,
+            definition=f"A {term}.",
+            namespace="test",
+            defined_in="REQ-p00001",
+        )
+    )
+    return td
+
+
+def test_REQ_d00237_D_skip_term_inside_outer_bold_phrase():
+    """A defined term that appears inside a longer **bold ...** phrase
+    must NOT be re-wrapped — the outer emphasis already satisfies the
+    convention. Re-wrapping produces `****term** ...**` literal text."""
+    td = _td_with_term("Diary")
+    text = "The **Diary Start Day** is configurable."
+    result, _ = _canonicalize_text(text, td, "**", {"*", "**"})
+    assert result == text, f"term inside outer bold should be left alone, got: {result!r}"
+
+
+def test_REQ_d00237_D_skip_term_inside_outer_italic_phrase():
+    """Same rule applies to single-asterisk italic spans."""
+    td = _td_with_term("Diary")
+    text = "The *Diary Start Day* is configurable."
+    result, _ = _canonicalize_text(text, td, "**", {"*", "**"})
+    assert result == text
+
+
+def test_REQ_d00237_D_wrap_term_outside_emphasis_unchanged():
+    """Verifies the guard doesn't over-correct — plain occurrences of
+    the term in non-emphasis prose are still auto-marked."""
+    td = _td_with_term("Diary")
+    text = "Open the Diary."
+    result, _ = _canonicalize_text(text, td, "**", {"*", "**"})
+    assert result == "Open the **Diary**."
+
+
+def test_REQ_d00237_D_canonical_bold_term_left_alone():
+    """A term that IS the entire bold phrase (canonical form) must
+    still be recognized as canonical and not double-wrapped."""
+    td = _td_with_term("Participant")
+    text = "Define **Participant** here."
+    result, _ = _canonicalize_text(text, td, "**", {"*", "**"})
+    assert result == text

@@ -61,7 +61,10 @@ version = 4   # Config schema version (required)
 ```toml
 [project]
 namespace = "REQ"          # ID prefix (e.g. "REQ" -> REQ-p00001)
-name = "my-project"        # Project name (used in reports)
+name = "my-project"        # REQUIRED; non-empty. Project name used in
+                            #   reports. load_config() rejects configs that
+                            #   omit this field or leave it blank. Run
+                            #   `elspais init` to generate a starter config.
 # color = "#1b3a5c"        # Optional badge color for the local namespace
                             #   (hex "#RRGGBB"). Omit for a deterministic
                             #   hash-derived color.

@@ -228,3 +228,140 @@ class TestTermNotFound:
         client = _make_app(tmp_path)
         resp = client.get("/api/term/nonexistent")
         assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# TestTermRepoNameAndPath (REQ-d00242-B / CUR-1357 disambiguation fields)
+# ---------------------------------------------------------------------------
+
+
+def _make_federated_app(tmp_path: Path) -> TestClient:
+    """Build a two-repo federation with terms in the associate repo.
+
+    Mirrors ``_make_app`` but with a separate ``assoc`` RepoEntry whose
+    graph owns a FILE node (``file:spec/glossary.md``) and a REQUIREMENT
+    node (``REQ-a00001``). Both nodes carry term definitions exercising
+    the two ``defined_in_path`` resolution branches (FILE vs non-FILE)
+    and the ``repo_name`` stamping done by ``_merge_terms``.
+    """
+    core_root = tmp_path / "core"
+    assoc_root = tmp_path / "assoc"
+    core_root.mkdir()
+    assoc_root.mkdir()
+
+    # --- core repo: empty graph + terms dict (no terms in core) -----------
+    core_graph = TraceGraph(repo_root=core_root)
+
+    # --- assoc repo: FILE node + REQUIREMENT node, both with terms -------
+    assoc_graph = TraceGraph(repo_root=assoc_root)
+    file_node = GraphNode(id="file:spec/glossary.md", kind=NodeKind.FILE)
+    file_node.set_field("relative_path", "spec/glossary.md")
+    file_node.set_field("absolute_path", str(assoc_root / "spec" / "glossary.md"))
+
+    req_node = GraphNode(id="REQ-a00001", kind=NodeKind.REQUIREMENT)
+    req_node.set_field("title", "Assoc Requirement")
+    # CONTAINS edge so ``req_node.file_node()`` resolves to the FILE.
+    file_node.link(req_node, EdgeKind.CONTAINS)
+
+    assoc_graph._index["file:spec/glossary.md"] = file_node
+    assoc_graph._index["REQ-a00001"] = req_node
+    assoc_graph._roots.append(file_node)
+
+    # Populate the assoc graph's per-repo term dict; ``_merge_terms`` will
+    # stamp ``repo_name`` from the RepoEntry.name and merge into the
+    # federated dictionary.
+    assoc_graph._terms.add(
+        TermEntry(
+            term="OAuth2",
+            definition="An open standard for access delegation.",
+            collection=False,
+            indexed=True,
+            defined_in="file:spec/glossary.md",  # FILE id branch
+            defined_at_line=42,
+            namespace="assoc",
+        )
+    )
+    assoc_graph._terms.add(
+        TermEntry(
+            term="Access Token",
+            definition="A credential representing authorization to a resource.",
+            collection=False,
+            indexed=True,
+            defined_in="REQ-a00001",  # non-FILE id → file_node() lookup
+            defined_at_line=7,
+            namespace="assoc",
+        )
+    )
+
+    repos = [
+        RepoEntry(name="core", graph=core_graph, config={}, repo_root=core_root),
+        RepoEntry(name="assoc", graph=assoc_graph, config={}, repo_root=assoc_root),
+    ]
+    federated = FederatedGraph(repos)
+
+    state = AppState(graph=federated, repo_root=core_root, config={})
+    app = create_app(state=state, mount_mcp=False)
+    return TestClient(app)
+
+
+class TestTermRepoNameAndPath:
+    """Validates CUR-1357 disambiguation fields on /api/term/{key}.
+
+    The endpoint must surface:
+      - ``repo_name`` — the owning federated RepoEntry.name, used by the
+        viewer to disambiguate FILE-id collisions across repos.
+      - ``defined_in_path`` — the resolved file path of the term's
+        ``defined_in`` node (whether that node is a FILE itself or a
+        REQUIREMENT whose enclosing FILE we navigate to via
+        ``file_node()``).
+      - ``defined_in_line`` — the ``defined_at_line`` recorded by the
+        term scanner.
+
+    Together these let the term-card open the correct file viewer
+    without any node_id-based ambiguity.
+    """
+
+    # Verifies: REQ-d00242-B
+    def test_api_term_returns_repo_name(self, tmp_path: Path) -> None:
+        """repo_name matches the owning RepoEntry.name (stamped by _merge_terms)."""
+        client = _make_federated_app(tmp_path)
+        resp = client.get("/api/term/oauth2")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        # Stamped automatically by FederatedGraph._merge_terms from
+        # RepoEntry(name="assoc").
+        assert data["repo_name"] == "assoc"
+
+    # Verifies: REQ-d00242-B
+    def test_api_term_returns_defined_in_path_for_file_term(self, tmp_path: Path) -> None:
+        """defined_in points at a FILE id → defined_in_path uses its relative_path."""
+        client = _make_federated_app(tmp_path)
+        resp = client.get("/api/term/oauth2")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["defined_in"] == "file:spec/glossary.md"
+        assert data["defined_in_path"] == "spec/glossary.md"
+        assert data["defined_in_line"] == 42
+
+    # Verifies: REQ-d00242-B
+    def test_api_term_returns_defined_in_path_for_req_term(self, tmp_path: Path) -> None:
+        """defined_in is a REQUIREMENT id → defined_in_path follows file_node()."""
+        client = _make_federated_app(tmp_path)
+        resp = client.get("/api/term/access token")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["defined_in"] == "REQ-a00001"
+        # REQ-a00001 is CONTAINS-linked from file:spec/glossary.md, so
+        # file_node() resolves to that FILE and yields its relative_path.
+        assert data["defined_in_path"] == "spec/glossary.md"
+        assert data["defined_in_line"] == 7
+
+    # Verifies: REQ-d00242-A
+    def test_api_terms_list_includes_repo_name(self, tmp_path: Path) -> None:
+        """/api/terms list endpoint also exposes repo_name on each entry."""
+        client = _make_federated_app(tmp_path)
+        resp = client.get("/api/terms")
+        assert resp.status_code == 200, resp.text
+        terms = resp.json()
+        # Both terms originate from the assoc repo.
+        assert {t["repo_name"] for t in terms} == {"assoc"}

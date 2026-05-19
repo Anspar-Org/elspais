@@ -6,17 +6,29 @@ where columns are aligned, and _regenerate_index uses aligned tables.
 """
 
 import argparse
+from pathlib import Path
 
 from elspais.commands.index import (
     _format_table,
     _regenerate_index,
     _resolve_spec_dir_info,
 )
+from elspais.graph.builder import TraceGraph
+from elspais.graph.federated import FederatedGraph
 from tests.core.graph_test_helpers import (
     build_graph,
     make_journey,
     make_requirement,
 )
+
+
+def _wrap(graph: TraceGraph, repo_root: Path | None = None) -> FederatedGraph:
+    """Wrap a bare TraceGraph in a single-repo FederatedGraph for tests."""
+    return FederatedGraph.from_single(
+        graph,
+        config={"project": {"name": "test"}},
+        repo_root=repo_root or Path("."),
+    )
 
 
 class TestFormatTable:
@@ -212,7 +224,7 @@ class TestRegenerateIndexAlignment:
         )
         args = argparse.Namespace(git_root=tmp_path)
 
-        _regenerate_index(graph, [spec_dir], args)
+        _regenerate_index(_wrap(graph, tmp_path), [spec_dir], args)
 
         content = (spec_dir / "INDEX.md").read_text()
         table_lines = self._find_table_lines(content)
@@ -235,7 +247,7 @@ class TestRegenerateIndexAlignment:
         )
         args = argparse.Namespace(git_root=tmp_path)
 
-        _regenerate_index(graph, [spec_dir], args)
+        _regenerate_index(_wrap(graph, tmp_path), [spec_dir], args)
 
         content = (spec_dir / "INDEX.md").read_text()
         separator = None
@@ -269,7 +281,7 @@ class TestRegenerateIndexAlignment:
         )
         args = argparse.Namespace(git_root=tmp_path)
 
-        _regenerate_index(graph, [spec_dir], args)
+        _regenerate_index(_wrap(graph, tmp_path), [spec_dir], args)
 
         content = (spec_dir / "INDEX.md").read_text()
         jny_table = self._find_section_table(content, "## User Journeys")
@@ -293,7 +305,7 @@ class TestRegenerateIndexAlignment:
         )
         args = argparse.Namespace(git_root=tmp_path)
 
-        _regenerate_index(graph, [spec_dir], args)
+        _regenerate_index(_wrap(graph, tmp_path), [spec_dir], args)
 
         content = (spec_dir / "INDEX.md").read_text()
         assert "REQ-p00001" in content
@@ -325,7 +337,7 @@ class TestRegenerateIndexAlignment:
         )
         args = argparse.Namespace(git_root=tmp_path)
 
-        _regenerate_index(graph, [spec_dir], args)
+        _regenerate_index(_wrap(graph, tmp_path), [spec_dir], args)
 
         content = (spec_dir / "INDEX.md").read_text()
         lines = content.split("\n")
@@ -362,7 +374,18 @@ class TestRegenerateIndexAlignment:
         )
         args = argparse.Namespace(git_root=tmp_path)
 
-        _regenerate_index(graph, [dir_a, dir_b], args)
+        # Federation config must declare both spec dirs so _repo_spec_dirs
+        # picks them up (the bare-TraceGraph fallback that used the caller's
+        # spec_dirs list was removed in CUR-1357 Task 3).
+        fed = FederatedGraph.from_single(
+            graph,
+            config={
+                "project": {"name": "test"},
+                "scanning": {"spec": {"directories": [str(dir_a), str(dir_b)]}},
+            },
+            repo_root=tmp_path,
+        )
+        _regenerate_index(fed, [dir_a, dir_b], args)
 
         content = (dir_a / "INDEX.md").read_text()
         h3_lines = [line for line in content.split("\n") if line.startswith("### ")]
@@ -390,7 +413,7 @@ class TestRegenerateIndexAlignment:
         )
         args = argparse.Namespace(git_root=tmp_path)
 
-        _regenerate_index(graph, [spec_dir], args)
+        _regenerate_index(_wrap(graph, tmp_path), [spec_dir], args)
 
         content = (spec_dir / "INDEX.md").read_text()
         assert "Addresses" not in content

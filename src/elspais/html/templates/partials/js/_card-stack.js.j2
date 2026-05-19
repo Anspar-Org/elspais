@@ -138,12 +138,19 @@ function renderCardStack() {
     // Re-apply cached coverage colors after DOM rebuild
     recolorCachedButtons();
 
-    // Re-apply edit mode state after DOM rebuild
-    if (editState.enabled) {
-        document.querySelectorAll('.card-assertion-text').forEach(function(el) {
+    // Re-apply edit mode state after DOM rebuild. In edit mode each
+    // assertion's body must show raw source (so textContent roundtrips
+    // through onAssertionBlur unchanged); in view mode it shows the
+    // markdown-rendered HTML produced by simpleMarkdown.
+    document.querySelectorAll('.card-assertion-text').forEach(function(el) {
+        var raw = el.dataset.original || '';
+        if (editState.enabled) {
             el.contentEditable = 'true';
-        });
-    }
+            el.innerHTML = escapeHtml(raw);
+        } else {
+            el.contentEditable = 'false';
+        }
+    });
 
     // Re-apply cached comment indicators after DOM rebuild
     editState.openCardOrder.forEach(function(nodeId) {
@@ -508,11 +515,19 @@ function buildAssertionHtml(nodeId, a, data) {
     h += '<div class="card-assertion-wrapper" data-assertion-id="' + assertionId + '" data-anchor="' + nodeId + '#' + label + '">';
     h += '<div class="card-assertion">';
     h += '<span class="card-assertion-label">' + label + '</span>';
+    // Assertion text — rendered through simpleMarkdown in view mode so
+    // pipe tables and inline bold render. In edit mode the span swaps to
+    // raw escaped text via _activateEditMode/_deactivateEditMode so the
+    // user types against the markdown source (textContent roundtrips
+    // back to the same source on blur).
+    var initialBody = editState.enabled
+        ? escapeHtml(text)
+        : simpleMarkdown(text, true);
     h += '<span class="card-assertion-text editable-field" ' +
         'contenteditable="false" data-assertion-id="' + assertionId + '" ' +
         'data-field="assertion" data-original="' + escapeAttr(text) + '" ' +
         'onblur="onAssertionBlur(this)" onkeydown="onEditableKeydown(event)">' +
-        escapeHtml(text) + '</span>';
+        initialBody + '</span>';
     // 6 dimension badges — only shown when direct assertion-level links exist
     h += '<span class="assertion-badges-area">';
     var badgeMode = editState.assertionBadgeMode || 'abbrev';
@@ -690,11 +705,11 @@ function buildCardHtml(nodeId, data, collapsed) {
     if (sourcePath) {
         reqSourceLink = '<span style="margin-left:auto;display:flex;align-items:baseline;gap:4px;text-transform:none;">' +
             '<a href="#" onclick="event.preventDefault(); showSource(\'' +
-            escapeHtml(sourcePath) + '\', ' + sourceLine + ')" ' +
+            escapeJsInAttr(sourcePath) + '\', ' + sourceLine + ', \'' + nodeId + '\')" ' +
             'style="color:#0d6efd;cursor:pointer;font-size:0.7rem;text-decoration:none;">' +
             escapeHtml(sourcePath.split('/').pop()) + ':' + sourceLine + '</a>' +
             '<button class="card-move-file-btn edit-only" ' +
-            'onclick="event.preventDefault(); onMoveToFile(\'' + nodeId + '\', \'' + escapeHtml(sourcePath) + '\')" ' +
+            'onclick="event.preventDefault(); onMoveToFile(\'' + nodeId + '\', \'' + escapeJsInAttr(sourcePath) + '\')" ' +
             'title="Move to different file" style="font-size:0.65rem;">Move</button>' +
             '</span>';
     }
@@ -921,7 +936,7 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
     var sourceLink = '';
     if (sourcePath) {
         sourceLink = '<a href="#" onclick="event.preventDefault(); showSource(\'' +
-            escapeHtml(sourcePath) + '\', ' + sourceLine + ')" ' +
+            escapeJsInAttr(sourcePath) + '\', ' + sourceLine + ', \'' + nodeId + '\')" ' +
             'style="color:#0d6efd;cursor:pointer;font-size:0.7rem;text-decoration:none;text-transform:none;margin-left:auto;">' +
             escapeHtml(sourcePath.split('/').pop()) + ':' + sourceLine + '</a>';
         sourceLink += '<button class="edit-only journey-move-btn" onclick="event.preventDefault(); onMoveToFile(\'' + nodeId + '\')" style="margin-left:4px;">Move</button>';
@@ -1060,7 +1075,7 @@ function buildGenericCardHtml(nodeId, data, collapsed) {
         html += '<div class="card-section"><div class="card-section-label">Source</div>';
         html += '<div class="card-meta"><div class="card-meta-item">';
         html += '<a class="card-meta-value" href="#" onclick="event.preventDefault(); showSource(\'' +
-            escapeHtml(sourcePath) + '\', ' + sourceLine + ')" ' +
+            escapeJsInAttr(sourcePath) + '\', ' + sourceLine + ', \'' + nodeId + '\')" ' +
             'style="color:#0d6efd;cursor:pointer;font-size:0.75rem;text-decoration:none;">' +
             escapeHtml(sourcePath.split('/').pop()) + ':' + sourceLine + '</a>';
         html += '</div></div></div>';
@@ -1109,42 +1124,62 @@ function buildGenericCardHtml(nodeId, data, collapsed) {
 
 // Implements: REQ-d00245-A
 function simpleMarkdown(text, annotateTerms) {
-    // Escape HTML first, then add minimal formatting
-    var lines = text.split('\n');
+    // Phase 1: extract pipe tables into HTML chunks keyed by placeholder.
+    // Cell content is escaped, bold-transformed, and term-annotated
+    // here so the global term pass below skips it (placeholders are
+    // non-word and survive escapeHtml).
+    var cellTransform = function(cellText) {
+        var safe = escapeHtml(cellText);
+        safe = safe.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        if (annotateTerms) {
+            safe = _annotateTermsInString(safe);
+        }
+        return safe;
+    };
+    var extracted = extractMdTables(text.split('\n'), cellTransform);
+
+    // Phase 2: run the existing line-by-line transforms over the
+    // remaining (non-table) lines. Placeholder lines pass through
+    // unchanged because they contain no markdown syntax.
     var result = [];
-    for (var i = 0; i < lines.length; i++) {
-        var line = escapeHtml(lines[i]);
-        // Bold: **text**
+    for (var i = 0; i < extracted.lines.length; i++) {
+        var line = escapeHtml(extracted.lines[i]);
         line = line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-        // Headers: ## text -> bold
         line = line.replace(/^(#{1,3})\s+(.+)$/, '<strong>$2</strong>');
-        // Numbered steps: 1. text
         line = line.replace(/^(\d+)\.\s+/, '<strong>$1.</strong> ');
-        // Bullet items: - text
         line = line.replace(/^(\s*)-\s+/, '$1&bull; ');
         result.push(line);
     }
     var output = result.join('\n');
 
-    // Term annotation pass (after markdown transforms)
-    if (annotateTerms && editState.termsLookup && Object.keys(editState.termsLookup).length > 0) {
-        if (!editState.termsRegex) {
-            _buildTermsRegex();
-        }
-        if (editState.termsRegex) {
-            output = output.replace(editState.termsRegex, function(match) {
-                var key = match.toLowerCase();
-                var entry = editState.termsLookup[key];
-                if (!entry) return match;
-                var tip = entry.definition_short || entry.definition || '';
-                if (tip.length > 80) tip = tip.substring(0, 80) + '...';
-                return '<span class="defined-term" data-term-key="' + escapeAttr(key) +
-                    '" data-tip="' + escapeAttr(tip) + '">' + match + '</span>';
-            });
-        }
+    // Phase 3: term annotation on non-table content only.
+    if (annotateTerms) {
+        output = _annotateTermsInString(output);
     }
 
+    // Phase 4: reinsert table HTML at placeholder positions.
+    output = reinsertMdTables(output, extracted.chunks);
+
     return output;
+}
+
+function _annotateTermsInString(s) {
+    if (!editState.termsLookup || Object.keys(editState.termsLookup).length === 0) {
+        return s;
+    }
+    if (!editState.termsRegex) {
+        _buildTermsRegex();
+    }
+    if (!editState.termsRegex) return s;
+    return s.replace(editState.termsRegex, function(match) {
+        var key = match.toLowerCase();
+        var entry = editState.termsLookup[key];
+        if (!entry) return match;
+        var tip = entry.definition_short || entry.definition || '';
+        if (tip.length > 80) tip = tip.substring(0, 80) + '...';
+        return '<span class="defined-term" data-term-key="' + escapeAttr(key) +
+            '" data-tip="' + escapeAttr(tip) + '">' + match + '</span>';
+    });
 }
 
 function _buildTermsRegex() {
@@ -1160,19 +1195,18 @@ function _buildTermsRegex() {
     editState.termsRegex = new RegExp('\\b(' + escaped.join('|') + ')\\b', 'gi');
 }
 
-// Implements: REQ-d00245-B — delegated click handler for .defined-term spans
+// Implements: REQ-d00245-B — delegated click handler for .defined-term spans.
+// Scoped to document.body so clicks land for terms surfaced anywhere —
+// card stack, file-viewer Rendered pane, etc.
 document.addEventListener('DOMContentLoaded', function() {
-    var body = document.getElementById('card-stack-body');
-    if (body) {
-        body.addEventListener('click', function(e) {
-            var span = e.target.closest('.defined-term');
-            if (span) {
-                e.preventDefault();
-                var key = span.getAttribute('data-term-key');
-                if (key) openTermCard(key);
-            }
-        });
-    }
+    document.body.addEventListener('click', function(e) {
+        var span = e.target.closest('.defined-term');
+        if (span) {
+            e.preventDefault();
+            var key = span.getAttribute('data-term-key');
+            if (key) openTermCard(key);
+        }
+    });
 });
 
 // =====================================================================
@@ -1331,15 +1365,15 @@ function renderAssertionTests(panel, reqId, label, data) {
         html += '<span class="assertion-test-icon">' + statusIcon + '</span>';
         if (t.file) {
             html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
-                escapeHtml(t.file) + '\', ' + (t.line || 0) + ')">' + testLabel + '</a>';
+                escapeJsInAttr(t.file) + '\', ' + (t.line || 0) + ', \'' + escapeAttr(t.id || '') + '\')">' + testLabel + '</a>';
         } else {
             html += '<span class="assertion-test-link">' + testLabel + '</span>';
         }
         // Result file link (e.g., test-results.xml)
         if (hasResults && t.results[0].file) {
             html += ' <a class="assertion-result-file-link" href="#" onclick="event.preventDefault(); showSource(\'' +
-                escapeHtml(t.results[0].file) + '\', ' + (t.results[0].line || 0) +
-                ')" title="View result in ' + escapeHtml(t.results[0].file) + '">[result]</a>';
+                escapeJsInAttr(t.results[0].file) + '\', ' + (t.results[0].line || 0) +
+                ', \'' + escapeAttr(t.id || '') + '\')" title="View result in ' + escapeHtml(t.results[0].file) + '">[result]</a>';
         }
         html += '</div>';
     }
@@ -1394,7 +1428,7 @@ function renderAssertionResults(panel, reqId, label, data) {
         var t = tests[i];
         if (t.results && t.results.length > 0) {
             for (var j = 0; j < t.results.length; j++) {
-                resultItems.push({ result: t.results[j], testLabel: t.label || t.id });
+                resultItems.push({ result: t.results[j], testLabel: t.label || t.id, testId: t.id });
             }
         }
     }
@@ -1423,7 +1457,7 @@ function renderAssertionResults(panel, reqId, label, data) {
         html += '<span class="assertion-test-icon">' + statusIcon + '</span>';
         if (r.file) {
             html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
-                escapeHtml(r.file) + '\', ' + (r.line || 0) + ')">' +
+                escapeJsInAttr(r.file) + '\', ' + (r.line || 0) + ', \'' + escapeAttr(resultItems[k].testId || '') + '\')">' +
                 escapeHtml(tLabel) + ' [' + escapeHtml(r.status) + ']</a>';
         } else {
             html += '<span class="assertion-test-link">' + escapeHtml(tLabel) + ' [' + escapeHtml(r.status) + ']</span>';
@@ -1545,7 +1579,7 @@ function renderAssertionCode(panel, reqId, label, data) {
         html += '<span class="assertion-test-icon">&#x1F4C4;</span>';
         if (c.file) {
             html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
-                escapeHtml(c.file) + '\', ' + (c.line || 0) + ')">' +
+                escapeJsInAttr(c.file) + '\', ' + (c.line || 0) + ', \'' + escapeAttr(c.id || '') + '\')">' +
                 escapeHtml(fileName) + ':' + (c.line || 1) + '</a>';
         } else {
             html += '<span class="assertion-test-link">' + escapeHtml(c.label || c.id) + '</span>';
@@ -1812,7 +1846,7 @@ function renderAssertionUatResults(panel, reqId, label, data) {
         html += '<span class="assertion-test-icon">' + statusIcon + '</span>';
         if (res.file) {
             html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
-                escapeHtml(res.file) + '\', ' + (res.line || 0) + ')">' +
+                escapeJsInAttr(res.file) + '\', ' + (res.line || 0) + ', \'' + escapeAttr(resultItems[r].jnyId || '') + '\')">' +
                 escapeHtml(jLabel) + ' [' + escapeHtml(res.status) + ']</a>';
         } else {
             html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
@@ -1879,7 +1913,7 @@ function toggleReqLevelLinks(badge, reqId, dimKey, assertLinkKey) {
             html += '<span class="assertion-test-icon">' + statusIcon + icon + '</span>';
             if (link.file) {
                 html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
-                    escapeHtml(link.file) + '\', ' + (link.line || 0) + ')">' + escapeHtml(link.title) + '</a>';
+                    escapeJsInAttr(link.file) + '\', ' + (link.line || 0) + ', \'' + escapeAttr(link.id || '') + '\')">' + escapeHtml(link.title) + '</a>';
             } else {
                 html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
                     escapeHtml(link.id) + '\')">' + escapeHtml(link.title) + '</a>';
@@ -2066,9 +2100,18 @@ function buildTermCardHtml(cardId, data, collapsed) {
     // Source section
     html += '<div class="card-section"><div class="card-section-label">Source</div>';
     html += '<div class="card-meta">';
-    if (data.defined_in) {
+    // `defined_in` is a node id (REQUIREMENT or FILE); the server resolves it
+    // into a concrete (defined_in_path, defined_in_line) pair so we can open
+    // the file viewer directly. `repo_name` disambiguates FILE-id collisions
+    // across federated repos (which `repo_root_for` cannot do on its own).
+    if (data.defined_in_path) {
+        var definedInPath = data.defined_in_path;
+        var definedLine = data.defined_in_line || 1;
         html += '<div class="card-meta-item"><span class="card-meta-key">Defined in:</span>';
-        html += '<a class="card-meta-value" href="#" onclick="event.preventDefault(); openCard(\'' + escapeAttr(data.defined_in) + '\')">' + escapeHtml(data.defined_in) + '</a>';
+        html += '<a class="card-meta-value" href="#" onclick="event.preventDefault(); showSource(\'' +
+            escapeJsInAttr(definedInPath) + '\', ' + definedLine + ', \'' +
+            escapeJsInAttr(data.defined_in || '') + '\', \'' +
+            escapeJsInAttr(data.repo_name || '') + '\')">' + escapeHtml(definedInPath) + '</a>';
         html += '</div>';
     }
     if (data.namespace) {
@@ -2162,7 +2205,7 @@ function buildTermCardHtml(cardId, data, collapsed) {
             for (var li = 0; li < lines.length; li++) {
                 var ln = lines[li].line;
                 var lnNcClass = lines[li].ref && lines[li].ref.canonical === false ? ' term-ref-noncanonical' : '';
-                html += '<a class="term-ref-file-line' + lnNcClass + '" href="#" onclick="event.preventDefault();showSource(\'' + escapeAttr(fp) + '\',' + ln + ')"';
+                html += '<a class="term-ref-file-line' + lnNcClass + '" href="#" onclick="event.preventDefault();showSource(\'' + escapeJsInAttr(fp) + '\',' + ln + ')"';
                 html += ' title="' + escapeAttr(fp + ':' + ln) + '">';
                 html += ln + '</a>';
                 if (li < lines.length - 1) html += ', ';

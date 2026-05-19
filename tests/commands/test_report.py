@@ -48,7 +48,7 @@ A. The system SHALL do something.
 
     config_file = tmp_path / ".elspais.toml"
     config_file.write_text(
-        "version = 3\n"
+        'version = 3\n[project]\nname = "test"\n'
         '[scanning.spec]\ndirectories = ["spec"]\n'
         "[changelog]\nhash_current = false\npresent = false\n"
     )

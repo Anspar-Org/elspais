@@ -76,7 +76,7 @@ def test_load_config_replaces_default_levels_when_user_provides_levels(tmp_path)
     cfg_path = tmp_path / ".elspais.toml"
     cfg_path.write_text(
         "version = 4\n"
-        '[project]\nnamespace = "DIARY"\n'
+        '[project]\nname = "test"\nnamespace = "DIARY"\n'
         '[levels.PRD]\nrank = 1\nletter = "p"\nimplements = ["PRD"]\n'
         '[levels.DEV]\nrank = 2\nletter = "d"\nimplements = ["DEV", "PRD"]\n'
     )

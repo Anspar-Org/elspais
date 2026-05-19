@@ -118,7 +118,11 @@ class RepoEntry:
     """A single repository's graph paired with its config.
 
     Attributes:
-        name: Repository name (e.g. "root", "core", "module-a").
+        name: Repository name. For the host repo, the value of
+            ``[project].name`` from the config (``load_config()`` rejects
+            empty/missing names at the TOML boundary; ``config_defaults()``
+            provides ``"example"`` for the fresh-directory / no-config-file
+            path). For associates, the key under ``[associates]``.
         graph: The repo's TraceGraph, or None if repo unavailable.
         config: The repo's config dict, or None if repo unavailable.
         repo_root: Expected local filesystem path.
@@ -209,13 +213,23 @@ class FederatedGraph:
 
     # Implements: REQ-d00222-C
     def _merge_terms(self) -> None:
-        """Merge per-repo _terms into a single federated TermDictionary."""
+        """Merge per-repo _terms into a single federated TermDictionary.
+
+        Each TermEntry is stamped with the owning repo's name before
+        merging so the API layer can disambiguate cross-repo file
+        resolution for terms whose ``defined_in`` is a FILE id (FILE ids
+        legitimately collide across federated repos; see
+        ``_ownership`` setup above).
+        """
         from elspais.graph.terms import TermDictionary
 
         merged = TermDictionary()
         self._term_duplicates: list[tuple] = []
         for entry in self._repos.values():
             if entry.graph is not None:
+                for term_entry in entry.graph._terms.iter_all():
+                    if not term_entry.repo_name:
+                        term_entry.repo_name = entry.name
                 dupes = merged.merge(entry.graph._terms)
                 self._term_duplicates.extend(dupes)
         self._terms = merged
@@ -371,6 +385,11 @@ class FederatedGraph:
     # ─────────────────────────────────────────────────────────────────────────
 
     @property
+    def root_repo_name(self) -> str:
+        """Return the host (root) repo's name as used in RepoEntry/index."""
+        return self._root_repo
+
+    @property
     def repo_root(self) -> Path:
         """Return the root repo's filesystem path."""
         return self._repos[self._root_repo].repo_root
@@ -392,46 +411,53 @@ class FederatedGraph:
         return _DEFAULT_SATELLITE_KINDS
 
     @classmethod
-    def empty(cls) -> FederatedGraph:
+    def empty(cls, *, name: str) -> FederatedGraph:
         """Create an empty FederatedGraph with no repos.
 
-        Used as an error fallback when graph construction fails.
+        Used as an error-fallback when graph construction fails. The caller
+        must pass an explicit ``name`` sentinel (e.g. ``"<unconfigured>"``)
+        so the degraded state is visible at the call site rather than hidden
+        behind a default.
         """
         from elspais.graph.builder import TraceGraph
 
         entry = RepoEntry(
-            name="root",
+            name=name,
             graph=TraceGraph(),
             config=None,
             repo_root=Path("."),
         )
-        return cls([entry], root_repo="root")
+        return cls([entry], root_repo=name)
 
     # Implements: REQ-d00200-B
     @classmethod
     def from_single(
         cls,
         graph: TraceGraph,
-        config: dict[str, Any] | None,
+        config: dict[str, Any],
         repo_root: Path,
     ) -> FederatedGraph:
         """Create a federation-of-one from a single TraceGraph.
 
         Args:
             graph: The single TraceGraph to wrap.
-            config: Config for this repo.
+            config: Config for this repo. Must have ``[project].name`` set
+                — ``load_config()`` enforces this at the boundary, so any
+                ``KeyError`` here indicates a caller bug, not a missing-
+                config user error.
             repo_root: Filesystem path to the repo root.
 
         Returns:
             A FederatedGraph wrapping a single repo.
         """
+        host_name = config["project"]["name"]
         entry = RepoEntry(
-            name="root",
+            name=host_name,
             graph=graph,
             config=config,
             repo_root=repo_root,
         )
-        return cls([entry], root_repo="root")
+        return cls([entry], root_repo=host_name)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Repo Access

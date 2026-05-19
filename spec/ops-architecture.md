@@ -78,7 +78,7 @@ Automated CI/CD checks ensure that requirement *Traceability*, code quality, and
 The pipeline validates at three levels:
 
 - **Quality gates**: Automated test suite and linting prevent regressions
-- ****Traceability** gates**: PR titles and commit messages must reference Linear tickets and requirements, maintaining the audit trail from code change to requirement
+- **Traceability gates**: PR titles and commit messages must reference Linear tickets and requirements, maintaining the audit trail from code change to requirement
 - **Security gates**: Secret scanning and dependency vulnerability auditing prevent accidental exposure or use of known-vulnerable libraries
 
 These checks are required status checks on the main branch, preventing merges that do not meet the standards.

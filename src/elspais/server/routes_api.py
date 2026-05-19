@@ -249,24 +249,21 @@ async def api_status(request: Request) -> JSONResponse:
     result = _get_graph_status(state.graph)
     result["version"] = __version__
     # Implements: REQ-d00206-C
-    # Include federation repo metadata from iter_repos()
+    # Include federation repo metadata from iter_repos().
     graph = state.graph
-    if hasattr(graph, "iter_repos"):
-        repos_info = []
-        for entry in graph.iter_repos():
-            repo_info: dict[str, Any] = {
-                "name": entry.name,
-                "path": str(entry.repo_root),
-                "status": "error" if entry.graph is None else "ok",
-            }
-            if entry.git_origin:
-                repo_info["git_origin"] = entry.git_origin
-            if entry.error:
-                repo_info["error"] = entry.error
-            repos_info.append(repo_info)
-        result["repos"] = repos_info
-    else:
-        result["repos"] = []
+    repos_info = []
+    for entry in graph.iter_repos():
+        repo_info: dict[str, Any] = {
+            "name": entry.name,
+            "path": str(entry.repo_root),
+            "status": "error" if entry.graph is None else "ok",
+        }
+        if entry.git_origin:
+            repo_info["git_origin"] = entry.git_origin
+        if entry.error:
+            repo_info["error"] = entry.error
+        repos_info.append(repo_info)
+    result["repos"] = repos_info
 
     # Dynamic category catalogs for the viewer UI. Each entry carries the
     # resolved (configured or hashed) bg/text colors so clients can render
@@ -288,33 +285,32 @@ async def api_repos(request: Request) -> JSONResponse:
     state = _st(request)
     graph = state.graph
     repos: list[dict] = []
-    if hasattr(graph, "iter_repos"):
-        for entry in graph.iter_repos():
-            repo_info: dict = {
-                "name": entry.name,
-                "path": str(entry.repo_root),
-                "status": "error" if entry.graph is None else "ok",
-            }
-            if entry.git_origin:
-                repo_info["git_origin"] = entry.git_origin
-            if entry.error:
-                repo_info["error"] = entry.error
+    for entry in graph.iter_repos():
+        repo_info: dict = {
+            "name": entry.name,
+            "path": str(entry.repo_root),
+            "status": "error" if entry.graph is None else "ok",
+        }
+        if entry.git_origin:
+            repo_info["git_origin"] = entry.git_origin
+        if entry.error:
+            repo_info["error"] = entry.error
 
-            # REQ-d00206-B: Staleness info for repos with git_origin
-            if entry.git_origin and entry.graph is not None:
-                try:
-                    from elspais.utilities.git import git_status_summary
+        # REQ-d00206-B: Staleness info for repos with git_origin
+        if entry.git_origin and entry.graph is not None:
+            try:
+                from elspais.utilities.git import git_status_summary
 
-                    summary = git_status_summary(entry.repo_root)
-                    repo_info["staleness"] = {
-                        "branch": summary.get("branch"),
-                        "remote_diverged": summary.get("remote_diverged", False),
-                        "fast_forward_possible": summary.get("fast_forward_possible", False),
-                    }
-                except Exception:
-                    repo_info["staleness"] = None
+                summary = git_status_summary(entry.repo_root)
+                repo_info["staleness"] = {
+                    "branch": summary.get("branch"),
+                    "remote_diverged": summary.get("remote_diverged", False),
+                    "fast_forward_possible": summary.get("fast_forward_possible", False),
+                }
+            except Exception:
+                repo_info["staleness"] = None
 
-            repos.append(repo_info)
+        repos.append(repo_info)
     return JSONResponse({"repos": repos})
 
 
@@ -719,7 +715,25 @@ async def api_tree_data(request: Request) -> JSONResponse:
 
 
 async def api_file_content(request: Request) -> JSONResponse:
-    """GET /api/file-content?path=<path> - Read a file from disk."""
+    """GET /api/file-content?path=<path>&node_id=<id>&repo_name=<name>.
+
+    Resolution order for a relative path:
+
+    1. ``repo_name`` (highest priority) — when supplied, look up the
+       owning federated repo by name via ``iter_repos()`` and resolve
+       strictly against its root. This bypasses ``_ownership`` for
+       FILE-id-based callers (FILE ids legitimately collide across
+       federated repos; ownership map keeps only the first-iterated
+       repo, which can be wrong).
+    2. ``node_id`` — when supplied and the federated graph knows the
+       node, resolve via ``FederatedGraph.repo_root_for(node_id)``.
+       Reliable for non-structural node ids (REQ/ASSERTION/CODE/TEST —
+       collisions raise FederationError) but unreliable for FILE ids.
+    3. Federation root (``state.repo_root``).
+    4. Fallback: scan every ``state.allowed_roots`` entry — covers raw
+       file paths sent without any disambiguator (test/code references
+       whose graph node id wasn't captured).
+    """
     import os
 
     from elspais.graph.mutations import MutationLog
@@ -730,8 +744,34 @@ async def api_file_content(request: Request) -> JSONResponse:
     if not rel_path:
         return JSONResponse({"error": "path parameter required"}, status_code=400)
 
+    node_id = request.query_params.get("node_id", "")
+    repo_name = request.query_params.get("repo_name", "")
+    base_root = state.repo_root
+    strict_root = False
+    if repo_name:
+        # Explicit repo_name takes precedence and disables the
+        # allowed_roots fallback (we know which repo owns the file).
+        for repo_entry in state.graph.iter_repos():
+            if repo_entry.name == repo_name:
+                base_root = repo_entry.repo_root
+                strict_root = True
+                break
+    elif node_id:
+        owning_root = state.graph.repo_root_for(node_id)
+        if owning_root is not None:
+            base_root = owning_root
+
     p = Path(rel_path)
-    abs_path = (p if p.is_absolute() else (state.repo_root / rel_path)).resolve()
+    if p.is_absolute():
+        abs_path = p.resolve()
+    else:
+        abs_path = (base_root / rel_path).resolve()
+        if not abs_path.exists() and not strict_root:
+            for root in state.allowed_roots:
+                candidate = (root / rel_path).resolve()
+                if candidate.exists() and candidate.is_relative_to(root):
+                    abs_path = candidate
+                    break
 
     # Security: path must be under repo root or an allowed associate dir
     if not any(abs_path.is_relative_to(root) for root in state.allowed_roots):
@@ -779,6 +819,12 @@ async def api_file_content(request: Request) -> JSONResponse:
             "pending_mutation_count": len(affected_node_ids),
             "affected_nodes": sorted(affected_node_ids),
             "mtime": os.path.getmtime(abs_path),
+            # Absolute resolved path so the file viewer's `vscode://` link
+            # can target the actual on-disk file (including in associate
+            # repos) without re-deriving the path from a single
+            # `document.body.dataset.basePath`, which only knows the
+            # federation root.
+            "abs_path": str(abs_path),
         }
     )
 
@@ -1843,6 +1889,7 @@ async def api_terms(request: Request) -> JSONResponse:
                 "definition_short": defn_short,
                 "defined_in": entry.defined_in,
                 "namespace": entry.namespace,
+                "repo_name": entry.repo_name,
                 "collection": entry.collection,
                 "indexed": entry.indexed,
                 "ref_count": len(entry.references),
@@ -1887,13 +1934,34 @@ async def api_term(request: Request) -> JSONResponse:
             if file_n:
                 ref_data["file_path"] = file_n.get_field("relative_path") or ""
         refs.append(ref_data)
+
+    # Resolve `defined_in` (a node id — REQUIREMENT or FILE) into a concrete
+    # (file_path, line) pair for the file-viewer link in the term card.
+    # REQ ids are always unique across the federation (collisions raise
+    # FederationError); FILE ids are not, so the JS also uses `repo_name`
+    # to disambiguate when calling /api/file-content.
+    defined_in_path = ""
+    defined_in_line = entry.defined_at_line or 1
+    if entry.defined_in:
+        defined_node = state.graph.find_by_id(entry.defined_in)
+        if defined_node is not None:
+            if defined_node.kind == NodeKind.FILE:
+                defined_in_path = defined_node.get_field("relative_path") or ""
+            else:
+                file_n = defined_node.file_node()
+                if file_n is not None:
+                    defined_in_path = file_n.get_field("relative_path") or ""
+
     return JSONResponse(
         {
             "term": entry.term,
             "key": entry.term.lower(),
             "definition": entry.definition,
             "defined_in": entry.defined_in,
+            "defined_in_path": defined_in_path,
+            "defined_in_line": defined_in_line,
             "namespace": entry.namespace,
+            "repo_name": entry.repo_name,
             "collection": entry.collection,
             "indexed": entry.indexed,
             "is_reference": entry.is_reference,

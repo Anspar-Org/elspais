@@ -1,0 +1,131 @@
+// Partial: _md-table.js.j2 — pipe-table extraction for markdown renderers
+// Used by both `simpleMarkdown` (card bodies) and `fvRenderMarkdown`
+// (file-viewer rendered mode). Renders GFM pipe tables to full-grid
+// HTML tables with a per-cell transform callback so callers can apply
+// their own escaping/term annotation inside cells.
+
+// Returns true if the line begins a candidate table row (starts with `|`).
+function _isMdTableLine(line) {
+    return /^\s*\|/.test(line);
+}
+
+// Returns true if the line is a separator row (cells contain only dashes,
+// optionally with `:` for alignment markers — alignment ignored for v1).
+function _isMdTableSeparator(line) {
+    if (!_isMdTableLine(line)) return false;
+    var cells = _splitMdTableRow(line);
+    if (cells.length === 0) return false;
+    for (var i = 0; i < cells.length; i++) {
+        if (!/^:?-+:?$/.test(cells[i].trim())) return false;
+    }
+    return true;
+}
+
+// Split a pipe-row into cells. Trims outer pipes and whitespace.
+function _splitMdTableRow(line) {
+    var trimmed = line.trim();
+    if (trimmed.charAt(0) === '|') trimmed = trimmed.substring(1);
+    if (trimmed.charAt(trimmed.length - 1) === '|') {
+        trimmed = trimmed.substring(0, trimmed.length - 1);
+    }
+    var cells = trimmed.split('|');
+    var out = [];
+    for (var i = 0; i < cells.length; i++) {
+        out.push(cells[i].trim());
+    }
+    return out;
+}
+
+// Render a [headerCells, ...bodyRows] array to HTML using cellTransform
+// to convert raw cell text into safe HTML (escape + per-cell markdown +
+// term annotation per the caller's needs).
+function _renderMdTable(rows, cellTransform) {
+    if (rows.length === 0) return '';
+    var header = rows[0];
+    var body = rows.slice(1);
+    var colCount = header.length;
+    var html = '<div class="md-table-wrap"><table class="md-table">';
+    html += '<thead><tr>';
+    for (var c = 0; c < colCount; c++) {
+        html += '<th>' + cellTransform(header[c]) + '</th>';
+    }
+    html += '</tr></thead><tbody>';
+    // Visual separator row — mimics the markdown `| --- | --- |` line so
+    // the source separator line has a real rendered target the file
+    // viewer's gutter can align against.
+    html += '<tr class="md-table-separator">';
+    for (var s = 0; s < colCount; s++) {
+        html += '<td></td>';
+    }
+    html += '</tr>';
+    for (var r = 0; r < body.length; r++) {
+        var cells = body[r];
+        html += '<tr>';
+        for (var c2 = 0; c2 < colCount; c2++) {
+            var cell = c2 < cells.length ? cells[c2] : '';
+            html += '<td>' + cellTransform(cell) + '</td>';
+        }
+        html += '</tr>';
+    }
+    html += '</tbody></table></div>';
+    return html;
+}
+
+// Walk `lines` and substitute every detected pipe-table block with a
+// single placeholder line of the form `[[ELSPAISMDTABLE_NNN]]`. The
+// rendered HTML for each placeholder is collected into `tableChunks`.
+// Returns { lines: newLines, chunks: tableChunks }. Callers run their
+// regular markdown pipeline on the placeholder-bearing lines, then
+// substitute placeholders for the rendered table HTML at the end so
+// the table chunks are not touched by post-pass transforms (term
+// annotation, etc.).
+function extractMdTables(lines, cellTransform) {
+    var newLines = [];
+    var chunks = [];
+    var i = 0;
+    while (i < lines.length) {
+        // Need header + separator immediately following to form a table.
+        if (
+            i + 1 < lines.length &&
+            _isMdTableLine(lines[i]) &&
+            !_isMdTableSeparator(lines[i]) &&
+            _isMdTableSeparator(lines[i + 1])
+        ) {
+            var header = _splitMdTableRow(lines[i]);
+            var body = [];
+            var j = i + 2;
+            while (j < lines.length && _isMdTableLine(lines[j]) && !_isMdTableSeparator(lines[j])) {
+                body.push(_splitMdTableRow(lines[j]));
+                j++;
+            }
+            var html = _renderMdTable([header].concat(body), cellTransform);
+            var placeholder = '[[ELSPAISMDTABLE_' + chunks.length + ']]';
+            chunks.push(html);
+            newLines.push(placeholder);
+            i = j;
+            continue;
+        }
+        newLines.push(lines[i]);
+        i++;
+    }
+    return { lines: newLines, chunks: chunks };
+}
+
+// Substitute every `[[ELSPAISMDTABLE_NNN]]` placeholder in `output` with
+// the corresponding rendered HTML. Used after the main markdown pipeline
+// finishes so the table HTML bypasses the global term-annotation pass.
+// Tokens are pure ASCII so they survive `escapeHtml` (which only touches
+// `& < > " '`) and the regex-based markdown pipeline. The bracket
+// wrappers are non-word characters so the term-annotation regex's
+// `\b(...)\b` cannot match across them. Replacement uses `split`/`join`
+// (rather than `replace`) so every occurrence is substituted — defensive
+// against accidental multi-emit.
+function reinsertMdTables(output, chunks) {
+    for (var k = 0; k < chunks.length; k++) {
+        var token = '[[ELSPAISMDTABLE_' + k + ']]';
+        if (output.indexOf(token) >= 0) {
+            output = output.split(token).join(chunks[k]);
+        }
+    }
+    return output;
+}

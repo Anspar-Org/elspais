@@ -186,7 +186,7 @@ class TestDoctorRun:
         monkeypatch.chdir(tmp_path)
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            'version = 3\n[project]\nnamespace = "REQ"\n\n'
+            'version = 3\n[project]\nname = "test"\nnamespace = "REQ"\n\n'
             '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n\n'
             "[id-patterns]\n"
             'canonical = "{namespace}-{level.letter}{component}"\n\n'

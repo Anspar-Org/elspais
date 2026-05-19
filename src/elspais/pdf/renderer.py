@@ -23,6 +23,7 @@ def render_pdf(
     engine: str = "xelatex",
     template: Path | None = None,
     cover: Path | None = None,
+    resource_paths: list[Path] | None = None,
 ) -> int:
     """Render Markdown content to PDF via pandoc.
 
@@ -32,6 +33,10 @@ def render_pdf(
         engine: LaTeX engine (xelatex, lualatex, pdflatex).
         template: Custom LaTeX template path, or None for bundled.
         cover: Markdown file for custom cover page.
+        resource_paths: Directories pandoc should search when resolving
+            relative image references. Required when assembled markdown
+            references images by relative path -- pandoc would otherwise
+            resolve them against the tempfile's directory in `/tmp/`.
 
     Returns:
         0 on success, non-zero on failure.
@@ -76,6 +81,10 @@ def render_pdf(
             "-o",
             str(output_path),
         ]
+
+        if resource_paths:
+            resource_arg = os.pathsep.join(str(p) for p in resource_paths)
+            cmd.append(f"--resource-path={resource_arg}")
 
         if cover_tex_path:
             cmd.extend(["-V", f"cover-tex={cover_tex_path}"])

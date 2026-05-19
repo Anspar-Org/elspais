@@ -42,7 +42,9 @@ cli_ttl = 30
 # Project namespace (used as the ID prefix, e.g. "REQ" -> REQ-p00001)
 namespace = "REQ"
 
-# Project name (used in reports)
+# Project name (REQUIRED; non-empty; used in reports). load_config() rejects
+# configs that omit this field or leave it blank. `elspais init` generates a
+# starter config with `name` auto-derived from the invocation directory.
 name = "my-project"
 
 #──────────────────────────────────────────────────────────────────────────────

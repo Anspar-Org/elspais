@@ -57,8 +57,15 @@ def graph_with_code() -> TraceGraph:
 
 @pytest.fixture()
 def config() -> dict:
-    """Create a minimal config dict."""
-    return config_defaults()
+    """Create a minimal config dict with ``[project].name`` set.
+
+    ``from_single`` requires ``config['project']['name']`` to be
+    populated — the production boundary (``load_config()``) enforces
+    this, but the schema's default is the empty string.
+    """
+    cfg = config_defaults()
+    cfg.setdefault("project", {})["name"] = "root"
+    return cfg
 
 
 # === Tests ===
@@ -116,6 +123,35 @@ class TestFederatedGraphReadOnly:
         assert repos[0].graph is simple_graph
         assert repos[0].config is config
         assert repos[0].repo_root == Path("/repo/core")
+
+    def test_REQ_d00200_B_from_single_raises_on_missing_project_name(self) -> None:
+        """KeyError signals a caller bug: from_single requires config['project']['name'].
+
+        The host-repo-name refactor (CUR-1357) deleted the resolve_host_repo_name
+        fallback so production code reads the project name directly. A config
+        without [project] (or with no name field) means the caller didn't go
+        through load_config()/get_config() — that's a code bug to surface
+        rather than silently substitute a placeholder.
+        """
+        graph = TraceGraph()
+        with pytest.raises(KeyError):
+            FederatedGraph.from_single(graph, {}, Path("."))
+        with pytest.raises(KeyError):
+            FederatedGraph.from_single(graph, {"project": {}}, Path("."))
+
+    def test_empty_graph_repo_name_visible_at_call_site(self) -> None:
+        """REQ-d00200-B: FederatedGraph.empty(name=...) makes the degraded-state
+        sentinel visible — its name flows to iter_repos() and root_repo_name.
+
+        Both MCP error-recovery sites pass "<unconfigured>"; the keyword-only
+        parameter is the contract that surfaces the degraded state at the
+        call site instead of hiding it behind a default.
+        """
+        g = FederatedGraph.empty(name="<unconfigured>")
+        repos = list(g.iter_repos())
+        assert len(repos) == 1
+        assert repos[0].name == "<unconfigured>"
+        assert g.root_repo_name == "<unconfigured>"
 
     def test_REQ_d00200_D_find_by_id_delegates(
         self, simple_graph: TraceGraph, config: dict
@@ -349,6 +385,7 @@ class TestFederatedGraphMutations:
             repo_root=Path("/repo/core"),
         )
         config = config_defaults()
+        config.setdefault("project", {})["name"] = "root"
         return FederatedGraph.from_single(graph, config, repo_root=Path("/repo/core"))
 
     @pytest.fixture()
@@ -366,6 +403,7 @@ class TestFederatedGraphMutations:
             repo_root=Path("/repo/core"),
         )
         config = config_defaults()
+        config.setdefault("project", {})["name"] = "root"
         return FederatedGraph.from_single(graph, config, repo_root=Path("/repo/core"))
 
     def test_REQ_d00201_A_rename_node_delegates_and_updates_ownership(

@@ -72,8 +72,19 @@ def run(args: argparse.Namespace) -> int:
         print("Error: --associated-prefix required for associated repositories")
         return 1
 
+    # Derive project name from the user's original invocation directory.
+    # cli.py chdir's to the git root before dispatching, so Path.cwd() here
+    # points at the git root, not where the user typed `elspais init`.
+    # For a nested-init scenario (`cd ~/repos/myrepo/sub/dir && elspais init`)
+    # the user almost certainly wants "dir" as the project name, not the git
+    # root's basename. `args.original_cwd` is stashed by cli.py; tests that
+    # bypass cli.py (calling init.run directly) will not set it, in which
+    # case generate_config falls back to Path.cwd().name.
+    original_cwd = getattr(args, "original_cwd", None)
+    project_name = original_cwd.name if original_cwd else None
+
     # Generate configuration
-    config_content = generate_config(project_type, associated_prefix)
+    config_content = generate_config(project_type, associated_prefix, project_name=project_name)
 
     # Write file
     config_path.write_text(config_content, encoding="utf-8")
@@ -539,23 +550,43 @@ def _add_table(
     doc.add(key, tbl)
 
 
-def generate_config(project_type: str, associated_prefix: str | None = None) -> str:
+def generate_config(
+    project_type: str,
+    associated_prefix: str | None = None,
+    project_name: str | None = None,
+) -> str:
     """Generate configuration file content from the ElspaisConfig schema.
 
     Walks the Pydantic model defaults and applies project-type-specific
     overrides to produce valid, schema-compliant TOML.
+
+    Args:
+        project_type: "core" or "associated"
+        associated_prefix: Namespace prefix (required for associated projects)
+        project_name: Project name override (defaults to cwd basename). The
+            generated config always emits a non-empty [project].name so the
+            load_config() boundary check accepts it.
     """
     from elspais import __version__
     from elspais.config import config_defaults
 
     defaults = config_defaults()
 
+    # Derive a real project name (never empty -- load_config() rejects empty names).
+    # NOTE: when called via the CLI, project_name is already set from
+    # args.original_cwd (the user's invocation directory, not the git root
+    # that cli.py chdir's to). This Path.cwd() fallback only fires for
+    # direct callers (e.g. tests calling generate_config()/run() with no
+    # original_cwd on args).
+    if project_name is None or not project_name.strip():
+        project_name = Path.cwd().name or "my-project"
+
     if project_type == "associated":
         if associated_prefix is None:
             associated_prefix = "XXX"
         overrides: dict[str, Any] = {
             "project": {
-                "name": f"{associated_prefix.lower()}-project",
+                "name": project_name,
                 "namespace": associated_prefix,
             },
             "levels": {
@@ -597,7 +628,10 @@ def generate_config(project_type: str, associated_prefix: str | None = None) -> 
         label = "Associated Repository"
         gen_by = f"elspais init --type associated (v{__version__})"
     else:
-        overrides = _CORE_OVERRIDES
+        # Start from _CORE_OVERRIDES but inject the derived project name so a
+        # fresh `elspais init` produces a config that passes the load_config()
+        # boundary check (which requires a non-empty [project].name).
+        overrides = _deep_merge(_CORE_OVERRIDES, {"project": {"name": project_name}})
         sections = _CORE_SECTIONS
         label = "Main Repository"
         gen_by = f"elspais init (v{__version__})"

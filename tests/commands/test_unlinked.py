@@ -65,7 +65,7 @@ def _make_graph(
             f.link(t, EdgeKind.CONTAINS)
             req.link(t, EdgeKind.VERIFIES)
 
-    return FederatedGraph.from_single(tg, config=None, repo_root=Path("."))
+    return FederatedGraph.from_single(tg, config={"project": {"name": "test"}}, repo_root=Path("."))
 
 
 def _make_args(**kwargs: object) -> argparse.Namespace:

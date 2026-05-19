@@ -48,6 +48,7 @@ class TestLoadConfig:
             f.write(
                 """\
 [project]
+name = "test"
 namespace = "MYREQ"
 
 [scanning.spec]
@@ -63,7 +64,7 @@ directories = ["specs"]
 
     def test_load_applies_defaults(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
-            f.write('[project]\nnamespace = "REQ"\n')
+            f.write('[project]\nname = "test"\nnamespace = "REQ"\n')
             f.flush()
 
             config = load_config(Path(f.name))
@@ -96,7 +97,7 @@ class TestLocalConfigOverride:
     def test_local_toml_overrides_base_values(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             base = Path(tmpdir) / ".elspais.toml"
-            base.write_text('[project]\nnamespace = "REQ"\n')
+            base.write_text('[project]\nname = "test"\nnamespace = "REQ"\n')
 
             local = Path(tmpdir) / ".elspais.local.toml"
             local.write_text('[project]\nnamespace = "LOCAL"\n')
@@ -108,7 +109,7 @@ class TestLocalConfigOverride:
     # Implements: REQ-d00207-B
     def test_missing_local_toml_is_silently_ignored(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
-            f.write('[project]\nnamespace = "REQ"\n')
+            f.write('[project]\nname = "test"\nnamespace = "REQ"\n')
             f.flush()
 
             config = load_config(Path(f.name))
@@ -119,7 +120,10 @@ class TestLocalConfigOverride:
     def test_local_toml_deep_merges_nested_sections(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             base = Path(tmpdir) / ".elspais.toml"
-            base.write_text('[scanning.spec]\ndirectories = ["spec"]\nfile_patterns = ["*.md"]\n')
+            base.write_text(
+                '[project]\nname = "test"\n'
+                '[scanning.spec]\ndirectories = ["spec"]\nfile_patterns = ["*.md"]\n'
+            )
 
             local = Path(tmpdir) / ".elspais.local.toml"
             local.write_text('[scanning.spec]\ndirectories = ["spec", "extra-specs"]\n')
@@ -218,7 +222,7 @@ class TestPydanticShim:
     def test_load_config_validates_schema(self, tmp_path):
         """load_config() should validate against Pydantic schema."""
         config_path = tmp_path / ".elspais.toml"
-        config_path.write_text('version = 3\n[project]\nnamespace = "TEST"\n')
+        config_path.write_text('version = 3\n[project]\nname = "test"\nnamespace = "TEST"\n')
 
         config = load_config(config_path)
         assert config["project"]["namespace"] == "TEST"
@@ -230,6 +234,78 @@ class TestPydanticShim:
 
         with pytest.raises(ValueError):
             load_config(config_path)
+
+
+class TestProjectNameBoundary:
+    """Boundary enforcement: load_config() requires non-empty [project].name.
+
+    The "no fallbacks" rule applies at the boundary where user configs enter
+    the system. Bare ProjectConfig()/ElspaisConfig() construction in tests and
+    internal helpers still gets a schema default (currently ``"example"``) so
+    partial-dict validation in _validate_config() helpers keeps working and
+    the MCP server's no-config-file degraded mode keeps a non-empty repo name.
+    Only configs loaded from disk through load_config() must declare a real
+    project name -- and the check inspects the pre-merge user TOML so the
+    schema placeholder never masks a missing field.
+    """
+
+    def test_load_config_rejects_missing_project_name(self, tmp_path):
+        """A config file missing [project].name is rejected at load_config()."""
+        cfg_path = tmp_path / ".elspais.toml"
+        cfg_path.write_text("version = 4\n" "[project]\n" 'namespace = "REQ"\n')
+        with pytest.raises(ValueError) as ei:
+            load_config(cfg_path)
+        msg = str(ei.value).lower()
+        assert "project" in msg and "name" in msg
+
+    def test_load_config_rejects_empty_project_name(self, tmp_path):
+        """A config file with empty [project].name is rejected at load_config()."""
+        cfg_path = tmp_path / ".elspais.toml"
+        cfg_path.write_text("version = 4\n" "[project]\n" 'name = ""\n' 'namespace = "REQ"\n')
+        with pytest.raises(ValueError) as ei:
+            load_config(cfg_path)
+        msg = str(ei.value).lower()
+        assert "project" in msg and "name" in msg
+
+    def test_load_config_accepts_real_project_name(self, tmp_path):
+        """A config file with a real [project].name loads cleanly."""
+        cfg_path = tmp_path / ".elspais.toml"
+        cfg_path.write_text("version = 4\n" "[project]\n" 'name = "demo"\n' 'namespace = "REQ"\n')
+        cfg = load_config(cfg_path)
+        assert cfg["project"]["name"] == "demo"
+
+    def test_config_defaults_provides_non_empty_project_name(self):
+        """config_defaults() must populate a non-empty [project].name.
+
+        Production callers (viewer, MCP daemon, pdf, factory.build_graph,
+        server/state) read config['project']['name'] directly. When no
+        .elspais.toml is discoverable, get_config() returns config_defaults()
+        — that fresh-directory path must still produce a usable repo name so
+        the UI/API never silently shows ''.
+
+        The literal ``"example"`` is pinned: a future revert to ``""`` would
+        silently break the MCP no-config-file path; a generic non-empty
+        assertion would not catch that regression.
+        """
+        from elspais.config import config_defaults
+
+        defaults = config_defaults()
+        assert defaults["project"]["name"] == "example"
+
+    def test_load_config_rejects_missing_project_name_with_local_override(self, tmp_path):
+        """Local override supplying name rescues a main TOML without name.
+
+        The boundary check must accept the local override as the source of
+        [project].name (mirroring how docker-compose.override.yml supplies
+        missing fields). Without this, the .elspais.local.toml escape hatch
+        would be useless for the project name.
+        """
+        cfg_path = tmp_path / ".elspais.toml"
+        cfg_path.write_text("version = 4\n" "[project]\n" 'namespace = "REQ"\n')
+        local_path = tmp_path / ".elspais.local.toml"
+        local_path.write_text('[project]\nname = "from-local"\n')
+        cfg = load_config(cfg_path)
+        assert cfg["project"]["name"] == "from-local"
 
 
 class TestChangelogConfig:

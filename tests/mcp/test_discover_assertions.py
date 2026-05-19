@@ -50,6 +50,7 @@ def _add_implements_edge(child: GraphNode, parent: GraphNode) -> None:
 def _wrap_federated(graph: TraceGraph) -> FederatedGraph:
     """Wrap a TraceGraph in a FederatedGraph for the MCP helpers."""
     config = config_defaults()
+    config.setdefault("project", {})["name"] = "test"
     return FederatedGraph.from_single(graph, config, Path("/test/repo"))
 
 

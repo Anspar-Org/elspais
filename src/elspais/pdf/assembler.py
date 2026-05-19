@@ -127,6 +127,17 @@ class MarkdownAssembler:
 
         # Group requirements by file, then partition by level
         file_groups = self._group_by_file()
+        # Map each file path to its owning repo (root or associate). Files
+        # whose nodes span multiple repos are extraordinarily rare; the
+        # first node wins (matches _group_by_file's document order).
+        file_owners: dict[str, str] = {}
+        for fp, nodes in file_groups.items():
+            for node in nodes:
+                try:
+                    file_owners[fp] = self._graph.repo_for(node.id).name
+                    break
+                except KeyError:
+                    continue
         level_buckets = self._partition_by_level(file_groups)
 
         # Emit each level group
@@ -155,7 +166,8 @@ class MarkdownAssembler:
             sorted_files = self._sort_files_by_depth(files, file_groups)
 
             for file_path in sorted_files:
-                parts.extend(self._render_file(file_path))
+                owner_root = self._repo_root_for_owner(file_owners.get(file_path))
+                parts.extend(self._render_file(file_path, owning_repo_root=owner_root))
 
         # Topic index — scope to rendered files only in overview mode
         if self._overview:
@@ -168,7 +180,7 @@ class MarkdownAssembler:
             index_groups = {k: v for k, v in file_groups.items() if k in rendered_files}
         else:
             index_groups = file_groups
-        index_section = self._build_topic_index(index_groups)
+        index_section = self._build_topic_index(index_groups, file_owners=file_owners)
         if index_section:
             parts.append("# Topic Index")
             parts.append("")
@@ -180,7 +192,7 @@ class MarkdownAssembler:
     # File rendering — reads source files directly
     # ------------------------------------------------------------------
 
-    def _render_file(self, file_path: str) -> list[str]:
+    def _render_file(self, file_path: str, owning_repo_root: Path | None = None) -> list[str]:
         """Render a spec file's content with adjusted heading levels.
 
         Reads the file directly. Detects the heading level used for requirements
@@ -189,8 +201,11 @@ class MarkdownAssembler:
         - Requirement headings → `###` with anchor and page break
         - Sub-sections within requirements → `####`
         - `---` separators and `*End*` footer lines → stripped
+
+        ``owning_repo_root`` anchors path resolution to the file's owning
+        associate when supplied (cross-repo PDF rendering).
         """
-        resolved = self._resolve_path(file_path)
+        resolved = self._resolve_path(file_path, owning_repo_root=owning_repo_root)
         if not resolved or not resolved.exists():
             return []
 
@@ -232,7 +247,9 @@ class MarkdownAssembler:
 
             # Replace .mmd image references with .png
             if ".mmd)" in line:
-                line = self._resolve_mermaid_images(line, file_path)
+                line = self._resolve_mermaid_images(
+                    line, file_path, owning_repo_root=owning_repo_root
+                )
 
             # Ensure blank line before first list item so Pandoc renders as a list
             stripped = line.lstrip()
@@ -266,29 +283,65 @@ class MarkdownAssembler:
                 return len(m.group(1))
         return 1
 
-    def _resolve_path(self, file_path: str) -> Path | None:
-        """Resolve a source path to an absolute Path."""
+    def _repo_root_for_owner(self, owner_name: str | None) -> Path | None:
+        """Look up the on-disk root for a named federated repo, if any."""
+        if not owner_name:
+            return None
+        for entry in self._graph.iter_repos():
+            if entry.name == owner_name:
+                return entry.repo_root
+        return None
+
+    def _resolve_path(self, file_path: str, owning_repo_root: Path | None = None) -> Path | None:
+        """Resolve a source path to an absolute Path.
+
+        When ``owning_repo_root`` is supplied, the file is resolved
+        against that repo root first (the federated case for cross-repo
+        files). Falls back to ``self._graph.repo_root`` and then to a
+        scan of every repo in ``iter_repos()`` so that cross-repo
+        references render even when the caller didn't track ownership.
+        """
         p = Path(file_path)
         if p.is_absolute() and p.exists():
             return p
-        # Try relative to repo root
+        if owning_repo_root is not None:
+            candidate = owning_repo_root / file_path
+            if candidate.exists():
+                return candidate
+        # Try relative to root repo
         candidate = self._graph.repo_root / file_path
         if candidate.exists():
             return candidate
+        # Fall back: search every federated repo (cross-repo file with
+        # no ownership context — rare in normal callers but needed for
+        # mermaid blocks emitted from preamble-style global text).
+        for entry in self._graph.iter_repos():
+            candidate = entry.repo_root / file_path
+            if candidate.exists():
+                return candidate
         return None
 
     # ------------------------------------------------------------------
     # Mermaid diagram resolution
     # ------------------------------------------------------------------
 
-    def _resolve_mermaid_images(self, line: str, source_file: str) -> str:
+    def _resolve_mermaid_images(
+        self,
+        line: str,
+        source_file: str,
+        owning_repo_root: Path | None = None,
+    ) -> str:
         """Replace .mmd image references with .png equivalents.
 
         For each ![alt](path.mmd) reference:
         1. Look for path.png alongside the .mmd file
         2. If not found, generate it using mmdc (mermaid CLI)
         3. Replace the reference with the absolute .png path
+
+        ``owning_repo_root`` anchors resolution to the source file's
+        owning repo when known (federated cross-repo rendering).
         """
+        anchor = owning_repo_root if owning_repo_root is not None else self._graph.repo_root
 
         def _replace_mmd(match: re.Match) -> str:
             prefix = match.group(1)  # ![alt](
@@ -297,10 +350,10 @@ class MarkdownAssembler:
 
             # Resolve .mmd path relative to the source file's directory
             source_dir = Path(source_file).parent
-            mmd_resolved = self._graph.repo_root / source_dir / mmd_path
+            mmd_resolved = anchor / source_dir / mmd_path
             if not mmd_resolved.exists():
-                # Try relative to repo root
-                mmd_resolved = self._graph.repo_root / mmd_path
+                # Try relative to anchor repo root
+                mmd_resolved = anchor / mmd_path
             if not mmd_resolved.exists():
                 return match.group(0)  # Leave unchanged
 
@@ -501,7 +554,11 @@ class MarkdownAssembler:
     # Topic index
     # ------------------------------------------------------------------
 
-    def _build_topic_index(self, file_groups: dict[str, list[GraphNode]]) -> list[str]:
+    def _build_topic_index(
+        self,
+        file_groups: dict[str, list[GraphNode]],
+        file_owners: dict[str, str] | None = None,
+    ) -> list[str]:
         """Build an alphabetized topic index.
 
         Topic sources:
@@ -509,39 +566,61 @@ class MarkdownAssembler:
         2. File-level Topics: lines (scanned from source file)
         3. Requirement-level Topics: lines (from REMAINDER children in graph)
 
+        When ``file_owners`` is supplied, requirement entries belonging
+        to an associate repo render with a ``[<repo_name>]`` prefix so
+        readers can tell where each cross-repo section originates.
+
         Returns:
             List of Markdown lines for the index section.
         """
-        # topic → set of (req_id, req_title)
-        index: dict[str, set[tuple[str, str]]] = defaultdict(set)
+        # topic → set of (req_id, req_title, repo_name)
+        index: dict[str, set[tuple[str, str, str]]] = defaultdict(set)
+        owners = file_owners or {}
+
+        def _repo_for_node(node: GraphNode, fallback: str) -> str:
+            try:
+                return self._graph.repo_for(node.id).name
+            except KeyError:
+                return fallback
 
         for file_path, nodes in file_groups.items():
+            file_owner = owners.get(file_path, "")
             # Source 1: filename words
             filename_topics = self._topics_from_filename(file_path)
             for topic in filename_topics:
                 for node in nodes:
-                    index[topic].add((node.id, node.get_label()))
+                    index[topic].add((node.id, node.get_label(), _repo_for_node(node, file_owner)))
 
             # Source 2: file-level Topics: lines (scan file directly)
-            file_topics = self._topics_from_file(file_path)
+            file_topics = self._topics_from_file(
+                file_path,
+                owning_repo_root=self._repo_root_for_owner(file_owner),
+            )
             for topic in file_topics:
                 for node in nodes:
-                    index[topic].add((node.id, node.get_label()))
+                    index[topic].add((node.id, node.get_label(), _repo_for_node(node, file_owner)))
 
             # Source 3: requirement-level REMAINDER children with Topics: lines
             for node in nodes:
                 req_topics = self._topics_from_requirement_remainders(node)
                 for topic in req_topics:
-                    index[topic].add((node.id, node.get_label()))
+                    index[topic].add((node.id, node.get_label(), _repo_for_node(node, file_owner)))
 
         if not index:
             return []
 
         # Render as alphabetized list
         lines: list[str] = []
+        host_name = self._graph.root_repo_name
         for topic in sorted(index.keys(), key=str.lower):
             entries = sorted(index[topic], key=lambda e: e[0])
-            refs = ", ".join(f"[{req_id}](#{req_id})" for req_id, _title in entries)
+            parts: list[str] = []
+            for req_id, _title, repo_name in entries:
+                if repo_name and repo_name != host_name:
+                    parts.append(f"[{repo_name}] [{req_id}](#{req_id})")
+                else:
+                    parts.append(f"[{req_id}](#{req_id})")
+            refs = ", ".join(parts)
             lines.append(f"**{topic}**: {refs}")
             lines.append("")
 
@@ -562,9 +641,9 @@ class MarkdownAssembler:
         words = [w for w in cleaned.split("-") if w]
         return words
 
-    def _topics_from_file(self, file_path: str) -> list[str]:
+    def _topics_from_file(self, file_path: str, owning_repo_root: Path | None = None) -> list[str]:
         """Extract Topics: lines from the pre-requirement section of a file."""
-        resolved = self._resolve_path(file_path)
+        resolved = self._resolve_path(file_path, owning_repo_root=owning_repo_root)
         if not resolved or not resolved.exists():
             return []
         text = resolved.read_text(encoding="utf-8")

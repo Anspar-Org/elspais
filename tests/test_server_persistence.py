@@ -22,6 +22,7 @@ from pathlib import Path
 
 from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
+from elspais.graph.federated import FederatedGraph
 from elspais.graph.relations import EdgeKind
 from elspais.graph.render import render_save
 
@@ -30,11 +31,25 @@ from elspais.graph.render import render_save
 # ---------------------------------------------------------------------------
 
 
+def _wrap(graph: TraceGraph, tmp_path: Path) -> FederatedGraph:
+    """Wrap a TraceGraph in a single-repo FederatedGraph for tests."""
+    return FederatedGraph.from_single(graph, {"project": {"name": "test"}}, tmp_path)
+
+
+def _inject_node(fed: FederatedGraph, anchor_id: str, new_node: GraphNode) -> None:
+    """Inject a node into the inner sub-graph that owns anchor_id and refresh
+    federation ownership so the new node is reachable via the federation API."""
+    inner = fed.repo_for(anchor_id).graph
+    inner._index[new_node.id] = new_node
+    inner._roots.append(new_node)
+    fed._rebuild_ownership()
+
+
 def _build_graph_with_spec(
     tmp_path: Path,
     spec_content: str,
     spec_filename: str = "test_spec.md",
-) -> tuple[TraceGraph, Path]:
+) -> tuple[FederatedGraph, Path]:
     """Build a TraceGraph with a real spec file on disk.
 
     Creates a spec file, builds graph nodes manually with FILE nodes
@@ -125,10 +140,10 @@ def _build_graph_with_spec(
         "REQ-t00001-B": assertion_b,
     }
 
-    return graph, spec_file
+    return _wrap(graph, tmp_path), spec_file
 
 
-def _build_two_req_graph(tmp_path: Path) -> tuple[TraceGraph, Path]:
+def _build_two_req_graph(tmp_path: Path) -> tuple[FederatedGraph, Path]:
     """Build a graph with two requirements."""
     from elspais.graph.GraphNode import FileType
 
@@ -226,7 +241,7 @@ def _build_two_req_graph(tmp_path: Path) -> tuple[TraceGraph, Path]:
         "REQ-t00002-A": a2,
     }
 
-    return graph, spec_file
+    return _wrap(graph, tmp_path), spec_file
 
 
 # ---------------------------------------------------------------------------
@@ -366,8 +381,7 @@ class TestSaveEdgeMutations:
             label="Second PRD",
         )
         prd2._content = {"level": "PRD", "status": "Active", "hash": "11111111"}
-        graph._index["REQ-p00002"] = prd2
-        graph._roots.append(prd2)
+        _inject_node(graph, "REQ-t00001", prd2)
 
         # Add edge: REQ-t00001 implements REQ-p00002
         graph.add_edge("REQ-t00001", "REQ-p00002", EdgeKind.IMPLEMENTS)
@@ -481,9 +495,10 @@ class TestNoSourceFile:
         graph._roots = [node]
         graph._index = {"REQ-nosource": node}
 
-        graph.change_status("REQ-nosource", "Draft")
+        fed = _wrap(graph, tmp_path)
+        fed.change_status("REQ-nosource", "Draft")
 
-        result = render_save(graph, tmp_path)
+        result = render_save(fed, tmp_path)
 
         # Should succeed with no files written (node has no FILE ancestor)
         assert result["success"] is True
@@ -527,8 +542,7 @@ class TestEdgeCoalescing:
             label="Second PRD",
         )
         prd2._content = {"level": "PRD", "status": "Active", "hash": "11111111"}
-        graph._index["REQ-p00002"] = prd2
-        graph._roots.append(prd2)
+        _inject_node(graph, "REQ-t00001", prd2)
 
         # Add and then delete the edge
         graph.add_edge("REQ-t00001", "REQ-p00002", EdgeKind.IMPLEMENTS)
@@ -555,8 +569,7 @@ class TestEdgeCoalescing:
                 label=f"PRD {i}",
             )
             prd._content = {"level": "PRD", "status": "Active", "hash": f"{i}0000000"}
-            graph._index[f"REQ-p0000{i}"] = prd
-            graph._roots.append(prd)
+            _inject_node(graph, "REQ-t00001", prd)
             graph.add_edge("REQ-t00001", f"REQ-p0000{i}", EdgeKind.IMPLEMENTS)
 
         result = render_save(graph, tmp_path)
@@ -614,8 +627,7 @@ class TestAssertionTargetPersistence:
             label="Second PRD",
         )
         prd2._content = {"level": "PRD", "status": "Active", "hash": "11111111"}
-        graph._index["REQ-p00002"] = prd2
-        graph._roots.append(prd2)
+        _inject_node(graph, "REQ-t00001", prd2)
 
         graph.add_edge("REQ-t00001", "REQ-p00002", EdgeKind.IMPLEMENTS, assertion_targets=["B"])
 
@@ -674,7 +686,7 @@ class TestAssertionTargetPersistence:
 def _build_refines_graph(
     tmp_path: Path,
     has_refines_edge: bool = False,
-) -> tuple[TraceGraph, Path]:
+) -> tuple[FederatedGraph, Path]:
     """Build a graph with optional REFINES edge for testing."""
     from elspais.graph.GraphNode import FileType
 
@@ -742,7 +754,7 @@ def _build_refines_graph(
         "REQ-t00001-A": a1,
     }
 
-    return graph, spec_file
+    return _wrap(graph, tmp_path), spec_file
 
 
 class TestSaveRefinesEdge:
@@ -805,8 +817,7 @@ class TestSaveRefinesEdge:
             label="Product Req 3",
         )
         prd3._content = {"level": "PRD", "status": "Active", "hash": "00000002"}
-        graph._index["REQ-p00003"] = prd3
-        graph._roots.append(prd3)
+        _inject_node(graph, "REQ-t00001", prd3)
 
         graph.add_edge("REQ-t00001", "REQ-p00003", EdgeKind.IMPLEMENTS)
         # Also delete the REFINES edge

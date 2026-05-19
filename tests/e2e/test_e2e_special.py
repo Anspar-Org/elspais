@@ -93,7 +93,7 @@ class TestFixThenHealth:
         # Create minimal config
         config = tmp_path / ".elspais.toml"
         config.write_text(
-            'version = 3\n[project]\nnamespace = "REQ"\n\n'
+            'version = 3\n[project]\nname = "test"\nnamespace = "REQ"\n\n'
             '[scanning.spec]\ndirectories = ["spec"]\n'
         )
 
@@ -365,7 +365,7 @@ class TestH6SectionDepthUnfixable:
             "*End* *H6 Test* | **Hash**: -\n"
         )
         (tmp_path / ".elspais.toml").write_text(
-            'version = 3\n[project]\nnamespace = "REQ"\n\n'
+            'version = 3\n[project]\nname = "test"\nnamespace = "REQ"\n\n'
             '[scanning.spec]\ndirectories = ["spec"]\n'
         )
         return tmp_path

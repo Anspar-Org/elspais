@@ -37,7 +37,10 @@ class TermEntry:
     indexed: bool = True  # True by default; False suppresses index + health check
     defined_in: str = ""  # node ID of nearest REQUIREMENT or FILE ancestor
     defined_at_line: int = 0  # for error reporting
-    namespace: str = ""  # repo namespace
+    namespace: str = ""  # repo namespace (ID prefix, e.g. "REQ", "DIARY")
+    repo_name: str = ""  # owning federated repo name (RepoEntry.name) —
+    # the canonical disambiguator when a term's defined_in is a FILE id,
+    # since FILE ids can legitimately collide across federated repos.
     references: list[TermRef] = field(default_factory=list)
     # Phase 4: reference-type definitions, synonyms, change tracking
     is_reference: bool = False  # True for external standard/document definitions

@@ -206,16 +206,11 @@ def _resolve_spec_dir_info(spec_dir: Path) -> _SpecDirInfo:
 def _repo_name_for(graph: FederatedGraph, node_id: str) -> str | None:
     """Return the owning repo's name for a node ID, or None if unknown.
 
-    Uses ``FederatedGraph.repo_for(node_id).name`` directly. REQ/JNY IDs are
-    forbidden from colliding cross-repo, so this lookup is unambiguous (unlike
-    a FILE-node-based lookup, since two repos may share a relative path).
-
-    For backward compat with callers passing a bare ``TraceGraph`` (legacy
-    code paths and tests), returns ``"root"`` if the graph has no
-    ``repo_for`` method.
+    Uses ``FederatedGraph.repo_for(node_id).name`` directly. REQ/JNY IDs
+    are forbidden from colliding cross-repo, so this lookup is unambiguous
+    (unlike a FILE-node-based lookup, since two repos may share a relative
+    path).
     """
-    if not hasattr(graph, "repo_for"):
-        return "root"
     try:
         return graph.repo_for(node_id).name
     except KeyError:
@@ -225,20 +220,19 @@ def _repo_name_for(graph: FederatedGraph, node_id: str) -> str | None:
 def _repo_spec_dirs(graph: FederatedGraph, repo_name: str, fallback: list[Path]) -> list[Path]:
     """Return the absolute spec directory paths for a repo.
 
-    Reads ``[scanning.spec].directories`` from the repo's config when
-    available; falls back to ``fallback`` (the caller's spec_dirs) for
-    bare-TraceGraph callers or repos with no config.
+    Reads ``[scanning.spec].directories`` from the repo's config; falls
+    back to ``fallback`` only when the repo is unknown to the graph or
+    its entry has no config.
     """
-    if hasattr(graph, "iter_repos"):
-        for entry in graph.iter_repos():
-            if entry.name != repo_name or entry.config is None:
-                continue
-            scanning = entry.config.get("scanning", {})
-            spec_cfg = scanning.get("spec", {}) if isinstance(scanning, dict) else {}
-            dirs = spec_cfg.get("directories") if isinstance(spec_cfg, dict) else None
-            if dirs:
-                return [Path(d) if Path(d).is_absolute() else entry.repo_root / d for d in dirs]
-            return [entry.repo_root / "spec"]
+    for entry in graph.iter_repos():
+        if entry.name != repo_name or entry.config is None:
+            continue
+        scanning = entry.config.get("scanning", {})
+        spec_cfg = scanning.get("spec", {}) if isinstance(scanning, dict) else {}
+        dirs = spec_cfg.get("directories") if isinstance(spec_cfg, dict) else None
+        if dirs:
+            return [Path(d) if Path(d).is_absolute() else entry.repo_root / d for d in dirs]
+        return [entry.repo_root / "spec"]
     return fallback
 
 
@@ -273,8 +267,7 @@ def _resolve_repo_info(
 
     Reads the repo's config from FederatedGraph for level rank/display name.
     Falls back to scanning ``fallback_dir`` for a `.elspais.toml` when the
-    graph is a bare TraceGraph (legacy caller) and config isn't otherwise
-    accessible.
+    repo's entry in the graph has no config attached.
     """
     from elspais.config.schema import ElspaisConfig
 
@@ -283,11 +276,10 @@ def _resolve_repo_info(
     level_names: dict[str, str] = {}
 
     config = None
-    if hasattr(graph, "iter_repos"):
-        for entry in graph.iter_repos():
-            if entry.name == repo_name and entry.config is not None:
-                config = entry.config
-                break
+    for entry in graph.iter_repos():
+        if entry.name == repo_name and entry.config is not None:
+            config = entry.config
+            break
 
     if config is None and fallback_dir is not None:
         # Legacy fallback: walk up from spec dir to find .elspais.toml
@@ -378,12 +370,9 @@ def _build_index_content(
         if (reqs_by_bucket.get(b_none) or jnys_by_bucket.get(b_none)) and b_none not in seen:
             active_buckets.append(b_none)
 
-    if hasattr(graph, "iter_repos"):
-        for entry in graph.iter_repos():
-            dirs = _repo_spec_dirs(graph, entry.name, spec_dirs)
-            _add_repo_buckets(entry.name, dirs)
-    else:
-        _add_repo_buckets("root", spec_dirs)
+    for entry in graph.iter_repos():
+        dirs = _repo_spec_dirs(graph, entry.name, spec_dirs)
+        _add_repo_buckets(entry.name, dirs)
 
     unatt_bucket: Bucket = (UNATTRIBUTED, None)
     if reqs_by_bucket.get(unatt_bucket) or jnys_by_bucket.get(unatt_bucket):

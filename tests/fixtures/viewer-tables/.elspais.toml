@@ -1,0 +1,33 @@
+# Minimal fixture for viewer table-rendering tests.
+# A single PRD spec file under spec/ exercises the simpleMarkdown table path.
+
+version = 3
+
+[project]
+name = "viewer-tables-fixture"
+namespace = "REQ"
+
+[levels.prd]
+rank = 1
+letter = "p"
+implements = ["prd"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
+
+[id-patterns.component]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[scanning.spec]
+directories = ["spec"]
+
+[rules.hierarchy]
+allow_structural_orphans = true
+
+[rules.format]
+require_hash = false
+require_assertions = false
+require_status = true
+allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]

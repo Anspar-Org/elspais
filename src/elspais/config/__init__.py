@@ -213,6 +213,11 @@ def load_config(config_path: Path) -> dict[str, Any]:
     """
     content = config_path.read_text(encoding="utf-8")
     user_config = _parse_toml(content)
+    # Capture the user-supplied project name BEFORE merging in defaults — the
+    # boundary check below must reject a real TOML that omits [project].name
+    # even when `config_defaults()` provides a placeholder for the no-config-file
+    # path (see ProjectConfig.name).
+    _user_project_name = (user_config.get("project") or {}).get("name")
     merged = _merge_configs(config_defaults(), user_config)
     # `[levels]` is a hierarchy declaration. When the user supplies their own
     # levels, take only the user's keys (so a custom uppercase `[levels.PRD]`
@@ -224,8 +229,12 @@ def load_config(config_path: Path) -> dict[str, Any]:
 
     # Deep-merge developer-local overrides if present
     local_path = config_path.parent / ".elspais.local.toml"
+    _local_project_name: Any = None
     if local_path.is_file():
         local_config = _parse_toml(local_path.read_text(encoding="utf-8"))
+        # Same rule as the main TOML: capture pre-merge so we can tell whether
+        # the user supplied a name vs. the schema default leaking through.
+        _local_project_name = (local_config.get("project") or {}).get("name")
         merged = _merge_configs(merged, local_config)
         _override_levels(merged, local_config)
 
@@ -259,6 +268,16 @@ def load_config(config_path: Path) -> dict[str, Any]:
     from elspais.config.schema import ElspaisConfig
 
     validated = ElspaisConfig.model_validate(merged)
+
+    # Boundary enforcement: a real .elspais.toml MUST declare [project].name.
+    # Bare ProjectConfig() construction in helpers and tests still defaults
+    # name (currently to "example"), but configs loaded from disk go through
+    # this check, which is the only entry point that should accept user-
+    # authored TOML. The check inspects the pre-merge user/local TOML values
+    # so the schema's placeholder default cannot mask a missing/empty name.
+    supplied_name = _local_project_name if _local_project_name is not None else _user_project_name
+    if not supplied_name or not str(supplied_name).strip():
+        raise ValueError(f"{config_path}: [project].name is required and must be non-empty")
 
     # Produce hyphenated dict for backward-compatible access
     result = validated.model_dump(by_alias=True)

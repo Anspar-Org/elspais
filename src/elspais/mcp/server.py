@@ -813,16 +813,15 @@ def _refresh_graph(
                 "success": False,
                 "message": f"CONFIG ERROR: {error_msg}",
                 "node_count": 0,
-            }, FederatedGraph.empty()
+            }, FederatedGraph.empty(name="<unconfigured>")
         raise
 
-    # REQ-d00205-B: Extract root config from rebuilt graph for handler to sync
+    # REQ-d00205-B: Extract root config from rebuilt graph for handler to sync.
     root_config = None
-    if hasattr(new_graph, "iter_repos"):
-        for entry in new_graph.iter_repos():
-            if entry.config is not None:
-                root_config = entry.config
-                break
+    for entry in new_graph.iter_repos():
+        if entry.config is not None:
+            root_config = entry.config
+            break
 
     return {
         "success": True,
@@ -1610,7 +1609,7 @@ def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dic
     REQ-o00061-D: Reads configuration from unified config system.
     """
     typed_config = _validate_config(config) if isinstance(config, dict) else config
-    project_name = typed_config.project.name or "unknown"
+    project_name = typed_config.project.name
 
     config_file = find_config_file(working_dir)
 
@@ -1980,14 +1979,14 @@ def _get_workspace_info(
     Args:
         working_dir: The repository root directory.
         config: Optional pre-loaded config dict.
-        graph: Optional TraceGraph for coverage/health profiles.
+        graph: Optional FederatedGraph for coverage/health profiles.
         detail: Detail profile to use. See _WORKSPACE_DETAIL_PROFILES.
 
     Returns:
         Workspace information dict with profile-specific sections.
     """
-    # REQ-d00205-D: Derive root config from graph when not provided
-    if config is None and graph is not None and hasattr(graph, "iter_repos"):
+    # REQ-d00205-D: Derive root config from graph when not provided.
+    if config is None and graph is not None:
         for entry in graph.iter_repos():
             if entry.config is not None:
                 config = entry.config
@@ -1998,7 +1997,7 @@ def _get_workspace_info(
     base = _build_base_workspace_info(working_dir, config)
 
     # REQ-d00205-A: Include federation details when multi-repo graph present
-    if graph is not None and hasattr(graph, "iter_repos"):
+    if graph is not None:
         repos_info = []
         for entry in graph.iter_repos():
             repo_info: dict[str, Any] = {
@@ -4954,7 +4953,7 @@ def create_server(
             import sys
 
             print(f"CONFIG ERROR: {e}", file=sys.stderr)
-            graph = FederatedGraph.empty()
+            graph = FederatedGraph.empty(name="<unconfigured>")
 
     # Create server with instructions for AI agents (REQ-d00065)
     mcp = FastMCP("elspais", instructions=MCP_SERVER_INSTRUCTIONS)

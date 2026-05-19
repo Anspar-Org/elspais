@@ -14,22 +14,18 @@ from elspais.mcp.server import _get_mutation_log
 
 # Implements: REQ-d00201-A
 def _iter_repo_entries(state: Any) -> list[tuple[str, Path, dict | None]]:
-    """Yield (name, repo_root, config) for all repos in the graph.
-    Works for both FederatedGraph (iter_repos) and plain TraceGraph (root only).
-    """
-    if hasattr(state.graph, "iter_repos"):
-        return [
-            (e.name, e.repo_root, e.config)
-            for e in state.graph.iter_repos()
-            if e.error is None and e.graph is not None
-        ]
-    return [("root", state.repo_root, state.config)]
+    """Yield (name, repo_root, config) for all repos in the graph."""
+    return [
+        (e.name, e.repo_root, e.config)
+        for e in state.graph.iter_repos()
+        if e.error is None and e.graph is not None
+    ]
 
 
 # Implements: REQ-d00201-A
 def _resolve_repo_root(state: Any, repo_name: str | None) -> Path:
-    """Look up repo root by name. None/'root' returns state.repo_root."""
-    if repo_name is None or repo_name == "root":
+    """Look up repo root by name. None returns state.repo_root (host)."""
+    if repo_name is None:
         return state.repo_root
     for name, root, _ in _iter_repo_entries(state):
         if name == repo_name:
@@ -103,7 +99,7 @@ async def api_git_status(request: Request) -> JSONResponse:
     # Detect detached HEAD from git state (branch is None) even if AppState
     # doesn't know about it (e.g. server started on a detached worktree).
     git_detached = result.get("branch") is None
-    root_ds = state.get_detached_state("root")
+    root_ds = state.get_detached_state(state.config["project"]["name"])
     is_detached = root_ds is not None or git_detached
     result["is_detached"] = is_detached
     result["originating_branch"] = root_ds.originating_branch if root_ds else None
@@ -302,7 +298,7 @@ async def api_git_checkout(request: Request) -> JSONResponse:
         root = _resolve_repo_root(state, repo_name)
         result = _checkout_single_repo(root, branch, is_remote)
         if result.get("success"):
-            effective_name = repo_name if repo_name else "root"
+            effective_name = repo_name if repo_name else state.config["project"]["name"]
             state.leave_detached(effective_name)
             invalidate_ancestor_cache()
         status_code = 200 if result.get("success") else 400
@@ -430,7 +426,7 @@ async def api_git_checkout_commit(request: Request) -> JSONResponse:
                 {"success": False, "error": "commit hash required"}, status_code=400
             )
         root = _resolve_repo_root(state, repo_name)
-        rname = repo_name or "root"
+        rname = repo_name or state.config["project"]["name"]
         if not originating_branch:
             originating_branch = get_current_branch(root) or ""
         originating_head = get_current_commit(root) or ""

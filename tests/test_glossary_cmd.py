@@ -132,6 +132,40 @@ class TestGlossaryCmd:
         q_section = output[output.index("**Questionnaire**") :]
         assert "(collection)" in q_section.split("\n## ")[0]
 
+    def test_REQ_d00224_A_glossary_blank_line_between_terms(self) -> None:
+        """Consecutive terms within a letter section are separated by a blank line.
+
+        Without it, two adjacent ``: definition`` lines render as a single
+        definition-list item in pandoc/markdown viewers.
+        """
+        generate_glossary, _, _ = _import_generators()
+        td = _build_test_dictionary()
+        output = generate_glossary(td)
+        # `_build_test_dictionary` produces two `Q` terms (Quality Control,
+        # Questionnaire) — pick whichever pair shares a letter section.
+        # Each per-term block ends with `*Defined in: ...*` followed by a
+        # blank line before the next `**Term**` heading.
+        import re
+
+        # Match a defined-in line followed by an immediate **Term** line
+        # (i.e. no separating blank line). This must NOT appear.
+        bad = re.search(r"\*Defined in: [^\n]+\n\*\*", output)
+        assert bad is None, f"Found adjacent term blocks with no blank line: {bad.group(0)!r}"
+
+    def test_REQ_d00224_A_glossary_blank_line_before_term_index_bullets(self) -> None:
+        """Term-index namespace headers are separated from their bullet list
+        by a blank line so pandoc treats the bullets as a list rather than
+        paragraph continuation of the bold header."""
+        _, generate_term_index, _ = _import_generators()
+        td = _build_test_dictionary()
+        output = generate_term_index(td)
+        # The `**ns:**` line must be followed by a blank line before the
+        # first `- node_id` bullet.
+        import re
+
+        bad = re.search(r"\*\*[^*\n]+:\*\*\n- ", output)
+        assert bad is None, f"Namespace header without blank-line separator: {bad.group(0)!r}"
+
     # -- REQ-d00224-B: term index ---------------------------------------------
 
     def test_REQ_d00224_B_term_index_only_indexed(self) -> None:

@@ -77,7 +77,9 @@ def _build_single_repo(
     req_b = _make_requirement("REQ-p00002", "Second Requirement")
     jny_a = _make_journey("JNY-A1", "Login Journey")
     _attach_to_file(graph, fn, req_a, req_b, jny_a)
-    return FederatedGraph.from_single(graph, config=None, repo_root=tmp_path)
+    return FederatedGraph.from_single(
+        graph, config={"project": {"name": "test"}}, repo_root=tmp_path
+    )
 
 
 def _build_two_repo_federation(
@@ -306,7 +308,9 @@ class TestNoSpecDirPathMatching:
         req = _make_requirement("REQ-p00001", "Requirement Outside Spec Dirs")
         _attach_to_file(graph, fn, req)
 
-        fed = FederatedGraph.from_single(graph, config=None, repo_root=tmp_path)
+        fed = FederatedGraph.from_single(
+            graph, config={"project": {"name": "test"}}, repo_root=tmp_path
+        )
 
         # Pass a spec_dirs that does NOT contain the file's directory.
         spec_dirs = [tmp_path / "spec"]

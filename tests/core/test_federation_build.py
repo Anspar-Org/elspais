@@ -23,7 +23,7 @@ from elspais.graph.federated import FederationError
 # ---------------------------------------------------------------------------
 
 _BASE_CONFIG = {
-    "project": {"namespace": "REQ"},
+    "project": {"name": "test", "namespace": "REQ"},
     "scanning": {"spec": {"directories": ["spec"]}},
     "id-patterns": {
         "canonical": "{namespace}-{level.letter}{component}",

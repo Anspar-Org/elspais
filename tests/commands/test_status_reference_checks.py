@@ -19,7 +19,11 @@ from elspais.graph.relations import EdgeKind
 
 def _wrap(graph: TraceGraph) -> FederatedGraph:
     """Wrap a bare TraceGraph in a federation-of-one."""
-    return FederatedGraph.from_single(graph, None, graph.repo_root or Path("/test/repo"))
+    return FederatedGraph.from_single(
+        graph,
+        {"project": {"name": "test"}},
+        graph.repo_root or Path("/test/repo"),
+    )
 
 
 # Default exclude_status matching the real default set
