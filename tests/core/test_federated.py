@@ -57,8 +57,15 @@ def graph_with_code() -> TraceGraph:
 
 @pytest.fixture()
 def config() -> dict:
-    """Create a minimal config dict."""
-    return config_defaults()
+    """Create a minimal config dict with ``[project].name`` set.
+
+    ``from_single`` requires ``config['project']['name']`` to be
+    populated — the production boundary (``load_config()``) enforces
+    this, but the schema's default is the empty string.
+    """
+    cfg = config_defaults()
+    cfg.setdefault("project", {})["name"] = "root"
+    return cfg
 
 
 # === Tests ===
@@ -349,6 +356,7 @@ class TestFederatedGraphMutations:
             repo_root=Path("/repo/core"),
         )
         config = config_defaults()
+        config.setdefault("project", {})["name"] = "root"
         return FederatedGraph.from_single(graph, config, repo_root=Path("/repo/core"))
 
     @pytest.fixture()
@@ -366,6 +374,7 @@ class TestFederatedGraphMutations:
             repo_root=Path("/repo/core"),
         )
         config = config_defaults()
+        config.setdefault("project", {})["name"] = "root"
         return FederatedGraph.from_single(graph, config, repo_root=Path("/repo/core"))
 
     def test_REQ_d00201_A_rename_node_delegates_and_updates_ownership(

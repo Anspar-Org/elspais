@@ -624,11 +624,12 @@ class MarkdownAssembler:
 
         # Render as alphabetized list
         lines: list[str] = []
+        host_name = self._graph.root_repo_name
         for topic in sorted(index.keys(), key=str.lower):
             entries = sorted(index[topic], key=lambda e: e[0])
             parts: list[str] = []
             for req_id, _title, repo_name in entries:
-                if repo_name and repo_name != "root":
+                if repo_name and repo_name != host_name:
                     parts.append(f"[{repo_name}] [{req_id}](#{req_id})")
                 else:
                     parts.append(f"[{req_id}](#{req_id})")

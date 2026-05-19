@@ -21,7 +21,16 @@ from ..core.graph_test_helpers import (
 
 
 def _wrap(graph: TraceGraph, config: dict | None = None) -> FederatedGraph:
-    """Wrap a bare TraceGraph in a federation-of-one."""
+    """Wrap a bare TraceGraph in a federation-of-one.
+
+    Injects a test-default ``[project].name`` when the caller doesn't
+    supply one — ``from_single`` requires it.
+    """
+    if config is None:
+        config = {"project": {"name": "test"}}
+    elif not (config.get("project") or {}).get("name"):
+        config = dict(config)
+        config["project"] = {**(config.get("project") or {}), "name": "test"}
     return FederatedGraph.from_single(graph, config, graph.repo_root or Path("/test/repo"))
 
 

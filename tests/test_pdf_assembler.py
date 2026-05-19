@@ -16,9 +16,22 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from elspais.graph.builder import TraceGraph
+from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.relations import EdgeKind
 from elspais.pdf.assembler import MarkdownAssembler
+
+
+def _wrap(graph: TraceGraph) -> FederatedGraph:
+    """Wrap a bare ``TraceGraph`` as a federation-of-one for the assembler.
+
+    The assembler reads ``self._graph.root_repo_name`` (no fallback) so
+    every test must hand it a ``FederatedGraph``. We pass a minimal
+    config with ``[project].name`` populated so ``from_single`` doesn't
+    raise.
+    """
+    return FederatedGraph.from_single(graph, {"project": {"name": "test"}}, graph.repo_root)
+
 
 # ---------------------------------------------------------------------------
 # Spec file content for on-disk test fixtures
@@ -300,7 +313,7 @@ class TestFileGrouping:
     def test_REQ_p00080_B_groups_by_source_path(self):
         """Requirements from different files appear in different groups."""
         graph = _make_graph()
-        asm = MarkdownAssembler(graph)
+        asm = MarkdownAssembler(_wrap(graph))
         groups = asm._group_by_file()
         assert "spec/prd-auth.md" in groups
         assert "spec/dev-login.md" in groups
@@ -325,7 +338,7 @@ class TestFileGrouping:
         }
         wire_file_parent(node2, "spec/prd-auth.md", line=50, graph=graph)
         graph._index["REQ-p00002"] = node2
-        asm = MarkdownAssembler(graph)
+        asm = MarkdownAssembler(_wrap(graph))
         groups = asm._group_by_file()
         nodes = groups["spec/prd-auth.md"]
         assert nodes[0].id == "REQ-p00001"
@@ -338,7 +351,7 @@ class TestLevelPartitioning:
     def test_REQ_p00080_B_partitions_by_level(self):
         """Files are partitioned into PRD, OPS, DEV buckets."""
         graph = _make_graph()
-        asm = MarkdownAssembler(graph)
+        asm = MarkdownAssembler(_wrap(graph))
         groups = asm._group_by_file()
         buckets = asm._partition_by_level(groups)
         assert "spec/prd-auth.md" in buckets.get("PRD", [])
@@ -348,7 +361,7 @@ class TestLevelPartitioning:
     def test_REQ_p00080_B_level_headings_in_output(self, tmp_path):
         """Assembled output contains level group headings."""
         graph = _make_graph(base_dir=tmp_path)
-        asm = MarkdownAssembler(graph)
+        asm = MarkdownAssembler(_wrap(graph))
         output = asm.assemble()
         assert "# Product Requirements" in output
         assert "# Development Requirements" in output
@@ -372,7 +385,7 @@ class TestGraphDepthOrdering:
     def test_REQ_p00080_B_files_sorted_by_depth(self):
         """Files within a level group are sorted by min graph depth."""
         graph = _make_graph()
-        asm = MarkdownAssembler(graph)
+        asm = MarkdownAssembler(_wrap(graph))
         groups = asm._group_by_file()
         dev_files = ["spec/dev-login.md", "spec/dev-session.md"]
         sorted_files = asm._sort_files_by_depth(dev_files, groups)
@@ -386,28 +399,28 @@ class TestRequirementRendering:
     def test_REQ_p00080_E_page_break_before_requirement(self, tmp_path):
         """Each requirement is preceded by \\newpage."""
         graph = _make_graph(base_dir=tmp_path)
-        asm = MarkdownAssembler(graph)
+        asm = MarkdownAssembler(_wrap(graph))
         output = asm.assemble()
         assert output.count("\\newpage") >= 3  # At least PRD, DEV1, DEV2
 
     def test_REQ_p00080_E_requirement_heading_with_anchor(self, tmp_path):
         """Requirement headings include the ID as an anchor."""
         graph = _make_graph(base_dir=tmp_path)
-        asm = MarkdownAssembler(graph)
+        asm = MarkdownAssembler(_wrap(graph))
         output = asm.assemble()
         assert "### REQ-p00001: Authentication {#REQ-p00001}" in output
 
     def test_REQ_p00080_E_assertions_rendered(self, tmp_path):
         """Assertions appear under their parent requirement."""
         graph = _make_graph(base_dir=tmp_path)
-        asm = MarkdownAssembler(graph)
+        asm = MarkdownAssembler(_wrap(graph))
         output = asm.assemble()
         assert "A. The tool SHALL authenticate users." in output
 
     def test_REQ_p00080_E_sections_rendered(self, tmp_path):
         """Sub-sections within requirements render at #### level."""
         graph = _make_graph(base_dir=tmp_path)
-        asm = MarkdownAssembler(graph)
+        asm = MarkdownAssembler(_wrap(graph))
         output = asm.assemble()
         assert "#### Rationale" in output
         assert "Users need authentication." in output
@@ -415,14 +428,14 @@ class TestRequirementRendering:
     def test_REQ_p00080_E_file_heading_at_level_two(self, tmp_path):
         """File-level headings (before first requirement) render at ## level."""
         graph = _make_graph(base_dir=tmp_path)
-        asm = MarkdownAssembler(graph)
+        asm = MarkdownAssembler(_wrap(graph))
         output = asm.assemble()
         assert "## PRD Authentication" in output
 
     def test_REQ_p00080_E_footer_lines_present(self, tmp_path):
         """*End* footer lines are preserved in output."""
         graph = _make_graph(base_dir=tmp_path)
-        asm = MarkdownAssembler(graph)
+        asm = MarkdownAssembler(_wrap(graph))
         output = asm.assemble()
         assert "*End*" in output
 
@@ -433,7 +446,7 @@ class TestYAMLMetadata:
     def test_REQ_p00080_C_yaml_header_present(self, tmp_path):
         """Output starts with YAML metadata block."""
         graph = _make_graph(base_dir=tmp_path)
-        asm = MarkdownAssembler(graph, title="Test Doc")
+        asm = MarkdownAssembler(_wrap(graph), title="Test Doc")
         output = asm.assemble()
         assert output.startswith("---\n")
         assert 'title: "Test Doc"' in output
@@ -442,7 +455,7 @@ class TestYAMLMetadata:
     def test_REQ_p00080_C_toc_depth(self, tmp_path):
         """YAML metadata includes toc-depth."""
         graph = _make_graph(base_dir=tmp_path)
-        asm = MarkdownAssembler(graph)
+        asm = MarkdownAssembler(_wrap(graph))
         output = asm.assemble()
         assert "toc-depth: 2" in output
 
@@ -452,20 +465,20 @@ class TestTopicIndex:
 
     def test_REQ_p00080_D_topics_from_filename(self):
         """Topics are extracted from filenames stripping level prefix."""
-        asm = MarkdownAssembler(_make_graph())
+        asm = MarkdownAssembler(_wrap(_make_graph()))
         topics = asm._topics_from_filename("spec/prd-pdf-generation.md")
         assert topics == ["pdf", "generation"]
 
     def test_REQ_p00080_D_topics_from_filename_numeric(self):
         """Numeric prefixes are stripped."""
-        asm = MarkdownAssembler(_make_graph())
+        asm = MarkdownAssembler(_wrap(_make_graph()))
         topics = asm._topics_from_filename("spec/07-graph-architecture.md")
         assert topics == ["graph", "architecture"]
 
     def test_REQ_p00080_D_topics_from_remainder(self):
         """Topics are extracted from REMAINDER nodes with Topics: line."""
         graph = _make_graph()
-        asm = MarkdownAssembler(graph)
+        asm = MarkdownAssembler(_wrap(graph))
         prd = graph.find_by_id("REQ-p00001")
         topics = asm._topics_from_requirement_remainders(prd)
         assert "auth" in topics
@@ -474,7 +487,7 @@ class TestTopicIndex:
     def test_REQ_p00080_D_topics_from_file(self, tmp_path):
         """Topics are extracted from pre-requirement Topics: lines in files."""
         graph = _make_graph(base_dir=tmp_path)
-        asm = MarkdownAssembler(graph)
+        asm = MarkdownAssembler(_wrap(graph))
         topics = asm._topics_from_file("spec/prd-auth.md")
         assert "auth" in topics
         assert "security" in topics
@@ -482,7 +495,7 @@ class TestTopicIndex:
     def test_REQ_p00080_D_index_rendered_with_links(self, tmp_path):
         """Topic index entries contain hyperlinks to requirements."""
         graph = _make_graph(base_dir=tmp_path)
-        asm = MarkdownAssembler(graph)
+        asm = MarkdownAssembler(_wrap(graph))
         output = asm.assemble()
         assert "# Topic Index" in output
         assert "[REQ-p00001](#REQ-p00001)" in output
@@ -490,7 +503,7 @@ class TestTopicIndex:
     def test_REQ_p00080_D_index_alphabetized(self, tmp_path):
         """Topic index is alphabetized."""
         graph = _make_graph(base_dir=tmp_path)
-        asm = MarkdownAssembler(graph)
+        asm = MarkdownAssembler(_wrap(graph))
         groups = asm._group_by_file()
         index_lines = asm._build_topic_index(groups)
         topic_lines = [line for line in index_lines if line.startswith("**")]
@@ -504,7 +517,7 @@ class TestOverviewMode:
     def test_REQ_p00080_F_excludes_ops_and_dev(self, tmp_path):
         """Overview mode only includes PRD-level sections."""
         graph = _make_overview_graph(base_dir=tmp_path)
-        asm = MarkdownAssembler(graph, overview=True)
+        asm = MarkdownAssembler(_wrap(graph), overview=True)
         output = asm.assemble()
         assert "# Product Requirements" in output
         assert "# Operations Requirements" not in output
@@ -513,7 +526,7 @@ class TestOverviewMode:
     def test_REQ_p00080_F_includes_associated_prd(self, tmp_path):
         """Overview mode includes PRD from associated repos."""
         graph = _make_overview_graph(base_dir=tmp_path)
-        asm = MarkdownAssembler(graph, overview=True)
+        asm = MarkdownAssembler(_wrap(graph), overview=True)
         output = asm.assemble()
         assert "Callisto Auth" in output
 
@@ -543,7 +556,7 @@ class TestOverviewMode:
         prd.link(prd2, EdgeKind.STRUCTURES)
 
         # max_depth=1 means only depth 0
-        asm = MarkdownAssembler(graph, overview=True, max_depth=1)
+        asm = MarkdownAssembler(_wrap(graph), overview=True, max_depth=1)
         output = asm.assemble()
         # Root PRD (depth 0) included
         assert "Authentication" in output
@@ -555,21 +568,21 @@ class TestOverviewMode:
     def test_REQ_p00080_F_default_title(self, tmp_path):
         """Overview mode uses 'Product Requirements Overview' as default title."""
         graph = _make_overview_graph(base_dir=tmp_path)
-        asm = MarkdownAssembler(graph, overview=True)
+        asm = MarkdownAssembler(_wrap(graph), overview=True)
         output = asm.assemble()
         assert 'title: "Product Requirements Overview"' in output
 
     def test_REQ_p00080_F_custom_title_overrides(self, tmp_path):
         """Explicit title overrides the overview default."""
         graph = _make_overview_graph(base_dir=tmp_path)
-        asm = MarkdownAssembler(graph, title="My Custom", overview=True)
+        asm = MarkdownAssembler(_wrap(graph), title="My Custom", overview=True)
         output = asm.assemble()
         assert 'title: "My Custom"' in output
 
     def test_REQ_p00080_F_topic_index_excludes_non_prd(self, tmp_path):
         """Topic index in overview mode only references rendered PRD files."""
         graph = _make_overview_graph(base_dir=tmp_path)
-        asm = MarkdownAssembler(graph, overview=True)
+        asm = MarkdownAssembler(_wrap(graph), overview=True)
         output = asm.assemble()
         # Topic index should not reference OPS or DEV requirements
         assert "REQ-o00001" not in output
@@ -579,7 +592,7 @@ class TestOverviewMode:
     def test_REQ_p00080_F_non_overview_unchanged(self, tmp_path):
         """Without overview flag, all levels still appear."""
         graph = _make_overview_graph(base_dir=tmp_path)
-        asm = MarkdownAssembler(graph)
+        asm = MarkdownAssembler(_wrap(graph))
         output = asm.assemble()
         assert "# Product Requirements" in output
         assert "# Operations Requirements" in output

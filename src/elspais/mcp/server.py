@@ -813,7 +813,7 @@ def _refresh_graph(
                 "success": False,
                 "message": f"CONFIG ERROR: {error_msg}",
                 "node_count": 0,
-            }, FederatedGraph.empty()
+            }, FederatedGraph.empty(name="<unconfigured>")
         raise
 
     # REQ-d00205-B: Extract root config from rebuilt graph for handler to sync
@@ -4954,7 +4954,7 @@ def create_server(
             import sys
 
             print(f"CONFIG ERROR: {e}", file=sys.stderr)
-            graph = FederatedGraph.empty()
+            graph = FederatedGraph.empty(name="<unconfigured>")
 
     # Create server with instructions for AI agents (REQ-d00065)
     mcp = FastMCP("elspais", instructions=MCP_SERVER_INSTRUCTIONS)

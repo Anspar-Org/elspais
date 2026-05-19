@@ -239,16 +239,18 @@ class TestNoCacheMiddleware:
 class TestResolveRepoRoot:
     """REQ-d00201-A: Resolve repo root from app state."""
 
-    def test_resolve_root_repo(self, tmp_path):
+    def test_resolve_host_repo(self, tmp_path):
         from unittest.mock import MagicMock
 
         from elspais.server.routes_git import _resolve_repo_root
 
         state = MagicMock()
         state.repo_root = tmp_path
+        state.config = {"project": {"name": "demo"}}
         state.graph = MagicMock(spec=[])  # No iter_repos
         assert _resolve_repo_root(state, None) == tmp_path
-        assert _resolve_repo_root(state, "root") == tmp_path
+        # Host is addressable by its configured [project].name.
+        assert _resolve_repo_root(state, "demo") == tmp_path
 
     def test_resolve_named_repo(self, tmp_path):
         from unittest.mock import MagicMock
@@ -332,9 +334,9 @@ class TestGitStatusRepoParam:
         data = resp.json()
         assert "is_detached" in data
 
-    def test_git_status_root_param(self, client: TestClient):
-        """GET /api/git/status?repo=root resolves to main repo root."""
-        resp = client.get("/api/git/status?repo=root")
+    def test_git_status_host_repo_param(self, client: TestClient):
+        """GET /api/git/status?repo=<project.name> resolves to host repo root."""
+        resp = client.get("/api/git/status?repo=test-routes")
         assert resp.status_code == 200
         data = resp.json()
         assert "is_detached" in data
@@ -351,9 +353,9 @@ class TestGitCommitsRepoParam:
         # list_commits returns a list directly
         assert isinstance(data, list)
 
-    def test_git_commits_root_param(self, client: TestClient):
-        """GET /api/git/commits?repo=root resolves to main repo root."""
-        resp = client.get("/api/git/commits?repo=root")
+    def test_git_commits_host_repo_param(self, client: TestClient):
+        """GET /api/git/commits?repo=<project.name> resolves to host repo root."""
+        resp = client.get("/api/git/commits?repo=test-routes")
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)

@@ -118,7 +118,10 @@ class RepoEntry:
     """A single repository's graph paired with its config.
 
     Attributes:
-        name: Repository name (e.g. "root", "core", "module-a").
+        name: Repository name. For the host repo, the value of
+            ``[project].name`` (guaranteed populated because
+            ``load_config()`` rejects empty/missing names at the config
+            boundary). For associates, the key under ``[associates]``.
         graph: The repo's TraceGraph, or None if repo unavailable.
         config: The repo's config dict, or None if repo unavailable.
         repo_root: Expected local filesystem path.
@@ -381,6 +384,11 @@ class FederatedGraph:
     # ─────────────────────────────────────────────────────────────────────────
 
     @property
+    def root_repo_name(self) -> str:
+        """Return the host (root) repo's name as used in RepoEntry/index."""
+        return self._root_repo
+
+    @property
     def repo_root(self) -> Path:
         """Return the root repo's filesystem path."""
         return self._repos[self._root_repo].repo_root
@@ -402,46 +410,53 @@ class FederatedGraph:
         return _DEFAULT_SATELLITE_KINDS
 
     @classmethod
-    def empty(cls) -> FederatedGraph:
+    def empty(cls, *, name: str) -> FederatedGraph:
         """Create an empty FederatedGraph with no repos.
 
-        Used as an error fallback when graph construction fails.
+        Used as an error-fallback when graph construction fails. The caller
+        must pass an explicit ``name`` sentinel (e.g. ``"<unconfigured>"``)
+        so the degraded state is visible at the call site rather than hidden
+        behind a default.
         """
         from elspais.graph.builder import TraceGraph
 
         entry = RepoEntry(
-            name="root",
+            name=name,
             graph=TraceGraph(),
             config=None,
             repo_root=Path("."),
         )
-        return cls([entry], root_repo="root")
+        return cls([entry], root_repo=name)
 
     # Implements: REQ-d00200-B
     @classmethod
     def from_single(
         cls,
         graph: TraceGraph,
-        config: dict[str, Any] | None,
+        config: dict[str, Any],
         repo_root: Path,
     ) -> FederatedGraph:
         """Create a federation-of-one from a single TraceGraph.
 
         Args:
             graph: The single TraceGraph to wrap.
-            config: Config for this repo.
+            config: Config for this repo. Must have ``[project].name`` set
+                — ``load_config()`` enforces this at the boundary, so any
+                ``KeyError`` here indicates a caller bug, not a missing-
+                config user error.
             repo_root: Filesystem path to the repo root.
 
         Returns:
             A FederatedGraph wrapping a single repo.
         """
+        host_name = config["project"]["name"]
         entry = RepoEntry(
-            name="root",
+            name=host_name,
             graph=graph,
             config=config,
             repo_root=repo_root,
         )
-        return cls([entry], root_repo="root")
+        return cls([entry], root_repo=host_name)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Repo Access

@@ -680,10 +680,11 @@ def build_graph(
         associates_config = get_associates_config(config, repo_root=repo_root)
         if associates_config:
             entries: list[RepoEntry] = []
+            host_name = config["project"]["name"]
             # Root repo entry
             entries.append(
                 RepoEntry(
-                    name="root",
+                    name=host_name,
                     graph=graph,
                     config=config,
                     repo_root=repo_root,
@@ -737,7 +738,7 @@ def build_graph(
                     )
                 )
 
-            return FederatedGraph(entries, root_repo="root")
+            return FederatedGraph(entries, root_repo=host_name)
 
     return FederatedGraph.from_single(graph, config, repo_root)
 

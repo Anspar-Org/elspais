@@ -160,7 +160,9 @@ class TestResourcePathsCallSite:
         (repo_root / "spec").mkdir()
 
         graph = _make_graph_with_req(repo_root, "REQ-p00001")
-        fed = FederatedGraph.from_single(graph, config={}, repo_root=repo_root)
+        fed = FederatedGraph.from_single(
+            graph, config={"project": {"name": "test"}}, repo_root=repo_root
+        )
 
         captured = {}
 

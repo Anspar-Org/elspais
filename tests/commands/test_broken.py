@@ -5,9 +5,17 @@ from __future__ import annotations
 from pathlib import Path
 
 from elspais.commands.broken import collect_broken, render_broken_markdown, render_broken_text
+from elspais.config import config_defaults
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.mutations import BrokenReference
+
+
+def _test_config() -> dict:
+    """Default config with ``[project].name`` set so ``from_single`` accepts it."""
+    cfg = config_defaults()
+    cfg.setdefault("project", {})["name"] = "test"
+    return cfg
 
 
 def _make_ref(
@@ -30,7 +38,7 @@ def _make_graph(*refs: BrokenReference) -> FederatedGraph:
     tg = TraceGraph()
     for ref in refs:
         tg._broken_references.append(ref)
-    return FederatedGraph.from_single(tg, config=None, repo_root=Path("."))
+    return FederatedGraph.from_single(tg, config=_test_config(), repo_root=Path("."))
 
 
 def _make_args(**kwargs: object) -> object:

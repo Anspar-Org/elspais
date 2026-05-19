@@ -94,7 +94,9 @@ def sample_graph():
 @pytest.fixture
 def app(sample_graph):
     """Create Starlette test app."""
-    state = AppState(graph=sample_graph, repo_root=Path("/test/repo"), config={})
+    state = AppState(
+        graph=sample_graph, repo_root=Path("/test/repo"), config={"project": {"name": "test"}}
+    )
     return create_app(state, mount_mcp=False)
 
 
@@ -146,7 +148,9 @@ def coverage_graph():
 @pytest.fixture
 def coverage_app(coverage_graph):
     """Create Starlette test app with coverage graph."""
-    state = AppState(graph=coverage_graph, repo_root=Path("/test/repo"), config={})
+    state = AppState(
+        graph=coverage_graph, repo_root=Path("/test/repo"), config={"project": {"name": "test"}}
+    )
     return create_app(state, mount_mcp=False)
 
 
@@ -168,7 +172,9 @@ class TestAppFactory:
         """App factory returns a Starlette application."""
         from starlette.applications import Starlette
 
-        state = AppState(graph=sample_graph, repo_root=Path("/test/repo"), config={})
+        state = AppState(
+            graph=sample_graph, repo_root=Path("/test/repo"), config={"project": {"name": "test"}}
+        )
         app = create_app(state, mount_mcp=False)
         assert isinstance(app, Starlette)
 
@@ -324,7 +330,9 @@ class TestGetSearch:
             big_graph._index[node.id] = node
             big_graph._roots.append(node)
 
-        big_state = AppState(graph=big_graph, repo_root=Path("/test/repo"), config={})
+        big_state = AppState(
+            graph=big_graph, repo_root=Path("/test/repo"), config={"project": {"name": "test"}}
+        )
         big_app = create_app(big_state, mount_mcp=False)
         big_client = TestClient(big_app)
 
@@ -769,7 +777,7 @@ class TestGetFileContent:
     def test_REQ_p00006_A_file_content_returns_highlighted_lines(self, tmp_path):
         """API returns highlighted_lines and language for a Python file."""
         graph = TraceGraph(repo_root=tmp_path)
-        state = AppState(graph=graph, repo_root=tmp_path, config={})
+        state = AppState(graph=graph, repo_root=tmp_path, config={"project": {"name": "test"}})
         app = create_app(state, mount_mcp=False)
 
         py_file = tmp_path / "example.py"
@@ -791,7 +799,7 @@ class TestGetFileContent:
     def test_REQ_p00006_A_file_content_mutation_tracking(self, tmp_path):
         """API still returns mutation tracking alongside highlighting."""
         graph = TraceGraph(repo_root=tmp_path)
-        state = AppState(graph=graph, repo_root=tmp_path, config={})
+        state = AppState(graph=graph, repo_root=tmp_path, config={"project": {"name": "test"}})
         app = create_app(state, mount_mcp=False)
 
         md_file = tmp_path / "README.md"
@@ -875,7 +883,7 @@ class TestGetFileContent:
 
         try:
             graph = TraceGraph(repo_root=main_repo)
-            state = AppState(graph=graph, repo_root=main_repo, config={})
+            state = AppState(graph=graph, repo_root=main_repo, config={"project": {"name": "test"}})
             app = create_app(state, mount_mcp=False)
 
             c = TestClient(app)
@@ -1469,7 +1477,7 @@ def _make_disk_app(tmp_path, spec_content=DISK_SPEC, two_reqs=False):
     graph._roots = [prd]
     graph._index = index
 
-    state = AppState(graph=graph, repo_root=tmp_path, config={})
+    state = AppState(graph=graph, repo_root=tmp_path, config={"project": {"name": "test"}})
     application = create_app(state, mount_mcp=False)
     return application, graph, spec_file
 
@@ -2354,7 +2362,9 @@ class TestGitCheckoutCommit:
         """POST /api/git/checkout-commit sets AppState.is_detached=True on success."""
         from unittest.mock import patch
 
-        state = AppState(graph=sample_graph, repo_root=Path("/test/repo"), config={})
+        state = AppState(
+            graph=sample_graph, repo_root=Path("/test/repo"), config={"project": {"name": "test"}}
+        )
         app = create_app(state, mount_mcp=False)
         client = TestClient(app)
 
@@ -2372,7 +2382,7 @@ class TestGitCheckoutCommit:
 
         assert resp.status_code == 200
         assert state.is_detached is True
-        ds = state.get_detached_state("root")
+        ds = state.get_detached_state("test")
         assert ds.originating_branch == "main"
         assert ds.originating_head == "HEAD123"
 
@@ -2380,7 +2390,9 @@ class TestGitCheckoutCommit:
         """When branch not in body, falls back to get_current_branch."""
         from unittest.mock import patch
 
-        state = AppState(graph=sample_graph, repo_root=Path("/test/repo"), config={})
+        state = AppState(
+            graph=sample_graph, repo_root=Path("/test/repo"), config={"project": {"name": "test"}}
+        )
         app = create_app(state, mount_mcp=False)
         client = TestClient(app)
 
@@ -2393,7 +2405,7 @@ class TestGitCheckoutCommit:
             resp = client.post("/api/git/checkout-commit", json={"hash": "def5678"})
 
         assert resp.status_code == 200
-        ds = state.get_detached_state("root")
+        ds = state.get_detached_state("test")
         assert ds.originating_branch == "detected-branch"
 
     def test_git_checkout_commit_empty_hash_returns_400(self, client):
@@ -2425,8 +2437,10 @@ class TestGitStatusDetached:
         """GET /api/git/status includes is_detached, originating_branch, etc."""
         from unittest.mock import patch
 
-        state = AppState(graph=sample_graph, repo_root=Path("/test/repo"), config={})
-        state.enter_detached("root", branch="main", head_commit="deadbeef")
+        state = AppState(
+            graph=sample_graph, repo_root=Path("/test/repo"), config={"project": {"name": "test"}}
+        )
+        state.enter_detached("test", branch="main", head_commit="deadbeef")
         app = create_app(state, mount_mcp=False)
         client = TestClient(app)
 
@@ -2479,8 +2493,10 @@ class TestDetachedGuardMiddleware:
 
     def test_mutate_blocked_when_detached(self, sample_graph):
         """POST /api/mutate/title returns 409 when in detached HEAD mode."""
-        state = AppState(graph=sample_graph, repo_root=Path("/test/repo"), config={})
-        state.enter_detached("root", branch="main", head_commit="deadbeef")
+        state = AppState(
+            graph=sample_graph, repo_root=Path("/test/repo"), config={"project": {"name": "test"}}
+        )
+        state.enter_detached("test", branch="main", head_commit="deadbeef")
         app = create_app(state, mount_mcp=False)
         client = TestClient(app)
 
@@ -2617,7 +2633,11 @@ class TestSpecFiles:
 
     @pytest.fixture
     def spec_files_client(self, spec_files_graph):
-        state = AppState(graph=spec_files_graph, repo_root=Path("/test/repo"), config={})
+        state = AppState(
+            graph=spec_files_graph,
+            repo_root=Path("/test/repo"),
+            config={"project": {"name": "test"}},
+        )
         app = create_app(state, mount_mcp=False)
         return TestClient(app)
 
@@ -2672,7 +2692,9 @@ class TestSpecFiles:
         graph._index = {"file:src/main.py": code_file}
         graph._kind_index = {NodeKind.FILE: [code_file]}
 
-        state = AppState(graph=graph, repo_root=Path("/test/repo"), config={})
+        state = AppState(
+            graph=graph, repo_root=Path("/test/repo"), config={"project": {"name": "test"}}
+        )
         app = create_app(state, mount_mcp=False)
         client = TestClient(app)
 
