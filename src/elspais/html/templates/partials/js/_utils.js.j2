@@ -9,3 +9,17 @@ function escapeHtml(text) {
 function escapeAttr(text) {
     return text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+
+// Escape `text` for use inside a single-quoted JS string literal that
+// itself sits inside an HTML attribute (e.g. `onclick="showSource('…')"`).
+// Two layers are required: backslash-escape JS string-literal specials
+// (`\` and `'`, plus `\n`/`\r` so a newline can't break the JS line),
+// then HTML-escape the result for attribute context. The HTML parser
+// decodes `&#39;` back to `'` and the JS engine sees the preceding `\`
+// that we added, so the literal stays a single string rather than
+// terminating early or executing as code.
+function escapeJsInAttr(text) {
+    var s = String(text == null ? '' : text);
+    s = s.replace(/[\\']/g, '\\$&').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+    return escapeAttr(s);
+}

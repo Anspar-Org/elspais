@@ -217,10 +217,22 @@ function fvScrollAndFlash(container, lineNumber) {
             }
         }
 
+        // Primary lookup: a per-line `.source-line` wrapper. For lines
+        // inside a multi-line rendered block (e.g. a pipe table), the
+        // wrapper only carries the block's FIRST source line; the inner
+        // source lines are addressable only via their gutter span's
+        // `id="fv-line-N"`. Fall back to that and highlight the nearest
+        // enclosing `.source-line` so the table block still flashes.
         var target = container.querySelector('.source-line[data-line="' + lineNumber + '"]');
-        if (!target) return;
+        var scrollTarget = target;
+        if (!target) {
+            var inner = container.querySelector('#fv-line-' + lineNumber);
+            if (!inner) return;
+            target = inner.closest('.source-line') || inner;
+            scrollTarget = inner;
+        }
 
-        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
         target.classList.add('highlighted');
 
         // Flash after scroll completes
