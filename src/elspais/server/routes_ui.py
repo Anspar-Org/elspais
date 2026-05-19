@@ -237,7 +237,13 @@ async def index(request: Request):
             "default_hidden_statuses": sorted(default_hidden),
             "version": gen.version,
             "base_path": str(state.repo_root),
-            "repo_name": state.config["project"]["name"],
+            # `typed` is already validated above (with a fallback to the
+            # schema defaults when ``state.config`` is partial — e.g. the
+            # ``config={}`` isolation pattern used by some tests), so
+            # ``typed.project.name`` is always populated and never raises
+            # a KeyError that the outer try/except would silently swallow
+            # into the JSON fallback.
+            "repo_name": typed.project.name,
             "pygments_css": get_pygments_css(),
             "pygments_css_dark": get_pygments_css(style="monokai", scope=".theme-dark .highlight"),
             "node_index": {},
