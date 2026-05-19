@@ -107,7 +107,9 @@ def sample_graph():
         "REQ-d00001": dev_node,
     }
 
-    return FederatedGraph.from_single(graph, {"project": {"name": "test"}}, Path("/test/repo"))
+    return FederatedGraph.from_single(
+        graph, {"project": {"name": "test", "namespace": "REQ"}}, Path("/test/repo")
+    )
 
 
 @pytest.fixture

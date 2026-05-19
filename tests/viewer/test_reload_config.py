@@ -40,7 +40,8 @@ class TestReloadRefreshesConfig:
         # Write initial config
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            'version = 3\n[project]\nname = "test"\n' '[scanning.spec]\ndirectories = ["spec"]\n'
+            'version = 3\n[project]\nname = "test"\nnamespace = "REQ"\n'
+            '[scanning.spec]\ndirectories = ["spec"]\n'
         )
 
         # Create the app with initial config and the tmp_path as working_dir
@@ -55,7 +56,7 @@ class TestReloadRefreshesConfig:
 
         # Modify config on disk -- add extra-specs directory
         config_path.write_text(
-            'version = 3\n[project]\nname = "test"\n'
+            'version = 3\n[project]\nname = "test"\nnamespace = "REQ"\n'
             '[scanning.spec]\ndirectories = ["spec", "extra-specs"]\n'
         )
 

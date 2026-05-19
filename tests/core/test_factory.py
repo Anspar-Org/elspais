@@ -53,6 +53,7 @@ class TestCodeDirectoryScanning:
             """\
 [project]
 name = "test-code-dirs"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
@@ -91,6 +92,7 @@ directories = ["src"]
             """\
 [project]
 name = "test-both-sources"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
@@ -129,6 +131,7 @@ file_patterns = ["scripts/*.py"]
             """\
 [project]
 name = "test-dedup"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
@@ -166,6 +169,7 @@ file_patterns = ["src/**/*.py"]
             """\
 [project]
 name = "test-ignore"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
@@ -211,6 +215,7 @@ skip_dirs = ["vendor"]
             """\
 [project]
 name = "test-explicit-src"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
@@ -244,6 +249,7 @@ directories = ["src"]
             """\
 [project]
 name = "test-missing-dir"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
@@ -285,6 +291,7 @@ class TestBuildGraphCoverageAnnotation:
             """\
 [project]
 name = "test-coverage"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
@@ -355,6 +362,7 @@ A. The system SHALL perform action X.
             """\
 [project]
 name = "test-rollup"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
@@ -430,6 +438,7 @@ B. The system SHALL do B.
             """\
 [project]
 name = "test-summary"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
@@ -505,6 +514,7 @@ class TestMultiRoleFileScanning:
             """\
 [project]
 name = "test-multi-role"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]

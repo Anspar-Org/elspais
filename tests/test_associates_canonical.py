@@ -27,6 +27,7 @@ class TestGetAssociateSpecDirectoriesCanonicalRoot:
             "version = 3\n"
             "[project]\n"
             'name = "test-associate"\n'
+            'namespace = "REQ"\n'
             "\n"
             "[scanning.spec]\n"
             'directories = ["spec"]\n'

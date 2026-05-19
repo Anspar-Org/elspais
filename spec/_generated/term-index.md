@@ -4,13 +4,13 @@
 
 ## Defined Term
 
-**elspais:**
+**REQ:**
 
 - REQ-d00223-B
 
 ## Specification
 
-**elspais:**
+**REQ:**
 
 - rem:spec/requirements-spec.md:1
 - rem:spec/requirements-spec.md:7
@@ -19,7 +19,7 @@
 
 ## Traceability
 
-**elspais:**
+**REQ:**
 
 - REQ-p00003
 - REQ-d00241
@@ -65,7 +65,7 @@
 
 ## Traceability Matrix
 
-**elspais:**
+**REQ:**
 
 - REQ-p00003
 - JNY-CEO-Sponsor-01

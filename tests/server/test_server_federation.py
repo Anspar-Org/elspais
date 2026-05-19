@@ -207,7 +207,7 @@ class TestApiStatusRepos:
         graph = _make_graph(Path("/test/repo"), "REQ-p00001", "Test Req")
         fed = FederatedGraph.from_single(
             graph,
-            config={"project": {"name": "root"}},
+            config={"project": {"name": "root", "namespace": "REQ"}},
             repo_root=Path("/test/repo"),
         )
         client = _make_client(fed)

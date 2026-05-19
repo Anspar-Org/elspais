@@ -22,6 +22,7 @@ def _write_config(tmp_path: Path, extra: str = "") -> Path:
         f"""\
 [project]
 name = "test-file-nodes"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]

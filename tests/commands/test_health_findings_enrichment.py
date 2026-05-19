@@ -38,6 +38,7 @@ def _make_config(tmp_path: Path) -> Path:
 
 [project]
 name = "test"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
@@ -166,6 +167,7 @@ class TestCheckSpecHierarchyLevelsFindings:
 
 [project]
 name = "test"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
@@ -239,6 +241,7 @@ class TestCheckBrokenReferencesFindings:
 
 [project]
 name = "test"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
@@ -293,6 +296,7 @@ class TestCheckSpecFormatRulesFindings:
 
 [project]
 name = "test"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
@@ -340,6 +344,7 @@ class TestCheckTestResultsFindings:
 
 [project]
 name = "test"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]

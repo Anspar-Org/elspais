@@ -564,3 +564,64 @@ class TestFederatedGraphMutations:
         assert cloned.find_by_id("REQ-p00001").get_label() == "Cloned Title"
         # Original should be unchanged
         assert fed.find_by_id("REQ-p00001").get_label() == original_title
+
+
+class TestFederatedGraphInvariants:
+    """FederatedGraph.__init__ asserts the name+repo_root+project contract.
+
+    Regression for CUR-1357: every RepoEntry the federation sees must
+    carry a non-empty host-side ``name`` and ``repo_root``, and (when a
+    ``[project]`` block is supplied) the block must declare non-empty
+    ``name`` and ``namespace``. These three identifiers are distinct;
+    the term card / file viewer / namespace label all assume all three
+    are present and authoritative.
+    """
+
+    def _entry(self, tmp_path, **overrides) -> RepoEntry:
+        kwargs = {
+            "name": "r1",
+            "graph": TraceGraph(repo_root=tmp_path),
+            "config": {"project": {"name": "r1", "namespace": "REQ"}},
+            "repo_root": tmp_path,
+        }
+        kwargs.update(overrides)
+        return RepoEntry(**kwargs)
+
+    def test_empty_repo_name_rejected(self, tmp_path):
+        from elspais.graph.federated import FederationError
+
+        with pytest.raises(FederationError, match=r"RepoEntry\.name must be non-empty"):
+            FederatedGraph([self._entry(tmp_path, name="")])
+
+    def test_missing_project_name_in_config_rejected(self, tmp_path):
+        from elspais.graph.federated import FederationError
+
+        with pytest.raises(FederationError, match=r"\[project\]\.name"):
+            FederatedGraph([self._entry(tmp_path, config={"project": {"namespace": "REQ"}})])
+
+    def test_missing_project_namespace_in_config_rejected(self, tmp_path):
+        from elspais.graph.federated import FederationError
+
+        with pytest.raises(FederationError, match=r"\[project\]\.namespace"):
+            FederatedGraph([self._entry(tmp_path, config={"project": {"name": "r1"}})])
+
+    def test_empty_config_dict_is_allowed(self, tmp_path):
+        """``config={}`` is the unit-test isolation pattern — no [project]
+        block means no shape check fires."""
+        fed = FederatedGraph([self._entry(tmp_path, config={})])
+        assert fed.root_repo_name == "r1"
+
+    def test_error_state_entry_skips_config_check(self, tmp_path):
+        """An associate in error state (graph=None, config=None) is allowed."""
+        entries = [
+            self._entry(tmp_path, name="host"),
+            RepoEntry(
+                name="broken-assoc",
+                graph=None,
+                config=None,
+                repo_root=tmp_path / "missing",
+                error="Path does not exist",
+            ),
+        ]
+        fed = FederatedGraph(entries)
+        assert {r.name for r in fed.iter_repos()} == {"host", "broken-assoc"}

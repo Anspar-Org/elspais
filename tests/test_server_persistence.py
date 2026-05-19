@@ -33,7 +33,9 @@ from elspais.graph.render import render_save
 
 def _wrap(graph: TraceGraph, tmp_path: Path) -> FederatedGraph:
     """Wrap a TraceGraph in a single-repo FederatedGraph for tests."""
-    return FederatedGraph.from_single(graph, {"project": {"name": "test"}}, tmp_path)
+    return FederatedGraph.from_single(
+        graph, {"project": {"name": "test", "namespace": "REQ"}}, tmp_path
+    )
 
 
 def _inject_node(fed: FederatedGraph, anchor_id: str, new_node: GraphNode) -> None:

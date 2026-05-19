@@ -32,7 +32,9 @@ from elspais.server.state import AppState
 
 def _wrap(graph: TraceGraph, repo_root: Path) -> FederatedGraph:
     """Wrap a TraceGraph in a single-repo FederatedGraph for tests."""
-    return FederatedGraph.from_single(graph, {"project": {"name": "test"}}, repo_root)
+    return FederatedGraph.from_single(
+        graph, {"project": {"name": "test", "namespace": "REQ"}}, repo_root
+    )
 
 
 @pytest.fixture
@@ -101,7 +103,9 @@ def sample_graph():
 def app(sample_graph):
     """Create Starlette test app."""
     state = AppState(
-        graph=sample_graph, repo_root=Path("/test/repo"), config={"project": {"name": "test"}}
+        graph=sample_graph,
+        repo_root=Path("/test/repo"),
+        config={"project": {"name": "test", "namespace": "REQ"}},
     )
     return create_app(state, mount_mcp=False)
 
@@ -155,7 +159,9 @@ def coverage_graph():
 def coverage_app(coverage_graph):
     """Create Starlette test app with coverage graph."""
     state = AppState(
-        graph=coverage_graph, repo_root=Path("/test/repo"), config={"project": {"name": "test"}}
+        graph=coverage_graph,
+        repo_root=Path("/test/repo"),
+        config={"project": {"name": "test", "namespace": "REQ"}},
     )
     return create_app(state, mount_mcp=False)
 
@@ -179,14 +185,16 @@ class TestAppFactory:
         from starlette.applications import Starlette
 
         state = AppState(
-            graph=sample_graph, repo_root=Path("/test/repo"), config={"project": {"name": "test"}}
+            graph=sample_graph,
+            repo_root=Path("/test/repo"),
+            config={"project": {"name": "test", "namespace": "REQ"}},
         )
         app = create_app(state, mount_mcp=False)
         assert isinstance(app, Starlette)
 
     def test_REQ_d00010_A_create_app_accepts_config(self, sample_graph):
         """App factory stores the provided config in internal state."""
-        test_config = {"project": {"name": "test"}}
+        test_config = {"project": {"name": "test", "namespace": "REQ"}}
         state = AppState(graph=sample_graph, repo_root=Path("/another/repo"), config=test_config)
         app = create_app(state, mount_mcp=False)
         # Verify the config was applied by hitting an endpoint
@@ -339,7 +347,7 @@ class TestGetSearch:
         big_state = AppState(
             graph=_wrap(big_graph, Path("/test/repo")),
             repo_root=Path("/test/repo"),
-            config={"project": {"name": "test"}},
+            config={"project": {"name": "test", "namespace": "REQ"}},
         )
         big_app = create_app(big_state, mount_mcp=False)
         big_client = TestClient(big_app)
@@ -788,7 +796,7 @@ class TestGetFileContent:
         state = AppState(
             graph=_wrap(graph, tmp_path),
             repo_root=tmp_path,
-            config={"project": {"name": "test"}},
+            config={"project": {"name": "test", "namespace": "REQ"}},
         )
         app = create_app(state, mount_mcp=False)
 
@@ -814,7 +822,7 @@ class TestGetFileContent:
         state = AppState(
             graph=_wrap(graph, tmp_path),
             repo_root=tmp_path,
-            config={"project": {"name": "test"}},
+            config={"project": {"name": "test", "namespace": "REQ"}},
         )
         app = create_app(state, mount_mcp=False)
 
@@ -853,7 +861,8 @@ class TestGetFileContent:
 
         # Write a .elspais.toml that marks this as an associated repo
         (assoc_repo / ".elspais.toml").write_text(
-            'version = 3\n[project]\nname = "assoc"\n\n[scanning.spec]\ndirectories = ["spec"]\n'
+            'version = 3\n[project]\nname = "assoc"\nnamespace = "REQ"\n\n'
+            '[scanning.spec]\ndirectories = ["spec"]\n'
         )
 
         # Write a spec file in the associate repo
@@ -862,7 +871,7 @@ class TestGetFileContent:
 
         # Config registers the associate repo path for discovery
         config = {
-            "project": {"name": "test"},
+            "project": {"name": "test", "namespace": "REQ"},
             "associates": {"assoc": {"path": str(assoc_repo), "namespace": "A"}},
         }
 
@@ -909,7 +918,7 @@ class TestGetFileContent:
             state = AppState(
                 graph=_wrap(graph, main_repo),
                 repo_root=main_repo,
-                config={"project": {"name": "test"}},
+                config={"project": {"name": "test", "namespace": "REQ"}},
             )
             app = create_app(state, mount_mcp=False)
 
@@ -1507,7 +1516,9 @@ def _make_disk_app(tmp_path, spec_content=DISK_SPEC, two_reqs=False):
     graph._index = index
 
     fed = _wrap(graph, tmp_path)
-    state = AppState(graph=fed, repo_root=tmp_path, config={"project": {"name": "test"}})
+    state = AppState(
+        graph=fed, repo_root=tmp_path, config={"project": {"name": "test", "namespace": "REQ"}}
+    )
     application = create_app(state, mount_mcp=False)
     return application, fed, spec_file
 
@@ -2244,7 +2255,7 @@ def _make_freshness_app(tmp_path, spec_subdir="spec"):
     }
 
     config = {
-        "project": {"name": "test"},
+        "project": {"name": "test", "namespace": "REQ"},
         "scanning": {"spec": {"directories": [spec_subdir]}},
     }
     fed = FederatedGraph.from_single(graph, config, tmp_path)
@@ -2404,7 +2415,9 @@ class TestGitCheckoutCommit:
         from unittest.mock import patch
 
         state = AppState(
-            graph=sample_graph, repo_root=Path("/test/repo"), config={"project": {"name": "test"}}
+            graph=sample_graph,
+            repo_root=Path("/test/repo"),
+            config={"project": {"name": "test", "namespace": "REQ"}},
         )
         app = create_app(state, mount_mcp=False)
         client = TestClient(app)
@@ -2432,7 +2445,9 @@ class TestGitCheckoutCommit:
         from unittest.mock import patch
 
         state = AppState(
-            graph=sample_graph, repo_root=Path("/test/repo"), config={"project": {"name": "test"}}
+            graph=sample_graph,
+            repo_root=Path("/test/repo"),
+            config={"project": {"name": "test", "namespace": "REQ"}},
         )
         app = create_app(state, mount_mcp=False)
         client = TestClient(app)
@@ -2479,7 +2494,9 @@ class TestGitStatusDetached:
         from unittest.mock import patch
 
         state = AppState(
-            graph=sample_graph, repo_root=Path("/test/repo"), config={"project": {"name": "test"}}
+            graph=sample_graph,
+            repo_root=Path("/test/repo"),
+            config={"project": {"name": "test", "namespace": "REQ"}},
         )
         state.enter_detached("test", branch="main", head_commit="deadbeef")
         app = create_app(state, mount_mcp=False)
@@ -2535,7 +2552,9 @@ class TestDetachedGuardMiddleware:
     def test_mutate_blocked_when_detached(self, sample_graph):
         """POST /api/mutate/title returns 409 when in detached HEAD mode."""
         state = AppState(
-            graph=sample_graph, repo_root=Path("/test/repo"), config={"project": {"name": "test"}}
+            graph=sample_graph,
+            repo_root=Path("/test/repo"),
+            config={"project": {"name": "test", "namespace": "REQ"}},
         )
         state.enter_detached("test", branch="main", head_commit="deadbeef")
         app = create_app(state, mount_mcp=False)
@@ -2677,7 +2696,7 @@ class TestSpecFiles:
         state = AppState(
             graph=spec_files_graph,
             repo_root=Path("/test/repo"),
-            config={"project": {"name": "test"}},
+            config={"project": {"name": "test", "namespace": "REQ"}},
         )
         app = create_app(state, mount_mcp=False)
         return TestClient(app)
@@ -2736,7 +2755,7 @@ class TestSpecFiles:
         state = AppState(
             graph=_wrap(graph, Path("/test/repo")),
             repo_root=Path("/test/repo"),
-            config={"project": {"name": "test"}},
+            config={"project": {"name": "test", "namespace": "REQ"}},
         )
         app = create_app(state, mount_mcp=False)
         client = TestClient(app)
@@ -2791,7 +2810,7 @@ def _make_full_disk_app(tmp_path):
     toml_file = tmp_path / ".elspais.toml"
     toml_file.write_text(
         "version = 3\n"
-        '[project]\nname = "test-project"\n'
+        '[project]\nname = "test-project"\nnamespace = "REQ"\n'
         '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n'
         '[levels.dev]\nrank = 3\nletter = "t"\nimplements = ["dev", "prd"]\n',
         encoding="utf-8",

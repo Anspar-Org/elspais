@@ -90,7 +90,8 @@ class TestTomlRoundTrip:
         toml_content = """\
 # Project configuration
 [project]
-name = "test-project"  # inline comment
+name = "test-project"
+namespace = "REQ"  # inline comment
 
 [patterns]
 prefix = "REQ"  # The prefix for all requirement IDs
@@ -122,6 +123,7 @@ allowed_implements = [
 # Main configuration
 [project]
 name = "my-project"
+namespace = "REQ"
 
 [rules.hierarchy]
 allowed_implements = [

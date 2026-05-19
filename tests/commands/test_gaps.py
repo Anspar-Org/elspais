@@ -41,7 +41,9 @@ def _make_graph(*nodes: GraphNode) -> FederatedGraph:
         for child in node.iter_children():
             if child.id not in tg._index:
                 tg._index[child.id] = child
-    return FederatedGraph.from_single(tg, config={"project": {"name": "test"}}, repo_root=Path("."))
+    return FederatedGraph.from_single(
+        tg, config={"project": {"name": "test", "namespace": "REQ"}}, repo_root=Path(".")
+    )
 
 
 class TestCollectGaps:

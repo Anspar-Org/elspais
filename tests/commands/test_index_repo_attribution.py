@@ -78,7 +78,7 @@ def _build_single_repo(
     jny_a = _make_journey("JNY-A1", "Login Journey")
     _attach_to_file(graph, fn, req_a, req_b, jny_a)
     return FederatedGraph.from_single(
-        graph, config={"project": {"name": "test"}}, repo_root=tmp_path
+        graph, config={"project": {"name": "test", "namespace": "REQ"}}, repo_root=tmp_path
     )
 
 
@@ -309,7 +309,7 @@ class TestNoSpecDirPathMatching:
         _attach_to_file(graph, fn, req)
 
         fed = FederatedGraph.from_single(
-            graph, config={"project": {"name": "test"}}, repo_root=tmp_path
+            graph, config={"project": {"name": "test", "namespace": "REQ"}}, repo_root=tmp_path
         )
 
         # Pass a spec_dirs that does NOT contain the file's directory.

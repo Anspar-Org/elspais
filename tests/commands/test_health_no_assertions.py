@@ -27,7 +27,7 @@ def _wrap(graph: TraceGraph, config: dict | None = None) -> FederatedGraph:
     supply one — ``from_single`` requires it.
     """
     if config is None:
-        config = {"project": {"name": "test"}}
+        config = {"project": {"name": "test", "namespace": "REQ"}}
     elif not (config.get("project") or {}).get("name"):
         config = dict(config)
         config["project"] = {**(config.get("project") or {}), "name": "test"}

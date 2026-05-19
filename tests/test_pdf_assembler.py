@@ -30,7 +30,9 @@ def _wrap(graph: TraceGraph) -> FederatedGraph:
     config with ``[project].name`` populated so ``from_single`` doesn't
     raise.
     """
-    return FederatedGraph.from_single(graph, {"project": {"name": "test"}}, graph.repo_root)
+    return FederatedGraph.from_single(
+        graph, {"project": {"name": "test", "namespace": "REQ"}}, graph.repo_root
+    )
 
 
 # ---------------------------------------------------------------------------

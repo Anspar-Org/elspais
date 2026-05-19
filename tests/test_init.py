@@ -282,6 +282,7 @@ class TestInitTemplate:
 version = 3
 [project]
 name = "test"
+namespace = "REQ"
 [scanning.spec]
 directories = ["requirements"]
 """

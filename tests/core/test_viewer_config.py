@@ -183,7 +183,7 @@ class TestIndexRouteStatusOrdering:
         from elspais.server.state import AppState
 
         (tmp_path / ".elspais.toml").write_text(
-            'version = 3\n[project]\nname = "test"\n'
+            'version = 3\n[project]\nname = "test"\nnamespace = "REQ"\n'
             '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n'
         )
         state = AppState.from_config(repo_root=tmp_path)

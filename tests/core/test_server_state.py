@@ -8,6 +8,7 @@ version = 3
 
 [project]
 name = "test"
+namespace = "REQ"
 
 [levels.prd]
 rank = 1

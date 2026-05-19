@@ -23,6 +23,7 @@ def _write_config(tmp_path: Path, extra: str = "") -> Path:
         f"""\
 [project]
 name = "test-parameterized-roots"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]

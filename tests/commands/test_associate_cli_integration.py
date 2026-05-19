@@ -14,7 +14,8 @@ def _make_core_repo(tmp_path):
     """Create a minimal core repo with .elspais.toml."""
     tmp_path.mkdir(exist_ok=True)
     (tmp_path / ".elspais.toml").write_text(
-        'version = 3\n[project]\nname = "core"\n\n' '[scanning.spec]\ndirectories = ["spec"]\n'
+        'version = 3\n[project]\nname = "core"\nnamespace = "REQ"\n\n'
+        '[scanning.spec]\ndirectories = ["spec"]\n'
     )
     (tmp_path / "spec").mkdir()
     return tmp_path

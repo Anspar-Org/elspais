@@ -204,7 +204,7 @@ class TestBuilderReferenceTerms:
         )
         (tmp_path / ".elspais.toml").write_text(
             "version = 4\n"
-            '[project]\nname = "test"\n'
+            '[project]\nname = "test"\nnamespace = "REQ"\n'
             "[levels.prd]\n"
             "rank = 1\n"
             'letter = "p"\n'
@@ -240,7 +240,7 @@ class TestBuilderReferenceTerms:
         )
         (tmp_path / ".elspais.toml").write_text(
             "version = 4\n"
-            '[project]\nname = "test"\n'
+            '[project]\nname = "test"\nnamespace = "REQ"\n'
             "[levels.prd]\n"
             "rank = 1\n"
             'letter = "p"\n'

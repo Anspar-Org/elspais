@@ -22,7 +22,7 @@ def test_compute_config_hash_deterministic(tmp_path: Path):
 def test_compute_config_hash_includes_local(tmp_path: Path):
     """Hash changes when .elspais.local.toml is added."""
     config_path = tmp_path / ".elspais.toml"
-    config_path.write_text('[project]\nname = "test"\n')
+    config_path.write_text('[project]\nname = "test"\nnamespace = "REQ"\n')
 
     h_without = compute_config_hash(config_path)
 
@@ -47,12 +47,12 @@ def test_compute_config_hash_changes_on_edit(tmp_path: Path):
 def test_compute_config_hash_includes_associate_configs(tmp_path: Path):
     """Hash includes associate repo configs when [associates] present."""
     config_path = tmp_path / ".elspais.toml"
-    config_path.write_text('[project]\nname = "test"\n')
+    config_path.write_text('[project]\nname = "test"\nnamespace = "REQ"\n')
 
     assoc_dir = tmp_path / "assoc"
     assoc_dir.mkdir()
     assoc_config = assoc_dir / ".elspais.toml"
-    assoc_config.write_text('[project]\nnamespace = "FOO"\n')
+    assoc_config.write_text('[project]\nname = "assoc"\nnamespace = "FOO"\n')
 
     local_path = tmp_path / ".elspais.local.toml"
     local_path.write_text(f'[associates.foo]\npath = "{assoc_dir}"\nnamespace = "FOO"\n')
@@ -60,6 +60,6 @@ def test_compute_config_hash_includes_associate_configs(tmp_path: Path):
     h1 = compute_config_hash(config_path)
 
     # Change associate config
-    assoc_config.write_text('[project]\nnamespace = "BAR"\n')
+    assoc_config.write_text('[project]\nname = "assoc"\nnamespace = "BAR"\n')
     h2 = compute_config_hash(config_path)
     assert h1 != h2
