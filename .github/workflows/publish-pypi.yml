@@ -197,9 +197,6 @@ jobs:
       contents: read
 
     steps:
-      # Required for slack-notify (reads .github/slack-channels.yml).
-      - uses: actions/checkout@v4
-
       - name: Extract version
         id: version
         run: |
@@ -226,7 +223,7 @@ jobs:
           fi
           echo "failed_steps=${FAILED}" >> "$GITHUB_OUTPUT"
 
-      - name: Find triggering PR
+      - name: Find triggering PR author
         id: pr
         env:
           GH_TOKEN: ${{ github.token }}
@@ -235,63 +232,66 @@ jobs:
             --jq '.[0] // empty' 2>/dev/null || echo "")
 
           if [ -n "$PR_JSON" ]; then
-            LOGIN=$(echo "$PR_JSON" | jq -r '.user.login')
             echo "number=$(echo "$PR_JSON" | jq -r '.number')" >> "$GITHUB_OUTPUT"
             echo "title=$(echo "$PR_JSON" | jq -r '.title')" >> "$GITHUB_OUTPUT"
             echo "url=$(echo "$PR_JSON" | jq -r '.html_url')" >> "$GITHUB_OUTPUT"
+            echo "author=$(echo "$PR_JSON" | jq -r '.user.login')" >> "$GITHUB_OUTPUT"
             echo "found=true" >> "$GITHUB_OUTPUT"
-
-            DISPLAY_NAME=$(gh api "users/${LOGIN}" --jq '.name // empty' 2>/dev/null || echo "")
-            echo "author_name=${DISPLAY_NAME:-${LOGIN}}" >> "$GITHUB_OUTPUT"
           else
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build notification message
-        id: message
+      - name: Lookup Slack user (PR author) for DM
+        id: slack_user
         env:
+          SLACK_TOKEN: ${{ secrets.SLACK_APP_OATH_TOKEN }}
           GH_TOKEN: ${{ github.token }}
           PR_FOUND: ${{ steps.pr.outputs.found }}
-          PR_NUM: ${{ steps.pr.outputs.number }}
-          PR_TITLE: ${{ steps.pr.outputs.title }}
-          PR_URL: ${{ steps.pr.outputs.url }}
-          PR_AUTHOR_NAME: ${{ steps.pr.outputs.author_name }}
-          VERSION: ${{ steps.version.outputs.version }}
-          FAILED_STEPS: ${{ steps.failures.outputs.failed_steps }}
-          SERVER_URL: ${{ github.server_url }}
+          PR_AUTHOR: ${{ steps.pr.outputs.author }}
+          COMMIT_SHA: ${{ github.sha }}
           REPOSITORY: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
           ACTOR: ${{ github.actor }}
         run: |
-          RUN_URL="${SERVER_URL}/${REPOSITORY}/actions/runs/${RUN_ID}"
-
-          ACTOR_NAME=$(gh api "users/${ACTOR}" --jq '.name // empty' 2>/dev/null || echo "")
-          ACTOR_NAME="${ACTOR_NAME:-${ACTOR}}"
-
+          # Resolve a usable email: PR author profile → commit author →
+          # workflow actor profile. Skip noreply addresses (e.g. bots).
+          EMAIL=""
           if [ "$PR_FOUND" = "true" ]; then
-            MSG=$(printf '%s\n\n%s\n%s\n%s\n%s' \
-              ":rotating_light: *Publish failed* for elspais v${VERSION}" \
-              "*Failed:* ${FAILED_STEPS}" \
-              "*PR:* <${PR_URL}|#${PR_NUM} ${PR_TITLE}>" \
-              "*Run:* <${RUN_URL}|View failed run>" \
-              "*Author:* ${PR_AUTHOR_NAME}")
-          else
-            MSG=$(printf '%s\n\n%s\n%s\n%s' \
-              ":rotating_light: *Publish failed* for elspais v${VERSION}" \
-              "*Failed:* ${FAILED_STEPS}" \
-              "*Run:* <${RUN_URL}|View failed run>" \
-              "*Triggered by:* ${ACTOR_NAME}")
+            EMAIL=$(gh api "users/${PR_AUTHOR}" --jq '.email // empty' 2>/dev/null || echo "")
+          fi
+          if [ -z "$EMAIL" ] || echo "$EMAIL" | grep -q 'noreply'; then
+            EMAIL=$(gh api "repos/${REPOSITORY}/commits/${COMMIT_SHA}" \
+              --jq '.commit.author.email // empty' 2>/dev/null || echo "")
+          fi
+          if [ -z "$EMAIL" ] || echo "$EMAIL" | grep -q 'noreply'; then
+            EMAIL=$(gh api "users/${ACTOR}" --jq '.email // empty' 2>/dev/null || echo "")
+          fi
+          if [ -z "$EMAIL" ] || echo "$EMAIL" | grep -q 'noreply'; then
+            echo "::warning::No usable email for PR author / commit author / actor; failure DM not sent"
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
-          {
-            echo "text<<EOF"
-            echo "$MSG"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+          SLACK_RESPONSE=$(curl -s -H "Authorization: Bearer ${SLACK_TOKEN}" \
+            "https://slack.com/api/users.lookupByEmail?email=${EMAIL}")
 
-      - name: Send Slack notification
-        uses: Cure-HHT/hht_workflows/.github/actions/slack-notify@bfe3d57b66429f300d11496b541c91d2934ceada
+          if [ "$(echo "$SLACK_RESPONSE" | jq -r '.ok')" = "true" ]; then
+            echo "user_id=$(echo "$SLACK_RESPONSE" | jq -r '.user.id')" >> "$GITHUB_OUTPUT"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Slack user lookup failed for ${EMAIL}: $(echo "$SLACK_RESPONSE" | jq -r '.error // \"unknown\"'); failure DM not sent"
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # DMs target a user ID, not a channel name — the shared
+      # slack-notify action only routes named channels, so failure DMs
+      # stay on slackapi/slack-github-action.
+      - name: Send failure DM
+        if: steps.slack_user.outputs.found == 'true'
+        uses: slackapi/slack-github-action@v2.1.1
         with:
-          event: release-failure
-          text: ${{ steps.message.outputs.text }}
-          slack-token: ${{ secrets.SLACK_APP_OATH_TOKEN }}
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_APP_OATH_TOKEN }}
+          errors: true
+          payload: |
+            channel: "${{ steps.slack_user.outputs.user_id }}"
+            text: ":rotating_light: *Publish failed* for elspais v${{ steps.version.outputs.version }}\n\n*Failed:* ${{ steps.failures.outputs.failed_steps }}\n*PR:* <${{ steps.pr.outputs.url }}|#${{ steps.pr.outputs.number }} ${{ steps.pr.outputs.title }}>\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View failed run>"

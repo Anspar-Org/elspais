@@ -14,5 +14,4 @@ channels:
 
 routing:
   release-success: SLACK_DEV_CH
-  release-failure: SLACK_DEV_CH
   slack-test:      SLACK_DEV_CH
