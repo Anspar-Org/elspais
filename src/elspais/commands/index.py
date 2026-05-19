@@ -220,20 +220,19 @@ def _repo_name_for(graph: FederatedGraph, node_id: str) -> str | None:
 def _repo_spec_dirs(graph: FederatedGraph, repo_name: str, fallback: list[Path]) -> list[Path]:
     """Return the absolute spec directory paths for a repo.
 
-    Reads ``[scanning.spec].directories`` from the repo's config when
-    available; falls back to ``fallback`` (the caller's spec_dirs) for
-    bare-TraceGraph callers or repos with no config.
+    Reads ``[scanning.spec].directories`` from the repo's config; falls
+    back to ``fallback`` only when the repo is unknown to the graph or
+    its entry has no config.
     """
-    if hasattr(graph, "iter_repos"):
-        for entry in graph.iter_repos():
-            if entry.name != repo_name or entry.config is None:
-                continue
-            scanning = entry.config.get("scanning", {})
-            spec_cfg = scanning.get("spec", {}) if isinstance(scanning, dict) else {}
-            dirs = spec_cfg.get("directories") if isinstance(spec_cfg, dict) else None
-            if dirs:
-                return [Path(d) if Path(d).is_absolute() else entry.repo_root / d for d in dirs]
-            return [entry.repo_root / "spec"]
+    for entry in graph.iter_repos():
+        if entry.name != repo_name or entry.config is None:
+            continue
+        scanning = entry.config.get("scanning", {})
+        spec_cfg = scanning.get("spec", {}) if isinstance(scanning, dict) else {}
+        dirs = spec_cfg.get("directories") if isinstance(spec_cfg, dict) else None
+        if dirs:
+            return [Path(d) if Path(d).is_absolute() else entry.repo_root / d for d in dirs]
+        return [entry.repo_root / "spec"]
     return fallback
 
 
@@ -268,8 +267,7 @@ def _resolve_repo_info(
 
     Reads the repo's config from FederatedGraph for level rank/display name.
     Falls back to scanning ``fallback_dir`` for a `.elspais.toml` when the
-    graph is a bare TraceGraph (legacy caller) and config isn't otherwise
-    accessible.
+    repo's entry in the graph has no config attached.
     """
     from elspais.config.schema import ElspaisConfig
 
@@ -278,11 +276,10 @@ def _resolve_repo_info(
     level_names: dict[str, str] = {}
 
     config = None
-    if hasattr(graph, "iter_repos"):
-        for entry in graph.iter_repos():
-            if entry.name == repo_name and entry.config is not None:
-                config = entry.config
-                break
+    for entry in graph.iter_repos():
+        if entry.name == repo_name and entry.config is not None:
+            config = entry.config
+            break
 
     if config is None and fallback_dir is not None:
         # Legacy fallback: walk up from spec dir to find .elspais.toml
