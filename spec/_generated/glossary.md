@@ -25,6 +25,7 @@
 **Traceability**
 : The ability to follow a requirement from its origin through design, implementation, and verification, establishing a documented chain of evidence.
 *Defined in: file:spec/glossary.md (REQ)*
+
 **Traceability Matrix**
 : A tabular representation linking requirements to their implementations, tests, and verification results across all hierarchy levels.
 *Defined in: file:spec/glossary.md (REQ)*

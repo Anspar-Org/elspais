@@ -70,14 +70,16 @@ def generate_glossary(td: TermDictionary, format: str = "markdown") -> str:
     regular = [e for e in all_entries if not e.is_reference]
     references = [e for e in all_entries if e.is_reference]
 
-    lines = [_HEADER, "# Glossary"]
+    # Each entry block ends with one trailing blank line (the `lines.append("")`
+    # after every entry); the next letter heading or section follows directly
+    # so separators stay at one blank — never two.
+    lines = [_HEADER, "# Glossary", ""]
     current_letter = ""
 
     for entry in regular:
         first_letter = entry.term[0].upper()
         if first_letter != current_letter:
             current_letter = first_letter
-            lines.append("")
             lines.append(f"## {current_letter}")
             lines.append("")
 
@@ -99,7 +101,6 @@ def generate_glossary(td: TermDictionary, format: str = "markdown") -> str:
 
     # References section
     if references:
-        lines.append("")
         lines.append("# References")
         lines.append("")
 
@@ -117,7 +118,6 @@ def generate_glossary(td: TermDictionary, format: str = "markdown") -> str:
             lines.append(f"*Defined in: {entry.defined_in} ({entry.namespace})*")
             lines.append("")
 
-    lines.append("")
     return "\n".join(lines)
 
 
@@ -148,11 +148,12 @@ def generate_term_index(td: TermDictionary, format: str = "markdown") -> str:
             )
         return json.dumps(data, indent=2)
 
-    # Markdown format
-    lines = [_HEADER, "# Term Index"]
+    # Markdown format. Each major section ends with one trailing blank line
+    # (the last per-namespace `lines.append("")`); the next section follows
+    # directly to keep separators at one blank — never two.
+    lines = [_HEADER, "# Term Index", ""]
 
     for entry in entries:
-        lines.append("")
         lines.append(f"## {entry.term}")
         lines.append("")
 
@@ -169,7 +170,6 @@ def generate_term_index(td: TermDictionary, format: str = "markdown") -> str:
                 lines.append(f"- {node_id}")
             lines.append("")
 
-    lines.append("")
     return "\n".join(lines)
 
 
