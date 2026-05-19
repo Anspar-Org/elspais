@@ -101,6 +101,7 @@ The system SHALL timeout sessions after 30 minutes of inactivity.
         config_file.write_text(
             """\
 [project]
+name = "test"
 namespace = "REQ"
 
 [id-patterns]
@@ -206,6 +207,7 @@ def authenticate():
         config_file.write_text(
             """\
 [project]
+name = "test"
 namespace = "REQ"
 
 [id-patterns]

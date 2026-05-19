@@ -750,6 +750,7 @@ class TestFactoryIntegration:
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
             "[project]\n"
+            'name = "test"\n'
             'namespace = "REQ"\n'
             "\n"
             "[scanning.spec]\n"
@@ -808,6 +809,7 @@ class TestFactoryIntegration:
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
             "[project]\n"
+            'name = "test"\n'
             'namespace = "REQ"\n'
             "\n"
             "[scanning.spec]\n"
@@ -855,6 +857,7 @@ class TestFactoryIntegration:
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
             "[project]\n"
+            'name = "test"\n'
             'namespace = "REQ"\n'
             "\n"
             "[scanning.spec]\n"

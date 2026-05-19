@@ -260,6 +260,14 @@ def load_config(config_path: Path) -> dict[str, Any]:
 
     validated = ElspaisConfig.model_validate(merged)
 
+    # Boundary enforcement: a real .elspais.toml MUST declare [project].name.
+    # Bare ProjectConfig() construction in helpers and tests still defaults
+    # name to "", but configs loaded from disk go through this check, which
+    # is the only entry point that should accept user-authored TOML.
+    project_name = (merged.get("project") or {}).get("name")
+    if not project_name or not str(project_name).strip():
+        raise ValueError(f"{config_path}: [project].name is required and must be non-empty")
+
     # Produce hyphenated dict for backward-compatible access
     result = validated.model_dump(by_alias=True)
 

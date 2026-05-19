@@ -366,6 +366,7 @@ class TestMultiAssertionSeparatorRoundTrip:
     # Minimal config common to both parametrizations.
     _CONFIG_TEMPLATE = """\
 [project]
+name = "test"
 namespace = "EVS"
 
 [id-patterns]

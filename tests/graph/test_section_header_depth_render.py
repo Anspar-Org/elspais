@@ -6,6 +6,7 @@ import pytest
 _MINIMAL_TOML = """\
 version = 4
 [project]
+name = "test"
 namespace = "REQ"
 [id-patterns]
 canonical = "{namespace}-{level.letter}{component}"

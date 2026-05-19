@@ -265,6 +265,8 @@ class TestInitTemplate:
         config_path.write_text(
             """
 version = 3
+[project]
+name = "test"
 [scanning.spec]
 directories = ["requirements"]
 """

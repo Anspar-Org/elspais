@@ -539,23 +539,38 @@ def _add_table(
     doc.add(key, tbl)
 
 
-def generate_config(project_type: str, associated_prefix: str | None = None) -> str:
+def generate_config(
+    project_type: str,
+    associated_prefix: str | None = None,
+    project_name: str | None = None,
+) -> str:
     """Generate configuration file content from the ElspaisConfig schema.
 
     Walks the Pydantic model defaults and applies project-type-specific
     overrides to produce valid, schema-compliant TOML.
+
+    Args:
+        project_type: "core" or "associated"
+        associated_prefix: Namespace prefix (required for associated projects)
+        project_name: Project name override (defaults to cwd basename). The
+            generated config always emits a non-empty [project].name so the
+            load_config() boundary check accepts it.
     """
     from elspais import __version__
     from elspais.config import config_defaults
 
     defaults = config_defaults()
 
+    # Derive a real project name (never empty -- load_config() rejects empty names).
+    if project_name is None or not project_name.strip():
+        project_name = Path.cwd().name or "my-project"
+
     if project_type == "associated":
         if associated_prefix is None:
             associated_prefix = "XXX"
         overrides: dict[str, Any] = {
             "project": {
-                "name": f"{associated_prefix.lower()}-project",
+                "name": project_name,
                 "namespace": associated_prefix,
             },
             "levels": {
@@ -597,7 +612,10 @@ def generate_config(project_type: str, associated_prefix: str | None = None) -> 
         label = "Associated Repository"
         gen_by = f"elspais init --type associated (v{__version__})"
     else:
-        overrides = _CORE_OVERRIDES
+        # Start from _CORE_OVERRIDES but inject the derived project name so a
+        # fresh `elspais init` produces a config that passes the load_config()
+        # boundary check (which requires a non-empty [project].name).
+        overrides = _deep_merge(_CORE_OVERRIDES, {"project": {"name": project_name}})
         sections = _CORE_SECTIONS
         label = "Main Repository"
         gen_by = f"elspais init (v{__version__})"
