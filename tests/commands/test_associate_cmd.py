@@ -16,7 +16,8 @@ def _make_core_repo(tmp_path: Path) -> Path:
     """Create a minimal core repo with .elspais.toml."""
     tmp_path.mkdir(exist_ok=True)
     (tmp_path / ".elspais.toml").write_text(
-        'version = 3\n[project]\nname = "core"\n\n' '[scanning.spec]\ndirectories = ["spec"]\n'
+        'version = 3\n[project]\nname = "core"\nnamespace = "REQ"\n\n'
+        '[scanning.spec]\ndirectories = ["spec"]\n'
     )
     (tmp_path / "spec").mkdir(exist_ok=True)
     return tmp_path
@@ -240,7 +241,9 @@ class TestAssociateErrors:
         core = _make_core_repo(tmp_path / "core")
         other = tmp_path / "other"
         other.mkdir()
-        (other / ".elspais.toml").write_text('version = 3\n[project]\nname = "other"\n')
+        (other / ".elspais.toml").write_text(
+            'version = 3\n[project]\nname = "other"\nnamespace = "REQ"\n'
+        )
 
         monkeypatch.chdir(core)
         args = argparse.Namespace(

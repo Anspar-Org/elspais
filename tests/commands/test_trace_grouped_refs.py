@@ -84,6 +84,7 @@ def test_REQ_p00001_A_and_C():
 
 [project]
 name = "test-grouped-refs"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
@@ -197,6 +198,7 @@ A. The system SHALL be alone.
 
 [project]
 name = "test-no-tests"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
@@ -308,6 +310,7 @@ def test_REQ_p00001_A_extra_check():
 
 [project]
 name = "test-md-grouped-refs"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
@@ -444,6 +447,7 @@ def test_REQ_p00001_A_and_C():
 
 [project]
 name = "test-html-grouped-refs"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
@@ -565,6 +569,7 @@ def test_REQ_p00001_general():
 
 [project]
 name = "test-json-grouped-refs"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
@@ -699,6 +704,7 @@ def test_REQ_p00001_A_and_C():
 
 [project]
 name = "test-csv-grouped-refs"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]

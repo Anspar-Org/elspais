@@ -228,6 +228,7 @@ class TestResolveSpecDirInfoV3:
             "version = 3\n"
             "[project]\n"
             'name = "testproject"\n'
+            'namespace = "REQ"\n'
             "\n"
             "[levels.prd]\n"
             "rank = 1\n"

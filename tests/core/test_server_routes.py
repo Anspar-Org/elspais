@@ -12,6 +12,7 @@ version = 3
 
 [project]
 name = "test-routes"
+namespace = "REQ"
 
 [levels.prd]
 rank = 1
@@ -248,12 +249,12 @@ class TestResolveRepoRoot:
         host_entry = MagicMock()
         host_entry.name = "demo"
         host_entry.repo_root = tmp_path
-        host_entry.config = {"project": {"name": "demo"}}
+        host_entry.config = {"project": {"name": "demo", "namespace": "REQ"}}
         host_entry.error = None
         host_entry.graph = MagicMock()
         state = MagicMock()
         state.repo_root = tmp_path
-        state.config = {"project": {"name": "demo"}}
+        state.config = {"project": {"name": "demo", "namespace": "REQ"}}
         state.graph.iter_repos.return_value = iter([host_entry])
         assert _resolve_repo_root(state, None) == tmp_path
         # Host is addressable by its configured [project].name.
@@ -452,6 +453,7 @@ version = 3
 
 [project]
 name = "core"
+namespace = "REQ"
 
 [levels.prd]
 rank = 1
@@ -478,6 +480,7 @@ version = 3
 
 [project]
 name = "assoc"
+namespace = "REQ"
 
 [levels.prd]
 rank = 1

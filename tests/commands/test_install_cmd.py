@@ -57,13 +57,13 @@ class TestFindSourceRoot:
 
     def test_REQ_p00001_A_override_valid_project(self, tmp_path):
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text('[project]\nname = "elspais"\n')
+        pyproject.write_text('[project]\nname = "elspais"\nnamespace = "REQ"\n')
         result = install_cmd.find_source_root(override_path=tmp_path)
         assert result == tmp_path.resolve()
 
     def test_REQ_p00001_A_override_non_elspais_returns_none(self, tmp_path):
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text('[project]\nname = "other-project"\n')
+        pyproject.write_text('[project]\nname = "other-project"\nnamespace = "REQ"\n')
         result = install_cmd.find_source_root(override_path=tmp_path)
         assert result is None
 
@@ -82,12 +82,12 @@ class TestIsElspaisProject:
 
     def test_REQ_p00001_A_valid_elspais(self, tmp_path):
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text('[project]\nname = "elspais"\nversion = "1.0"\n')
+        pyproject.write_text('[project]\nname = "elspais"\nnamespace = "REQ"\nversion = "1.0"\n')
         assert install_cmd._is_elspais_project(pyproject) is True
 
     def test_REQ_p00001_A_wrong_name(self, tmp_path):
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text('[project]\nname = "some-other-thing"\n')
+        pyproject.write_text('[project]\nname = "some-other-thing"\nnamespace = "REQ"\n')
         assert install_cmd._is_elspais_project(pyproject) is False
 
     def test_REQ_p00001_A_missing_file(self, tmp_path):

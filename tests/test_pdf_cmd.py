@@ -161,7 +161,7 @@ class TestResourcePathsCallSite:
 
         graph = _make_graph_with_req(repo_root, "REQ-p00001")
         fed = FederatedGraph.from_single(
-            graph, config={"project": {"name": "test"}}, repo_root=repo_root
+            graph, config={"project": {"name": "test", "namespace": "REQ"}}, repo_root=repo_root
         )
 
         captured = {}

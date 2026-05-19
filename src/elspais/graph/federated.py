@@ -153,6 +153,42 @@ class FederatedGraph:
         repos: list[RepoEntry],
         root_repo: str | None = None,
     ) -> None:
+        # Invariant: every RepoEntry must carry a non-empty ``name`` and
+        # ``repo_root``. When the backing config declares a ``[project]``
+        # section, that section must carry non-empty ``name`` and
+        # ``namespace`` — the three identifiers (host-side handle,
+        # display name, REQ-id prefix) are distinct and downstream
+        # consumers (term cards, file routing, viewer namespace labels,
+        # render save) assume all three are present. The ``[project]``
+        # presence check is permissive on empty ``config={}`` so isolated
+        # unit tests that wire a TraceGraph straight into a RepoEntry
+        # don't need to fabricate a full config dict; production callers
+        # always go through ``load_config()`` which produces a populated
+        # ``[project]`` block.
+        for r in repos:
+            if not r.name or not str(r.name).strip():
+                raise FederationError(
+                    "RepoEntry.name must be non-empty (this is the host-side "
+                    "handle: [project].name for the host, the [associates.<key>] "
+                    "key for an associate)"
+                )
+            if r.repo_root is None or str(r.repo_root) == "":
+                raise FederationError(f"RepoEntry({r.name!r}).repo_root must be set")
+            if r.config and "project" in r.config:
+                project = r.config["project"] or {}
+                if not project.get("name") or not str(project["name"]).strip():
+                    raise FederationError(
+                        f"RepoEntry({r.name!r}).config is missing non-empty "
+                        f"[project].name; load_config() should enforce this "
+                        f"at the TOML boundary"
+                    )
+                if not project.get("namespace") or not str(project["namespace"]).strip():
+                    raise FederationError(
+                        f"RepoEntry({r.name!r}).config is missing non-empty "
+                        f"[project].namespace; load_config() should enforce "
+                        f"this at the TOML boundary"
+                    )
+
         self._repos: dict[str, RepoEntry] = {r.name: r for r in repos}
         self._root_repo = root_repo or (repos[0].name if repos else "")
         # Build ownership map: node_id -> repo name
@@ -215,11 +251,15 @@ class FederatedGraph:
     def _merge_terms(self) -> None:
         """Merge per-repo _terms into a single federated TermDictionary.
 
-        Each TermEntry is stamped with the owning repo's name before
-        merging so the API layer can disambiguate cross-repo file
-        resolution for terms whose ``defined_in`` is a FILE id (FILE ids
-        legitimately collide across federated repos; see
-        ``_ownership`` setup above).
+        Each TermEntry is (re-)stamped with this federation's view of the
+        owning repo's name. An associate's TraceGraph reaches us already
+        carrying a ``repo_name`` from its inner ``FederatedGraph.from_single``
+        build (stamped from ``[project].name``); the host calls that same
+        repo something else in ``[associates]`` (e.g. the dict key
+        ``hht_diary``), and only the host-side name resolves via
+        ``iter_repos()`` for ``/api/file-content``. We overwrite
+        unconditionally so the term card's ``repo_name`` always matches
+        ``RepoEntry.name``.
         """
         from elspais.graph.terms import TermDictionary
 
@@ -228,8 +268,7 @@ class FederatedGraph:
         for entry in self._repos.values():
             if entry.graph is not None:
                 for term_entry in entry.graph._terms.iter_all():
-                    if not term_entry.repo_name:
-                        term_entry.repo_name = entry.name
+                    term_entry.repo_name = entry.name
                 dupes = merged.merge(entry.graph._terms)
                 self._term_duplicates.extend(dupes)
         self._terms = merged
@@ -242,6 +281,13 @@ class FederatedGraph:
         cross-repo term references resolve correctly.  Always canonicalizes
         term forms in spec node text and marks affected files dirty so that
         ``render_save`` produces canonical output.
+
+        ``TermRef.namespace`` carries the REQ-id prefix (e.g. ``DIARY``)
+        of the repo each reference was found in, NOT the host-side
+        ``RepoEntry.name``. The two are distinct identifiers (see
+        ``__init__`` invariant check); the API surfaces this value to the
+        viewer as the term's namespace label, so the REQ-prefix is what
+        callers expect.
         """
         from elspais.graph.term_scanner import scan_graph
 
@@ -251,10 +297,11 @@ class FederatedGraph:
                 continue
             config = entry.config or {}
             terms_cfg = config.get("terms", {})
+            req_namespace = config.get("project", {}).get("namespace", "") or entry.name
             unmatched = scan_graph(
                 self._terms,
                 entry.graph,
-                namespace=entry.name,
+                namespace=req_namespace,
                 markup_styles=terms_cfg.get("markup_styles"),
                 exclude_files=terms_cfg.get("exclude_files"),
                 canonicalize=True,

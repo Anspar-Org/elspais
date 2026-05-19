@@ -31,7 +31,8 @@ class TestDoctorExitCodes:
         config = tmp_path / ".elspais.toml"
         # Explicitly empty required sections to override defaults
         config.write_text(
-            'version = 3\n[project]\nname = "test"\n' "[scanning.spec]\ndirectories = []\n"
+            'version = 3\n[project]\nname = "test"\nnamespace = "REQ"\n'
+            "[scanning.spec]\ndirectories = []\n"
         )
         (tmp_path / "spec").mkdir()
 

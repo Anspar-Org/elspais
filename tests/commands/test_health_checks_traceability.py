@@ -38,7 +38,7 @@ def _wrap(graph: TraceGraph, config: dict | None = None) -> FederatedGraph:
     ``config_defaults()``).
     """
     if config is None:
-        config = {"project": {"name": "test"}}
+        config = {"project": {"name": "test", "namespace": "REQ"}}
     elif not (config.get("project") or {}).get("name"):
         config = dict(config)
         config.setdefault("project", {})
@@ -366,6 +366,7 @@ class TestConfigBackwardCompat:
 
 [project]
 name = "test-compat"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
@@ -398,6 +399,7 @@ allow_structural_orphans = true
 
 [project]
 name = "test-precedence"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]

@@ -86,7 +86,7 @@ class TestLocalConfigOverride:
             base.write_text('[project]\nnamespace = "REQ"\n')
 
             local = Path(tmpdir) / ".elspais.local.toml"
-            local.write_text('[project]\nname = "local-override"\n')
+            local.write_text('[project]\nname = "local-override"\nnamespace = "REQ"\n')
 
             config = load_config(base)
 
@@ -121,7 +121,7 @@ class TestLocalConfigOverride:
         with tempfile.TemporaryDirectory() as tmpdir:
             base = Path(tmpdir) / ".elspais.toml"
             base.write_text(
-                '[project]\nname = "test"\n'
+                '[project]\nname = "test"\nnamespace = "REQ"\n'
                 '[scanning.spec]\ndirectories = ["spec"]\nfile_patterns = ["*.md"]\n'
             )
 
@@ -306,6 +306,49 @@ class TestProjectNameBoundary:
         local_path.write_text('[project]\nname = "from-local"\n')
         cfg = load_config(cfg_path)
         assert cfg["project"]["name"] == "from-local"
+
+
+class TestProjectNamespaceBoundary:
+    """Boundary enforcement: load_config() requires non-empty [project].namespace.
+
+    Mirrors ``TestProjectNameBoundary`` for the REQ-id prefix. The viewer
+    and federation routing rely on a real per-repo namespace; the schema
+    default ``"REQ"`` only exists for the no-config-file degraded mode.
+    """
+
+    def test_load_config_rejects_missing_project_namespace(self, tmp_path):
+        """A config file missing [project].namespace is rejected at load_config()."""
+        cfg_path = tmp_path / ".elspais.toml"
+        cfg_path.write_text("version = 4\n" "[project]\n" 'name = "demo"\n')
+        with pytest.raises(ValueError) as ei:
+            load_config(cfg_path)
+        msg = str(ei.value).lower()
+        assert "project" in msg and "namespace" in msg
+
+    def test_load_config_rejects_empty_project_namespace(self, tmp_path):
+        """A config file with empty [project].namespace is rejected at load_config()."""
+        cfg_path = tmp_path / ".elspais.toml"
+        cfg_path.write_text("version = 4\n" "[project]\n" 'name = "demo"\n' 'namespace = ""\n')
+        with pytest.raises(ValueError) as ei:
+            load_config(cfg_path)
+        msg = str(ei.value).lower()
+        assert "project" in msg and "namespace" in msg
+
+    def test_load_config_accepts_real_project_namespace(self, tmp_path):
+        """A config file with a real [project].namespace loads cleanly."""
+        cfg_path = tmp_path / ".elspais.toml"
+        cfg_path.write_text("version = 4\n" "[project]\n" 'name = "demo"\n' 'namespace = "DEMO"\n')
+        cfg = load_config(cfg_path)
+        assert cfg["project"]["namespace"] == "DEMO"
+
+    def test_load_config_accepts_namespace_via_local_override(self, tmp_path):
+        """Local override supplying namespace rescues a main TOML without it."""
+        cfg_path = tmp_path / ".elspais.toml"
+        cfg_path.write_text("version = 4\n" "[project]\n" 'name = "demo"\n')
+        local_path = tmp_path / ".elspais.local.toml"
+        local_path.write_text('[project]\nnamespace = "LOCAL"\n')
+        cfg = load_config(cfg_path)
+        assert cfg["project"]["namespace"] == "LOCAL"
 
 
 class TestChangelogConfig:

@@ -178,7 +178,7 @@ class TestReservedEnvVarsSkipped:
 
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            'version = 4\n\n[project]\nname = "test"\n\n'
+            'version = 4\n\n[project]\nname = "test"\nnamespace = "REQ"\n\n'
             '[scanning.spec]\ndirectories = ["spec"]\n',
             encoding="utf-8",
         )

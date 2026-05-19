@@ -65,6 +65,7 @@ class TestCoverageFileScanning:
             """\
 [project]
 name = "test-coverage"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
@@ -111,6 +112,7 @@ directories = ["."]
             """\
 [project]
 name = "test-no-coverage"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
@@ -147,6 +149,7 @@ directories = ["src"]
             """\
 [project]
 name = "test-unmatched"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
@@ -190,6 +193,7 @@ file_patterns = ["lcov.info"]
             """\
 [project]
 name = "test-cov-json"
+namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]

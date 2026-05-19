@@ -91,7 +91,9 @@ def _build_graph_with_spec(tmp_path: Path) -> tuple[FederatedGraph, Path, GraphN
         "REQ-t00001-B": a2,
     }
 
-    fed = FederatedGraph.from_single(graph, {"project": {"name": "test"}}, tmp_path)
+    fed = FederatedGraph.from_single(
+        graph, {"project": {"name": "test", "namespace": "REQ"}}, tmp_path
+    )
     return fed, spec_file, file_node
 
 
@@ -319,7 +321,9 @@ class TestConsistencyCheck:
         req = GraphNode(id="REQ-t00001", kind=NodeKind.REQUIREMENT, label="WRONG Title")
         req._content = {"level": "DEV", "status": "Draft", "hash": "00000000"}
         bad_graph._index = {"REQ-t00001": req}
-        bad_fed = FederatedGraph.from_single(bad_graph, {"project": {"name": "test"}}, tmp_path)
+        bad_fed = FederatedGraph.from_single(
+            bad_graph, {"project": {"name": "test", "namespace": "REQ"}}, tmp_path
+        )
 
         def rebuild_fn():
             return {}, bad_fed

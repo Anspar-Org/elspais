@@ -5,6 +5,7 @@ version = 3
 
 [project]
 name = "fda-style-fixture"
+namespace = "FDA"
 
 [levels.PRD]
 rank = 1

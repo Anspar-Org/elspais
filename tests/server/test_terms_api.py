@@ -365,3 +365,121 @@ class TestTermRepoNameAndPath:
         terms = resp.json()
         # Both terms originate from the assoc repo.
         assert {t["repo_name"] for t in terms} == {"assoc"}
+
+    # Verifies: REQ-d00242-B
+    def test_outer_federation_overwrites_stale_repo_name(self, tmp_path: Path) -> None:
+        """Outer federation must overwrite repo_name stamped by an inner build.
+
+        Regression for CUR-1357: when ``factory.build_graph`` builds an
+        associate via an inner ``FederatedGraph.from_single`` first, the
+        inner ``_merge_terms`` stamps every TermEntry with the associate's
+        ``[project].name``. The host's outer federation then wraps the
+        same TraceGraph under a *different* ``RepoEntry.name`` (the
+        associate key, e.g. ``"hht_diary"``). The viewer's file-resolution
+        path looks repos up by ``iter_repos()`` name; if ``term.repo_name``
+        still holds the inner ``[project].name`` the lookup misses and the
+        viewer opens whichever same-pathed file lives under the host root.
+        """
+        assoc_root = tmp_path / "assoc"
+        assoc_root.mkdir()
+        assoc_graph = TraceGraph(repo_root=assoc_root)
+        file_node = GraphNode(id="file:spec/glossary.md", kind=NodeKind.FILE)
+        file_node.set_field("relative_path", "spec/glossary.md")
+        assoc_graph._index["file:spec/glossary.md"] = file_node
+        assoc_graph._roots.append(file_node)
+        # Pre-stamp with the *wrong* repo_name to simulate the associate
+        # having been built through an inner FederatedGraph.from_single
+        # first (which stamps using config["project"]["name"]).
+        assoc_graph._terms.add(
+            TermEntry(
+                term="OAuth2",
+                definition="An open standard for access delegation.",
+                defined_in="file:spec/glossary.md",
+                defined_at_line=1,
+                namespace="assoc",
+                repo_name="Inner Project Name",
+            )
+        )
+
+        core_root = tmp_path / "core"
+        core_root.mkdir()
+        core_graph = TraceGraph(repo_root=core_root)
+        repos = [
+            RepoEntry(name="core", graph=core_graph, config={}, repo_root=core_root),
+            RepoEntry(name="assoc", graph=assoc_graph, config={}, repo_root=assoc_root),
+        ]
+        federated = FederatedGraph(repos)
+
+        merged = federated.terms.lookup("OAuth2")
+        assert merged is not None
+        # The outer RepoEntry.name ("assoc") wins, not the stale stamping.
+        assert merged.repo_name == "assoc", (
+            "outer _merge_terms must overwrite the stale repo_name "
+            "left over from the associate's inner federation"
+        )
+
+    # Verifies: REQ-d00239-A
+    def test_scan_terms_uses_req_namespace_not_repo_name(self, tmp_path: Path) -> None:
+        """TermRef.namespace must be the REQ-prefix, not the host-side RepoEntry.name.
+
+        Regression for CUR-1357: ``_scan_terms`` previously passed
+        ``namespace=entry.name`` to ``scan_graph``, which stamped every
+        discovered TermRef with the host-side RepoEntry handle (e.g.
+        ``"hht_diary"``) instead of the REQ-id prefix
+        (``[project].namespace``, e.g. ``"DIARY"``). The terms API
+        surfaces ``ref.namespace`` to the viewer, so callers saw the
+        wrong namespace label on every cross-repo term reference.
+        """
+        assoc_root = tmp_path / "assoc"
+        assoc_root.mkdir()
+        assoc_graph = TraceGraph(repo_root=assoc_root)
+        # A REQUIREMENT whose text contains the term — scan_graph will
+        # populate its references list.
+        file_node = GraphNode(id="file:spec/prd.md", kind=NodeKind.FILE)
+        file_node.set_field("relative_path", "spec/prd.md")
+        file_node.set_field("file_type", "spec")
+        req_node = GraphNode(id="REQ-a00001", kind=NodeKind.REQUIREMENT)
+        req_node.set_label("uses *OAuth2* for authentication")
+        req_node.set_field("parse_line", 1)
+        file_node.link(req_node, EdgeKind.CONTAINS)
+        assoc_graph._index["file:spec/prd.md"] = file_node
+        assoc_graph._index["REQ-a00001"] = req_node
+        assoc_graph._roots.append(file_node)
+        assoc_graph._terms.add(
+            TermEntry(
+                term="OAuth2",
+                definition="An open standard for access delegation.",
+                defined_in="file:spec/prd.md",
+                defined_at_line=1,
+                namespace="ASSOC",
+            )
+        )
+
+        core_root = tmp_path / "core"
+        core_root.mkdir()
+        repos = [
+            RepoEntry(
+                name="core",
+                graph=TraceGraph(repo_root=core_root),
+                config={"project": {"name": "core", "namespace": "CORE"}},
+                repo_root=core_root,
+            ),
+            # RepoEntry.name ("assoc-key") deliberately differs from the
+            # REQ-prefix namespace ("ASSOC") so the two cannot be confused.
+            RepoEntry(
+                name="assoc-key",
+                graph=assoc_graph,
+                config={"project": {"name": "Assoc Display Name", "namespace": "ASSOC"}},
+                repo_root=assoc_root,
+            ),
+        ]
+        federated = FederatedGraph(repos)
+
+        merged = federated.terms.lookup("OAuth2")
+        assert merged is not None
+        assert len(merged.references) >= 1, "expected scan_graph to find *OAuth2*"
+        # Every reference carries the REQ-prefix, not the host-side handle.
+        namespaces = {ref.namespace for ref in merged.references}
+        assert namespaces == {"ASSOC"}, (
+            f"TermRef.namespace should be the REQ-prefix 'ASSOC', " f"got {namespaces!r}"
+        )

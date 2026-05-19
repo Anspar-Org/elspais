@@ -21,7 +21,7 @@ def _wrap(graph: TraceGraph) -> FederatedGraph:
     """Wrap a bare TraceGraph in a federation-of-one."""
     return FederatedGraph.from_single(
         graph,
-        {"project": {"name": "test"}},
+        {"project": {"name": "test", "namespace": "REQ"}},
         graph.repo_root or Path("/test/repo"),
     )
 

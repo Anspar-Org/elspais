@@ -295,15 +295,21 @@ class HTMLGenerator:
         base_path: str = "",
         version: str | None = None,
         repo_name: str | None = None,
-        namespace: str = "REQ",
+        namespace: str | None = None,
         config: dict | None = None,
     ) -> None:
         self.graph = graph
         self.base_path = base_path
         self.version = version if version is not None else __version__
         self.repo_name = repo_name
-        self.namespace = namespace
         self.config = config or {}
+        # Pull the REQ-id prefix from config when callers don't pass it
+        # explicitly. ``load_config()`` guarantees ``[project].namespace``
+        # is non-empty; for the no-config-file degraded path the schema
+        # default ("REQ") flows through here unchanged.
+        if namespace is None:
+            namespace = self.config.get("project", {}).get("namespace") or "REQ"
+        self.namespace = namespace
 
     def generate(self, embed_content: bool = False) -> str:
         """Generate the complete HTML report.

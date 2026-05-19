@@ -27,7 +27,9 @@ def _graph_with_files(*nodes: GraphNode) -> FederatedGraph:
     tg = TraceGraph()
     for n in nodes:
         tg._index[n.id] = n
-    return FederatedGraph.from_single(tg, config={"project": {"name": "test"}}, repo_root=Path("."))
+    return FederatedGraph.from_single(
+        tg, config={"project": {"name": "test", "namespace": "REQ"}}, repo_root=Path(".")
+    )
 
 
 def test_missing_results_fails_with_warning(tmp_path: Path):

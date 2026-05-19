@@ -26,7 +26,7 @@ def _wrap(graph: TraceGraph, repo_root: Path | None = None) -> FederatedGraph:
     """Wrap a bare TraceGraph in a single-repo FederatedGraph for tests."""
     return FederatedGraph.from_single(
         graph,
-        config={"project": {"name": "test"}},
+        config={"project": {"name": "test", "namespace": "REQ"}},
         repo_root=repo_root or Path("."),
     )
 
@@ -146,7 +146,7 @@ class TestResolveSpecDirInfo:
     def test_with_config(self, tmp_path):
         """Info uses project name and level config from .elspais.toml."""
         (tmp_path / ".elspais.toml").write_text(
-            'version = 3\n[project]\nname = "my-project"\n\n'
+            'version = 3\n[project]\nname = "my-project"\nnamespace = "REQ"\n\n'
             '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n\n'
             '[levels.dev]\nrank = 3\nletter = "d"\nimplements = ["dev", "prd"]\n'
         )
@@ -317,7 +317,7 @@ class TestRegenerateIndexAlignment:
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
         (tmp_path / ".elspais.toml").write_text(
-            'version = 3\n[project]\nname = "test"\n\n'
+            'version = 3\n[project]\nname = "test"\nnamespace = "REQ"\n\n'
             '[levels.PRD]\nrank = 1\nletter = "p"\nimplements = ["PRD"]\n\n'
             '[levels.DEV]\nrank = 3\nletter = "d"\nimplements = ["DEV", "PRD"]\n'
         )
@@ -380,7 +380,7 @@ class TestRegenerateIndexAlignment:
         fed = FederatedGraph.from_single(
             graph,
             config={
-                "project": {"name": "test"},
+                "project": {"name": "test", "namespace": "REQ"},
                 "scanning": {"spec": {"directories": [str(dir_a), str(dir_b)]}},
             },
             repo_root=tmp_path,
