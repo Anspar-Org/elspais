@@ -2109,9 +2109,9 @@ function buildTermCardHtml(cardId, data, collapsed) {
         var definedLine = data.defined_in_line || 1;
         html += '<div class="card-meta-item"><span class="card-meta-key">Defined in:</span>';
         html += '<a class="card-meta-value" href="#" onclick="event.preventDefault(); showSource(\'' +
-            escapeAttr(definedInPath) + '\', ' + definedLine + ', \'' +
-            escapeAttr(data.defined_in || '') + '\', \'' +
-            escapeAttr(data.repo_name || '') + '\')">' + escapeHtml(definedInPath) + '</a>';
+            escapeJsInAttr(definedInPath) + '\', ' + definedLine + ', \'' +
+            escapeJsInAttr(data.defined_in || '') + '\', \'' +
+            escapeJsInAttr(data.repo_name || '') + '\')">' + escapeHtml(definedInPath) + '</a>';
         html += '</div>';
     }
     if (data.namespace) {
