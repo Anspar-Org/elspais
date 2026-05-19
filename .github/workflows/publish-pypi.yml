@@ -278,13 +278,48 @@ jobs:
             echo "user_id=$(echo "$SLACK_RESPONSE" | jq -r '.user.id')" >> "$GITHUB_OUTPUT"
             echo "found=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::Slack user lookup failed for ${EMAIL}: $(echo "$SLACK_RESPONSE" | jq -r '.error // \"unknown\"'); failure DM not sent"
+            ERR=$(echo "$SLACK_RESPONSE" | jq -r '.error // "unknown"')
+            echo "::warning::Slack user lookup failed for ${EMAIL}: ${ERR}; failure DM not sent"
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Build failure message
+        id: message
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_FOUND: ${{ steps.pr.outputs.found }}
+          PR_NUM: ${{ steps.pr.outputs.number }}
+          PR_TITLE: ${{ steps.pr.outputs.title }}
+          PR_URL: ${{ steps.pr.outputs.url }}
+          VERSION: ${{ steps.version.outputs.version }}
+          FAILED_STEPS: ${{ steps.failures.outputs.failed_steps }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          RUN_URL="${SERVER_URL}/${REPOSITORY}/actions/runs/${RUN_ID}"
+
+          # PR fields are only populated when a PR was found via the
+          # commit-SHA lookup. Branch the message so a non-PR trigger
+          # (release/workflow_dispatch/workflow_call) doesn't render an
+          # empty "*PR:* <|#> " line; fall back to "Triggered by" with
+          # the actor's display name in that case.
+          if [ "$PR_FOUND" = "true" ]; then
+            MSG=":rotating_light: *Publish failed* for elspais v${VERSION}\n\n*Failed:* ${FAILED_STEPS}\n*PR:* <${PR_URL}|#${PR_NUM} ${PR_TITLE}>\n*Run:* <${RUN_URL}|View failed run>"
+          else
+            ACTOR_NAME=$(gh api "users/${ACTOR}" --jq '.name // empty' 2>/dev/null || echo "")
+            ACTOR_NAME="${ACTOR_NAME:-${ACTOR}}"
+            MSG=":rotating_light: *Publish failed* for elspais v${VERSION}\n\n*Failed:* ${FAILED_STEPS}\n*Run:* <${RUN_URL}|View failed run>\n*Triggered by:* ${ACTOR_NAME}"
+          fi
+
+          echo "text=${MSG}" >> "$GITHUB_OUTPUT"
+
       # DMs target a user ID, not a channel name — the shared
       # slack-notify action only routes named channels, so failure DMs
-      # stay on slackapi/slack-github-action.
+      # stay on slackapi/slack-github-action. The slackapi action parses
+      # the `payload:` block as YAML; literal `\n` in the double-quoted
+      # YAML string is interpreted as a newline.
       - name: Send failure DM
         if: steps.slack_user.outputs.found == 'true'
         uses: slackapi/slack-github-action@v2.1.1
@@ -294,4 +329,4 @@ jobs:
           errors: true
           payload: |
             channel: "${{ steps.slack_user.outputs.user_id }}"
-            text: ":rotating_light: *Publish failed* for elspais v${{ steps.version.outputs.version }}\n\n*Failed:* ${{ steps.failures.outputs.failed_steps }}\n*PR:* <${{ steps.pr.outputs.url }}|#${{ steps.pr.outputs.number }} ${{ steps.pr.outputs.title }}>\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View failed run>"
+            text: "${{ steps.message.outputs.text }}"
