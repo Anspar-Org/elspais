@@ -341,6 +341,28 @@ class TestGitStatusRepoParam:
         data = resp.json()
         assert "is_detached" in data
 
+    def test_git_status_detached_round_trip_singular_path(self, client: TestClient):
+        """Singular-path enter_detached must be observable via /api/git/status.
+
+        Regression: when the host repo's [project].name is e.g. 'test-routes',
+        enter_detached keys state under 'test-routes' and the singular
+        /api/git/status read must use the same key. Previously the status
+        endpoint hardcoded 'root' and missed entries written under the
+        project name.
+        """
+        state = client.app.state.app_state
+        host_key = state.config["project"]["name"]
+        state.enter_detached(host_key, branch="main", head_commit="deadbeef")
+        try:
+            resp = client.get("/api/git/status")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["is_detached"] is True
+            assert data["originating_branch"] == "main"
+            assert data["originating_head"] == "deadbeef"
+        finally:
+            state.leave_detached(host_key)
+
 
 class TestGitCommitsRepoParam:
     """REQ-p00004-I: /api/git/commits supports ?repo= param."""
