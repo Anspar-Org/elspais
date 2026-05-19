@@ -6,13 +6,25 @@ linking including validates.
 """
 
 import argparse
+from pathlib import Path
 
 from elspais.commands.index import _regenerate_index, _validate_index
+from elspais.graph.builder import TraceGraph
+from elspais.graph.federated import FederatedGraph
 from tests.core.graph_test_helpers import (
     build_graph,
     make_journey,
     make_requirement,
 )
+
+
+def _wrap(graph: TraceGraph, repo_root: Path | None = None) -> FederatedGraph:
+    """Wrap a bare TraceGraph in a single-repo FederatedGraph for tests."""
+    return FederatedGraph.from_single(
+        graph,
+        config={"project": {"name": "test"}},
+        repo_root=repo_root or Path("."),
+    )
 
 
 class TestIndexRegenerateJNY:
@@ -44,7 +56,7 @@ class TestIndexRegenerateJNY:
         )
         args = argparse.Namespace(git_root=tmp_path)
 
-        result = _regenerate_index(graph, [spec_dir], args)
+        result = _regenerate_index(_wrap(graph, tmp_path), [spec_dir], args)
 
         assert result == 0
         index_content = (spec_dir / "INDEX.md").read_text()
@@ -72,7 +84,7 @@ class TestIndexRegenerateJNY:
         )
         args = argparse.Namespace(git_root=tmp_path)
 
-        _regenerate_index(graph, [spec_dir], args)
+        _regenerate_index(_wrap(graph, tmp_path), [spec_dir], args)
 
         index_content = (spec_dir / "INDEX.md").read_text()
         header_lines = [
@@ -107,7 +119,7 @@ class TestIndexRegenerateJNY:
         )
         args = argparse.Namespace(git_root=tmp_path)
 
-        _regenerate_index(graph, [spec_dir], args)
+        _regenerate_index(_wrap(graph, tmp_path), [spec_dir], args)
 
         index_content = (spec_dir / "INDEX.md").read_text()
         jny_lines = [line for line in index_content.split("\n") if "JNY-Dev-01" in line]
@@ -130,7 +142,7 @@ class TestIndexRegenerateJNY:
         )
         args = argparse.Namespace(git_root=tmp_path)
 
-        _regenerate_index(graph, [spec_dir], args)
+        _regenerate_index(_wrap(graph, tmp_path), [spec_dir], args)
 
         index_content = (spec_dir / "INDEX.md").read_text()
         assert "## User Journeys" not in index_content
@@ -166,7 +178,7 @@ class TestIndexValidateJNY:
         )
 
         args = argparse.Namespace()
-        result = _validate_index(graph, [spec_dir], args)
+        result = _validate_index(_wrap(graph, tmp_path), [spec_dir], args)
 
         assert result == 1
 
@@ -197,7 +209,7 @@ class TestIndexValidateJNY:
         )
 
         args = argparse.Namespace()
-        result = _validate_index(graph, [spec_dir], args)
+        result = _validate_index(_wrap(graph, tmp_path), [spec_dir], args)
 
         assert result == 0
 
@@ -222,6 +234,6 @@ class TestIndexValidateJNY:
         )
 
         args = argparse.Namespace()
-        result = _validate_index(graph, [spec_dir], args)
+        result = _validate_index(_wrap(graph, tmp_path), [spec_dir], args)
 
         assert result == 1

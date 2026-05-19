@@ -206,16 +206,11 @@ def _resolve_spec_dir_info(spec_dir: Path) -> _SpecDirInfo:
 def _repo_name_for(graph: FederatedGraph, node_id: str) -> str | None:
     """Return the owning repo's name for a node ID, or None if unknown.
 
-    Uses ``FederatedGraph.repo_for(node_id).name`` directly. REQ/JNY IDs are
-    forbidden from colliding cross-repo, so this lookup is unambiguous (unlike
-    a FILE-node-based lookup, since two repos may share a relative path).
-
-    For backward compat with callers passing a bare ``TraceGraph`` (legacy
-    code paths and tests), returns ``"root"`` if the graph has no
-    ``repo_for`` method.
+    Uses ``FederatedGraph.repo_for(node_id).name`` directly. REQ/JNY IDs
+    are forbidden from colliding cross-repo, so this lookup is unambiguous
+    (unlike a FILE-node-based lookup, since two repos may share a relative
+    path).
     """
-    if not hasattr(graph, "repo_for"):
-        return "root"
     try:
         return graph.repo_for(node_id).name
     except KeyError:
@@ -378,12 +373,9 @@ def _build_index_content(
         if (reqs_by_bucket.get(b_none) or jnys_by_bucket.get(b_none)) and b_none not in seen:
             active_buckets.append(b_none)
 
-    if hasattr(graph, "iter_repos"):
-        for entry in graph.iter_repos():
-            dirs = _repo_spec_dirs(graph, entry.name, spec_dirs)
-            _add_repo_buckets(entry.name, dirs)
-    else:
-        _add_repo_buckets("root", spec_dirs)
+    for entry in graph.iter_repos():
+        dirs = _repo_spec_dirs(graph, entry.name, spec_dirs)
+        _add_repo_buckets(entry.name, dirs)
 
     unatt_bucket: Bucket = (UNATTRIBUTED, None)
     if reqs_by_bucket.get(unatt_bucket) or jnys_by_bucket.get(unatt_bucket):
