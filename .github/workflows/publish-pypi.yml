@@ -95,10 +95,11 @@ jobs:
     name: Notify on Success
     runs-on: ubuntu-latest
     needs: [publish, update-homebrew]
-    if: >-
-      always()
-      && needs.publish.result == 'success'
-      && needs.update-homebrew.result == 'success'
+    # Fires whenever PyPI publish succeeded, regardless of the Homebrew
+    # dispatch result. A Homebrew failure is reported separately via the
+    # author DM in notify-failure; gating #dev on both would silence the
+    # PyPI announcement on partial-success runs.
+    if: always() && needs.publish.result == 'success'
     permissions:
       contents: read
 
@@ -293,6 +294,8 @@ jobs:
           PR_URL: ${{ steps.pr.outputs.url }}
           VERSION: ${{ steps.version.outputs.version }}
           FAILED_STEPS: ${{ steps.failures.outputs.failed_steps }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
+          HOMEBREW_RESULT: ${{ needs.update-homebrew.result }}
           SERVER_URL: ${{ github.server_url }}
           REPOSITORY: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
@@ -300,17 +303,29 @@ jobs:
         run: |
           RUN_URL="${SERVER_URL}/${REPOSITORY}/actions/runs/${RUN_ID}"
 
+          # Surface the partial-success half so the DM tells the author
+          # what did ship in addition to what didn't — a Homebrew failure
+          # alone shouldn't hide that PyPI is already live.
+          SUCCEEDED=""
+          if [ "$PUBLISH_RESULT" = "success" ] && [ "$HOMEBREW_RESULT" != "success" ]; then
+            SUCCEEDED="PyPI publish — v${VERSION} is live"
+          elif [ "$HOMEBREW_RESULT" = "success" ] && [ "$PUBLISH_RESULT" != "success" ]; then
+            SUCCEEDED="Homebrew update dispatched"
+          fi
+          SUCCEEDED_LINE=""
+          [ -n "$SUCCEEDED" ] && SUCCEEDED_LINE="\n*Succeeded:* ${SUCCEEDED}"
+
           # PR fields are only populated when a PR was found via the
           # commit-SHA lookup. Branch the message so a non-PR trigger
           # (release/workflow_dispatch/workflow_call) doesn't render an
           # empty "*PR:* <|#> " line; fall back to "Triggered by" with
           # the actor's display name in that case.
           if [ "$PR_FOUND" = "true" ]; then
-            MSG=":rotating_light: *Publish failed* for elspais v${VERSION}\n\n*Failed:* ${FAILED_STEPS}\n*PR:* <${PR_URL}|#${PR_NUM} ${PR_TITLE}>\n*Run:* <${RUN_URL}|View failed run>"
+            MSG=":rotating_light: *Publish failed* for elspais v${VERSION}\n\n*Failed:* ${FAILED_STEPS}${SUCCEEDED_LINE}\n*PR:* <${PR_URL}|#${PR_NUM} ${PR_TITLE}>\n*Run:* <${RUN_URL}|View failed run>"
           else
             ACTOR_NAME=$(gh api "users/${ACTOR}" --jq '.name // empty' 2>/dev/null || echo "")
             ACTOR_NAME="${ACTOR_NAME:-${ACTOR}}"
-            MSG=":rotating_light: *Publish failed* for elspais v${VERSION}\n\n*Failed:* ${FAILED_STEPS}\n*Run:* <${RUN_URL}|View failed run>\n*Triggered by:* ${ACTOR_NAME}"
+            MSG=":rotating_light: *Publish failed* for elspais v${VERSION}\n\n*Failed:* ${FAILED_STEPS}${SUCCEEDED_LINE}\n*Run:* <${RUN_URL}|View failed run>\n*Triggered by:* ${ACTOR_NAME}"
           fi
 
           echo "text=${MSG}" >> "$GITHUB_OUTPUT"
