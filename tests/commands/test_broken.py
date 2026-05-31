@@ -23,6 +23,7 @@ def _make_ref(
     target: str = "REQ-p00099",
     kind: str = "implements",
     foreign: bool = False,
+    diagnostic: str = "",
 ) -> BrokenReference:
     """Create a BrokenReference for testing."""
     return BrokenReference(
@@ -30,6 +31,7 @@ def _make_ref(
         target_id=target,
         edge_kind=kind,
         presumed_foreign=foreign,
+        diagnostic=diagnostic,
     )
 
 
@@ -152,6 +154,33 @@ class TestRenderBrokenText:
         output = render_broken_text([])
         assert "BROKEN REFERENCES" in output
 
+    def test_diagnostic_on_own_indented_line(self) -> None:
+        # Verifies: REQ-d00085
+        """A non-empty diagnostic is surfaced on its own indented line."""
+        diag = "REQ-p00099 is a Template: target it with Satisfies:, not Refines:."
+        refs = [_make_ref(diagnostic=diag)]
+        output = render_broken_text(refs)
+        assert diag in output
+        # The diagnostic must live on its own line, indented beneath the ref
+        # line (not concatenated onto the source/target/kind line).
+        diag_lines = [ln for ln in output.split("\n") if diag in ln]
+        assert diag_lines, f"diagnostic not found on any line: {output!r}"
+        assert diag_lines[0].strip() == diag, (
+            f"diagnostic line should contain only the diagnostic text, " f"got: {diag_lines[0]!r}"
+        )
+        assert diag_lines[0].startswith(
+            "      "
+        ), f"diagnostic line should be indented, got: {diag_lines[0]!r}"
+
+    def test_no_diagnostic_line_when_empty(self) -> None:
+        # Verifies: REQ-d00085
+        """An empty diagnostic must NOT add an extra (blank) line."""
+        with_diag = render_broken_text([_make_ref(diagnostic="boom")])
+        without_diag = render_broken_text([_make_ref(diagnostic="")])
+        # The diagnostic-carrying render has exactly one more line than the
+        # bare one, proving the empty diagnostic adds no line.
+        assert len(with_diag.split("\n")) == len(without_diag.split("\n")) + 1
+
 
 # ---- Markdown rendering tests ----
 
@@ -188,6 +217,23 @@ class TestRenderBrokenMarkdown:
         refs = [_make_ref(foreign=True)]
         output = render_broken_markdown(refs)
         assert "implements [foreign]" in output
+
+    def test_diagnostic_column_header(self) -> None:
+        # Verifies: REQ-d00085
+        """The markdown table exposes a Diagnostic column."""
+        refs = [_make_ref()]
+        output = render_broken_markdown(refs)
+        assert "Diagnostic" in output
+
+    def test_diagnostic_in_data_row(self) -> None:
+        # Verifies: REQ-d00085
+        """A ref's diagnostic text appears in its markdown data row."""
+        diag = "Refining instance content is not supported."
+        refs = [_make_ref(diagnostic=diag)]
+        output = render_broken_markdown(refs)
+        data_rows = [ln for ln in output.split("\n") if ln.startswith("| REQ-p00001 |")]
+        assert data_rows, f"no data row found: {output!r}"
+        assert diag in data_rows[0], f"diagnostic missing from data row: {data_rows[0]!r}"
 
 
 # ---- render_section tests ----
@@ -275,3 +321,81 @@ class TestBrokenComposability:
         from elspais.commands.report import EXIT_BIT
 
         assert "broken" in EXIT_BIT
+
+
+# ---- Daemon dict-renderer tests ----
+
+
+class TestRenderBrokenDataRenderers:
+    """Diagnostic surfacing in the daemon dict-based renderers."""
+
+    @staticmethod
+    def _data_ref(diagnostic: str = "") -> dict:
+        return {
+            "source": "REQ-p00001",
+            "target": "REQ-p00099",
+            "kind": "refines",
+            "foreign": False,
+            "diagnostic": diagnostic,
+        }
+
+    def test_data_text_includes_diagnostic(self) -> None:
+        # Verifies: REQ-d00085
+        """_render_broken_data_text surfaces the diagnostic on its own line."""
+        from elspais.commands.broken import _render_broken_data_text
+
+        diag = "REQ-p00099 is a Template: target it with Satisfies:."
+        output = _render_broken_data_text([self._data_ref(diag)])
+        diag_lines = [ln for ln in output.split("\n") if diag in ln]
+        assert diag_lines, f"diagnostic not surfaced: {output!r}"
+        assert diag_lines[0].strip() == diag
+        assert diag_lines[0].startswith("      ")
+
+    def test_data_text_no_line_when_empty(self) -> None:
+        # Verifies: REQ-d00085
+        """An empty diagnostic adds no extra line in the text renderer."""
+        from elspais.commands.broken import _render_broken_data_text
+
+        with_diag = _render_broken_data_text([self._data_ref("boom")])
+        without_diag = _render_broken_data_text([self._data_ref("")])
+        assert len(with_diag.split("\n")) == len(without_diag.split("\n")) + 1
+
+    def test_data_markdown_includes_diagnostic(self) -> None:
+        # Verifies: REQ-d00085
+        """_render_broken_data_markdown surfaces the diagnostic in its row."""
+        from elspais.commands.broken import _render_broken_data_markdown
+
+        diag = "Refining instance content is not supported."
+        output = _render_broken_data_markdown([self._data_ref(diag)])
+        assert "Diagnostic" in output
+        data_rows = [ln for ln in output.split("\n") if ln.startswith("| REQ-p00001 |")]
+        assert data_rows, f"no data row: {output!r}"
+        assert diag in data_rows[0]
+
+
+# ---- JSON / compute_broken diagnostic tests ----
+
+
+class TestBrokenJsonDiagnostic:
+    """The diagnostic is carried through the json and compute_broken paths."""
+
+    def test_json_format_includes_diagnostic(self) -> None:
+        # Verifies: REQ-d00085
+        import json
+
+        from elspais.commands.broken import render_section
+
+        diag = "REQ-p00099 is a Template: target it with Satisfies:."
+        graph = _make_graph(_make_ref(diagnostic=diag))
+        output, _exit = render_section(graph, None, _make_args(format="json"))
+        parsed = json.loads(output)
+        assert parsed["broken"][0]["diagnostic"] == diag
+
+    def test_compute_broken_includes_diagnostic(self) -> None:
+        # Verifies: REQ-d00085
+        from elspais.commands.broken import compute_broken
+
+        diag = "Refining instance content is not supported."
+        graph = _make_graph(_make_ref(diagnostic=diag))
+        result = compute_broken(graph, _test_config(), {})
+        assert result["broken"][0]["diagnostic"] == diag

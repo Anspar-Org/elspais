@@ -3935,36 +3935,22 @@ class GraphBuilder:
                 # contains structurally-inconsistent traceability.
                 target_stereotype = target.get_field("stereotype")
                 if edge_kind == EdgeKind.REFINES and target_stereotype == Stereotype.TEMPLATE:
-                    # Rules 3 and 8 both fire for Refines:TEMPLATE — by design.
-                    # Rule 3 names the source-side mistake ("don't refine
-                    # templates"); rule 8 names the target-side invariant
-                    # ("templates have no descendants"). Both surface in
-                    # `elspais health` so authors see the rule that matches
-                    # their perspective. Asserted by
-                    # test_template_targeted_by_refines_from_another_template_errors.
-                    # Rule 3 (source perspective): compositing templates.
+                    # Rules 3 and 8 describe the same illegal edge from two
+                    # perspectives (source: "don't refine templates"; target:
+                    # "templates have no descendants"). Emit a SINGLE broken-ref
+                    # so one mistake reads as one error — and name the remedy
+                    # (Satisfies:) plainly, since the bare "(refines)" line plus a
+                    # passing refines_resolve check is what misleads authors.
                     self._broken_references.append(
                         BrokenReference(
                             source_id=source_id,
                             target_id=target_id,
                             edge_kind=edge_kind.value,
                             diagnostic=(
-                                "Compositing templates is not supported. "
-                                "Use Satisfies: and refine the concrete REQ."
-                            ),
-                        )
-                    )
-                    # Rule 8 (target perspective): templates may not have
-                    # descendants. Same edge, target-perspective diagnostic.
-                    self._broken_references.append(
-                        BrokenReference(
-                            source_id=source_id,
-                            target_id=target_id,
-                            edge_kind=edge_kind.value,
-                            diagnostic=(
-                                f"Templates may not have descendants. Either "
-                                f"drop the **Template** flag on {target_id}, "
-                                f"or stop refining {target_id} from {source_id}."
+                                f"{target_id} is a Template: target it with "
+                                f"Satisfies:, not Refines:. To add detail, "
+                                f"Satisfies: the template and Refines: a "
+                                f"concrete REQ in your own repo."
                             ),
                         )
                     )
