@@ -217,6 +217,7 @@ def _render_requirement(node: GraphNode, resolver: Any | None = None) -> str:
     implements_refs = _derive_implements_refs(node, resolver=resolver)
     refines_refs = _derive_refines_refs(node, resolver=resolver)
     satisfies_refs = node.get_field("satisfies_refs") or []
+    integrates_refs = node.get_field("integrates_refs") or []
 
     lines: list[str] = []
 
@@ -254,6 +255,14 @@ def _render_requirement(node: GraphNode, resolver: Any | None = None) -> str:
     if satisfies_refs:
         sat_str = ", ".join(satisfies_refs)
         lines.append(f"**Satisfies**: {sat_str}")
+
+    # Integrates line (if present)
+    # Implements: REQ-d00252
+    # Rendered from the stored field (not derived from edges): targets are
+    # external and may be absent from the build.
+    if integrates_refs:
+        integ_str = ", ".join(integrates_refs)
+        lines.append(f"**Integrates**: {integ_str}")
 
     # Walk STRUCTURES children sorted by render_order (set during build).
     # Collect assertions for hashing while rendering sections in order.
