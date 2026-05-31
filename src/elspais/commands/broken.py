@@ -57,6 +57,8 @@ def render_broken_text(refs: list[BrokenReference]) -> str:
     for br in sorted(refs, key=lambda r: (r.source_id, r.target_id)):
         foreign = " [foreign]" if br.presumed_foreign else ""
         lines.append(f"  {br.source_id:20s} -> {br.target_id:20s} ({br.edge_kind}){foreign}")
+        if br.diagnostic:
+            lines.append(f"      {br.diagnostic}")
     return "\n".join(lines)
 
 
@@ -67,12 +69,14 @@ def render_broken_markdown(refs: list[BrokenReference]) -> str:
     lines = [
         f"## {_LABEL} ({len(refs)})",
         "",
-        "| Source | Target | Kind |",
-        "|--------|--------|------|",
+        "| Source | Target | Kind | Diagnostic |",
+        "|--------|--------|------|------------|",
     ]
     for br in sorted(refs, key=lambda r: (r.source_id, r.target_id)):
         foreign = " [foreign]" if br.presumed_foreign else ""
-        lines.append(f"| {br.source_id} | {br.target_id} | {br.edge_kind}{foreign} |")
+        lines.append(
+            f"| {br.source_id} | {br.target_id} | {br.edge_kind}{foreign} | {br.diagnostic} |"
+        )
     return "\n".join(lines)
 
 
@@ -102,6 +106,7 @@ def render_section(
                 "target": br.target_id,
                 "kind": br.edge_kind,
                 "foreign": br.presumed_foreign,
+                "diagnostic": br.diagnostic,
             }
             for br in sorted(refs, key=lambda r: (r.source_id, r.target_id))
         ]
@@ -136,6 +141,7 @@ def compute_broken(
             "target": br.target_id,
             "kind": br.edge_kind,
             "foreign": br.presumed_foreign,
+            "diagnostic": br.diagnostic,
         }
         for br in sorted(refs, key=lambda r: (r.source_id, r.target_id))
     ]
@@ -202,6 +208,8 @@ def _render_broken_data_text(refs: list[dict[str, Any]]) -> str:
     for br in refs:
         foreign = " [foreign]" if br.get("foreign") else ""
         lines.append(f"  {br['source']:20s} -> {br['target']:20s} ({br['kind']}){foreign}")
+        if br.get("diagnostic"):
+            lines.append(f"      {br['diagnostic']}")
     return "\n".join(lines)
 
 
@@ -212,10 +220,11 @@ def _render_broken_data_markdown(refs: list[dict[str, Any]]) -> str:
     lines = [
         f"## {_LABEL} ({len(refs)})",
         "",
-        "| Source | Target | Kind |",
-        "|--------|--------|------|",
+        "| Source | Target | Kind | Diagnostic |",
+        "|--------|--------|------|------------|",
     ]
     for br in refs:
         foreign = " [foreign]" if br.get("foreign") else ""
-        lines.append(f"| {br['source']} | {br['target']} | {br['kind']}{foreign} |")
+        diag = br.get("diagnostic", "")
+        lines.append(f"| {br['source']} | {br['target']} | {br['kind']}{foreign} | {diag} |")
     return "\n".join(lines)

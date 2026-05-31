@@ -123,10 +123,57 @@ class TestRefinesTemplateRaises:
             for br in graph.broken_references()
             if br.source_id == "REQ-p00002" and br.edge_kind == "refines"
         ]
-        assert brs, "expected a refines broken-ref"
-        assert any(
-            "Compositing templates is not supported" in br.diagnostic for br in brs
-        ), f"diagnostics: {[br.diagnostic for br in brs]!r}"
+        # A concrete REQ refining a template is ONE mistake -> ONE broken-ref
+        # (previously rules 3 and 8 both fired, reporting the same edge twice).
+        assert len(brs) == 1, f"expected exactly one refines broken-ref, got {brs!r}"
+        assert "is a Template" in brs[0].diagnostic and "Satisfies:" in brs[0].diagnostic, (
+            f"diagnostic should name the template rule and the Satisfies: remedy, "
+            f"got: {brs[0].diagnostic!r}"
+        )
+
+    def test_ops_refines_prd_template_single_broken_ref_with_remedy(self) -> None:
+        # Implements: REQ-p00014-G
+        """An OPS REQ refining a PRD ``**Template**`` is ONE mistake.
+
+        This exercises a different level combination (OPS -> PRD) than
+        ``test_refines_template_is_broken_ref`` (same-level PRD -> PRD) to
+        confirm the de-duplication of the source-perspective (rule 3) and
+        target-perspective (rule 8) diagnostics is independent of hierarchy
+        depth. The single surviving diagnostic must also direct the author to
+        ``Refines:`` a concrete REQ in their own repo, not just to use
+        ``Satisfies:``.
+        """
+        prd_template = make_requirement(
+            "REQ-p00001",
+            title="PRD Template",
+            template=True,
+            assertions=[{"label": "A", "text": "be templated"}],
+        )
+        ops_refiner = make_requirement(
+            "REQ-o00002",
+            title="Ops Refiner",
+            level="OPS",
+            refines=["REQ-p00001"],
+            assertions=[{"label": "A", "text": "refine at ops level"}],
+        )
+        graph = build_graph(prd_template, ops_refiner)
+
+        brs = [
+            br
+            for br in graph.broken_references()
+            if br.source_id == "REQ-o00002" and br.edge_kind == "refines"
+        ]
+        # Rules 3 (source-perspective) and 8 (target-perspective) describe the
+        # same edge: the merge must collapse them to a single broken-ref.
+        assert len(brs) == 1, f"expected exactly one refines broken-ref, got {brs!r}"
+        diag = brs[0].diagnostic
+        assert "is a Template" in diag, f"diagnostic should name the template rule, got: {diag!r}"
+        # The remedy must mention BOTH Satisfies: the template AND Refines: a
+        # concrete REQ -- distinguishing this assertion from the existing test.
+        assert "Satisfies:" in diag and "Refines:" in diag and "concrete" in diag, (
+            f"diagnostic should sketch the Satisfies-template + Refines-concrete "
+            f"remedy, got: {diag!r}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -264,10 +311,11 @@ class TestTemplateInboundRefinesRaises:
             for br in graph.broken_references()
             if br.target_id == "REQ-p00001" and br.edge_kind == "refines"
         ]
-        assert brs, "expected a refines broken-ref targeting the template"
-        assert any(
-            "Templates may not have descendants" in br.diagnostic for br in brs
-        ), f"diagnostics: {[br.diagnostic for br in brs]!r}"
+        assert len(brs) == 1, f"expected exactly one refines broken-ref, got {brs!r}"
+        assert "is a Template" in brs[0].diagnostic and "Satisfies:" in brs[0].diagnostic, (
+            f"diagnostic should name the template rule and the Satisfies: remedy, "
+            f"got: {brs[0].diagnostic!r}"
+        )
 
     def test_template_targeted_by_refines_from_another_template_errors(self) -> None:
         """Templates may not refine other templates either (single-REQ scope).
@@ -294,16 +342,27 @@ class TestTemplateInboundRefinesRaises:
         )
         graph = build_graph(template_root, template_refiner)
 
-        # Rule 8: an inbound Refines against the template target.
+        # Rule 8: an inbound Refines against the template target. The source-
+        # and target-perspective diagnostics are now merged into a single
+        # broken-ref naming the Satisfies: remedy. (A separate rule-7 broken-ref
+        # also targets REQ-p00001 here because the *source* is a mis-marked
+        # template; it carries a different "pure specs" diagnostic and is
+        # asserted below.)
         rule8_brs = [
             br
             for br in graph.broken_references()
-            if br.target_id == "REQ-p00001" and br.edge_kind == "refines"
+            if br.target_id == "REQ-p00001"
+            and br.edge_kind == "refines"
+            and "is a Template" in br.diagnostic
         ]
-        assert rule8_brs, "expected a rule-8 refines broken-ref against the template target"
-        assert any(
-            "Templates may not have descendants" in br.diagnostic for br in rule8_brs
-        ), f"rule-8 diagnostics: {[br.diagnostic for br in rule8_brs]!r}"
+        assert len(rule8_brs) == 1, (
+            f"expected exactly one merged refines broken-ref against the "
+            f"template target, got {rule8_brs!r}"
+        )
+        assert "Satisfies:" in rule8_brs[0].diagnostic, (
+            f"rule-8 diagnostic should name the Satisfies: remedy, "
+            f"got: {rule8_brs[0].diagnostic!r}"
+        )
 
         # Rule 7: the refining template declared behavioural metadata
         # (Refines:) -- this is also flagged because templates are pure specs.
