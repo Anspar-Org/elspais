@@ -159,3 +159,32 @@ Without per-repo delegation, all nodes are validated against the root repo's con
 
 *End* *Per-Repo Health Check Delegation* | **Hash**: 2313140d
 ---
+
+## REQ-d00252: External Library Integration via Integrates Keyword
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00005
+
+A requirement MAY declare that its implementation is provided by a requirement in a configured associate (external library) repository, so that a reusable library need not contain references to any specific consumer.
+
+### Assertions
+
+A. A requirement in a spec file MAY declare an `Integrates:` metadata field naming one or more requirement IDs in a configured associate repository; the field SHALL be parsed and stored on the requirement node and rendered back verbatim.
+
+B. The `Integrates:` keyword SHALL be valid only in spec files; in code, test, and journey files it SHALL NOT create a *Traceability* edge.
+
+C. When the resolved target of an `Integrates:` reference belongs to the same repository as the declaring requirement, the build SHALL report it as a broken reference.
+
+D. When the associate owning an `Integrates:` target participates in the federated build, the build SHALL wire an INTEGRATES edge from the declaring requirement to the target library node such that the declaring requirement counts as implemented and inherits the library node's implemented and verified coverage, while the library's own source files SHALL remain unmodified.
+
+E. When an `Integrates:` target cannot be resolved, the build SHALL report a broken reference if a configured associate claims the target's ID format but lacks the ID, and SHALL record a presumed-foreign reference that does not fail the build if no configured associate claims the ID format.
+
+### Rationale
+
+The bottom-up reference model (`Implements:` authored on the implementer) would force a reusable library to name each consumer's requirement IDs, coupling the library to its consumers and breaking isolated builds. `Integrates:` is the top-down inverse: authored and stored on the consumer, it points into the library and is wired as a distinct INTEGRATES edge during federation. A dedicated edge kind keeps the library's `Implements:` derivation clean (no consumer IDs leak into library files on render), while contributing to coverage like IMPLEMENTS. Test/verification results propagate by a live-query overlay that reads the library node's own metrics, consistent with the existing cross-repo inheritance mechanism.
+
+### Changelog
+
+- 2026-05-31 | b576d134 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms, update hash, add missing changelog section
+
+*End* *External Library Integration via Integrates Keyword* | **Hash**: b576d134
+---

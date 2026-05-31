@@ -140,6 +140,7 @@
 | REQ-d00249 | Configured test runner execution                              | dev-cli.md              | 8a579eb1 |
 | REQ-d00250 | Section Header Depth Canonicalization                         | dev-graph-core.md       | 903349d2 |
 | REQ-d00251 | Component Style Vocabulary and Assertion Separator            | dev-graph-config.md     | e04a4e37 |
+| REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | b576d134 |
 
 ## User Journeys
 
