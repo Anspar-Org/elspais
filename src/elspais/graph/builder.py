@@ -3150,6 +3150,8 @@ class GraphBuilder:
             "implements_refs": data.get("implements", []),
             "refines_refs": data.get("refines", []),
             "satisfies_refs": data.get("satisfies", []),
+            # Implements: REQ-d00252
+            "integrates_refs": data.get("integrates", []),
             "heading_level": data.get("heading_level", 2),
             "assertions_heading_level": data.get("assertions_heading_level"),
             "changelog_heading_level": data.get("changelog_heading_level"),
