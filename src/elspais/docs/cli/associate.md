@@ -76,6 +76,26 @@ Even when the linked path is a worktree (e.g., `callisto-worktrees/some-branch`)
 | `--list` | Show status of linked associates |
 | `--unlink NAME` | Remove a linked associate by name, path, or prefix code |
 
+## Referencing an associate's requirements
+
+Once an associate is linked, a consumer requirement can declare that its
+implementation is provided by a requirement in that external library with
+the `Integrates:` keyword:
+
+```markdown
+## REQ-d00010: Event Sourcing Adapter
+
+**Level**: DEV | **Status**: Active
+
+**Integrates**: REQ-evs-0007
+```
+
+`Integrates:` is external-only -- the target must resolve to an associate
+repo (a same-repo target is a broken reference), the library is never
+modified and contains no reference back, and the consumer inherits the
+library requirement's implemented/verified coverage. See
+`elspais docs graph-model` (INTEGRATES edge) and `elspais docs format`.
+
 ## Notes
 
 - Links are stored in `.elspais.local.toml` (gitignored)

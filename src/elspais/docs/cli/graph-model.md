@@ -290,6 +290,31 @@ Satisfies: REQ-p00099
 This clones the template's subtree as INSTANCE nodes under the
 declaring requirement. See INSTANCE and DEFINES below.
 
+#### INTEGRATES
+
+Declares that this requirement's implementation is provided by a
+requirement in a configured associate (external library) repository.
+**Contributes to coverage.**
+
+Authored only on the consumer side (spec files) -- the library is never
+modified and contains no reference back. The target must resolve to an
+associate repo; a same-repo target is a broken reference (external-only).
+
+```markdown
+## REQ-d00010: Event Sourcing Adapter
+
+**Level**: DEV | **Status**: Active
+
+**Integrates**: REQ-evs-0007
+```
+
+During federation an INTEGRATES edge is wired from this requirement to the
+library requirement, so the consumer counts as implemented and inherits the
+library requirement's implemented/verified coverage. Unresolved targets
+split into a hard error (a configured associate claims the ID format but
+lacks the ID) and a soft, non-failing case (no associate claims the format,
+treated as presumed-foreign).
+
 ### Keyword Validity by File Type
 
 Not every keyword is valid in every file type. Using the wrong
@@ -301,6 +326,7 @@ keyword produces a warning:
 | `Verifies` | n/a | VERIFIES edge | VERIFIES edge | n/a |
 | `Refines` | REFINES edge | **warning** (skipped) | **warning** (skipped) | n/a |
 | `Satisfies` | SATISFIES edge | n/a | n/a | n/a |
+| `Integrates` | INTEGRATES edge (associate target only) | n/a | n/a | n/a |
 | `Validates` | n/a | n/a | n/a | VALIDATES edge |
 
 ### Structural Edges (automatic)
@@ -357,6 +383,7 @@ Only three edge kinds contribute to coverage metrics:
 | IMPLEMENTS | `implemented` (code or child-REQ covers assertions) |
 | VERIFIES | `tested` / `verified` (test covers / passes assertions) |
 | VALIDATES | `uat_coverage` / `uat_verified` (journey covers / passes) |
+| INTEGRATES | `implemented` / `verified` (inherited from the library requirement) |
 
 REFINES, CONTAINS, STRUCTURES, SATISFIES, INSTANCE, DEFINES, and YIELDS
 do not contribute to coverage. See `elspais docs checks` for the full

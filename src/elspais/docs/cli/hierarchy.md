@@ -40,6 +40,12 @@ Example chain:
   **Refines**    - Adds detail to parent without claiming satisfaction
                No coverage rollup; just shows relationship
 
+  **Integrates** - Satisfaction is provided by a requirement in a
+               configured associate (external library) repo. Coverage
+               (implemented/verified) is inherited from that library
+               requirement. The library is never modified. See
+               `elspais docs graph-model` for the INTEGRATES edge.
+
 Use `Refines` when you're adding constraints but the parent still
 needs its own implementation.
 
