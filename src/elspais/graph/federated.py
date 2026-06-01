@@ -1551,11 +1551,51 @@ class FederatedGraph:
                 continue
             for req in list(source_entry.graph.iter_by_kind(NodeKind.REQUIREMENT)):
                 for raw in req.get_field("integrates_refs") or []:
-                    # v1 is whole-REQ: strip any library-side assertion suffix
-                    # (e.g. ``LIB-d00007-A`` -> ``LIB-d00007``) for resolution.
-                    parts = raw.split("-")
-                    target_id = "-".join(parts[:3]) if len(parts) > 3 else raw
-                    self._wire_one_integrates(source_entry, req.id, target_id)
+                    self._wire_one_integrates(source_entry, req.id, raw)
+
+    # Implements: REQ-d00252
+    @staticmethod
+    def _integrates_candidates(target_id: str):
+        """Yield the target id as written, then a base id with one trailing
+        ``-<segment>`` stripped (v1 whole-REQ: a library-side assertion suffix
+        like ``LIB-d00007-A`` resolves to its base REQ ``LIB-d00007``)."""
+        yield target_id
+        base, sep, _suffix = target_id.rpartition("-")
+        if sep and base:
+            yield base
+
+    # Implements: REQ-d00252
+    def _resolves_to_requirement(self, owner: str, canonical: str) -> bool:
+        """True if ``canonical`` names a REQUIREMENT node in ``owner``'s graph.
+
+        v1 is whole-REQ, so a candidate that resolves to an ASSERTION (e.g. the
+        library-side suffix ``LIB-d00007-A``) is rejected here, letting the base
+        id be tried next.
+        """
+        from elspais.graph.GraphNode import NodeKind
+
+        entry = self._repos.get(owner)
+        if entry is None or entry.graph is None:
+            return False
+        node = entry.graph._index.get(canonical)
+        return node is not None and node.kind == NodeKind.REQUIREMENT
+
+    # Implements: REQ-d00252
+    def _resolve_integrates_target(self, target_id: str):
+        """Resolve an Integrates target to ``(owner_repo_name, canonical_id)``.
+
+        Tries the id as written, then the assertion-suffix-stripped base id, and
+        only accepts a candidate that resolves to a whole REQUIREMENT node.
+        Returns ``(None, target_id)`` if neither resolves.
+        """
+        for candidate in self._integrates_candidates(target_id):
+            owner = self._ownership.get(candidate)
+            if owner is not None and self._resolves_to_requirement(owner, candidate):
+                return owner, candidate
+            claim = self._claim_for(candidate)
+            if claim is not None and self._resolves_to_requirement(*claim):
+                return claim  # (repo_name, canonical_id)
+        return None, target_id
 
     # Implements: REQ-d00252
     def _wire_one_integrates(
@@ -1565,12 +1605,7 @@ class FederatedGraph:
         target_id: str,
     ) -> None:
         """Resolve and wire one ``Integrates:`` target (helper for above)."""
-        owner = self._ownership.get(target_id)
-        canonical = target_id
-        if owner is None:
-            claim = self._claim_for(target_id)
-            if claim is not None:
-                owner, canonical = claim
+        owner, canonical = self._resolve_integrates_target(target_id)
 
         # Resolved to a foreign associate: wire the reverse INTEGRATES edge.
         # consumer (source_id) = PARENT, library node (canonical) = CHILD.

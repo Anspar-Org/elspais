@@ -72,6 +72,20 @@ class TestIntegratesWiresEdge:
         lib_req = fed._repos["library"].graph._index["LIB-d00007"]
         assert "APP-d00001" not in render_node(lib_req)
 
+    def test_REQ_d00252_D_assertion_suffix_target_wires_whole_req(self, tmp_path):
+        """Validates REQ-d00252-D: an Integrates target with a library assertion
+        suffix (LIB-d00007-A) resolves to the base REQ and wires one whole-REQ edge."""
+        app_root = _copy_full(tmp_path)
+        app_spec = app_root / "spec" / "dev-app.md"
+        app_spec.write_text(app_spec.read_text().replace("LIB-d00007", "LIB-d00007-A"))
+        fed = _federate(app_root)
+        app_req = fed._repos["app"].graph._index["APP-d00001"]
+        integ = _outgoing_integrates(app_req)
+        assert len(integ) == 1
+        assert integ[0].target.id == "LIB-d00007"
+        # no broken ref for the suffixed target
+        assert not fed._repos["app"].graph._broken_references
+
 
 class TestIntegratesUnresolved:
     """Validates REQ-d00252-E: unresolved targets are soft or hard per claim."""
