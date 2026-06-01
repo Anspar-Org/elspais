@@ -329,3 +329,55 @@ class TestGapComposability:
 
         assert "checks" in COMPOSABLE_SECTIONS
         assert "health" not in COMPOSABLE_SECTIONS
+
+
+# ===========================================================================
+# REQ-d00252-F: Integrates coverage in gaps
+# ===========================================================================
+
+_INTEGRATES_FIX = Path(__file__).parents[1] / "fixtures" / "e2e-integrates"
+
+
+def _federate_integrates(tmp_path):
+    """Federate the e2e-integrates fixture (APP-d00001 integrates LIB-d00007)."""
+    import shutil
+
+    from elspais.config import get_config
+    from elspais.graph.factory import build_graph
+
+    dest = tmp_path / "proj"
+    shutil.copytree(_INTEGRATES_FIX, dest)
+    return build_graph(
+        config=get_config(None, dest / "app"),
+        repo_root=dest / "app",
+        scan_code=False,
+        scan_tests=False,
+    )
+
+
+class TestGapsIntegrates:
+    """Validates REQ-d00252-F: an integrating requirement is not an uncovered
+    gap and is listed under its owning associate."""
+
+    def test_REQ_d00252_F_integrating_req_not_uncovered(self, tmp_path) -> None:
+        """APP-d00001 integrates a library REQ, so it must NOT appear in the
+        uncovered gap list."""
+        fed = _federate_integrates(tmp_path)
+        data = collect_gaps(fed, exclude_status=set())
+        uncovered_ids = {e.req_id for e in data.uncovered}
+        assert "APP-d00001" not in uncovered_ids
+
+    def test_REQ_d00252_F_integrating_req_grouped_by_associate(self, tmp_path) -> None:
+        """APP-d00001 is recorded under the owning associate 'library', and the
+        rendered text shows a 'Covered via external associate' segment."""
+        from elspais.commands.gaps import render_integrated_text
+
+        fed = _federate_integrates(tmp_path)
+        data = collect_gaps(fed, exclude_status=set())
+        assert "library" in data.integrated
+        assert "APP-d00001" in data.integrated["library"]
+
+        text = render_integrated_text(data)
+        assert "Covered via external associate" in text
+        assert "library" in text
+        assert "APP-d00001" in text

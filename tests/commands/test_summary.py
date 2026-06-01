@@ -11,11 +11,48 @@ from __future__ import annotations
 import csv
 import io
 import json
+import shutil
+from pathlib import Path
 
 from elspais.commands.summary import _collect_coverage, _pct, _render
 from elspais.graph.builder import TraceGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.metrics import RollupMetrics
+
+_INTEGRATES_FIX = Path(__file__).parents[1] / "fixtures" / "e2e-integrates"
+
+
+def _federate_integrates(tmp_path):
+    """Federate the e2e-integrates fixture with a verified library REQ.
+
+    Mirrors the proven recipe in tests/unit/graph/test_integrates_by_associate.py:
+    APP-d00001 integrates LIB-d00007; we give the library REQ a passing test so
+    its verified dimension is non-zero, then recompute the library's own metrics.
+    """
+    from elspais.config import get_config
+    from elspais.graph.annotators import annotate_coverage
+    from elspais.graph.factory import build_graph
+    from elspais.graph.relations import EdgeKind
+
+    dest = tmp_path / "proj"
+    shutil.copytree(_INTEGRATES_FIX, dest)
+    fed = build_graph(
+        config=get_config(None, dest / "app"),
+        repo_root=dest / "app",
+        scan_code=False,
+        scan_tests=False,
+    )
+    lib_graph = fed._repos["library"].graph
+    lib_req = lib_graph._index["LIB-d00007"]
+    test = GraphNode(id="LIB-test-1", kind=NodeKind.TEST, label="test_append_only")
+    result = GraphNode(id="LIB-test-1::result", kind=NodeKind.RESULT, label="result")
+    result.set_field("status", "passed")
+    test.link(result, EdgeKind.YIELDS)
+    lib_req.link(test, EdgeKind.VERIFIES, ["A"])
+    lib_graph._index[test.id] = test
+    annotate_coverage(lib_graph)
+    return fed
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -560,3 +597,44 @@ class TestPctHelper:
     def test_REQ_d00086_B_pct_zero_num(self):
         """_pct returns 0.0 when numerator is zero."""
         assert _pct(0, 10) == 0.0
+
+
+# ===========================================================================
+# REQ-d00252-F: External integrations section + implemented crediting
+# ===========================================================================
+
+
+class TestSummaryIntegrations:
+    """Validates REQ-d00252-F: summary surfaces per-associate Integrates rollup.
+
+    Inherited coverage counts toward implemented status, and the report
+    summarizes integrated requirements grouped by owning associate with a
+    federation total.
+    """
+
+    def test_REQ_d00252_F_external_integrations_section(self, tmp_path):
+        """Text summary contains an External integrations section with a
+        per-associate 'library' row and a 'total' row."""
+        fed = _federate_integrates(tmp_path)
+        data = _collect_coverage(fed, config=None)
+        text = _render(data, "text")
+
+        assert "External integrations" in text
+        names = [row["associate"] for row in data["integrations"]]
+        assert "library" in names
+        assert data["integration_total"] is not None
+        assert data["integration_total"]["associate"] == "total"
+        # Rendered rows present in text output.
+        assert "library" in text
+        assert "total" in text
+
+    def test_REQ_d00252_D_integrating_req_credited_implemented(self, tmp_path):
+        """The integrating consumer requirement (APP-d00001) is credited as
+        implemented in the main coverage classification, not a phantom gap."""
+        fed = _federate_integrates(tmp_path)
+        data = _collect_coverage(fed, config=None)
+        dev_levels = [lv for lv in data["levels"] if lv["level"] == "DEV"]
+        assert dev_levels, "expected a DEV level row"
+        # APP-d00001 has no local code refs but integrates a library REQ, so it
+        # must count toward with_code_refs (implemented requirements).
+        assert dev_levels[0]["with_code_refs"] >= 1

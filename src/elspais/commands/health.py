@@ -1983,6 +1983,7 @@ def check_dimension_coverage(
         config: Project config dict.
     """
     from elspais.graph import NodeKind
+    from elspais.graph.metrics import has_integration
 
     if exclude_status is None:
         from elspais.config import get_status_roles
@@ -2011,8 +2012,15 @@ def check_dimension_coverage(
         if node.status in exclude_status:
             continue
         req_count += 1
+        # An integrating consumer requirement inherits implemented status from
+        # its library node via INTEGRATES (REQ-d00252-D/F); count it as covered
+        # so it is not reported as a coverage gap.
+        integrates = dimension == "implemented" and has_integration(node)
         metrics = node.get_metric("rollup_metrics")
         if metrics is None:
+            if integrates:
+                req_with_any += 1
+                req_with_direct += 1
             continue
         dim = getattr(metrics, dimension, None)
         if dim is None:
@@ -2020,9 +2028,9 @@ def check_dimension_coverage(
         total_assertions += dim.total
         direct_assertions += dim.direct
         indirect_assertions += dim.indirect
-        if dim.indirect > 0:
+        if dim.indirect > 0 or integrates:
             req_with_any += 1
-        if dim.direct > 0:
+        if dim.direct > 0 or integrates:
             req_with_direct += 1
         if dim.has_failures:
             has_any_failures = True

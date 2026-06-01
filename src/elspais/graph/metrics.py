@@ -453,6 +453,21 @@ class IntegratesRollup:
 
 
 # Implements: REQ-d00252
+def has_integration(node: GraphNode) -> bool:
+    """True if ``node`` delegates implementation via at least one INTEGRATES edge.
+
+    This is the binary "implemented-via-integration / not-a-gap" predicate used by
+    coverage surfaces (summary classification, gaps exclusion, health) so an
+    integrating consumer requirement is not reported as an uncovered gap
+    (REQ-d00252-F). It is intentionally cheap -- the federation rollup ratios come
+    from :func:`integrates_by_associate` / :func:`integrates_total`.
+    """
+    from elspais.graph.relations import EdgeKind
+
+    return any(e.kind == EdgeKind.INTEGRATES for e in node.iter_outgoing_edges())
+
+
+# Implements: REQ-d00252
 def integrates_rollup(node: GraphNode) -> IntegratesRollup:
     """Inherit implemented/verified status from library nodes via INTEGRATES.
 
@@ -585,6 +600,7 @@ __all__ = [
     "RollupMetrics",
     "SatisfierRollup",
     "direct_coverage_for",
+    "has_integration",
     "inherited_coverage_for",
     "integrates_by_associate",
     "integrates_rollup",

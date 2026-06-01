@@ -33,6 +33,9 @@ class GapData:
     unvalidated: list[GapEntry] = field(default_factory=list)
     failing: list[tuple[str, str, str]] = field(default_factory=list)  # (req_id, title, source)
     no_assertions: list[GapEntry] = field(default_factory=list)
+    # REQ-d00252-F: requirements covered via an external associate (INTEGRATES),
+    # grouped by owning associate name -> sorted list of consumer requirement IDs.
+    integrated: dict[str, list[str]] = field(default_factory=dict)
 
 
 def _reqs_with_code_refs(graph: FederatedGraph, excluded_ids: set[str]) -> set[str]:
@@ -50,6 +53,29 @@ def _reqs_with_code_refs(graph: FederatedGraph, excluded_ids: set[str]) -> set[s
                     ):
                         covered.add(grandparent.id)
     return covered
+
+
+# Implements: REQ-d00252
+def _integrates_associates(graph: FederatedGraph, node: Any) -> list[str]:
+    """Return sorted owning-associate names for a requirement's INTEGRATES targets.
+
+    Empty if the requirement has no INTEGRATES edges. Guards the ownership lookup
+    (``repo_for`` raises KeyError if a target is unowned) so an unresolved target
+    does not crash gap collection (REQ-d00252-F).
+    """
+    owners: set[str] = set()
+    for edge in node.iter_outgoing_edges():
+        if edge.kind != EdgeKind.INTEGRATES:
+            continue
+        target = edge.target
+        owner: str | None
+        try:
+            owner = graph.repo_for(target.id).name
+        except (KeyError, AttributeError):
+            owner = getattr(graph, "_ownership", {}).get(target.id)
+        if owner is not None:
+            owners.add(owner)
+    return sorted(owners)
 
 
 def collect_gaps(graph: FederatedGraph, exclude_status: set[str]) -> GapData:
@@ -86,8 +112,15 @@ def collect_gaps(graph: FederatedGraph, exclude_status: set[str]) -> GapData:
             if child.kind == NodeKind.ASSERTION
         ]
 
+        # REQ-d00252-F: a requirement that delegates implementation to a library
+        # via INTEGRATES is covered through that associate -- it must NOT be
+        # reported as an uncovered gap. Record it under its owning associate(s).
+        integrating = _integrates_associates(graph, node)
+        if integrating:
+            for assoc in integrating:
+                data.integrated.setdefault(assoc, []).append(req_id)
         # Uncovered: no code references
-        if req_id not in code_covered:
+        elif req_id not in code_covered:
             data.uncovered.append(GapEntry(req_id, title))
         elif metrics is not None and metrics.implemented.indirect < metrics.implemented.total:
             # Partially covered: find which assertions lack coverage
@@ -201,6 +234,34 @@ def render_gap_text(gap_type: str, data: GapData) -> str:
     return "\n".join(lines)
 
 
+def render_integrated_text(data: GapData) -> str:
+    """Render the 'Covered via external associate' segment as plain text.
+
+    Returns an empty string when no requirement integrates an associate, so the
+    segment only appears when relevant (REQ-d00252-F).
+    """
+    if not data.integrated:
+        return ""
+    lines = ["\nCovered via external associate:"]
+    for assoc in sorted(data.integrated):
+        req_ids = ", ".join(sorted(data.integrated[assoc]))
+        lines.append(f"  {assoc}:  {req_ids}")
+    return "\n".join(lines)
+
+
+def render_integrated_markdown(data: GapData) -> str:
+    """Render the 'Covered via external associate' segment as markdown."""
+    if not data.integrated:
+        return ""
+    lines = ["## Covered via external associate", ""]
+    lines.append("| Associate | Requirements |")
+    lines.append("|-----------|--------------|")
+    for assoc in sorted(data.integrated):
+        req_ids = ", ".join(sorted(data.integrated[assoc]))
+        lines.append(f"| {assoc} | {req_ids} |")
+    return "\n".join(lines)
+
+
 def render_gap_markdown(gap_type: str, data: GapData) -> str:
     """Render a single gap section as markdown."""
     label = _LABELS[gap_type]
@@ -251,6 +312,8 @@ def render_section(
 
     fmt = getattr(args, "format", "text")
 
+    show_integrated = "uncovered" in gap_types
+
     if fmt == "json":
         result: dict[str, Any] = {}
         for gt in gap_types:
@@ -259,15 +322,24 @@ def render_section(
                 result[gt] = [list(item) for item in items]
             else:
                 result[gt] = [_gap_entry_to_list(entry) for entry in items]
+        if show_integrated and data.integrated:
+            result["integrated"] = {k: sorted(v) for k, v in data.integrated.items()}
         return json.dumps(result, indent=2), 0
 
     if fmt == "markdown":
         sections = [render_gap_markdown(gt, data) for gt in gap_types]
+        if show_integrated:
+            seg = render_integrated_markdown(data)
+            if seg:
+                sections.append(seg)
         return "\n\n".join(sections), 0
 
     # Default: text
     sections = [render_gap_text(gt, data) for gt in gap_types]
-    return "\n\n".join(sections), 0
+    text = "\n\n".join(sections)
+    if show_integrated:
+        text += render_integrated_text(data)
+    return text, 0
 
 
 # =============================================================================
@@ -301,6 +373,9 @@ def _gap_data_from_dict(data: dict[str, Any]) -> GapData:
             getattr(gd, gt).append(GapEntry(item[0], item[1], assertions))
     for item in data.get("failing", []):
         gd.failing.append(tuple(item))  # type: ignore[arg-type]
+    integrated = data.get("integrated", {})
+    if isinstance(integrated, dict):
+        gd.integrated = {k: list(v) for k, v in integrated.items()}
     return gd
 
 
@@ -328,6 +403,8 @@ def compute_gaps(graph: FederatedGraph, config: dict, params: dict[str, str]) ->
             return [list(item) for item in items]
         return [_gap_entry_to_list(entry) for entry in items]
 
+    integrated = {k: sorted(v) for k, v in data.integrated.items()}
+
     gap_type = params.get("type", None)
     if gap_type and gap_type in (
         "uncovered",
@@ -336,11 +413,16 @@ def compute_gaps(graph: FederatedGraph, config: dict, params: dict[str, str]) ->
         "failing",
         "no_assertions",
     ):
-        return {gap_type: _serialize_gap_list(gap_type)}
+        out = {gap_type: _serialize_gap_list(gap_type)}
+        if gap_type == "uncovered" and integrated:
+            out["integrated"] = integrated  # type: ignore[assignment]
+        return out
 
     result: dict[str, Any] = {}
     for gt in ("uncovered", "untested", "unvalidated", "failing", "no_assertions"):
         result[gt] = _serialize_gap_list(gt)
+    if integrated:
+        result["integrated"] = integrated
     return result
 
 
@@ -375,12 +457,19 @@ def run(args: argparse.Namespace) -> int:
     else:
         gap_data = _gap_data_from_dict(data)
         types_to_render = gap_types or _ALL_GAP_TYPES
+        show_integrated = "uncovered" in types_to_render
         if fmt == "markdown":
             sections = [render_gap_markdown(gt, gap_data) for gt in types_to_render]
+            if show_integrated:
+                seg = render_integrated_markdown(gap_data)
+                if seg:
+                    sections.append(seg)
             output = "\n\n".join(sections)
         else:
             sections = [render_gap_text(gt, gap_data) for gt in types_to_render]
             output = "\n\n".join(sections)
+            if show_integrated:
+                output += render_integrated_text(gap_data)
 
     output_file = getattr(args, "output", None)
     if output_file:
