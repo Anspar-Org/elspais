@@ -517,6 +517,7 @@ def _parse_hierarchy_rules(hierarchy: dict[str, Any]) -> dict[str, list[str]]:
 def check_spec_hierarchy_levels(graph: FederatedGraph, config: dict[str, Any]) -> HealthCheck:
     """Check that hierarchy levels follow configured rules."""
     from elspais.graph import NodeKind
+    from elspais.graph.relations import EdgeKind
 
     typed_config = _validate_config(config)
     levels = typed_config.levels
@@ -536,7 +537,20 @@ def check_spec_hierarchy_levels(graph: FederatedGraph, config: dict[str, Any]) -
 
         allowed_parents = allowed_parents_map.get(node_level, [])
 
-        for parent in node.iter_parents():
+        seen_parents: set[str] = set()
+        for edge in node.iter_incoming_edges():
+            # INTEGRATES is a cross-repo integration edge (consumer -> library),
+            # not a level-hierarchy relationship: the library requirement lives
+            # in a separate repo's hierarchy and may sit at any level, so a
+            # low-level consumer integrating a higher-level library requirement
+            # is legitimate, not a deviation. Excluding it keeps the level check
+            # from flagging a spurious deviation on the library node. (REQ-d00252-D)
+            if edge.kind == EdgeKind.INTEGRATES:
+                continue
+            parent = edge.source
+            if parent.id in seen_parents:
+                continue
+            seen_parents.add(parent.id)
             if parent.kind != NodeKind.REQUIREMENT:
                 continue
             parent_level = parent.level.lower() if parent.level else None

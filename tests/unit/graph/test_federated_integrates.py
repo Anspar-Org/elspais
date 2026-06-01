@@ -11,6 +11,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+from elspais.commands.health import check_spec_hierarchy_levels
 from elspais.config import get_config
 from elspais.graph.factory import build_graph
 from elspais.graph.metrics import direct_coverage_for
@@ -18,6 +19,34 @@ from elspais.graph.relations import EdgeKind
 from elspais.graph.render import render_node
 
 FIX = Path(__file__).parents[2] / "fixtures" / "e2e-integrates"
+
+# A levels block shared by the inline federation repos below. The consumer
+# (dev) and library (prd) deliberately sit at DIFFERENT levels so an
+# INTEGRATES edge, if treated as a hierarchy parent, would look like a
+# cross-level deviation.
+_LEVELS_TOML = """\
+[levels.prd]
+rank = 1
+letter = "p"
+implements = ["prd"]
+[levels.dev]
+rank = 3
+letter = "d"
+implements = ["dev", "prd"]
+[scanning.spec]
+directories = ["spec"]
+[scanning.code]
+directories = []
+[scanning.test]
+enabled = false
+directories = []
+"""
+
+
+def _write(path: Path, text: str) -> None:
+    """Write ``text`` to ``path``, creating parent directories."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
 
 
 def _federate(app_root: Path):
@@ -136,3 +165,115 @@ class TestIntegratesSameRepo:
         brs = fed._repos["app"].graph._broken_references
         matches = [b for b in brs if b.target_id == "APP-d00002"]
         assert len(matches) == 1
+
+
+class TestIntegratesHierarchyLevels:
+    """Validates REQ-d00252-D: the cross-repo INTEGRATES edge is an
+    integration link, not a level-hierarchy relationship, so it must be
+    excluded from the spec hierarchy-level check. A low-level consumer that
+    ``Integrates:`` a higher-level library requirement must NOT produce a
+    false-positive hierarchy-level deviation on the library node."""
+
+    def _build_cross_level_federation(self, tmp_path: Path):
+        """Inline federation where a DEV consumer integrates a PRD library
+        requirement (cross-level). Returns the FederatedGraph."""
+        library = tmp_path / "library"
+        app = tmp_path / "app"
+
+        _write(
+            library / ".elspais.toml",
+            'version = 3\n[project]\nname = "library"\nnamespace = "LIB"\n' + _LEVELS_TOML,
+        )
+        _write(
+            library / "spec" / "prd.md",
+            "# LIB-p00001: Event Log\n\n"
+            "**Level**: prd | **Status**: Active | **Implements**: -\n\n"
+            "A. SHALL append.\n\n"
+            "*End* *Event Log*\n",
+        )
+
+        _write(
+            app / ".elspais.toml",
+            'version = 3\n[project]\nname = "app"\nnamespace = "APP"\n'
+            + _LEVELS_TOML
+            + '[associates.library]\npath = "../library"\nnamespace = "LIB"\n',
+        )
+        _write(
+            app / "spec" / "dev.md",
+            "# APP-d00001: Consumer log\n\n"
+            "**Level**: dev | **Status**: Active | **Implements**: -\n"
+            "**Integrates**: LIB-p00001\n\n"
+            "A. SHALL use the library log.\n\n"
+            "*End* *Consumer log*\n",
+        )
+
+        return build_graph(
+            config=get_config(None, app),
+            repo_root=app,
+            scan_code=False,
+            scan_tests=False,
+        )
+
+    def test_REQ_d00252_D_integrates_edge_excluded_from_hierarchy_levels(self, tmp_path):
+        """The INTEGRATES edge (consumer DEV -> library PRD) must NOT be
+        counted as a hierarchy parent. Fails on the unfixed code because the
+        check iterates all parents and flags LIB-p00001 <- APP-d00001."""
+        fed = self._build_cross_level_federation(tmp_path)
+        lib_entry = fed._repos["library"]
+
+        # Sanity: the cross-repo INTEGRATES edge exists, so the library node
+        # really does have the consumer as an INTEGRATES parent. Without this
+        # the test could pass for the wrong reason (no edge at all).
+        lib_req = lib_entry.graph._index["LIB-p00001"]
+        integ_parents = [e for e in lib_req.iter_incoming_edges() if e.kind == EdgeKind.INTEGRATES]
+        assert len(integ_parents) == 1
+        assert integ_parents[0].source.id == "APP-d00001"
+
+        res = check_spec_hierarchy_levels(lib_entry.graph, lib_entry.config)
+        violations = res.details.get("violations", [])
+        offending = [
+            v for v in violations if v["child"] == "LIB-p00001" and v["parent"] == "APP-d00001"
+        ]
+        assert offending == [], (
+            "INTEGRATES edge wrongly flagged as a hierarchy-level deviation: " f"{offending}"
+        )
+        assert violations == []
+        assert res.message == "All requirements follow hierarchy rules"
+
+    def test_REQ_d00252_D_genuine_level_violation_still_detected(self, tmp_path):
+        """CONTROL: a real same-repo level violation (a PRD requirement that
+        ``Implements:`` a DEV requirement) must STILL be reported. Proves the
+        INTEGRATES exclusion does not gut the check."""
+        repo = tmp_path / "repo"
+        _write(
+            repo / ".elspais.toml",
+            'version = 3\n[project]\nname = "repo"\nnamespace = "REPO"\n' + _LEVELS_TOML,
+        )
+        _write(
+            repo / "spec" / "reqs.md",
+            "# REPO-d00001: Foo\n\n"
+            "**Level**: dev | **Status**: Active | **Implements**: -\n\n"
+            "A. SHALL foo.\n\n"
+            "*End* *Foo*\n\n"
+            "# REPO-p00001: Bar\n\n"
+            "**Level**: prd | **Status**: Active | **Implements**: REPO-d00001\n\n"
+            "A. SHALL bar.\n\n"
+            "*End* *Bar*\n",
+        )
+
+        fed = build_graph(
+            config=get_config(None, repo),
+            repo_root=repo,
+            scan_code=False,
+            scan_tests=False,
+        )
+        entry = fed._repos["repo"]
+
+        res = check_spec_hierarchy_levels(entry.graph, entry.config)
+        violations = res.details.get("violations", [])
+        offending = [
+            v for v in violations if v["child"] == "REPO-p00001" and v["parent"] == "REPO-d00001"
+        ]
+        assert (
+            len(offending) == 1
+        ), f"genuine same-repo level violation not detected; violations={violations}"
