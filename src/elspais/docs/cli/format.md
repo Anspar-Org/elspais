@@ -48,6 +48,15 @@ B. The system SHALL NOT do something prohibited.
                   cloned as instance nodes under the declaring requirement.
                   Use "REQ-xxx-Y SHALL be NOT APPLICABLE" to exclude
                   template assertions from coverage.
+  **Integrates**: External-library requirement ID this requirement's
+                  implementation is provided by. Authored only on the
+                  consumer side; the library is never modified and contains
+                  no reference back. The target must resolve to a configured
+                  associate (external library) repo -- a same-repo target is
+                  an error. During federation an INTEGRATES edge wires this
+                  requirement to the library requirement, so it counts as
+                  implemented and inherits the library requirement's
+                  implemented/verified coverage. Example: REQ-evs-0007
 
 ## Hash
 

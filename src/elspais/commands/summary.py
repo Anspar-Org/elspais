@@ -21,7 +21,12 @@ if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
 
 from elspais.graph import NodeKind
-from elspais.graph.metrics import RollupMetrics
+from elspais.graph.metrics import (
+    RollupMetrics,
+    has_integration,
+    integrates_by_associate,
+    integrates_total,
+)
 
 
 # Implements: REQ-d00085-A
@@ -145,7 +150,10 @@ def _collect_coverage(graph: FederatedGraph, config: dict | None = None) -> dict
                 validated = rollup.tested.direct
                 passing = rollup.verified.direct
 
-            if implemented > 0:
+            # REQ-d00252-F: a requirement that delegates implementation via
+            # INTEGRATES counts as implemented in the main coverage classification
+            # (it inherits the library node's coverage and is not a phantom gap).
+            if implemented > 0 or has_integration(node):
                 level_totals["with_code_refs"] += 1
             if validated > 0:
                 level_totals["with_test_refs"] += 1
@@ -158,9 +166,36 @@ def _collect_coverage(graph: FederatedGraph, config: dict | None = None) -> dict
 
         levels.append(level_totals)
 
+    # REQ-d00252-F: per-associate Integrates rollup + federation total.
+    integration_rows = integrates_by_associate(graph)
+    integrations: list[dict] = [
+        {
+            "associate": row.associate,
+            "requirement_count": row.requirement_count,
+            "implemented_covered": row.implemented_covered,
+            "implemented_total": row.implemented_total,
+            "verified_covered": row.verified_covered,
+            "verified_total": row.verified_total,
+        }
+        for row in integration_rows
+    ]
+    integration_total: dict | None = None
+    if integration_rows:
+        tot = integrates_total(integration_rows)
+        integration_total = {
+            "associate": tot.associate,
+            "requirement_count": tot.requirement_count,
+            "implemented_covered": tot.implemented_covered,
+            "implemented_total": tot.implemented_total,
+            "verified_covered": tot.verified_covered,
+            "verified_total": tot.verified_total,
+        }
+
     return {
         "levels": levels,
         "excluded": excluded_counts,
+        "integrations": integrations,
+        "integration_total": integration_total,
     }
 
 
@@ -214,6 +249,28 @@ def _render_text(data: dict) -> str:
         parts = [f"{v} {k}" for k, v in sorted(excluded.items())]
         lines.append(f"  ({', '.join(parts)} not included in coverage)")
 
+    # REQ-d00252-F: External integrations grouped by owning associate.
+    integrations = data.get("integrations") or []
+    if integrations:
+        lines.append("")
+        lines.append("External integrations (by associate)")
+        lines.append(f"  {'associate':<18} {'reqs':>5}   {'implemented':>11}   {'verified':>8}")
+        for row in integrations:
+            impl = f"{row['implemented_covered']}/{row['implemented_total']}"
+            ver = f"{row['verified_covered']}/{row['verified_total']}"
+            lines.append(
+                f"  {row['associate']:<18} {row['requirement_count']:>5}"
+                f"   {impl:>11}   {ver:>8}"
+            )
+        lines.append("  " + "-" * 46)
+        tot = data.get("integration_total")
+        if tot:
+            impl = f"{tot['implemented_covered']}/{tot['implemented_total']}"
+            ver = f"{tot['verified_covered']}/{tot['verified_total']}"
+            lines.append(
+                f"  {'total':<18} {tot['requirement_count']:>5}" f"   {impl:>11}   {ver:>8}"
+            )
+
     meta = data.get("meta")
     if meta:
         from elspais.utilities.report_meta import format_meta_line
@@ -248,6 +305,24 @@ def _render_markdown(data: dict) -> str:
         parts = [f"{v} {k}" for k, v in sorted(excluded.items())]
         lines.append("")
         lines.append(f"*{', '.join(parts)} not included in coverage.*")
+
+    # REQ-d00252-F: External integrations grouped by owning associate.
+    integrations = data.get("integrations") or []
+    if integrations:
+        lines.append("")
+        lines.append("## External integrations (by associate)")
+        lines.append("")
+        lines.append("| Associate | Reqs | Implemented | Verified |")
+        lines.append("|-----------|------|-------------|----------|")
+        for row in integrations:
+            impl = f"{row['implemented_covered']}/{row['implemented_total']}"
+            ver = f"{row['verified_covered']}/{row['verified_total']}"
+            lines.append(f"| {row['associate']} | {row['requirement_count']} | {impl} | {ver} |")
+        tot = data.get("integration_total")
+        if tot:
+            impl = f"{tot['implemented_covered']}/{tot['implemented_total']}"
+            ver = f"{tot['verified_covered']}/{tot['verified_total']}"
+            lines.append(f"| total | {tot['requirement_count']} | {impl} | {ver} |")
 
     meta = data.get("meta")
     if meta:

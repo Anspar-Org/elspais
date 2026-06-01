@@ -139,6 +139,15 @@ long_description = """A 'Satisfies' edge means the requirement declares
 compliance with a template requirement. The template's subtree is cloned
 as instance nodes under the declaring requirement."""
 
+[badges.edge.integrates]
+label = "Integrates"
+description = "Requirement is implemented by an external associate library"
+long_description = """An 'Integrates' edge means this requirement's
+implementation is provided by a requirement in a configured associate
+(external library) repository. The library is never modified; the
+consumer inherits the library requirement's implemented and verified
+coverage."""
+
 [badges.edge.validates]
 label = "Validates"
 description = "User journey validates a requirement"

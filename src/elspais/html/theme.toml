@@ -888,6 +888,9 @@ css_class = "card-parent-kind"
 [badges.edge.satisfies]
 css_class = "card-parent-kind"
 
+[badges.edge.integrates]
+css_class = "card-parent-kind"
+
 [badges.edge.validates]
 css_class = "card-parent-kind"
 

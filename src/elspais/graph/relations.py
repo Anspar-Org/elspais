@@ -56,6 +56,12 @@ class EdgeKind(Enum):
     STRUCTURES = "structures"
     DEFINES = "defines"
     YIELDS = "yields"
+    # Implements: REQ-d00252
+    # Top-down external reference: consumer REQ is implemented by an associate
+    # library node. Distinct from IMPLEMENTS so the library's Implements:
+    # derivation (filtered on EdgeKind.IMPLEMENTS) never renders a consumer ID
+    # into the library file.
+    INTEGRATES = "integrates"
 
     # Implements: REQ-p00050-D
     def contributes_to_coverage(self) -> bool:
@@ -65,7 +71,12 @@ class EdgeKind(Enum):
             True if edges of this type should be included in coverage
             calculations, False otherwise.
         """
-        return self in (EdgeKind.IMPLEMENTS, EdgeKind.VERIFIES, EdgeKind.VALIDATES)
+        return self in (
+            EdgeKind.IMPLEMENTS,
+            EdgeKind.VERIFIES,
+            EdgeKind.VALIDATES,
+            EdgeKind.INTEGRATES,
+        )
 
 
 # Implements: REQ-p00050-A

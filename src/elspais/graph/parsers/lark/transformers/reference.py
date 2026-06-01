@@ -138,6 +138,10 @@ class ReferenceTransformer:
                     # Skip keywords invalid for this file type (silently —
                     # test fixtures legitimately contain cross-type keywords
                     # in string literals that the grammar also matches)
+                    # Implements: REQ-d00252 -- Integrates is spec-file only;
+                    # it must never create a traceability edge in code/test.
+                    if keyword == "integrates":
+                        continue
                     if self.content_type == "code_ref" and keyword == "refines":
                         continue
                     if self.content_type == "test_ref" and keyword != "verifies":
@@ -299,6 +303,9 @@ class ReferenceTransformer:
         keyword = self._detect_keyword(text)
 
         if self.content_type == "code_ref":
+            # Implements: REQ-d00252 -- Integrates is spec-file only.
+            if keyword == "integrates":
+                return None  # Integrates is valid only in spec files
             if keyword == "refines":
                 return None  # Refines is requirement-to-requirement only
             parsed_data: dict[str, Any] = {
@@ -412,8 +419,9 @@ class ReferenceTransformer:
         """Detect which reference keyword is used in *text*.
 
         Returns:
-            ``"implements"``, ``"verifies"``, or ``"refines"``.
-            Falls back to ``"implements"`` if no keyword is found.
+            ``"implements"``, ``"verifies"``, ``"refines"``, or
+            ``"integrates"``. Falls back to ``"implements"`` if no keyword
+            is found.
         """
         m = _KEYWORD_RE.search(text)
         if m:

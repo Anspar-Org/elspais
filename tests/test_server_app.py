@@ -2933,3 +2933,23 @@ class TestMoveToNewFile:
         assert resp.status_code == 200, resp.json()
         data = resp.json()
         assert data["success"] is True
+
+
+class TestComputeLinkDataIntegrates:
+    """Validates REQ-d00252-D: the trace-review link computation surfaces an
+    outgoing INTEGRATES edge as implementation evidence on the consumer REQ
+    (the declaring requirement counts as implemented)."""
+
+    def test_REQ_d00252_D_integrates_edge_marks_consumer_implemented(self) -> None:
+        """A consumer REQ with an outgoing INTEGRATES edge to a library REQ
+        lists that library node under the 'implemented' header links."""
+        from elspais.server.routes_api import _compute_link_data
+
+        consumer = GraphNode(id="APP-d00001", kind=NodeKind.REQUIREMENT, label="Consumer")
+        library = GraphNode(id="LIB-d00001", kind=NodeKind.REQUIREMENT, label="Library")
+        consumer.link(library, EdgeKind.INTEGRATES)
+
+        _a_links, r_links = _compute_link_data(consumer)
+
+        implemented_ids = {entry["id"] for entry in r_links["implemented"]}
+        assert "LIB-d00001" in implemented_ids

@@ -232,6 +232,8 @@ class FederatedGraph:
             self._wire_cross_graph_edges()
         # Implements: REQ-p00014-H
         self._instantiate_cross_repo_satisfies()
+        # Implements: REQ-d00252
+        self._wire_integrates_edges()
         # Implements: REQ-p00014-J
         self._detect_satisfies_cycles()
         self._annotate_presumed_foreign_refs()
@@ -1522,6 +1524,143 @@ class FederatedGraph:
             for idx in reversed(resolved_indices):
                 source_entry.graph._broken_references.pop(idx)
 
+    # Implements: REQ-d00252
+    def _wire_integrates_edges(self) -> None:
+        """Wire top-down ``Integrates:`` refs into reverse INTEGRATES edges.
+
+        For each REQUIREMENT carrying ``integrates_refs``, resolve the target
+        to its owning associate and wire a cross-graph INTEGRATES edge so the
+        declaring (consumer) requirement becomes the PARENT and the library
+        node the CHILD — the consumer thus counts as implemented while the
+        library's own source files stay untouched (REQ-d00252-D).
+
+        External-only enforcement: if the target resolves to the SAME repo as
+        the declaring requirement, record a broken reference instead
+        (REQ-d00252-C). If the target can't be resolved, record a hard broken
+        reference when a configured associate claims the target's ID format but
+        lacks the ID, or a soft ``presumed_foreign`` broken reference when no
+        associate claims the format (REQ-d00252-E).
+
+        Runs unconditionally (even single-repo), so an unresolved Integrates in
+        a one-repo build still surfaces a presumed-foreign broken reference.
+        """
+        from elspais.graph.GraphNode import NodeKind
+
+        for source_entry in self._repos.values():
+            if source_entry.graph is None:
+                continue
+            for req in list(source_entry.graph.iter_by_kind(NodeKind.REQUIREMENT)):
+                for raw in req.get_field("integrates_refs") or []:
+                    self._wire_one_integrates(source_entry, req.id, raw)
+
+    # Implements: REQ-d00252
+    @staticmethod
+    def _integrates_candidates(target_id: str):
+        """Yield the target id as written, then a base id with one trailing
+        ``-<segment>`` stripped (v1 whole-REQ: a library-side assertion suffix
+        like ``LIB-d00007-A`` resolves to its base REQ ``LIB-d00007``)."""
+        yield target_id
+        base, sep, _suffix = target_id.rpartition("-")
+        if sep and base:
+            yield base
+
+    # Implements: REQ-d00252
+    def _resolves_to_requirement(self, owner: str, canonical: str) -> bool:
+        """True if ``canonical`` names a REQUIREMENT node in ``owner``'s graph.
+
+        v1 is whole-REQ, so a candidate that resolves to an ASSERTION (e.g. the
+        library-side suffix ``LIB-d00007-A``) is rejected here, letting the base
+        id be tried next.
+        """
+        from elspais.graph.GraphNode import NodeKind
+
+        entry = self._repos.get(owner)
+        if entry is None or entry.graph is None:
+            return False
+        node = entry.graph._index.get(canonical)
+        return node is not None and node.kind == NodeKind.REQUIREMENT
+
+    # Implements: REQ-d00252
+    def _resolve_integrates_target(self, target_id: str):
+        """Resolve an Integrates target to ``(owner_repo_name, canonical_id)``.
+
+        Tries the id as written, then the assertion-suffix-stripped base id, and
+        only accepts a candidate that resolves to a whole REQUIREMENT node.
+        Returns ``(None, target_id)`` if neither resolves.
+        """
+        for candidate in self._integrates_candidates(target_id):
+            owner = self._ownership.get(candidate)
+            if owner is not None and self._resolves_to_requirement(owner, candidate):
+                return owner, candidate
+            claim = self._claim_for(candidate)
+            if claim is not None and self._resolves_to_requirement(*claim):
+                return claim  # (repo_name, canonical_id)
+        return None, target_id
+
+    # Implements: REQ-d00252
+    def _wire_one_integrates(
+        self,
+        source_entry: RepoEntry,
+        source_id: str,
+        target_id: str,
+    ) -> None:
+        """Resolve and wire one ``Integrates:`` target (helper for above)."""
+        owner, canonical = self._resolve_integrates_target(target_id)
+
+        # Resolved to a foreign associate: wire the reverse INTEGRATES edge.
+        # consumer (source_id) = PARENT, library node (canonical) = CHILD.
+        if owner is not None and owner != source_entry.name:
+            target_entry = self._repos[owner]
+            if target_entry.graph is not None and canonical in target_entry.graph._index:
+                target_entry.graph.add_edge(
+                    canonical,  # source_id (child, local to library graph)
+                    source_id,  # target_id (parent, resolved in consumer graph)
+                    EdgeKind.INTEGRATES,
+                    target_graph=source_entry.graph,
+                )
+                return
+
+        # Same-repo target: external-only violation (REQ-d00252-C).
+        if owner == source_entry.name:
+            source_entry.graph._broken_references.append(
+                BrokenReference(
+                    source_id=source_id,
+                    target_id=target_id,
+                    edge_kind=EdgeKind.INTEGRATES.value,
+                    diagnostic=(
+                        f"{source_id} integrates {target_id}, but {target_id} is in the "
+                        f"same repository; Integrates must target an external associate."
+                    ),
+                )
+            )
+            return
+
+        # Unresolved: hard if a configured associate claims the ID format but
+        # lacks the ID, soft presumed-foreign otherwise (REQ-d00252-E).
+        claimed = False
+        for entry in self._repos.values():
+            if entry.graph is None or entry.name == source_entry.name:
+                continue
+            resolver = self._resolver_for(entry)
+            if resolver is not None and resolver.is_local_id(target_id):
+                claimed = True
+                break
+        source_entry.graph._broken_references.append(
+            BrokenReference(
+                source_id=source_id,
+                target_id=target_id,
+                edge_kind=EdgeKind.INTEGRATES.value,
+                presumed_foreign=not claimed,
+                diagnostic=(
+                    f"{source_id} integrates {target_id}: a configured associate "
+                    f"claims this ID format but is missing the ID."
+                    if claimed
+                    else f"{source_id} integrates {target_id}: no configured associate "
+                    f"claims this ID."
+                ),
+            )
+        )
+
     # Implements: REQ-p00014-J
     def _detect_satisfies_cycles(self) -> None:
         """Detect Satisfies cycles via DFS over SATISFIES + INSTANCE edges.
@@ -1605,6 +1744,11 @@ class FederatedGraph:
         BrokenReference with presumed_foreign=True.
 
         Skipped for repos with no config (annotation requires pattern knowledge).
+
+        Refs that already carry a ``diagnostic`` are left untouched: an earlier
+        federation pass (e.g. cross-repo Satisfies, or Integrates resolution in
+        ``_wire_integrates_edges``) made a deliberate hard/soft determination
+        that this generic pattern check must not silently override.
         """
         for source_entry in self._repos.values():
             if source_entry.graph is None:
@@ -1614,6 +1758,8 @@ class FederatedGraph:
                 continue
             refs = source_entry.graph._broken_references
             for i, br in enumerate(refs):
+                if br.diagnostic:
+                    continue
                 if not br.presumed_foreign and not resolver.is_local_id(br.target_id):
                     refs[i] = BrokenReference(
                         source_id=br.source_id,

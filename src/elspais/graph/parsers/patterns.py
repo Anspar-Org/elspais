@@ -43,7 +43,9 @@ VALIDATES_PATTERN = re.compile(r"^Validates:[ \t]*(?P<validates>.+?)$", re.MULTI
 #
 # Covers all five documented keywords. Previous inlined regexes missed
 # `validates` and `satisfies` -- this is the canonical form.
-KEYWORD_PATTERN = re.compile(r"(?:implements|verifies|refines|validates|satisfies)", re.IGNORECASE)
+KEYWORD_PATTERN = re.compile(
+    r"(?:implements|verifies|refines|validates|satisfies|integrates)", re.IGNORECASE
+)
 
 # --- Changelog section header --------------------------------------------- #
 #

@@ -433,13 +433,179 @@ def satisfier_rollup(node: GraphNode) -> SatisfierRollup:
     return SatisfierRollup(covered=covered, total=total)
 
 
+@dataclass(frozen=True)
+class IntegratesRollup:
+    """Coverage/verification a consumer REQ inherits across INTEGRATES edges.
+
+    Derived live by reading each library child's own persisted RollupMetrics.
+    Nothing is persisted on the consumer node -- the INTEGRATES edge is the
+    provenance (REQ-d00252-D).
+    """
+
+    implemented_covered: int
+    implemented_total: int
+    verified_covered: int
+    verified_total: int
+
+    @property
+    def has_integrations(self) -> bool:
+        return self.implemented_total > 0
+
+
+# Implements: REQ-d00252
+def has_integration(node: GraphNode) -> bool:
+    """True if ``node`` delegates implementation via at least one INTEGRATES edge.
+
+    This is the binary "implemented-via-integration / not-a-gap" predicate used by
+    coverage surfaces (summary classification, gaps exclusion, health) so an
+    integrating consumer requirement is not reported as an uncovered gap
+    (REQ-d00252-F). It is intentionally cheap -- the federation rollup ratios come
+    from :func:`integrates_by_associate` / :func:`integrates_total`.
+    """
+    from elspais.graph.relations import EdgeKind
+
+    return any(e.kind == EdgeKind.INTEGRATES for e in node.iter_outgoing_edges())
+
+
+# Implements: REQ-d00252
+def integrates_rollup(node: GraphNode) -> IntegratesRollup:
+    """Inherit implemented/verified status from library nodes via INTEGRATES.
+
+    For each outgoing INTEGRATES edge (consumer REQ -> library node), read the
+    library node's finalized ``rollup_metrics`` (computed in its own repo) and
+    fold its implemented and verified dimensions in. A consumer REQ with no
+    INTEGRATES edges yields all zeros.
+    """
+    from elspais.graph.relations import EdgeKind
+
+    impl_c = impl_t = ver_c = ver_t = 0
+    for edge in node.iter_outgoing_edges():
+        if edge.kind != EdgeKind.INTEGRATES:
+            continue
+        metrics = edge.target.get_metric("rollup_metrics")
+        if metrics is None:
+            continue
+        impl_c += metrics.implemented.indirect
+        impl_t += metrics.implemented.total
+        ver_c += metrics.verified.indirect
+        ver_t += metrics.verified.total
+    return IntegratesRollup(
+        implemented_covered=impl_c,
+        implemented_total=impl_t,
+        verified_covered=ver_c,
+        verified_total=ver_t,
+    )
+
+
+@dataclass(frozen=True)
+class AssociateIntegration:
+    """Per-associate rollup of requirements integrating that associate."""
+
+    associate: str  # owning associate repo name
+    requirement_count: int  # distinct consumer requirements integrating it
+    implemented_covered: int
+    implemented_total: int
+    verified_covered: int
+    verified_total: int
+
+
+# Implements: REQ-d00252
+def integrates_by_associate(graph) -> list[AssociateIntegration]:
+    """Summarize Integrates inheritance grouped by owning associate (REQ-d00252-F).
+
+    Scans every INTEGRATES edge in the federation (consumer REQ -> library REQ),
+    groups by the owning associate repo of the target library node, and sums the
+    inherited implemented/verified coverage (read live from each target's
+    ``rollup_metrics``). Returns one entry per associate, sorted by associate
+    name. A federation total is the caller's concern (see
+    :func:`integrates_total`). ``graph`` is a FederatedGraph.
+    """
+    from elspais.graph.GraphNode import NodeKind
+    from elspais.graph.relations import EdgeKind
+
+    # Per-associate accumulators.
+    consumers: dict[str, set[str]] = {}
+    impl_c: dict[str, int] = {}
+    impl_t: dict[str, int] = {}
+    ver_c: dict[str, int] = {}
+    ver_t: dict[str, int] = {}
+
+    for req in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        for edge in req.iter_outgoing_edges():
+            if edge.kind != EdgeKind.INTEGRATES:
+                continue
+            target = edge.target
+            # Resolve the owning associate robustly: prefer repo_for(), fall
+            # back to the ownership map, skip if neither resolves.
+            owner: str | None
+            try:
+                owner = graph.repo_for(target.id).name
+            except KeyError:
+                owner = None  # node not owned by any repo -> skip
+            except AttributeError:
+                owner = getattr(graph, "_ownership", {}).get(target.id)
+            if owner is None:
+                continue
+
+            consumers.setdefault(owner, set()).add(req.id)
+            impl_c.setdefault(owner, 0)
+            impl_t.setdefault(owner, 0)
+            ver_c.setdefault(owner, 0)
+            ver_t.setdefault(owner, 0)
+
+            metrics = target.get_metric("rollup_metrics")
+            if metrics is None:
+                continue
+            impl_c[owner] += metrics.implemented.indirect
+            impl_t[owner] += metrics.implemented.total
+            ver_c[owner] += metrics.verified.indirect
+            ver_t[owner] += metrics.verified.total
+
+    return [
+        AssociateIntegration(
+            associate=name,
+            requirement_count=len(consumers[name]),
+            implemented_covered=impl_c[name],
+            implemented_total=impl_t[name],
+            verified_covered=ver_c[name],
+            verified_total=ver_t[name],
+        )
+        for name in sorted(consumers)
+    ]
+
+
+# Implements: REQ-d00252
+def integrates_total(items: list[AssociateIntegration]) -> AssociateIntegration:
+    """Aggregate per-associate integration rows into a federation total.
+
+    Returns an :class:`AssociateIntegration` with ``associate="total"`` whose
+    fields are the field-wise sums of ``items`` (REQ-d00252-F federation total).
+    ``requirement_count`` sums the per-associate distinct-consumer counts, so a
+    consumer integrating two associates contributes to both.
+    """
+    return AssociateIntegration(
+        associate="total",
+        requirement_count=sum(i.requirement_count for i in items),
+        implemented_covered=sum(i.implemented_covered for i in items),
+        implemented_total=sum(i.implemented_total for i in items),
+        verified_covered=sum(i.verified_covered for i in items),
+        verified_total=sum(i.verified_total for i in items),
+    )
+
+
 __all__ = [
+    "AssociateIntegration",
     "CoverageDimension",
     "CoverageSource",
     "CoverageContribution",
+    "IntegratesRollup",
     "RollupMetrics",
     "SatisfierRollup",
     "direct_coverage_for",
+    "has_integration",
     "inherited_coverage_for",
+    "integrates_by_associate",
+    "integrates_rollup",
+    "integrates_total",
     "satisfier_rollup",
 ]

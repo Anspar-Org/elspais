@@ -241,6 +241,14 @@ dir = ""
 # satisfier of the template via the INSTANCE edges, so coverage flows
 # automatically without per-instance re-implementation. See
 # `elspais docs satisfies` for the full pattern and validation matrix.
+#
+# Associates also enable top-down `Integrates: <ASSOCIATE-REQ>` references:
+# a consumer requirement declares that its implementation is provided by a
+# requirement in a linked library. It is external-only (the target must
+# resolve to an associate; a same-repo target is a broken reference), the
+# library is never modified, and the consumer inherits the library
+# requirement's implemented/verified coverage via an INTEGRATES edge wired
+# during federation. See `elspais docs graph-model`.
 #──────────────────────────────────────────────────────────────────────────────
 
 [associates.callisto]

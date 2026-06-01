@@ -27,6 +27,8 @@ TRACEABILITY_EDGE_KINDS: frozenset[EdgeKind] = frozenset(
         EdgeKind.INSTANCE,
         EdgeKind.DEFINES,
         EdgeKind.YIELDS,
+        # Implements: REQ-d00252
+        EdgeKind.INTEGRATES,
     }
 )
 

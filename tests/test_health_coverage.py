@@ -523,3 +523,45 @@ class TestRunUatChecks:
         coverage_check = next(c for c in checks if c.name == "uat.uat_coverage")
         assert coverage_check.details["total_requirements"] == 1
         assert coverage_check.details["reqs_with_any_coverage"] == 1
+
+
+# =============================================================================
+# REQ-d00252-D/F: Integrates crediting in coverage health
+# =============================================================================
+
+_INTEGRATES_FIX = Path(__file__).parent / "fixtures" / "e2e-integrates"
+
+
+def _federate_integrates(tmp_path):
+    """Federate the e2e-integrates fixture (APP-d00001 integrates LIB-d00007)."""
+    import shutil
+
+    from elspais.config import get_config
+    from elspais.graph.factory import build_graph
+
+    dest = tmp_path / "proj"
+    shutil.copytree(_INTEGRATES_FIX, dest)
+    return build_graph(
+        config=get_config(None, dest / "app"),
+        repo_root=dest / "app",
+        scan_code=False,
+        scan_tests=False,
+    )
+
+
+class TestCheckCoverageIntegrates:
+    """Validates REQ-d00252-D, REQ-d00252-F: a requirement that delegates
+    implementation via INTEGRATES counts as implemented in the coverage health
+    check, so it is not a phantom coverage gap."""
+
+    def test_REQ_d00252_D_integrating_req_counts_implemented(self, tmp_path):
+        """The 'code.implemented' coverage check credits APP-d00001 (which has
+        no local code refs but integrates a library REQ) as covered."""
+        from elspais.commands.health import check_code_coverage
+
+        fed = _federate_integrates(tmp_path)
+        check = check_code_coverage(fed, exclude_status=set())
+        # The federation's only consumer REQ (APP-d00001) integrates a library
+        # REQ; it must be counted among requirements with coverage.
+        assert check.details["reqs_with_any_coverage"] >= 1
+        assert check.details["reqs_with_direct_coverage"] >= 1

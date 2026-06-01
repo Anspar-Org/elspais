@@ -148,6 +148,8 @@ class RequirementTransformer:
         implements: list[str] = []
         refines: list[str] = []
         satisfies: list[str] = []
+        # Implements: REQ-d00252
+        integrates: list[str] = []
         assertions: list[dict[str, Any]] = []
         sections: list[dict[str, Any]] = []
         changelog: list[dict[str, str]] = []
@@ -193,6 +195,14 @@ class RequirementTransformer:
                         if ref not in satisfies:
                             satisfies.append(ref)
                     if len(satisfies) < old_len + len(meta["satisfies"]):
+                        has_redundant_refs = True
+                # Implements: REQ-d00252
+                if meta.get("integrates"):
+                    old_len = len(integrates)
+                    for ref in meta["integrates"]:
+                        if ref not in integrates:
+                            integrates.append(ref)
+                    if len(integrates) < old_len + len(meta["integrates"]):
                         has_redundant_refs = True
                 # Implements: REQ-p00014-E
                 if meta.get("template"):
@@ -267,6 +277,8 @@ class RequirementTransformer:
             "implements": implements,
             "refines": refines,
             "satisfies": satisfies,
+            # Implements: REQ-d00252
+            "integrates": integrates,
             # Implements: REQ-p00014-E
             "template": is_template,
             "assertions": assertions,
@@ -316,6 +328,9 @@ class RequirementTransformer:
                 # Implements: REQ-p00014-A
                 elif child.type == "SATISFIES_FIELD":
                     result["satisfies"] = self._parse_refs(val)
+                # Implements: REQ-d00252
+                elif child.type == "INTEGRATES_FIELD":
+                    result["integrates"] = self._parse_refs(val)
                 # Implements: REQ-p00014-E
                 elif child.type == "TEMPLATE_FIELD":
                     result["template"] = True
