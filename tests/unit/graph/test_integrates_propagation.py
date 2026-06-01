@@ -1,4 +1,4 @@
-# Implements: REQ-d00252
+# Verifies: REQ-d00252
 """Validates REQ-d00252-D.
 
 A consumer REQ inherits the library REQ's implemented+verified coverage.

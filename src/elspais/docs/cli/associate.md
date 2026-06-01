@@ -96,6 +96,11 @@ modified and contains no reference back, and the consumer inherits the
 library requirement's implemented/verified coverage. See
 `elspais docs graph-model` (INTEGRATES edge) and `elspais docs format`.
 
+In coverage reporting, `elspais summary` shows an "External integrations (by
+associate)" section grouping inherited coverage by the owning associate with a
+federation total, and `elspais gaps` lists integrating requirements under
+"Covered via external associate" rather than reporting them as uncovered.
+
 ## Notes
 
 - Links are stored in `.elspais.local.toml` (gitignored)

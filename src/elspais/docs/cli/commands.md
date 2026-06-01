@@ -187,6 +187,12 @@ Generate coverage summary reports.
 
   `--format {text,markdown,json,csv}`  Output format (default: text)
 
+When `Integrates:` references are present, `summary` adds an "External
+integrations (by associate)" section listing inherited coverage grouped by the
+owning associate with a federation total, and `gaps` lists integrating
+requirements under "Covered via external associate" instead of flagging them as
+uncovered.
+
 ## changed
 
 Detect git changes to spec files.

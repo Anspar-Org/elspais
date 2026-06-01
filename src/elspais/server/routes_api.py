@@ -160,6 +160,12 @@ def _compute_link_data(
             dim = "refined"
         elif edge.kind == EdgeKind.IMPLEMENTS and tk == NodeKind.REQUIREMENT:
             dim = "implemented"
+        elif edge.kind == EdgeKind.INTEGRATES and tk == NodeKind.REQUIREMENT:
+            # The consumer REQ has an OUTGOING INTEGRATES edge to a library
+            # REQ; from the consumer's perspective this is implementation
+            # evidence. (The library intentionally does not enumerate its
+            # consumers, so we do not add the consumer as a parent there.)
+            dim = "implemented"
 
         if dim is None:
             return None

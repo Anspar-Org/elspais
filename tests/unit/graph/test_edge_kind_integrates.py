@@ -1,4 +1,4 @@
-# Implements: REQ-d00252
+# Verifies: REQ-d00252
 """Validates REQ-d00252-D: INTEGRATES is a coverage-contributing traceability edge."""
 from elspais.graph.edge_sets import TRACEABILITY_EDGE_KINDS
 from elspais.graph.relations import EdgeKind

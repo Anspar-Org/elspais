@@ -1,4 +1,4 @@
-# Implements: REQ-d00252
+# Verifies: REQ-d00252
 """Validates REQ-d00252-F.
 
 Coverage reports summarize integrated requirements grouped by the owning

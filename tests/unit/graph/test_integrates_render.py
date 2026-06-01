@@ -1,4 +1,4 @@
-# Implements: REQ-d00252
+# Verifies: REQ-d00252
 """Validates REQ-d00252-A: a requirement's Integrates: line renders from the stored field."""
 import textwrap
 from pathlib import Path

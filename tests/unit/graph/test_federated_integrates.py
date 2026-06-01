@@ -1,4 +1,4 @@
-# Implements: REQ-d00252
+# Verifies: REQ-d00252
 """Tests for cross-graph Integrates: edge wiring during federation.
 
 Validates REQ-d00252-C, REQ-d00252-D, REQ-d00252-E: a consumer requirement
