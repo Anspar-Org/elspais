@@ -433,13 +433,64 @@ def satisfier_rollup(node: GraphNode) -> SatisfierRollup:
     return SatisfierRollup(covered=covered, total=total)
 
 
+@dataclass(frozen=True)
+class IntegratesRollup:
+    """Coverage/verification a consumer REQ inherits across INTEGRATES edges.
+
+    Derived live by reading each library child's own persisted RollupMetrics.
+    Nothing is persisted on the consumer node -- the INTEGRATES edge is the
+    provenance (REQ-d00252-D).
+    """
+
+    implemented_covered: int
+    implemented_total: int
+    verified_covered: int
+    verified_total: int
+
+    @property
+    def has_integrations(self) -> bool:
+        return self.implemented_total > 0
+
+
+# Implements: REQ-d00252
+def integrates_rollup(node: GraphNode) -> IntegratesRollup:
+    """Inherit implemented/verified status from library nodes via INTEGRATES.
+
+    For each outgoing INTEGRATES edge (consumer REQ -> library node), read the
+    library node's finalized ``rollup_metrics`` (computed in its own repo) and
+    fold its implemented and verified dimensions in. A consumer REQ with no
+    INTEGRATES edges yields all zeros.
+    """
+    from elspais.graph.relations import EdgeKind
+
+    impl_c = impl_t = ver_c = ver_t = 0
+    for edge in node.iter_outgoing_edges():
+        if edge.kind != EdgeKind.INTEGRATES:
+            continue
+        metrics = edge.target.get_metric("rollup_metrics")
+        if metrics is None:
+            continue
+        impl_c += metrics.implemented.indirect
+        impl_t += metrics.implemented.total
+        ver_c += metrics.verified.indirect
+        ver_t += metrics.verified.total
+    return IntegratesRollup(
+        implemented_covered=impl_c,
+        implemented_total=impl_t,
+        verified_covered=ver_c,
+        verified_total=ver_t,
+    )
+
+
 __all__ = [
     "CoverageDimension",
     "CoverageSource",
     "CoverageContribution",
+    "IntegratesRollup",
     "RollupMetrics",
     "SatisfierRollup",
     "direct_coverage_for",
     "inherited_coverage_for",
+    "integrates_rollup",
     "satisfier_rollup",
 ]

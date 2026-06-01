@@ -420,6 +420,20 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
                     "total": rollup.total,
                     "covered_fraction": rollup.covered_fraction,
                 }
+        # CUR-1419: consumer REQs declaring `Integrates:` inherit the
+        # library node's implemented/verified coverage across INTEGRATES
+        # edges. Surface the live overlay so viewers can show inherited
+        # status. Skip when there are no integrations to avoid noise.
+        from elspais.graph.metrics import integrates_rollup
+
+        irollup = integrates_rollup(node)
+        if irollup.has_integrations:
+            properties["integrates_rollup"] = {
+                "implemented_covered": irollup.implemented_covered,
+                "implemented_total": irollup.implemented_total,
+                "verified_covered": irollup.verified_covered,
+                "verified_total": irollup.verified_total,
+            }
     elif kind == NodeKind.USER_JOURNEY:
         descriptor = None
         m = JNY_ID_PATTERN.match(node.id)
