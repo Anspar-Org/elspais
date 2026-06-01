@@ -71,7 +71,9 @@ def _integrates_associates(graph: FederatedGraph, node: Any) -> list[str]:
         owner: str | None
         try:
             owner = graph.repo_for(target.id).name
-        except (KeyError, AttributeError):
+        except KeyError:
+            owner = None  # node not owned by any repo -> skip
+        except AttributeError:
             owner = getattr(graph, "_ownership", {}).get(target.id)
         if owner is not None:
             owners.add(owner)

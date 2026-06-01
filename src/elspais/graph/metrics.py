@@ -540,8 +540,10 @@ def integrates_by_associate(graph) -> list[AssociateIntegration]:
             owner: str | None
             try:
                 owner = graph.repo_for(target.id).name
-            except (KeyError, AttributeError):
-                owner = graph._ownership.get(target.id)
+            except KeyError:
+                owner = None  # node not owned by any repo -> skip
+            except AttributeError:
+                owner = getattr(graph, "_ownership", {}).get(target.id)
             if owner is None:
                 continue
 

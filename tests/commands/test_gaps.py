@@ -381,3 +381,32 @@ class TestGapsIntegrates:
         assert "Covered via external associate" in text
         assert "library" in text
         assert "APP-d00001" in text
+
+    def test_REQ_d00252_F_gap_data_from_dict_integrated_field(self) -> None:
+        """The daemon serialization round-trips a populated ``integrated`` map."""
+        from elspais.commands.gaps import _gap_data_from_dict
+
+        d = {
+            "uncovered": [],
+            "untested": [],
+            "unvalidated": [],
+            "failing": [],
+            "no_assertions": [],
+            "integrated": {"lib": ["APP-d00001", "APP-d00002"]},
+        }
+        gd = _gap_data_from_dict(d)
+        assert gd.integrated == {"lib": ["APP-d00001", "APP-d00002"]}
+
+    def test_REQ_d00252_F_gap_data_from_dict_missing_integrated_is_empty(self) -> None:
+        """``integrated`` defaults to an empty map when absent from the dict."""
+        from elspais.commands.gaps import _gap_data_from_dict
+
+        d = {
+            "uncovered": [],
+            "untested": [],
+            "unvalidated": [],
+            "failing": [],
+            "no_assertions": [],
+        }
+        gd = _gap_data_from_dict(d)
+        assert gd.integrated == {}
