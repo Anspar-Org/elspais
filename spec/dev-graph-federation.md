@@ -178,13 +178,16 @@ D. When the associate owning an `Integrates:` target participates in the federat
 
 E. When an `Integrates:` target cannot be resolved, the build SHALL report a broken reference if a configured associate claims the target's ID format but lacks the ID, and SHALL record a presumed-foreign reference that does not fail the build if no configured associate claims the ID format.
 
+F. Coverage inherited through `Integrates:` edges SHALL count toward the declaring requirement's implemented status in coverage reports (so an integrating requirement is not reported as an uncovered gap), and coverage reports SHALL summarize integrated requirements grouped by the owning associate, with a federation total.
+
 ### Rationale
 
 The bottom-up reference model (`Implements:` authored on the implementer) would force a reusable library to name each consumer's requirement IDs, coupling the library to its consumers and breaking isolated builds. `Integrates:` is the top-down inverse: authored and stored on the consumer, it points into the library and is wired as a distinct INTEGRATES edge during federation. A dedicated edge kind keeps the library's `Implements:` derivation clean (no consumer IDs leak into library files on render), while contributing to coverage like IMPLEMENTS. Test/verification results propagate by a live-query overlay that reads the library node's own metrics, consistent with the existing cross-repo inheritance mechanism.
 
 ### Changelog
 
+- 2026-05-31 | d1f691f0 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-05-31 | b576d134 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms, update hash, add missing changelog section
 
-*End* *External Library Integration via Integrates Keyword* | **Hash**: b576d134
+*End* *External Library Integration via Integrates Keyword* | **Hash**: d1f691f0
 ---
