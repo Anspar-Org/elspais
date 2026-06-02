@@ -2010,7 +2010,8 @@ def _get_workspace_info(
 
     base = _build_base_workspace_info(working_dir, config)
 
-    # REQ-d00205-A: Include federation details when multi-repo graph present
+    # REQ-d00205-A: Include federation details whenever fed_cfg is present
+    fed_cfg = config.get("federation", {}) if isinstance(config, dict) else {}
     if graph is not None:
         repos_info = []
         for entry in graph.iter_repos():
@@ -2025,7 +2026,22 @@ def _get_workspace_info(
                 repo_info["error"] = entry.error
             repos_info.append(repo_info)
         if len(repos_info) > 1:
-            base["federation"] = {"repos": repos_info, "root_repo": graph._root_repo}
+            base["federation"] = {
+                "repos": repos_info,
+                "root_repo": graph._root_repo,
+                "write_associates": fed_cfg.get("write_associates", False),
+                "index_associates": fed_cfg.get("index_associates", False),
+            }
+        elif fed_cfg:
+            base["federation"] = {
+                "write_associates": fed_cfg.get("write_associates", False),
+                "index_associates": fed_cfg.get("index_associates", False),
+            }
+    elif fed_cfg:
+        base["federation"] = {
+            "write_associates": fed_cfg.get("write_associates", False),
+            "index_associates": fed_cfg.get("index_associates", False),
+        }
 
     if detail == "default":
         return base
@@ -2458,6 +2474,32 @@ def _get_docs(topic: str) -> dict[str, Any]:
 # ─────────────────────────────────────────────────────────────────────────────
 # Mutation Tool Functions (REQ-o00062)
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+def _guard_associate_write(graph: Any, config: Any, *node_ids: str) -> dict[str, Any] | None:
+    """Return a read-only error dict if any node_id is associate-owned and
+    associate writes are disabled; otherwise None. Implements: REQ-d00253-D
+    """
+    fed = config.get("federation", {}) if isinstance(config, dict) else {}
+    if fed.get("write_associates", False):
+        return None
+    root = getattr(graph, "root_repo_name", None)
+    for nid in node_ids:
+        if not nid:
+            continue
+        try:
+            owner = graph.repo_for(nid).name
+        except (KeyError, AttributeError):
+            continue  # unknown/new/structural node — not an associate
+        if root is not None and owner != root:
+            return {
+                "success": False,
+                "error": (
+                    f"Associate '{owner}' is read-only "
+                    f"(set federation.write_associates=true to enable mutations)"
+                ),
+            }
+    return None
 
 
 def _mutate_rename_node(graph: FederatedGraph, old_id: str, new_id: str) -> dict[str, Any]:
@@ -5340,11 +5382,17 @@ def create_server(
     @mcp.tool()
     def mutate_rename_node(old_id: str, new_id: str) -> dict[str, Any]:
         """Rename a requirement's ID (e.g., REQ-d00001 -> REQ-d00010). Updates all references."""
+        guard = _guard_associate_write(_state["graph"], _state["config"], old_id)
+        if guard:
+            return guard
         return _mutate_rename_node(_state["graph"], old_id, new_id)
 
     @mcp.tool()
     def mutate_update_title(node_id: str, new_title: str) -> dict[str, Any]:
         """Change a requirement's display title."""
+        guard = _guard_associate_write(_state["graph"], _state["config"], node_id)
+        if guard:
+            return guard
         return _mutate_update_title(_state["graph"], node_id, new_title)
 
     @mcp.tool()
@@ -5354,6 +5402,9 @@ def create_server(
         Args:
             new_status: e.g., 'Active', 'Draft', 'Deprecated'.
         """
+        guard = _guard_associate_write(_state["graph"], _state["config"], node_id)
+        if guard:
+            return guard
         return _mutate_change_status(_state["graph"], node_id, new_status)
 
     @mcp.tool()
@@ -5375,6 +5426,13 @@ def create_server(
             parent_id: Optional parent requirement to link to.
             edge_kind: Edge type if parent_id set ('IMPLEMENTS' or 'REFINES').
         """
+        guard = (
+            _guard_associate_write(_state["graph"], _state["config"], parent_id)
+            if parent_id
+            else None
+        )
+        if guard:
+            return guard
         return _mutate_add_requirement(
             _state["graph"], req_id, title, level, status, parent_id, edge_kind
         )
@@ -5382,6 +5440,9 @@ def create_server(
     @mcp.tool()
     def mutate_delete_requirement(node_id: str, confirm: bool = False) -> dict[str, Any]:
         """Delete a requirement and its assertions. Returns error unless confirm=True."""
+        guard = _guard_associate_write(_state["graph"], _state["config"], node_id)
+        if guard:
+            return guard
         return _mutate_delete_requirement(_state["graph"], node_id, confirm)
 
     # ─────────────────────────────────────────────────────────────────────
@@ -5391,11 +5452,17 @@ def create_server(
     @mcp.tool()
     def mutate_add_assertion(req_id: str, label: str, text: str) -> dict[str, Any]:
         """Add a testable assertion (A, B, C...) to a requirement. Text should include SHALL."""
+        guard = _guard_associate_write(_state["graph"], _state["config"], req_id)
+        if guard:
+            return guard
         return _mutate_add_assertion(_state["graph"], req_id, label, text)
 
     @mcp.tool()
     def mutate_update_assertion(assertion_id: str, new_text: str) -> dict[str, Any]:
         """Rewrite an assertion's text (e.g., REQ-p00001-A)."""
+        guard = _guard_associate_write(_state["graph"], _state["config"], assertion_id)
+        if guard:
+            return guard
         return _mutate_update_assertion(_state["graph"], assertion_id, new_text)
 
     @mcp.tool()
@@ -5406,11 +5473,17 @@ def create_server(
 
         Remaining labels re-sequenced if compact=True.
         """
+        guard = _guard_associate_write(_state["graph"], _state["config"], assertion_id)
+        if guard:
+            return guard
         return _mutate_delete_assertion(_state["graph"], assertion_id, compact, confirm)
 
     @mcp.tool()
     def mutate_rename_assertion(old_id: str, new_label: str) -> dict[str, Any]:
         """Change an assertion's label (e.g., rename B to D). Updates all references."""
+        guard = _guard_associate_write(_state["graph"], _state["config"], old_id)
+        if guard:
+            return guard
         return _mutate_rename_assertion(_state["graph"], old_id, new_label)
 
     # ─────────────────────────────────────────────────────────────────────
@@ -5435,6 +5508,9 @@ def create_server(
                 IDs to target (e.g. ["A", "B"] or ["REQ-p00044-A", "REQ-p00044-B"]).
                 Full IDs are automatically normalized to bare labels.
         """
+        guard = _guard_associate_write(_state["graph"], _state["config"], source_id, target_id)
+        if guard:
+            return guard
         return _mutate_add_edge(
             _state["graph"],
             source_id,
@@ -5451,11 +5527,17 @@ def create_server(
         Args:
             new_kind: 'IMPLEMENTS' or 'REFINES'.
         """
+        guard = _guard_associate_write(_state["graph"], _state["config"], source_id, target_id)
+        if guard:
+            return guard
         return _mutate_change_edge_kind(_state["graph"], source_id, target_id, new_kind)
 
     @mcp.tool()
     def mutate_delete_edge(source_id: str, target_id: str, confirm: bool = False) -> dict[str, Any]:
         """Remove a traceability relationship between nodes. Returns error unless confirm=True."""
+        guard = _guard_associate_write(_state["graph"], _state["config"], source_id, target_id)
+        if guard:
+            return guard
         return _mutate_delete_edge(_state["graph"], source_id, target_id, confirm)
 
     @mcp.tool()
@@ -5463,6 +5545,9 @@ def create_server(
         source_id: str, old_target_id: str, new_target_id: str
     ) -> dict[str, Any]:
         """Repair a broken reference by redirecting it to a valid target node."""
+        guard = _guard_associate_write(_state["graph"], _state["config"], source_id)
+        if guard:
+            return guard
         return _mutate_fix_broken_reference(
             _state["graph"], source_id, old_target_id, new_target_id
         )
@@ -5478,6 +5563,9 @@ def create_server(
             target_id: The parent/target node ID.
             assertion_targets: Assertion labels to target (empty = whole req).
         """
+        guard = _guard_associate_write(_state["graph"], _state["config"], source_id, target_id)
+        if guard:
+            return guard
         return _mutate_change_edge_targets(_state["graph"], source_id, target_id, assertion_targets)
 
     @mcp.tool()
@@ -5488,6 +5576,9 @@ def create_server(
             node_id: The node to move.
             target_file_id: The target FILE node ID (e.g. "file:spec/other.md").
         """
+        guard = _guard_associate_write(_state["graph"], _state["config"], node_id, target_file_id)
+        if guard:
+            return guard
         return _mutate_move_node_to_file(_state["graph"], node_id, target_file_id)
 
     @mcp.tool()
@@ -5498,6 +5589,9 @@ def create_server(
             file_id: Current FILE node ID (e.g. "file:spec/main.md").
             new_relative_path: New repo-relative path (e.g. "spec/renamed.md").
         """
+        guard = _guard_associate_write(_state["graph"], _state["config"], file_id)
+        if guard:
+            return guard
         return _mutate_rename_file(
             _state["graph"], file_id, new_relative_path, _state.get("repo_root")
         )
