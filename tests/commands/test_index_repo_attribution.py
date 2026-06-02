@@ -182,7 +182,11 @@ class TestFederatedMultiRepoBuckets:
         fed, root_repo, _cal_repo = _build_two_repo_federation(tmp_path)
         spec_dirs = [root_repo / "spec"]
 
-        _output, content, req_count, _jny_count = _build_index_content(fed, spec_dirs)
+        # include_associates=True: this test validates correct attribution when
+        # associate repos ARE included in the index (federation.index_associates=True).
+        _output, content, req_count, _jny_count = _build_index_content(
+            fed, spec_dirs, include_associates=True
+        )
 
         assert req_count == 2, f"Expected 2 REQs across both repos, got {req_count}"
         assert "REQ-p00001" in content
@@ -346,7 +350,11 @@ class TestCrossGeneratorConsistency:
         fed, root_repo, _cal_repo = _build_two_repo_federation(tmp_path)
         spec_dirs = [root_repo / "spec"]
 
-        _output, index_content, _r, _j = _build_index_content(fed, spec_dirs)
+        # include_associates=True: this test validates that INDEX.md bucket labels
+        # align with term-index namespaces when associates ARE included.
+        _output, index_content, _r, _j = _build_index_content(
+            fed, spec_dirs, include_associates=True
+        )
 
         # Build a term dictionary that references the foreign REQ from the
         # callisto namespace. This mirrors how the federation's _scan_terms

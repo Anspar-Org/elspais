@@ -750,7 +750,10 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
     if _abort_if_duplicates(graph):
         return
 
-    output_path, expected, _req_count, _jny_count = _build_index_content(graph, all_spec_dirs)
+    include_assoc = config.get("federation", {}).get("index_associates", False)
+    output_path, expected, _req_count, _jny_count = _build_index_content(
+        graph, all_spec_dirs, include_associates=include_assoc
+    )
     if output_path.exists():
         current = output_path.read_text(encoding="utf-8")
         if current == expected:
@@ -760,7 +763,7 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
         print("Would regenerate INDEX.md")
         return
 
-    _regenerate_index(graph, all_spec_dirs, args)
+    _regenerate_index(graph, all_spec_dirs, args, include_associates=include_assoc)
 
 
 # Implements: REQ-d00225-B
