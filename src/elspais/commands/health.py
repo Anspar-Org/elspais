@@ -1179,10 +1179,13 @@ def check_spec_changelog_format(graph: FederatedGraph, config: dict[str, Any]) -
 def check_spec_index_current(
     graph: FederatedGraph,
     spec_dirs: list[Path],
+    config: dict[str, Any] | None = None,
 ) -> HealthCheck:
     """Check that INDEX.md is byte-identical to what 'elspais fix' would produce."""
-    from elspais.commands.index import _build_index_content
+    from elspais.commands.index import _build_index_content, _indexed_node_ids
     from elspais.graph import NodeKind
+
+    include_assoc = (config or {}).get("federation", {}).get("index_associates", False)
 
     # Find INDEX.md
     index_path = None
@@ -1201,13 +1204,13 @@ def check_spec_index_current(
             severity="info",
         )
 
-    _expected_path, expected, _req_count, _jny_count = _build_index_content(graph, spec_dirs)
+    _expected_path, expected, req_count, jny_count = _build_index_content(
+        graph, spec_dirs, include_associates=include_assoc
+    )
     actual = index_path.read_text(encoding="utf-8")
 
     if actual == expected:
-        total = sum(1 for _ in graph.nodes_by_kind(NodeKind.REQUIREMENT)) + sum(
-            1 for _ in graph.nodes_by_kind(NodeKind.USER_JOURNEY)
-        )
+        total = req_count + jny_count
         return HealthCheck(
             name="spec.index_current",
             passed=True,
@@ -1220,8 +1223,8 @@ def check_spec_index_current(
 
     index_req_ids = set(re.findall(r"REQ-[a-z0-9-]+", actual, re.IGNORECASE))
     index_jny_ids = set(re.findall(r"JNY-[A-Za-z0-9-]+", actual))
-    graph_req_ids = {n.id for n in graph.nodes_by_kind(NodeKind.REQUIREMENT)}
-    graph_jny_ids = {n.id for n in graph.nodes_by_kind(NodeKind.USER_JOURNEY)}
+    graph_req_ids = _indexed_node_ids(graph, NodeKind.REQUIREMENT, include_assoc)
+    graph_jny_ids = _indexed_node_ids(graph, NodeKind.USER_JOURNEY, include_assoc)
 
     missing_reqs = graph_req_ids - index_req_ids
     extra_reqs = index_req_ids - graph_req_ids
@@ -1920,7 +1923,7 @@ def run_spec_checks(
         )
 
     if spec_dirs:
-        checks.append(check_spec_index_current(graph, spec_dirs))
+        checks.append(check_spec_index_current(graph, spec_dirs, config=config))
 
     # Post-process: downgrade checks that only have findings for retired REQs
     if retired_ids:

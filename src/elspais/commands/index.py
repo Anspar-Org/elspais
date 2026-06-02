@@ -44,16 +44,23 @@ def run(args: argparse.Namespace) -> int:
 
     action = getattr(args, "index_action", None)
 
+    include_assoc = config.get("federation", {}).get("index_associates", False)
+
     if action == "validate":
-        return _validate_index(graph, all_spec_dirs, args)
+        return _validate_index(graph, all_spec_dirs, args, include_associates=include_assoc)
     elif action == "regenerate":
-        return _regenerate_index(graph, all_spec_dirs, args)
+        return _regenerate_index(graph, all_spec_dirs, args, include_associates=include_assoc)
     else:
         print("Usage: elspais index <validate|regenerate>", file=sys.stderr)
         return 1
 
 
-def _validate_index(graph: FederatedGraph, spec_dirs: list[Path], args: argparse.Namespace) -> int:
+def _validate_index(
+    graph: FederatedGraph,
+    spec_dirs: list[Path],
+    args: argparse.Namespace,
+    include_associates: bool = False,
+) -> int:
     """Validate INDEX.md against graph requirements."""
     # Find INDEX.md
     index_path = None
@@ -73,9 +80,9 @@ def _validate_index(graph: FederatedGraph, spec_dirs: list[Path], args: argparse
     index_req_ids = set(re.findall(r"REQ-[a-z0-9-]+", content, re.IGNORECASE))
     index_jny_ids = set(re.findall(r"JNY-[A-Za-z0-9-]+", content))
 
-    # Get IDs from graph
-    graph_req_ids = {node.id for node in graph.nodes_by_kind(NodeKind.REQUIREMENT)}
-    graph_jny_ids = {node.id for node in graph.nodes_by_kind(NodeKind.USER_JOURNEY)}
+    # Get IDs from graph (filtered to same set as INDEX.md generation)
+    graph_req_ids = _indexed_node_ids(graph, NodeKind.REQUIREMENT, include_associates)
+    graph_jny_ids = _indexed_node_ids(graph, NodeKind.USER_JOURNEY, include_associates)
 
     # Compare requirements
     missing_reqs = graph_req_ids - index_req_ids
@@ -217,6 +224,26 @@ def _repo_name_for(graph: FederatedGraph, node_id: str) -> str | None:
         return None
 
 
+def _indexed_node_ids(
+    graph: FederatedGraph, kind: NodeKind, include_associates: bool = False
+) -> set[str]:
+    """Return the node IDs of `kind` that INDEX.md should contain.
+
+    Applies the same primary-repo filter as `_build_index_content`: when
+    include_associates is False, associate-owned nodes are excluded (root-repo
+    and unattributed nodes are kept). Implements: REQ-d00253-C
+    """
+    root_repo = graph.root_repo_name
+    ids: set[str] = set()
+    for node in graph.nodes_by_kind(kind):
+        if not include_associates:
+            name = _repo_name_for(graph, node.id)
+            if name is not None and name != root_repo:
+                continue
+        ids.add(node.id)
+    return ids
+
+
 def _repo_spec_dirs(graph: FederatedGraph, repo_name: str, fallback: list[Path]) -> list[Path]:
     """Return the absolute spec directory paths for a repo.
 
@@ -314,7 +341,7 @@ def _resolve_repo_info(
 
 
 def _build_index_content(
-    graph: FederatedGraph, spec_dirs: list[Path]
+    graph: FederatedGraph, spec_dirs: list[Path], include_associates: bool = False
 ) -> tuple[Path, str, int, int]:
     """Render INDEX.md content without writing.
 
@@ -346,9 +373,22 @@ def _build_index_content(
         sd = _classify_node(node, repo_dirs_cache[repo_name])
         return (repo_name, sd)
 
+    root_repo = graph.root_repo_name
+
+    def _is_included(node: object) -> bool:
+        if include_associates:
+            return True
+        name = _repo_name_for(graph, node.id)
+        # Unattributed (name is None) defaults to primary inclusion.
+        return name is None or name == root_repo
+
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if not _is_included(node):
+            continue
         reqs_by_bucket[_bucket_for(node)].append(node)
     for node in graph.nodes_by_kind(NodeKind.USER_JOURNEY):
+        if not _is_included(node):
+            continue
         jnys_by_bucket[_bucket_for(node)].append(node)
 
     # Order buckets: each repo in iter_repos() construction order, within
@@ -490,7 +530,10 @@ def _build_index_content(
 
 
 def _regenerate_index(
-    graph: FederatedGraph, spec_dirs: list[Path], args: argparse.Namespace
+    graph: FederatedGraph,
+    spec_dirs: list[Path],
+    args: argparse.Namespace,
+    include_associates: bool = False,
 ) -> int:
     """Regenerate INDEX.md from graph requirements."""
     # Use git root (threaded from CLI) for relative paths
@@ -499,7 +542,9 @@ def _regenerate_index(
         print("Cannot generate INDEX.md: not in a git repository.", file=sys.stderr)
         return 1
 
-    output_path, content, req_count, jny_count = _build_index_content(graph, spec_dirs)
+    output_path, content, req_count, jny_count = _build_index_content(
+        graph, spec_dirs, include_associates=include_associates
+    )
 
     if output_path.exists():
         output_path.chmod(0o644)

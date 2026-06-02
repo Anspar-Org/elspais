@@ -381,6 +381,24 @@
       "title": "DocsScanningConfig",
       "type": "object"
     },
+    "FederationConfig": {
+      "additionalProperties": false,
+      "description": "Controls how associate repos affect write/generate surfaces.\n\nReads (checks/summary/cross-repo resolution) always federate; these flags\ngovern only the write and generation surfaces.",
+      "properties": {
+        "write_associates": {
+          "default": false,
+          "title": "Write Associates",
+          "type": "boolean"
+        },
+        "index_associates": {
+          "default": false,
+          "title": "Index Associates",
+          "type": "boolean"
+        }
+      },
+      "title": "FederationConfig",
+      "type": "object"
+    },
     "FormatConfig": {
       "additionalProperties": false,
       "properties": {
@@ -1084,6 +1102,9 @@
       },
       "title": "Associates",
       "type": "object"
+    },
+    "federation": {
+      "$ref": "#/$defs/FederationConfig"
     },
     "statuses": {
       "additionalProperties": {

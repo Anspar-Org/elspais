@@ -1596,6 +1596,7 @@ async def api_save(request: Request) -> JSONResponse:
         state.graph,
         state.repo_root,
         resolver=_build_resolver_for_save(state.config),
+        write_associates=state.config.get("federation", {}).get("write_associates", False),
     )
     status_code = 200 if result.get("success") else 409
     if result.get("success"):

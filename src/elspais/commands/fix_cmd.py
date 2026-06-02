@@ -491,7 +491,11 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
     _add_autofix_changelog_entries(graph, autofix_items, config, author)
     _add_drift_changelog_entries(graph, drift_only_nodes, config, author)
 
-    result = render_save(graph, repo_root=repo_root)
+    result = render_save(
+        graph,
+        repo_root=repo_root,
+        write_associates=config.get("federation", {}).get("write_associates", False),
+    )
     saved = result.get("saved_count", 0)
     if saved:
         files = result.get("files_modified", [])
@@ -637,7 +641,11 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
     # "fix_single" overrides the stale_hash filter in _find_dirty_files.
     node.mark_parse_dirty("fix_single")
 
-    result = render_save(graph, repo_root=repo_root)
+    result = render_save(
+        graph,
+        repo_root=repo_root,
+        write_associates=config.get("federation", {}).get("write_associates", False),
+    )
     if result.get("errors"):
         for err in result["errors"]:
             print(f"Error: {err}", file=sys.stderr)
@@ -742,7 +750,10 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
     if _abort_if_duplicates(graph):
         return
 
-    output_path, expected, _req_count, _jny_count = _build_index_content(graph, all_spec_dirs)
+    include_assoc = config.get("federation", {}).get("index_associates", False)
+    output_path, expected, _req_count, _jny_count = _build_index_content(
+        graph, all_spec_dirs, include_associates=include_assoc
+    )
     if output_path.exists():
         current = output_path.read_text(encoding="utf-8")
         if current == expected:
@@ -752,7 +763,25 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
         print("Would regenerate INDEX.md")
         return
 
-    _regenerate_index(graph, all_spec_dirs, args)
+    _regenerate_index(graph, all_spec_dirs, args, include_associates=include_assoc)
+
+
+def _select_terms_dictionary(graph, include_associates: bool):
+    """Return the TermDictionary to render for glossary/term-index.
+
+    Primary-only (default) returns the root repo's own terms; federated
+    returns the merged dictionary across all repos. Implements: REQ-d00253-C
+    """
+    if include_associates:
+        return graph.terms if hasattr(graph, "terms") else None
+    # Primary-only: the root repo's own TraceGraph terms.
+    root = getattr(graph, "root_repo_name", None)
+    if root is not None and hasattr(graph, "iter_repos"):
+        for entry in graph.iter_repos():
+            if entry.name == root and entry.graph is not None:
+                return getattr(entry.graph, "terms", None)
+    # Non-federated graph fallback.
+    return getattr(graph, "terms", None)
 
 
 # Implements: REQ-d00225-B
@@ -777,16 +806,8 @@ def _fix_terms(args: argparse.Namespace, dry_run: bool) -> None:
     if _abort_if_duplicates(graph):
         return
 
-    # Get terms from the graph
-    td = None
-    if hasattr(graph, "terms"):
-        td = graph.terms
-    else:
-        # FederatedGraph — check root repo
-        for entry in graph._repos.values():
-            if entry.graph and hasattr(entry.graph, "terms"):
-                td = entry.graph.terms
-                break
+    include_assoc = config.get("federation", {}).get("index_associates", False)
+    td = _select_terms_dictionary(graph, include_associates=include_assoc)
 
     if td is None or len(td) == 0:
         return
