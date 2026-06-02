@@ -404,6 +404,17 @@ class TermsConfig(_StrictModel):
     severity: TermsSeverityConfig = Field(default_factory=TermsSeverityConfig)
 
 
+class FederationConfig(_StrictModel):
+    """Controls how associate repos affect write/generate surfaces.
+
+    Reads (checks/summary/cross-repo resolution) always federate; these flags
+    govern only the write and generation surfaces.
+    """
+
+    write_associates: bool = False
+    index_associates: bool = False
+
+
 # Implements: REQ-d00212-F
 class ElspaisConfig(_StrictModel):
     version: int = 4
@@ -431,6 +442,7 @@ class ElspaisConfig(_StrictModel):
     output: OutputConfig = Field(default_factory=OutputConfig)
     terms: TermsConfig = Field(default_factory=TermsConfig)
     associates: dict[str, AssociateEntryConfig] = Field(default_factory=dict)
+    federation: FederationConfig = Field(default_factory=FederationConfig)
     statuses: dict[str, StatusConfig] = Field(default_factory=dict)
     stats: str = Field(default="", description="File path for MCP tool usage statistics")
 

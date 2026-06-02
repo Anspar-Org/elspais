@@ -261,6 +261,22 @@ path = "../phoenix"
 namespace = "PHX"
 
 #──────────────────────────────────────────────────────────────────────────────
+# FEDERATION - Write / generation surface control
+# These flags opt in to writing or indexing associate repos during build.
+# Read operations (checks, summary, cross-repo resolution) always federate
+# regardless of these flags; they only affect write and generation surfaces.
+#
+#   write_associates  (default: false) — allow `elspais fix` to modify spec
+#                     files inside associate repos.
+#   index_associates  (default: false) — include associate requirements in
+#                     generated artifacts (e.g. traceability matrices, glossary).
+#──────────────────────────────────────────────────────────────────────────────
+
+[federation]
+write_associates = false
+index_associates = false
+
+#──────────────────────────────────────────────────────────────────────────────
 # STATUSES - Optional Per-Status Metadata
 # Attach color (and future metadata) to status names referenced by
 # [rules.format.status_roles]. Unspecified statuses fall back to a
