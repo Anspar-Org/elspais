@@ -191,3 +191,29 @@ The bottom-up reference model (`Implements:` authored on the implementer) would 
 
 *End* *External Library Integration via Integrates Keyword* | **Hash**: d1f691f0
 ---
+
+## REQ-d00253: Federation Write/Generation Scope
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-d00200
+
+Associate repositories SHALL affect only read and validation surfaces by default; the write and generation surfaces SHALL be primary-repo-only unless explicitly opted in via the `[federation]` config table.
+
+### Assertions
+
+A. The `[federation]` config table SHALL expose `write_associates` and `index_associates`, both defaulting to false.
+
+B. `elspais fix` SHALL write spec files only in the primary (root) repo unless `federation.write_associates` is true; with it false, primary-repo output SHALL be byte-identical whether or not an associate is configured.
+
+C. Generated `INDEX.md` and `term-index.md` SHALL contain only primary-repo requirements and terms unless `federation.index_associates` is true.
+
+D. MCP mutation tools SHALL reject mutations targeting associate-owned nodes when `federation.write_associates` is false, returning a read-only error and applying no in-memory change.
+
+### Rationale
+
+Federation is fundamentally a read and validation aggregation: associates provide cross-repo reference resolution and coverage inheritance without surrendering write authority. Making the write and generation surfaces primary-repo-only by default prevents `elspais fix` and MCP mutations from silently editing files in repositories the operator does not own. The `[federation]` opt-in flags keep the safe default while allowing deliberate multi-repo authoring when an operator owns every associate.
+
+### Changelog
+
+- 2026-06-01 | 28c8c538 | - | Michael Lewis (michael@anspar.org) | Auto-fix: add missing changelog section
+
+*End* *Federation Write/Generation Scope* | **Hash**: 28c8c538

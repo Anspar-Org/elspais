@@ -344,6 +344,8 @@ _FIELD_COMMENTS: dict[str, str] = {
         'Optional badge color for this namespace (hex "#RRGGBB"); omit for a '
         "deterministic hash-derived color"
     ),
+    # --- [federation] ---
+    "federation": "Federation write/generation scope flags (write_associates, index_associates)",
     "statuses": (
         "Optional per-status metadata. Keys match status names from "
         '[rules.format.status_roles]; each entry may set `color = "#RRGGBB"`.'

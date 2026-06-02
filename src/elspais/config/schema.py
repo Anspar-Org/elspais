@@ -404,6 +404,7 @@ class TermsConfig(_StrictModel):
     severity: TermsSeverityConfig = Field(default_factory=TermsSeverityConfig)
 
 
+# Implements: REQ-d00253-A
 class FederationConfig(_StrictModel):
     """Controls how associate repos affect write/generate surfaces.
 

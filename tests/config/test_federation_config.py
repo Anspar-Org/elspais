@@ -1,6 +1,6 @@
 """Tests for the [federation] config table.
 
-Implements: REQ-d00231-A
+Implements: REQ-d00253-A
 """
 
 from elspais.config.schema import ElspaisConfig, FederationConfig
@@ -20,7 +20,7 @@ def test_federation_parses_from_dict():
     assert cfg.federation.index_associates is True
 
 
-def test_federation_dump_uses_plain_keys():
+def test_federation_dump_structure():
     dumped = ElspaisConfig().model_dump(by_alias=True)
     assert dumped["federation"] == {
         "write_associates": False,
