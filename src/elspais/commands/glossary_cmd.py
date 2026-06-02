@@ -11,8 +11,9 @@ from __future__ import annotations
 import argparse
 import json
 from collections import defaultdict
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from elspais.graph.terms import TermDictionary, TermEntry
@@ -122,23 +123,36 @@ def generate_glossary(td: TermDictionary, format: str = "markdown") -> str:
 
 
 # Implements: REQ-d00224-B
-def generate_term_index(td: TermDictionary, format: str = "markdown") -> str:
+def generate_term_index(
+    td: TermDictionary,
+    format: str = "markdown",
+    ref_filter: Callable[[Any], bool] | None = None,
+) -> str:
     """Generate a term index from indexed terms only.
 
     Args:
         td: The term dictionary to generate from.
         format: "markdown" or "json".
+        ref_filter: Optional predicate on a TermReference. When provided,
+            references for which it returns False are omitted. Used to keep
+            associate-repo references out of the primary term index when
+            ``federation.index_associates`` is false (REQ-d00253-C).
 
     Returns:
         Formatted term index content.
     """
     entries = sorted(td.iter_indexed(), key=lambda e: e.term.lower())
 
+    def _refs(entry):
+        if ref_filter is None:
+            return entry.references
+        return [ref for ref in entry.references if ref_filter(ref)]
+
     if format == "json":
         data = []
         for entry in entries:
             refs_by_ns: dict[str, list[str]] = defaultdict(list)
-            for ref in entry.references:
+            for ref in _refs(entry):
                 refs_by_ns[ref.namespace].append(ref.node_id)
             data.append(
                 {
@@ -159,7 +173,7 @@ def generate_term_index(td: TermDictionary, format: str = "markdown") -> str:
 
         # Group references by namespace
         refs_by_ns: dict[str, list[str]] = defaultdict(list)
-        for ref in entry.references:
+        for ref in _refs(entry):
             if ref.node_id not in refs_by_ns[ref.namespace]:
                 refs_by_ns[ref.namespace].append(ref.node_id)
 
@@ -174,19 +188,29 @@ def generate_term_index(td: TermDictionary, format: str = "markdown") -> str:
 
 
 # Implements: REQ-d00224-C
-def generate_collection_manifest(entry: TermEntry, format: str = "markdown") -> str:
+def generate_collection_manifest(
+    entry: TermEntry,
+    format: str = "markdown",
+    ref_filter: Callable[[Any], bool] | None = None,
+) -> str:
     """Generate a standalone collection manifest for one collection term.
 
     Args:
         entry: The TermEntry (must have collection=True).
         format: "markdown" or "json".
+        ref_filter: Optional predicate on a TermReference; references for
+            which it returns False are omitted (REQ-d00253-C).
 
     Returns:
         Formatted manifest content.
     """
+    refs = (
+        entry.references if ref_filter is None else [r for r in entry.references if ref_filter(r)]
+    )
+
     if format == "json":
         refs_by_ns: dict[str, list[str]] = defaultdict(list)
-        for ref in entry.references:
+        for ref in refs:
             refs_by_ns[ref.namespace].append(ref.node_id)
         data = {
             "term": entry.term,
@@ -201,7 +225,7 @@ def generate_collection_manifest(entry: TermEntry, format: str = "markdown") -> 
     lines.append("")
 
     refs_by_ns: dict[str, list[str]] = defaultdict(list)
-    for ref in entry.references:
+    for ref in refs:
         if ref.node_id not in refs_by_ns[ref.namespace]:
             refs_by_ns[ref.namespace].append(ref.node_id)
 
@@ -220,8 +244,17 @@ def write_term_outputs(
     td: TermDictionary,
     output_dir: str | Path,
     format: str = "markdown",
+    ref_filter: Callable[[Any], bool] | None = None,
 ) -> list[str]:
     """Write glossary, term index, and collection manifests to output_dir.
+
+    Args:
+        ref_filter: Optional predicate on a TermReference applied to the term
+            index and collection manifests; references for which it returns
+            False are omitted. The glossary lists definitions only and is
+            unaffected. Used to keep associate-repo references out of the
+            primary artifacts when ``federation.index_associates`` is false
+            (REQ-d00253-C).
 
     Returns:
         List of generated file paths.
@@ -232,14 +265,14 @@ def write_term_outputs(
 
     ext = ".json" if format == "json" else ".md"
 
-    # Glossary
+    # Glossary (definitions only — no references to filter)
     glossary_path = out / f"glossary{ext}"
     _write_readonly(glossary_path, generate_glossary(td, format=format))
     generated.append(str(glossary_path))
 
     # Term index
     index_path = out / f"term-index{ext}"
-    _write_readonly(index_path, generate_term_index(td, format=format))
+    _write_readonly(index_path, generate_term_index(td, format=format, ref_filter=ref_filter))
     generated.append(str(index_path))
 
     # Collection manifests
@@ -248,7 +281,10 @@ def write_term_outputs(
         collections_dir.mkdir(parents=True, exist_ok=True)
         slug = entry.term.lower().replace(" ", "-")
         manifest_path = collections_dir / f"{slug}{ext}"
-        _write_readonly(manifest_path, generate_collection_manifest(entry, format=format))
+        _write_readonly(
+            manifest_path,
+            generate_collection_manifest(entry, format=format, ref_filter=ref_filter),
+        )
         generated.append(str(manifest_path))
 
     return generated

@@ -818,6 +818,22 @@ def _fix_terms(args: argparse.Namespace, dry_run: bool) -> None:
 
     from elspais.commands.glossary_cmd import write_term_outputs
 
-    generated = write_term_outputs(td, output_dir)
+    # Even with a primary-only term dictionary, term *references* are collected
+    # by the federated term scan and include associate-repo nodes. When not
+    # indexing associates, drop those references so the term index/collection
+    # manifests don't surface associate-namespace sections. Implements: REQ-d00253-C
+    ref_filter = None
+    if not include_assoc:
+        assoc_ns = {
+            a.get("namespace")
+            for a in config.get("associates", {}).values()
+            if isinstance(a, dict) and a.get("namespace")
+        }
+        if assoc_ns:
+
+            def ref_filter(ref, _assoc_ns=assoc_ns):
+                return getattr(ref, "namespace", None) not in _assoc_ns
+
+    generated = write_term_outputs(td, output_dir, ref_filter=ref_filter)
     for path in generated:
         print(f"Generated: {path}")
