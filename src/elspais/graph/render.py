@@ -737,6 +737,7 @@ def render_save(
     consistency_check: bool = False,
     rebuild_fn: Any | None = None,
     resolver: Any | None = None,
+    write_associates: bool = False,
 ) -> dict[str, Any]:
     """Persist dirty FILE nodes to disk by rendering their CONTAINS children.
 
@@ -754,6 +755,10 @@ def render_save(
             compare to pre-save state. Requires rebuild_fn.
         rebuild_fn: Callable that rebuilds a TraceGraph from disk, returning
             (result_dict, TraceGraph). Required when consistency_check=True.
+        resolver: Optional callable for resolving ID patterns during render.
+        write_associates: When False (default), only primary (root) repo files
+            are written; associate-owned FILE nodes (repo field set) are skipped.
+            When True, associate files are written too.
 
     Returns:
         Dict with:
@@ -778,6 +783,18 @@ def render_save(
 
     # Find dirty FILE nodes
     dirty_file_ids = _find_dirty_files(graph, resolver=resolver)
+
+    # Federation: by default, fix/save writes only primary-repo files. An
+    # associate FILE node carries a non-None `repo` field; the primary's is
+    # None. Implements: REQ-d00253-B
+    if not write_associates:
+        primary_only: set[str] = set()
+        for file_id in dirty_file_ids:
+            fnode = graph.find_by_id(file_id)
+            if fnode is not None and fnode.get_field("repo") is not None:
+                continue  # owned by an associate — never written by default
+            primary_only.add(file_id)
+        dirty_file_ids = primary_only
 
     if not dirty_file_ids:
         # No dirty files — clear log and return

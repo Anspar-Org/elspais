@@ -491,7 +491,11 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
     _add_autofix_changelog_entries(graph, autofix_items, config, author)
     _add_drift_changelog_entries(graph, drift_only_nodes, config, author)
 
-    result = render_save(graph, repo_root=repo_root)
+    result = render_save(
+        graph,
+        repo_root=repo_root,
+        write_associates=config.get("federation", {}).get("write_associates", False),
+    )
     saved = result.get("saved_count", 0)
     if saved:
         files = result.get("files_modified", [])
@@ -637,7 +641,11 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
     # "fix_single" overrides the stale_hash filter in _find_dirty_files.
     node.mark_parse_dirty("fix_single")
 
-    result = render_save(graph, repo_root=repo_root)
+    result = render_save(
+        graph,
+        repo_root=repo_root,
+        write_associates=config.get("federation", {}).get("write_associates", False),
+    )
     if result.get("errors"):
         for err in result["errors"]:
             print(f"Error: {err}", file=sys.stderr)

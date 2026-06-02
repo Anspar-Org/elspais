@@ -5744,7 +5744,14 @@ def create_server(
         from elspais.utilities.patterns import build_resolver as _build_resolver_for_save
 
         result = render_save(
-            graph, _state["working_dir"], resolver=_build_resolver_for_save(config)
+            graph,
+            _state["working_dir"],
+            resolver=_build_resolver_for_save(config),
+            write_associates=(
+                config.get("federation", {}).get("write_associates", False)
+                if isinstance(config, dict)
+                else False
+            ),
         )
 
         # Add changelog entries for Active requirements after save. Failure
