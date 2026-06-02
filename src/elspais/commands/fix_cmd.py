@@ -766,6 +766,24 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
     _regenerate_index(graph, all_spec_dirs, args, include_associates=include_assoc)
 
 
+def _select_terms_dictionary(graph, include_associates: bool):
+    """Return the TermDictionary to render for glossary/term-index.
+
+    Primary-only (default) returns the root repo's own terms; federated
+    returns the merged dictionary across all repos. Implements: REQ-d00253-C
+    """
+    if include_associates:
+        return graph.terms if hasattr(graph, "terms") else None
+    # Primary-only: the root repo's own TraceGraph terms.
+    root = getattr(graph, "root_repo_name", None)
+    if root is not None and hasattr(graph, "iter_repos"):
+        for entry in graph.iter_repos():
+            if entry.name == root and entry.graph is not None:
+                return getattr(entry.graph, "terms", None)
+    # Non-federated graph fallback.
+    return getattr(graph, "terms", None)
+
+
 # Implements: REQ-d00225-B
 def _fix_terms(args: argparse.Namespace, dry_run: bool) -> None:
     """Generate glossary and term index if terms are defined."""
@@ -788,16 +806,8 @@ def _fix_terms(args: argparse.Namespace, dry_run: bool) -> None:
     if _abort_if_duplicates(graph):
         return
 
-    # Get terms from the graph
-    td = None
-    if hasattr(graph, "terms"):
-        td = graph.terms
-    else:
-        # FederatedGraph — check root repo
-        for entry in graph._repos.values():
-            if entry.graph and hasattr(entry.graph, "terms"):
-                td = entry.graph.terms
-                break
+    include_assoc = config.get("federation", {}).get("index_associates", False)
+    td = _select_terms_dictionary(graph, include_associates=include_assoc)
 
     if td is None or len(td) == 0:
         return
