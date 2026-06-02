@@ -307,6 +307,27 @@ associate in declared order). Namespace badge colors are taken from
 `[project].color` and `[associates.<key>].color`, falling back to a
 deterministic hash if omitted.
 
+### [federation] Section
+
+Controls which surfaces write to or index associate repos during a build.
+Read operations (health checks, summary, cross-repo reference resolution)
+always federate regardless of these flags; they only affect write and
+generation surfaces.
+
+```toml
+[federation]
+write_associates = false   # allow elspais fix to write associate repo files
+index_associates = false   # include associate reqs in INDEX.md / term-index.md
+```
+
+By default both flags are `false`, meaning `elspais fix` only modifies
+primary-repo spec files and never folds associate requirements into the
+primary `INDEX.md` or `term-index.md`. Set `write_associates = true` to
+allow fix (and MCP mutations) to write files inside associate repos. Set
+`index_associates = true` to include associate requirements in generated
+index artifacts. See `elspais docs validation` for the fix command's
+federation scope.
+
 ### [statuses] Section
 
 Optional per-status metadata. Keys match status names that appear in

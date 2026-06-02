@@ -41,6 +41,24 @@ The `fix` command automatically corrects:
 - Orphaned requirements (no parent)
 - Hierarchy violations
 
+## Fix and Federation Scope
+
+By default, `elspais fix` operates only on the **primary repository**. It
+never writes spec files inside associate repos and never folds associate
+requirements into the primary `INDEX.md` or `term-index.md`. Read operations
+(health checks, cross-repo reference resolution, coverage rollup) always
+federate regardless of this default.
+
+To opt in to wider write/generation scope, set flags in `.elspais.toml`:
+
+```toml
+[federation]
+write_associates = true    # allow fix to write associate repo spec files
+index_associates = true    # include associate reqs in INDEX.md / term-index.md
+```
+
+See `elspais docs config` for the full `[federation]` reference.
+
 ## What Gets Validated
 
   **Format**      - Header line structure, hash presence
