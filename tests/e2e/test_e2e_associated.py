@@ -706,6 +706,126 @@ class TestFederationWriteScope:
         assoc_text = (assoc_root / "spec" / "prd-assoc.md").read_text()
         assert "deadbeef" not in assoc_text, "stale hash should have been fixed"
 
+    # ------------------------------------------------------------------
+    # Term-index scope (REQ-d00253-C). A term index groups each term's
+    # references by namespace (`**<NS>:**` blocks). The federated term scan
+    # records references from associate repos, so a *core-defined* term that
+    # an associate requirement *uses* would otherwise produce an
+    # associate-namespace block in the primary term-index. These tests use
+    # DISTINCT namespaces (CORE vs CAL) so the associate block is
+    # unambiguously identifiable.
+    # ------------------------------------------------------------------
+    TERM = "Heartbeat"
+    CORE_NS = "CORE"
+    CAL_NS = "CAL"
+    CORE_TERM_REQ = "CORE-p00001"
+    CAL_TERM_REQ = "CAL-p00099"
+
+    def _build_terms(self, tmp_path, *, index_associates=False):
+        """Isolated core+associate where the associate requirement USES a term
+        DEFINED in the core. Distinct namespaces (CORE / CAL). Both committed.
+
+        Returns (core_root, assoc_root).
+        """
+        core_root = tmp_path / "core"
+        assoc_root = tmp_path / "assoc"
+
+        core_cfg = base_config(name="fed-term-core", namespace=self.CORE_NS)
+        core_cfg["cli_ttl"] = 0
+        core_cfg["associates"] = {"cal": {"path": "../assoc", "namespace": self.CAL_NS}}
+        if index_associates:
+            core_cfg["federation"] = {"index_associates": True}
+
+        core_prd = Requirement(
+            self.CORE_TERM_REQ,
+            "Core PRD",
+            "PRD",
+            body=f"The core service emits a {self.TERM} on a schedule.",
+            assertions=[("A", "The system SHALL emit periodic signals.")],
+        )
+        # Term defined via markdown definition-list syntax (blank line before
+        # and after); a separate prose file so the scan records it as a
+        # core-namespace definition.
+        glossary = (
+            "# Glossary\n\n" f"{self.TERM}\n" ": A periodic liveness signal emitted by a node.\n"
+        )
+        build_project(
+            core_root,
+            core_cfg,
+            spec_files={"spec/prd-core.md": [core_prd]},
+            extra_files={"spec/glossary.md": glossary},
+        )
+
+        # Associate requirement body USES the core-defined term, so the
+        # federated term scan records a CAL-namespace reference under it.
+        assoc_prd = Requirement(
+            self.CAL_TERM_REQ,
+            "Associate PRD",
+            "PRD",
+            body=f"The associate monitors each {self.TERM} from the core service.",
+            assertions=[("A", "The associate SHALL track liveness signals.")],
+        )
+        build_associate(
+            assoc_root,
+            "cal",
+            "XX",
+            "../core",
+            config_overrides={"project": {"namespace": self.CAL_NS}},
+            spec_files={"spec/prd-assoc.md": [assoc_prd]},
+            init_git=True,
+        )
+
+        assert _git_porcelain(core_root) == "", "core repo dirty before fix"
+        assert _git_porcelain(assoc_root) == "", "associate repo dirty before fix"
+        return core_root, assoc_root
+
+    def test_fix_term_index_excludes_associate_references(self, tmp_path):
+        """Verifies: REQ-d00253-C — the generated term-index.md groups a
+        core-defined term's references by namespace, but with default flags
+        the associate-namespace (`**CAL:**`) reference block is omitted while
+        the term itself and its core references remain."""
+        core_root, _assoc_root = self._build_terms(tmp_path)
+
+        result = run_elspais("fix", cwd=core_root)
+        assert result.returncode == 0, f"fix failed: {result.stderr}\n{result.stdout}"
+
+        term_index = core_root / "spec" / "_generated" / "term-index.md"
+        assert term_index.exists(), "term-index.md was not generated"
+        text = term_index.read_text()
+
+        assert f"## {self.TERM}" in text, "core-defined term missing from term-index"
+        assert f"**{self.CAL_NS}:**" not in text, (
+            f"associate namespace block **{self.CAL_NS}:** leaked into primary "
+            "term-index with index_associates=false"
+        )
+        assert (
+            self.CAL_TERM_REQ not in text
+        ), f"associate node {self.CAL_TERM_REQ} leaked into primary term-index"
+        # The core's own reference to the term is still indexed.
+        assert f"**{self.CORE_NS}:**" in text, "core namespace block missing"
+
+    def test_fix_term_index_associates_opt_in(self, tmp_path):
+        """Verifies: REQ-d00253-C — with federation.index_associates=true the
+        associate-namespace (`**CAL:**`) reference block DOES appear in the
+        primary term-index."""
+        core_root, _assoc_root = self._build_terms(tmp_path, index_associates=True)
+
+        result = run_elspais("fix", cwd=core_root)
+        assert result.returncode == 0, f"fix failed: {result.stderr}\n{result.stdout}"
+
+        term_index = core_root / "spec" / "_generated" / "term-index.md"
+        assert term_index.exists(), "term-index.md was not generated"
+        text = term_index.read_text()
+
+        assert f"## {self.TERM}" in text, "core-defined term missing from term-index"
+        assert f"**{self.CAL_NS}:**" in text, (
+            f"associate namespace block **{self.CAL_NS}:** absent from primary "
+            "term-index despite index_associates=true"
+        )
+        assert (
+            self.CAL_TERM_REQ in text
+        ), f"associate node {self.CAL_TERM_REQ} absent despite index_associates=true"
+
 
 class TestFederationMCPGuard:
     """REQ-d00253-D: MCP mutation tools reject associate-owned nodes unless
