@@ -757,8 +757,9 @@ def render_save(
             (result_dict, TraceGraph). Required when consistency_check=True.
         resolver: Optional callable for resolving ID patterns during render.
         write_associates: When False (default), only primary (root) repo files
-            are written; associate-owned FILE nodes (repo field set) are skipped.
-            When True, associate files are written too.
+            are written; files owned by an associate repo (per the federation
+            ownership map, with the FILE node's `repo` field as a fallback) are
+            skipped. When True, associate files are written too.
 
     Returns:
         Dict with:
