@@ -784,14 +784,30 @@ def render_save(
     # Find dirty FILE nodes
     dirty_file_ids = _find_dirty_files(graph, resolver=resolver)
 
-    # Federation: by default, fix/save writes only primary-repo files. An
-    # associate FILE node carries a non-None `repo` field; the primary's is
-    # None. Implements: REQ-d00253-B
+    # Federation: by default, fix/save writes only primary-repo files. The
+    # authoritative owner is the federation's ownership map (graph.repo_for):
+    # build-time associate FILE nodes are created by a recursive build where
+    # the associate is its own root, so their `repo` field is None and cannot
+    # be relied upon. We mirror the resolution used below (write path) and by
+    # the MCP write guard. The `repo` field is a fallback for any node not yet
+    # registered in the ownership map. Implements: REQ-d00253-B
     if not write_associates:
+        root_repo = getattr(graph, "root_repo_name", None)
         primary_only: set[str] = set()
         for file_id in dirty_file_ids:
-            fnode = graph.find_by_id(file_id)
-            if fnode is not None and fnode.get_field("repo") is not None:
+            is_associate = False
+            try:
+                owner = graph.repo_for(file_id).name
+                # Ownership map is authoritative: anything not owned by the
+                # root repo is an associate.
+                is_associate = root_repo is not None and owner != root_repo
+            except (KeyError, AttributeError):
+                # Not registered in the ownership map — fall back to the FILE
+                # node's `repo` field (non-None => associate-owned).
+                fnode = graph.find_by_id(file_id)
+                if fnode is not None and fnode.get_field("repo") is not None:
+                    is_associate = True
+            if is_associate:
                 continue  # owned by an associate — never written by default
             primary_only.add(file_id)
         dirty_file_ids = primary_only
