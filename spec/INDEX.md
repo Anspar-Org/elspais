@@ -125,7 +125,7 @@
 | REQ-d00234 | Lost Comments Card                                            | prd-features.md         | 7fc99c6a |
 | REQ-d00235 | Comment Compaction CLI                                        | prd-features.md         | f3547362 |
 | REQ-d00236 | Comment Extraction Utilities                                  | prd-core.md             | 499123f1 |
-| REQ-d00237 | Term Reference Scanner Core                                   | prd-core.md             | 63cb874b |
+| REQ-d00237 | Term Reference Scanner Core                                   | prd-core.md             | d1eb27f4 |
 | REQ-d00238 | Graph-Wide Term Scan                                          | prd-core.md             | d3a202d4 |
 | REQ-d00239 | Federated Graph Term Scanner Pass                             | prd-core.md             | 7d9a30c4 |
 | REQ-d00240 | New Term Health Checks                                        | prd-core.md             | 76a49db3 |

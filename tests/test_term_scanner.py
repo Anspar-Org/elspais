@@ -13,6 +13,7 @@ from unittest.mock import MagicMock
 from elspais.graph.GraphNode import FileType, NodeKind
 from elspais.graph.term_scanner import (
     _canonicalize_text,
+    _is_embedded_in_compound,
     extract_comments,
     scan_graph,
     scan_text_for_terms,
@@ -914,3 +915,107 @@ def test_REQ_d00237_D_canonical_bold_term_left_alone():
     text = "Define **Participant** here."
     result, _ = _canonicalize_text(text, td, "**", {"*", "**"})
     assert result == text
+
+
+# =============================================================================
+# REQ-d00237-F: terms embedded in compound identifiers
+#
+# A whole-word (\b) match that is a proper part of a larger compound token
+# (e.g. a requirement ID like CAL-PRD-portal-Session-configuration) is still
+# recorded as a reference but is NOT free-standing prose: it is flagged
+# embedded=True so it is neither auto-marked nor reported as a violation.
+# =============================================================================
+
+
+def _offsets(text: str, term: str) -> tuple[int, int]:
+    """Return (start, end) of *term* within *text* via str.find."""
+    start = text.find(term)
+    assert start != -1, f"{term!r} not found in {text!r}"
+    return start, start + len(term)
+
+
+# -- REQ-d00237-F: the _is_embedded_in_compound predicate ---------------------
+
+
+def test_REQ_d00237_F_embedded_predicate_true_for_compound_ids():
+    """A term that is one sub-token of a larger compound identifier is
+    embedded — the surrounding non-whitespace token has other alnum chars."""
+    for compound in (
+        "CAL-PRD-portal-Session-configuration",
+        "Session-based",
+        "path/Session/config",
+    ):
+        start, end = _offsets(compound, "Session")
+        assert (
+            _is_embedded_in_compound(compound, start, end) is True
+        ), f"{compound!r} should be embedded"
+
+
+def test_REQ_d00237_F_embedded_predicate_false_for_free_standing_prose():
+    """Free-standing prose occurrences (with optional trailing punctuation
+    or wrapping parens) are NOT embedded."""
+    for text in (
+        "The Session expired",
+        "End of Session.",
+        "(Session)",
+        "Start Session here",
+    ):
+        start, end = _offsets(text, "Session")
+        assert (
+            _is_embedded_in_compound(text, start, end) is False
+        ), f"{text!r} should NOT be embedded"
+
+
+# -- REQ-d00237-F: scan_text_for_terms flags embedded refs but keeps them -----
+
+
+def test_REQ_d00237_F_scan_flags_embedded_compound_id_but_records_it():
+    """A term inside a hyphenated compound ID yields a TermRef with
+    embedded=True that IS present in the result and in entry.references
+    (the index still counts it)."""
+    td = _make_td(("Session", True))
+    text = "Configure CAL-PRD-portal-Session-configuration now."
+    result = scan_text_for_terms(text, td, node_id="REQ-001", namespace="main")
+
+    assert len(result) == 1
+    assert result[0].embedded is True
+    # Still recorded on the entry so the index counts the reference.
+    entry = td.lookup("Session")
+    assert entry is not None
+    assert len(entry.references) == 1
+    assert entry.references[0].embedded is True
+
+
+def test_REQ_d00237_F_scan_free_standing_prose_is_not_embedded():
+    """A free-standing prose occurrence yields embedded=False — contrast
+    with the compound-ID case so the flag is meaningfully set."""
+    td = _make_td(("Session", True))
+    result = scan_text_for_terms("The Session expired.", td, node_id="REQ-001", namespace="main")
+
+    assert len(result) == 1
+    assert result[0].embedded is False
+
+
+# -- REQ-d00237-F: canonicalization skips embedded refs -----------------------
+
+
+def test_REQ_d00237_F_canonicalize_skips_term_in_compound_id():
+    """The auto-marker must NOT wrap a term that is a sub-token of a
+    compound identifier — the ID is returned unchanged with no replacement."""
+    td = _td_with_term("Session")
+    text = "Configure CAL-PRD-portal-Session-configuration now."
+    result, repls = _canonicalize_text(text, td, "*", {"*", "**"})
+
+    assert result == text, f"compound ID should be left unchanged, got: {result!r}"
+    assert repls == []
+
+
+def test_REQ_d00237_F_canonicalize_still_marks_free_standing_term():
+    """Sanity contrast: a free-standing occurrence of the SAME term IS
+    still auto-marked — embedding didn't disable marking entirely."""
+    td = _td_with_term("Session")
+    text = "The Session expired."
+    result, repls = _canonicalize_text(text, td, "*", {"*", "**"})
+
+    assert result == "The *Session* expired."
+    assert repls == [("Session", "*Session*")]

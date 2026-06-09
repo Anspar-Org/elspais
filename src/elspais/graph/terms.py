@@ -21,6 +21,7 @@ class TermRef:
     wrong_marking: str = ""  # e.g. "__" when markup_styles are ["*", "**"]
     surface_form: str = ""  # the actual text matched (e.g. "traceability")
     delimiter: str = ""  # the emphasis delimiter used (e.g. "*", "**", "")
+    embedded: bool = False  # True = inside a compound identifier (e.g. a REQ-ID)
 
     def is_canonical(self, canonical_term: str) -> bool:
         """Check if this ref uses canonical form (correct markup + casing)."""

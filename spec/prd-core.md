@@ -403,12 +403,15 @@ D. For terms with `indexed=True`, the scanner SHALL perform whole-word case-inse
 
 E. Terms with `indexed=False` SHALL be scanned for marked and wrong-marking references only; unmarked scanning SHALL be skipped.
 
+F. An unmarked occurrence that is a proper part of a larger compound identifier (e.g. a term appearing between hyphens inside a requirement ID such as `CAL-PRD-portal-Session-configuration`) SHALL be recorded as a reference with `embedded=True`. Embedded references SHALL be counted toward the term index, SHALL NOT be auto-marked during canonicalization, and SHALL NOT be reported as unmarked-emphasis or non-canonical-form violations.
+
 ### Changelog
 
+- 2026-06-09 | d1eb27f4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-05-11 | 63cb874b | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 63cb874b | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
-*End* *Term Reference Scanner Core* | **Hash**: 63cb874b
+*End* *Term Reference Scanner Core* | **Hash**: d1eb27f4
 
 ## REQ-d00238: Graph-Wide Term Scan
 

@@ -298,6 +298,9 @@ def scan_text_for_terms(
                 continue
 
             lineno = text[:span_start].count("\n") + 1 + line_offset
+            # Implements: REQ-d00237-F — record the reference (for the index)
+            # but flag occurrences embedded in a compound identifier so they are
+            # neither auto-marked nor reported as unmarked-emphasis violations.
             ref = TermRef(
                 node_id=node_id,
                 namespace=namespace,
@@ -306,6 +309,7 @@ def scan_text_for_terms(
                 line=lineno,
                 surface_form=m.group(0),
                 delimiter="",
+                embedded=_is_embedded_in_compound(text, span_start, span_end),
             )
             results.append(ref)
             entry.references.append(ref)
@@ -360,6 +364,31 @@ def _extract_file_comments(file_node) -> list[tuple[str, int]] | None:  # noqa: 
 
 
 _CODE_SPAN_RE = re.compile(r"`[^`]+`")
+
+
+# Implements: REQ-d00237-F
+def _is_embedded_in_compound(text: str, start: int, end: int) -> bool:
+    """True when ``text[start:end]`` is a proper part of a larger compound token.
+
+    A whole-word (``\\b``) match can still land inside a hyphen-joined
+    identifier such as a requirement ID (``CAL-PRD-portal-Session-configuration``)
+    because ``\\b`` treats ``-`` as a word boundary. Such an occurrence is a
+    reference for index purposes but is NOT free-standing prose, so it must not
+    be auto-marked nor flagged as an unmarked-emphasis violation.
+
+    The match is "embedded" when the surrounding maximal non-whitespace token
+    contains other alphanumeric characters outside the match itself. Trailing
+    punctuation (``Session.``, ``(Session)``) is therefore not treated as
+    embedding, while compound identifiers (``Session-config``, ``a/Session``)
+    are.
+    """
+    i = start
+    while i > 0 and not text[i - 1].isspace():
+        i -= 1
+    j = end
+    while j < len(text) and not text[j].isspace():
+        j += 1
+    return any(c.isalnum() for c in text[i:start]) or any(c.isalnum() for c in text[end:j])
 
 
 _EMPHASIS_SPAN_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -475,6 +504,10 @@ def _canonicalize_text(
             if any(not (m.end() <= cs or m.start() >= ce) for cs, ce in claimed):
                 continue
             if _in_outer_emphasis(m.start(), m.end()):
+                continue
+            # Implements: REQ-d00237-F — don't reach into compound identifiers
+            # (e.g. a REQ-ID); marking a sub-token would emit ``...-*Session*-...``.
+            if _is_embedded_in_compound(text, m.start(), m.end()):
                 continue
             old_form = m.group(0)
             new_text.append(text[last_end : m.start()])

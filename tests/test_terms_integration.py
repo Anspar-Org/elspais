@@ -13,6 +13,7 @@ from unittest.mock import MagicMock
 
 from elspais.commands.health import (
     HealthCheck,
+    check_term_canonical_form,
     check_term_unused,
     check_unmarked_usage,
     run_term_checks,
@@ -716,3 +717,124 @@ def test_REQ_d00238_B_code_comments_only_in_pipeline(tmp_path):
     assert entry.references[0].node_id == "file:src/main.py"
     # The reference is from a comment (plain text), so unmarked
     assert entry.references[0].marked is False
+
+
+# =============================================================================
+# REQ-d00237-F: terms embedded in compound identifiers bypass health checks
+#
+# A term occurrence flagged embedded=True (a sub-token of a compound ID) is a
+# reference for the index but must NOT be reported by terms.unmarked nor
+# terms.canonical_form.
+# =============================================================================
+
+
+def _embedded_term_entry() -> TermEntry:
+    """A defined term whose ONLY occurrence is embedded in a compound ID."""
+    return TermEntry(
+        term="Session",
+        definition="A bounded interval of user activity.",
+        indexed=True,
+        defined_in="REQ-p00003",
+        defined_at_line=5,
+        namespace="main",
+        references=[
+            TermRef(
+                node_id="REQ-d00080",
+                namespace="main",
+                marked=False,
+                wrong_marking="",
+                line=12,
+                surface_form="Session",
+                delimiter="",
+                embedded=True,
+            ),
+        ],
+    )
+
+
+# Implements: REQ-d00237-F
+def test_REQ_d00237_F_unmarked_check_skips_embedded_ref():
+    """run_term_checks: a term appearing only inside a compound ID is NOT
+    reported as an unmarked-emphasis violation."""
+    td = TermDictionary()
+    td.add(_embedded_term_entry())
+
+    config = {
+        "terms": {
+            "severity": {
+                "duplicate": "error",
+                "undefined": "warning",
+                "unmarked": "warning",
+                "unused": "warning",
+                "bad_definition": "error",
+                "collection_empty": "warning",
+                "canonical_form": "warning",
+            },
+        },
+    }
+    result = run_term_checks(_FakeGraph(terms=td), config)
+
+    unmarked = [c for c in result if c.name == "terms.unmarked"]
+    assert len(unmarked) == 1
+    assert (
+        unmarked[0].passed is True
+    ), f"embedded ref must not be flagged unmarked, findings: {unmarked[0].findings}"
+
+
+# Implements: REQ-d00237-F
+def test_REQ_d00237_F_unmarked_check_still_flags_free_standing_ref():
+    """Contrast: an identical but non-embedded plain-text ref IS flagged,
+    proving the skip is the embedded flag and not a disabled check."""
+    td = TermDictionary()
+    entry = _embedded_term_entry()
+    # Same ref, but free-standing prose (embedded=False).
+    entry.references[0].embedded = False
+    td.add(entry)
+
+    config = {
+        "terms": {
+            "severity": {
+                "duplicate": "error",
+                "undefined": "warning",
+                "unmarked": "warning",
+                "unused": "warning",
+                "bad_definition": "error",
+                "collection_empty": "warning",
+                "canonical_form": "warning",
+            },
+        },
+    }
+    result = run_term_checks(_FakeGraph(terms=td), config)
+
+    unmarked = [c for c in result if c.name == "terms.unmarked"]
+    assert len(unmarked) == 1
+    assert unmarked[0].passed is False
+    assert any(r.node_id == "REQ-d00080" for r in unmarked[0].findings)
+
+
+# Implements: REQ-d00237-F
+def test_REQ_d00237_F_canonical_form_check_skips_embedded_ref():
+    """check_term_canonical_form: an embedded ref is not reported as a
+    non-canonical term reference."""
+    td = TermDictionary()
+    td.add(_embedded_term_entry())
+
+    result = check_term_canonical_form(list(td.iter_all()))
+    assert result.name == "terms.canonical_form"
+    assert (
+        result.passed is True
+    ), f"embedded ref must not be non-canonical, findings: {result.findings}"
+
+
+# Implements: REQ-d00237-F
+def test_REQ_d00237_F_canonical_form_check_still_flags_free_standing_ref():
+    """Contrast: the same ref when NOT embedded is non-canonical (unmarked
+    surface form), so the check fails — confirms the skip hinges on embedded."""
+    td = TermDictionary()
+    entry = _embedded_term_entry()
+    entry.references[0].embedded = False
+    td.add(entry)
+
+    result = check_term_canonical_form(list(td.iter_all()))
+    assert result.passed is False
+    assert any(r.node_id == "REQ-d00080" for r in result.findings)
