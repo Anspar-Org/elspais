@@ -10,10 +10,13 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from elspais.graph.GraphNode import FileType, NodeKind
 from elspais.graph.term_scanner import (
     _canonicalize_text,
     _is_embedded_in_compound,
+    _terms_longest_first,
     extract_comments,
     scan_graph,
     scan_text_for_terms,
@@ -1019,3 +1022,186 @@ def test_REQ_d00237_F_canonicalize_still_marks_free_standing_term():
 
     assert result == "The *Session* expired."
     assert repls == [("Session", "*Session*")]
+
+
+# =============================================================================
+# REQ-d00237-G: leftmost-longest (maximal munch) nested-defined-term handling
+#
+# When one defined term's text contains another (e.g. "Sponsor Portal" contains
+# "Sponsor"), matching is leftmost-longest and INDEPENDENT of the order the
+# terms were defined/inserted. Both scan_text_for_terms and _canonicalize_text
+# iterate terms longest-first (_terms_longest_first) and claim matched spans so
+# a shorter nested term does not also match inside a longer one. The shorter
+# term still matches where it stands alone.
+#
+# These tests are parametrized over BOTH insertion orders; under the old
+# order-dependent logic the [Sponsor, Sponsor Portal] order produced a spurious
+# unmarked "Sponsor" ref and canonicalized to "The *Sponsor* Portal is here.".
+# =============================================================================
+
+
+def _td_nested(*terms: str, indexed: bool = True) -> TermDictionary:
+    """Build a TermDictionary inserting *terms* in the given order."""
+    td = TermDictionary()
+    for term in terms:
+        td.add(
+            TermEntry(
+                term=term,
+                definition=f"A {term}.",
+                namespace="test",
+                defined_in="REQ-p00001",
+                indexed=indexed,
+            )
+        )
+    return td
+
+
+# Both insertion orders of the nested pair. The first order is the one that
+# regressed before the fix; both must now yield identical outcomes.
+_NESTED_ORDERS = [
+    pytest.param(("Sponsor", "Sponsor Portal"), id="inner-first"),
+    pytest.param(("Sponsor Portal", "Sponsor"), id="compound-first"),
+]
+
+
+# -- REQ-d00237-G: _terms_longest_first ordering ------------------------------
+
+
+def test_REQ_d00237_G_terms_longest_first_descending_length():
+    """_terms_longest_first orders entries by descending term length,
+    breaking ties deterministically on the term string."""
+    # "Beta" and "Acme" are a length tie -> alphabetical break ("Acme" first).
+    td = _td_nested("Sponsor", "Sponsor Portal Admin", "Sponsor Portal", "Beta", "Acme")
+    ordered = [e.term for e in _terms_longest_first(td)]
+
+    assert ordered == [
+        "Sponsor Portal Admin",  # 20 chars
+        "Sponsor Portal",  # 14 chars
+        "Sponsor",  # 7 chars
+        "Acme",  # 4 chars, tie -> alphabetical
+        "Beta",  # 4 chars
+    ]
+
+
+def test_REQ_d00237_G_terms_longest_first_order_independent():
+    """The ordering is independent of insertion order — inserting the
+    same terms reversed yields the same longest-first sequence."""
+    forward = [e.term for e in _terms_longest_first(_td_nested("Sponsor", "Sponsor Portal"))]
+    reverse = [e.term for e in _terms_longest_first(_td_nested("Sponsor Portal", "Sponsor"))]
+
+    assert forward == reverse == ["Sponsor Portal", "Sponsor"]
+
+
+# -- REQ-d00237-G: scan plain compound — only the longer term matches ----------
+
+
+@pytest.mark.parametrize("order", _NESTED_ORDERS)
+def test_REQ_d00237_G_scan_plain_compound_only_longest(order):
+    """A plain "Sponsor Portal" yields exactly one unmarked "Sponsor Portal"
+    ref and NO separate "Sponsor" ref, regardless of insertion order."""
+    td = _td_nested(*order)
+    result = scan_text_for_terms(
+        "The Sponsor Portal is here.", td, node_id="REQ-001", namespace="main"
+    )
+
+    surfaces = [r.surface_form for r in result]
+    assert surfaces == ["Sponsor Portal"]
+    assert result[0].marked is False
+    assert result[0].wrong_marking == ""
+    # The inner term must NOT also be recorded inside the claimed compound span.
+    assert "Sponsor" not in surfaces
+
+
+@pytest.mark.parametrize("order", _NESTED_ORDERS)
+def test_REQ_d00237_G_scan_marked_compound_only_longest(order):
+    """A marked "*Sponsor Portal*" yields exactly one marked "Sponsor Portal"
+    ref and no spurious unmarked "Sponsor", in either insertion order."""
+    td = _td_nested(*order)
+    result = scan_text_for_terms(
+        "The *Sponsor Portal* is here.",
+        td,
+        node_id="REQ-001",
+        namespace="main",
+        markup_styles=["*", "**"],
+    )
+
+    assert len(result) == 1
+    assert result[0].surface_form == "Sponsor Portal"
+    assert result[0].marked is True
+    assert result[0].wrong_marking == ""
+
+
+@pytest.mark.parametrize("order", _NESTED_ORDERS)
+def test_REQ_d00237_G_scan_standalone_inner_still_matches(order):
+    """The shorter nested term still matches where it appears on its own
+    (no enclosing compound), independent of insertion order."""
+    td = _td_nested(*order)
+    result = scan_text_for_terms(
+        "The Sponsor approved it.", td, node_id="REQ-001", namespace="main"
+    )
+
+    assert len(result) == 1
+    assert result[0].surface_form == "Sponsor"
+    assert result[0].marked is False
+    assert result[0].wrong_marking == ""
+
+
+@pytest.mark.parametrize("order", _NESTED_ORDERS)
+def test_REQ_d00237_G_scan_mixed_compound_and_standalone(order):
+    """Text with BOTH a compound usage and a separate standalone inner usage
+    yields one "Sponsor Portal" ref AND one standalone "Sponsor" ref —
+    the inner term is claimed inside the compound but free elsewhere."""
+    td = _td_nested(*order)
+    result = scan_text_for_terms(
+        "The Sponsor Portal is run by the Sponsor.",
+        td,
+        node_id="REQ-001",
+        namespace="main",
+    )
+
+    surfaces = sorted(r.surface_form for r in result)
+    assert surfaces == ["Sponsor", "Sponsor Portal"]
+    # Exactly one of each — no double-counting of the inner term in the compound.
+    assert surfaces.count("Sponsor") == 1
+    assert surfaces.count("Sponsor Portal") == 1
+
+
+# -- REQ-d00237-G: canonicalization wraps the compound as a whole --------------
+
+
+@pytest.mark.parametrize("order", _NESTED_ORDERS)
+def test_REQ_d00237_G_canonicalize_wraps_compound_as_whole(order):
+    """_canonicalize_text wraps the full compound "Sponsor Portal" rather
+    than its inner "Sponsor" — same result in either insertion order.
+    Under the old order-dependent logic, [Sponsor, Sponsor Portal] produced
+    "The *Sponsor* Portal is here." instead."""
+    td = _td_nested(*order)
+    result, repls = _canonicalize_text("The Sponsor Portal is here.", td, "*", {"*", "**"})
+
+    assert result == "The *Sponsor Portal* is here."
+    assert repls == [("Sponsor Portal", "*Sponsor Portal*")]
+
+
+# -- REQ-d00237-G: three-level nest — longest wins -----------------------------
+
+
+@pytest.mark.parametrize(
+    "order",
+    [
+        pytest.param(("Sponsor", "Sponsor Portal", "Sponsor Portal Admin"), id="shortest-first"),
+        pytest.param(("Sponsor Portal Admin", "Sponsor Portal", "Sponsor"), id="longest-first"),
+    ],
+)
+def test_REQ_d00237_G_three_level_nest_longest_wins(order):
+    """With three nested terms, the longest enclosing term claims the span;
+    the two shorter terms do not separately match inside it."""
+    td = _td_nested(*order)
+    result = scan_text_for_terms(
+        "Contact the Sponsor Portal Admin today.",
+        td,
+        node_id="REQ-001",
+        namespace="main",
+    )
+
+    surfaces = [r.surface_form for r in result]
+    assert surfaces == ["Sponsor Portal Admin"]

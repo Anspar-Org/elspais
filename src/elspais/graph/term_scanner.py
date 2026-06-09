@@ -185,6 +185,20 @@ _ALL_EMPHASIS_DELIMITERS: list[str] = ["**", "__", "*", "_"]
 _DEFAULT_MARKUP_STYLES: list[str] = ["*", "**"]
 
 
+# Implements: REQ-d00237-G
+def _terms_longest_first(td: TermDictionary) -> list:
+    """Return term entries ordered longest term first (leftmost-longest).
+
+    When one defined term contains another (``Sponsor Portal`` contains
+    ``Sponsor``), matching must be deterministic and prefer the longer term —
+    otherwise the outcome depends on definition/insertion order. Processing
+    longest-first, combined with span claiming, yields maximal-munch matching:
+    the inner term does not separately match inside the longer one. Ties break
+    on the term string for a stable order.
+    """
+    return sorted(td.iter_all(), key=lambda e: (-len(e.term), e.term))
+
+
 @functools.cache
 def _build_emphasis_pattern(delimiter: str, term: str) -> re.Pattern[str]:
     """Build a regex that matches *term* wrapped in *delimiter*.
@@ -236,10 +250,13 @@ def scan_text_for_terms(
 
     styles_set = set(markup_styles)
     results: list[TermRef] = []
-    # Track character spans already claimed by emphasis matches
+    # Track character spans already claimed by an emphasis OR unmarked match.
+    # Claiming unmarked spans (with longest-first iteration) gives maximal-munch
+    # matching so a shorter nested term doesn't also match inside a longer one.
     claimed_spans: list[tuple[int, int]] = []
 
-    for entry in td.iter_all():
+    # Implements: REQ-d00237-G — longest-first for deterministic nesting.
+    for entry in _terms_longest_first(td):
         term = entry.term
 
         # --- Phase 1: scan all 4 emphasis delimiters --------------------------
@@ -313,6 +330,8 @@ def scan_text_for_terms(
             )
             results.append(ref)
             entry.references.append(ref)
+            # Claim the span so a shorter nested term won't also match here.
+            claimed_spans.append((span_start, span_end))
 
     return results
 
@@ -451,7 +470,10 @@ def _canonicalize_text(
     claimed: list[tuple[int, int]] = []
     replacements: list[tuple[str, str]] = []  # (old_form, new_form)
 
-    for entry in td.iter_all():
+    # Implements: REQ-d00237-G — longest-first so a compound term (e.g.
+    # "Sponsor Portal") is marked as a whole rather than having its inner
+    # term ("Sponsor") wrapped first.
+    for entry in _terms_longest_first(td):
         if not entry.indexed:
             continue
         term = entry.term

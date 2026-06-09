@@ -405,13 +405,17 @@ E. Terms with `indexed=False` SHALL be scanned for marked and wrong-marking refe
 
 F. An unmarked occurrence that is a proper part of a larger compound identifier (e.g. a term appearing between hyphens inside a requirement ID such as `CAL-PRD-portal-Session-configuration`) SHALL be recorded as a reference with `embedded=True`. Embedded references SHALL be counted toward the term index, SHALL NOT be auto-marked during canonicalization, and SHALL NOT be reported as unmarked-emphasis or non-canonical-form violations.
 
+G. When one *Defined Term*'s text contains another (e.g. `Sponsor Portal` contains `Sponsor`), matching SHALL be leftmost-longest (maximal munch) and independent of term definition order: the scanner and the canonicalizer SHALL process terms longest-first and SHALL NOT match a shorter term within a span already claimed by a longer term. A shorter nested term SHALL still match where it occurs on its own.
+
 ### Changelog
 
+- 2026-06-09 | f2b673a4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms, update hash
+- 2026-06-09 | 2849c41b | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-06-09 | d1eb27f4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-05-11 | 63cb874b | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 63cb874b | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
-*End* *Term Reference Scanner Core* | **Hash**: d1eb27f4
+*End* *Term Reference Scanner Core* | **Hash**: f2b673a4
 
 ## REQ-d00238: Graph-Wide Term Scan
 
