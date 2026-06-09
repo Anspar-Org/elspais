@@ -4836,6 +4836,11 @@ The graph is the single source of truth - all tools read directly from it.
 - `mutate_delete_assertion(assertion_id, confirm=True)` - Delete (requires confirm)
 - `mutate_rename_assertion(old_id, new_label)` - Rename label
 
+### Section / Remainder Mutations (in-memory)
+- `mutate_add_remainder(req_id, heading, text)` - Add non-normative section (e.g. Rationale)
+- `mutate_update_remainder(node_id, text=..., heading=...)` - Edit section prose/heading
+- `mutate_delete_remainder(node_id, confirm=True)` - Delete section (requires confirm)
+
 ### Edge Mutations (in-memory)
 - `mutate_add_edge(source_id, target_id, edge_kind)` - Add relationship
 - `mutate_change_edge_kind(source_id, target_id, new_kind)` - Change type
@@ -5485,6 +5490,50 @@ def create_server(
         if guard:
             return guard
         return _mutate_rename_assertion(_state["graph"], old_id, new_label)
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Remainder (Non-Normative Section) Mutation Tools
+    # ─────────────────────────────────────────────────────────────────────
+
+    @mcp.tool()
+    def mutate_update_remainder(
+        node_id: str, text: str | None = None, heading: str | None = None
+    ) -> dict[str, Any]:
+        """Edit a non-normative section's prose or heading (e.g. Rationale, Notes).
+
+        Targets a REMAINDER section node (id like 'REQ-p00001:section:m1'), not an
+        assertion or metadata field. Pass text and/or heading; omit one to leave it
+        unchanged. Recomputes the parent requirement's hash.
+        """
+        guard = _guard_associate_write(_state["graph"], _state["config"], node_id)
+        if guard:
+            return guard
+        return _mutate_update_remainder(_state["graph"], node_id, text, heading)
+
+    @mcp.tool()
+    def mutate_add_remainder(req_id: str, heading: str, text: str) -> dict[str, Any]:
+        """Add a non-normative section (e.g. Rationale, Notes) to a requirement.
+
+        Creates a new REMAINDER section linked to the requirement. The section is
+        appended after existing content; recomputes the requirement's hash.
+        """
+        guard = _guard_associate_write(_state["graph"], _state["config"], req_id)
+        if guard:
+            return guard
+        return _mutate_add_remainder(_state["graph"], req_id, heading, text)
+
+    @mcp.tool()
+    def mutate_delete_remainder(node_id: str, confirm: bool = False) -> dict[str, Any]:
+        """Delete a non-normative section node. Returns error unless confirm=True."""
+        if not confirm:
+            return {
+                "success": False,
+                "error": "Deletion requires confirm=True",
+            }
+        guard = _guard_associate_write(_state["graph"], _state["config"], node_id)
+        if guard:
+            return guard
+        return _mutate_delete_remainder(_state["graph"], node_id)
 
     # ─────────────────────────────────────────────────────────────────────
     # Edge Mutation Tools (REQ-o00062-C)

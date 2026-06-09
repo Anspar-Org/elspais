@@ -82,16 +82,19 @@ F. Destructive operations (delete_*) SHALL require explicit `confirm=True` param
 
 G. `undo_last_mutation()` and `undo_to_mutation(id)` SHALL reverse mutations using graph.undo_last() and graph.undo_to().
 
+H. *Section* (remainder) mutations SHALL include: add_remainder, update_remainder, delete_remainder, covering non-normative prose such as Rationale and Notes.
+
 ### Rationale
 
 In-memory mutations enable AI agents to draft requirement changes that can be reviewed before persisting. The undo system provides safety for exploratory editing.
 
 ### Changelog
 
+- 2026-06-09 | 69e70749 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-05-11 | ef63f424 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | ef63f424 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
-*End* *MCP Graph Mutation Tools* | **Hash**: ef63f424
+*End* *MCP Graph Mutation Tools* | **Hash**: 69e70749
 ---
 
 ## REQ-o00063: MCP File Mutation Tools
