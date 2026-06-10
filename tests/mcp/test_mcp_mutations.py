@@ -1,6 +1,6 @@
 # Validates REQ-p00060-D, REQ-p00060-E
 # Validates REQ-o00062-A, REQ-o00062-B, REQ-o00062-C, REQ-o00062-D
-# Validates REQ-o00062-E, REQ-o00062-F, REQ-o00062-G
+# Validates REQ-o00062-E, REQ-o00062-F, REQ-o00062-G, REQ-o00062-H
 # Validates REQ-o00063-A
 # Validates REQ-d00065-A, REQ-d00065-B, REQ-d00065-C, REQ-d00065-D, REQ-d00065-E
 """Tests for MCP mutation tools.
@@ -408,6 +408,185 @@ class TestMutateRenameAssertion:
 
         assert "mutation" in result
         assert result["mutation"]["operation"] == "rename_assertion"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test: Remainder (Section) Mutations - REQ-o00062-H
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _build_remainder_graph() -> TraceGraph:
+    """Build a graph with a requirement that has REMAINDER sections.
+
+    Mirrors the fixture in tests/core/test_remainder_mutations.py so the
+    section ID format (e.g. REQ-p00001:section:1) is produced by the real
+    GraphBuilder rather than hand-constructed.
+    """
+    from elspais.graph.builder import GraphBuilder
+    from elspais.graph.parsers import ParsedContent
+
+    builder = GraphBuilder()
+    builder.add_parsed_content(
+        ParsedContent(
+            content_type="requirement",
+            parsed_data={
+                "id": "REQ-p00001",
+                "title": "Requirement with Sections",
+                "level": "PRD",
+                "status": "Active",
+                "assertions": [],
+                "implements": [],
+                "refines": [],
+                "sections": [
+                    {"heading": "preamble", "content": "Some preamble text", "line": 2},
+                    {"heading": "Rationale", "content": "Why we need this", "line": 4},
+                ],
+            },
+            start_line=1,
+            end_line=5,
+            raw_text="## REQ-p00001: Requirement with Sections",
+        )
+    )
+    return builder.build()
+
+
+class TestMutateRemainder:
+    """Tests for remainder (section) mutation tool wrappers.
+
+    Validates REQ-o00062-H: Section (remainder) mutations include
+    add_remainder, update_remainder, delete_remainder.
+    """
+
+    def test_REQ_o00062_H_add_remainder_creates_section(self):
+        """REQ-o00062-H: _mutate_add_remainder adds a queryable section."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_add_remainder
+
+        graph = _build_remainder_graph()
+
+        result = _mutate_add_remainder(graph, "REQ-p00001", "Notes", "Some notes text")
+
+        assert result["success"] is True
+        new_id = result["mutation"]["target_id"]
+        node = graph.find_by_id(new_id)
+        assert node is not None
+        assert node.kind == NodeKind.REMAINDER
+        assert node.get_field("heading") == "Notes"
+        assert node.get_field("text") == "Some notes text"
+
+    def test_REQ_o00062_E_add_remainder_returns_mutation_entry(self):
+        """REQ-o00062-E: _mutate_add_remainder returns a MutationEntry."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_add_remainder
+
+        graph = _build_remainder_graph()
+
+        result = _mutate_add_remainder(graph, "REQ-p00001", "Notes", "Text")
+
+        assert "mutation" in result
+        assert result["mutation"]["operation"] == "add_remainder"
+
+    def test_REQ_d00065_D_update_remainder_changes_text(self):
+        """REQ-d00065-D: _mutate_update_remainder delegates and stores new text."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_update_remainder
+
+        graph = _build_remainder_graph()
+        section = graph.find_by_id("REQ-p00001:section:1")
+        assert section.get_field("text") != "Updated rationale"
+
+        result = _mutate_update_remainder(graph, "REQ-p00001:section:1", text="Updated rationale")
+
+        assert result["success"] is True
+        assert section.get_field("text") == "Updated rationale"
+
+    def test_REQ_o00062_H_update_remainder_changes_heading(self):
+        """REQ-o00062-H: _mutate_update_remainder updates the heading field."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_update_remainder
+
+        graph = _build_remainder_graph()
+        section = graph.find_by_id("REQ-p00001:section:1")
+        assert section.get_field("heading") != "New Heading"
+
+        result = _mutate_update_remainder(graph, "REQ-p00001:section:1", heading="New Heading")
+
+        assert result["success"] is True
+        assert section.get_field("heading") == "New Heading"
+
+    def test_REQ_o00062_E_update_remainder_returns_mutation_entry(self):
+        """REQ-o00062-E: _mutate_update_remainder returns a MutationEntry."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_update_remainder
+
+        graph = _build_remainder_graph()
+
+        result = _mutate_update_remainder(graph, "REQ-p00001:section:1", text="x")
+
+        assert "mutation" in result
+        assert result["mutation"]["operation"] == "update_remainder"
+
+    def test_REQ_o00062_H_delete_remainder_removes_section(self):
+        """REQ-o00062-H: _mutate_delete_remainder removes the section."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_delete_remainder
+
+        graph = _build_remainder_graph()
+        assert graph.find_by_id("REQ-p00001:section:1") is not None
+
+        result = _mutate_delete_remainder(graph, "REQ-p00001:section:1")
+
+        assert result["success"] is True
+        assert graph.find_by_id("REQ-p00001:section:1") is None
+
+    def test_REQ_o00062_E_delete_remainder_returns_mutation_entry(self):
+        """REQ-o00062-E: _mutate_delete_remainder returns a MutationEntry."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_delete_remainder
+
+        graph = _build_remainder_graph()
+
+        result = _mutate_delete_remainder(graph, "REQ-p00001:section:1")
+
+        assert "mutation" in result
+        assert result["mutation"]["operation"] == "delete_remainder"
+
+    def test_REQ_o00062_H_update_nonexistent_returns_error(self):
+        """REQ-o00062-H: Updating a missing node returns error, not an exception."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_update_remainder
+
+        graph = _build_remainder_graph()
+
+        result = _mutate_update_remainder(graph, "REQ-p00001:section:99", text="x")
+
+        assert result["success"] is False
+        assert "error" in result
+
+    def test_REQ_o00062_H_update_non_remainder_returns_error(self):
+        """REQ-o00062-H: Updating a non-REMAINDER node returns error."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_update_remainder
+
+        graph = _build_remainder_graph()
+
+        # REQ-p00001 is a REQUIREMENT, not a REMAINDER
+        result = _mutate_update_remainder(graph, "REQ-p00001", text="x")
+
+        assert result["success"] is False
+        assert "error" in result
+
+    def test_REQ_o00062_H_delete_nonexistent_returns_error(self):
+        """REQ-o00062-H: Deleting a missing node returns error, not an exception."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_delete_remainder
+
+        graph = _build_remainder_graph()
+
+        result = _mutate_delete_remainder(graph, "REQ-p00001:section:99")
+
+        assert result["success"] is False
+        assert "error" in result
 
 
 # ─────────────────────────────────────────────────────────────────────────────

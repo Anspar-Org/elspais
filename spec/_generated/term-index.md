@@ -7,6 +7,7 @@
 **REQ:**
 
 - REQ-d00223-B
+- REQ-d00237-G
 
 ## Specification
 

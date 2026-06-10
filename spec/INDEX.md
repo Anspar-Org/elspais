@@ -30,7 +30,7 @@
 | REQ-o00051 | Composable Annotation Design        | ops-architecture.md | c73a6e32 |
 | REQ-o00060 | MCP Core Query Tools                | ops-mcp.md          | 73c31134 |
 | REQ-o00061 | MCP Workspace Context Tools         | ops-mcp.md          | 0aa9dff4 |
-| REQ-o00062 | MCP Graph Mutation Tools            | ops-mcp.md          | ef63f424 |
+| REQ-o00062 | MCP Graph Mutation Tools            | ops-mcp.md          | 69e70749 |
 | REQ-o00063 | MCP File Mutation Tools             | ops-mcp.md          | 291497b8 |
 | REQ-o00064 | MCP Test Coverage Analysis Tools    | ops-mcp.md          | e7fd1b43 |
 | REQ-o00065 | Agent-Assisted Link Suggestion      | ops-mcp.md          | 17851ae2 |
@@ -125,7 +125,7 @@
 | REQ-d00234 | Lost Comments Card                                            | prd-features.md         | 7fc99c6a |
 | REQ-d00235 | Comment Compaction CLI                                        | prd-features.md         | f3547362 |
 | REQ-d00236 | Comment Extraction Utilities                                  | prd-core.md             | 499123f1 |
-| REQ-d00237 | Term Reference Scanner Core                                   | prd-core.md             | 63cb874b |
+| REQ-d00237 | Term Reference Scanner Core                                   | prd-core.md             | f2b673a4 |
 | REQ-d00238 | Graph-Wide Term Scan                                          | prd-core.md             | d3a202d4 |
 | REQ-d00239 | Federated Graph Term Scanner Pass                             | prd-core.md             | 7d9a30c4 |
 | REQ-d00240 | New Term Health Checks                                        | prd-core.md             | 76a49db3 |
