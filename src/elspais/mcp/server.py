@@ -5501,9 +5501,11 @@ def create_server(
     ) -> dict[str, Any]:
         """Edit a non-normative section's prose or heading (e.g. Rationale, Notes).
 
-        Targets a REMAINDER section node (id like 'REQ-p00001:section:m1'), not an
-        assertion or metadata field. Pass text and/or heading; omit one to leave it
-        unchanged. Recomputes the parent requirement's hash.
+        Targets a REMAINDER section node, not an assertion or metadata field.
+        Parsed sections have numeric IDs ('REQ-p00001:section:1'); sections added
+        via mutate_add_remainder use an 'm'-prefixed suffix ('...:section:m0').
+        Pass text and/or heading; omit one to leave it unchanged. Recomputes the
+        parent requirement's hash.
         """
         guard = _guard_associate_write(_state["graph"], _state["config"], node_id)
         if guard:
@@ -5528,7 +5530,7 @@ def create_server(
         if not confirm:
             return {
                 "success": False,
-                "error": "Deletion requires confirm=True",
+                "error": "Destructive operation requires confirm=True",
             }
         guard = _guard_associate_write(_state["graph"], _state["config"], node_id)
         if guard:

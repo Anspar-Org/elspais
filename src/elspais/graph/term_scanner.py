@@ -310,7 +310,8 @@ def scan_text_for_terms(
         word_pat = re.compile(r"\b" + re.escape(term) + r"\b", re.IGNORECASE)
         for m in word_pat.finditer(text):
             span_start, span_end = m.start(), m.end()
-            # Skip if overlapping any emphasis match
+            # Skip if overlapping an already-claimed span — either an emphasis
+            # match or a longer term's unmarked match (maximal-munch nesting).
             if any(not (span_end <= cs or span_start >= ce) for cs, ce in claimed_spans):
                 continue
 
