@@ -22,11 +22,11 @@
 
 **REQ:**
 
-- REQ-p00003
 - REQ-d00241
 - REQ-p00006
 - REQ-d00212-F
 - REQ-d00212-M
+- REQ-d00204-G
 - REQ-d00252-B
 - REQ-d00128-I
 - REQ-d00133-B
@@ -60,9 +60,6 @@
 - JNY-CEO-Sponsor-01
 - JNY-CEO-Audit-01
 - JNY-PM-Sprint-01
-- JNY-PM-MultiRepo-01
-- JNY-Sponsor-PM-01
-- JNY-Sponsor-PM-02
 - JNY-Auditor-Validate-01
 
 ## Traceability Matrix

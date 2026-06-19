@@ -1284,6 +1284,15 @@ class FederatedGraph:
                 # Implements: REQ-p00014-H
                 if br.edge_kind == EdgeKind.SATISFIES.value:
                     continue
+                # INTEGRATES is owned by the dedicated _wire_integrates_edges
+                # pass, which wires the consumer->library edge from the node's
+                # integrates_refs field. Resolving it here too would wire a
+                # SECOND edge in the opposite direction (library->consumer),
+                # producing a cycle. Skip it; _wire_integrates_edges clears the
+                # matching broken reference when it wires the correct edge.
+                # Implements: REQ-d00252-C
+                if br.edge_kind == EdgeKind.INTEGRATES.value:
+                    continue
                 target_repo_name = self._ownership.get(br.target_id)
                 if target_repo_name and target_repo_name != source_entry.name:
                     target_entry = self._repos[target_repo_name]
@@ -1618,6 +1627,25 @@ class FederatedGraph:
                     EdgeKind.INTEGRATES,
                     target_graph=source_entry.graph,
                 )
+                # Drop the consumer-side INTEGRATES broken reference left by an
+                # earlier integrates pass that could not resolve the target
+                # locally. The per-repo GraphBuilder only stores integrates_refs;
+                # the broken ref is recorded by _wire_one_integrates itself when
+                # this consumer repo was built as a federation-of-one (the target
+                # lives in a sibling associate not present at that point, so it
+                # was recorded as presumed-foreign). Now, in the full federation,
+                # the target resolves and we wire the correct edge --
+                # _wire_cross_graph_edges deliberately skips INTEGRATES, so clear
+                # the stale broken ref here or it surfaces as a false positive.
+                source_entry.graph._broken_references = [
+                    br
+                    for br in source_entry.graph._broken_references
+                    if not (
+                        br.source_id == source_id
+                        and br.target_id == target_id
+                        and br.edge_kind == EdgeKind.INTEGRATES.value
+                    )
+                ]
                 return
 
         # Same-repo target: external-only violation (REQ-d00252-C).

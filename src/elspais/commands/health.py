@@ -26,6 +26,7 @@ from elspais.config.status_roles import StatusRole
 
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
+    from elspais.graph.GraphNode import GraphNode
     from elspais.utilities.patterns import IdResolver
 
 _SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
@@ -779,7 +780,6 @@ def check_spec_format_rules(
 ) -> HealthCheck:
     """Check that requirements comply with configured format rules."""
     from elspais.graph import NodeKind
-    from elspais.graph.GraphNode import GraphNode
     from elspais.validation.format import get_format_rules_config, validate_requirement_format
 
     rules = get_format_rules_config(config)
@@ -1775,6 +1775,85 @@ def check_associate_paths(
     )
 
 
+# Implements: REQ-d00204-G
+def check_no_cycles(graph: FederatedGraph) -> HealthCheck:
+    """Detect cycles in the requirement traceability graph.
+
+    A cycle (a requirement reachable as its own descendant through the
+    REQUIREMENT-to-REQUIREMENT edges that downstream tree/coverage walks
+    follow) crashes those walks with unbounded recursion. Surface it here as
+    a clear diagnostic instead. Uses an iterative colored DFS so cycle
+    detection itself can never blow the stack.
+    """
+    from elspais.graph import NodeKind
+
+    def req_children(node: GraphNode) -> list[GraphNode]:
+        return [c for c in node.iter_children() if c.kind == NodeKind.REQUIREMENT]
+
+    WHITE, GREY, BLACK = 0, 1, 2
+    color: dict[str, int] = {}
+    findings: list[HealthFinding] = []
+    seen_cycles: set[frozenset[str]] = set()
+
+    for start in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if color.get(start.id, WHITE) != WHITE:
+            continue
+        # Iterative DFS. path holds the current grey chain; path_pos maps a
+        # node id to its index in path so a back-edge can name the cycle.
+        path: list[GraphNode] = [start]
+        path_pos: dict[str, int] = {start.id: 0}
+        color[start.id] = GREY
+        stack: list[tuple[GraphNode, Iterator[GraphNode]]] = [(start, iter(req_children(start)))]
+        while stack:
+            node, children = stack[-1]
+            descended = False
+            for child in children:
+                cstate = color.get(child.id, WHITE)
+                if cstate == WHITE:
+                    color[child.id] = GREY
+                    path_pos[child.id] = len(path)
+                    path.append(child)
+                    stack.append((child, iter(req_children(child))))
+                    descended = True
+                    break
+                if cstate == GREY:
+                    # Back-edge: child..node on the current path form a cycle.
+                    cycle_ids = [n.id for n in path[path_pos[child.id] :]]
+                    key = frozenset(cycle_ids)
+                    if key not in seen_cycles:
+                        seen_cycles.add(key)
+                        loop = " -> ".join([*cycle_ids, child.id])
+                        findings.append(
+                            HealthFinding(
+                                message=f"Requirement cycle: {loop}",
+                                node_id=child.id,
+                                related=cycle_ids,
+                            )
+                        )
+            if not descended:
+                color[node.id] = BLACK
+                path_pos.pop(node.id, None)
+                path.pop()
+                stack.pop()
+
+    if findings:
+        return HealthCheck(
+            name="spec.no_cycles",
+            passed=False,
+            message=f"Found {len(findings)} requirement cycle(s)",
+            category="spec",
+            severity="error",
+            details={"cycle_count": len(findings)},
+            findings=findings,
+        )
+    return HealthCheck(
+        name="spec.no_cycles",
+        passed=True,
+        message="No requirement cycles",
+        category="spec",
+    )
+
+
 def check_no_requirements(graph: FederatedGraph) -> HealthCheck:
     """Flag when no requirements are found — likely a config issue."""
     from elspais.graph import NodeKind
@@ -1841,6 +1920,7 @@ def run_spec_checks(
         check_spec_no_duplicates(graph),
         check_broken_references(graph, config),
         check_spec_hash_integrity(graph),
+        check_no_cycles(graph),
     ]
 
     # --- Config-sensitive checks: run per-repo ---

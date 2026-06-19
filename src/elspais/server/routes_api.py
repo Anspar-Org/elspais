@@ -504,7 +504,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
         return parsed.component if (parsed and parsed.component) else node.id
 
     rows: list[dict[str, Any]] = []
-    visited: set[tuple[str, str]] = set()
+    visited: set[tuple[str, str, int]] = set()
 
     # Collect node IDs affected by pending mutations for "Unsaved" filter
     unsaved_ids: set[str] = set()
@@ -580,10 +580,18 @@ async def api_tree_data(request: Request) -> JSONResponse:
         #    "no `CORE` literal anywhere on the wire" invariant.
         return local_ns
 
-    def _walk(node, depth: int, parent_id: str | None) -> None:
+    def _walk(node, depth: int, parent_id: str | None, ancestors: frozenset[str]) -> None:
         from elspais.graph.relations import EdgeKind
 
         if node.kind != NodeKind.REQUIREMENT:
+            return
+        # Cycle guard: if this node is already on the current root->node path, a
+        # traceability cycle (e.g. mutual `Integrates:` references) would recurse
+        # forever. Stop descending — the node is already represented higher up on
+        # this branch. This intentionally keys on the ancestor PATH, not a global
+        # visited set, so a shared node still renders under each distinct parent
+        # (multi-parent DAG behavior is preserved).
+        if node.id in ancestors:
             return
         visit_key = (node.id, parent_id or "__root__", depth)
         if visit_key in visited:
@@ -660,12 +668,13 @@ async def api_tree_data(request: Request) -> JSONResponse:
             (c for c in node.iter_children() if c.kind == NodeKind.REQUIREMENT),
             key=lambda n: n.id,
         )
+        child_ancestors = ancestors | {node.id}
         for child in req_children:
-            _walk(child, depth + 1, node.id)
+            _walk(child, depth + 1, node.id, child_ancestors)
 
     for root in sorted(g.iter_roots(), key=lambda n: n.id):
         if root.kind == NodeKind.REQUIREMENT:
-            _walk(root, 0, None)
+            _walk(root, 0, None, frozenset())
 
     # Add USER_JOURNEY nodes
     _jn_entry = ns_catalog.get(local_ns) or {}

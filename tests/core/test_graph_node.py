@@ -175,6 +175,33 @@ class TestGraphNodeTraversal:
         ids = [n.id for n in root.walk("level")]
         assert ids == ["root", "child1", "child2", "gc"]
 
+    # Implements: REQ-d00127-C
+    def test_walk_terminates_on_cyclic_edges(self):
+        """walk() must not recurse forever over a cycle (REQ-d00127-C).
+
+        A mutual requirement-to-requirement edge set (a -> b -> a) used to
+        make _walk_preorder/_walk_postorder/_walk_level recurse without
+        bound (RecursionError). The ancestor-path guard prunes the
+        back-edge so every order terminates and still yields both nodes.
+        """
+        a = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
+        b = GraphNode(id="REQ-p00002", kind=NodeKind.REQUIREMENT)
+        a.link(b, EdgeKind.REFINES)
+        b.link(a, EdgeKind.REFINES)
+
+        # Pre-order: returns (no RecursionError) and is finite/bounded.
+        pre = list(a.walk())
+        assert len(pre) <= 4
+        pre_ids = {n.id for n in pre}
+        assert pre_ids == {"REQ-p00001", "REQ-p00002"}
+
+        # Post-order and level-order also terminate and reach both nodes.
+        post_ids = {n.id for n in a.walk(order="post")}
+        assert post_ids == {"REQ-p00001", "REQ-p00002"}
+
+        level_ids = {n.id for n in a.walk(order="level")}
+        assert level_ids == {"REQ-p00001", "REQ-p00002"}
+
 
 class TestGraphNodeFieldAccess:
     """Tests for content and metric field access."""

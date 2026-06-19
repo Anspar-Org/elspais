@@ -449,25 +449,52 @@ class GraphNode:
         else:
             raise ValueError(f"Unknown traversal order: {order}")
 
-    def _walk_preorder(self, edge_kinds: set[EdgeKind] | None = None) -> Iterator[GraphNode]:
-        """Pre-order traversal (parent before children)."""
-        yield self
-        for child in self.iter_children(edge_kinds):
-            yield from child._walk_preorder(edge_kinds)
+    def _walk_preorder(
+        self,
+        edge_kinds: set[EdgeKind] | None = None,
+        _ancestors: frozenset[str] = frozenset(),
+    ) -> Iterator[GraphNode]:
+        """Pre-order traversal (parent before children).
 
-    def _walk_postorder(self, edge_kinds: set[EdgeKind] | None = None) -> Iterator[GraphNode]:
-        """Post-order traversal (children before parent)."""
+        ``_ancestors`` tracks the node ids on the current root->node path so a
+        cycle in the followed edges (e.g. a mutual ``Integrates:`` reference)
+        cannot recurse forever. A child already on the path is a back-edge and
+        is skipped. Nodes reachable via multiple distinct paths (DAG diamonds)
+        are still yielded per-path -- only true cycles are pruned.
+        """
+        yield self
+        child_ancestors = _ancestors | {self.id}
         for child in self.iter_children(edge_kinds):
-            yield from child._walk_postorder(edge_kinds)
+            if child.id in child_ancestors:
+                continue
+            yield from child._walk_preorder(edge_kinds, child_ancestors)
+
+    def _walk_postorder(
+        self,
+        edge_kinds: set[EdgeKind] | None = None,
+        _ancestors: frozenset[str] = frozenset(),
+    ) -> Iterator[GraphNode]:
+        """Post-order traversal (children before parent). Cycle-safe via the
+        ancestor-path guard (see :meth:`_walk_preorder`)."""
+        child_ancestors = _ancestors | {self.id}
+        for child in self.iter_children(edge_kinds):
+            if child.id in child_ancestors:
+                continue
+            yield from child._walk_postorder(edge_kinds, child_ancestors)
         yield self
 
     def _walk_level(self, edge_kinds: set[EdgeKind] | None = None) -> Iterator[GraphNode]:
-        """Level-order (breadth-first) traversal."""
-        queue: deque[GraphNode] = deque([self])
+        """Level-order (breadth-first) traversal. Cycle-safe: each queue entry
+        carries its root->node path so back-edges are skipped (see
+        :meth:`_walk_preorder`)."""
+        queue: deque[tuple[GraphNode, frozenset[str]]] = deque([(self, frozenset())])
         while queue:
-            node = queue.popleft()
+            node, ancestors = queue.popleft()
             yield node
-            queue.extend(node.iter_children(edge_kinds))
+            child_ancestors = ancestors | {node.id}
+            for child in node.iter_children(edge_kinds):
+                if child.id not in child_ancestors:
+                    queue.append((child, child_ancestors))
 
     # Implements: REQ-d00127-C
     def ancestors(self, edge_kinds: set[EdgeKind] | None = None) -> Iterator[GraphNode]:
