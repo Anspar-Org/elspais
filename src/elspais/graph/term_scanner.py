@@ -255,9 +255,19 @@ def scan_text_for_terms(
     # matching so a shorter nested term doesn't also match inside a longer one.
     claimed_spans: list[tuple[int, int]] = []
 
+    # Cheap pre-filter: every form we look for (``*term*``, ``**term**``,
+    # ``\bterm\b``) contains the bare term as a case-insensitive substring, so a
+    # term absent from the text cannot match any pattern. The C-level ``in``
+    # check skips the regex passes for the (many) term/region pairs that can't
+    # match -- this dominates scan cost on large federated graphs.
+    text_lower = text.lower()
+
     # Implements: REQ-d00237-G — longest-first for deterministic nesting.
     for entry in _terms_longest_first(td):
         term = entry.term
+
+        if term.lower() not in text_lower:
+            continue
 
         # --- Phase 1: scan all 4 emphasis delimiters --------------------------
         # Implements: REQ-d00237-B, REQ-d00237-C
@@ -451,6 +461,10 @@ def _canonicalize_text(
     # Find all code spans to protect them from replacement
     protected: list[tuple[int, int]] = [(m.start(), m.end()) for m in _CODE_SPAN_RE.finditer(text)]
 
+    # Lower-cased view of *text* for the cheap substring pre-filter below;
+    # refreshed whenever *text* mutates.
+    text_lower = text.lower()
+
     def _in_code_span(start: int, end: int) -> bool:
         return any(ps <= start and end <= pe for ps, pe in protected)
 
@@ -478,6 +492,10 @@ def _canonicalize_text(
         if not entry.indexed:
             continue
         term = entry.term
+        # Cheap pre-filter: no canonical/emphasis/unmarked form can match if the
+        # bare term isn't present (case-insensitively) in the current text.
+        if term.lower() not in text_lower:
+            continue
         canonical = f"{markup_style}{term}{markup_style}"
 
         # Phase 1: fix emphasis-wrapped forms (wrong casing or wrong delimiter)
@@ -513,6 +531,7 @@ def _canonicalize_text(
                 # Recompute protected and emphasis spans after text mutation
                 protected = [(m.start(), m.end()) for m in _CODE_SPAN_RE.finditer(text)]
                 emphasis_spans = _find_emphasis_spans(text)
+                text_lower = text.lower()
 
         # Phase 2: fix unmarked occurrences (skip claimed, code spans,
         # and matches that sit inside a larger emphasis span — wrapping
@@ -543,6 +562,7 @@ def _canonicalize_text(
             text = "".join(new_text)
             protected = [(m.start(), m.end()) for m in _CODE_SPAN_RE.finditer(text)]
             emphasis_spans = _find_emphasis_spans(text)
+            text_lower = text.lower()
 
     return text, replacements
 

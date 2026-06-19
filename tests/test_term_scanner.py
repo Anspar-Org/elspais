@@ -315,6 +315,39 @@ def test_REQ_d00237_C_single_underscore_wrong_marking():
     assert wrong[0].marked is False
 
 
+def test_REQ_d00237_C_wrong_case_term_still_detected():
+    # Guards the case-insensitive term pre-filter (CUR-1521)
+    # Term defined lowercase "widget" but appears as "Widget" (capital W)
+    # wrapped in a wrong-marking delimiter. The emphasis/word regexes use
+    # re.IGNORECASE, so the case-insensitive pre-filter must not drop this.
+    td = _make_td(("widget", True))
+    result = scan_text_for_terms(
+        "A _Widget_ is here.",
+        td,
+        node_id="REQ-001",
+        namespace="main",
+        markup_styles=["*", "**"],
+    )
+    wrong = [r for r in result if r.wrong_marking]
+    assert len(wrong) == 1
+    assert wrong[0].wrong_marking == "_"
+    assert wrong[0].marked is False
+
+
+def test_REQ_d00237_C_absent_term_yields_no_results():
+    # Confirms the pre-filter skip path: a term genuinely absent from the
+    # text (in any case) produces no references.
+    td = _make_td(("widget", True))
+    result = scan_text_for_terms(
+        "A _gadget_ is here.",
+        td,
+        node_id="REQ-001",
+        namespace="main",
+        markup_styles=["*", "**"],
+    )
+    assert result == []
+
+
 def test_REQ_d00237_C_star_not_in_markup_styles_is_wrong():
     """When '*' is NOT in markup_styles, *term* is wrong-marking."""
     td = _make_td(("widget", True))
