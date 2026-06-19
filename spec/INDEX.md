@@ -92,7 +92,7 @@
 | REQ-d00201 | FederatedGraph Mutation Delegation                            | dev-graph-federation.md | 1a0942a4 |
 | REQ-d00202 | Associates Config Loading                                     | dev-graph-federation.md | 479dcbb8 |
 | REQ-d00203 | Multi-Repo Build Pipeline                                     | dev-graph-federation.md | 31e019a1 |
-| REQ-d00204 | Per-Repo Health Check Delegation                              | dev-graph-federation.md | 2313140d |
+| REQ-d00204 | Per-Repo Health Check Delegation                              | dev-graph-federation.md | 844d12d1 |
 | REQ-d00205 | MCP Federation Support                                        | dev-mcp-tools.md        | 4f16dfc7 |
 | REQ-d00206 | Server Federation and Staleness                               | dev-traceview-review.md | b4fae1d0 |
 | REQ-d00207 | Declarative Config Schema Cleanup                             | dev-graph-config.md     | 8d323813 |

@@ -11,6 +11,7 @@ from pathlib import Path
 from elspais.commands.health import (
     HealthFinding,
     check_broken_references,
+    check_no_cycles,
     check_structural_orphans,
     check_unlinked_code,
     check_unlinked_tests,
@@ -20,6 +21,7 @@ from elspais.config import _merge_configs, config_defaults, get_config
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import FileType, GraphNode, NodeKind
+from elspais.graph.relations import EdgeKind
 
 from ..core.graph_test_helpers import (
     build_graph,
@@ -348,6 +350,49 @@ class TestCheckBrokenReferences:
 
         check = check_broken_references(_wrap(graph, config))
         assert not check.passed
+
+
+# =============================================================================
+# Requirement Cycles
+# =============================================================================
+
+
+class TestCheckNoCycles:
+    """Tests for check_no_cycles() — REQ-d00204-G."""
+
+    # Implements: REQ-d00204-G
+    def test_REQ_d00204_G_acyclic_graph_passes(self) -> None:
+        """A normal acyclic requirement graph reports no cycles."""
+        graph = build_graph(
+            make_requirement("REQ-p00001", title="Parent", level="PRD"),
+            make_requirement("REQ-o00001", title="Child", level="OPS", implements=["REQ-p00001"]),
+        )
+        check = check_no_cycles(_wrap(graph))
+        assert check.passed is True
+        assert check.name == "spec.no_cycles"
+
+    # Implements: REQ-d00204-G
+    def test_REQ_d00204_G_injected_cycle_fails_and_names_both_ids(self) -> None:
+        """A 2-node requirement cycle is detected; the finding names both ids."""
+        graph = build_graph(
+            make_requirement("REQ-p00001", title="A", level="PRD"),
+            make_requirement("REQ-p00002", title="B", level="PRD"),
+        )
+        reqs = {n.id: n for n in graph.nodes_by_kind(NodeKind.REQUIREMENT)}
+        a = reqs["REQ-p00001"]
+        b = reqs["REQ-p00002"]
+        # Inject a genuine cycle: a -> b -> a through REQUIREMENT children.
+        a.link(b, EdgeKind.INTEGRATES)
+        b.link(a, EdgeKind.INTEGRATES)
+
+        check = check_no_cycles(_wrap(graph))
+        assert check.passed is False
+        assert check.name == "spec.no_cycles"
+        assert len(check.findings) == 1
+        finding = check.findings[0]
+        assert isinstance(finding, HealthFinding)
+        assert "REQ-p00001" in finding.message
+        assert "REQ-p00002" in finding.message
 
 
 # =============================================================================

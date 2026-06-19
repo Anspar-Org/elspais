@@ -148,16 +148,19 @@ E. `check_broken_references` SHALL distinguish within-repo broken references (er
 
 F. `run_spec_checks` SHALL accept a `FederatedGraph` and iterate `iter_repos()` for config-sensitive checks, using `FederatedGraph.from_single()` to create per-repo sub-federations.
 
+G. A non-config-sensitive check SHALL detect requirement cycles (a requirement reachable as its own descendant through *Traceability* edges) and report each detected cycle as a failing finding naming the requirements that form the cycle, so that a cyclic graph surfaces as a clear diagnostic rather than crashing downstream traversals.
+
 ### Rationale
 
 Without per-repo delegation, all nodes are validated against the root repo's config. When repos have different hierarchy rules, format rules, or changelog policies, this produces false positives (root config rejects valid associate nodes) or false negatives (root config allows invalid associate nodes). Per-repo delegation ensures each repo is validated by its own rules.
 
 ### Changelog
 
+- 2026-06-18 | 844d12d1 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms, update hash
 - 2026-05-11 | 2313140d | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 2313140d | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
-*End* *Per-Repo Health Check Delegation* | **Hash**: 2313140d
+*End* *Per-Repo Health Check Delegation* | **Hash**: 844d12d1
 ---
 
 ## REQ-d00252: External Library Integration via Integrates Keyword
