@@ -26,6 +26,7 @@ from elspais.config.status_roles import StatusRole
 
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
+    from elspais.graph.GraphNode import GraphNode
     from elspais.utilities.patterns import IdResolver
 
 _SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
@@ -779,7 +780,6 @@ def check_spec_format_rules(
 ) -> HealthCheck:
     """Check that requirements comply with configured format rules."""
     from elspais.graph import NodeKind
-    from elspais.graph.GraphNode import GraphNode
     from elspais.validation.format import get_format_rules_config, validate_requirement_format
 
     rules = get_format_rules_config(config)
@@ -1786,7 +1786,6 @@ def check_no_cycles(graph: FederatedGraph) -> HealthCheck:
     detection itself can never blow the stack.
     """
     from elspais.graph import NodeKind
-    from elspais.graph.GraphNode import GraphNode  # noqa: F401 — used in annotations
 
     def req_children(node: GraphNode) -> list[GraphNode]:
         return [c for c in node.iter_children() if c.kind == NodeKind.REQUIREMENT]

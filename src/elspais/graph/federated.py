@@ -1627,12 +1627,16 @@ class FederatedGraph:
                     EdgeKind.INTEGRATES,
                     target_graph=source_entry.graph,
                 )
-                # Drop the consumer-side INTEGRATES broken reference recorded
-                # during the per-repo build (the target lives in another repo,
-                # so the local wiring left a broken ref). _wire_cross_graph_edges
-                # deliberately skips INTEGRATES, so we clear it here now that the
-                # correct edge exists — otherwise it would surface as a false
-                # broken reference.
+                # Drop the consumer-side INTEGRATES broken reference left by an
+                # earlier integrates pass that could not resolve the target
+                # locally. The per-repo GraphBuilder only stores integrates_refs;
+                # the broken ref is recorded by _wire_one_integrates itself when
+                # this consumer repo was built as a federation-of-one (the target
+                # lives in a sibling associate not present at that point, so it
+                # was recorded as presumed-foreign). Now, in the full federation,
+                # the target resolves and we wire the correct edge --
+                # _wire_cross_graph_edges deliberately skips INTEGRATES, so clear
+                # the stale broken ref here or it surfaces as a false positive.
                 source_entry.graph._broken_references = [
                     br
                     for br in source_entry.graph._broken_references
