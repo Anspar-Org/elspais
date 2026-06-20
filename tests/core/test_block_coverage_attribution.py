@@ -1,4 +1,4 @@
-# Verifies: REQ-d00254-B
+# Verifies: REQ-d00254-D
 """Block-scoped // Implements: coverage attribution (CUR-1533).
 
 When a CODE node has no function range (parse_line == parse_end_line,

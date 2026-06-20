@@ -737,11 +737,10 @@ def _compute_code_tested(
         if not rel_path:
             continue
 
-        fn_tmp = target.file_node()
-        if impl_end == impl_start and fn_tmp is not None:
-            owned = _block_region_lines(
-                fn_tmp, region_cache if region_cache is not None else {}
-            ).get(impl_start, set())
+        if impl_end == impl_start:
+            owned = _block_region_lines(fn, region_cache if region_cache is not None else {}).get(
+                impl_start, set()
+            )
             for line_no in owned:
                 impl_lines.add((rel_path, line_no))
         else:
