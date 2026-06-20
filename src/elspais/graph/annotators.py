@@ -51,6 +51,59 @@ _NA_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+
+@dataclass(frozen=True)
+class CoverageCreditConfig:
+    """CUR-1533 crediting config, derived from [scanning.result]/[scanning.coverage]."""
+
+    app_dirs: tuple[str, ...] = ()
+    unmatched_credit: str = "off"  # "off" | "verified"
+    coverage_dirs: tuple[str, ...] = ()
+    assertion_credit: str = "off"  # "off" | "tested" | "verified"
+    min_coverage_fraction: float = 0.0
+
+
+def _match_app_dir(path: str | None, app_dirs: tuple[str, ...]) -> str | None:
+    """Return the app dir whose segments appear deepest in ``path``.
+
+    Matches each app dir as a contiguous run of path segments; when several
+    match, the one starting at the greatest segment index wins (tiebreak:
+    longer dir string). Returns None when nothing matches.
+    """
+    if not path:
+        return None
+    segs = [s for s in path.replace("\\", "/").split("/") if s]
+    best: str | None = None
+    best_key: tuple[int, int] = (-1, -1)
+    for d in app_dirs:
+        dparts = [s for s in d.strip("/").replace("\\", "/").split("/") if s]
+        if not dparts:
+            continue
+        for i in range(len(segs) - len(dparts) + 1):
+            if segs[i : i + len(dparts)] == dparts:
+                key = (i, len(d))
+                if key > best_key:
+                    best_key = key
+                    best = d
+                break
+    return best
+
+
+def _compute_app_status(graph, app_dirs: tuple[str, ...]) -> dict[str, str]:
+    """Map app dir -> 'green'|'red' from RESULT node statuses (CUR-1533)."""
+    from elspais.graph import NodeKind
+
+    failed_by_app: dict[str, bool] = {}
+    for r in graph.nodes_by_kind(NodeKind.RESULT):
+        app = _match_app_dir(r.get_field("source_path"), app_dirs)
+        if app is None:
+            continue
+        status = (r.get_field("status") or "").lower()
+        is_fail = status in ("failed", "fail", "failure", "error")
+        failed_by_app[app] = failed_by_app.get(app, False) or is_fail
+    return {app: ("red" if failed else "green") for app, failed in failed_by_app.items()}
+
+
 if TYPE_CHECKING:
     from elspais.graph import NodeKind
     from elspais.graph.federated import FederatedGraph
