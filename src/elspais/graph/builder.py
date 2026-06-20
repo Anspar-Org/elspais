@@ -3513,6 +3513,9 @@ class GraphBuilder:
         short_class = classname.split(".")[-1] if classname else ""
         label = f"{short_class}::{test_name}" if short_class else test_name
 
+        source_ctx = getattr(content, "source_context", None)
+        source_path = data.get("source_path") or (source_ctx.source_id if source_ctx else None)
+
         node = GraphNode(
             id=result_id,
             kind=NodeKind.RESULT,
@@ -3527,6 +3530,7 @@ class GraphBuilder:
             "message": data.get("message"),
             "parse_line": content.start_line,
             "parse_end_line": content.end_line,
+            "source_path": source_path,
         }
         self._nodes[result_id] = node
 
