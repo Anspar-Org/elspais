@@ -801,6 +801,110 @@ def _compute_code_tested(node: GraphNode, metrics: RollupMetrics) -> None:
     )
 
 
+def _under_dirs(rel_path: str, dirs: tuple[str, ...]) -> bool:
+    """True if rel_path is within one of dirs. '.' (or empty dirs) matches all."""
+    if not dirs or "." in dirs:
+        return True
+    return _match_app_dir(rel_path, dirs) is not None
+
+
+def _compute_lcov_tested(node, metrics, credit, app_status) -> None:
+    """Credit the lcov_tested dimension from covered // Implements: lines (CUR-1533)."""
+    from elspais.graph import NodeKind
+    from elspais.graph.metrics import CoverageDimension
+    from elspais.graph.relations import EdgeKind
+
+    if credit.assertion_credit == "off":
+        return
+
+    labels = [
+        c.get_field("label", "")
+        for c in node.iter_children()
+        if c.kind == NodeKind.ASSERTION and c.get_field("label", "")
+    ]
+    if not labels:
+        return
+
+    direct_lines: dict[str, set[tuple[str, int]]] = {}
+    blanket_lines: set[tuple[str, int]] = set()
+    file_cov: dict[str, dict[int, int]] = {}
+    file_app: dict[str, str | None] = {}
+
+    for edge in node.iter_outgoing_edges():
+        if edge.kind != EdgeKind.IMPLEMENTS:
+            continue
+        target = edge.target
+        if target.kind != NodeKind.CODE:
+            continue
+        start = edge.metadata.get("impl_start_line")
+        end = edge.metadata.get("impl_end_line")
+        if not start:
+            continue
+        if not end:
+            end = target.get_field("parse_end_line") or 0
+        if not end or end < start:
+            continue
+        fn = target.file_node()
+        if fn is None:
+            continue
+        rel = fn.get_field("relative_path")
+        if not rel or not _under_dirs(rel, credit.coverage_dirs):
+            continue
+        lc = fn.get_field("line_coverage")
+        if lc is None:
+            continue
+        file_cov.setdefault(rel, lc)
+        file_app.setdefault(rel, _match_app_dir(rel, credit.app_dirs))
+        rng = {(rel, ln) for ln in range(start, end + 1)}
+        if edge.assertion_targets:
+            for lbl in edge.assertion_targets:
+                if lbl in labels:
+                    direct_lines.setdefault(lbl, set()).update(rng)
+        else:
+            blanket_lines.update(rng)
+
+    if not direct_lines and not blanket_lines:
+        return
+
+    def frac(lines: set[tuple[str, int]]) -> float:
+        if not lines:
+            return 0.0
+        covered = sum(1 for (rel, ln) in lines if file_cov.get(rel, {}).get(ln, 0) > 0)
+        return covered / len(lines)
+
+    direct_pct: dict[str, float] = {}
+    for lbl, lines in direct_lines.items():
+        f = frac(lines)
+        if f > 0 and f >= credit.min_coverage_fraction:
+            direct_pct[lbl] = f
+
+    indirect_pct: dict[str, float] = dict(direct_pct)
+    if blanket_lines:
+        bf = frac(blanket_lines)
+        if bf > 0 and bf >= credit.min_coverage_fraction:
+            for lbl in labels:
+                indirect_pct.setdefault(lbl, bf)
+
+    if not indirect_pct:
+        return
+
+    has_failures = False
+    if credit.assertion_credit == "verified":
+        apps = {file_app.get(rel) for rel in file_cov}
+        has_failures = any(app_status.get(a) == "red" for a in apps if a)
+
+    metrics.lcov_tested = CoverageDimension(
+        total=len(labels),
+        direct=sum(direct_pct.values()),
+        indirect=sum(indirect_pct.values()),
+        has_failures=has_failures,
+        direct_labels=set(direct_pct),
+        indirect_labels=set(indirect_pct),
+        direct_pct_by_label=dict(direct_pct),
+        indirect_pct_by_label=dict(indirect_pct),
+    )
+
+
 # Implements: REQ-p00061-A
 def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None = None) -> None:
     """Compute and store coverage metrics for all requirement nodes.
@@ -1073,6 +1177,7 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
 
         # Compute code_tested dimension from coverage data
         _compute_code_tested(node, metrics)
+        _compute_lcov_tested(node, metrics, credit, app_status)
 
         # Store in node metrics
         node.set_metric("rollup_metrics", metrics)

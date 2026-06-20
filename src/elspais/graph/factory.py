@@ -39,6 +39,25 @@ _SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.item
 )
 
 
+def _resolve_coverage_file_node(graph, source_file, lcov_path, repo_root):
+    """Resolve an lcov SF path to a repo-relative FILE node.
+
+    Tries the SF verbatim, then resolves it relative to the package root
+    (the directory containing the lcov file, minus a trailing 'coverage').
+    """
+    node = graph.find_by_id(make_file_id(source_file))
+    if node is not None:
+        return node
+    pkg_root = lcov_path.parent
+    if pkg_root.name == "coverage":
+        pkg_root = pkg_root.parent
+    try:
+        rel = (pkg_root / source_file).resolve().relative_to(Path(repo_root).resolve())
+    except ValueError:
+        return None
+    return graph.find_by_id(make_file_id(str(rel)))
+
+
 def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
     """Validate a config dict into ElspaisConfig, stripping non-schema keys.
 
@@ -647,8 +666,7 @@ def build_graph(
 
                     # Annotate existing FILE nodes
                     for source_file, data in parsed.items():
-                        file_id = make_file_id(source_file)
-                        node = graph.find_by_id(file_id)
+                        node = _resolve_coverage_file_node(graph, source_file, path, repo_root)
                         if node is None:
                             continue
                         node.set_field("line_coverage", data["line_coverage"])
@@ -666,10 +684,20 @@ def build_graph(
 
     # Annotate keywords on all nodes so keyword search tools work
     # Annotate coverage metrics so all consumers (MCP, HTML, Flask) get coverage data
-    from elspais.graph.annotators import annotate_coverage, annotate_keywords
+    from elspais.graph.annotators import CoverageCreditConfig, annotate_coverage, annotate_keywords
 
     annotate_keywords(graph)
-    annotate_coverage(graph)
+    cov_cfg = typed_config.scanning.coverage
+    res_cfg = typed_config.scanning.result
+    app_dirs = tuple(d for d in [*cov_cfg.directories, *res_cfg.directories] if d and d != ".")
+    credit = CoverageCreditConfig(
+        app_dirs=app_dirs,
+        unmatched_credit=res_cfg.unmatched_credit,
+        coverage_dirs=tuple(cov_cfg.directories),
+        assertion_credit=cov_cfg.assertion_credit,
+        min_coverage_fraction=cov_cfg.min_coverage_fraction,
+    )
+    annotate_coverage(graph, credit)
 
     # Implements: REQ-d00203-A+B+C+D+E
     # Build associate repos if [associates] config is present
