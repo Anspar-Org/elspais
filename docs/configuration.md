@@ -174,9 +174,29 @@ command = "flutter test --machine > .elspais/results/flutter.json"
 cwd = "app/"  # optional; relative to repo root
 
 # Test result file scanning (JUnit XML, pytest JSON)
+# See `elspais docs test-results` for per-language setup and the per-app green model.
 [scanning.result]
 file_patterns = ["TEST-*.xml", "pytest-results.json"]
 run_meta_file = ""
+# unmatched_credit: "off" (default) | "verified"
+# When "verified", an unmatched // Verifies: edge receives verified credit if its
+# app directory is green (>=1 result ingested, zero failures). Useful for Dart/Flutter
+# where JUnit output cannot be matched per-test. See `elspais docs test-results`.
+unmatched_credit = "off"
+
+# Code coverage report scanning (lcov .info files)
+# Enables the lcov_tested dimension — see `elspais docs test-results`.
+[scanning.coverage]
+directories = ["."]
+file_patterns = []
+# assertion_credit: "off" (default) | "tested" | "verified"
+# When set, covered // Implements: lines grant credit to the assertion.
+#   "tested"   -> lcov_tested dimension only
+#   "verified" -> lcov_tested + verified dimensions
+assertion_credit = "off"
+# min_coverage_fraction: minimum fraction of an assertion's impl lines that must
+# be covered before credit is granted. Default 0.0 means any execution counts.
+min_coverage_fraction = 0.0
 
 # User journey file scanning
 [scanning.journey]
