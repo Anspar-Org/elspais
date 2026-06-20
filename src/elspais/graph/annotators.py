@@ -802,7 +802,7 @@ def _compute_code_tested(node: GraphNode, metrics: RollupMetrics) -> None:
 
 
 # Implements: REQ-p00061-A
-def annotate_coverage(graph: FederatedGraph) -> None:
+def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None = None) -> None:
     """Compute and store coverage metrics for all requirement nodes.
 
     This function traverses the graph once to compute RollupMetrics for
@@ -838,6 +838,10 @@ def annotate_coverage(graph: FederatedGraph) -> None:
         RollupMetrics,
     )
     from elspais.graph.relations import EdgeKind
+
+    if credit is None:
+        credit = CoverageCreditConfig()
+    app_status = _compute_app_status(graph, credit.app_dirs) if credit.app_dirs else {}
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
 
@@ -1002,21 +1006,35 @@ def annotate_coverage(graph: FederatedGraph) -> None:
         # Process TEST children to find RESULT nodes
         validated_indirect_labels: set[str] = set()
         for test_node, assertion_targets in test_nodes_for_result_lookup:
+            saw_result = False
             for result in test_node.iter_children():
                 if result.kind == NodeKind.RESULT:
+                    saw_result = True
                     status = (result.get_field("status", "") or "").lower()
                     if status in ("passed", "pass", "success"):
                         if assertion_targets:
-                            # Assertion-targeted test: mark specific assertions
                             for label in assertion_targets:
                                 if label in assertion_labels:
                                     validated_labels.add(label)
                         else:
-                            # Whole-req test: mark all assertions as indirect-validated
                             for label in assertion_labels:
                                 validated_indirect_labels.add(label)
                     elif status in ("failed", "fail", "failure", "error"):
                         has_failures = True
+            if not saw_result and credit.unmatched_credit == "verified":
+                fn = test_node.file_node()
+                app = _match_app_dir(fn.get_field("relative_path") if fn else None, credit.app_dirs)
+                st = app_status.get(app) if app else None
+                if st == "green":
+                    if assertion_targets:
+                        for label in assertion_targets:
+                            if label in assertion_labels:
+                                validated_labels.add(label)
+                    else:
+                        for label in assertion_labels:
+                            validated_indirect_labels.add(label)
+                elif st == "red":
+                    has_failures = True
 
         # Implements: REQ-d00069-A
         # Process JNY children to find RESULT nodes (UAT)
