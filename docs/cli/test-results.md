@@ -84,6 +84,16 @@ assertion's implementing lines that must be covered before credit is
 granted.  `0.0` means any execution counts; `1.0` requires every
 implementing line to be covered.
 
+**Block-scoped attribution for file-level markers (e.g. Dart):** Languages
+without function detection (such as Dart) produce single-line `// Implements:`
+markers with no surrounding function range.  In that case elspais uses
+*block-scoped attribution*: a run of consecutive markers with no executable
+line strictly between them forms one block, and that block owns the executable
+lines that follow it up to the next block's first marker or end-of-file.
+Coverage on any of those owned lines credits all assertions in the block.
+For multi-line code refs (start line != end line), the existing function-range
+behaviour is unchanged.
+
 ## Per-App Green Model
 
 elspais evaluates result health per *app directory* (one entry under

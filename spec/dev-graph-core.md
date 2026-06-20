@@ -379,9 +379,12 @@ B. The annotator SHALL compute a separate `lcov_tested` dimension by measuring t
 
 C. The configuration surface SHALL expose `unmatched_credit` under `[scanning.result]` (values: `off`, `verified`) and `assertion_credit` plus `min_coverage_fraction` under `[scanning.coverage]`. User documentation SHALL include a `test-results` topic describing these options and the `lcov_tested` dimension.
 
+D. When an `// Implements:` marker has no function range (i.e., `impl_start_line == impl_end_line`), the annotator SHALL attribute coverage via block-scoped attribution: a run of consecutive marker lines with no executable line strictly between them forms one block, and that block owns the executable lines that follow it up to the next block's first marker or end-of-file. This enables languages without function detection (e.g. Dart) to receive lcov coverage credit for the code each marker precedes.
+
 ### Changelog
 
+- 2026-06-20 | 81f6cdcd | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-06-20 | 98120740 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (michael@anspar.org) | CUR-1533: initial
 
-*End* *Coverage-Based and Aggregate Test Verification* | **Hash**: 98120740
+*End* *Coverage-Based and Aggregate Test Verification* | **Hash**: 81f6cdcd

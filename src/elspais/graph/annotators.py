@@ -690,7 +690,9 @@ def _compute_coverage_from_source(
     return contributions, source_nodes
 
 
-def _compute_code_tested(node: GraphNode, metrics: RollupMetrics) -> None:
+def _compute_code_tested(
+    node: GraphNode, metrics: RollupMetrics, region_cache: dict | None = None
+) -> None:
     """Compute the code_tested dimension from line coverage data.
 
     Intersects implementation line ranges (from IMPLEMENTS edges to CODE nodes)
@@ -735,8 +737,16 @@ def _compute_code_tested(node: GraphNode, metrics: RollupMetrics) -> None:
         if not rel_path:
             continue
 
-        for line_no in range(impl_start, impl_end + 1):
-            impl_lines.add((rel_path, line_no))
+        fn_tmp = target.file_node()
+        if impl_end == impl_start and fn_tmp is not None:
+            owned = _block_region_lines(
+                fn_tmp, region_cache if region_cache is not None else {}
+            ).get(impl_start, set())
+            for line_no in owned:
+                impl_lines.add((rel_path, line_no))
+        else:
+            for line_no in range(impl_start, impl_end + 1):
+                impl_lines.add((rel_path, line_no))
 
     if not impl_lines:
         return
@@ -811,8 +821,54 @@ def _under_dirs(rel_path: str, dirs: tuple[str, ...]) -> bool:
     return _match_app_dir(rel_path, dirs) is not None
 
 
+# Implements: REQ-d00254-D
+def _block_region_lines(file_node, cache: dict) -> dict:
+    """Map each // Implements: marker line in a CODE file to the executable
+    lines its *block* owns (CUR-1533 block-scoped attribution).
+
+    A block is a run of marker lines with no executable (line_coverage) line
+    strictly between consecutive markers; it owns the executable lines after
+    its last marker up to the next block's first marker (or EOF). For languages
+    without function detection (e.g. Dart) this lets a file-/block-scoped marker
+    credit the code it precedes. Cached per FILE id for one annotate_coverage run.
+    """
+    from elspais.graph.GraphNode import NodeKind
+    from elspais.graph.relations import EdgeKind
+
+    fid = file_node.id
+    if fid in cache:
+        return cache[fid]
+    result: dict[int, set[int]] = {}
+    lc = file_node.get_field("line_coverage")
+    if lc:
+        markers = sorted(
+            c.get_field("parse_line")
+            for c in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
+            if c.kind == NodeKind.CODE and c.get_field("parse_line")
+        )
+        cov = sorted(lc.keys())
+        if markers:
+            blocks: list[list[int]] = [[markers[0]]]
+            for m in markers[1:]:
+                prev = blocks[-1][-1]
+                if any(prev < L < m for L in cov):
+                    blocks.append([m])
+                else:
+                    blocks[-1].append(m)
+            for i, blk in enumerate(blocks):
+                last = blk[-1]
+                nxt = blocks[i + 1][0] if i + 1 < len(blocks) else None
+                owned = {L for L in cov if L > last and (nxt is None or L < nxt)}
+                for m in blk:
+                    result[m] = owned
+    cache[fid] = result
+    return result
+
+
 # Implements: REQ-d00254-B
-def _compute_lcov_tested(node, metrics, credit, app_status) -> None:
+def _compute_lcov_tested(
+    node, metrics, credit, app_status, region_cache: dict | None = None
+) -> None:
     """Credit the lcov_tested dimension from covered // Implements: lines (CUR-1533)."""
     from elspais.graph import NodeKind
     from elspais.graph.metrics import CoverageDimension
@@ -859,7 +915,13 @@ def _compute_lcov_tested(node, metrics, credit, app_status) -> None:
             continue
         file_cov.setdefault(rel, lc)
         file_app.setdefault(rel, _match_app_dir(rel, credit.app_dirs))
-        rng = {(rel, ln) for ln in range(start, end + 1)}
+        if end == start:
+            owned = _block_region_lines(fn, region_cache if region_cache is not None else {}).get(
+                start, set()
+            )
+            rng = {(rel, ln) for ln in owned}
+        else:
+            rng = {(rel, ln) for ln in range(start, end + 1)}
         if edge.assertion_targets:
             for lbl in edge.assertion_targets:
                 if lbl in labels:
@@ -950,6 +1012,7 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
     if credit is None:
         credit = CoverageCreditConfig()
     app_status = _compute_app_status(graph, credit.app_dirs) if credit.app_dirs else {}
+    region_cache: dict = {}
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
 
@@ -1181,8 +1244,8 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
         )
 
         # Compute code_tested dimension from coverage data
-        _compute_code_tested(node, metrics)
-        _compute_lcov_tested(node, metrics, credit, app_status)
+        _compute_code_tested(node, metrics, region_cache)
+        _compute_lcov_tested(node, metrics, credit, app_status, region_cache)
 
         # Store in node metrics
         node.set_metric("rollup_metrics", metrics)
