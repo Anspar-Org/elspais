@@ -156,7 +156,10 @@ pytest --cov=src --cov-report=lcov:.elspais/coverage/lcov.info
 ### Dart / Flutter
 
 Flutter JUnit output is aggregated per app.  Use `unmatched_credit = "verified"`
-to propagate the green-app signal to all linked assertions:
+to propagate the green-app signal to all linked assertions.  When aggregate
+result-crediting is enabled, individual test results are not linked to test
+nodes (no per-test YIELDS) -- elspais uses only the per-app aggregate pass/fail,
+so unmatched results are NOT broken references.
 
 ```toml
 [[scanning.test.runners]]

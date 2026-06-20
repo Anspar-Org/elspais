@@ -423,6 +423,14 @@ def build_graph(
     mas = default_resolver.config.assertions.multi_separator
     if mas is False or mas is None:
         mas = ""
+    # In aggregate result-crediting mode (unmatched_credit="verified" or
+    # assertion_credit in ("tested","verified")), RESULT nodes are aggregate
+    # evidence only.  Skip per-test YIELDS links so unmatched test_ids from
+    # Dart/Flutter runners never produce broken references.
+    _link_results = not (
+        typed_config.scanning.result.unmatched_credit == "verified"
+        or typed_config.scanning.coverage.assertion_credit in ("tested", "verified")
+    )
     builder = GraphBuilder(
         repo_root=repo_root,
         hash_mode=hash_mode,
@@ -431,6 +439,7 @@ def build_graph(
         resolver=default_resolver,
         namespace=typed_config.project.namespace,
         project_name=typed_config.project.name,
+        link_results_to_tests=_link_results,
     )
 
     # Get ignore configuration for code/test scanning (main project only)
