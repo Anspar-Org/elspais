@@ -766,7 +766,9 @@ def annotate_coverage(graph: FederatedGraph) -> None:
     - IMPLEMENTS to REQ with assertion_targets → EXPLICIT coverage
     - IMPLEMENTS to REQ without assertion_targets → INFERRED coverage
 
-    REFINES edges do NOT contribute to coverage (EdgeKind.contributes_to_coverage()).
+    REFINES edges add no coverage by themselves, but a second pass
+    (_conduct_refines_coverage) conducts each refining requirement's own
+    coverage upward into the targeted parent *Assertion* (REQ-d00069-J).
 
     Test-specific metrics:
     - direct_tested: Assertions with TEST nodes (not CODE)
@@ -837,7 +839,8 @@ def annotate_coverage(graph: FederatedGraph) -> None:
         # The builder links CODE/REQ as children of parent REQ with assertion_targets
         for edge in node.iter_outgoing_edges():
             if not edge.kind.contributes_to_coverage():
-                # REFINES doesn't count
+                # REFINES is handled by the second pass (_conduct_refines_coverage),
+                # which conducts the refining requirement's coverage upward.
                 continue
 
             target_node = edge.target
@@ -1002,6 +1005,166 @@ def annotate_coverage(graph: FederatedGraph) -> None:
 
         # Store in node metrics
         node.set_metric("rollup_metrics", metrics)
+
+    # Implements: REQ-d00069-J
+    # Second pass: conduct child coverage upward across REFINES edges so that a
+    # parent *Assertion* refined by (partially) covered requirements inherits a
+    # fractional share of that coverage.
+    _conduct_refines_coverage(graph)
+
+
+# Implements: REQ-d00069-J
+# Dimensions that propagate upward across REFINES edges. ``code_tested`` is
+# line-based (total == lines, not assertions) and is intentionally excluded.
+_PROPAGATING_DIMENSIONS = (
+    "implemented",
+    "tested",
+    "verified",
+    "uat_coverage",
+    "uat_verified",
+)
+
+
+# Implements: REQ-d00069-J
+def _conduct_refines_coverage(graph: FederatedGraph) -> None:
+    """Propagate child coverage up REFINES edges into parent assertions.
+
+    A `Refines:` edge is stored outgoing from the *refined* requirement to its
+    refining requirement, carrying ``assertion_targets`` that name which of the
+    refined requirement's assertions are refined (empty == whole-requirement /
+    blanket). A path edge adds no coverage by itself; instead each refining
+    requirement contributes its own rolled-up coverage as one equal-weight
+    incoming edge to the targeted parent *Assertion* (REQ-d00069-J).
+
+    Per assertion A of requirement R (with N assertions), for each dimension and
+    each strictness ``mode`` ("direct" = assertion-targeted only, "indirect" =
+    also whole-requirement):
+
+    - direct contributors = (1.0 if A has local direct leaf evidence) plus
+      ``coverage(child)`` for every assertion-targeted REFINES edge naming A.
+      If any direct contributor exists, A's value is their mean and indirect
+      credit is ignored for A (REQ-d00069-J: only the *Assertion* with direct
+      coverage forgoes indirect credit -- its siblings still accrue it).
+    - else (A has no direct contributor), indirect mode credits A with the
+      stronger of:
+        * 1.0, if A has local whole-requirement leaf evidence (a whole-req test
+          genuinely exercises every assertion); or
+        * ``(1/N) * mean(coverage(child))`` over whole-requirement (blanket)
+          REFINES edges. A blanket Refines names no assertion, so it is worth
+          only one assertion's share (1/N) of its refining requirement's
+          coverage -- averaged across blanket edges so a requirement refined by
+          many whole-req children is not credited beyond one assertion's worth.
+
+    ``coverage(child)`` is the child requirement's mean assertion coverage in
+    the same dimension/mode, computed recursively (memoized, with a visited
+    guard so an unexpected cycle degrades to 0 rather than recursing forever).
+    """
+    from elspais.graph import NodeKind
+
+    reqs = list(graph.nodes_by_kind(NodeKind.REQUIREMENT))
+
+    # Snapshot per-requirement assertion labels and local (pre-conduction) leaf
+    # evidence so the recursion reads immutable input while we overwrite dims.
+    labels_by_req: dict[str, list[str]] = {}
+    local_evidence: dict[str, dict[str, tuple[set[str], set[str]]]] = {}
+    for req in reqs:
+        metrics = req.get_metric("rollup_metrics")
+        if metrics is None:
+            continue
+        labels = [
+            child.get_field("label", "")
+            for child in req.iter_children()
+            if child.kind == NodeKind.ASSERTION and child.get_field("label", "")
+        ]
+        labels_by_req[req.id] = labels
+        ev: dict[str, tuple[set[str], set[str]]] = {}
+        for dim_name in _PROPAGATING_DIMENSIONS:
+            dim = getattr(metrics, dim_name)
+            ev[dim_name] = (set(dim.direct_labels), set(dim.indirect_labels))
+        local_evidence[req.id] = ev
+
+    memo: dict[tuple[str, str, str], float] = {}
+
+    def assertion_fraction(
+        req: GraphNode,
+        label: str,
+        dim_name: str,
+        mode: str,
+        visiting: frozenset[str],
+    ) -> float:
+        direct_labels, indirect_labels = local_evidence[req.id][dim_name]
+        direct_vals: list[float] = []
+        if label in direct_labels:
+            direct_vals.append(1.0)
+        blanket_refines_vals: list[float] = []
+        for edge in req.iter_outgoing_edges():
+            if not edge.kind.conducts_coverage():
+                continue
+            if edge.assertion_targets:
+                if label in edge.assertion_targets:
+                    direct_vals.append(req_coverage(edge.target, dim_name, mode, visiting))
+            else:
+                blanket_refines_vals.append(req_coverage(edge.target, dim_name, mode, visiting))
+
+        if direct_vals:
+            return sum(direct_vals) / len(direct_vals)
+        if mode == "indirect":
+            candidates: list[float] = []
+            if label in indirect_labels:
+                # Local whole-requirement leaf evidence (a whole-req test/code/
+                # journey) genuinely exercises every assertion -> full credit.
+                candidates.append(1.0)
+            if blanket_refines_vals:
+                # A whole-requirement Refines names no assertion, so it is worth
+                # only one assertion's share (1/N) of the refining requirement's
+                # coverage, averaged across all such blanket edges.
+                n_assertions = len(labels_by_req.get(req.id) or ()) or 1
+                avg = sum(blanket_refines_vals) / len(blanket_refines_vals)
+                candidates.append(avg / n_assertions)
+            if candidates:
+                return max(candidates)
+        return 0.0
+
+    def req_coverage(req: GraphNode, dim_name: str, mode: str, visiting: frozenset[str]) -> float:
+        key = (dim_name, mode, req.id)
+        cached = memo.get(key)
+        if cached is not None:
+            return cached
+        if req.id in visiting:
+            return 0.0  # cycle guard -- valid graphs are DAGs (CUR-1521)
+        labels = labels_by_req.get(req.id)
+        if not labels:
+            memo[key] = 0.0
+            return 0.0
+        inner = visiting | {req.id}
+        total = sum(assertion_fraction(req, lbl, dim_name, mode, inner) for lbl in labels)
+        value = total / len(labels)
+        memo[key] = value
+        return value
+
+    eps = 1e-9
+    for req in reqs:
+        metrics = req.get_metric("rollup_metrics")
+        if metrics is None:
+            continue
+        labels = labels_by_req.get(req.id, [])
+        if not labels:
+            continue
+        for dim_name in _PROPAGATING_DIMENSIONS:
+            dim = getattr(metrics, dim_name)
+            direct_pct = {
+                lbl: assertion_fraction(req, lbl, dim_name, "direct", frozenset()) for lbl in labels
+            }
+            indirect_pct = {
+                lbl: assertion_fraction(req, lbl, dim_name, "indirect", frozenset())
+                for lbl in labels
+            }
+            dim.direct_pct_by_label = direct_pct
+            dim.indirect_pct_by_label = indirect_pct
+            dim.direct = sum(direct_pct.values())
+            dim.indirect = sum(indirect_pct.values())
+            dim.direct_labels = {lbl for lbl, v in direct_pct.items() if v > eps}
+            dim.indirect_labels = {lbl for lbl, v in indirect_pct.items() if v > eps}
 
 
 # =============================================================================

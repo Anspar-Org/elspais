@@ -165,39 +165,20 @@ def _uncovered_assertions(
     assertion_labels: list[str],
     dimension: str,
 ) -> list[str]:
-    """Return assertion IDs that have no coverage for the given dimension.
+    """Return assertion IDs that are not ~fully covered for the given dimension.
 
-    Uses the assertion_coverage dict on RollupMetrics to check which
-    assertions received contributions relevant to the dimension.
+    Reads the dimension's per-assertion fraction map so that coverage conducted
+    upward across REFINES edges (REQ-d00069-J) is honored. An assertion counts
+    as covered only when its fraction reaches ~1.0; a partially covered
+    assertion (0 < fraction < 1, e.g. a parent assertion refined by a
+    not-fully-covered child) is still reported as a gap.
     """
-    from elspais.graph.metrics import CoverageSource
-
-    # Map dimensions to the coverage source types that satisfy them
-    _DIM_SOURCES: dict[str, set[CoverageSource]] = {
-        "implemented": {
-            CoverageSource.DIRECT,
-            CoverageSource.EXPLICIT,
-            CoverageSource.INFERRED,
-            CoverageSource.INDIRECT,
-        },
-        "tested": {
-            CoverageSource.DIRECT,
-            CoverageSource.INDIRECT,
-        },
-        "uat_coverage": {
-            CoverageSource.UAT_EXPLICIT,
-            CoverageSource.UAT_INFERRED,
-        },
-    }
-    relevant_sources = _DIM_SOURCES.get(dimension, set())
-
-    uncovered: list[str] = []
-    for label in assertion_labels:
-        contribs = metrics.assertion_coverage.get(label, [])
-        has_relevant = any(c.source in relevant_sources for c in contribs)
-        if not has_relevant:
-            uncovered.append(label)
-    return uncovered
+    dim = getattr(metrics, dimension, None)
+    if dim is None:
+        return list(assertion_labels)
+    fractions = dim.indirect_pct_by_label
+    covered = 1.0 - 1e-9
+    return [label for label in assertion_labels if fractions.get(label, 0.0) < covered]
 
 
 # =============================================================================

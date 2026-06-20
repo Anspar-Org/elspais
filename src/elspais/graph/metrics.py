@@ -81,19 +81,33 @@ class CoverageDimension:
     Each of the 5 coverage dimensions (implemented, tested, verified,
     uat_covered, uat_verified) uses this same structure.
 
+    Assertion coverage is **fractional** in [0.0, 1.0] (a requirement's
+    coverage has always been ``covered / total``; the only change is that an
+    individual assertion can now be partially covered, e.g. when a parent
+    *Assertion* is refined by several requirements and only some are covered --
+    see REQ-d00069-J). ``direct`` / ``indirect`` are therefore **sums** of the
+    per-assertion fractions (so they may be non-integer); the per-assertion
+    values live in ``direct_pct_by_label`` / ``indirect_pct_by_label``.
+
     Attributes:
         total: Total assertions in the requirement
-        direct: Assertions covered by targeted references (assertion-level)
-        indirect: Assertions covered when including blanket/whole-req references
+        direct: Sum of per-assertion direct fractions (assertion-targeted edges)
+        indirect: Sum of per-assertion fractions incl. blanket/whole-req edges
         has_failures: True if any result is failed/error (verified dims only)
+        direct_labels: Assertions with direct coverage > 0
+        indirect_labels: Assertions with any coverage > 0
+        direct_pct_by_label: Per-assertion direct fraction in [0,1]
+        indirect_pct_by_label: Per-assertion fraction (incl. blanket) in [0,1]
     """
 
     total: int = 0
-    direct: int = 0
-    indirect: int = 0
+    direct: float = 0.0
+    indirect: float = 0.0
     has_failures: bool = False
     direct_labels: set[str] = field(default_factory=set)
     indirect_labels: set[str] = field(default_factory=set)
+    direct_pct_by_label: dict[str, float] = field(default_factory=dict)
+    indirect_pct_by_label: dict[str, float] = field(default_factory=dict)
 
     @property
     def direct_pct(self) -> float:
@@ -110,15 +124,17 @@ class CoverageDimension:
         """Classify into a tier key for color/severity mapping.
 
         Returns one of: 'failing', 'full-direct', 'full-indirect',
-        'partial', 'none'.
+        'partial', 'none'. Float sums are compared with a small epsilon so a
+        fully-covered requirement (each assertion == 1.0) still reads as full.
         """
+        eps = 1e-9
         if self.has_failures:
             return "failing"
-        if self.direct >= self.total > 0:
+        if self.total > 0 and self.direct >= self.total - eps:
             return "full-direct"
-        if self.indirect >= self.total > 0:
+        if self.total > 0 and self.indirect >= self.total - eps:
             return "full-indirect"
-        if self.direct > 0 or self.indirect > 0:
+        if self.direct > eps or self.indirect > eps:
             return "partial"
         return "none"
 
@@ -126,6 +142,20 @@ class CoverageDimension:
 def _dim(total: int = 0) -> CoverageDimension:
     """Factory helper for default CoverageDimension with total pre-set."""
     return CoverageDimension(total=total)
+
+
+def fmt_assertion_count(value: float) -> str:
+    """Format a (possibly fractional) covered-assertion count for display.
+
+    Coverage counts are sums of per-assertion fractions (REQ-d00069-J), so they
+    can be non-integer when assertions are partially covered through refinement.
+    Render whole numbers without a decimal point and fractional ones with a
+    single decimal place, e.g. ``2`` or ``1.5``.
+    """
+    rounded = round(value)
+    if abs(value - rounded) < 1e-9:
+        return str(int(rounded))
+    return f"{value:.1f}"
 
 
 @dataclass
@@ -214,6 +244,8 @@ class RollupMetrics:
             indirect=len(impl_indirect),
             direct_labels=set(impl_direct),
             indirect_labels=set(impl_indirect),
+            direct_pct_by_label=dict.fromkeys(impl_direct, 1.0),
+            indirect_pct_by_label=dict.fromkeys(impl_indirect, 1.0),
         )
 
         # UAT Coverage: direct = assertion-targeted (UAT_EXPLICIT),
@@ -224,6 +256,8 @@ class RollupMetrics:
             indirect=len(uat_all),
             direct_labels=set(uat_explicit_labels),
             indirect_labels=set(uat_all),
+            direct_pct_by_label=dict.fromkeys(uat_explicit_labels, 1.0),
+            indirect_pct_by_label=dict.fromkeys(uat_all, 1.0),
         )
 
         # tested, verified, uat_verified are populated by annotate_coverage()
@@ -255,6 +289,8 @@ class RollupMetrics:
             indirect=len(tested_all),
             direct_labels=set(tested_direct_labels),
             indirect_labels=set(tested_all),
+            direct_pct_by_label=dict.fromkeys(tested_direct_labels, 1.0),
+            indirect_pct_by_label=dict.fromkeys(tested_all, 1.0),
         )
         verified_all = verified_direct_labels | verified_indirect_labels
         self.verified = CoverageDimension(
@@ -264,6 +300,8 @@ class RollupMetrics:
             has_failures=verified_failures,
             direct_labels=set(verified_direct_labels),
             indirect_labels=set(verified_all),
+            direct_pct_by_label=dict.fromkeys(verified_direct_labels, 1.0),
+            indirect_pct_by_label=dict.fromkeys(verified_all, 1.0),
         )
         uat_all = uat_verified_direct_labels | uat_verified_indirect_labels
         self.uat_verified = CoverageDimension(
@@ -273,6 +311,8 @@ class RollupMetrics:
             has_failures=uat_verified_failures,
             direct_labels=set(uat_verified_direct_labels),
             indirect_labels=set(uat_all),
+            direct_pct_by_label=dict.fromkeys(uat_verified_direct_labels, 1.0),
+            indirect_pct_by_label=dict.fromkeys(uat_all, 1.0),
         )
 
 
@@ -602,6 +642,7 @@ __all__ = [
     "RollupMetrics",
     "SatisfierRollup",
     "direct_coverage_for",
+    "fmt_assertion_count",
     "has_integration",
     "inherited_coverage_for",
     "integrates_by_associate",

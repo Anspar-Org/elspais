@@ -2089,7 +2089,7 @@ def check_dimension_coverage(
         config: Project config dict.
     """
     from elspais.graph import NodeKind
-    from elspais.graph.metrics import has_integration
+    from elspais.graph.metrics import fmt_assertion_count, has_integration
 
     if exclude_status is None:
         from elspais.config import get_status_roles
@@ -2149,10 +2149,13 @@ def check_dimension_coverage(
     # Build message showing both levels
     msg_parts = [
         f"{label}: {req_with_any}/{req_count} REQs ({req_pct:.0f}%)",
-        f"{direct_assertions}/{total_assertions} assertions direct ({direct_pct:.0f}%)",
+        f"{fmt_assertion_count(direct_assertions)}/{total_assertions} assertions"
+        f" direct ({direct_pct:.0f}%)",
     ]
-    if indirect_assertions != direct_assertions:
-        msg_parts.append(f"{indirect_assertions} indirect ({indirect_pct:.0f}%)")
+    if abs(indirect_assertions - direct_assertions) > 1e-9:
+        msg_parts.append(
+            f"{fmt_assertion_count(indirect_assertions)} indirect ({indirect_pct:.0f}%)"
+        )
     if has_any_failures:
         msg_parts.append("FAILURES DETECTED")
     message = ", ".join(msg_parts) + note
@@ -2170,8 +2173,8 @@ def check_dimension_coverage(
             "total_requirements": req_count,
             "req_coverage_percent": round(req_pct, 1),
             "total_assertions": total_assertions,
-            "direct_assertions": direct_assertions,
-            "indirect_assertions": indirect_assertions,
+            "direct_assertions": round(direct_assertions, 3),
+            "indirect_assertions": round(indirect_assertions, 3),
             "direct_pct": round(direct_pct, 1),
             "indirect_pct": round(indirect_pct, 1),
             "has_failures": has_any_failures,

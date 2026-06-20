@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 from elspais.graph import NodeKind
 from elspais.graph.metrics import (
     RollupMetrics,
+    fmt_assertion_count,
     has_integration,
     integrates_by_associate,
     integrates_total,
@@ -164,6 +165,10 @@ def _collect_coverage(graph: FederatedGraph, config: dict | None = None) -> dict
             level_totals["validated_assertions"] += validated
             level_totals["passing_assertions"] += passing
 
+        # Covered counts are sums of per-assertion fractions (REQ-d00069-J);
+        # round to avoid float noise in serialized output.
+        for _k in ("implemented_assertions", "validated_assertions", "passing_assertions"):
+            level_totals[_k] = round(level_totals[_k], 3)
         levels.append(level_totals)
 
     # REQ-d00252-F: per-associate Integrates rollup + federation total.
@@ -232,15 +237,15 @@ def _render_text(data: dict) -> str:
         ta = lv["total_assertions"]
         lines.append(f"  {lv['level']}: {lv['total']} requirements, {ta} assertions")
         lines.append(
-            f"    Implemented: {lv['implemented_assertions']}/{ta}"
+            f"    Implemented: {fmt_assertion_count(lv['implemented_assertions'])}/{ta}"
             f" ({_pct(lv['implemented_assertions'], ta):.1f}%)"
         )
         lines.append(
-            f"    Validated:   {lv['validated_assertions']}/{ta}"
+            f"    Validated:   {fmt_assertion_count(lv['validated_assertions'])}/{ta}"
             f" ({_pct(lv['validated_assertions'], ta):.1f}%)"
         )
         lines.append(
-            f"    Passing:     {lv['passing_assertions']}/{ta}"
+            f"    Passing:     {fmt_assertion_count(lv['passing_assertions'])}/{ta}"
             f" ({_pct(lv['passing_assertions'], ta):.1f}%)"
         )
 
@@ -295,9 +300,9 @@ def _render_markdown(data: dict) -> str:
         ia = lv["implemented_assertions"]
         va = lv["validated_assertions"]
         pa = lv["passing_assertions"]
-        impl = f"{ia}/{ta} ({_pct(ia, ta):.0f}%)"
-        val = f"{va}/{ta} ({_pct(va, ta):.0f}%)"
-        pas = f"{pa}/{ta} ({_pct(pa, ta):.0f}%)"
+        impl = f"{fmt_assertion_count(ia)}/{ta} ({_pct(ia, ta):.0f}%)"
+        val = f"{fmt_assertion_count(va)}/{ta} ({_pct(va, ta):.0f}%)"
+        pas = f"{fmt_assertion_count(pa)}/{ta} ({_pct(pa, ta):.0f}%)"
         lines.append(f"| {lv['level']} | {lv['total']} | {ta} | {impl} | {val} | {pas} |")
 
     excluded = data.get("excluded", {})

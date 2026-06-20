@@ -163,7 +163,11 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
     When assertion_labels is True, coverage columns show compact assertion
     label ranges (e.g. "A-E (100%)") instead of counts ("5/5 (100%)").
     """
-    from elspais.graph.metrics import CoverageDimension, RollupMetrics
+    from elspais.graph.metrics import (
+        CoverageDimension,
+        RollupMetrics,
+        fmt_assertion_count,
+    )
 
     # Get implements IDs via parent iteration
     impl_ids = []
@@ -203,11 +207,11 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
     rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
     total_a = rollup.total_assertions if rollup else 0
 
-    def _fmt_count(num: int, total: int) -> str:
+    def _fmt_count(num: float, total: int) -> str:
         if total == 0:
             return "n/a"
         pct = round(num / total * 100)
-        return f"{num}/{total} ({pct}%)"
+        return f"{fmt_assertion_count(num)}/{total} ({pct}%)"
 
     def _fmt_code_tested(dim: CoverageDimension) -> str:
         if dim.total == 0:
@@ -246,7 +250,10 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
             if assertion_labels:
                 labels = dim.indirect_labels if use_ind_labels else dim.direct_labels
                 label_str = _compact_labels(labels) if labels else "-"
-                pct = round(len(labels) / dim.total * 100) if dim.total else 0
+                # Percentage reflects true fractional coverage (sum of per-assertion
+                # fractions), not just how many assertions have *any* coverage.
+                covered = dim.indirect if use_ind_labels else dim.direct
+                pct = round(covered / dim.total * 100) if dim.total else 0
                 data[key] = f"{label_str} ({pct}%)" if dim.total else "n/a"
                 data[key + "_labels"] = label_str if dim.total else "n/a"
                 data[key + "_pct"] = f"{pct}%" if dim.total else "n/a"

@@ -174,7 +174,7 @@ H. When a requirement declares `Satisfies: X`, the graph builder SHALL clone the
 
 I. 100% coverage of a template instance SHALL be achieved when every leaf *Assertion* in the cloned template subtree (excluding N/A assertions) has at least one `Implements:` reference.
 
-J. A `Refines:` relationship SHALL NOT count as coverage in itself, but coverage of its child assertions SHALL propagate upward. An *Assertion* with `Refines:` children SHALL have fractional coverage equal to the proportion of its covered leaf descendants.
+J. A `Refines:` relationship SHALL NOT contribute coverage by itself, but it SHALL conduct the refining requirement's own rolled-up coverage upward to the *Assertion* it targets. A requirement's coverage SHALL be the mean of its assertions' coverage (assertions are unweighted), computed independently per coverage dimension. An *Assertion*'s coverage SHALL be determined as follows: if the *Assertion* has direct coverage (local evidence on it, or any assertion-targeted `Refines:`/`Implements:` edge naming it), its coverage SHALL be the equal-weight mean of those direct contributions (each contributor -- direct evidence at full value, each assertion-targeted refining requirement at its own rolled-up coverage -- carrying equal weight regardless of how many target the *Assertion*), and whole-requirement (blanket) credit SHALL be ignored for it. Otherwise (the *Assertion* has no direct coverage), it SHALL receive whole-requirement credit: full value if the requirement has local whole-requirement evidence (a whole-requirement test/code/journey), else `1/N` times the mean coverage of the requirement's whole-requirement (blanket) `Refines:` edges, where `N` is the requirement's assertion count -- so a blanket `Refines:` names no *Assertion* and is therefore worth at most one *Assertion*'s share, and a requirement refined by many whole-requirement children is not credited beyond that share. Only the *Assertion* with direct coverage forgoes blanket credit; its sibling *Assertions* without direct coverage still accrue it.
 
 K. The system SHALL report coverage gaps on template instance nodes through the standard coverage mechanisms. Instance nodes are normal graph nodes and participate in existing health checks.
 
@@ -184,10 +184,12 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* 
 
 ### Changelog
 
+- 2026-06-20 | 2d05ad7b | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
+- 2026-06-19 | acbdf3da | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-05-11 | e9b5c3f1 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | e9b5c3f1 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
-*End* *Indirect Coverage Source* | **Hash**: e9b5c3f1
+*End* *Indirect Coverage Source* | **Hash**: 2d05ad7b
 ---
 
 ## REQ-d00070: Indirect Coverage Toggle Display
