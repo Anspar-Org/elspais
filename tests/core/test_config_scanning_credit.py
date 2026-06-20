@@ -26,9 +26,10 @@ def test_coverage_assertion_credit_defaults_and_range():
     assert cfg.min_coverage_fraction == 0.0
 
 
-def test_coverage_assertion_credit_accepts_values():
-    cfg = CoverageScanningConfig(assertion_credit="verified", min_coverage_fraction=0.8)
-    assert cfg.assertion_credit == "verified"
+@pytest.mark.parametrize("val", ["off", "tested", "verified"])
+def test_coverage_assertion_credit_accepts_values(val):
+    cfg = CoverageScanningConfig(assertion_credit=val, min_coverage_fraction=0.8)
+    assert cfg.assertion_credit == val
     assert cfg.min_coverage_fraction == 0.8
 
 
