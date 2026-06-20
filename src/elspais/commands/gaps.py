@@ -107,9 +107,10 @@ def collect_gaps(graph: FederatedGraph, exclude_status: set[str]) -> GapData:
         title = node.get_label() or ""
         metrics = node.get_metric("rollup_metrics")
 
-        # Collect assertion labels for this REQ
-        assertion_labels = [
-            child.id
+        # Collect assertion nodes for this REQ (kept as nodes so coverage
+        # lookups can key by assertion *label* while gap entries report IDs).
+        assertion_nodes = [
+            child
             for child in node.iter_children(edge_kinds={EdgeKind.STRUCTURES})
             if child.kind == NodeKind.ASSERTION
         ]
@@ -126,7 +127,7 @@ def collect_gaps(graph: FederatedGraph, exclude_status: set[str]) -> GapData:
             data.uncovered.append(GapEntry(req_id, title))
         elif metrics is not None and metrics.implemented.indirect < metrics.implemented.total:
             # Partially covered: find which assertions lack coverage
-            uncov = _uncovered_assertions(metrics, assertion_labels, "implemented")
+            uncov = _uncovered_assertions(metrics, assertion_nodes, "implemented")
             if uncov:
                 data.uncovered.append(GapEntry(req_id, title, uncov))
 
@@ -134,7 +135,7 @@ def collect_gaps(graph: FederatedGraph, exclude_status: set[str]) -> GapData:
         if metrics is None or metrics.tested.indirect <= 0:
             data.untested.append(GapEntry(req_id, title))
         elif metrics.tested.indirect < metrics.tested.total:
-            uncov = _uncovered_assertions(metrics, assertion_labels, "tested")
+            uncov = _uncovered_assertions(metrics, assertion_nodes, "tested")
             if uncov:
                 data.untested.append(GapEntry(req_id, title, uncov))
 
@@ -142,12 +143,12 @@ def collect_gaps(graph: FederatedGraph, exclude_status: set[str]) -> GapData:
         if metrics is None or metrics.uat_coverage.indirect <= 0:
             data.unvalidated.append(GapEntry(req_id, title))
         elif metrics.uat_coverage.indirect < metrics.uat_coverage.total:
-            uncov = _uncovered_assertions(metrics, assertion_labels, "uat_coverage")
+            uncov = _uncovered_assertions(metrics, assertion_nodes, "uat_coverage")
             if uncov:
                 data.unvalidated.append(GapEntry(req_id, title, uncov))
 
         # No assertions: not testable
-        if not assertion_labels:
+        if not assertion_nodes:
             data.no_assertions.append(GapEntry(req_id, title))
 
         # Failing: test or UAT failures
@@ -162,42 +163,26 @@ def collect_gaps(graph: FederatedGraph, exclude_status: set[str]) -> GapData:
 
 def _uncovered_assertions(
     metrics: Any,
-    assertion_labels: list[str],
+    assertion_nodes: list[Any],
     dimension: str,
 ) -> list[str]:
-    """Return assertion IDs that have no coverage for the given dimension.
+    """Return the IDs of assertions that are not ~fully covered for a dimension.
 
-    Uses the assertion_coverage dict on RollupMetrics to check which
-    assertions received contributions relevant to the dimension.
+    Reads the dimension's per-assertion fraction map so that coverage conducted
+    upward across REFINES edges (REQ-d00069-J) is honored. The fraction map is
+    keyed by assertion *label* (e.g. ``A``), so each node is looked up by its
+    label while the returned list reports assertion *IDs* (e.g. ``REQ-100-A``),
+    which is what gap entries and their renderers expect. An assertion counts as
+    covered only when its fraction reaches ~1.0; a partially covered assertion
+    (0 < fraction < 1, e.g. a parent assertion refined by a not-fully-covered
+    child) is still reported as a gap.
     """
-    from elspais.graph.metrics import CoverageSource
-
-    # Map dimensions to the coverage source types that satisfy them
-    _DIM_SOURCES: dict[str, set[CoverageSource]] = {
-        "implemented": {
-            CoverageSource.DIRECT,
-            CoverageSource.EXPLICIT,
-            CoverageSource.INFERRED,
-            CoverageSource.INDIRECT,
-        },
-        "tested": {
-            CoverageSource.DIRECT,
-            CoverageSource.INDIRECT,
-        },
-        "uat_coverage": {
-            CoverageSource.UAT_EXPLICIT,
-            CoverageSource.UAT_INFERRED,
-        },
-    }
-    relevant_sources = _DIM_SOURCES.get(dimension, set())
-
-    uncovered: list[str] = []
-    for label in assertion_labels:
-        contribs = metrics.assertion_coverage.get(label, [])
-        has_relevant = any(c.source in relevant_sources for c in contribs)
-        if not has_relevant:
-            uncovered.append(label)
-    return uncovered
+    dim = getattr(metrics, dimension, None)
+    if dim is None:
+        return [a.id for a in assertion_nodes]
+    fractions = dim.indirect_pct_by_label
+    covered = 1.0 - 1e-9
+    return [a.id for a in assertion_nodes if fractions.get(a.get_field("label", ""), 0.0) < covered]
 
 
 # =============================================================================

@@ -60,7 +60,7 @@
 | REQ-d00066 | Test Coverage Tool Implementation                             | dev-mcp-tools.md        | 6ac6b51f |
 | REQ-d00067 | Uncovered Assertions Tool Implementation                      | dev-mcp-tools.md        | 4884d7cb |
 | REQ-d00068 | Assertion Keyword Search Tool Implementation                  | dev-mcp-tools.md        | a9b8dff2 |
-| REQ-d00069 | Indirect Coverage Source                                      | dev-graph-core.md       | e9b5c3f1 |
+| REQ-d00069 | Indirect Coverage Source                                      | dev-graph-core.md       | 2d05ad7b |
 | REQ-d00070 | Indirect Coverage Toggle Display                              | dev-graph-core.md       | 3e5b1766 |
 | REQ-d00071 | Unified Root vs Orphan Classification                         | dev-graph-core.md       | 4bd239f1 |
 | REQ-d00072 | Link Suggestion Core Engine                                   | dev-graph-core.md       | 95f09aea |

@@ -78,6 +78,24 @@ class EdgeKind(Enum):
             EdgeKind.INTEGRATES,
         )
 
+    # Implements: REQ-d00069-J
+    def conducts_coverage(self) -> bool:
+        """Check if this edge type conducts child coverage up to a parent assertion.
+
+        Conduction paths add no coverage by themselves -- they propagate the
+        *actual* per-dimension coverage of the refining/implementing child up to
+        the targeted parent *Assertion* (REQ-d00069-J). This is distinct from
+        :meth:`contributes_to_coverage`, which classifies leaf-evidence edges
+        (TEST/CODE/JNY) and is relied on by reachability checks.
+
+        Currently only ``REFINES`` conducts; req->req ``IMPLEMENTS`` keeps its
+        binary EXPLICIT/INFERRED contribution (see CUR-1329 scope note).
+
+        Returns:
+            True if edges of this type conduct child coverage upward.
+        """
+        return self is EdgeKind.REFINES
+
 
 # Implements: REQ-p00050-A
 @dataclass

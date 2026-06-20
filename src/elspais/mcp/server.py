@@ -3368,6 +3368,24 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
 
     assertion_ids = [a[0] for a in assertions]
     label_to_id = {label: aid for aid, label in assertions}
+    rollup = node.get_metric("rollup_metrics")
+
+    def _fold_conducted(target_ids: set[str], dimension: str) -> None:
+        # REQ-d00069-J: an assertion covered only through a refining requirement
+        # has no direct incoming edge but does carry conducted coverage in its
+        # rollup dimension. Fold those in so it is not reported as a gap -- but
+        # only when conduction makes it ~fully covered. A partially covered
+        # assertion (0 < fraction < 1) remains a gap.
+        if rollup is None:
+            return
+        dim = getattr(rollup, dimension, None)
+        if dim is None:
+            return
+        for label, frac in dim.indirect_pct_by_label.items():
+            if frac >= 1.0 - 1e-9:
+                aid = label_to_id.get(label)
+                if aid is not None:
+                    target_ids.add(aid)
 
     # Deduplicated test serialization via shared iterator
     seen_test_ids: set[str] = set()
@@ -3386,6 +3404,7 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
 
         test_nodes.append(_serialize_test_info(test_node, graph))
 
+    _fold_conducted(covered_assertion_ids, "tested")
     covered_assertions = sorted(covered_assertion_ids)
     uncovered_assertions = sorted(set(assertion_ids) - covered_assertion_ids)
 
@@ -3417,11 +3436,11 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
             }
         )
 
+    _fold_conducted(covered_uat_assertion_ids, "uat_coverage")
     uat_covered_count = len(covered_uat_assertion_ids)
     uat_referenced_pct = (uat_covered_count / total * 100) if total > 0 else 0.0
 
     # Read uat_validated_pct from rollup_metrics if available
-    rollup = node.get_metric("rollup_metrics")
     uat_validated_pct = rollup.uat_verified.indirect_pct if rollup is not None else 0.0
 
     return {
@@ -3737,14 +3756,37 @@ def _get_uncovered_assertions(
     """
 
     def _covered_labels_for_req(req_node: Any) -> set[str]:
-        """Return the set of assertion labels covered by at least one matching source."""
+        """Return the set of assertion labels covered by at least one matching source.
+
+        Includes coverage conducted upward across REFINES edges (REQ-d00069-J):
+        an assertion covered only through a refining requirement has no direct
+        incoming edge, and is counted here only when conduction makes it
+        ~fully covered (rollup fraction ~1.0). A partial fraction (0 < f < 1)
+        stays a gap.
+        """
         covered: set[str] = set()
+        rollup = req_node.get_metric("rollup_metrics")
+
+        def _fold(dimension: str) -> None:
+            # Only ~fully-covered assertions count as covered; partial coverage
+            # (0 < fraction < 1) stays a gap (REQ-d00069-J).
+            if rollup is None:
+                return
+            dim = getattr(rollup, dimension, None)
+            if dim is None:
+                return
+            covered.update(
+                lbl for lbl, frac in dim.indirect_pct_by_label.items() if frac >= 1.0 - 1e-9
+            )
+
         if source in ("test", "both"):
             for _test_node, labels in _iter_assertion_coverage(req_node, NodeKind.TEST):
                 covered.update(labels)
+            _fold("tested")
         if source in ("uat", "both"):
             for _jny_node, labels in _iter_assertion_coverage(req_node, NodeKind.USER_JOURNEY):
                 covered.update(labels)
+            _fold("uat_coverage")
         return covered
 
     if req_id is not None:

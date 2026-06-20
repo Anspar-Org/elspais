@@ -6,6 +6,9 @@ __pycache__/
 # C extensions
 *.so
 
+# LaTeX artifact from `elspais pdf` / PDF tests (written when a font is missing)
+missfont.log
+
 # Distribution / packaging
 .Python
 build/
