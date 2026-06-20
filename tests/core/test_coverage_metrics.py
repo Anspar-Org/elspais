@@ -928,8 +928,12 @@ class TestRefinesCoverageConduction:
         PARENT has N=2 assertions (A, B), one fully-tested blanket refiner, so
         each parent assertion gets (1/2) * 1.0 == 0.5. The gaps surface treats
         an assertion as covered only at ~1.0, so both A and B remain gaps.
+
+        Exercises the real ``collect_gaps`` entry point, which passes assertion
+        nodes (IDs keyed by label) -- guarding against the regression where the
+        ID/label key mismatch marked every assertion uncovered.
         """
-        from elspais.commands.gaps import _uncovered_assertions
+        from elspais.commands.gaps import collect_gaps
 
         graph = build_graph(
             make_requirement(
@@ -955,6 +959,14 @@ class TestRefinesCoverageConduction:
         assert metrics.tested.indirect_pct_by_label["A"] == pytest.approx(0.5)
         assert metrics.tested.indirect_pct_by_label["B"] == pytest.approx(0.5)
 
-        # Partial coverage is a gap: both assertions reported as uncovered.
-        uncov = _uncovered_assertions(metrics, ["A", "B"], "tested")
-        assert set(uncov) == {"A", "B"}
+        # Both assertion IDs of PARENT (partial coverage = gap).
+        parent = graph.find_by_id("PARENT")
+        from elspais.graph import NodeKind
+
+        parent_assertion_ids = {
+            c.id for c in parent.iter_children() if c.kind == NodeKind.ASSERTION
+        }
+
+        data = collect_gaps(graph, set())
+        untested = next(e for e in data.untested if e.req_id == "PARENT")
+        assert set(untested.assertions) == parent_assertion_ids

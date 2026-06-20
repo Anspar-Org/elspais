@@ -3760,7 +3760,9 @@ def _get_uncovered_assertions(
 
         Includes coverage conducted upward across REFINES edges (REQ-d00069-J):
         an assertion covered only through a refining requirement has no direct
-        incoming edge but carries a non-zero fraction in its rollup dimension.
+        incoming edge, and is counted here only when conduction makes it
+        ~fully covered (rollup fraction ~1.0). A partial fraction (0 < f < 1)
+        stays a gap.
         """
         covered: set[str] = set()
         rollup = req_node.get_metric("rollup_metrics")

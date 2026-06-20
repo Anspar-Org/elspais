@@ -482,9 +482,12 @@ class IntegratesRollup:
     provenance (REQ-d00252-D).
     """
 
-    implemented_covered: int
+    # Covered counts are summed from per-dimension coverage, which is now a
+    # sum of fractional per-assertion values (REQ-d00069-J), so they may be
+    # non-integer. Totals are assertion counts and stay int.
+    implemented_covered: float
     implemented_total: int
-    verified_covered: int
+    verified_covered: float
     verified_total: int
 
     @property
@@ -543,9 +546,11 @@ class AssociateIntegration:
 
     associate: str  # owning associate repo name
     requirement_count: int  # distinct consumer requirements integrating it
-    implemented_covered: int
+    # Covered counts may be fractional (sums of per-assertion coverage,
+    # REQ-d00069-J); totals are assertion counts and stay int.
+    implemented_covered: float
     implemented_total: int
-    verified_covered: int
+    verified_covered: float
     verified_total: int
 
 

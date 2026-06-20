@@ -261,8 +261,8 @@ def _render_text(data: dict) -> str:
         lines.append("External integrations (by associate)")
         lines.append(f"  {'associate':<18} {'reqs':>5}   {'implemented':>11}   {'verified':>8}")
         for row in integrations:
-            impl = f"{row['implemented_covered']}/{row['implemented_total']}"
-            ver = f"{row['verified_covered']}/{row['verified_total']}"
+            impl = f"{fmt_assertion_count(row['implemented_covered'])}/{row['implemented_total']}"
+            ver = f"{fmt_assertion_count(row['verified_covered'])}/{row['verified_total']}"
             lines.append(
                 f"  {row['associate']:<18} {row['requirement_count']:>5}"
                 f"   {impl:>11}   {ver:>8}"
@@ -270,8 +270,8 @@ def _render_text(data: dict) -> str:
         lines.append("  " + "-" * 46)
         tot = data.get("integration_total")
         if tot:
-            impl = f"{tot['implemented_covered']}/{tot['implemented_total']}"
-            ver = f"{tot['verified_covered']}/{tot['verified_total']}"
+            impl = f"{fmt_assertion_count(tot['implemented_covered'])}/{tot['implemented_total']}"
+            ver = f"{fmt_assertion_count(tot['verified_covered'])}/{tot['verified_total']}"
             lines.append(
                 f"  {'total':<18} {tot['requirement_count']:>5}" f"   {impl:>11}   {ver:>8}"
             )
@@ -320,13 +320,13 @@ def _render_markdown(data: dict) -> str:
         lines.append("| Associate | Reqs | Implemented | Verified |")
         lines.append("|-----------|------|-------------|----------|")
         for row in integrations:
-            impl = f"{row['implemented_covered']}/{row['implemented_total']}"
-            ver = f"{row['verified_covered']}/{row['verified_total']}"
+            impl = f"{fmt_assertion_count(row['implemented_covered'])}/{row['implemented_total']}"
+            ver = f"{fmt_assertion_count(row['verified_covered'])}/{row['verified_total']}"
             lines.append(f"| {row['associate']} | {row['requirement_count']} | {impl} | {ver} |")
         tot = data.get("integration_total")
         if tot:
-            impl = f"{tot['implemented_covered']}/{tot['implemented_total']}"
-            ver = f"{tot['verified_covered']}/{tot['verified_total']}"
+            impl = f"{fmt_assertion_count(tot['implemented_covered'])}/{tot['implemented_total']}"
+            ver = f"{fmt_assertion_count(tot['verified_covered'])}/{tot['verified_total']}"
             lines.append(f"| total | {tot['requirement_count']} | {impl} | {ver} |")
 
     meta = data.get("meta")
