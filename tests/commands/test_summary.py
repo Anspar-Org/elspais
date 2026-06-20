@@ -638,3 +638,37 @@ class TestSummaryIntegrations:
         # APP-d00001 has no local code refs but integrates a library REQ, so it
         # must count toward with_code_refs (implemented requirements).
         assert dev_levels[0]["with_code_refs"] >= 1
+
+
+class TestTestedAndPassingUnion:
+    """Validates REQ-d00215-B: lcov_tested credit counts toward headline passing score."""
+
+    def test_lcov_only_req_contributes_to_passing(self):
+        """A requirement with only lcov_tested credit (no verified) contributes
+        to passing_assertions."""
+        from elspais.graph.metrics import CoverageDimension
+
+        graph = _make_graph()
+        req = _add_requirement(graph, "REQ-d00099", "LCOV Only", level="dev")
+        # Set rollup with lcov_tested but NO verified credit
+        rm = RollupMetrics(
+            total_assertions=1,
+            verified=CoverageDimension(total=1, direct=0.0, indirect=0.0),
+            lcov_tested=CoverageDimension(
+                total=1,
+                direct=1.0,
+                indirect=1.0,
+                direct_labels={"A"},
+                indirect_labels={"A"},
+                direct_pct_by_label={"A": 1.0},
+                indirect_pct_by_label={"A": 1.0},
+            ),
+        )
+        req.set_metric("rollup_metrics", rm)
+
+        data = _collect_coverage(graph)
+        dev = next(lv for lv in data["levels"] if lv["level"] == "DEV")
+        assert (
+            dev["passing_assertions"] > 0
+        ), "lcov_tested credit must count toward headline passing"
+        assert dev["with_passing"] == 1

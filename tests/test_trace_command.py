@@ -213,3 +213,17 @@ class TestTraceReportPresets:
         standard_header = capsys.readouterr().out.split("\n")[0]
 
         assert default_header == standard_header
+
+
+class TestLcovTestedTrace:
+    """Validates REQ-d00215-B: lcov_tested % appears in trace node data."""
+
+    def test_lcov_tested_key_in_node_data(self, canonical_federated_graph):
+        """_get_node_data includes lcov_tested key in output."""
+        from elspais.commands.trace import _get_node_data
+        from elspais.graph.GraphNode import NodeKind
+
+        for node in canonical_federated_graph.nodes_by_kind(NodeKind.REQUIREMENT):
+            data = _get_node_data(node, canonical_federated_graph)
+            assert "lcov_tested" in data, f"Missing lcov_tested key for {node.id}"
+            break  # Just check the first one

@@ -2103,6 +2103,7 @@ def check_dimension_coverage(
         "uat_coverage": ("Validated", "uat"),
         "uat_verified": ("Accepted", "uat"),
         "code_tested": ("Code Tested (line coverage)", "code"),
+        "lcov_tested": ("Coverage-Verified (lcov)", "tests"),
     }
     label, category = dim_labels.get(dimension, (dimension, "code"))
 

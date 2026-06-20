@@ -642,6 +642,54 @@ def integrates_total(items: list[AssociateIntegration]) -> AssociateIntegration:
     )
 
 
+def tested_and_passing(metrics: RollupMetrics) -> CoverageDimension:
+    """Union of `verified` and `lcov_tested` for the headline 'tested & passing' score.
+
+    Per-assertion fractions are the max across the two dimensions (not summed);
+    has_failures is True if either dimension reports a failure. Used by the
+    summary headline and the health combined signal (CUR-1533).
+
+    When per-label dicts are populated the union is label-keyed; when they are
+    absent (e.g. in simplified test fixtures) the raw direct/indirect scalars
+    are combined via max so the headline is never understated.
+    """
+    vd = metrics.verified
+    lt = metrics.lcov_tested
+    total = max(vd.total, lt.total)
+
+    def merge(a: dict[str, float], b: dict[str, float]) -> dict[str, float]:
+        out = dict(a)
+        for k, val in b.items():
+            out[k] = max(out.get(k, 0.0), val)
+        return out
+
+    direct_pct = merge(vd.direct_pct_by_label, lt.direct_pct_by_label)
+    indirect_pct = merge(vd.indirect_pct_by_label, lt.indirect_pct_by_label)
+
+    # Fall back to raw scalars when no per-label data is present (e.g. simplified
+    # test fixtures that don't populate direct_pct_by_label).
+    if direct_pct:
+        combined_direct = sum(direct_pct.values())
+    else:
+        combined_direct = max(vd.direct, lt.direct)
+
+    if indirect_pct:
+        combined_indirect = sum(indirect_pct.values())
+    else:
+        combined_indirect = max(vd.indirect, lt.indirect)
+
+    return CoverageDimension(
+        total=total,
+        direct=combined_direct,
+        indirect=combined_indirect,
+        has_failures=vd.has_failures or lt.has_failures,
+        direct_labels=set(direct_pct),
+        indirect_labels=set(indirect_pct),
+        direct_pct_by_label=direct_pct,
+        indirect_pct_by_label=indirect_pct,
+    )
+
+
 __all__ = [
     "AssociateIntegration",
     "CoverageDimension",
@@ -658,4 +706,5 @@ __all__ = [
     "integrates_rollup",
     "integrates_total",
     "satisfier_rollup",
+    "tested_and_passing",
 ]
