@@ -308,6 +308,16 @@
           },
           "title": "Skip Dirs",
           "type": "array"
+        },
+        "assertion_credit": {
+          "default": "off",
+          "title": "Assertion Credit",
+          "type": "string"
+        },
+        "min_coverage_fraction": {
+          "default": 0.0,
+          "title": "Min Coverage Fraction",
+          "type": "number"
         }
       },
       "title": "CoverageScanningConfig",
@@ -716,6 +726,11 @@
         "run_meta_file": {
           "default": "",
           "title": "Run Meta File",
+          "type": "string"
+        },
+        "unmatched_credit": {
+          "default": "off",
+          "title": "Unmatched Credit",
           "type": "string"
         }
       },
