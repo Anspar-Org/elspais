@@ -1,4 +1,4 @@
-# Verifies: REQ-d00215-A+B+C+D+E
+# Verifies: REQ-d00254-B
 """Tests for _compute_code_tested annotator."""
 
 from elspais.graph.annotators import annotate_coverage

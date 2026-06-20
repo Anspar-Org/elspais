@@ -1,4 +1,4 @@
-# Verifies: REQ-d00215-A
+# Verifies: REQ-d00254-A
 """Per-app green/red signal and app-dir matching (CUR-1533)."""
 
 from elspais.graph.annotators import _compute_app_status, _match_app_dir

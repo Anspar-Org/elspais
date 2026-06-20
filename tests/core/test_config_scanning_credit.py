@@ -1,4 +1,4 @@
-# Verifies: REQ-d00215-A
+# Verifies: REQ-d00254-C
 """Config fields for coverage/result assertion crediting (CUR-1533)."""
 
 import pytest

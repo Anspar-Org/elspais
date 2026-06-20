@@ -1,4 +1,4 @@
-# Verifies: REQ-d00215-B
+# Verifies: REQ-d00254-B
 """Union of verified + lcov_tested for the headline score (CUR-1533)."""
 
 from elspais.graph.metrics import CoverageDimension, RollupMetrics, tested_and_passing

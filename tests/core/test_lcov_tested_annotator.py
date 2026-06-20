@@ -1,4 +1,4 @@
-# Verifies: REQ-d00215-A
+# Verifies: REQ-d00254-B
 """lcov_tested assertion-level crediting (CUR-1533)."""
 
 from elspais.graph.annotators import CoverageCreditConfig, annotate_coverage

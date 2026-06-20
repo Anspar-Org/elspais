@@ -364,3 +364,24 @@ F. The `validate` / health-check command reports B and C as
 - 2026-05-11 | 903349d2 | - | Developer (dev@example.com) | Auto-fix: update hash, add missing changelog section
 
 *End* *Section Header Depth Canonicalization* | **Hash**: 903349d2
+
+## REQ-d00254: Coverage-Based and Aggregate Test Verification
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-o00051
+
+The coverage annotation system SHALL credit test verification through two complementary paths: aggregate app-green status for unmatched test-file edges, and line-coverage fraction for implementation-code edges; both are tracked as separate dimensions distinct from direct `Verifies:` evidence.
+
+### Assertions
+
+A. When a test-file edge has no matching result record, the annotator SHALL consult the per-app green/red signal derived from result nodes whose source path falls within the same app directory. A green app SHALL credit the assertion as verified; a red app SHALL flag the requirement as having failures.
+
+B. The annotator SHALL compute a separate `lcov_tested` dimension by measuring the fraction of implementation lines (from `Implements:` edges) covered by execution data. When the fraction meets or exceeds the configured minimum, the relevant assertions SHALL be credited in `lcov_tested`, which feeds into the `tested_and_passing` union score alongside `verified`.
+
+C. The configuration surface SHALL expose `unmatched_credit` under `[scanning.result]` (values: `off`, `verified`) and `assertion_credit` plus `min_coverage_fraction` under `[scanning.coverage]`. User documentation SHALL include a `test-results` topic describing these options and the `lcov_tested` dimension.
+
+### Changelog
+
+- 2026-06-20 | 98120740 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
+- 2026-06-20 | 00000000 | - | Michael Lewis (michael@anspar.org) | CUR-1533: initial
+
+*End* *Coverage-Based and Aggregate Test Verification* | **Hash**: 98120740

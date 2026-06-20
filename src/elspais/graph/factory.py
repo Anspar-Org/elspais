@@ -690,6 +690,7 @@ def build_graph(
     cov_cfg = typed_config.scanning.coverage
     res_cfg = typed_config.scanning.result
     app_dirs = tuple(d for d in [*cov_cfg.directories, *res_cfg.directories] if d and d != ".")
+    # Implements: REQ-d00254-A+B+C
     credit = CoverageCreditConfig(
         app_dirs=app_dirs,
         unmatched_credit=res_cfg.unmatched_credit,

@@ -296,6 +296,7 @@ class TestScanningConfig(ScanningKindConfig):
     runners: list[TestRunnerConfig] = Field(default_factory=list)
 
 
+# Implements: REQ-d00254-C
 class ResultScanningConfig(ScanningKindConfig):
     run_meta_file: str = ""
     # CUR-1533: credit `verified` for // Verifies: edges with no matchable RESULT,
@@ -310,6 +311,7 @@ class ResultScanningConfig(ScanningKindConfig):
         return v
 
 
+# Implements: REQ-d00254-C
 class CoverageScanningConfig(ScanningKindConfig):
     """Configuration for code coverage report scanning."""
 

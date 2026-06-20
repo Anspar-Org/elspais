@@ -1,4 +1,4 @@
-# Verifies: REQ-d00215-C
+# Verifies: REQ-d00254-C
 """The test-results docs topic is registered and loadable (CUR-1533)."""
 
 from elspais.utilities.docs_loader import TOPIC_ORDER, get_available_topics, load_topic

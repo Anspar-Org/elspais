@@ -52,6 +52,7 @@ _NA_PATTERN = re.compile(
 )
 
 
+# Implements: REQ-d00254-C
 @dataclass(frozen=True)
 class CoverageCreditConfig:
     """CUR-1533 crediting config, derived from [scanning.result]/[scanning.coverage]."""
@@ -63,6 +64,7 @@ class CoverageCreditConfig:
     min_coverage_fraction: float = 0.0
 
 
+# Implements: REQ-d00254-A
 def _match_app_dir(path: str | None, app_dirs: tuple[str, ...]) -> str | None:
     """Return the app dir whose segments appear deepest in ``path``.
 
@@ -89,6 +91,7 @@ def _match_app_dir(path: str | None, app_dirs: tuple[str, ...]) -> str | None:
     return best
 
 
+# Implements: REQ-d00254-A
 def _compute_app_status(graph, app_dirs: tuple[str, ...]) -> dict[str, str]:
     """Map app dir -> 'green'|'red' from RESULT node statuses (CUR-1533)."""
     from elspais.graph import NodeKind
@@ -808,6 +811,7 @@ def _under_dirs(rel_path: str, dirs: tuple[str, ...]) -> bool:
     return _match_app_dir(rel_path, dirs) is not None
 
 
+# Implements: REQ-d00254-B
 def _compute_lcov_tested(node, metrics, credit, app_status) -> None:
     """Credit the lcov_tested dimension from covered // Implements: lines (CUR-1533)."""
     from elspais.graph import NodeKind
@@ -1125,6 +1129,7 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                                 validated_indirect_labels.add(label)
                     elif status in ("failed", "fail", "failure", "error"):
                         has_failures = True
+            # Implements: REQ-d00254-A
             if not saw_result and credit.unmatched_credit == "verified":
                 fn = test_node.file_node()
                 app = _match_app_dir(fn.get_field("relative_path") if fn else None, credit.app_dirs)

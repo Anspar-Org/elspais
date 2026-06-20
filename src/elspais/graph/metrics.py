@@ -642,6 +642,7 @@ def integrates_total(items: list[AssociateIntegration]) -> AssociateIntegration:
     )
 
 
+# Implements: REQ-d00254-B
 def tested_and_passing(metrics: RollupMetrics) -> CoverageDimension:
     """Union of `verified` and `lcov_tested` for the headline 'tested & passing' score.
 

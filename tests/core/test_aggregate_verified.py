@@ -1,4 +1,4 @@
-# Verifies: REQ-d00215-A
+# Verifies: REQ-d00254-A
 """Aggregate-green fallback credits verified for unmatched // Verifies: edges (CUR-1533)."""
 
 from elspais.graph.annotators import CoverageCreditConfig, annotate_coverage
