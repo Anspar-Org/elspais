@@ -73,8 +73,11 @@ min_coverage_fraction = 0.0      # fraction of impl lines that must be covered
 `assertion_credit` controls *which* dimension receives credit:
 
 - `"off"` (default): coverage reports are ingested but grant no assertion credit
-- `"tested"`: covered impl lines count as `lcov_tested` (the assertion was exercised)
-- `"verified"`: covered impl lines count as both `lcov_tested` and `verified`
+- `"tested"`: covered impl lines count as `lcov_tested` (the assertion was exercised);
+  `lcov_tested.has_failures` is never set by coverage alone
+- `"verified"`: covered impl lines count as `lcov_tested`; additionally, if the
+  app is red (any failing test in that app), `lcov_tested` is marked failing so
+  the coverage credit does not suppress a failure signal
 
 `min_coverage_fraction` (default `0.0`) is the minimum fraction of an
 assertion's implementing lines that must be covered before credit is

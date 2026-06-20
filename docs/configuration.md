@@ -187,12 +187,13 @@ unmatched_credit = "off"
 # Code coverage report scanning (lcov .info files)
 # Enables the lcov_tested dimension — see `elspais docs test-results`.
 [scanning.coverage]
-directories = ["."]
+directories = [".elspais/coverage"]   # example path; default is ["."]
 file_patterns = []
 # assertion_credit: "off" (default) | "tested" | "verified"
 # When set, covered // Implements: lines grant credit to the assertion.
-#   "tested"   -> lcov_tested dimension only
-#   "verified" -> lcov_tested + verified dimensions
+#   "tested"   -> lcov_tested dimension only (failures never suppressed by coverage)
+#   "verified" -> lcov_tested dimension; additionally marks lcov_tested failing
+#                 if the app is red, so coverage credit does not hide failures
 assertion_credit = "off"
 # min_coverage_fraction: minimum fraction of an assertion's impl lines that must
 # be covered before credit is granted. Default 0.0 means any execution counts.
