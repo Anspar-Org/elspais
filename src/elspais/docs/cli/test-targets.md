@@ -39,7 +39,7 @@ This is the correct pattern for CI.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `name` | string | (required) | Unique label for this target; appears in output |
-| `cwd` | string | `"."` | Directory relative to repo root where the command runs |
+| `cwd` | string | `""` (repo root) | Directory relative to repo root where the command runs |
 | `command` | string | (omit in CI) | Shell command to execute when `--run-tests` is passed |
 | `reporter` | string | (required) | Parser format: `flutter-machine`, `junit`, `pytest-json` |
 | `results` | string | `""` | Glob pattern for result files (file-channel reporters) |
@@ -219,8 +219,9 @@ command = "my-test-runner --output results.xml"
 reporter = "junit"
 
 # Glob for result files (file-channel reporters).
-# Relative to repo root (not cwd).
-results = "packages/my-package/results/*.xml"
+# Relative to cwd (not repo root).  With cwd = "packages/my-package",
+# this resolves to packages/my-package/results/*.xml from the repo root.
+results = "results/*.xml"
 
 # Path to lcov or coverage-xml file, relative to cwd.
 # Omit if no coverage report.
@@ -248,8 +249,11 @@ name     = "app"
 cwd      = "app"
 # No `command` -- CI already ran flutter test
 reporter = "flutter-machine"
-# results not needed for stdout-channel reporters when replaying from file;
-# point coverage at the file produced by the CI step
+# flutter-machine is a stdout reporter, so `results` is unused.
+# To get per-test pass/fail attribution in CI, save `flutter test --machine`
+# output to a file in the CI step and point `results` at it (relative to cwd):
+#   results = "build/test-results.jsonl"
+# Without `results`, only coverage credit is applied (no pass/fail signal).
 coverage = "coverage/lcov.info"
 match    = "precise"
 credit_coverage = "verified"
