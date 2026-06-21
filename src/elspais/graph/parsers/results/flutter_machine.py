@@ -1,7 +1,13 @@
 """Parser for `flutter test --machine` newline-delimited JSON events.
 
-Builds RESULT records carrying the REAL test-file path (from `suite.path`)
+Builds RESULT records carrying the REAL test-file path (from ``suite.path``)
 and per-test identity (name, line) — unlike tojunit's lossy classname.
+
+Record shape mirrors sibling parsers (junit_xml, pytest_json):
+``{"id", "name", "classname", "status", "duration", "message", "verifies",
+"source_path", "test_id"}``.  ``test_id`` is always ``None`` because Flutter
+results correlate to test files by path (Task 5 precise matching), not by a
+pytest-style test_id.
 """
 
 from __future__ import annotations
@@ -53,9 +59,13 @@ class FlutterMachineParser:
                 results.append(
                     {
                         "id": f"{path}::{meta['name']}",
-                        "status": status,
                         "name": meta["name"],
-                        "source_file": path,
+                        "classname": "",
+                        "status": status,
+                        "duration": 0.0,
+                        "message": None,
+                        "verifies": [],
+                        "source_path": path,
                         "line": meta["line"],
                         "test_id": None,
                     }

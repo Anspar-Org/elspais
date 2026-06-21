@@ -14,7 +14,10 @@ def _by_name(records):
 
 def test_real_path_from_suite():
     recs = FlutterMachineParser().parse(SAMPLE, "stdout")
-    assert all(r["source_file"] == "/repo/provenance/test/provenance_entry_test.dart" for r in recs)
+    assert all(r["source_path"] == "/repo/provenance/test/provenance_entry_test.dart" for r in recs)
+    assert {"classname", "duration", "message", "verifies", "source_path", "test_id"}.issubset(
+        recs[0]
+    )
 
 
 def test_hidden_test_skipped():
