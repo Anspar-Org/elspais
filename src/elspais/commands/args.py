@@ -60,7 +60,7 @@ class ChecksArgs:
     """
 
     fail_fast: bool = False
-    """Stop at the first runner failure and skip the checks pass. Requires --run-tests."""
+    """Stop at the first target failure and skip the checks pass. Requires --run-tests."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
@@ -637,6 +637,7 @@ DOCS_TOPICS = Literal[
     "commands",
     "checks",
     "test-results",
+    "test-targets",
     "doctor",
     "analysis",
     "terms",

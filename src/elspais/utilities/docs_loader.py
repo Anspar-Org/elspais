@@ -28,6 +28,7 @@ TOPIC_ORDER = [
     "commands",
     "checks",
     "test-results",
+    "test-targets",
     "doctor",
     "analysis",
     "terms",

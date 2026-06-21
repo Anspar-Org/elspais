@@ -2984,9 +2984,9 @@ def _report_from_dict(data: dict[str, Any]) -> HealthReport:
 def run(args: argparse.Namespace) -> int:
     """Run the health command.
 
-    If --run-tests is set, execute configured runners first, then proceed
-    to checks. With --fail-fast, a failing runner skips the checks pass
-    entirely. Final exit code is non-zero if any runner failed OR any
+    If --run-tests is set, execute configured targets first, then proceed
+    to checks. With --fail-fast, a failing target skips the checks pass
+    entirely. Final exit code is non-zero if any target failed OR any
     check failed.
     """
     from elspais.commands import _engine
