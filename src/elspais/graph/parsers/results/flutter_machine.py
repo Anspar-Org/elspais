@@ -16,6 +16,7 @@ import json
 from typing import Any
 
 
+# Implements: REQ-d00254-E
 class FlutterMachineParser:
     def parse(self, content: str, source_path: str = "") -> list[dict[str, Any]]:
         suites: dict[int, str] = {}  # suiteID -> path

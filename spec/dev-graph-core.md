@@ -377,14 +377,21 @@ A. When a test-file edge has no matching result record, the annotator SHALL cons
 
 B. The annotator SHALL compute a separate `lcov_tested` dimension by measuring the fraction of implementation lines (from `Implements:` edges) covered by execution data. When the fraction meets or exceeds the configured minimum, the relevant assertions SHALL be credited in `lcov_tested`, which feeds into the `tested_and_passing` union score alongside `verified`.
 
-C. The configuration surface SHALL expose `unmatched_credit` under `[scanning.result]` (values: `off`, `verified`) and `assertion_credit` plus `min_coverage_fraction` under `[scanning.coverage]`. User documentation SHALL include a `test-results` topic describing these options and the `lcov_tested` dimension.
+C. The configuration surface SHALL express test result and coverage ingestion via `[[scanning.test.targets]]` entries, each declaring how a target's results and coverage are produced (`command`) and ingested (`reporter`, `results`, `coverage`, `match`, `credit_coverage`, `min_coverage_fraction`). User documentation SHALL include a `test-targets` topic describing the target model, the available reporters, and a worked Flutter recipe.
 
 D. When an `// Implements:` marker has no function range (i.e., `impl_start_line == impl_end_line`), the annotator SHALL attribute coverage via block-scoped attribution: a run of consecutive marker lines with no executable line strictly between them forms one block, and that block owns the executable lines that follow it up to the next block's first marker or end-of-file. This enables languages without function detection (e.g. Dart) to receive lcov coverage credit for the code each marker precedes.
 
+E. A reporter registry SHALL map each `reporter` format name to a parser and an input channel (`stdout` or `file`). The registry SHALL include a native `flutter test --machine` reporter that parses the machine JSON event stream into result records carrying each test's real source-file path (from the suite path), pass/fail/skip status, and line -- without an external JUnit converter.
+
+F. For each configured target, the system SHALL obtain the reporter's output (captured from the command's stdout for stdout-channel reporters, or read from the `results` glob for file-channel reporters), build RESULT nodes carrying the real test-file path (`source_file`, repo-relative) and the target's `match` mode, and ingest the target's `coverage` file. Coverage crediting SHALL be derived from the targets' `credit_coverage`/`min_coverage_fraction`.
+
+G. Each target SHALL select its result-to-test matching via `match`: `precise` SHALL credit verification at file granularity by resolving a result's real source-file path to the test nodes in that file (all passing credits the file's `Verifies:` assertions; any failure flags them), while `aggregate` SHALL use the per-app green/red engine.
+
 ### Changelog
 
+- 2026-06-21 | 6962b5a4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-06-20 | 81f6cdcd | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-06-20 | 98120740 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (michael@anspar.org) | CUR-1533: initial
 
-*End* *Coverage-Based and Aggregate Test Verification* | **Hash**: 81f6cdcd
+*End* *Coverage-Based and Aggregate Test Verification* | **Hash**: 6962b5a4

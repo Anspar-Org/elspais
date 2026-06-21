@@ -1,4 +1,4 @@
-# Verifies: REQ-d00254-C
+# Verifies: REQ-d00254-E
 """Reporter registry: format name -> parser + channel (test-ingestion)."""
 
 import pytest

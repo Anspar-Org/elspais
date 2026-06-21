@@ -31,6 +31,7 @@ class RunnerResult:
         return self.returncode == 0
 
 
+# Implements: REQ-d00254-F
 def run_configured_targets(
     config: ElspaisConfig,
     repo_root: Path,

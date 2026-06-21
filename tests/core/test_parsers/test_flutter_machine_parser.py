@@ -1,4 +1,4 @@
-# Verifies: REQ-d00254-C
+# Verifies: REQ-d00254-E
 """flutter test --machine parser yields RESULT records with real paths."""
 
 from pathlib import Path

@@ -61,6 +61,7 @@ def _resolve_coverage_file_node(graph, source_file, lcov_path, repo_root):
     return graph.find_by_id(make_file_id(str(rel)))
 
 
+# Implements: REQ-d00254-F
 def _ingest_target_results(builder, target, results_text: str, repo_root: Path) -> int:
     """Parse a target's reporter output and add RESULT ParsedContent.
 
@@ -344,7 +345,7 @@ class SpecDirConfig:
     ignore_config: IgnoreConfig | None = None
 
 
-# Implements: REQ-d00254-A+B+C
+# Implements: REQ-d00254-A+B+F
 def _derive_credit_config(targets):
     """Collapse per-target credit settings into the annotator's global CoverageCreditConfig.
 

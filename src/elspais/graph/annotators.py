@@ -1203,7 +1203,7 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
             if not saw_result:
                 fn = test_node.file_node()
                 rel = fn.get_field("relative_path") if fn else None
-                # Implements: REQ-d00254-A
+                # Implements: REQ-d00254-G
                 # Precise file-granular path: match RESULT nodes by source_file.
                 if rel and rel in precise_index:
                     statuses = precise_index[rel]

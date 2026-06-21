@@ -1,4 +1,4 @@
-# Verifies: REQ-d00254-A
+# Verifies: REQ-d00254-F
 """Unit tests for _derive_credit_config: per-target credit reduction logic.
 
 Tests the pure helper that collapses [[scanning.test.targets]] settings into a

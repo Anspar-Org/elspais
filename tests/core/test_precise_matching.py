@@ -1,4 +1,4 @@
-# Verifies: REQ-d00254-A
+# Verifies: REQ-d00254-G
 """Precise file-granular matching credits verified by real test-file path."""
 
 from elspais.graph.annotators import CoverageCreditConfig, annotate_coverage

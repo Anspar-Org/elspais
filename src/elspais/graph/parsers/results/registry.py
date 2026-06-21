@@ -17,6 +17,7 @@ from elspais.graph.parsers.results.lcov import LcovParser
 from elspais.graph.parsers.results.pytest_json import PytestJSONParser
 
 
+# Implements: REQ-d00254-E
 @dataclass(frozen=True)
 class ReporterSpec:
     name: str

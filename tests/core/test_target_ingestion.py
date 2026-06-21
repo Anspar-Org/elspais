@@ -1,4 +1,4 @@
-# Verifies: REQ-d00254-C
+# Verifies: REQ-d00254-F
 """RESULT nodes carry real source_file + match from their target.
 
 Tests for target-driven result ingestion via the reporter registry.
