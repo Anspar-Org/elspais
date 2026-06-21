@@ -1013,6 +1013,15 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
     app_status = _compute_app_status(graph, credit.app_dirs) if credit.app_dirs else {}
     region_cache: dict = {}
 
+    # Build a per-file index of RESULT nodes with match=="precise" (Task 5).
+    # Maps repo-relative source_file -> list of status strings (lowercased).
+    precise_index: dict[str, list[str]] = {}
+    for r in graph.nodes_by_kind(NodeKind.RESULT):
+        if (r.get_field("match") or "") == "precise":
+            sf = r.get_field("source_file")
+            if sf:
+                precise_index.setdefault(sf, []).append((r.get_field("status") or "").lower())
+
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
 
         metrics = RollupMetrics()
@@ -1191,21 +1200,37 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                                 validated_indirect_labels.add(label)
                     elif status in ("failed", "fail", "failure", "error"):
                         has_failures = True
-            # Implements: REQ-d00254-A
-            if not saw_result and credit.unmatched_credit == "verified":
+            if not saw_result:
                 fn = test_node.file_node()
-                app = _match_app_dir(fn.get_field("relative_path") if fn else None, credit.app_dirs)
-                st = app_status.get(app) if app else None
-                if st == "green":
-                    if assertion_targets:
-                        for label in assertion_targets:
-                            if label in assertion_labels:
-                                validated_labels.add(label)
-                    else:
-                        for label in assertion_labels:
-                            validated_indirect_labels.add(label)
-                elif st == "red":
-                    has_failures = True
+                rel = fn.get_field("relative_path") if fn else None
+                # Implements: REQ-d00254-A
+                # Precise file-granular path: match RESULT nodes by source_file.
+                if rel and rel in precise_index:
+                    statuses = precise_index[rel]
+                    if any(s in ("failed", "fail", "failure", "error") for s in statuses):
+                        has_failures = True
+                    elif statuses:  # all passed/skipped, at least one result
+                        if assertion_targets:
+                            for label in assertion_targets:
+                                if label in assertion_labels:
+                                    validated_labels.add(label)
+                        else:
+                            for label in assertion_labels:
+                                validated_indirect_labels.add(label)
+                elif credit.unmatched_credit == "verified":
+                    # Aggregate app-green path (unchanged).
+                    app = _match_app_dir(rel, credit.app_dirs)
+                    st = app_status.get(app) if app else None
+                    if st == "green":
+                        if assertion_targets:
+                            for label in assertion_targets:
+                                if label in assertion_labels:
+                                    validated_labels.add(label)
+                        else:
+                            for label in assertion_labels:
+                                validated_indirect_labels.add(label)
+                    elif st == "red":
+                        has_failures = True
 
         # Implements: REQ-d00069-A
         # Process JNY children to find RESULT nodes (UAT)
