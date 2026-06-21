@@ -1,0 +1,11 @@
+{"protocolVersion":"0.1.1","type":"start","time":0}
+{"suite":{"id":0,"platform":"vm","path":"/repo/provenance/test/provenance_entry_test.dart"},"type":"suite","time":0}
+{"test":{"id":1,"name":"loading /repo/provenance/test/provenance_entry_test.dart","suiteID":0,"line":null},"type":"testStart","time":1}
+{"testID":1,"result":"success","skipped":false,"hidden":true,"type":"testDone","time":50}
+{"test":{"id":5,"name":"ProvenanceEntry round-trip","suiteID":0,"line":47},"type":"testStart","time":60}
+{"testID":5,"result":"success","skipped":false,"hidden":false,"type":"testDone","time":70}
+{"test":{"id":6,"name":"ProvenanceEntry rejects missing hop","suiteID":0,"line":55},"type":"testStart","time":71}
+{"testID":6,"result":"failure","skipped":false,"hidden":false,"type":"testDone","time":80}
+{"test":{"id":7,"name":"ProvenanceEntry skipped case","suiteID":0,"line":60},"type":"testStart","time":81}
+{"testID":7,"result":"success","skipped":true,"hidden":false,"type":"testDone","time":82}
+{"type":"done","success":false,"time":90}
