@@ -3541,6 +3541,8 @@ class GraphBuilder:
             "parse_line": content.start_line,
             "parse_end_line": content.end_line,
             "source_path": source_path,
+            "source_file": data.get("source_file") or source_path,
+            "match": data.get("match", "aggregate"),
         }
         self._nodes[result_id] = node
 

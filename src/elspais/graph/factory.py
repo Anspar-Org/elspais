@@ -9,6 +9,8 @@ implementing their own file reading logic.
 
 from __future__ import annotations
 
+import logging
+import os
 from dataclasses import dataclass, field
 from glob import glob
 from pathlib import Path
@@ -33,6 +35,8 @@ from elspais.graph.parsers.remainder import RemainderParser
 from elspais.graph.parsers.results import JUnitXMLParser, PytestJSONParser
 from elspais.utilities.patterns import build_resolver
 
+_log = logging.getLogger(__name__)
+
 # Known schema fields (by alias and Python name) for filtering non-schema keys
 _SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
     ElspaisConfig.model_fields.keys()
@@ -56,6 +60,73 @@ def _resolve_coverage_file_node(graph, source_file, lcov_path, repo_root):
     except ValueError:
         return None
     return graph.find_by_id(make_file_id(str(rel)))
+
+
+def _ingest_target_results(builder, target, results_text: str, repo_root: Path) -> int:
+    """Parse a target's reporter output and add RESULT ParsedContent.
+
+    Each ParsedContent carries real source_file (repo-relative) + match.
+    Returns the count of RESULT records added.
+
+    Only "results"-kind reporters are handled; coverage-kind reporters are
+    skipped (returns 0 immediately).
+    """
+    from elspais.graph.parsers import ParsedContent
+    from elspais.graph.parsers.results.registry import get_reporter
+
+    try:
+        spec = get_reporter(target.reporter)
+    except KeyError:
+        _log.debug("_ingest_target_results: unknown reporter %r, skipping", target.reporter)
+        return 0
+
+    if spec.kind != "results":
+        _log.debug(
+            "_ingest_target_results: reporter %r is kind=%r, not 'results', skipping",
+            target.reporter,
+            spec.kind,
+        )
+        return 0
+
+    parser = spec.parser_factory()
+    records = parser.parse(results_text, "")
+    repo_root_resolved = Path(repo_root).resolve()
+    count = 0
+    for rec in records:
+        raw_src = rec.get("source_path", "")
+        # Normalize absolute source_path to repo-relative for source_file.
+        # If already relative or outside the repo, keep as-is.
+        if raw_src and os.path.isabs(raw_src):
+            try:
+                source_file = str(Path(raw_src).resolve().relative_to(repo_root_resolved))
+            except ValueError:
+                source_file = raw_src  # outside repo root -- keep absolute
+        else:
+            source_file = raw_src
+
+        parsed_data = {
+            "id": rec["id"],
+            "status": rec.get("status"),
+            "name": rec.get("name", ""),
+            "classname": rec.get("classname", ""),
+            "duration": rec.get("duration", 0.0),
+            "message": rec.get("message"),
+            "verifies": rec.get("verifies", []),
+            "test_id": rec.get("test_id"),
+            "source_path": raw_src,
+            "source_file": source_file,
+            "match": target.match,
+        }
+        content = ParsedContent(
+            content_type="test_result",
+            start_line=1,
+            end_line=1,
+            raw_text="",
+            parsed_data=parsed_data,
+        )
+        builder.add_parsed_content(content)
+        count += 1
+    return count
 
 
 def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
@@ -364,6 +435,7 @@ def build_graph(
     scan_tests: bool = True,
     strict: bool = False,
     _build_associates: bool = True,
+    captured_results: dict[str, str] | None = None,
 ) -> FederatedGraph:
     """Build a FederatedGraph from spec directories.
 
@@ -640,6 +712,36 @@ def build_graph(
                         for parsed_content in domain_file.deserialize(registry):
                             builder.add_parsed_content(parsed_content, file_node=fn)
 
+    # 6b-target. Ingest results from [[scanning.test.targets]] via reporter registry.
+    # Additive: runs alongside the existing result-glob block above.  When targets
+    # is empty (the default) this loop is a no-op -- behavior is byte-identical.
+    _captured = captured_results or {}
+    for target in typed_config.scanning.test.targets:
+        if not target.reporter:
+            continue
+        results_text: str | None = None
+        if target.name in _captured:
+            results_text = _captured[target.name]
+        elif target.results:
+            cwd_path = (repo_root / target.cwd) if target.cwd else repo_root
+            matched = glob(str(cwd_path / target.results), recursive=True)
+            if matched:
+                results_text = "\n".join(
+                    Path(f).read_text(encoding="utf-8", errors="replace")
+                    for f in matched
+                    if Path(f).is_file()
+                )
+            else:
+                _log.debug("target %r: no files matched %r", target.name, target.results)
+        else:
+            _log.debug(
+                "target %r: stdout reporter with no captured output and no results"
+                " glob -- skipping",
+                target.name,
+            )
+        if results_text is not None:
+            _ingest_target_results(builder, target, results_text, repo_root)
+
     graph = builder.build()
 
     # 6c. Scan coverage files and annotate FILE nodes
@@ -680,6 +782,38 @@ def build_graph(
                             continue
                         node.set_field("line_coverage", data["line_coverage"])
                         node.set_field("executable_lines", data["executable_lines"])
+
+    # 6d-target. Per-target coverage ingestion.
+    # Additive alongside the existing coverage-glob block above.
+    # When targets is empty (the default), this loop is a no-op.
+    for target in typed_config.scanning.test.targets:
+        if not target.coverage:
+            continue
+        from elspais.graph.parsers.results.coverage_json import CoverageJsonParser
+        from elspais.graph.parsers.results.lcov import LcovParser
+
+        lcov_parser = LcovParser()
+        cov_json_parser = CoverageJsonParser()
+        cwd_path = (repo_root / target.cwd) if target.cwd else repo_root
+        cov_path = (cwd_path / target.coverage).resolve()
+        if not cov_path.is_file():
+            _log.debug("target %r: coverage file not found: %s", target.name, cov_path)
+            continue
+        if lcov_parser.can_parse(cov_path):
+            cov_parser = lcov_parser
+        elif cov_json_parser.can_parse(cov_path):
+            cov_parser = cov_json_parser
+        else:
+            _log.debug("target %r: unrecognised coverage format: %s", target.name, cov_path)
+            continue
+        cov_content = cov_path.read_text(encoding="utf-8")
+        parsed_cov = cov_parser.parse(cov_content, str(cov_path))
+        for source_file, data in parsed_cov.items():
+            cov_node = _resolve_coverage_file_node(graph, source_file, cov_path, repo_root)
+            if cov_node is None:
+                continue
+            cov_node.set_field("line_coverage", data["line_coverage"])
+            cov_node.set_field("executable_lines", data["executable_lines"])
 
     # Link TEST nodes to CODE nodes via import analysis.
     # This creates TEST→CODE edges that enable transitive coverage:

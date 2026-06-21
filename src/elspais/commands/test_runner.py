@@ -125,3 +125,127 @@ def run_configured_runners(
         if fail_fast and result.returncode != 0:
             break
     return results
+
+
+def run_configured_targets(
+    config: ElspaisConfig,
+    repo_root: Path,
+    *,
+    fail_fast: bool = False,
+) -> tuple[list[RunnerResult], dict[str, str]]:
+    """Execute each configured target's command in declaration order.
+
+    For targets whose reporter channel is ``"stdout"``, stdout is captured and
+    returned in the ``captured`` map keyed by ``target.name``; for file-channel
+    reporters stdout passes through to the parent process.
+
+    Args:
+        config: Loaded `ElspaisConfig`.
+        repo_root: Repository root; `cwd` overrides resolve relative to it.
+        fail_fast: If True, stop after the first target that exits non-zero
+            (or fails to spawn).
+
+    Returns:
+        A tuple ``(results, captured)`` where ``results`` is one
+        ``RunnerResult`` per target that was actually invoked (command non-empty)
+        and ``captured`` maps target name → stdout text for stdout-channel
+        reporters.
+    """
+    from elspais.graph.parsers.results.registry import get_reporter
+
+    results: list[RunnerResult] = []
+    captured: dict[str, str] = {}
+    resolved_root = repo_root.resolve()
+
+    for target in config.scanning.test.targets:
+        if not target.command:
+            continue
+
+        # Determine whether this reporter captures stdout.
+        try:
+            spec = get_reporter(target.reporter)
+            is_stdout_channel = spec.channel == "stdout"
+        except KeyError:
+            is_stdout_channel = False
+
+        # Resolve cwd and confine it to the repo root.
+        cwd_candidate = (repo_root / target.cwd).resolve() if target.cwd else resolved_root
+        try:
+            cwd_candidate.relative_to(resolved_root)
+        except ValueError:
+            elapsed = 0.0
+            err = (
+                f"cwd '{target.cwd}' resolves to {cwd_candidate} which is "
+                f"outside the repo root {resolved_root}"
+            )
+            print(
+                f"\n<<< {target.name}: FAILED (config error: {err}) ({elapsed:.1f}s)",
+                file=sys.stderr,
+            )
+            results.append(
+                RunnerResult(
+                    name=target.name,
+                    command=target.command,
+                    cwd=cwd_candidate,
+                    returncode=-1,
+                    duration_seconds=elapsed,
+                    error=err,
+                )
+            )
+            if fail_fast:
+                break
+            continue
+
+        cwd = cwd_candidate
+        print(
+            f"\n>>> Running '{target.name}' target: {target.command}",
+            file=sys.stderr,
+        )
+        start = time.monotonic()
+        try:
+            if is_stdout_channel:
+                completed = subprocess.run(
+                    target.command,
+                    shell=True,
+                    cwd=cwd,
+                    capture_output=True,
+                    text=True,
+                )
+                captured[target.name] = completed.stdout
+            else:
+                completed = subprocess.run(
+                    target.command,
+                    shell=True,
+                    cwd=cwd,
+                )
+            elapsed = time.monotonic() - start
+            result = RunnerResult(
+                name=target.name,
+                command=target.command,
+                cwd=cwd,
+                returncode=completed.returncode,
+                duration_seconds=elapsed,
+            )
+            tag = "passed" if completed.returncode == 0 else f"FAILED (exit {completed.returncode})"
+            print(
+                f"<<< {target.name}: {tag} ({elapsed:.1f}s)",
+                file=sys.stderr,
+            )
+        except (FileNotFoundError, PermissionError, OSError) as exc:
+            elapsed = time.monotonic() - start
+            result = RunnerResult(
+                name=target.name,
+                command=target.command,
+                cwd=cwd,
+                returncode=-1,
+                duration_seconds=elapsed,
+                error=str(exc),
+            )
+            print(
+                f"<<< {target.name}: FAILED (spawn error: {exc}) ({elapsed:.1f}s)",
+                file=sys.stderr,
+            )
+        results.append(result)
+        if fail_fast and result.returncode != 0:
+            break
+    return results, captured
