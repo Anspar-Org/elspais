@@ -222,28 +222,6 @@ _FIELD_COMMENTS: dict[str, str] = {
     ),
     "scanning.test.reference_keyword": 'Keyword for test->requirement refs (e.g. "Verifies")',
     "scanning.test.reference_patterns": "Additional regex patterns for reference detection",
-    "scanning.result": (
-        "Test result file scanning — see `elspais docs test-results` for per-language setup"
-    ),
-    "scanning.result.directories": "Directories to scan for test results",
-    "scanning.result.file_patterns": "Glob patterns for result files",
-    "scanning.result.skip_files": "Filenames to skip in result directories",
-    "scanning.result.skip_dirs": "Subdirectories to skip in result directories",
-    "scanning.result.run_meta_file": "Path to test run metadata JSON file",
-    "scanning.result.unmatched_credit": (
-        '"off" | "verified" — credit verified for unmatched // Verifies: edges by per-app aggregate'
-    ),
-    "scanning.coverage": "Code coverage report scanning — see `elspais docs test-results`",
-    "scanning.coverage.directories": "Directories to scan for coverage reports",
-    "scanning.coverage.file_patterns": "Glob patterns for coverage files",
-    "scanning.coverage.skip_files": "Filenames to skip in coverage directories",
-    "scanning.coverage.skip_dirs": "Subdirectories to skip in coverage directories",
-    "scanning.coverage.assertion_credit": (
-        '"off" | "tested" | "verified" — credit lcov_tested from covered // Implements: lines'
-    ),
-    "scanning.coverage.min_coverage_fraction": (
-        "Min covered fraction of an assertion's impl lines to credit (default 0.0)"
-    ),
     "scanning.journey": "User journey file scanning",
     "scanning.journey.directories": "Directories to scan for journey files",
     "scanning.journey.file_patterns": "Glob patterns for journey files",
@@ -397,14 +375,6 @@ _CORE_OVERRIDES: dict[str, Any] = {
             "directories": ["tests"],
             "file_patterns": ["test_*.py", "*_test.py"],
             "reference_keyword": "Verifies",
-        },
-        "result": {
-            "directories": [],
-            "file_patterns": [],
-        },
-        "coverage": {
-            "directories": ["."],
-            "file_patterns": [],
         },
         "journey": {
             "directories": ["spec"],

@@ -139,30 +139,8 @@ prescan_command = ""
 reference_keyword = "Validates"
 # Additional regex patterns for reference detection
 reference_patterns = []
-
-# Test result file scanning
-[scanning.result]
-# Directories to scan for test results
-directories = [".results"]
-# Glob patterns for result files
-file_patterns = ["test-results.xml"]
-# Filenames to skip in result directories
-skip_files = []
-# Subdirectories to skip in result directories
-skip_dirs = []
-# Path to test run metadata JSON file
-run_meta_file = ".results/test-run-meta.json"
-
-# Code coverage report scanning
-[scanning.coverage]
-# Directories to scan for coverage reports
-directories = [".results"]
-# Glob patterns for coverage files
-file_patterns = ["coverage.json"]
-# Filenames to skip in coverage directories
-skip_files = []
-# Subdirectories to skip in coverage directories
-skip_dirs = []
+# Test targets drive result + coverage ingestion ([[scanning.test.targets]]).
+# elspais's own target choice is finalized in a later task.
 
 # User journey file scanning
 [scanning.journey]

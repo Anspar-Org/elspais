@@ -326,46 +326,6 @@ class TestScanningConfig(ScanningKindConfig):
     targets: list[TestTargetConfig] = Field(default_factory=list)
 
 
-# Implements: REQ-d00254-C
-class ResultScanningConfig(ScanningKindConfig):
-    run_meta_file: str = ""
-    # CUR-1533: credit `verified` for // Verifies: edges with no matchable RESULT,
-    # using the per-app aggregate pass/fail. "off" preserves prior behavior.
-    unmatched_credit: str = "off"  # "off" | "verified"
-
-    @field_validator("unmatched_credit")
-    @classmethod
-    def _check_unmatched_credit(cls, v: str) -> str:
-        if v not in ("off", "verified"):
-            raise ValueError('unmatched_credit must be "off" or "verified"')
-        return v
-
-
-# Implements: REQ-d00254-C
-class CoverageScanningConfig(ScanningKindConfig):
-    """Configuration for code coverage report scanning."""
-
-    directories: list[str] = Field(default_factory=lambda: ["."])
-    # CUR-1533: credit assertions in the separate lcov_tested dimension from
-    # covered // Implements: lines. "off" preserves prior behavior.
-    assertion_credit: str = "off"  # "off" | "tested" | "verified"
-    min_coverage_fraction: float = 0.0  # [0.0, 1.0]
-
-    @field_validator("assertion_credit")
-    @classmethod
-    def _check_assertion_credit(cls, v: str) -> str:
-        if v not in ("off", "tested", "verified"):
-            raise ValueError('assertion_credit must be "off", "tested", or "verified"')
-        return v
-
-    @field_validator("min_coverage_fraction")
-    @classmethod
-    def _check_min_fraction(cls, v: float) -> float:
-        if not 0.0 <= v <= 1.0:
-            raise ValueError("min_coverage_fraction must be in [0.0, 1.0]")
-        return v
-
-
 class JourneyScanningConfig(ScanningKindConfig):
     directories: list[str] = Field(default_factory=lambda: ["spec"])
     file_patterns: list[str] = Field(default_factory=lambda: ["*.md"])
@@ -382,8 +342,6 @@ class ScanningConfig(_StrictModel):
     spec: SpecScanningConfig = Field(default_factory=SpecScanningConfig)
     code: CodeScanningConfig = Field(default_factory=CodeScanningConfig)
     test: TestScanningConfig = Field(default_factory=TestScanningConfig)
-    result: ResultScanningConfig = Field(default_factory=ResultScanningConfig)
-    coverage: CoverageScanningConfig = Field(default_factory=CoverageScanningConfig)
     journey: JourneyScanningConfig = Field(default_factory=JourneyScanningConfig)
     docs: DocsScanningConfig = Field(default_factory=DocsScanningConfig)
 

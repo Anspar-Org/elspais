@@ -1688,15 +1688,10 @@ class TestRunTestsFlag:
         scratch = tmp_path / "no_targets"
         shutil.copytree(project, scratch)
         toml = (scratch / ".elspais.toml").read_text()
-        # Remove the targets block while preserving [scanning.result].
-        # Use string-split (not regex) to avoid issues with complex command strings.
-        parts = toml.split("\n[[scanning.test.targets]]")
-        if len(parts) > 1:
-            before = parts[0]
-            after = parts[1]
-            result_idx = after.find("\n[scanning.result]")
-            tail = after[result_idx:] if result_idx >= 0 else ""
-            toml = before + tail
+        # Remove the targets block (it is the last [scanning.*] section in the
+        # fixture). Use string-split (not regex) to avoid issues with complex
+        # command strings.
+        toml = toml.split("\n[[scanning.test.targets]]")[0]
         (scratch / ".elspais.toml").write_text(toml)
         out = run_elspais("checks", "--run-tests", cwd=scratch)
         assert out.returncode == 2
@@ -1728,19 +1723,10 @@ class TestRunTestsFailFast:
             f'command = "{sentinel_cmd}"\n'
             'reporter = "junit"\n'
         )
-        # Split on the targets block start - safe because the fixture has exactly one
-        parts = raw.split("\n[[scanning.test.targets]]")
-        # parts[0] is everything before the targets; parts[1] has the targets+rest
-        # We need to preserve [scanning.result] which comes after the targets block
-        before_runners = parts[0]
-        after_runners = parts[1] if len(parts) > 1 else ""
-        # Find where [scanning.result] starts in after_runners
-        result_idx = after_runners.find("\n[scanning.result]")
-        if result_idx >= 0:
-            tail = after_runners[result_idx:]
-        else:
-            tail = ""
-        new_toml = before_runners + runners_toml + tail
+        # Split on the targets block start - the fixture's targets block is the
+        # last [scanning.*] section, so everything before it is what we keep.
+        before_runners = raw.split("\n[[scanning.test.targets]]")[0]
+        new_toml = before_runners + runners_toml
         (scratch / ".elspais.toml").write_text(new_toml)
         out = run_elspais("checks", "--run-tests", "--fail-fast", cwd=scratch)
         assert out.returncode == 1

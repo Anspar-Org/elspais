@@ -32,7 +32,6 @@ from elspais.graph.parsers import ParserRegistry
 from elspais.graph.parsers.journey import JourneyParser
 from elspais.graph.parsers.lark import FileDispatcher
 from elspais.graph.parsers.remainder import RemainderParser
-from elspais.graph.parsers.results import JUnitXMLParser, PytestJSONParser
 from elspais.utilities.patterns import build_resolver
 
 _log = logging.getLogger(__name__)
@@ -495,14 +494,9 @@ def build_graph(
     mas = default_resolver.config.assertions.multi_separator
     if mas is False or mas is None:
         mas = ""
-    # In aggregate result-crediting mode (unmatched_credit="verified" or
-    # assertion_credit in ("tested","verified")), RESULT nodes are aggregate
-    # evidence only.  Skip per-test YIELDS links so unmatched test_ids from
-    # Dart/Flutter runners never produce broken references.
-    _link_results = not (
-        typed_config.scanning.result.unmatched_credit == "verified"
-        or typed_config.scanning.coverage.assertion_credit in ("tested", "verified")
-    )
+    # YIELDS (RESULT->TEST) links are always enabled: flutter-machine emits
+    # test_id=None (never queues YIELDS), while junit/pytest emit real test_ids
+    # (YIELDS desired).  So the per-test link is unconditionally safe.
     builder = GraphBuilder(
         repo_root=repo_root,
         hash_mode=hash_mode,
@@ -511,7 +505,7 @@ def build_graph(
         resolver=default_resolver,
         namespace=typed_config.project.namespace,
         project_name=typed_config.project.name,
-        link_results_to_tests=_link_results,
+        link_results_to_tests=True,
     )
 
     # Get ignore configuration for code/test scanning (main project only)
@@ -673,48 +667,10 @@ def build_graph(
                                 fn = _get_or_create_file_node(Path(source_path), FileType.TEST)
                             builder.add_parsed_content(parsed_content, file_node=fn)
 
-            # 6b. Scan test result files (JUnit XML, pytest JSON)
-            # Implements: REQ-d00128-H
-            # RemainderParser is NOT registered for RESULT file types
-            result_files = list(typed_config.scanning.result.file_patterns)
-            if result_files:
-                xml_registry = ParserRegistry()
-                xml_registry.register(
-                    JUnitXMLParser(
-                        resolver=default_resolver,
-                        base_path=repo_root,
-                    )
-                )
-                json_registry = ParserRegistry()
-                json_registry.register(
-                    PytestJSONParser(
-                        resolver=default_resolver,
-                        base_path=repo_root,
-                    )
-                )
-
-                for file_pattern in result_files:
-                    matched_files = glob(str(repo_root / file_pattern), recursive=True)
-                    for file_path in matched_files:
-                        path = Path(file_path)
-                        if not path.is_file():
-                            continue
-                        ext = path.suffix.lower()
-                        if ext == ".xml":
-                            registry = xml_registry
-                        elif ext == ".json":
-                            registry = json_registry
-                        else:
-                            continue
-                        # Implements: REQ-d00128-A
-                        fn = _get_or_create_file_node(path, FileType.RESULT)
-                        domain_file = DomainFile(path)
-                        for parsed_content in domain_file.deserialize(registry):
-                            builder.add_parsed_content(parsed_content, file_node=fn)
-
             # 6b-target. Ingest results from [[scanning.test.targets]] via reporter registry.
-            # Additive: runs alongside the existing result-glob block above.  When targets
-            # is empty (the default) this loop is a no-op -- behavior is byte-identical.
+            # Implements: REQ-d00128-A+H
+            # RemainderParser is NOT registered for RESULT file types.
+            # When targets is empty (the default) this loop is a no-op.
             _captured = captured_results or {}
             resolved_root = repo_root.resolve()
             for target in typed_config.scanning.test.targets:
@@ -742,6 +698,13 @@ def build_graph(
                             for f in matched
                             if Path(f).is_file()
                         )
+                        # Create RESULT FILE nodes for on-disk result files so
+                        # freshness checks (tests.results_stale) have an mtime
+                        # source.
+                        for f in matched:
+                            if Path(f).is_file():
+                                # Implements: REQ-d00128-A
+                                _get_or_create_file_node(Path(f), FileType.RESULT)
                     else:
                         _log.debug("target %r: no files matched %r", target.name, target.results)
                 else:
@@ -755,47 +718,7 @@ def build_graph(
 
     graph = builder.build()
 
-    # 6c. Scan coverage files and annotate FILE nodes
-    coverage_patterns = list(typed_config.scanning.coverage.file_patterns)
-    if coverage_patterns:
-        from elspais.graph.parsers.results.coverage_json import CoverageJsonParser
-        from elspais.graph.parsers.results.lcov import LcovParser
-
-        lcov_parser = LcovParser()
-        cov_json_parser = CoverageJsonParser()
-
-        for file_pattern in coverage_patterns:
-            coverage_dirs = list(typed_config.scanning.coverage.directories)
-            if not coverage_dirs:
-                coverage_dirs = ["."]
-            for cov_dir in coverage_dirs:
-                matched_files = glob(str(repo_root / cov_dir / file_pattern), recursive=True)
-                for file_path in matched_files:
-                    path = Path(file_path)
-                    if not path.is_file():
-                        continue
-
-                    # Detect format
-                    if lcov_parser.can_parse(path):
-                        parser = lcov_parser
-                    elif cov_json_parser.can_parse(path):
-                        parser = cov_json_parser
-                    else:
-                        continue
-
-                    content = path.read_text(encoding="utf-8")
-                    parsed = parser.parse(content, str(path))
-
-                    # Annotate existing FILE nodes
-                    for source_file, data in parsed.items():
-                        node = _resolve_coverage_file_node(graph, source_file, path, repo_root)
-                        if node is None:
-                            continue
-                        node.set_field("line_coverage", data["line_coverage"])
-                        node.set_field("executable_lines", data["executable_lines"])
-
-    # 6d-target. Per-target coverage ingestion.
-    # Additive alongside the existing coverage-glob block above.
+    # 6c-target. Per-target coverage ingestion: scan coverage files and annotate FILE nodes.
     # When targets is empty (the default), this loop is a no-op.
     if typed_config.scanning.test.targets:
         from elspais.graph.parsers.results.coverage_json import CoverageJsonParser
@@ -853,16 +776,25 @@ def build_graph(
     from elspais.graph.annotators import CoverageCreditConfig, annotate_coverage, annotate_keywords
 
     annotate_keywords(graph)
-    cov_cfg = typed_config.scanning.coverage
-    res_cfg = typed_config.scanning.result
-    app_dirs = tuple(d for d in [*cov_cfg.directories, *res_cfg.directories] if d and d != ".")
     # Implements: REQ-d00254-A+B+C
+    # Derive the global coverage-credit config from [[scanning.test.targets]].
+    # Per-target settings are collapsed into one global config (acceptable for
+    # Phase 1 homogeneous targets).
+    _targets = typed_config.scanning.test.targets
+    _tgt_dirs = tuple(t.cwd for t in _targets if t.cwd and t.cwd != ".")
+    _order = {"off": 0, "tested": 1, "verified": 2}
+    _assertion_credit = "off"
+    for _t in _targets:
+        if _order.get(_t.credit_coverage, 0) > _order.get(_assertion_credit, 0):
+            _assertion_credit = _t.credit_coverage
+    _unmatched = "verified" if any(_t.match == "aggregate" for _t in _targets) else "off"
+    _min_frac = max((_t.min_coverage_fraction for _t in _targets), default=0.0)
     credit = CoverageCreditConfig(
-        app_dirs=app_dirs,
-        unmatched_credit=res_cfg.unmatched_credit,
-        coverage_dirs=tuple(cov_cfg.directories),
-        assertion_credit=cov_cfg.assertion_credit,
-        min_coverage_fraction=cov_cfg.min_coverage_fraction,
+        app_dirs=_tgt_dirs,
+        unmatched_credit=_unmatched,
+        coverage_dirs=_tgt_dirs,
+        assertion_credit=_assertion_credit,
+        min_coverage_fraction=_min_frac,
     )
     annotate_coverage(graph, credit)
 

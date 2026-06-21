@@ -51,3 +51,11 @@ def test_target_fraction_range(frac):
 def test_test_scanning_has_targets_list():
     cfg = TestScanningConfig(targets=[{"name": "a", "reporter": "flutter-machine"}])
     assert cfg.targets[0].name == "a"
+
+
+# Verifies: REQ-d00254-C
+def test_obsolete_config_removed():
+    import elspais.config.schema as s
+
+    for name in ("ResultScanningConfig", "CoverageScanningConfig", "TestRunnerConfig"):
+        assert not hasattr(s, name)

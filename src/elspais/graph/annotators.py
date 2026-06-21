@@ -55,7 +55,7 @@ _NA_PATTERN = re.compile(
 # Implements: REQ-d00254-C
 @dataclass(frozen=True)
 class CoverageCreditConfig:
-    """CUR-1533 crediting config, derived from [scanning.result]/[scanning.coverage]."""
+    """CUR-1533 crediting config, derived from [[scanning.test.targets]]."""
 
     app_dirs: tuple[str, ...] = ()
     unmatched_credit: str = "off"  # "off" | "verified"

@@ -2422,33 +2422,12 @@ def run_code_checks(
 
 
 def _read_run_meta(config: dict | None) -> dict:
-    """Read test-run metadata sidecar (deselected counts, runner info).
+    """Return test-run metadata defaults.
 
-    Returns a dict with at least {"deselected_count": 0, "runner": ""}.
-    The sidecar JSON format is test-runner agnostic — any runner can produce it.
+    The run-metadata sidecar config source was removed in the greenfield
+    target-driven rework; this now always returns the defaults.
     """
-    import json
-    from pathlib import Path
-
-    defaults = {"deselected_count": 0, "runner": ""}
-    if config:
-        _tc = _validate_config(config)
-        meta_file = _tc.scanning.result.run_meta_file
-    else:
-        meta_file = ""
-    if not meta_file:
-        return defaults
-    meta_path = Path(meta_file)
-    if not meta_path.exists():
-        return defaults
-    try:
-        data = json.loads(meta_path.read_text())
-        return {
-            "deselected_count": data.get("deselected_count", 0),
-            "runner": data.get("runner", ""),
-        }
-    except (json.JSONDecodeError, OSError):
-        return defaults
+    return {"deselected_count": 0, "runner": ""}
 
 
 def _collect_file_mtimes(
@@ -2498,14 +2477,14 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
     if not result_nodes:
         if config:
             _tc = _validate_config(config)
-            result_files = _tc.scanning.result.file_patterns
+            targets = _tc.scanning.test.targets
         else:
-            result_files = []
-        if not result_files:
+            targets = []
+        if not targets:
             return HealthCheck(
                 name="tests.results",
                 passed=True,
-                message="No result files configured",
+                message="No test targets configured",
                 category="tests",
                 severity="info",
             )
@@ -2513,8 +2492,7 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
             name="tests.results",
             passed=False,
             message=(
-                f"Test result files missing ({len(result_files)} pattern(s) "
-                "configured but no matching files). "
+                f"Test targets configured ({len(targets)}) but no results ingested. "
                 "Run `elspais checks --run-tests` or refresh manually."
             ),
             category="tests",
