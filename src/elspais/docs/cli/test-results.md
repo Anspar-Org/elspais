@@ -133,9 +133,10 @@ min_coverage_fraction = 0.0      # 0.0 to 1.0
 ### Python / pytest
 
 ```toml
-[[scanning.test.runners]]
+[[scanning.test.targets]]
 name = "python"
 command = "pytest --json-report --json-report-file=.elspais/results/pytest.json"
+reporter = "pytest-json"
 
 [scanning.result]
 directories = [".elspais/results"]
@@ -159,9 +160,10 @@ Flutter JUnit output is aggregated per app.  Use `unmatched_credit = "verified"`
 to propagate the green-app signal to all linked assertions:
 
 ```toml
-[[scanning.test.runners]]
+[[scanning.test.targets]]
 name = "flutter"
-command = "flutter test --machine > .elspais/results/flutter.json"
+command = "flutter test --machine"
+reporter = "flutter-machine"
 cwd = "app/"
 
 [scanning.result]
@@ -181,9 +183,10 @@ min_coverage_fraction = 0.5
 For any language that produces JUnit XML or a compatible format:
 
 ```toml
-[[scanning.test.runners]]
+[[scanning.test.targets]]
 name = "jest"
 command = "jest --reporters=jest-junit"
+reporter = "junit"
 
 [scanning.result]
 directories = ["test-results"]

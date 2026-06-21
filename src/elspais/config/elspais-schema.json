@@ -947,31 +947,6 @@
       "title": "TermsSeverityConfig",
       "type": "object"
     },
-    "TestRunnerConfig": {
-      "additionalProperties": false,
-      "description": "One configured test runner invocation.",
-      "properties": {
-        "name": {
-          "title": "Name",
-          "type": "string"
-        },
-        "command": {
-          "title": "Command",
-          "type": "string"
-        },
-        "cwd": {
-          "default": "",
-          "title": "Cwd",
-          "type": "string"
-        }
-      },
-      "required": [
-        "name",
-        "command"
-      ],
-      "title": "TestRunnerConfig",
-      "type": "object"
-    },
     "TestScanningConfig": {
       "additionalProperties": false,
       "properties": {
@@ -1023,13 +998,6 @@
             "type": "string"
           },
           "title": "Reference Patterns",
-          "type": "array"
-        },
-        "runners": {
-          "items": {
-            "$ref": "#/$defs/TestRunnerConfig"
-          },
-          "title": "Runners",
           "type": "array"
         },
         "targets": {

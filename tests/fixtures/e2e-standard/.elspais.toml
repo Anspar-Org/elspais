@@ -69,8 +69,9 @@ unused = "warning"
 bad_definition = "error"
 collection_empty = "warning"
 
-[[scanning.test.runners]]
+[[scanning.test.targets]]
 name = "stub"
+reporter = "junit"
 command = "python -c \"import json,pathlib; p=pathlib.Path('.elspais/results'); p.mkdir(parents=True,exist_ok=True); (p/'test-results.json').write_text(json.dumps({'created_at':'fixture','summary':{'passed':1,'failed':0,'total':1},'tests':[{'nodeid':'test_stub::test_ok','outcome':'passed','duration':0.001}]}))\""
 
 [scanning.result]

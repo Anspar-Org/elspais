@@ -25,10 +25,10 @@ import tyro
 class ChecksArgs:
     """Verify requirements traceability and configuration.
 
-    With --run-tests, executes each configured [[scanning.test.runners]]
-    entry before evaluating checks so coverage runs against fresh result
-    files. Without the flag, checks still warns when result files are
-    missing or older than any scanned spec/code/test source.
+    With --run-tests, executes each configured [[scanning.test.targets]]
+    entry (that has a command) before evaluating checks so coverage runs
+    against fresh result files. Without the flag, checks still warns when
+    result files are missing or older than any scanned spec/code/test source.
     """
 
     spec_only: Annotated[bool, tyro.conf.arg(name="spec")] = False
@@ -56,7 +56,8 @@ class ChecksArgs:
     """Show full details for passing checks."""
 
     run_tests: bool = False
-    """Execute each [[scanning.test.runners]] entry before checks; exits 2 if none configured."""
+    """Execute each [[scanning.test.targets]] command before checks; exits 2 if none have a command.
+    """
 
     fail_fast: bool = False
     """Stop at the first runner failure and skip the checks pass. Requires --run-tests."""

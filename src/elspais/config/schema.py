@@ -274,16 +274,6 @@ class CodeScanningConfig(ScanningKindConfig):
     source_roots: list[str] = Field(default_factory=lambda: ["src", ""])
 
 
-class TestRunnerConfig(_StrictModel):
-    """One configured test runner invocation."""
-
-    __test__ = False  # Prevent pytest from trying to collect this as a test class
-
-    name: str
-    command: str
-    cwd: str = ""  # relative to repo root; empty = repo root
-
-
 # Implements: REQ-d00254-C
 class TestTargetConfig(_StrictModel):
     """One test target: how its results + coverage are produced and ingested."""
@@ -333,7 +323,6 @@ class TestScanningConfig(ScanningKindConfig):
     prescan_command: str = ""
     reference_keyword: str = "Verifies"
     reference_patterns: list[str] = Field(default_factory=list)
-    runners: list[TestRunnerConfig] = Field(default_factory=list)
     targets: list[TestTargetConfig] = Field(default_factory=list)
 
 

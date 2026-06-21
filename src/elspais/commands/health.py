@@ -3012,7 +3012,7 @@ def run(args: argparse.Namespace) -> int:
     check failed.
     """
     from elspais.commands import _engine
-    from elspais.commands.test_runner import run_configured_runners
+    from elspais.commands.test_runner import run_configured_targets
     from elspais.config import find_git_root, get_config
 
     run_tests = getattr(args, "run_tests", False)
@@ -3030,17 +3030,18 @@ def run(args: argparse.Namespace) -> int:
             return 2
         # _validate_config is defined in this module (health.py near line 35).
         cfg = _validate_config(cfg_dict)
-        if not cfg.scanning.test.runners:
+        if not [t for t in cfg.scanning.test.targets if t.command]:
             print(
                 "error: --run-tests requires at least one "
-                "[[scanning.test.runners]] entry. "
-                "See docs/cli/checks.md for configuration examples.",
+                "[[scanning.test.targets]] entry with a command field. "
+                "See docs/cli/test-targets.md for configuration examples.",
                 file=sys.stderr,
             )
             return 2
         repo_root = find_git_root() or Path.cwd()
-        results = run_configured_runners(cfg, repo_root, fail_fast=fail_fast)
+        results, captured_map = run_configured_targets(cfg, repo_root, fail_fast=fail_fast)
         runner_failed = any(r.returncode != 0 for r in results)
+        args._captured_results = captured_map
         if fail_fast and runner_failed:
             skip_due_to_fail_fast = True
 
@@ -3102,6 +3103,7 @@ def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[
     config_path = getattr(args, "config", None)
     start_path = Path.cwd()
     lenient = params.get("lenient", "false") == "true"
+    captured = getattr(args, "_captured_results", None)
 
     report = HealthReport()
 
@@ -3135,6 +3137,7 @@ def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[
         graph = build_graph(
             spec_dirs=[spec_dir] if spec_dir else None,
             config_path=config_path,
+            captured_results=captured,
         )
         if config is None:
             config = get_config(config_path, start_path=start_path)
