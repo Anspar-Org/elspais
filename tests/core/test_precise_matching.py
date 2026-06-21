@@ -34,3 +34,13 @@ def test_precise_flags_on_fail():
     annotate_coverage(g, CoverageCreditConfig())
     m = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
     assert m.verified.has_failures is True
+    assert m.verified.direct_pct_by_label.get("A", 0.0) == 0.0
+
+
+def test_precise_skipped_only_grants_no_credit():
+    """Skipped tests must NOT grant verified credit (regression guard)."""
+    g = _g("skipped")
+    annotate_coverage(g, CoverageCreditConfig())
+    m = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
+    assert m.verified.has_failures is False
+    assert m.verified.direct_pct_by_label.get("A", 0.0) == 0.0

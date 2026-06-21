@@ -1209,7 +1209,9 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                     statuses = precise_index[rel]
                     if any(s in ("failed", "fail", "failure", "error") for s in statuses):
                         has_failures = True
-                    elif statuses:  # all passed/skipped, at least one result
+                    elif any(
+                        s in ("passed", "pass", "success") for s in statuses
+                    ):  # >=1 passed, none failed
                         if assertion_targets:
                             for label in assertion_targets:
                                 if label in assertion_labels:
