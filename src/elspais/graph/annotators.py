@@ -52,7 +52,7 @@ _NA_PATTERN = re.compile(
 )
 
 
-# Implements: REQ-d00254-C
+# Implements: REQ-d00254-A+B+F
 @dataclass(frozen=True)
 class CoverageCreditConfig:
     """CUR-1533 crediting config, derived from [[scanning.test.targets]]."""
