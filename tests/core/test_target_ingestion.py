@@ -221,3 +221,43 @@ def test_run_configured_targets_cwd_outside_repo_rejected(tmp_path: Path):
     assert len(results) == 1
     assert results[0].returncode == -1
     assert "outside the repo root" in results[0].error
+
+
+# ---------------------------------------------------------------------------
+# (d) scan_tests=False gate
+# ---------------------------------------------------------------------------
+
+
+def test_target_results_not_ingested_when_scan_tests_false(tmp_path: Path):
+    """When scan_tests=False, target result ingestion must be suppressed.
+
+    Verifies: REQ-d00254-C
+    """
+    from elspais.graph.factory import build_graph as _factory_build_graph
+
+    # Write a minimal flutter-machine result file that would normally produce a RESULT node
+    results_file = tmp_path / "results.jsonl"
+    results_file.write_text(
+        '{"type":"suite","suite":{"id":0,"platform":"vm","path":"test/foo_test.dart"}}\n'
+        '{"type":"testStart","test":{"id":1,"name":"passes","suiteID":0,'
+        '"line":1,"column":1,"metadata":{}}}\n'
+        '{"type":"testDone","testID":1,"result":"success","hidden":false,"time":5}\n',
+        encoding="utf-8",
+    )
+    target = TestTargetConfig(
+        name="flutter",
+        reporter="flutter-machine",
+        results="results.jsonl",
+        match="precise",
+    )
+    cfg = _cfg_with_targets([target])
+    graph = _factory_build_graph(
+        config=cfg.model_dump(by_alias=True),
+        repo_root=tmp_path,
+        scan_tests=False,
+    )
+    result_nodes = list(graph.iter_by_kind(NodeKind.RESULT))
+    assert result_nodes == [], (
+        "build_graph(scan_tests=False) must not ingest target results, "
+        f"but got {len(result_nodes)} RESULT node(s)"
+    )

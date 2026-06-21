@@ -712,35 +712,46 @@ def build_graph(
                         for parsed_content in domain_file.deserialize(registry):
                             builder.add_parsed_content(parsed_content, file_node=fn)
 
-    # 6b-target. Ingest results from [[scanning.test.targets]] via reporter registry.
-    # Additive: runs alongside the existing result-glob block above.  When targets
-    # is empty (the default) this loop is a no-op -- behavior is byte-identical.
-    _captured = captured_results or {}
-    for target in typed_config.scanning.test.targets:
-        if not target.reporter:
-            continue
-        results_text: str | None = None
-        if target.name in _captured:
-            results_text = _captured[target.name]
-        elif target.results:
-            cwd_path = (repo_root / target.cwd) if target.cwd else repo_root
-            matched = glob(str(cwd_path / target.results), recursive=True)
-            if matched:
-                results_text = "\n".join(
-                    Path(f).read_text(encoding="utf-8", errors="replace")
-                    for f in matched
-                    if Path(f).is_file()
-                )
-            else:
-                _log.debug("target %r: no files matched %r", target.name, target.results)
-        else:
-            _log.debug(
-                "target %r: stdout reporter with no captured output and no results"
-                " glob -- skipping",
-                target.name,
-            )
-        if results_text is not None:
-            _ingest_target_results(builder, target, results_text, repo_root)
+            # 6b-target. Ingest results from [[scanning.test.targets]] via reporter registry.
+            # Additive: runs alongside the existing result-glob block above.  When targets
+            # is empty (the default) this loop is a no-op -- behavior is byte-identical.
+            _captured = captured_results or {}
+            resolved_root = repo_root.resolve()
+            for target in typed_config.scanning.test.targets:
+                if not target.reporter:
+                    continue
+                # cwd-escape guard: skip targets whose cwd resolves outside the repo root
+                cwd_path = (repo_root / target.cwd) if target.cwd else repo_root
+                try:
+                    cwd_path.resolve().relative_to(resolved_root)
+                except ValueError:
+                    _log.warning(
+                        "target %r: cwd %r escapes repo root -- skipping",
+                        target.name,
+                        target.cwd,
+                    )
+                    continue
+                results_text: str | None = None
+                if target.name in _captured:
+                    results_text = _captured[target.name]
+                elif target.results:
+                    matched = glob(str(cwd_path / target.results), recursive=True)
+                    if matched:
+                        results_text = "\n".join(
+                            Path(f).read_text(encoding="utf-8", errors="replace")
+                            for f in matched
+                            if Path(f).is_file()
+                        )
+                    else:
+                        _log.debug("target %r: no files matched %r", target.name, target.results)
+                else:
+                    _log.debug(
+                        "target %r: stdout reporter with no captured output and no results"
+                        " glob -- skipping",
+                        target.name,
+                    )
+                if results_text is not None:
+                    _ingest_target_results(builder, target, results_text, repo_root)
 
     graph = builder.build()
 
@@ -786,34 +797,46 @@ def build_graph(
     # 6d-target. Per-target coverage ingestion.
     # Additive alongside the existing coverage-glob block above.
     # When targets is empty (the default), this loop is a no-op.
-    for target in typed_config.scanning.test.targets:
-        if not target.coverage:
-            continue
+    if typed_config.scanning.test.targets:
         from elspais.graph.parsers.results.coverage_json import CoverageJsonParser
         from elspais.graph.parsers.results.lcov import LcovParser
 
         lcov_parser = LcovParser()
         cov_json_parser = CoverageJsonParser()
-        cwd_path = (repo_root / target.cwd) if target.cwd else repo_root
-        cov_path = (cwd_path / target.coverage).resolve()
-        if not cov_path.is_file():
-            _log.debug("target %r: coverage file not found: %s", target.name, cov_path)
-            continue
-        if lcov_parser.can_parse(cov_path):
-            cov_parser = lcov_parser
-        elif cov_json_parser.can_parse(cov_path):
-            cov_parser = cov_json_parser
-        else:
-            _log.debug("target %r: unrecognised coverage format: %s", target.name, cov_path)
-            continue
-        cov_content = cov_path.read_text(encoding="utf-8")
-        parsed_cov = cov_parser.parse(cov_content, str(cov_path))
-        for source_file, data in parsed_cov.items():
-            cov_node = _resolve_coverage_file_node(graph, source_file, cov_path, repo_root)
-            if cov_node is None:
+        _resolved_root = repo_root.resolve()
+        for target in typed_config.scanning.test.targets:
+            if not target.coverage:
                 continue
-            cov_node.set_field("line_coverage", data["line_coverage"])
-            cov_node.set_field("executable_lines", data["executable_lines"])
+            # cwd-escape guard: skip targets whose cwd resolves outside the repo root
+            cwd_path = (repo_root / target.cwd) if target.cwd else repo_root
+            try:
+                cwd_path.resolve().relative_to(_resolved_root)
+            except ValueError:
+                _log.warning(
+                    "target %r: cwd %r escapes repo root -- skipping",
+                    target.name,
+                    target.cwd,
+                )
+                continue
+            cov_path = (cwd_path / target.coverage).resolve()
+            if not cov_path.is_file():
+                _log.debug("target %r: coverage file not found: %s", target.name, cov_path)
+                continue
+            if lcov_parser.can_parse(cov_path):
+                cov_parser = lcov_parser
+            elif cov_json_parser.can_parse(cov_path):
+                cov_parser = cov_json_parser
+            else:
+                _log.debug("target %r: unrecognised coverage format: %s", target.name, cov_path)
+                continue
+            cov_content = cov_path.read_text(encoding="utf-8")
+            parsed_cov = cov_parser.parse(cov_content, str(cov_path))
+            for source_file, data in parsed_cov.items():
+                cov_node = _resolve_coverage_file_node(graph, source_file, cov_path, repo_root)
+                if cov_node is None:
+                    continue
+                cov_node.set_field("line_coverage", data["line_coverage"])
+                cov_node.set_field("executable_lines", data["executable_lines"])
 
     # Link TEST nodes to CODE nodes via import analysis.
     # This creates TEST→CODE edges that enable transitive coverage:
