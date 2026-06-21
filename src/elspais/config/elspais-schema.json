@@ -1031,9 +1031,71 @@
           },
           "title": "Runners",
           "type": "array"
+        },
+        "targets": {
+          "items": {
+            "$ref": "#/$defs/TestTargetConfig"
+          },
+          "title": "Targets",
+          "type": "array"
         }
       },
       "title": "TestScanningConfig",
+      "type": "object"
+    },
+    "TestTargetConfig": {
+      "additionalProperties": false,
+      "description": "One test target: how its results + coverage are produced and ingested.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "cwd": {
+          "default": "",
+          "title": "Cwd",
+          "type": "string"
+        },
+        "command": {
+          "default": "",
+          "title": "Command",
+          "type": "string"
+        },
+        "reporter": {
+          "default": "",
+          "title": "Reporter",
+          "type": "string"
+        },
+        "results": {
+          "default": "",
+          "title": "Results",
+          "type": "string"
+        },
+        "coverage": {
+          "default": "",
+          "title": "Coverage",
+          "type": "string"
+        },
+        "match": {
+          "default": "aggregate",
+          "title": "Match",
+          "type": "string"
+        },
+        "credit_coverage": {
+          "default": "off",
+          "title": "Credit Coverage",
+          "type": "string"
+        },
+        "min_coverage_fraction": {
+          "default": 0.0,
+          "title": "Min Coverage Fraction",
+          "type": "number"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "TestTargetConfig",
       "type": "object"
     },
     "ValidationConfig": {

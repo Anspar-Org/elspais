@@ -284,6 +284,46 @@ class TestRunnerConfig(_StrictModel):
     cwd: str = ""  # relative to repo root; empty = repo root
 
 
+# Implements: REQ-d00254-C
+class TestTargetConfig(_StrictModel):
+    """One test target: how its results + coverage are produced and ingested."""
+
+    __test__ = False  # not a pytest class
+
+    name: str
+    cwd: str = ""  # relative to repo root; empty = repo root
+    command: str = ""  # optional; omitted in CI (tests already ran)
+    reporter: str = ""  # registry format name (e.g. "flutter-machine", "junit", "pytest-json")
+    results: str = (
+        ""  # glob (relative to cwd) for file-channel reporters; unused for stdout reporters
+    )
+    coverage: str = ""  # lcov/coverage file (relative to cwd); empty = no coverage
+    match: str = "aggregate"  # "precise" | "aggregate"
+    credit_coverage: str = "off"  # "off" | "tested" | "verified" (lcov_tested dimension)
+    min_coverage_fraction: float = 0.0  # [0.0, 1.0]
+
+    @field_validator("match")
+    @classmethod
+    def _check_match(cls, v: str) -> str:
+        if v not in ("precise", "aggregate"):
+            raise ValueError('match must be "precise" or "aggregate"')
+        return v
+
+    @field_validator("credit_coverage")
+    @classmethod
+    def _check_credit(cls, v: str) -> str:
+        if v not in ("off", "tested", "verified"):
+            raise ValueError('credit_coverage must be "off", "tested", or "verified"')
+        return v
+
+    @field_validator("min_coverage_fraction")
+    @classmethod
+    def _check_frac(cls, v: float) -> float:
+        if not 0.0 <= v <= 1.0:
+            raise ValueError("min_coverage_fraction must be in [0.0, 1.0]")
+        return v
+
+
 class TestScanningConfig(ScanningKindConfig):
     __test__ = False  # Prevent pytest collection
 
@@ -294,6 +334,7 @@ class TestScanningConfig(ScanningKindConfig):
     reference_keyword: str = "Verifies"
     reference_patterns: list[str] = Field(default_factory=list)
     runners: list[TestRunnerConfig] = Field(default_factory=list)
+    targets: list[TestTargetConfig] = Field(default_factory=list)
 
 
 # Implements: REQ-d00254-C
