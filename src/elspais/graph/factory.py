@@ -344,6 +344,36 @@ class SpecDirConfig:
     ignore_config: IgnoreConfig | None = None
 
 
+# Implements: REQ-d00254-A+B+C
+def _derive_credit_config(targets):
+    """Collapse per-target credit settings into the annotator's global CoverageCreditConfig.
+
+    Phase 1: homogeneous targets. assertion_credit = strongest credit_coverage;
+    unmatched_credit = "verified" iff any aggregate target; dirs = target cwds;
+    min_coverage_fraction = max.
+
+    Returns:
+        CoverageCreditConfig instance.
+    """
+    from elspais.graph.annotators import CoverageCreditConfig
+
+    _tgt_dirs = tuple(t.cwd for t in targets if t.cwd and t.cwd != ".")
+    _order = {"off": 0, "tested": 1, "verified": 2}
+    _assertion_credit = "off"
+    for _t in targets:
+        if _order.get(_t.credit_coverage, 0) > _order.get(_assertion_credit, 0):
+            _assertion_credit = _t.credit_coverage
+    _unmatched = "verified" if any(_t.match == "aggregate" for _t in targets) else "off"
+    _min_frac = max((_t.min_coverage_fraction for _t in targets), default=0.0)
+    return CoverageCreditConfig(
+        app_dirs=_tgt_dirs,
+        unmatched_credit=_unmatched,
+        coverage_dirs=_tgt_dirs,
+        assertion_credit=_assertion_credit,
+        min_coverage_fraction=_min_frac,
+    )
+
+
 def _find_repo_root(spec_dir: Path) -> Path | None:
     """Find the repository root containing .elspais.toml for a spec directory.
 
@@ -773,29 +803,14 @@ def build_graph(
 
     # Annotate keywords on all nodes so keyword search tools work
     # Annotate coverage metrics so all consumers (MCP, HTML, Flask) get coverage data
-    from elspais.graph.annotators import CoverageCreditConfig, annotate_coverage, annotate_keywords
+    from elspais.graph.annotators import annotate_coverage, annotate_keywords
 
     annotate_keywords(graph)
-    # Implements: REQ-d00254-A+B+C
     # Derive the global coverage-credit config from [[scanning.test.targets]].
     # Per-target settings are collapsed into one global config (acceptable for
-    # Phase 1 homogeneous targets).
-    _targets = typed_config.scanning.test.targets
-    _tgt_dirs = tuple(t.cwd for t in _targets if t.cwd and t.cwd != ".")
-    _order = {"off": 0, "tested": 1, "verified": 2}
-    _assertion_credit = "off"
-    for _t in _targets:
-        if _order.get(_t.credit_coverage, 0) > _order.get(_assertion_credit, 0):
-            _assertion_credit = _t.credit_coverage
-    _unmatched = "verified" if any(_t.match == "aggregate" for _t in _targets) else "off"
-    _min_frac = max((_t.min_coverage_fraction for _t in _targets), default=0.0)
-    credit = CoverageCreditConfig(
-        app_dirs=_tgt_dirs,
-        unmatched_credit=_unmatched,
-        coverage_dirs=_tgt_dirs,
-        assertion_credit=_assertion_credit,
-        min_coverage_fraction=_min_frac,
-    )
+    # Phase 1 homogeneous targets). Logic lives in _derive_credit_config (pure,
+    # unit-tested independently).
+    credit = _derive_credit_config(typed_config.scanning.test.targets)
     annotate_coverage(graph, credit)
 
     # Implements: REQ-d00203-A+B+C+D+E
