@@ -288,7 +288,7 @@ class TestTargetConfig(_StrictModel):
         ""  # glob (relative to cwd) for file-channel reporters; unused for stdout reporters
     )
     coverage: str = ""  # lcov/coverage file (relative to cwd); empty = no coverage
-    match: str = "aggregate"  # "precise" | "aggregate"
+    match: str = "precise"  # "precise" | "aggregate"
     credit_coverage: str = "off"  # "off" | "tested" | "verified" (lcov_tested dimension)
     min_coverage_fraction: float = 0.0  # [0.0, 1.0]
 

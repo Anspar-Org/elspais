@@ -11,7 +11,7 @@ def test_target_defaults():
     t = TestTargetConfig(name="provenance")
     assert t.cwd == "" and t.command == "" and t.reporter == ""
     assert t.results == "" and t.coverage == ""
-    assert t.match == "aggregate"
+    assert t.match == "precise"
     assert t.credit_coverage == "off"
     assert t.min_coverage_fraction == 0.0
 

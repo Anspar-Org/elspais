@@ -44,7 +44,7 @@ This is the correct pattern for CI.
 | `reporter` | string | (required) | Parser format: `flutter-machine`, `junit`, `pytest-json` |
 | `results` | string | `""` | Glob pattern for result files (file-channel reporters) |
 | `coverage` | string | `""` | Path to lcov/coverage-xml file, relative to `cwd` |
-| `match` | string | `"aggregate"` | `"precise"` or `"aggregate"` -- matching strategy |
+| `match` | string | `"precise"` | `"precise"` or `"aggregate"` -- matching strategy |
 | `credit_coverage` | string | `"off"` | `"off"`, `"tested"`, or `"verified"` -- lcov_tested credit |
 | `min_coverage_fraction` | float | `0.0` | Fraction of impl lines that must be covered (0.0-1.0) |
 
@@ -68,17 +68,18 @@ matched by the `results` glob.  These files can be pre-produced by CI.
 
 `match` controls how test results are attributed to `// Verifies:` edges:
 
-**`match = "aggregate"` (default):** The whole target is green or red.  When
-green (at least one result ingested, zero failures), all `// Verifies:`
-assertions in scope receive credit.  Use this when per-test attribution is
-lossy or the test runner output does not round-trip test identifiers cleanly.
+**`match = "precise"` (default):** File-granular attribution.  elspais matches
+each result record to the specific test file via the file path recorded in the
+result (e.g., the `suite.path` field from `flutter-machine`).  Only assertions
+linked to passing test files receive credit; a failing file marks only its own
+assertions as failing.  Requires a reporter that emits real file paths
+(`flutter-machine`).
 
-**`match = "precise":`** File-granular attribution.  elspais matches each
-result record to the specific test file via the file path recorded in the
-result (e.g., the `suite.path` field from `flutter-machine`).  Only
-assertions linked to passing test files receive credit; a failing file marks
-only its own assertions as failing.  Requires a reporter that emits real file
-paths (`flutter-machine`).
+**`match = "aggregate"` (opt-in coarse mode):** The whole target is green or
+red.  When green (at least one result ingested, zero failures), all
+`// Verifies:` assertions in scope receive credit.  Use this when per-test
+attribution is lossy or the test runner output does not round-trip test
+identifiers cleanly.
 
 ### credit_coverage
 
@@ -265,4 +266,4 @@ Run elspais in CI after the test step:
 elspais checks
 ```
 
-See also: `elspais docs test-results`, `elspais docs checks`
+See also: `elspais docs checks`

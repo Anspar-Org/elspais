@@ -190,12 +190,8 @@ prescan_command = ""             # External test discovery command
 # resolve to the parent requirement only — put assertion-level refs in a
 # comment instead: `# Verifies: REQ-p-event-store:A`.
 
-[scanning.result]
-directories = []
-file_patterns = []               # JUnit XML, pytest JSON patterns
-skip_files = []
-skip_dirs = []
-run_meta_file = ""               # Test run metadata file
+# Test result ingestion is configured via [[scanning.test.targets]].
+# See: elspais docs test-targets
 
 [scanning.journey]
 directories = ["spec"]
