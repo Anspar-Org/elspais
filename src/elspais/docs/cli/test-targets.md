@@ -43,7 +43,7 @@ This is the correct pattern for CI.
 | `command` | string | (omit in CI) | Shell command to execute when `--run-tests` is passed |
 | `reporter` | string | (required) | Parser format: `flutter-machine`, `junit`, `pytest-json` |
 | `results` | string | `""` | Glob pattern for result files (file-channel reporters) |
-| `coverage` | string | `""` | Path to lcov/coverage-json file, relative to `cwd` |
+| `coverage` | string | `""` | Path to an lcov.info or coverage.py JSON file (format auto-detected), relative to `cwd` |
 | `match` | string | `"precise"` | `"precise"` or `"aggregate"` -- matching strategy |
 | `credit_coverage` | string | `"off"` | `"off"`, `"tested"`, or `"verified"` -- lcov_tested credit |
 | `min_coverage_fraction` | float | `0.0` | Fraction of impl lines that must be covered (0.0-1.0) |
@@ -224,7 +224,7 @@ reporter = "junit"
 # this resolves to packages/my-package/results/*.xml from the repo root.
 results = "results/*.xml"
 
-# Path to lcov or coverage-json file, relative to cwd.
+# Path to an lcov.info or coverage.py JSON file (format auto-detected), relative to cwd.
 # Omit if no coverage report.
 # coverage = "coverage/lcov.info"
 
