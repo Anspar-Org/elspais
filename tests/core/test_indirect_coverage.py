@@ -181,6 +181,7 @@ class TestValidatedWithIndirect:
                 "result-whole",
                 status="passed",
                 test_id="test:tests/test_whole.py:1",
+                match="precise",
             ),
         )
 
@@ -205,8 +206,15 @@ class TestValidatedWithIndirect:
             ),
             make_test_ref(verifies=["REQ-100-A"], source_path="tests/test_a.py"),
             make_test_ref(verifies=["REQ-100"], source_path="tests/test_whole.py"),
-            make_test_result("result-a", status="passed", test_id="test:tests/test_a.py:1"),
-            make_test_result("result-whole", status="passed", test_id="test:tests/test_whole.py:1"),
+            make_test_result(
+                "result-a", status="passed", test_id="test:tests/test_a.py:1", match="precise"
+            ),
+            make_test_result(
+                "result-whole",
+                status="passed",
+                test_id="test:tests/test_whole.py:1",
+                match="precise",
+            ),
         )
 
         annotate_coverage(graph)
@@ -278,9 +286,15 @@ class TestEdgeCase2MultipleTestsOneFailing:
             make_test_ref(verifies=["REQ-100-A"], source_path="tests/test_1.py"),
             make_test_ref(verifies=["REQ-100-A"], source_path="tests/test_2.py"),
             make_test_ref(verifies=["REQ-100-A"], source_path="tests/test_3.py"),
-            make_test_result("r1", status="passed", test_id="test:tests/test_1.py:1"),
-            make_test_result("r2", status="passed", test_id="test:tests/test_2.py:1"),
-            make_test_result("r3", status="failed", test_id="test:tests/test_3.py:1"),
+            make_test_result(
+                "r1", status="passed", test_id="test:tests/test_1.py:1", match="precise"
+            ),
+            make_test_result(
+                "r2", status="passed", test_id="test:tests/test_2.py:1", match="precise"
+            ),
+            make_test_result(
+                "r3", status="failed", test_id="test:tests/test_3.py:1", match="precise"
+            ),
         )
 
         annotate_coverage(graph)
@@ -310,8 +324,12 @@ class TestEdgeCase3WholeReqMixedResults:
             make_requirement("REQ-100", level="PRD", assertions=assertions),
             make_test_ref(verifies=["REQ-100"], source_path="tests/test_pass.py"),
             make_test_ref(verifies=["REQ-100"], source_path="tests/test_fail.py"),
-            make_test_result("r-pass", status="passed", test_id="test:tests/test_pass.py:1"),
-            make_test_result("r-fail", status="failed", test_id="test:tests/test_fail.py:1"),
+            make_test_result(
+                "r-pass", status="passed", test_id="test:tests/test_pass.py:1", match="precise"
+            ),
+            make_test_result(
+                "r-fail", status="failed", test_id="test:tests/test_fail.py:1", match="precise"
+            ),
         )
 
         annotate_coverage(graph)
@@ -407,7 +425,12 @@ class TestIntegrationWholeReqTest:
                 ],
             ),
             make_test_ref(verifies=["REQ-100"], source_path="tests/test_whole.py"),
-            make_test_result("result-whole", status="passed", test_id="test:tests/test_whole.py:1"),
+            make_test_result(
+                "result-whole",
+                status="passed",
+                test_id="test:tests/test_whole.py:1",
+                match="precise",
+            ),
         )
 
         annotate_coverage(graph)

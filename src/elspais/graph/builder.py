@@ -3552,7 +3552,7 @@ class GraphBuilder:
         # per-test YIELDS link is created -- unmatched test_ids must not
         # become broken references (applies only when default link mode is
         # enabled).
-        if test_id and self._link_results_to_tests:
+        if test_id and self._link_results_to_tests and data.get("match") != "aggregate":
             # Implements: REQ-d00127-E
             self._pending_links.append((result_id, test_id, EdgeKind.YIELDS))
 

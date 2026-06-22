@@ -228,9 +228,9 @@ results = "results/*.xml"
 # Omit if no coverage report.
 # coverage = "coverage/lcov.info"
 
-# "precise": per-file attribution (requires file paths in results).
-# "aggregate": whole-suite green/red (default; most compatible).
-match = "aggregate"
+# "precise" (default): per-file attribution (requires file paths in results).
+# "aggregate" (opt-in): whole-suite green/red; use when results lack file paths.
+match = "precise"
 
 # "off" | "tested" | "verified" -- lcov_tested dimension credit.
 # credit_coverage = "off"

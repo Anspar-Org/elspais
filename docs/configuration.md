@@ -161,43 +161,22 @@ reference_keyword = "Verifies"
 #   [{"file": "path", "function": "name", "class": "Name|null", "line": N}]
 # prescan_command = "dart run tool/list_tests.dart"
 
-# Configured test runners executed by `elspais checks --run-tests`.
-# Each entry runs in declaration order with stdout/stderr passed through
-# to the terminal. Put output where [scanning.result].file_patterns expects.
-[[scanning.test.runners]]
-name = "python"
-command = "pytest --json-report --json-report-file=.elspais/results/pytest.json"
+# Configured test targets - result ingestion and coverage attribution.
+# See `elspais docs test-targets` for full documentation.
+[[scanning.test.targets]]
+name     = "app"
+cwd      = "app"                    # relative to repo root; empty = repo root
+command  = "flutter test --machine" # omit in CI (tests already ran)
+reporter = "flutter-machine"        # stdout-channel reporter
+match    = "precise"                # "precise" (default) | "aggregate"
+coverage = "coverage/lcov.info"     # optional; lcov or coverage.py JSON
 
-[[scanning.test.runners]]
-name = "flutter"
-command = "flutter test --machine > .elspais/results/flutter.json"
-cwd = "app/"  # optional; relative to repo root
-
-# Test result file scanning (JUnit XML, pytest JSON)
-# See `elspais docs test-results` for per-language setup and the per-app green model.
-[scanning.result]
-file_patterns = ["TEST-*.xml", "pytest-results.json"]
-run_meta_file = ""
-# unmatched_credit: "off" (default) | "verified"
-# When "verified", an unmatched // Verifies: edge receives verified credit if its
-# app directory is green (>=1 result ingested, zero failures). Useful for Dart/Flutter
-# where JUnit output cannot be matched per-test. See `elspais docs test-results`.
-unmatched_credit = "off"
-
-# Code coverage report scanning (lcov .info files)
-# Enables the lcov_tested dimension — see `elspais docs test-results`.
-[scanning.coverage]
-directories = [".elspais/coverage"]   # example path; default is ["."]
-file_patterns = []
-# assertion_credit: "off" (default) | "tested" | "verified"
-# When set, covered // Implements: lines grant credit to the assertion.
-#   "tested"   -> lcov_tested dimension only (failures never suppressed by coverage)
-#   "verified" -> lcov_tested dimension; additionally marks lcov_tested failing
-#                 if the app is red, so coverage credit does not hide failures
-assertion_credit = "off"
-# min_coverage_fraction: minimum fraction of an assertion's impl lines that must
-# be covered before credit is granted. Default 0.0 means any execution counts.
-min_coverage_fraction = 0.0
+# File-channel reporter example (junit XML):
+# [[scanning.test.targets]]
+# name     = "pytest"
+# reporter = "junit"
+# results  = "results/*.xml"        # glob relative to cwd
+# match    = "precise"
 
 # User journey file scanning
 [scanning.journey]

@@ -62,7 +62,9 @@ def _resolve_coverage_file_node(graph, source_file, lcov_path, repo_root):
 
 
 # Implements: REQ-d00254-F
-def _ingest_target_results(builder, target, results_text: str, repo_root: Path) -> int:
+def _ingest_target_results(
+    builder, target, results_text: str, repo_root: Path, source_path: str = ""
+) -> int:
     """Parse a target's reporter output and add RESULT ParsedContent.
 
     Each ParsedContent carries real source_file (repo-relative) + match.
@@ -89,7 +91,7 @@ def _ingest_target_results(builder, target, results_text: str, repo_root: Path) 
         return 0
 
     parser = spec.parser_factory()
-    records = parser.parse(results_text, "")
+    records = parser.parse(results_text, source_path)
     repo_root_resolved = Path(repo_root).resolve()
     count = 0
     for rec in records:
@@ -718,24 +720,22 @@ def build_graph(
                         target.cwd,
                     )
                     continue
-                results_text: str | None = None
                 if target.name in _captured:
-                    results_text = _captured[target.name]
+                    _ingest_target_results(builder, target, _captured[target.name], repo_root, "")
                 elif target.results:
                     matched = glob(str(cwd_path / target.results), recursive=True)
                     if matched:
-                        results_text = "\n".join(
-                            Path(f).read_text(encoding="utf-8", errors="replace")
-                            for f in matched
-                            if Path(f).is_file()
-                        )
-                        # Create RESULT FILE nodes for on-disk result files so
-                        # freshness checks (tests.results_stale) have an mtime
-                        # source.
                         for f in matched:
                             if Path(f).is_file():
                                 # Implements: REQ-d00128-A
                                 _get_or_create_file_node(Path(f), FileType.RESULT)
+                                _ingest_target_results(
+                                    builder,
+                                    target,
+                                    Path(f).read_text(encoding="utf-8", errors="replace"),
+                                    repo_root,
+                                    str(Path(f)),
+                                )
                     else:
                         _log.debug("target %r: no files matched %r", target.name, target.results)
                 else:
@@ -744,8 +744,6 @@ def build_graph(
                         " glob -- skipping",
                         target.name,
                     )
-                if results_text is not None:
-                    _ingest_target_results(builder, target, results_text, repo_root)
 
     graph = builder.build()
 

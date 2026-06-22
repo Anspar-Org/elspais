@@ -59,3 +59,36 @@ def test_obsolete_config_removed():
 
     for name in ("ResultScanningConfig", "CoverageScanningConfig", "TestRunnerConfig"):
         assert not hasattr(s, name)
+
+
+# ---------------------------------------------------------------------------
+# FIX 9: reporter required when command/results/coverage is set
+# ---------------------------------------------------------------------------
+
+
+def test_target_with_command_but_no_reporter_raises():
+    """A target with command but no reporter must raise ValidationError."""
+    with pytest.raises(ValidationError):
+        TestTargetConfig(name="x", command="flutter test --machine")
+
+
+def test_target_with_results_but_no_reporter_raises():
+    """A target with results glob but no reporter must raise ValidationError."""
+    with pytest.raises(ValidationError):
+        TestTargetConfig(name="x", results="results/*.xml")
+
+
+def test_target_with_coverage_only_no_reporter_is_valid():
+    """A target with only coverage (no command/results) is valid without a reporter.
+
+    Coverage ingestion uses format auto-detection, not the reporter registry.
+    """
+    t = TestTargetConfig(name="x", coverage="coverage/lcov.info")
+    assert t.coverage == "coverage/lcov.info"
+    assert t.reporter == ""
+
+
+def test_bare_name_target_still_validates():
+    """A target with only name (no command/results/coverage) validates fine."""
+    t = TestTargetConfig(name="provenance")
+    assert t.reporter == ""

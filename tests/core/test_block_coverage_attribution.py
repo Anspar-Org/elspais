@@ -285,3 +285,66 @@ class TestNoCoverageData:
         assert rollup.lcov_tested.indirect_labels == set(), "No line_coverage means no credit"
         assert rollup.lcov_tested.indirect == 0.0
         assert rollup.code_tested.indirect == 0
+
+
+# ---------------------------------------------------------------------------
+# Case 6: Multi-line CODE ref does not truncate single-line marker's owned lines
+# ---------------------------------------------------------------------------
+
+
+class TestMultiLineRefIgnoredInBlockMarkers:
+    """A multi-line CODE ref in the same file must NOT be included in the marker
+    list used by _block_region_lines. Only single-line markers (parse_line ==
+    parse_end_line) count as block boundaries.
+
+    Regression: previously any CODE child was used as a marker, so a multi-line
+    Python function at line 10 would truncate the single-line Dart marker at
+    line 1's owned region to lines 1-9 instead of the whole file.
+    """
+
+    def test_single_line_marker_not_truncated_by_multiline_ref(self):
+        """Single-line marker at line 1 owns lines after it even when a multi-line
+        CODE ref starts at line 10 in the same file.
+        """
+        req = make_requirement(
+            "REQ-p00001",
+            assertions=[{"label": "A", "text": "SHALL A"}],
+        )
+        # Single-line Dart marker at line 1 (the one we care about)
+        code_single = make_code_ref(
+            implements=["REQ-p00001-A"],
+            source_path="lib/src/mixed.dart",
+            start_line=1,
+            end_line=1,
+        )
+        # Multi-line CODE ref at lines 10-30 (should NOT count as a block marker)
+        code_multi = make_code_ref(
+            implements=["REQ-p00001-A"],
+            source_path="lib/src/mixed.dart",
+            start_line=10,
+            end_line=30,
+        )
+        g = build_graph(req, code_single, code_multi)
+
+        fn = g.find_by_id("file:lib/src/mixed.dart")
+        assert fn is not None
+        # Executable lines span past line 30 -- if multi-line ref were a marker,
+        # block region for line 1 would stop at line 9.
+        lc = {5: 1, 15: 1, 35: 1}
+        fn.set_field("line_coverage", lc)
+
+        from elspais.graph.annotators import _block_region_lines
+
+        region = _block_region_lines(fn, {})
+
+        # The single-line marker at line 1 should own ALL executable lines > 1
+        # (lines 5, 15, 35). If multi-line ref at 10 were treated as a second
+        # marker, region[1] would be {5} only (lines > 1 and < 10).
+        assert 1 in region, "Single-line marker at line 1 must have a region entry"
+        owned = region[1]
+        assert 35 in owned, (
+            "Single-line marker must own lines past the multi-line ref's start (35 > 10); "
+            f"got owned={owned}. Multi-line ref should NOT be a block boundary."
+        )
+        assert 15 in owned, "Line 15 (inside multi-line ref range) must be in owned set"
+        assert 5 in owned, "Line 5 (before multi-line ref) must be in owned set"

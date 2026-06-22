@@ -322,6 +322,7 @@ class TestBuilderContentTypes:
                 "result-1",
                 status="passed",
                 test_id="test:tests/test_module.py:1",
+                match="precise",
             ),
         )
 
@@ -362,6 +363,7 @@ class TestTestToRequirementLinking:
                 test_id="test:TestAuth::test_login",
                 name="test_login",
                 classname="TestAuth",
+                match="precise",
             ),
         )
 
@@ -396,6 +398,7 @@ class TestTestToRequirementLinking:
                 test_id="test:tests/test_auth.py::TestAuth::test_REQ_d00001_login",
                 name="test_REQ_d00001_login",
                 classname="tests.test_auth.TestAuth",
+                match="precise",
             ),
             repo_root=Path("."),
         )
@@ -511,6 +514,7 @@ class TestTestToRequirementLinking:
                 test_id=test_id,
                 name="test_REQ_d00001_login",
                 classname="tests.test_auth.TestAuth",
+                match="precise",
             ),
             make_test_result(
                 "result-run2",
@@ -518,6 +522,7 @@ class TestTestToRequirementLinking:
                 test_id=test_id,
                 name="test_REQ_d00001_login",
                 classname="tests.test_auth.TestAuth",
+                match="precise",
             ),
             repo_root=Path("."),
         )
@@ -613,6 +618,7 @@ class TestGeneralizedOrphanDetection:
                 status="passed",
                 test_id="test:nonexistent::test_func",
                 name="test_func",
+                match="precise",
             ),
         )
 
@@ -686,6 +692,7 @@ class TestGeneralizedOrphanDetection:
                 status="passed",
                 test_id="test:tests/test_module.py::test_func",
                 name="test_func",
+                match="precise",
             ),
         )
 
@@ -766,6 +773,7 @@ class TestGeneralizedOrphanDetection:
                 status="passed",
                 test_id="test:tests/test_standalone.py::test_standalone_func",
                 name="test_standalone_func",
+                match="precise",
             ),
         )
 

@@ -475,11 +475,13 @@ class TestTestSpecificMetrics:
                 "result-a",
                 status="passed",
                 test_id="test:tests/test_a.py:1",
+                match="precise",
             ),
             make_test_result(
                 "result-b",
                 status="failed",
                 test_id="test:tests/test_b.py:1",
+                match="precise",
             ),
         )
 
@@ -504,7 +506,9 @@ class TestTestSpecificMetrics:
                 assertions=[{"label": "A", "text": "Assertion A"}],
             ),
             make_test_ref(verifies=["REQ-100-A"]),
-            make_test_result("result-1", status="error", test_id="test:tests/test_module.py:1"),
+            make_test_result(
+                "result-1", status="error", test_id="test:tests/test_module.py:1", match="precise"
+            ),
         )
 
         annotate_coverage(graph)
@@ -526,7 +530,9 @@ class TestTestSpecificMetrics:
                 assertions=[{"label": "A", "text": "Assertion A"}],
             ),
             make_test_ref(verifies=["REQ-100-A"]),
-            make_test_result("result-1", status="passed", test_id="test:tests/test_module.py:1"),
+            make_test_result(
+                "result-1", status="passed", test_id="test:tests/test_module.py:1", match="precise"
+            ),
         )
 
         annotate_coverage(graph)

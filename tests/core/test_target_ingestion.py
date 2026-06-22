@@ -261,3 +261,60 @@ def test_target_results_not_ingested_when_scan_tests_false(tmp_path: Path):
         "build_graph(scan_tests=False) must not ingest target results, "
         f"but got {len(result_nodes)} RESULT node(s)"
     )
+
+
+# ---------------------------------------------------------------------------
+# (e) Per-file source_path for file-channel reporters (FIX 2+4)
+# ---------------------------------------------------------------------------
+
+
+def test_ingest_two_junit_files_distinct_source_paths(tmp_path: Path):
+    """A junit target whose results glob matches TWO xml files produces RESULT nodes
+    with non-empty, DISTINCT source_path per file (no id collision).
+
+    Verifies: REQ-d00254-F
+    """
+    from elspais.graph.factory import build_graph as _factory_build_graph
+
+    # Write two minimal JUnit XML files
+    xml1 = tmp_path / "results1.xml"
+    xml1.write_text(
+        '<?xml version="1.0"?>'
+        '<testsuite name="suite1" tests="1">'
+        '<testcase name="test_a" classname="tests.a" time="0.1"/>'
+        "</testsuite>\n",
+        encoding="utf-8",
+    )
+    xml2 = tmp_path / "results2.xml"
+    xml2.write_text(
+        '<?xml version="1.0"?>'
+        '<testsuite name="suite2" tests="1">'
+        '<testcase name="test_b" classname="tests.b" time="0.2"/>'
+        "</testsuite>\n",
+        encoding="utf-8",
+    )
+
+    target = TestTargetConfig(
+        name="junit",
+        reporter="junit",
+        results="results*.xml",
+        match="aggregate",
+    )
+    # enabled=True is required so the build_graph target ingestion loop runs
+    cfg = ElspaisConfig(
+        scanning=ScanningConfig(test=TestScanningConfig(targets=[target], enabled=True))
+    )
+    graph = _factory_build_graph(
+        config=cfg.model_dump(by_alias=True),
+        repo_root=tmp_path,
+    )
+
+    result_nodes = list(graph.iter_by_kind(NodeKind.RESULT))
+    assert len(result_nodes) == 2, f"Expected 2 RESULT nodes, got {len(result_nodes)}"
+
+    source_paths = {n.get_field("source_path") for n in result_nodes}
+    # Each result must have a non-empty source_path
+    assert "" not in source_paths, "source_path must be non-empty for file-channel results"
+    assert None not in source_paths, "source_path must not be None for file-channel results"
+    # The two results must have distinct source_paths (no collision)
+    assert len(source_paths) == 2, f"source_paths must be distinct per file, got: {source_paths}"

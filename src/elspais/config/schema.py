@@ -313,6 +313,12 @@ class TestTargetConfig(_StrictModel):
             raise ValueError("min_coverage_fraction must be in [0.0, 1.0]")
         return v
 
+    @model_validator(mode="after")
+    def _require_reporter(self) -> TestTargetConfig:
+        if (self.command or self.results) and not self.reporter:
+            raise ValueError("reporter is required when command or results is set")
+        return self
+
 
 class TestScanningConfig(ScanningKindConfig):
     __test__ = False  # Prevent pytest collection

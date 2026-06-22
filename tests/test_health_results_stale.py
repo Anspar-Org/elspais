@@ -37,7 +37,13 @@ def test_missing_results_fails_with_warning(tmp_path: Path):
     spec.write_text("# REQ-p00001\n")
     spec_node = _make_file_node(spec, FileType.SPEC)
     graph = _graph_with_files(spec_node)
-    config = {"scanning": {"test": {"targets": [{"name": "unit", "results": "results/*.json"}]}}}
+    config = {
+        "scanning": {
+            "test": {
+                "targets": [{"name": "unit", "results": "results/*.json", "reporter": "junit"}]
+            }
+        }
+    }
     chk = check_test_results(graph, config=config)
     assert chk.name == "tests.results"
     assert chk.passed is False

@@ -843,7 +843,9 @@ def _block_region_lines(file_node, cache: dict) -> dict:
         markers = sorted(
             c.get_field("parse_line")
             for c in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
-            if c.kind == NodeKind.CODE and c.get_field("parse_line")
+            if c.kind == NodeKind.CODE
+            and c.get_field("parse_line")
+            and (c.get_field("parse_end_line") in (None, c.get_field("parse_line")))
         )
         cov = sorted(lc.keys())
         if markers:
