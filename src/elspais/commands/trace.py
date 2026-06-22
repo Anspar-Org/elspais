@@ -75,6 +75,7 @@ REPORT_PRESETS = {
             "uat_coverage",
             "uat_verified",
             "code_tested",
+            "lcov_tested",
         ],
     ),
     "full": ReportPreset(
@@ -90,6 +91,7 @@ REPORT_PRESETS = {
             "uat_coverage",
             "uat_verified",
             "code_tested",
+            "lcov_tested",
         ],
     ),
 }
@@ -265,6 +267,20 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
         if assertion_labels:
             data["code_tested_labels"] = f"{ct.direct}/{ct.total}" if ct.total else "n/a"
             data["code_tested_pct"] = f"{round(ct.direct / ct.total * 100)}%" if ct.total else "n/a"
+        lt = rollup.lcov_tested
+        if lt.total > 0:
+            lt_pct = round(lt.indirect / lt.total * 100)
+            data["lcov_tested"] = f"lcov {lt_pct}%"
+            if assertion_labels:
+                labels = lt.indirect_labels if lt.indirect_labels else lt.direct_labels
+                label_str = _compact_labels(labels) if labels else "-"
+                data["lcov_tested_labels"] = label_str
+                data["lcov_tested_pct"] = f"{lt_pct}%"
+        else:
+            data["lcov_tested"] = "n/a"
+            if assertion_labels:
+                data["lcov_tested_labels"] = "n/a"
+                data["lcov_tested_pct"] = "n/a"
     else:
         for key, _, _, _ in _DIMS:
             data[key] = "n/a"
@@ -272,6 +288,13 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
                 data[key + "_labels"] = "n/a"
                 data[key + "_pct"] = "n/a"
         data["code_tested"] = "n/a"
+        if assertion_labels:
+            data["code_tested_labels"] = "n/a"
+            data["code_tested_pct"] = "n/a"
+        data["lcov_tested"] = "n/a"
+        if assertion_labels:
+            data["lcov_tested_labels"] = "n/a"
+            data["lcov_tested_pct"] = "n/a"
 
     return data
 
@@ -290,12 +313,13 @@ def _column_headers() -> dict[str, str]:
         "uat_coverage": "UAT Coverage",
         "uat_verified": "UAT Verified",
         "code_tested": "Code Tested",
+        "lcov_tested": "LCOV Tested",
         "hash": "Hash",
         "file": "File",
     }
 
 
-# The 6 coverage dimension column keys
+# The 6 coverage dimension column keys (plus lcov_tested)
 _COVERAGE_COLUMNS = [
     "implemented",
     "tested",
@@ -303,6 +327,7 @@ _COVERAGE_COLUMNS = [
     "uat_coverage",
     "uat_verified",
     "code_tested",
+    "lcov_tested",
 ]
 
 

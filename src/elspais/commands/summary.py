@@ -27,6 +27,7 @@ from elspais.graph.metrics import (
     has_integration,
     integrates_by_associate,
     integrates_total,
+    tested_and_passing,
 )
 
 
@@ -149,7 +150,7 @@ def _collect_coverage(graph: FederatedGraph, config: dict | None = None) -> dict
                 total = rollup.total_assertions
                 implemented = rollup.implemented.indirect
                 validated = rollup.tested.direct
-                passing = rollup.verified.direct
+                passing = tested_and_passing(rollup).direct
 
             # REQ-d00252-F: a requirement that delegates implementation via
             # INTEGRATES counts as implemented in the main coverage classification

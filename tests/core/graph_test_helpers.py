@@ -303,6 +303,8 @@ def make_test_result(
     verifies: list[str] | None = None,
     name: str = "",
     classname: str = "",
+    source_file: str = "",
+    match: str = "aggregate",
 ) -> ParsedContent:
     """Factory for creating test result content.
 
@@ -317,6 +319,9 @@ def make_test_result(
         verifies: List of REQ IDs this test verifies (extracted from name)
         name: Test function name
         classname: Test class/module name
+        source_file: Repo-relative path of the test source file that produced
+            this result (empty → falls back to source_path in the builder).
+        match: How the result is matched to test nodes ("aggregate" or "precise").
 
     Returns:
         ParsedContent ready for GraphBuilder.add_parsed_content()
@@ -334,6 +339,8 @@ def make_test_result(
             "verifies": verifies or [],
             "name": name,
             "classname": classname,
+            "source_file": source_file,
+            "match": match,
         },
     )
     content.source_context = MockSourceContext(source_id=source_path)

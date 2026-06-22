@@ -1649,7 +1649,7 @@ class TestStandardMCPMutations:
 
 
 class TestRunTestsFlag:
-    """Tests for `elspais checks --run-tests` and the no-runners error.
+    """Tests for `elspais checks --run-tests` and the no-targets error.
 
     Uses isolated scratch copies of the shared project to avoid interference
     from earlier mutation tests that may leave spec files in an unhealthy state.
@@ -1680,27 +1680,22 @@ class TestRunTestsFlag:
         # Use --tests scope to avoid spec-level errors from the shared (mutated) project.
         out = run_elspais("checks", "--run-tests", "--tests", "--lenient", cwd=scratch)
         combined = (out.stdout or "") + (out.stderr or "")
-        assert "Running 'stub' runner" in combined
+        assert "Running 'stub' target" in combined
 
-    def test_run_tests_no_runners_configured_exits_2(self, tmp_path, project):
+    def test_run_tests_no_targets_configured_exits_2(self, tmp_path, project):
         import shutil
 
-        scratch = tmp_path / "no_runners"
+        scratch = tmp_path / "no_targets"
         shutil.copytree(project, scratch)
         toml = (scratch / ".elspais.toml").read_text()
-        # Remove the runners block while preserving [scanning.result].
-        # Use string-split (not regex) to avoid issues with complex command strings.
-        parts = toml.split("\n[[scanning.test.runners]]")
-        if len(parts) > 1:
-            before = parts[0]
-            after = parts[1]
-            result_idx = after.find("\n[scanning.result]")
-            tail = after[result_idx:] if result_idx >= 0 else ""
-            toml = before + tail
+        # Remove the targets block (it is the last [scanning.*] section in the
+        # fixture). Use string-split (not regex) to avoid issues with complex
+        # command strings.
+        toml = toml.split("\n[[scanning.test.targets]]")[0]
         (scratch / ".elspais.toml").write_text(toml)
         out = run_elspais("checks", "--run-tests", cwd=scratch)
         assert out.returncode == 2
-        assert "runners" in (out.stderr or "").lower()
+        assert "targets" in (out.stderr or "").lower()
 
 
 class TestRunTestsFailFast:
@@ -1719,26 +1714,19 @@ class TestRunTestsFailFast:
         raw = (scratch / ".elspais.toml").read_text()
         sentinel_cmd = f"touch {marker}"
         runners_toml = (
-            "\n[[scanning.test.runners]]\n"
+            "\n[[scanning.test.targets]]\n"
             'name = "bad"\n'
             'command = "false"\n'
-            "\n[[scanning.test.runners]]\n"
+            'reporter = "junit"\n'
+            "\n[[scanning.test.targets]]\n"
             'name = "after"\n'
             f'command = "{sentinel_cmd}"\n'
+            'reporter = "junit"\n'
         )
-        # Split on the runners block start - safe because the fixture has exactly one
-        parts = raw.split("\n[[scanning.test.runners]]")
-        # parts[0] is everything before the runners; parts[1] has the runners+rest
-        # We need to preserve [scanning.result] which comes after the runners block
-        before_runners = parts[0]
-        after_runners = parts[1] if len(parts) > 1 else ""
-        # Find where [scanning.result] starts in after_runners
-        result_idx = after_runners.find("\n[scanning.result]")
-        if result_idx >= 0:
-            tail = after_runners[result_idx:]
-        else:
-            tail = ""
-        new_toml = before_runners + runners_toml + tail
+        # Split on the targets block start - the fixture's targets block is the
+        # last [scanning.*] section, so everything before it is what we keep.
+        before_runners = raw.split("\n[[scanning.test.targets]]")[0]
+        new_toml = before_runners + runners_toml
         (scratch / ".elspais.toml").write_text(new_toml)
         out = run_elspais("checks", "--run-tests", "--fail-fast", cwd=scratch)
         assert out.returncode == 1

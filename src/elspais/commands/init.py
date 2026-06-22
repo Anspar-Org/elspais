@@ -222,25 +222,30 @@ _FIELD_COMMENTS: dict[str, str] = {
     ),
     "scanning.test.reference_keyword": 'Keyword for test->requirement refs (e.g. "Verifies")',
     "scanning.test.reference_patterns": "Additional regex patterns for reference detection",
-    "scanning.test.runners": ("Configured test runners executed by `checks --run-tests`"),
-    "scanning.test.runners.name": "Display name for the runner (e.g. 'python')",
-    "scanning.test.runners.command": (
-        "Shell command to execute (writes result files where [scanning.result] expects them)"
+    "scanning.test.targets": ("Per-package/suite test-ingestion targets (array of tables)"),
+    "scanning.test.targets.name": "Unique label for this target (required)",
+    "scanning.test.targets.cwd": (
+        'Directory relative to repo root where the command runs (default ".")'
     ),
-    "scanning.test.runners.cwd": (
-        "Working directory for the runner, relative to repo root (default: repo root)"
+    "scanning.test.targets.command": (
+        "Shell command executed by --run-tests; omit in CI (ingest pre-produced files)"
     ),
-    "scanning.result": "Test result file scanning",
-    "scanning.result.directories": "Directories to scan for test results",
-    "scanning.result.file_patterns": "Glob patterns for result files",
-    "scanning.result.skip_files": "Filenames to skip in result directories",
-    "scanning.result.skip_dirs": "Subdirectories to skip in result directories",
-    "scanning.result.run_meta_file": "Path to test run metadata JSON file",
-    "scanning.coverage": "Code coverage report scanning",
-    "scanning.coverage.directories": "Directories to scan for coverage reports",
-    "scanning.coverage.file_patterns": "Glob patterns for coverage files",
-    "scanning.coverage.skip_files": "Filenames to skip in coverage directories",
-    "scanning.coverage.skip_dirs": "Subdirectories to skip in coverage directories",
+    "scanning.test.targets.reporter": (
+        'Parser format: "flutter-machine" | "junit" | "pytest-json"'
+    ),
+    "scanning.test.targets.results": (
+        "Glob for result files (file-channel reporters: junit, pytest-json)"
+    ),
+    "scanning.test.targets.coverage": ("Path to lcov/coverage-json file, relative to cwd"),
+    "scanning.test.targets.match": (
+        '"precise" (per-file) | "aggregate" (whole-app green/red, default)'
+    ),
+    "scanning.test.targets.credit_coverage": (
+        '"off" | "tested" | "verified" -- lcov_tested dimension credit (default off)'
+    ),
+    "scanning.test.targets.min_coverage_fraction": (
+        "Minimum fraction of impl lines that must be covered (0.0 to 1.0)"
+    ),
     "scanning.journey": "User journey file scanning",
     "scanning.journey.directories": "Directories to scan for journey files",
     "scanning.journey.file_patterns": "Glob patterns for journey files",
@@ -394,14 +399,6 @@ _CORE_OVERRIDES: dict[str, Any] = {
             "directories": ["tests"],
             "file_patterns": ["test_*.py", "*_test.py"],
             "reference_keyword": "Verifies",
-        },
-        "result": {
-            "directories": [],
-            "file_patterns": [],
-        },
-        "coverage": {
-            "directories": ["."],
-            "file_patterns": [],
         },
         "journey": {
             "directories": ["spec"],
@@ -662,5 +659,44 @@ def generate_config(
         comment = _FIELD_COMMENTS.get(section)
         _add_table(doc, section, data[section], comment)
         doc.add(tomlkit.nl())
+
+    # Append a commented-out [[scanning.test.targets]] example block so users
+    # see how to configure test-ingestion targets without activating them.
+    # tomlkit.comment(text) prepends "# " automatically, so text must NOT
+    # include a leading "#".
+    _targets_example_lines = [
+        "[[scanning.test.targets]] -- per-package test ingestion (opt-in)",
+        "Uncomment and repeat for each package/suite.",
+        "See: elspais docs test-targets",
+        "",
+        "-- Flutter/Dart package example --",
+        "[[scanning.test.targets]]",
+        'name    = "app"',
+        'cwd     = "app"',
+        'command = "flutter test --machine --coverage"',
+        'reporter = "flutter-machine"',
+        'coverage = "coverage/lcov.info"',
+        'match   = "precise"',
+        'credit_coverage = "verified"',
+        "",
+        "-- Package with a shared DB (serialise test files) --",
+        "[[scanning.test.targets]]",
+        'name    = "backend"',
+        'cwd     = "backend"',
+        'command = "flutter test --machine --coverage --concurrency=1"',
+        'reporter = "flutter-machine"',
+        'coverage = "coverage/lcov.info"',
+        'match   = "precise"',
+        'credit_coverage = "verified"',
+        "",
+        "-- Python/pytest example --",
+        "[[scanning.test.targets]]",
+        'name    = "unit"',
+        'command = "pytest tests/ --json-report --json-report-file=.elspais/results/pytest.json"',
+        'reporter = "pytest-json"',
+        'results = ".elspais/results/pytest.json"',
+    ]
+    for line in _targets_example_lines:
+        doc.add(tomlkit.comment(line))
 
     return tomlkit.dumps(doc)

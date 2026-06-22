@@ -51,6 +51,62 @@ _NA_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+
+# Implements: REQ-d00254-A+B+F
+@dataclass(frozen=True)
+class CoverageCreditConfig:
+    """CUR-1533 crediting config, derived from [[scanning.test.targets]]."""
+
+    app_dirs: tuple[str, ...] = ()
+    unmatched_credit: str = "off"  # "off" | "verified"
+    coverage_dirs: tuple[str, ...] = ()
+    assertion_credit: str = "off"  # "off" | "tested" | "verified"
+    min_coverage_fraction: float = 0.0
+
+
+# Implements: REQ-d00254-A
+def _match_app_dir(path: str | None, app_dirs: tuple[str, ...]) -> str | None:
+    """Return the app dir whose segments appear deepest in ``path``.
+
+    Matches each app dir as a contiguous run of path segments; when several
+    match, the one starting at the greatest segment index wins (tiebreak:
+    longer dir string). Returns None when nothing matches.
+    """
+    if not path:
+        return None
+    segs = [s for s in path.replace("\\", "/").split("/") if s]
+    best: str | None = None
+    best_key: tuple[int, int] = (-1, -1)
+    for d in app_dirs:
+        dparts = [s for s in d.strip("/").replace("\\", "/").split("/") if s]
+        if not dparts:
+            continue
+        for i in range(len(segs) - len(dparts) + 1):
+            if segs[i : i + len(dparts)] == dparts:
+                key = (i, len(d))
+                if key > best_key:
+                    best_key = key
+                    best = d
+                break
+    return best
+
+
+# Implements: REQ-d00254-A
+def _compute_app_status(graph, app_dirs: tuple[str, ...]) -> dict[str, str]:
+    """Map app dir -> 'green'|'red' from RESULT node statuses (CUR-1533)."""
+    from elspais.graph import NodeKind
+
+    failed_by_app: dict[str, bool] = {}
+    for r in graph.nodes_by_kind(NodeKind.RESULT):
+        app = _match_app_dir(r.get_field("source_path"), app_dirs)
+        if app is None:
+            continue
+        status = (r.get_field("status") or "").lower()
+        is_fail = status in ("failed", "fail", "failure", "error")
+        failed_by_app[app] = failed_by_app.get(app, False) or is_fail
+    return {app: ("red" if failed else "green") for app, failed in failed_by_app.items()}
+
+
 if TYPE_CHECKING:
     from elspais.graph import NodeKind
     from elspais.graph.federated import FederatedGraph
@@ -634,7 +690,9 @@ def _compute_coverage_from_source(
     return contributions, source_nodes
 
 
-def _compute_code_tested(node: GraphNode, metrics: RollupMetrics) -> None:
+def _compute_code_tested(
+    node: GraphNode, metrics: RollupMetrics, region_cache: dict | None = None
+) -> None:
     """Compute the code_tested dimension from line coverage data.
 
     Intersects implementation line ranges (from IMPLEMENTS edges to CODE nodes)
@@ -679,8 +737,15 @@ def _compute_code_tested(node: GraphNode, metrics: RollupMetrics) -> None:
         if not rel_path:
             continue
 
-        for line_no in range(impl_start, impl_end + 1):
-            impl_lines.add((rel_path, line_no))
+        if impl_end == impl_start:
+            owned = _block_region_lines(fn, region_cache if region_cache is not None else {}).get(
+                impl_start, set()
+            )
+            for line_no in owned:
+                impl_lines.add((rel_path, line_no))
+        else:
+            for line_no in range(impl_start, impl_end + 1):
+                impl_lines.add((rel_path, line_no))
 
     if not impl_lines:
         return
@@ -748,8 +813,167 @@ def _compute_code_tested(node: GraphNode, metrics: RollupMetrics) -> None:
     )
 
 
+def _under_dirs(rel_path: str, dirs: tuple[str, ...]) -> bool:
+    """True if rel_path is within one of dirs. '.' (or empty dirs) matches all."""
+    if not dirs or "." in dirs:
+        return True
+    return _match_app_dir(rel_path, dirs) is not None
+
+
+# Implements: REQ-d00254-D
+def _block_region_lines(file_node, cache: dict) -> dict:
+    """Map each // Implements: marker line in a CODE file to the executable
+    lines its *block* owns (CUR-1533 block-scoped attribution).
+
+    A block is a run of marker lines with no executable (line_coverage) line
+    strictly between consecutive markers; it owns the executable lines after
+    its last marker up to the next block's first marker (or EOF). For languages
+    without function detection (e.g. Dart) this lets a file-/block-scoped marker
+    credit the code it precedes. Cached per FILE id for one annotate_coverage run.
+    """
+    from elspais.graph.GraphNode import NodeKind
+    from elspais.graph.relations import EdgeKind
+
+    fid = file_node.id
+    if fid in cache:
+        return cache[fid]
+    result: dict[int, set[int]] = {}
+    lc = file_node.get_field("line_coverage")
+    if lc:
+        markers = sorted(
+            c.get_field("parse_line")
+            for c in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
+            if c.kind == NodeKind.CODE
+            and c.get_field("parse_line")
+            and (c.get_field("parse_end_line") in (None, c.get_field("parse_line")))
+        )
+        cov = sorted(lc.keys())
+        if markers:
+            blocks: list[list[int]] = [[markers[0]]]
+            for m in markers[1:]:
+                prev = blocks[-1][-1]
+                if any(prev < L < m for L in cov):
+                    blocks.append([m])
+                else:
+                    blocks[-1].append(m)
+            for i, blk in enumerate(blocks):
+                last = blk[-1]
+                nxt = blocks[i + 1][0] if i + 1 < len(blocks) else None
+                owned = {L for L in cov if L > last and (nxt is None or L < nxt)}
+                for m in blk:
+                    result[m] = owned
+    cache[fid] = result
+    return result
+
+
+# Implements: REQ-d00254-B
+def _compute_lcov_tested(
+    node, metrics, credit, app_status, region_cache: dict | None = None
+) -> None:
+    """Credit the lcov_tested dimension from covered // Implements: lines (CUR-1533)."""
+    from elspais.graph import NodeKind
+    from elspais.graph.metrics import CoverageDimension
+    from elspais.graph.relations import EdgeKind
+
+    if credit.assertion_credit == "off":
+        return
+
+    labels = [
+        c.get_field("label", "")
+        for c in node.iter_children()
+        if c.kind == NodeKind.ASSERTION and c.get_field("label", "")
+    ]
+    if not labels:
+        return
+
+    direct_lines: dict[str, set[tuple[str, int]]] = {}
+    blanket_lines: set[tuple[str, int]] = set()
+    file_cov: dict[str, dict[int, int]] = {}
+    file_app: dict[str, str | None] = {}
+
+    for edge in node.iter_outgoing_edges():
+        if edge.kind != EdgeKind.IMPLEMENTS:
+            continue
+        target = edge.target
+        if target.kind != NodeKind.CODE:
+            continue
+        start = edge.metadata.get("impl_start_line")
+        end = edge.metadata.get("impl_end_line")
+        if not start:
+            continue
+        if not end:
+            end = target.get_field("parse_end_line") or 0
+        if not end or end < start:
+            continue
+        fn = target.file_node()
+        if fn is None:
+            continue
+        rel = fn.get_field("relative_path")
+        if not rel or not _under_dirs(rel, credit.coverage_dirs):
+            continue
+        lc = fn.get_field("line_coverage")
+        if lc is None:
+            continue
+        file_cov.setdefault(rel, lc)
+        file_app.setdefault(rel, _match_app_dir(rel, credit.app_dirs))
+        if end == start:
+            owned = _block_region_lines(fn, region_cache if region_cache is not None else {}).get(
+                start, set()
+            )
+            rng = {(rel, ln) for ln in owned}
+        else:
+            rng = {(rel, ln) for ln in range(start, end + 1)}
+        if edge.assertion_targets:
+            for lbl in edge.assertion_targets:
+                if lbl in labels:
+                    direct_lines.setdefault(lbl, set()).update(rng)
+        else:
+            blanket_lines.update(rng)
+
+    if not direct_lines and not blanket_lines:
+        return
+
+    def frac(lines: set[tuple[str, int]]) -> float:
+        if not lines:
+            return 0.0
+        covered = sum(1 for (rel, ln) in lines if file_cov.get(rel, {}).get(ln, 0) > 0)
+        return covered / len(lines)
+
+    direct_pct: dict[str, float] = {}
+    for lbl, lines in direct_lines.items():
+        f = frac(lines)
+        if f > 0 and f >= credit.min_coverage_fraction:
+            direct_pct[lbl] = f
+
+    indirect_pct: dict[str, float] = dict(direct_pct)
+    if blanket_lines:
+        bf = frac(blanket_lines)
+        if bf > 0 and bf >= credit.min_coverage_fraction:
+            for lbl in labels:
+                indirect_pct.setdefault(lbl, bf)
+
+    if not indirect_pct:
+        return
+
+    has_failures = False
+    if credit.assertion_credit == "verified":
+        apps = {file_app.get(rel) for rel in file_cov}
+        has_failures = any(app_status.get(a) == "red" for a in apps if a)
+
+    metrics.lcov_tested = CoverageDimension(
+        total=len(labels),
+        direct=sum(direct_pct.values()),
+        indirect=sum(indirect_pct.values()),
+        has_failures=has_failures,
+        direct_labels=set(direct_pct),
+        indirect_labels=set(indirect_pct),
+        direct_pct_by_label=dict(direct_pct),
+        indirect_pct_by_label=dict(indirect_pct),
+    )
+
+
 # Implements: REQ-p00061-A
-def annotate_coverage(graph: FederatedGraph) -> None:
+def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None = None) -> None:
     """Compute and store coverage metrics for all requirement nodes.
 
     This function traverses the graph once to compute RollupMetrics for
@@ -785,6 +1009,20 @@ def annotate_coverage(graph: FederatedGraph) -> None:
         RollupMetrics,
     )
     from elspais.graph.relations import EdgeKind
+
+    if credit is None:
+        credit = CoverageCreditConfig()
+    app_status = _compute_app_status(graph, credit.app_dirs) if credit.app_dirs else {}
+    region_cache: dict = {}
+
+    # Build a per-file index of RESULT nodes with match=="precise" (Task 5).
+    # Maps repo-relative source_file -> list of status strings (lowercased).
+    precise_index: dict[str, list[str]] = {}
+    for r in graph.nodes_by_kind(NodeKind.RESULT):
+        if (r.get_field("match") or "") == "precise":
+            sf = r.get_field("source_file")
+            if sf:
+                precise_index.setdefault(sf, []).append((r.get_field("status") or "").lower())
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
 
@@ -949,20 +1187,53 @@ def annotate_coverage(graph: FederatedGraph) -> None:
         # Process TEST children to find RESULT nodes
         validated_indirect_labels: set[str] = set()
         for test_node, assertion_targets in test_nodes_for_result_lookup:
+            saw_result = False
             for result in test_node.iter_children():
                 if result.kind == NodeKind.RESULT:
+                    saw_result = True
                     status = (result.get_field("status", "") or "").lower()
                     if status in ("passed", "pass", "success"):
                         if assertion_targets:
-                            # Assertion-targeted test: mark specific assertions
                             for label in assertion_targets:
                                 if label in assertion_labels:
                                     validated_labels.add(label)
                         else:
-                            # Whole-req test: mark all assertions as indirect-validated
                             for label in assertion_labels:
                                 validated_indirect_labels.add(label)
                     elif status in ("failed", "fail", "failure", "error"):
+                        has_failures = True
+            if not saw_result:
+                fn = test_node.file_node()
+                rel = fn.get_field("relative_path") if fn else None
+                # Implements: REQ-d00254-G
+                # Precise file-granular path: match RESULT nodes by source_file.
+                if rel and rel in precise_index:
+                    statuses = precise_index[rel]
+                    if any(s in ("failed", "fail", "failure", "error") for s in statuses):
+                        has_failures = True
+                    elif any(
+                        s in ("passed", "pass", "success") for s in statuses
+                    ):  # >=1 passed, none failed
+                        if assertion_targets:
+                            for label in assertion_targets:
+                                if label in assertion_labels:
+                                    validated_labels.add(label)
+                        else:
+                            for label in assertion_labels:
+                                validated_indirect_labels.add(label)
+                elif credit.unmatched_credit == "verified":
+                    # Aggregate app-green path (unchanged).
+                    app = _match_app_dir(rel, credit.app_dirs)
+                    st = app_status.get(app) if app else None
+                    if st == "green":
+                        if assertion_targets:
+                            for label in assertion_targets:
+                                if label in assertion_labels:
+                                    validated_labels.add(label)
+                        else:
+                            for label in assertion_labels:
+                                validated_indirect_labels.add(label)
+                    elif st == "red":
                         has_failures = True
 
         # Implements: REQ-d00069-A
@@ -1001,7 +1272,8 @@ def annotate_coverage(graph: FederatedGraph) -> None:
         )
 
         # Compute code_tested dimension from coverage data
-        _compute_code_tested(node, metrics)
+        _compute_code_tested(node, metrics, region_cache)
+        _compute_lcov_tested(node, metrics, credit, app_status, region_cache)
 
         # Store in node metrics
         node.set_metric("rollup_metrics", metrics)

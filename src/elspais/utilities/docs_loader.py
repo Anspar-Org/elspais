@@ -1,3 +1,4 @@
+# Implements: REQ-d00254-C
 """Documentation loader for CLI docs command.
 
 Loads markdown documentation files from docs/cli/ directory.
@@ -26,6 +27,7 @@ TOPIC_ORDER = [
     "config",
     "commands",
     "checks",
+    "test-targets",
     "doctor",
     "analysis",
     "terms",

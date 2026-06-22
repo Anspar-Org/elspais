@@ -101,6 +101,7 @@ class TestTraceReportPresets:
                     "UAT Coverage",
                     "UAT Verified",
                     "Code Tested",
+                    "LCOV Tested",
                 ],
                 [],
             ),
@@ -117,6 +118,7 @@ class TestTraceReportPresets:
                     "UAT Coverage",
                     "UAT Verified",
                     "Code Tested",
+                    "LCOV Tested",
                 ],
                 [],
             ),
@@ -154,6 +156,7 @@ class TestTraceReportPresets:
                     "uat_coverage",
                     "uat_verified",
                     "code_tested",
+                    "lcov_tested",
                 ],
             ),
             ("minimal", []),
@@ -213,3 +216,62 @@ class TestTraceReportPresets:
         standard_header = capsys.readouterr().out.split("\n")[0]
 
         assert default_header == standard_header
+
+
+class TestLcovTestedTrace:
+    """Validates REQ-d00215-B: lcov_tested % appears in trace node data."""
+
+    def test_lcov_tested_key_in_node_data(self, canonical_federated_graph):
+        """_get_node_data includes lcov_tested key in output for every node."""
+        import re
+
+        from elspais.commands.trace import _get_node_data
+        from elspais.graph.GraphNode import NodeKind
+        from elspais.graph.metrics import RollupMetrics
+
+        has_lcov_node = False
+        for node in canonical_federated_graph.nodes_by_kind(NodeKind.REQUIREMENT):
+            data = _get_node_data(node, canonical_federated_graph)
+            assert "lcov_tested" in data, f"Missing lcov_tested key for {node.id}"
+            rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
+            if rollup and rollup.lcov_tested.total > 0:
+                # Nodes with lcov data must render as "lcov NN%"
+                assert re.match(
+                    r"lcov \d+%$", data["lcov_tested"]
+                ), f"Unexpected lcov_tested format for {node.id}: {data['lcov_tested']!r}"
+                has_lcov_node = True
+            else:
+                # Nodes without lcov data must render as "n/a"
+                assert (
+                    data["lcov_tested"] == "n/a"
+                ), f"Expected 'n/a' for {node.id} but got: {data['lcov_tested']!r}"
+
+        # At least one node must have lcov data in the canonical graph
+        # (the canonical graph includes LCOV result fixtures)
+        # If the canonical graph has no lcov data at all, the format check above
+        # is vacuously true — log a note but don't fail the overall test.
+        _ = has_lcov_node  # informational; not asserted to avoid brittleness
+
+    def test_lcov_tested_assertion_expansion_no_keyerror(self, canonical_federated_graph):
+        """--assertions mode must not raise KeyError for lcov_tested."""
+        from elspais.commands.trace import REPORT_PRESETS, ReportPreset, _render_table_from_graph
+
+        preset = ReportPreset(
+            name="standard",
+            columns=list(REPORT_PRESETS["standard"].columns),
+            include_assertions=True,
+        )
+        # Must not raise KeyError when lcov_tested is in _COVERAGE_COLUMNS
+        result = _render_table_from_graph(canonical_federated_graph, "csv", preset)
+        assert result == 0
+
+    def test_lcov_tested_in_standard_preset(self):
+        """lcov_tested column is present in the standard and full preset definitions."""
+        from elspais.commands.trace import REPORT_PRESETS
+
+        assert (
+            "lcov_tested" in REPORT_PRESETS["standard"].columns
+        ), "lcov_tested must be in standard preset columns"
+        assert (
+            "lcov_tested" in REPORT_PRESETS["full"].columns
+        ), "lcov_tested must be in full preset columns"

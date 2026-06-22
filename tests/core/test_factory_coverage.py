@@ -1,9 +1,9 @@
 # Validates REQ-d00054-A
 """Tests for coverage file scanning and FILE node annotation in build_graph().
 
-Verifies that when [scanning.coverage] is configured with file_patterns,
-build_graph() parses coverage files and annotates matching FILE nodes
-with line_coverage and executable_lines fields.
+Verifies that when a [[scanning.test.targets]] entry declares a coverage file,
+build_graph() parses it and annotates matching FILE nodes with line_coverage
+and executable_lines fields.
 """
 
 from pathlib import Path
@@ -55,7 +55,7 @@ end_of_record
 
 
 class TestCoverageFileScanning:
-    """Tests for [scanning.coverage] in build_graph()."""
+    """Tests for target-driven coverage ingestion in build_graph()."""
 
     def test_lcov_annotates_file_node(self, tmp_path: Path) -> None:
         """Coverage data from lcov.info annotates FILE nodes with
@@ -73,9 +73,9 @@ directories = ["spec"]
 [scanning.code]
 directories = ["src"]
 
-[scanning.coverage]
-file_patterns = ["coverage/lcov.info"]
-directories = ["."]
+[[scanning.test.targets]]
+name = "unit"
+coverage = "coverage/lcov.info"
 """,
             encoding="utf-8",
         )
@@ -157,8 +157,9 @@ directories = ["spec"]
 [scanning.code]
 directories = ["src"]
 
-[scanning.coverage]
-file_patterns = ["lcov.info"]
+[[scanning.test.targets]]
+name = "unit"
+coverage = "lcov.info"
 """,
             encoding="utf-8",
         )
@@ -201,8 +202,9 @@ directories = ["spec"]
 [scanning.code]
 directories = ["src"]
 
-[scanning.coverage]
-file_patterns = ["coverage.json"]
+[[scanning.test.targets]]
+name = "unit"
+coverage = "coverage.json"
 """,
             encoding="utf-8",
         )

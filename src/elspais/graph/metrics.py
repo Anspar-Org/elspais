@@ -165,25 +165,29 @@ class RollupMetrics:
     Computed once during graph annotation and stored in node._metrics.
     Provides both aggregate counts and per-assertion detail.
 
-    The 6 CoverageDimension instances provide uniform access:
+    The 7 CoverageDimension instances provide uniform access:
     - implemented: CODE/REQ coverage of assertions
     - tested: TEST nodes exist for assertions
     - verified: TEST results passing for assertions
     - uat_coverage: JNY Validates coverage of assertions
     - uat_verified: JNY results passing for assertions
     - code_tested: Implementation lines covered by tests (total=lines, not assertions)
+    - lcov_tested: Coverage-based "tested & passing" credit, kept SEPARATE from verified (CUR-1533)
     """
 
     total_assertions: int = 0
     assertion_coverage: dict[str, list[CoverageContribution]] = field(default_factory=dict)
 
-    # The 6 uniform coverage dimensions
+    # The 7 uniform coverage dimensions
     implemented: CoverageDimension = field(default_factory=CoverageDimension)
     tested: CoverageDimension = field(default_factory=CoverageDimension)
     verified: CoverageDimension = field(default_factory=CoverageDimension)
     uat_coverage: CoverageDimension = field(default_factory=CoverageDimension)
     uat_verified: CoverageDimension = field(default_factory=CoverageDimension)
     code_tested: CoverageDimension = field(default_factory=CoverageDimension)
+    # CUR-1533: coverage-based "tested & passing" credit, kept SEPARATE from
+    # `verified` (which is // Verifies:-based). Assertion-granular.
+    lcov_tested: CoverageDimension = field(default_factory=CoverageDimension)
 
     def add_contribution(self, contribution: CoverageContribution) -> None:
         """Add a coverage contribution for an assertion.
@@ -638,6 +642,55 @@ def integrates_total(items: list[AssociateIntegration]) -> AssociateIntegration:
     )
 
 
+# Implements: REQ-d00254-B
+def tested_and_passing(metrics: RollupMetrics) -> CoverageDimension:
+    """Union of `verified` and `lcov_tested` for the headline 'tested & passing' score.
+
+    Per-assertion fractions are the max across the two dimensions (not summed);
+    has_failures is True if either dimension reports a failure. Used by the
+    summary headline and the health combined signal (CUR-1533).
+
+    When per-label dicts are populated the union is label-keyed; when they are
+    absent (e.g. in simplified test fixtures) the raw direct/indirect scalars
+    are combined via max so the headline is never understated.
+    """
+    vd = metrics.verified
+    lt = metrics.lcov_tested
+    total = max(vd.total, lt.total)
+
+    def merge(a: dict[str, float], b: dict[str, float]) -> dict[str, float]:
+        out = dict(a)
+        for k, val in b.items():
+            out[k] = max(out.get(k, 0.0), val)
+        return out
+
+    direct_pct = merge(vd.direct_pct_by_label, lt.direct_pct_by_label)
+    indirect_pct = merge(vd.indirect_pct_by_label, lt.indirect_pct_by_label)
+
+    # Fall back to raw scalars when no per-label data is present (e.g. simplified
+    # test fixtures that don't populate direct_pct_by_label).
+    if direct_pct:
+        combined_direct = sum(direct_pct.values())
+    else:
+        combined_direct = max(vd.direct, lt.direct)
+
+    if indirect_pct:
+        combined_indirect = sum(indirect_pct.values())
+    else:
+        combined_indirect = max(vd.indirect, lt.indirect)
+
+    return CoverageDimension(
+        total=total,
+        direct=combined_direct,
+        indirect=combined_indirect,
+        has_failures=vd.has_failures or lt.has_failures,
+        direct_labels=set(direct_pct),
+        indirect_labels=set(indirect_pct),
+        direct_pct_by_label=direct_pct,
+        indirect_pct_by_label=indirect_pct,
+    )
+
+
 __all__ = [
     "AssociateIntegration",
     "CoverageDimension",
@@ -654,4 +707,5 @@ __all__ = [
     "integrates_rollup",
     "integrates_total",
     "satisfier_rollup",
+    "tested_and_passing",
 ]

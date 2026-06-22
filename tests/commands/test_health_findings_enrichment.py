@@ -353,8 +353,11 @@ directories = ["spec"]
 enabled = true
 directories = ["tests"]
 
-[scanning.result]
-file_patterns = ["results/junit.xml"]
+[[scanning.test.targets]]
+name = "unit"
+reporter = "junit"
+results = "results/junit.xml"
+match = "precise"
 """
         )
 

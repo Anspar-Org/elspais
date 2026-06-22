@@ -1800,7 +1800,7 @@ def _workspace_profile_testing(
         "reference_keyword": typed_config.scanning.test.reference_keyword,
         "test_dirs": typed_config.scanning.test.directories,
         "file_patterns": typed_config.scanning.test.file_patterns,
-        "result_files": typed_config.scanning.result.file_patterns,
+        "result_files": [t.results for t in typed_config.scanning.test.targets if t.results],
     }
 
     return result
@@ -1869,7 +1869,7 @@ def _workspace_profile_retrofit(
         "reference_keyword": typed_config.scanning.test.reference_keyword,
         "test_dirs": typed_config.scanning.test.directories,
         "file_patterns": typed_config.scanning.test.file_patterns,
-        "result_files": typed_config.scanning.result.file_patterns,
+        "result_files": [t.results for t in typed_config.scanning.test.targets if t.results],
     }
 
     result["associates"] = _build_associates_info(config, working_dir, include_paths=False)
@@ -1946,7 +1946,7 @@ def _workspace_profile_all(
         "reference_keyword": typed_config.scanning.test.reference_keyword,
         "test_dirs": typed_config.scanning.test.directories,
         "file_patterns": typed_config.scanning.test.file_patterns,
-        "result_files": typed_config.scanning.result.file_patterns,
+        "result_files": [t.results for t in typed_config.scanning.test.targets if t.results],
     }
 
     # Coverage and health (graph-dependent)

@@ -277,42 +277,6 @@
       "title": "CoverageConfig",
       "type": "object"
     },
-    "CoverageScanningConfig": {
-      "additionalProperties": false,
-      "description": "Configuration for code coverage report scanning.",
-      "properties": {
-        "directories": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Directories",
-          "type": "array"
-        },
-        "file_patterns": {
-          "items": {
-            "type": "string"
-          },
-          "title": "File Patterns",
-          "type": "array"
-        },
-        "skip_files": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Skip Files",
-          "type": "array"
-        },
-        "skip_dirs": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Skip Dirs",
-          "type": "array"
-        }
-      },
-      "title": "CoverageScanningConfig",
-      "type": "object"
-    },
     "CoverageSeverityConfig": {
       "additionalProperties": false,
       "description": "Severity mapping for a single coverage dimension's tier states.\n\nEach tier maps to a severity: 'ok', 'info', 'warning', or 'error'.",
@@ -682,46 +646,6 @@
       "title": "ReferenceSeverityConfig",
       "type": "object"
     },
-    "ResultScanningConfig": {
-      "additionalProperties": false,
-      "properties": {
-        "directories": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Directories",
-          "type": "array"
-        },
-        "file_patterns": {
-          "items": {
-            "type": "string"
-          },
-          "title": "File Patterns",
-          "type": "array"
-        },
-        "skip_files": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Skip Files",
-          "type": "array"
-        },
-        "skip_dirs": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Skip Dirs",
-          "type": "array"
-        },
-        "run_meta_file": {
-          "default": "",
-          "title": "Run Meta File",
-          "type": "string"
-        }
-      },
-      "title": "ResultScanningConfig",
-      "type": "object"
-    },
     "RulesConfig": {
       "additionalProperties": false,
       "properties": {
@@ -777,12 +701,6 @@
         },
         "test": {
           "$ref": "#/$defs/TestScanningConfig"
-        },
-        "result": {
-          "$ref": "#/$defs/ResultScanningConfig"
-        },
-        "coverage": {
-          "$ref": "#/$defs/CoverageScanningConfig"
         },
         "journey": {
           "$ref": "#/$defs/JourneyScanningConfig"
@@ -932,31 +850,6 @@
       "title": "TermsSeverityConfig",
       "type": "object"
     },
-    "TestRunnerConfig": {
-      "additionalProperties": false,
-      "description": "One configured test runner invocation.",
-      "properties": {
-        "name": {
-          "title": "Name",
-          "type": "string"
-        },
-        "command": {
-          "title": "Command",
-          "type": "string"
-        },
-        "cwd": {
-          "default": "",
-          "title": "Cwd",
-          "type": "string"
-        }
-      },
-      "required": [
-        "name",
-        "command"
-      ],
-      "title": "TestRunnerConfig",
-      "type": "object"
-    },
     "TestScanningConfig": {
       "additionalProperties": false,
       "properties": {
@@ -1010,15 +903,70 @@
           "title": "Reference Patterns",
           "type": "array"
         },
-        "runners": {
+        "targets": {
           "items": {
-            "$ref": "#/$defs/TestRunnerConfig"
+            "$ref": "#/$defs/TestTargetConfig"
           },
-          "title": "Runners",
+          "title": "Targets",
           "type": "array"
         }
       },
       "title": "TestScanningConfig",
+      "type": "object"
+    },
+    "TestTargetConfig": {
+      "additionalProperties": false,
+      "description": "One test target: how its results + coverage are produced and ingested.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "cwd": {
+          "default": "",
+          "title": "Cwd",
+          "type": "string"
+        },
+        "command": {
+          "default": "",
+          "title": "Command",
+          "type": "string"
+        },
+        "reporter": {
+          "default": "",
+          "title": "Reporter",
+          "type": "string"
+        },
+        "results": {
+          "default": "",
+          "title": "Results",
+          "type": "string"
+        },
+        "coverage": {
+          "default": "",
+          "title": "Coverage",
+          "type": "string"
+        },
+        "match": {
+          "default": "precise",
+          "title": "Match",
+          "type": "string"
+        },
+        "credit_coverage": {
+          "default": "off",
+          "title": "Credit Coverage",
+          "type": "string"
+        },
+        "min_coverage_fraction": {
+          "default": 0.0,
+          "title": "Min Coverage Fraction",
+          "type": "number"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "TestTargetConfig",
       "type": "object"
     },
     "ValidationConfig": {

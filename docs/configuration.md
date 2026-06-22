@@ -161,22 +161,22 @@ reference_keyword = "Verifies"
 #   [{"file": "path", "function": "name", "class": "Name|null", "line": N}]
 # prescan_command = "dart run tool/list_tests.dart"
 
-# Configured test runners executed by `elspais checks --run-tests`.
-# Each entry runs in declaration order with stdout/stderr passed through
-# to the terminal. Put output where [scanning.result].file_patterns expects.
-[[scanning.test.runners]]
-name = "python"
-command = "pytest --json-report --json-report-file=.elspais/results/pytest.json"
+# Configured test targets - result ingestion and coverage attribution.
+# See `elspais docs test-targets` for full documentation.
+[[scanning.test.targets]]
+name     = "app"
+cwd      = "app"                    # relative to repo root; empty = repo root
+command  = "flutter test --machine" # omit in CI (tests already ran)
+reporter = "flutter-machine"        # stdout-channel reporter
+match    = "precise"                # "precise" (default) | "aggregate"
+coverage = "coverage/lcov.info"     # optional; lcov or coverage.py JSON
 
-[[scanning.test.runners]]
-name = "flutter"
-command = "flutter test --machine > .elspais/results/flutter.json"
-cwd = "app/"  # optional; relative to repo root
-
-# Test result file scanning (JUnit XML, pytest JSON)
-[scanning.result]
-file_patterns = ["TEST-*.xml", "pytest-results.json"]
-run_meta_file = ""
+# File-channel reporter example (junit XML):
+# [[scanning.test.targets]]
+# name     = "pytest"
+# reporter = "junit"
+# results  = "results/*.xml"        # glob relative to cwd
+# match    = "precise"
 
 # User journey file scanning
 [scanning.journey]

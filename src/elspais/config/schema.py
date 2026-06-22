@@ -274,14 +274,50 @@ class CodeScanningConfig(ScanningKindConfig):
     source_roots: list[str] = Field(default_factory=lambda: ["src", ""])
 
 
-class TestRunnerConfig(_StrictModel):
-    """One configured test runner invocation."""
+# Implements: REQ-d00254-C
+class TestTargetConfig(_StrictModel):
+    """One test target: how its results + coverage are produced and ingested."""
 
-    __test__ = False  # Prevent pytest from trying to collect this as a test class
+    __test__ = False  # not a pytest class
 
     name: str
-    command: str
     cwd: str = ""  # relative to repo root; empty = repo root
+    command: str = ""  # optional; omitted in CI (tests already ran)
+    reporter: str = ""  # registry format name (e.g. "flutter-machine", "junit", "pytest-json")
+    results: str = (
+        ""  # glob (relative to cwd) for file-channel reporters; unused for stdout reporters
+    )
+    coverage: str = ""  # lcov/coverage file (relative to cwd); empty = no coverage
+    match: str = "precise"  # "precise" | "aggregate"
+    credit_coverage: str = "off"  # "off" | "tested" | "verified" (lcov_tested dimension)
+    min_coverage_fraction: float = 0.0  # [0.0, 1.0]
+
+    @field_validator("match")
+    @classmethod
+    def _check_match(cls, v: str) -> str:
+        if v not in ("precise", "aggregate"):
+            raise ValueError('match must be "precise" or "aggregate"')
+        return v
+
+    @field_validator("credit_coverage")
+    @classmethod
+    def _check_credit(cls, v: str) -> str:
+        if v not in ("off", "tested", "verified"):
+            raise ValueError('credit_coverage must be "off", "tested", or "verified"')
+        return v
+
+    @field_validator("min_coverage_fraction")
+    @classmethod
+    def _check_frac(cls, v: float) -> float:
+        if not 0.0 <= v <= 1.0:
+            raise ValueError("min_coverage_fraction must be in [0.0, 1.0]")
+        return v
+
+    @model_validator(mode="after")
+    def _require_reporter(self) -> TestTargetConfig:
+        if (self.command or self.results) and not self.reporter:
+            raise ValueError("reporter is required when command or results is set")
+        return self
 
 
 class TestScanningConfig(ScanningKindConfig):
@@ -293,17 +329,7 @@ class TestScanningConfig(ScanningKindConfig):
     prescan_command: str = ""
     reference_keyword: str = "Verifies"
     reference_patterns: list[str] = Field(default_factory=list)
-    runners: list[TestRunnerConfig] = Field(default_factory=list)
-
-
-class ResultScanningConfig(ScanningKindConfig):
-    run_meta_file: str = ""
-
-
-class CoverageScanningConfig(ScanningKindConfig):
-    """Configuration for code coverage report scanning."""
-
-    directories: list[str] = Field(default_factory=lambda: ["."])
+    targets: list[TestTargetConfig] = Field(default_factory=list)
 
 
 class JourneyScanningConfig(ScanningKindConfig):
@@ -322,8 +348,6 @@ class ScanningConfig(_StrictModel):
     spec: SpecScanningConfig = Field(default_factory=SpecScanningConfig)
     code: CodeScanningConfig = Field(default_factory=CodeScanningConfig)
     test: TestScanningConfig = Field(default_factory=TestScanningConfig)
-    result: ResultScanningConfig = Field(default_factory=ResultScanningConfig)
-    coverage: CoverageScanningConfig = Field(default_factory=CoverageScanningConfig)
     journey: JourneyScanningConfig = Field(default_factory=JourneyScanningConfig)
     docs: DocsScanningConfig = Field(default_factory=DocsScanningConfig)
 

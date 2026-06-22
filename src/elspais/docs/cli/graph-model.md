@@ -160,7 +160,7 @@ Each FILE node has a **FileType** classification:
 | `JOURNEY` | `[scanning.journey]` | `journeys/` |
 | `CODE` | `[scanning.code]` | `src/`, `lib/` |
 | `TEST` | `[scanning.test]` | `tests/` |
-| `RESULT` | `[scanning.results]` | `results/` |
+| `RESULT` | `[[scanning.test.targets]]` | results/coverage produced per target |
 
 ### REMAINDER
 

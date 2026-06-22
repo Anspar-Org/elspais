@@ -247,21 +247,14 @@ def cmd_remove(args: argparse.Namespace) -> int:
 def cmd_schema(args: argparse.Namespace) -> int:
     """Output JSON Schema for .elspais.toml configuration.
 
-    Generates the schema from ElspaisConfig.model_json_schema() and writes
-    it to stdout or to a file (with --output / -o).
+    Writes the schema (from ElspaisConfig.model_json_schema()) to stdout.
+    `--output`/`-o` is handled generically by the CLI (cli.py), which
+    redirects stdout to the file and prints a 'Generated:' notice.
     """
     from elspais.config.schema import ElspaisConfig
 
     schema = ElspaisConfig.model_json_schema()
-    output_str = json.dumps(schema, indent=2) + "\n"
-
-    output_path = getattr(args, "output", None)
-    if output_path:
-        Path(output_path).write_text(output_str, encoding="utf-8")
-        print(f"Schema written to {output_path}")
-    else:
-        sys.stdout.write(output_str)
-
+    sys.stdout.write(json.dumps(schema, indent=2) + "\n")
     return 0
 
 
