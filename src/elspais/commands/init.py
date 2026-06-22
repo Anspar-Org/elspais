@@ -236,7 +236,7 @@ _FIELD_COMMENTS: dict[str, str] = {
     "scanning.test.targets.results": (
         "Glob for result files (file-channel reporters: junit, pytest-json)"
     ),
-    "scanning.test.targets.coverage": ("Path to lcov/coverage-xml file, relative to cwd"),
+    "scanning.test.targets.coverage": ("Path to lcov/coverage-json file, relative to cwd"),
     "scanning.test.targets.match": (
         '"precise" (per-file) | "aggregate" (whole-app green/red, default)'
     ),

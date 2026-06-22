@@ -46,7 +46,7 @@ def _register_builtins() -> None:
     register_reporter(ReporterSpec("junit", "file", "results", JUnitXMLParser))
     register_reporter(ReporterSpec("pytest-json", "file", "results", PytestJSONParser))
     register_reporter(ReporterSpec("lcov", "file", "coverage", LcovParser))
-    register_reporter(ReporterSpec("coverage-xml", "file", "coverage", CoverageJsonParser))
+    register_reporter(ReporterSpec("coverage-json", "file", "coverage", CoverageJsonParser))
 
 
 _register_builtins()

@@ -31,5 +31,19 @@ def test_unknown_reporter_raises():
 
 
 def test_builtins_registered():
-    for name in ("flutter-machine", "junit", "pytest-json", "lcov", "coverage-xml"):
+    for name in ("flutter-machine", "junit", "pytest-json", "lcov", "coverage-json"):
         assert name in REPORTER_REGISTRY
+
+
+def test_coverage_json_is_file_coverage():
+    # Verifies: REQ-d00254-E
+    # coverage-json is backed by CoverageJsonParser (coverage.py `coverage json` output)
+    spec = get_reporter("coverage-json")
+    assert spec.channel == "file"
+    assert spec.kind == "coverage"
+
+
+def test_coverage_xml_is_not_registered():
+    # The old misnaming "coverage-xml" must be gone; no silent footgun
+    with pytest.raises(KeyError):
+        get_reporter("coverage-xml")
