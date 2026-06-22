@@ -38,20 +38,62 @@ class TestJsonSchemaExport:
         assert isinstance(schema, dict)
         assert "properties" in schema
 
-    def test_REQ_d00208_A_cmd_schema_writes_to_file(self, tmp_path: Path) -> None:
-        """cmd_schema(--output FILE) must write valid JSON Schema to the file."""
+    def test_REQ_d00208_A_cmd_schema_always_writes_to_stdout(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """cmd_schema always writes to stdout; --output redirection is the CLI's job.
+
+        File writing is handled generically by cli.py (redirect stdout → file).
+        cmd_schema must NOT independently write to args.output — that would
+        collide with the CLI's generic redirect and corrupt the output file.
+        """
         import argparse
 
         from elspais.commands.config_cmd import cmd_schema
 
-        outfile = tmp_path / "schema.json"
-        args = argparse.Namespace(output=str(outfile))
+        # Even with output set, cmd_schema only writes to stdout
+        args = argparse.Namespace(output="/dev/null")  # must be ignored by cmd_schema
         rc = cmd_schema(args)
         assert rc == 0
 
-        schema = json.loads(outfile.read_text())
+        captured = capsys.readouterr()
+        schema = json.loads(captured.out)
         assert isinstance(schema, dict)
         assert "properties" in schema
+
+    def test_REQ_d00208_A_cli_output_flag_produces_valid_json(self, tmp_path: Path) -> None:
+        """elspais config schema --output FILE via cli.main() must produce pure valid JSON.
+
+        Regression for the double-write corruption bug: cli.py redirects stdout
+        to the file AND cmd_schema independently wrote to the same file, resulting
+        in a file beginning with "Schema written to ..." followed by truncated JSON.
+        After the fix, only the generic CLI redirect writes; cmd_schema only writes
+        to stdout.
+        """
+        # Verifies: REQ-d00208-A
+        from elspais.cli import main
+
+        outfile = tmp_path / "schema_via_cli.json"
+        # Redirect stderr to suppress "Generated: ..." notice during test
+        rc = main(["config", "schema", "--output", str(outfile)])
+        assert rc == 0
+
+        content = outfile.read_text(encoding="utf-8")
+
+        # File must NOT contain any status/notice text from cmd_schema or cli.py
+        assert "Schema written" not in content, (
+            "File contains 'Schema written' — cmd_schema is independently writing to the file "
+            "in addition to the generic stdout redirect in cli.py"
+        )
+        assert (
+            "Generated:" not in content
+        ), "File contains 'Generated:' — the CLI notice leaked into the output file"
+
+        # File must be pure valid JSON equal to the model schema
+        schema = json.loads(content)  # raises JSONDecodeError if corrupt
+        assert (
+            schema == ElspaisConfig.model_json_schema()
+        ), "Schema written via --output does not match ElspaisConfig.model_json_schema()"
 
 
 class TestCommittedSchemaFile:
