@@ -3484,9 +3484,13 @@ class GraphBuilder:
         else:
             # Fallback: line-based ID keyed on the owning unit's line when a
             # prescan supplied one (e.g. Dart test() call line), else the ref line.
-            test_id = make_test_id(source_id, func_line)
-            label = f"Test at {source_id}:{func_line}"
-            source_line = func_line
+            # func_line==0 is text_prescan's "no function context" sentinel;
+            # in that case fall back to the comment's own line so each ref
+            # gets a distinct id (the pre-843a571d behaviour).
+            anchor_line = func_line or content.start_line
+            test_id = make_test_id(source_id, anchor_line)
+            label = f"Test at {source_id}:{anchor_line}"
+            source_line = anchor_line
 
         if test_id not in self._nodes:
             node = GraphNode(
