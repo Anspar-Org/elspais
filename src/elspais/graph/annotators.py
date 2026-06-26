@@ -1189,19 +1189,31 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
         for test_node, assertion_targets in test_nodes_for_result_lookup:
             saw_result = False
             for result in test_node.iter_children():
-                if result.kind == NodeKind.RESULT:
-                    saw_result = True
-                    status = (result.get_field("status", "") or "").lower()
-                    if status in ("passed", "pass", "success"):
-                        if assertion_targets:
-                            for label in assertion_targets:
-                                if label in assertion_labels:
-                                    validated_labels.add(label)
-                        else:
-                            for label in assertion_labels:
-                                validated_indirect_labels.add(label)
-                    elif status in ("failed", "fail", "failure", "error"):
-                        has_failures = True
+                if result.kind != NodeKind.RESULT:
+                    continue
+                # Implements: REQ-d00254-G
+                # File-granular precise edges (test_id-less, matched by real
+                # source-file path) exist for the viewer's per-test panel, but
+                # are credited via the file-level `precise_index` branch below
+                # (all-pass credits / any-fail flags the whole file). Per-test
+                # (test_id-linked) results -- including precise ones -- still
+                # credit inline, preserving prior behaviour.
+                if (result.get_field("match") or "") == "precise" and not result.get_field(
+                    "test_id"
+                ):
+                    continue
+                saw_result = True
+                status = (result.get_field("status", "") or "").lower()
+                if status in ("passed", "pass", "success"):
+                    if assertion_targets:
+                        for label in assertion_targets:
+                            if label in assertion_labels:
+                                validated_labels.add(label)
+                    else:
+                        for label in assertion_labels:
+                            validated_indirect_labels.add(label)
+                elif status in ("failed", "fail", "failure", "error"):
+                    has_failures = True
             if not saw_result:
                 fn = test_node.file_node()
                 rel = fn.get_field("relative_path") if fn else None

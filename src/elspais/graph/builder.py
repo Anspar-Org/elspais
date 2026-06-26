@@ -2967,6 +2967,11 @@ class GraphBuilder:
             self.satellite_kinds = _DEFAULT_SATELLITE_KINDS
         self._nodes: dict[str, GraphNode] = {}
         self._pending_links: list[tuple[str, str, EdgeKind]] = []
+        # Implements: REQ-d00254-G
+        # Precise (file-granular) RESULT->TEST links, matched by real source-file
+        # path instead of test_id. (result_id, source_file); resolved at build()
+        # time once every TEST node and its FILE parent exist.
+        self._pending_precise_result_links: list[tuple[str, str]] = []
         # Implements: REQ-d00222-A
         self._pending_terms: list[tuple[str, dict]] = []  # (node_id, parsed_data)
         # Implements: REQ-p00014-B
@@ -3555,6 +3560,14 @@ class GraphBuilder:
         if test_id and self._link_results_to_tests and data.get("match") != "aggregate":
             # Implements: REQ-d00127-E
             self._pending_links.append((result_id, test_id, EdgeKind.YIELDS))
+        elif data.get("match") == "precise" and self._link_results_to_tests:
+            # Implements: REQ-d00254-G
+            # Precise reporters (e.g. flutter-machine) emit no test_id; they
+            # match RESULT->TEST by real source-file path. Queue a file-granular
+            # link resolved once all TEST/FILE nodes exist (see build()).
+            source_file = node._content.get("source_file")
+            if source_file:
+                self._pending_precise_result_links.append((result_id, source_file))
 
     # Implements: REQ-d00222-A
     def _add_definition_block(self, content: ParsedContent) -> None:
@@ -4072,6 +4085,30 @@ class GraphBuilder:
                         edge_kind=edge_kind.value,
                     )
                 )
+
+        # Implements: REQ-d00254-G
+        # Resolve precise (file-granular) RESULT->TEST links. These reporters
+        # (e.g. flutter-machine) carry no test_id, so the result is wired to
+        # every TEST node sharing its real source-file path -- the same path the
+        # annotator's precise index credits. An unmatched file links nothing (no
+        # broken reference, unlike test_id resolution). Done before orphan/root
+        # classification so RESULT nodes count as YIELDS-parented, exactly like
+        # test_id-based YIELDS edges.
+        if self._pending_precise_result_links:
+            tests_by_file: dict[str, list[GraphNode]] = {}
+            for candidate in self._nodes.values():
+                if candidate.kind is not NodeKind.TEST:
+                    continue
+                file_node = candidate.file_node()
+                rel = file_node.get_field("relative_path") if file_node else None
+                if rel:
+                    tests_by_file.setdefault(rel, []).append(candidate)
+            for result_id, source_file in self._pending_precise_result_links:
+                result_node = self._nodes.get(result_id)
+                if result_node is None:
+                    continue
+                for test_node in tests_by_file.get(source_file, ()):
+                    test_node.link(result_node, EdgeKind.YIELDS)
 
         # Phase 2.5 (CUR-1353): Validate template-marker consistency over the
         # fully-resolved graph. Catches rules that need post-link context
