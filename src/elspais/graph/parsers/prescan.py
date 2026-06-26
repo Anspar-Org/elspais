@@ -433,6 +433,32 @@ def text_prescan(
     return line_context, all_test_funcs, first_def_line
 
 
+def _iter_code_brackets(code: str):
+    """Yield bracket chars in `code`, skipping any inside '...'/"..." string
+    literals (honoring backslash escapes). `code` has already had its `//`
+    line-comment stripped by the caller. Triple-quoted and raw strings are not
+    special-cased -- a residual miscount there warns honestly rather than wrongly."""
+    i = 0
+    n = len(code)
+    while i < n:
+        c = code[i]
+        if c == "'" or c == '"':
+            quote = c
+            i += 1
+            while i < n:
+                if code[i] == "\\":
+                    i += 2
+                    continue
+                if code[i] == quote:
+                    i += 1
+                    break
+                i += 1
+            continue
+        if c in "([{)]}":
+            yield c
+        i += 1
+
+
 def _match_brace_end(
     lines: list[tuple[int, str]],
     start_idx: int,
@@ -450,7 +476,7 @@ def _match_brace_end(
         if stop_line is not None and ln >= stop_line:
             return stop_line - 1, False  # clamped: never balanced before next test
         code = text.split("//", 1)[0]
-        for ch in code:
+        for ch in _iter_code_brackets(code):
             if ch in "([{":
                 depth += 1
                 seen = True
@@ -510,8 +536,9 @@ def dart_prescan(
 
     if inaccurate:
         print(
-            "Warning: dart_prescan saw brackets inside quotes; test-span "
-            "boundaries may be inaccurate.",
+            "Warning: dart_prescan could not balance a test() body before the "
+            "next test or end-of-file; comment-inside-test span boundaries may "
+            "be inaccurate.",
             file=sys.stderr,
         )
 
