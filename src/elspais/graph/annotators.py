@@ -1017,9 +1017,11 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
 
     # Build a per-file index of RESULT nodes with match=="precise" (Task 5).
     # Maps repo-relative source_file -> list of status strings (lowercased).
+    # Exclude per-test-resolved results (precise_scope=="test"): those credit
+    # inline (below) rather than via file-level all-pass/any-fail semantics.
     precise_index: dict[str, list[str]] = {}
     for r in graph.nodes_by_kind(NodeKind.RESULT):
-        if (r.get_field("match") or "") == "precise":
+        if (r.get_field("match") or "") == "precise" and r.get_field("precise_scope") != "test":
             sf = r.get_field("source_file")
             if sf:
                 precise_index.setdefault(sf, []).append((r.get_field("status") or "").lower())
@@ -1192,14 +1194,16 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                 if result.kind != NodeKind.RESULT:
                     continue
                 # Implements: REQ-d00254-G
-                # File-granular precise edges (test_id-less, matched by real
-                # source-file path) exist for the viewer's per-test panel, but
-                # are credited via the file-level `precise_index` branch below
-                # (all-pass credits / any-fail flags the whole file). Per-test
-                # (test_id-linked) results -- including precise ones -- still
-                # credit inline, preserving prior behaviour.
-                if (result.get_field("match") or "") == "precise" and not result.get_field(
-                    "test_id"
+                # Skip inline only for FILE-scope precise results (credited via
+                # precise_index below: all-pass credits / any-fail flags the
+                # whole file). Per-test-resolved precise results
+                # (precise_scope=="test") credit inline like test_id results:
+                # their pass credits their assertions; their fail flags only
+                # their own test.
+                if (
+                    (result.get_field("match") or "") == "precise"
+                    and not result.get_field("test_id")
+                    and result.get_field("precise_scope") != "test"
                 ):
                     continue
                 saw_result = True
