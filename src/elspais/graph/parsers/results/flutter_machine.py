@@ -5,9 +5,17 @@ and per-test identity (name, line) — unlike tojunit's lossy classname.
 
 Record shape mirrors sibling parsers (junit_xml, pytest_json):
 ``{"id", "name", "classname", "status", "duration", "message", "verifies",
-"source_path", "test_id"}``.  ``test_id`` is always ``None`` because Flutter
-results correlate to test files by path (Task 5 precise matching), not by a
-pytest-style test_id.
+"source_path", "line", "test_id"}``.
+
+``line`` is the ``test()`` call-site line number (``test.line`` from the
+machine event), NOT ``root_line``.  Using ``root_line`` would collapse
+distinct tests that share a common helper or generated entry point into the
+same line, breaking per-test resolution.
+
+``test_id`` is always ``None``.  Per-test correlation is resolved at
+graph-build time by ``(source_path, line)`` — no pre-baked id is used.
+
+Suite-loader pseudo-tests (``hidden: true`` in ``testDone``) are skipped.
 """
 
 from __future__ import annotations
