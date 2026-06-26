@@ -38,6 +38,13 @@ _C_FUNC = re.compile(
 )
 _C_CLASS = re.compile(r"^(\s*)(?:public\s+)?class\s+(\w+)")
 
+# Dart: test('desc', ...), testWidgets('desc', ...), group('desc', ...)
+_DART_TEST = re.compile(r"^(\s*)(?:test|testWidgets)\s*\(")
+_DART_GROUP = re.compile(r"^(\s*)group\s*\(")
+
+# Bracket inside a quoted string — signals brace-match may be inaccurate
+_QUOTE_BRACKET = re.compile(r"""(['"]).*?[\[\](){}].*?\1""")
+
 # File extension to language mapping
 _LANG_MAP: dict[str, str] = {
     ".py": "python",
@@ -59,6 +66,7 @@ _LANG_MAP: dict[str, str] = {
     ".java": "c",
     ".cs": "c",
     ".kt": "c",
+    ".dart": "dart",  # Dart: use dart_prescan() for test files
 }
 
 
@@ -424,6 +432,125 @@ def text_prescan(
         # func_end_line=0 sentinel: text-based scanning can't reliably determine end lines
         line_context[ln] = (current_func, current_class, current_func_line, 0)
 
+    return line_context, all_test_funcs, first_def_line
+
+
+def _match_brace_end(
+    lines: list[tuple[int, str]],
+    start_idx: int,
+    stop_line: int | None = None,
+) -> tuple[int, bool]:
+    """Return (end_line, tricky) for the call starting at lines[start_idx].
+
+    Counts brackets from the first '(' onward, ignoring `//` line comments.
+    The span is HARD-BOUNDED: it never extends to or past `stop_line` (the next
+    detected test()/group() start). If the brackets do not balance before that
+    bound, the end is clamped to the line just before `stop_line` (or EOF).
+    `tricky` is True when a bracket appears inside a quoted string on a scanned
+    line, signalling the caller to warn that boundaries may be inaccurate.
+    """
+    depth = 0
+    seen = False
+    tricky = False
+    last = lines[start_idx][0]
+    for ln, text in lines[start_idx:]:
+        if stop_line is not None and ln >= stop_line:
+            return stop_line - 1, tricky
+        code = text.split("//", 1)[0]
+        if _QUOTE_BRACKET.search(code):
+            tricky = True
+        for ch in code:
+            if ch in "([{":
+                depth += 1
+                seen = True
+            elif ch in ")]}":
+                depth -= 1
+        last = ln
+        if seen and depth <= 0:
+            return ln, tricky
+    return last, tricky
+
+
+def dart_prescan(
+    lines: list[tuple[int, str]],
+) -> tuple[
+    dict[int, tuple[str | None, str | None, int, int]],
+    list[tuple[int, str | None, str | None]],
+    int,
+]:
+    """Pre-scan Dart source: anchor each line to the test() that encloses it.
+
+    Regex-detects test()/testWidgets() call sites and brace-matches each to its
+    end line. func_name/class_name stay None (Dart test ids are line-based, not
+    identifier-based); only func_line (the call-site line) and func_end_line are
+    populated. A comment line above a test() that is not itself inside another
+    test binds forward to it via the forward-look pass below.
+
+    Args:
+        lines: List of (line_number, content) tuples.
+
+    Returns:
+        Tuple of (line_context, all_test_funcs, first_def_line):
+        - line_context: Maps line_number -> (None, None, func_line, func_end_line)
+        - all_test_funcs: List of (test_line, None, None) for each test()/testWidgets()
+        - first_def_line: Line of first detected test()/group() call (0 if none)
+    """
+    import sys
+
+    arr = lines
+    # 0) collect ALL detected start lines (test + group) -- used to bound any
+    #    runaway brace match: a span may never cross the next start line.
+    start_lines = sorted(
+        ln for ln, text in arr if _DART_TEST.match(text) or _DART_GROUP.match(text)
+    )
+
+    # 1) find each test() start and its brace-matched end (bounded)
+    spans: list[tuple[int, int]] = []  # (start_line, end_line)
+    first_def_line = start_lines[0] if start_lines else 0
+    inaccurate = False
+    for i, (ln, text) in enumerate(arr):
+        if not _DART_TEST.match(text):
+            continue
+        # next detected start strictly after this one (cap for the span)
+        nxt = next((s for s in start_lines if s > ln), None)
+        end, tricky = _match_brace_end(arr, i, stop_line=nxt)
+        inaccurate = inaccurate or tricky
+        spans.append((ln, end))
+
+    if inaccurate:
+        print(
+            "Warning: dart_prescan saw brackets inside quotes; test-span "
+            "boundaries may be inaccurate.",
+            file=sys.stderr,
+        )
+
+    # 2) line_context: each line inside a span -> that test (innermost wins)
+    line_context: dict[int, tuple[str | None, str | None, int, int]] = {}
+    for ln, _t in lines:
+        owner_start = 0
+        owner_end = 0
+        best = -1
+        for s, e in spans:
+            if s <= ln <= e and s > best:  # innermost (largest start) wins
+                best, owner_start, owner_end = s, s, e
+        line_context[ln] = (None, None, owner_start, owner_end)
+
+    # 3) forward-look: a comment with no owner binds to the next test() within 5 lines
+    span_starts = {s for s, _e in spans}
+    span_by_start = dict(spans)
+    for idx, (ln, text) in enumerate(lines):
+        if line_context[ln][2]:
+            continue
+        stripped = text.strip()
+        if not any(stripped.startswith(p) for p in ("//", "/*")):
+            continue
+        for ahead in range(1, min(6, len(lines) - idx)):
+            aln = lines[idx + ahead][0]
+            if aln in span_starts:
+                line_context[ln] = (None, None, aln, span_by_start[aln])
+                break
+
+    all_test_funcs = [(s, None, None) for s, _e in spans]
     return line_context, all_test_funcs, first_def_line
 
 
