@@ -42,8 +42,6 @@ _C_CLASS = re.compile(r"^(\s*)(?:public\s+)?class\s+(\w+)")
 _DART_TEST = re.compile(r"^(\s*)(?:test|testWidgets)\s*\(")
 _DART_GROUP = re.compile(r"^(\s*)group\s*\(")
 
-# Bracket inside a quoted string — signals brace-match may be inaccurate
-_QUOTE_BRACKET = re.compile(r"""(['"]).*?[\[\](){}].*?\1""")
 
 # File extension to language mapping
 _LANG_MAP: dict[str, str] = {
@@ -440,25 +438,18 @@ def _match_brace_end(
     start_idx: int,
     stop_line: int | None = None,
 ) -> tuple[int, bool]:
-    """Return (end_line, tricky) for the call starting at lines[start_idx].
-
-    Counts brackets from the first '(' onward, ignoring `//` line comments.
-    The span is HARD-BOUNDED: it never extends to or past `stop_line` (the next
-    detected test()/group() start). If the brackets do not balance before that
-    bound, the end is clamped to the line just before `stop_line` (or EOF).
-    `tricky` is True when a bracket appears inside a quoted string on a scanned
-    line, signalling the caller to warn that boundaries may be inaccurate.
-    """
+    """Return (end_line, accurate). `accurate` is False only when the brackets
+    did not balance before the bound -- i.e. the span was clamped to `stop_line`
+    (the next detected test()/group() start) or ran to EOF without depth<=0.
+    A clean close is accurate even if a bracket appeared inside a quoted string
+    on the way (a slightly-wrong END is harmless; attachment uses the START line)."""
     depth = 0
     seen = False
-    tricky = False
     last = lines[start_idx][0]
     for ln, text in lines[start_idx:]:
         if stop_line is not None and ln >= stop_line:
-            return stop_line - 1, tricky
+            return stop_line - 1, False  # clamped: never balanced before next test
         code = text.split("//", 1)[0]
-        if _QUOTE_BRACKET.search(code):
-            tricky = True
         for ch in code:
             if ch in "([{":
                 depth += 1
@@ -467,8 +458,8 @@ def _match_brace_end(
                 depth -= 1
         last = ln
         if seen and depth <= 0:
-            return ln, tricky
-    return last, tricky
+            return ln, True  # clean close
+    return last, False  # ran to EOF without closing
 
 
 def dart_prescan(
@@ -513,8 +504,8 @@ def dart_prescan(
             continue
         # next detected start strictly after this one (cap for the span)
         nxt = next((s for s in start_lines if s > ln), None)
-        end, tricky = _match_brace_end(arr, i, stop_line=nxt)
-        inaccurate = inaccurate or tricky
+        end, accurate = _match_brace_end(arr, i, stop_line=nxt)
+        inaccurate = inaccurate or (not accurate)
         spans.append((ln, end))
 
     if inaccurate:

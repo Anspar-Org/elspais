@@ -74,12 +74,37 @@ void main() {
     assert lc[2][3] <= 3  # first span capped before line 4
 
 
-def test_brackets_in_quotes_emit_warning(capsys):
+def test_clean_file_emits_no_warning(capsys):
+    # Verifies: REQ-d00254-G
+    # The well-formed DART fixture (all tests close cleanly) must NOT warn.
+    dart_prescan(_lines(DART))
+    assert "may be inaccurate" not in capsys.readouterr().err
+
+
+def test_clamped_runaway_emits_warning(capsys):
+    # Verifies: REQ-d00254-G
+    # A test() whose braces never balance before the next test clamps -> warn.
+    src = """\
+void main() {
+  test('broken has a stray brace in a string r"{"', () {
+    expect('{', '{');
+  test('next test still distinct', () {
+    expect(1, 1);
+  });
+}
+"""
+    dart_prescan(_lines(src))
+    assert "may be inaccurate" in capsys.readouterr().err
+
+
+def test_inline_bracket_in_quote_that_closes_cleanly_does_not_warn(capsys):
+    # Verifies: REQ-d00254-G
+    # A bracket inside a quote on a single-line test that still finds a clean
+    # close must NOT warn (this is the false-positive the old heuristic produced).
     src = """\
 void main() {
   test('has { brace in quote', () { expect(1, 1); });
 }
 """
     dart_prescan(_lines(src))
-    err = capsys.readouterr().err
-    assert "may be inaccurate" in err
+    assert "may be inaccurate" not in capsys.readouterr().err
