@@ -311,6 +311,7 @@ class FileDispatcher:
 
         # Pre-scan for function/class context
         is_python = file_path.endswith(".py")
+        is_dart = file_path.endswith(".dart")
 
         if prescan_data and file_path in prescan_data:
             line_context, all_test_funcs, first_def_line = external_prescan(
@@ -322,6 +323,10 @@ class FileDispatcher:
                 line_context, all_test_funcs, first_def_line = ast_prescan(source, lines)
             except SyntaxError:
                 line_context, all_test_funcs, first_def_line = text_prescan(lines)
+        elif is_dart:
+            from elspais.graph.parsers.prescan import dart_prescan
+
+            line_context, all_test_funcs, first_def_line = dart_prescan(lines)
         else:
             line_context, all_test_funcs, first_def_line = text_prescan(lines)
 

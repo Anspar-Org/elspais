@@ -3482,10 +3482,11 @@ class GraphBuilder:
             label = f"{class_name}::{func_name}" if class_name else func_name
             source_line = func_line
         else:
-            # Fallback: line-based ID for refs outside functions
-            test_id = make_test_id(source_id, content.start_line)
-            label = f"Test at {source_id}:{content.start_line}"
-            source_line = content.start_line
+            # Fallback: line-based ID keyed on the owning unit's line when a
+            # prescan supplied one (e.g. Dart test() call line), else the ref line.
+            test_id = make_test_id(source_id, func_line)
+            label = f"Test at {source_id}:{func_line}"
+            source_line = func_line
 
         if test_id not in self._nodes:
             node = GraphNode(
