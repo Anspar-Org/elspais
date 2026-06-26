@@ -385,13 +385,14 @@ E. A reporter registry SHALL map each `reporter` format name to a parser and an 
 
 F. For each configured target, the system SHALL obtain the reporter's output (captured from the command's stdout for stdout-channel reporters, or read from the `results` glob for file-channel reporters), build RESULT nodes carrying the real test-file path (`source_file`, repo-relative) and the target's `match` mode, and ingest the target's `coverage` file. Coverage crediting SHALL be derived from the targets' `credit_coverage`/`min_coverage_fraction`.
 
-G. Each target SHALL select its result-to-test matching via `match`: `precise` SHALL credit verification at file granularity by resolving a result's real source-file path to the test nodes in that file (all passing credits the file's `Verifies:` assertions; any failure flags them), while `aggregate` SHALL use the per-app green/red engine.
+G. Each target SHALL select its result-to-test matching via `match`: `precise` SHALL credit verification per test by resolving a result's real source-file path and `test()` source line to the specific test node at that `(path, line)`; when no test node matches that line (e.g. shared-helper or generated tests), it SHALL fall back to file granularity (all passing credits the file's `Verifies:` assertions; any failure flags them). `aggregate` SHALL use the per-app green/red engine.
 
 ### Changelog
 
+- 2026-06-26 | abc6e487 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-06-21 | 6962b5a4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-06-20 | 81f6cdcd | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-06-20 | 98120740 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (michael@anspar.org) | CUR-1533: initial
 
-*End* *Coverage-Based and Aggregate Test Verification* | **Hash**: 6962b5a4
+*End* *Coverage-Based and Aggregate Test Verification* | **Hash**: abc6e487
