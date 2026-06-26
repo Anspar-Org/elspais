@@ -434,14 +434,17 @@ def text_prescan(
 
 
 def _iter_code_brackets(code: str):
-    """Yield bracket chars in `code`, skipping any inside '...'/"..." string
-    literals (honoring backslash escapes). `code` has already had its `//`
-    line-comment stripped by the caller. Triple-quoted and raw strings are not
-    special-cased -- a residual miscount there warns honestly rather than wrongly."""
+    """Yield bracket chars in ONE line of source, skipping string literals
+    ('...'/"...", honoring \\ escapes) and a `//` line-comment -- but only when
+    the `//` is NOT inside a string (so a URL like 'http://x' is not mistaken
+    for a comment). Triple-quoted/raw strings and /* */ blocks are not special-
+    cased; a residual miscount there warns honestly rather than wrongly."""
     i = 0
     n = len(code)
     while i < n:
         c = code[i]
+        if c == "/" and i + 1 < n and code[i + 1] == "/":
+            return  # real line comment: rest of line is not code
         if c == "'" or c == '"':
             quote = c
             i += 1
@@ -475,8 +478,8 @@ def _match_brace_end(
     for ln, text in lines[start_idx:]:
         if stop_line is not None and ln >= stop_line:
             return stop_line - 1, False  # clamped: never balanced before next test
-        code = text.split("//", 1)[0]
-        for ch in _iter_code_brackets(code):
+        # (no more //-prestrip; _iter_code_brackets handles comments + strings)
+        for ch in _iter_code_brackets(text):
             if ch in "([{":
                 depth += 1
                 seen = True

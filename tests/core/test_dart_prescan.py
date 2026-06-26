@@ -130,3 +130,24 @@ void main() {
     # first test span ends at its own `});` (line 4), NOT clamped to line 4-before-5
     assert lc[3][2] == 2 and lc[3][3] == 4
     assert "may be inaccurate" not in capsys.readouterr().err
+
+
+def test_double_slash_inside_string_is_not_a_comment(capsys):
+    # A URL like 'http://x/me' must NOT be treated as a // line comment (which
+    # would strip the closing brackets and unbalance the span).
+    src = """\
+void main() {
+  test('hits a url', () async {
+    final req = Request('GET', Uri.parse('http://x/me'));
+    expect(req, isNotNull);
+  });
+  test('next', () {
+    expect(1, 1);
+  });
+}
+"""
+    lc, funcs, _first = dart_prescan(_lines(src))
+    starts = sorted(f[0] for f in funcs)
+    assert starts == [2, 6]
+    assert lc[3][3] == 5  # first test closes at its own `});` (line 5), not clamped
+    assert "may be inaccurate" not in capsys.readouterr().err
