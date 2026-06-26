@@ -2971,7 +2971,7 @@ class GraphBuilder:
         # Precise (file-granular) RESULT->TEST links, matched by real source-file
         # path instead of test_id. (result_id, source_file); resolved at build()
         # time once every TEST node and its FILE parent exist.
-        self._pending_precise_result_links: list[tuple[str, str]] = []
+        self._pending_precise_result_links: list[tuple[str, str, int | None]] = []
         # Implements: REQ-d00222-A
         self._pending_terms: list[tuple[str, dict]] = []  # (node_id, parsed_data)
         # Implements: REQ-p00014-B
@@ -3046,7 +3046,10 @@ class GraphBuilder:
         elif content.content_type == "test_ref":
             self._add_test_ref(content)
             if file_node is not None:
-                # Find the test node that was just created
+                # Find the test node that was just created.  Mirror the ID
+                # computation in _add_test_ref exactly so we find the right
+                # node when function_line differs from start_line (e.g. Dart
+                # prescan anchors to the test() call line, not the comment).
                 data = content.parsed_data
                 source_ctx = getattr(content, "source_context", None)
                 source_id = source_ctx.source_id if source_ctx else "test"
@@ -3056,7 +3059,9 @@ class GraphBuilder:
                     rel_path = self._to_relative_path(source_id)
                     test_id = build_test_id(rel_path, func_name, class_name)
                 else:
-                    test_id = make_test_id(source_id, content.start_line)
+                    func_line = data.get("function_line", content.start_line)
+                    anchor_line = func_line or content.start_line
+                    test_id = make_test_id(source_id, anchor_line)
                 node = self._nodes.get(test_id)
                 if node:
                     self._wire_contains_edge(file_node, node, content)
@@ -3553,6 +3558,7 @@ class GraphBuilder:
             "source_path": source_path,
             "source_file": data.get("source_file") or source_path,
             "match": data.get("match", "aggregate"),
+            "line": data.get("line"),
         }
         self._nodes[result_id] = node
 
@@ -3572,7 +3578,9 @@ class GraphBuilder:
             # link resolved once all TEST/FILE nodes exist (see build()).
             source_file = node._content.get("source_file")
             if source_file:
-                self._pending_precise_result_links.append((result_id, source_file))
+                self._pending_precise_result_links.append(
+                    (result_id, source_file, data.get("line"))
+                )
 
     # Implements: REQ-d00222-A
     def _add_definition_block(self, content: ParsedContent) -> None:
@@ -4101,19 +4109,30 @@ class GraphBuilder:
         # test_id-based YIELDS edges.
         if self._pending_precise_result_links:
             tests_by_file: dict[str, list[GraphNode]] = {}
+            tests_by_file_line: dict[tuple[str, int], GraphNode] = {}
             for candidate in self._nodes.values():
                 if candidate.kind is not NodeKind.TEST:
                     continue
                 file_node = candidate.file_node()
                 rel = file_node.get_field("relative_path") if file_node else None
-                if rel:
-                    tests_by_file.setdefault(rel, []).append(candidate)
-            for result_id, source_file in self._pending_precise_result_links:
+                if not rel:
+                    continue
+                tests_by_file.setdefault(rel, []).append(candidate)
+                pl = candidate.get_field("parse_line")
+                if pl:
+                    tests_by_file_line[(rel, pl)] = candidate
+            for result_id, source_file, line in self._pending_precise_result_links:
                 result_node = self._nodes.get(result_id)
                 if result_node is None:
                     continue
-                for test_node in tests_by_file.get(source_file, ()):
-                    test_node.link(result_node, EdgeKind.YIELDS)
+                target = tests_by_file_line.get((source_file, line)) if line is not None else None
+                if target is not None:
+                    target.link(result_node, EdgeKind.YIELDS)
+                    result_node.set_field("precise_scope", "test")
+                else:
+                    for test_node in tests_by_file.get(source_file, ()):
+                        test_node.link(result_node, EdgeKind.YIELDS)
+                    result_node.set_field("precise_scope", "file")
 
         # Phase 2.5 (CUR-1353): Validate template-marker consistency over the
         # fully-resolved graph. Catches rules that need post-link context

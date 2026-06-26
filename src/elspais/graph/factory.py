@@ -118,6 +118,7 @@ def _ingest_target_results(
             "source_path": raw_src,
             "source_file": source_file,
             "match": target.match,
+            "line": rec.get("line"),
         }
         content = ParsedContent(
             content_type="test_result",
