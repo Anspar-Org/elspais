@@ -2968,9 +2968,12 @@ class GraphBuilder:
         self._nodes: dict[str, GraphNode] = {}
         self._pending_links: list[tuple[str, str, EdgeKind]] = []
         # Implements: REQ-d00254-G
-        # Precise (file-granular) RESULT->TEST links, matched by real source-file
-        # path instead of test_id. (result_id, source_file); resolved at build()
-        # time once every TEST node and its FILE parent exist.
+        # Precise RESULT->TEST links for test_id-less reporters (e.g. flutter-
+        # machine), matched by real source-file path + test() source line rather
+        # than test_id. (result_id, source_file, line); resolved at build() time
+        # once every TEST node and its FILE parent exist -- preferring the single
+        # TEST at (source_file, line), falling back to every TEST in the file
+        # when line is None or unmatched.
         self._pending_precise_result_links: list[tuple[str, str, int | None]] = []
         # Implements: REQ-d00222-A
         self._pending_terms: list[tuple[str, dict]] = []  # (node_id, parsed_data)
@@ -3574,9 +3577,11 @@ class GraphBuilder:
         elif data.get("match") == "precise" and self._link_results_to_tests:
             # Implements: REQ-d00254-G
             # Precise reporters (e.g. flutter-machine) emit no test_id; they
-            # match RESULT->TEST by real source-file path. Queue a file-granular
-            # link resolved once all TEST/FILE nodes exist (see build()).
-            source_file = node._content.get("source_file")
+            # match RESULT->TEST by real source-file path + test() source line.
+            # Queue (result_id, source_file, line) resolved once all TEST/FILE
+            # nodes exist (see build()): line-precise when it resolves, file-
+            # granular fallback otherwise.
+            source_file = node.get_field("source_file")
             if source_file:
                 self._pending_precise_result_links.append(
                     (result_id, source_file, data.get("line"))
@@ -4100,13 +4105,15 @@ class GraphBuilder:
                 )
 
         # Implements: REQ-d00254-G
-        # Resolve precise (file-granular) RESULT->TEST links. These reporters
-        # (e.g. flutter-machine) carry no test_id, so the result is wired to
-        # every TEST node sharing its real source-file path -- the same path the
-        # annotator's precise index credits. An unmatched file links nothing (no
-        # broken reference, unlike test_id resolution). Done before orphan/root
-        # classification so RESULT nodes count as YIELDS-parented, exactly like
-        # test_id-based YIELDS edges.
+        # Resolve precise RESULT->TEST links. These reporters (e.g. flutter-
+        # machine) carry no test_id, so each result is wired by source path:
+        # preferring the single TEST at (source_file, line) and stamping
+        # precise_scope="test" (per-test crediting), else falling back to every
+        # TEST sharing the file and stamping precise_scope="file" (the file-level
+        # all-pass/any-fail crediting the annotator's precise index applies). An
+        # unmatched file links nothing (no broken reference, unlike test_id
+        # resolution). Done before orphan/root classification so RESULT nodes
+        # count as YIELDS-parented, exactly like test_id-based YIELDS edges.
         if self._pending_precise_result_links:
             tests_by_file: dict[str, list[GraphNode]] = {}
             tests_by_file_line: dict[tuple[str, int], GraphNode] = {}

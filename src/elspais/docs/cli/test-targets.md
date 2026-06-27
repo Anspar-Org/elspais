@@ -74,7 +74,8 @@ result record to the specific `test()` by its source path AND line number
 not resolve to a known test node (shared-helper or generated tests), it falls
 back to file granularity: all passing results for that file credit the file's
 `Verifies:` assertions; any failure flags them.  Requires a reporter that emits
-real file paths (`flutter-machine`).
+real file paths and, for per-test resolution, the test's source line
+(`flutter-machine`); results without a line fall back to file granularity.
 
 **`match = "aggregate"` (opt-in coarse mode):** The whole target is green or
 red.  When green (at least one result ingested, zero failures), all
