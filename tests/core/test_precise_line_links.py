@@ -6,7 +6,7 @@ back to every TEST in the file -- the existing file-granular behaviour.
 
 This tests the Task-3 extension to the precise resolver in ``build()``:
   * ``tests_by_file_line[(rel_path, parse_line)]`` for O(1) single-test lookup.
-  * ``precise_scope`` field: "test" for a line-resolved link, "file" for fallback.
+  * ``match_scope`` field: "test" for a line-resolved link, "file" for fallback.
 """
 from __future__ import annotations
 
@@ -106,8 +106,8 @@ def _req():
 def graph_line_matched(resolver):
     """Two precise results carrying line=TEST_A_LINE and line=TEST_B_LINE."""
     items = _dart_items(resolver)
-    r1 = make_test_result("r1", source_file=DART_PATH, match="precise", line=TEST_A_LINE)
-    r2 = make_test_result("r2", source_file=DART_PATH, match="precise", line=TEST_B_LINE)
+    r1 = make_test_result("r1", source_file=DART_PATH, match="source", line=TEST_A_LINE)
+    r2 = make_test_result("r2", source_file=DART_PATH, match="source", line=TEST_B_LINE)
     return build_graph(_req(), *items, r1, r2)
 
 
@@ -115,7 +115,7 @@ def graph_line_matched(resolver):
 def graph_fallback(resolver):
     """One precise result with line=None -- must fall back to all tests in file."""
     items = _dart_items(resolver)
-    r3 = make_test_result("r3", source_file=DART_PATH, match="precise", line=None)
+    r3 = make_test_result("r3", source_file=DART_PATH, match="source", line=None)
     return build_graph(_req(), *items, r3)
 
 
@@ -123,7 +123,7 @@ def graph_fallback(resolver):
 def graph_nonmatch_line(resolver):
     """One precise result whose line does not match any TEST parse_line."""
     items = _dart_items(resolver)
-    r4 = make_test_result("r4", source_file=DART_PATH, match="precise", line=9999)
+    r4 = make_test_result("r4", source_file=DART_PATH, match="source", line=9999)
     return build_graph(_req(), *items, r4)
 
 
@@ -173,18 +173,18 @@ def test_line_matched_result_not_in_other_test(graph_line_matched):
     assert "r2" not in a_result_ids, "r2 must not be a child of test_a"
 
 
-def test_precise_scope_is_test_for_line_resolved(graph_line_matched):
-    """Line-resolved precise results carry precise_scope='test'."""
+def test_match_scope_is_test_for_line_resolved(graph_line_matched):
+    """Line-resolved precise results carry match_scope='test'."""
     r1 = graph_line_matched.find_by_id("r1")
     r2 = graph_line_matched.find_by_id("r2")
     assert r1 is not None
     assert r2 is not None
     assert (
-        r1.get_field("precise_scope") == "test"
-    ), f"r1 precise_scope should be 'test', got {r1.get_field('precise_scope')!r}"
+        r1.get_field("match_scope") == "test"
+    ), f"r1 match_scope should be 'test', got {r1.get_field('match_scope')!r}"
     assert (
-        r2.get_field("precise_scope") == "test"
-    ), f"r2 precise_scope should be 'test', got {r2.get_field('precise_scope')!r}"
+        r2.get_field("match_scope") == "test"
+    ), f"r2 match_scope should be 'test', got {r2.get_field('match_scope')!r}"
 
 
 def test_line_matched_edge_kind_is_yields(graph_line_matched):
@@ -213,13 +213,13 @@ def test_null_line_falls_back_to_all_tests(graph_fallback):
         ), f"r3 should be a child of {test_node.id} (fallback), got {result_ids}"
 
 
-def test_precise_scope_is_file_for_null_line(graph_fallback):
-    """A fallback precise result (line=None) carries precise_scope='file'."""
+def test_match_scope_is_file_for_null_line(graph_fallback):
+    """A fallback precise result (line=None) carries match_scope='file'."""
     r3 = graph_fallback.find_by_id("r3")
     assert r3 is not None
     assert (
-        r3.get_field("precise_scope") == "file"
-    ), f"r3 precise_scope should be 'file', got {r3.get_field('precise_scope')!r}"
+        r3.get_field("match_scope") == "file"
+    ), f"r3 match_scope should be 'file', got {r3.get_field('match_scope')!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -238,10 +238,10 @@ def test_nonmatch_line_falls_back_to_all_tests(graph_nonmatch_line):
         ), f"r4 should be a child of {test_node.id} (line-mismatch fallback), got {result_ids}"
 
 
-def test_precise_scope_is_file_for_nonmatch_line(graph_nonmatch_line):
-    """A precise result with a non-matching line carries precise_scope='file'."""
+def test_match_scope_is_file_for_nonmatch_line(graph_nonmatch_line):
+    """A precise result with a non-matching line carries match_scope='file'."""
     r4 = graph_nonmatch_line.find_by_id("r4")
     assert r4 is not None
     assert (
-        r4.get_field("precise_scope") == "file"
-    ), f"r4 precise_scope should be 'file', got {r4.get_field('precise_scope')!r}"
+        r4.get_field("match_scope") == "file"
+    ), f"r4 match_scope should be 'file', got {r4.get_field('match_scope')!r}"

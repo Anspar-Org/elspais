@@ -288,15 +288,15 @@ class TestTargetConfig(_StrictModel):
         ""  # glob (relative to cwd) for file-channel reporters; unused for stdout reporters
     )
     coverage: str = ""  # lcov/coverage file (relative to cwd); empty = no coverage
-    match: str = "precise"  # "precise" | "aggregate"
+    match: str = "source"  # "source" | "aggregate"
     credit_coverage: str = "off"  # "off" | "tested" | "verified" (lcov_tested dimension)
     min_coverage_fraction: float = 0.0  # [0.0, 1.0]
 
     @field_validator("match")
     @classmethod
     def _check_match(cls, v: str) -> str:
-        if v not in ("precise", "aggregate"):
-            raise ValueError('match must be "precise" or "aggregate"')
+        if v not in ("source", "aggregate"):
+            raise ValueError('match must be "source" or "aggregate"')
         return v
 
     @field_validator("credit_coverage")

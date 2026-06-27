@@ -168,7 +168,7 @@ name     = "app"
 cwd      = "app"                    # relative to repo root; empty = repo root
 command  = "flutter test --machine" # omit in CI (tests already ran)
 reporter = "flutter-machine"        # stdout-channel reporter
-match    = "precise"                # "precise" (default) | "aggregate"
+match    = "source"                 # "source" (default) | "aggregate"
 coverage = "coverage/lcov.info"     # optional; lcov or coverage.py JSON
 
 # File-channel reporter example (junit XML):
@@ -176,7 +176,7 @@ coverage = "coverage/lcov.info"     # optional; lcov or coverage.py JSON
 # name     = "pytest"
 # reporter = "junit"
 # results  = "results/*.xml"        # glob relative to cwd
-# match    = "precise"
+# match    = "source"
 
 # User journey file scanning
 [scanning.journey]

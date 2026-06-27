@@ -1015,16 +1015,16 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
     app_status = _compute_app_status(graph, credit.app_dirs) if credit.app_dirs else {}
     region_cache: dict = {}
 
-    # Build a per-file index of RESULT nodes with match=="precise" (Task 5).
+    # Build a per-file index of RESULT nodes with match=="source" (Task 5).
     # Maps repo-relative source_file -> list of status strings (lowercased).
-    # Exclude per-test-resolved results (precise_scope=="test"): those credit
+    # Exclude per-test-resolved results (match_scope=="test"): those credit
     # inline (below) rather than via file-level all-pass/any-fail semantics.
-    precise_index: dict[str, list[str]] = {}
+    source_file_index: dict[str, list[str]] = {}
     for r in graph.nodes_by_kind(NodeKind.RESULT):
-        if (r.get_field("match") or "") == "precise" and r.get_field("precise_scope") != "test":
+        if (r.get_field("match") or "") == "source" and r.get_field("match_scope") != "test":
             sf = r.get_field("source_file")
             if sf:
-                precise_index.setdefault(sf, []).append((r.get_field("status") or "").lower())
+                source_file_index.setdefault(sf, []).append((r.get_field("status") or "").lower())
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
 
@@ -1194,16 +1194,16 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                 if result.kind != NodeKind.RESULT:
                     continue
                 # Implements: REQ-d00254-G
-                # Skip inline only for FILE-scope precise results (credited via
-                # precise_index below: all-pass credits / any-fail flags the
-                # whole file). Per-test-resolved precise results
-                # (precise_scope=="test") credit inline like test_id results:
+                # Skip inline only for FILE-scope source-match results (credited
+                # via source_file_index below: all-pass credits / any-fail flags
+                # the whole file). Per-test-resolved source results
+                # (match_scope=="test") credit inline like test_id results:
                 # their pass credits their assertions; their fail flags only
                 # their own test.
                 if (
-                    (result.get_field("match") or "") == "precise"
+                    (result.get_field("match") or "") == "source"
                     and not result.get_field("test_id")
-                    and result.get_field("precise_scope") != "test"
+                    and result.get_field("match_scope") != "test"
                 ):
                     continue
                 saw_result = True
@@ -1222,9 +1222,9 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                 fn = test_node.file_node()
                 rel = fn.get_field("relative_path") if fn else None
                 # Implements: REQ-d00254-G
-                # Precise file-granular path: match RESULT nodes by source_file.
-                if rel and rel in precise_index:
-                    statuses = precise_index[rel]
+                # Source-match file-granular path: match RESULT nodes by source_file.
+                if rel and rel in source_file_index:
+                    statuses = source_file_index[rel]
                     if any(s in ("failed", "fail", "failure", "error") for s in statuses):
                         has_failures = True
                     elif any(

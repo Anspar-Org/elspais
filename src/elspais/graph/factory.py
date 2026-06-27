@@ -118,7 +118,7 @@ def _ingest_target_results(
             except ValueError:
                 root_file = raw_root  # outside repo root -- keep absolute
         else:
-            root_file = raw_root or None
+            root_file = raw_root
 
         parsed_data = {
             "id": rec["id"],

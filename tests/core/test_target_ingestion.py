@@ -28,12 +28,12 @@ def test_result_records_source_file_and_match():
         status="passed",
         source_path="build-reports/x.xml",
         source_file="provenance/test/foo_test.dart",
-        match="precise",
+        match="source",
     )
     g = build_graph(r)
     node = next(iter(g.iter_by_kind(NodeKind.RESULT)))
     assert node.get_field("source_file") == "provenance/test/foo_test.dart"
-    assert node.get_field("match") == "precise"
+    assert node.get_field("match") == "source"
 
 
 def test_result_default_source_file_and_match():
@@ -70,7 +70,7 @@ def test_ingest_target_results_flutter_machine(tmp_path: Path):
     from elspais.graph.factory import _ingest_target_results
 
     builder = GraphBuilder(repo_root=tmp_path)
-    target = TestTargetConfig(name="flutter", reporter="flutter-machine", match="precise")
+    target = TestTargetConfig(name="flutter", reporter="flutter-machine", match="source")
     count = _ingest_target_results(builder, target, _FLUTTER_MACHINE_SAMPLE, tmp_path)
     assert count == 1
 
@@ -79,7 +79,7 @@ def test_ingest_target_results_flutter_machine(tmp_path: Path):
     assert len(results) == 1
     node = results[0]
     assert node.get_field("status") == "passed"
-    assert node.get_field("match") == "precise"
+    assert node.get_field("match") == "source"
     # source_file is set (to the suite path from the flutter event)
     assert node.get_field("source_file") == "test/widget_test.dart"
 
@@ -110,7 +110,7 @@ def test_ingest_target_results_source_file_repo_relative(tmp_path: Path):
         '{"type":"testDone","testID":1,"result":"success","hidden":false,"time":10}\n'
     )
     builder = GraphBuilder(repo_root=tmp_path)
-    target = TestTargetConfig(name="flutter", reporter="flutter-machine", match="precise")
+    target = TestTargetConfig(name="flutter", reporter="flutter-machine", match="source")
     _ingest_target_results(builder, target, sample, tmp_path)
     graph = builder.build()
     node = next(iter(graph.iter_by_kind(NodeKind.RESULT)))
@@ -248,7 +248,7 @@ def test_target_results_not_ingested_when_scan_tests_false(tmp_path: Path):
         name="flutter",
         reporter="flutter-machine",
         results="results.jsonl",
-        match="precise",
+        match="source",
     )
     cfg = _cfg_with_targets([target])
     graph = _factory_build_graph(

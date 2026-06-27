@@ -948,7 +948,7 @@
           "type": "string"
         },
         "match": {
-          "default": "precise",
+          "default": "source",
           "title": "Match",
           "type": "string"
         },

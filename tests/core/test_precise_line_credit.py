@@ -1,12 +1,12 @@
 # Verifies: REQ-d00254-G
 """Per-test crediting for line-resolved precise results.
 
-A precise RESULT carrying ``precise_scope = "test"`` (line resolved to a
+A precise RESULT carrying ``match_scope = "test"`` (line resolved to a
 specific Dart test() call) credits only ITS own assertion-targets: the
 passing result credits its assertions; the failing result flags only its own
 test without dragging down unrelated assertions.
 
-A precise RESULT carrying ``precise_scope = "file"`` keeps the existing
+A precise RESULT carrying ``match_scope = "file"`` keeps the existing
 file-level semantics: any failure in the file flags the whole file and
 withholds credit from all assertions (regression guard).
 """
@@ -106,7 +106,7 @@ def _req():
 
 @pytest.fixture(scope="module")
 def graph_per_test_credit(resolver):
-    """test-A passes (precise_scope=test), test-B fails (precise_scope=test).
+    """test-A passes (match_scope=test), test-B fails (match_scope=test).
 
     r_pass is line-resolved to test-A; r_fail is line-resolved to test-B.
     After annotate_coverage, A should be credited (test-A passed) while
@@ -117,14 +117,14 @@ def graph_per_test_credit(resolver):
         "r_pass",
         status="passed",
         source_file=DART_PATH,
-        match="precise",
+        match="source",
         line=TEST_A_LINE,
     )
     r_fail = make_test_result(
         "r_fail",
         status="failed",
         source_file=DART_PATH,
-        match="precise",
+        match="source",
         line=TEST_B_LINE,
     )
     g = build_graph(_req(), *items, r_pass, r_fail)
@@ -134,7 +134,7 @@ def graph_per_test_credit(resolver):
 
 @pytest.fixture(scope="module")
 def graph_file_scope_fallback(resolver):
-    """Both results use precise_scope=file (line=None -> fallback to all tests).
+    """Both results use match_scope=file (line=None -> fallback to all tests).
 
     Mixed pass+fail: file-level semantics apply -- any failure withholds
     credit from all assertions and flags has_failures.
@@ -144,14 +144,14 @@ def graph_file_scope_fallback(resolver):
         "r_pass2",
         status="passed",
         source_file=DART_PATH,
-        match="precise",
+        match="source",
         line=None,
     )
     r_fail = make_test_result(
         "r_fail2",
         status="failed",
         source_file=DART_PATH,
-        match="precise",
+        match="source",
         line=None,
     )
     g = build_graph(_req(), *items, r_pass, r_fail)
@@ -160,25 +160,25 @@ def graph_file_scope_fallback(resolver):
 
 
 # ---------------------------------------------------------------------------
-# Main tests: per-test crediting for precise_scope="test"
+# Main tests: per-test crediting for match_scope="test"
 # ---------------------------------------------------------------------------
 
 
 def test_per_test_pass_credits_only_its_assertions(graph_per_test_credit):
-    """Assertion A is credited because test-A (precise_scope='test') passed,
+    """Assertion A is credited because test-A (match_scope='test') passed,
     even though test-B failed."""
     m = graph_per_test_credit.find_by_id("REQ-p00001").get_metric("rollup_metrics")
     assert (
         m.verified.direct_pct_by_label.get("A", 0.0) == 1.0
-    ), "A should be credited since r_pass (precise_scope='test') passed for test-A"
+    ), "A should be credited since r_pass (match_scope='test') passed for test-A"
 
 
 def test_per_test_fail_does_not_credit_its_own_assertion(graph_per_test_credit):
-    """Assertion B is NOT credited because test-B (precise_scope='test') failed."""
+    """Assertion B is NOT credited because test-B (match_scope='test') failed."""
     m = graph_per_test_credit.find_by_id("REQ-p00001").get_metric("rollup_metrics")
     assert (
         m.verified.direct_pct_by_label.get("B", 0.0) == 0.0
-    ), "B should not be credited since r_fail (precise_scope='test') failed for test-B"
+    ), "B should not be credited since r_fail (match_scope='test') failed for test-B"
 
 
 def test_per_test_failure_sets_has_failures(graph_per_test_credit):
@@ -187,18 +187,18 @@ def test_per_test_failure_sets_has_failures(graph_per_test_credit):
     assert m.verified.has_failures is True
 
 
-def test_per_test_precise_scope_is_test_for_line_resolved_results(graph_per_test_credit):
-    """Both line-resolved results carry precise_scope='test'."""
+def test_per_test_match_scope_is_test_for_line_resolved_results(graph_per_test_credit):
+    """Both line-resolved results carry match_scope='test'."""
     r_pass = graph_per_test_credit.find_by_id("r_pass")
     r_fail = graph_per_test_credit.find_by_id("r_fail")
     assert r_pass is not None
     assert r_fail is not None
     assert (
-        r_pass.get_field("precise_scope") == "test"
-    ), f"r_pass should have precise_scope='test', got {r_pass.get_field('precise_scope')!r}"
+        r_pass.get_field("match_scope") == "test"
+    ), f"r_pass should have match_scope='test', got {r_pass.get_field('match_scope')!r}"
     assert (
-        r_fail.get_field("precise_scope") == "test"
-    ), f"r_fail should have precise_scope='test', got {r_fail.get_field('precise_scope')!r}"
+        r_fail.get_field("match_scope") == "test"
+    ), f"r_fail should have match_scope='test', got {r_fail.get_field('match_scope')!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -207,7 +207,7 @@ def test_per_test_precise_scope_is_test_for_line_resolved_results(graph_per_test
 
 
 def test_file_scope_any_fail_withholds_all_credit(graph_file_scope_fallback):
-    """precise_scope='file' results (line=None fallback): any failure in the
+    """match_scope='file' results (line=None fallback): any failure in the
     file withholds credit from all assertions and sets has_failures.
 
     This guards the semantics of test_edges_do_not_change_file_level_metric_semantics
@@ -222,15 +222,15 @@ def test_file_scope_any_fail_withholds_all_credit(graph_file_scope_fallback):
     ), "B should NOT be credited when the file-scope result set contains a failure"
 
 
-def test_file_scope_precise_scope_is_file_for_null_line(graph_file_scope_fallback):
-    """Results with line=None carry precise_scope='file'."""
+def test_file_scope_match_scope_is_file_for_null_line(graph_file_scope_fallback):
+    """Results with line=None carry match_scope='file'."""
     r_pass = graph_file_scope_fallback.find_by_id("r_pass2")
     r_fail = graph_file_scope_fallback.find_by_id("r_fail2")
     assert r_pass is not None
     assert r_fail is not None
     assert (
-        r_pass.get_field("precise_scope") == "file"
-    ), f"r_pass2 should have precise_scope='file', got {r_pass.get_field('precise_scope')!r}"
+        r_pass.get_field("match_scope") == "file"
+    ), f"r_pass2 should have match_scope='file', got {r_pass.get_field('match_scope')!r}"
     assert (
-        r_fail.get_field("precise_scope") == "file"
-    ), f"r_fail2 should have precise_scope='file', got {r_fail.get_field('precise_scope')!r}"
+        r_fail.get_field("match_scope") == "file"
+    ), f"r_fail2 should have match_scope='file', got {r_fail.get_field('match_scope')!r}"

@@ -357,7 +357,7 @@ directories = ["tests"]
 name = "unit"
 reporter = "junit"
 results = "results/junit.xml"
-match = "precise"
+match = "source"
 """
         )
 

@@ -1,9 +1,9 @@
 # Verifies: REQ-d00254-G
 """Precise (file-granular) matching wires real RESULT->TEST YIELDS edges.
 
-Part B (CUR-1533) credited the ``verified`` *metric* for ``match = "precise"``
+Part B (CUR-1533) credited the ``verified`` *metric* for ``match = "source"``
 results via a source_file path-index in the annotator, but never created the
-RESULT->TEST graph edges that ``match = "precise"`` promises ("file-granular
+RESULT->TEST graph edges that ``match = "source"`` promises ("file-granular
 RESULT->TEST verification by real path"). The viewer's per-assertion test map
 (``_get_assertion_test_map`` -> ``_serialize_test_info``) reads a TEST node's
 RESULT *children*, so without those edges the per-assertion VER panel is always
@@ -31,7 +31,7 @@ def _graph(result_status: str = "passed", result_file: str = FILE):
     test = make_test_ref(verifies=["REQ-p00001-A"], source_path=FILE, start_line=1)
     # flutter-machine results carry no test_id; they match by real source_file.
     res = make_test_result(
-        "r1", status=result_status, source_file=result_file, match="precise", test_id=None
+        "r1", status=result_status, source_file=result_file, match="source", test_id=None
     )
     return build_graph(req, test, res)
 
@@ -79,11 +79,11 @@ def test_precise_result_non_matching_file_does_not_link():
 def test_edges_do_not_change_file_level_metric_semantics():
     """REQ-d00254-G stays file-level: any failure in a precise file flags it and
     withholds credit, even though the passing RESULT is now a TEST child for the
-    viewer. The edges are presentation; crediting runs through precise_index."""
+    viewer. The edges are presentation; crediting runs through source_file_index."""
     req = make_requirement("REQ-p00001", assertions=[{"label": "A", "text": "SHALL A"}])
     test = make_test_ref(verifies=["REQ-p00001-A"], source_path=FILE, start_line=1)
-    passed = make_test_result("ok", status="passed", source_file=FILE, match="precise")
-    failed = make_test_result("bad", status="failed", source_file=FILE, match="precise")
+    passed = make_test_result("ok", status="passed", source_file=FILE, match="source")
+    failed = make_test_result("bad", status="failed", source_file=FILE, match="source")
     g = build_graph(req, test, passed, failed)
 
     # Both results are wired to the test node (viewer sees the full picture).

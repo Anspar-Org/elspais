@@ -54,7 +54,7 @@ class FlutterMachineParser:
             elif etype == "testStart":
                 t = ev.get("test", {})
                 raw_root_url = t.get("root_url")
-                # root_url is a file:// URL; strip the scheme to get a path
+                # root_url is a file:///abs/path URL (Dart); strip the scheme prefix to get a path
                 if raw_root_url and raw_root_url.startswith("file://"):
                     root_path = raw_root_url[len("file://") :]
                 else:

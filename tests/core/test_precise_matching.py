@@ -16,7 +16,7 @@ def _g(result_status):
         verifies=["REQ-p00001-A"], source_path="provenance/test/foo_test.dart", start_line=1
     )
     res = make_test_result(
-        "r1", status=result_status, source_file="provenance/test/foo_test.dart", match="precise"
+        "r1", status=result_status, source_file="provenance/test/foo_test.dart", match="source"
     )
     return build_graph(req, test, res)
 

@@ -124,7 +124,7 @@ def graph_root_resolves_a(resolver):
     r = make_test_result(
         "r_root_a",
         source_file=DART_PATH,
-        match="precise",
+        match="source",
         line=WRAPPER_LINE,
         root_line=TEST_A_LINE,
         root_file=DART_PATH,
@@ -139,7 +139,7 @@ def graph_root_resolves_b(resolver):
     r = make_test_result(
         "r_root_b",
         source_file=DART_PATH,
-        match="precise",
+        match="source",
         line=WRAPPER_LINE,
         root_line=TEST_B_LINE,
         root_file=DART_PATH,
@@ -155,7 +155,7 @@ def graph_primary_wins(resolver):
     r = make_test_result(
         "r_primary",
         source_file=DART_PATH,
-        match="precise",
+        match="source",
         line=TEST_A_LINE,
         root_line=TEST_B_LINE,
         root_file=DART_PATH,
@@ -170,7 +170,7 @@ def graph_both_miss(resolver):
     r = make_test_result(
         "r_both_miss",
         source_file=DART_PATH,
-        match="precise",
+        match="source",
         line=WRAPPER_LINE,
         root_line=WRAPPER_LINE + 1,
         root_file=DART_PATH,
@@ -185,7 +185,7 @@ def graph_root_no_file(resolver):
     r = make_test_result(
         "r_root_no_file",
         source_file=DART_PATH,
-        match="precise",
+        match="source",
         line=WRAPPER_LINE,
         root_line=TEST_A_LINE,
         root_file=None,
@@ -223,13 +223,13 @@ def test_root_line_resolves_to_test_b(graph_root_resolves_b):
     assert "r_root_b" not in a_results, f"r_root_b must NOT be in test_a children; got {a_results}"
 
 
-def test_root_resolved_precise_scope_is_test(graph_root_resolves_a):
-    """Root-line-resolved result carries precise_scope='test'."""
+def test_root_resolved_match_scope_is_test(graph_root_resolves_a):
+    """Root-line-resolved result carries match_scope='test'."""
     r = graph_root_resolves_a.find_by_id("r_root_a")
     assert r is not None
     assert (
-        r.get_field("precise_scope") == "test"
-    ), f"expected precise_scope='test', got {r.get_field('precise_scope')!r}"
+        r.get_field("match_scope") == "test"
+    ), f"expected match_scope='test', got {r.get_field('match_scope')!r}"
 
 
 def test_root_resolved_edge_kind_is_yields(graph_root_resolves_a):
@@ -262,10 +262,10 @@ def test_primary_line_wins_when_it_matches(graph_primary_wins):
 
 
 def test_primary_scope_is_test_when_direct_match(graph_primary_wins):
-    """A directly-matched result still carries precise_scope='test'."""
+    """A directly-matched result still carries match_scope='test'."""
     r = graph_primary_wins.find_by_id("r_primary")
     assert r is not None
-    assert r.get_field("precise_scope") == "test"
+    assert r.get_field("match_scope") == "test"
 
 
 # ---------------------------------------------------------------------------
@@ -285,10 +285,10 @@ def test_both_miss_falls_back_to_all_tests(graph_both_miss):
 
 
 def test_both_miss_scope_is_file(graph_both_miss):
-    """When both attempts fail, precise_scope='file'."""
+    """When both attempts fail, match_scope='file'."""
     r = graph_both_miss.find_by_id("r_both_miss")
     assert r is not None
-    assert r.get_field("precise_scope") == "file"
+    assert r.get_field("match_scope") == "file"
 
 
 # ---------------------------------------------------------------------------
@@ -308,7 +308,7 @@ def test_root_no_file_uses_source_file(graph_root_no_file):
 
 
 def test_root_no_file_scope_is_test(graph_root_no_file):
-    """root_line resolution via source_file (no root_file) still gives precise_scope='test'."""
+    """root_line resolution via source_file (no root_file) still gives match_scope='test'."""
     r = graph_root_no_file.find_by_id("r_root_no_file")
     assert r is not None
-    assert r.get_field("precise_scope") == "test"
+    assert r.get_field("match_scope") == "test"

@@ -2968,14 +2968,14 @@ class GraphBuilder:
         self._nodes: dict[str, GraphNode] = {}
         self._pending_links: list[tuple[str, str, EdgeKind]] = []
         # Implements: REQ-d00254-G
-        # Precise RESULT->TEST links for test_id-less reporters (e.g. flutter-
+        # Source RESULT->TEST links for test_id-less reporters (e.g. flutter-
         # machine), matched by real source-file path + test() source line rather
         # than test_id. Tuple: (result_id, source_file, line, root_file,
         # root_line); resolved at build() time once every TEST node and its FILE
         # parent exist -- trying (source_file, line) first, then falling back to
         # (root_file or source_file, root_line) for testWidgets() results whose
         # test.line is a framework wrapper, then to every TEST in the file.
-        self._pending_precise_result_links: list[
+        self._pending_source_result_links: list[
             tuple[str, str, int | None, str | None, int | None]
         ] = []
         # Implements: REQ-d00222-A
@@ -3579,16 +3579,16 @@ class GraphBuilder:
         if test_id and self._link_results_to_tests and data.get("match") != "aggregate":
             # Implements: REQ-d00127-E
             self._pending_links.append((result_id, test_id, EdgeKind.YIELDS))
-        elif data.get("match") == "precise" and self._link_results_to_tests:
+        elif data.get("match") == "source" and self._link_results_to_tests:
             # Implements: REQ-d00254-G
-            # Precise reporters (e.g. flutter-machine) emit no test_id; they
-            # match RESULT->TEST by real source-file path + test() source line.
-            # Queue (result_id, source_file, line) resolved once all TEST/FILE
-            # nodes exist (see build()): line-precise when it resolves, file-
-            # granular fallback otherwise.
+            # Source-matching reporters (e.g. flutter-machine) emit no test_id;
+            # they match RESULT->TEST by real source-file path + test() source
+            # line. Queue (result_id, source_file, line) resolved once all
+            # TEST/FILE nodes exist (see build()): line-precise when it
+            # resolves, file-granular fallback otherwise.
             source_file = node.get_field("source_file")
             if source_file:
-                self._pending_precise_result_links.append(
+                self._pending_source_result_links.append(
                     (
                         result_id,
                         source_file,
@@ -4116,16 +4116,16 @@ class GraphBuilder:
                 )
 
         # Implements: REQ-d00254-G
-        # Resolve precise RESULT->TEST links. These reporters (e.g. flutter-
+        # Resolve source RESULT->TEST links. These reporters (e.g. flutter-
         # machine) carry no test_id, so each result is wired by source path:
         # preferring the single TEST at (source_file, line) and stamping
-        # precise_scope="test" (per-test crediting), else falling back to every
-        # TEST sharing the file and stamping precise_scope="file" (the file-level
-        # all-pass/any-fail crediting the annotator's precise index applies). An
-        # unmatched file links nothing (no broken reference, unlike test_id
+        # match_scope="test" (per-test crediting), else falling back to every
+        # TEST sharing the file and stamping match_scope="file" (the file-level
+        # all-pass/any-fail crediting the annotator's source_file_index applies).
+        # An unmatched file links nothing (no broken reference, unlike test_id
         # resolution). Done before orphan/root classification so RESULT nodes
         # count as YIELDS-parented, exactly like test_id-based YIELDS edges.
-        if self._pending_precise_result_links:
+        if self._pending_source_result_links:
             tests_by_file: dict[str, list[GraphNode]] = {}
             tests_by_file_line: dict[tuple[str, int], GraphNode] = {}
             for candidate in self._nodes.values():
@@ -4145,7 +4145,7 @@ class GraphBuilder:
                 line,
                 root_file,
                 root_line,
-            ) in self._pending_precise_result_links:
+            ) in self._pending_source_result_links:
                 result_node = self._nodes.get(result_id)
                 if result_node is None:
                     continue
@@ -4157,11 +4157,11 @@ class GraphBuilder:
                     target = tests_by_file_line.get((root_file or source_file, root_line))
                 if target is not None:
                     target.link(result_node, EdgeKind.YIELDS)
-                    result_node.set_field("precise_scope", "test")
+                    result_node.set_field("match_scope", "test")
                 else:
                     for test_node in tests_by_file.get(source_file, ()):
                         test_node.link(result_node, EdgeKind.YIELDS)
-                    result_node.set_field("precise_scope", "file")
+                    result_node.set_field("match_scope", "file")
 
         # Phase 2.5 (CUR-1353): Validate template-marker consistency over the
         # fully-resolved graph. Catches rules that need post-link context
