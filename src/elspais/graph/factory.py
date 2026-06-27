@@ -106,6 +106,20 @@ def _ingest_target_results(
         else:
             source_file = raw_src
 
+        # Normalize root_path (from root_url after stripping file://) the same
+        # way. root_path is set only by flutter-machine for testWidgets() calls
+        # whose test.line is a framework wrapper rather than the user call site.
+        raw_root = rec.get("root_path") or None
+        if raw_root and os.path.isabs(raw_root):
+            try:
+                root_file: str | None = str(
+                    Path(raw_root).resolve().relative_to(repo_root_resolved)
+                )
+            except ValueError:
+                root_file = raw_root  # outside repo root -- keep absolute
+        else:
+            root_file = raw_root or None
+
         parsed_data = {
             "id": rec["id"],
             "status": rec.get("status"),
@@ -119,6 +133,8 @@ def _ingest_target_results(
             "source_file": source_file,
             "match": target.match,
             "line": rec.get("line"),
+            "root_line": rec.get("root_line"),
+            "root_file": root_file,
         }
         content = ParsedContent(
             content_type="test_result",

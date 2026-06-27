@@ -5,12 +5,18 @@ and per-test identity (name, line) — unlike tojunit's lossy classname.
 
 Record shape mirrors sibling parsers (junit_xml, pytest_json):
 ``{"id", "name", "classname", "status", "duration", "message", "verifies",
-"source_path", "line", "test_id"}``.
+"source_path", "line", "root_path", "root_line", "test_id"}``.
 
-``line`` is the ``test()`` call-site line number (``test.line`` from the
-machine event), NOT ``root_line``.  Using ``root_line`` would collapse
-distinct tests that share a common helper or generated entry point into the
-same line, breaking per-test resolution.
+``line`` is the line number from the machine event's ``test.line`` field.
+For plain ``test()`` calls this is the user call site.  For
+``testWidgets(...)`` calls the framework reports a wrapper line instead
+(e.g. inside ``package:flutter_test/src/widget_tester.dart``), which will
+*not* match the TEST node built from the source file.  In that case the
+real call site lives in ``test.root_line`` / ``test.root_url``.
+
+Both fields are carried through so the graph builder can try the primary
+``(source_path, line)`` match first and fall back to
+``(root_path, root_line)`` before giving up and doing a file-granular link.
 
 ``test_id`` is always ``None``.  Per-test correlation is resolved at
 graph-build time by ``(source_path, line)`` — no pre-baked id is used.
@@ -47,10 +53,18 @@ class FlutterMachineParser:
                 suites[s.get("id")] = s.get("path", "")
             elif etype == "testStart":
                 t = ev.get("test", {})
+                raw_root_url = t.get("root_url")
+                # root_url is a file:// URL; strip the scheme to get a path
+                if raw_root_url and raw_root_url.startswith("file://"):
+                    root_path = raw_root_url[len("file://") :]
+                else:
+                    root_path = None
                 tests[t.get("id")] = {
                     "name": t.get("name", ""),
                     "suiteID": t.get("suiteID"),
                     "line": t.get("line"),
+                    "root_line": t.get("root_line"),
+                    "root_path": root_path,
                 }
             elif etype == "testDone":
                 if ev.get("hidden"):
@@ -76,6 +90,8 @@ class FlutterMachineParser:
                         "verifies": [],
                         "source_path": path,
                         "line": meta["line"],
+                        "root_line": meta["root_line"],
+                        "root_path": meta["root_path"],
                         "test_id": None,
                     }
                 )

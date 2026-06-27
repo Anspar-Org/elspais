@@ -2970,11 +2970,14 @@ class GraphBuilder:
         # Implements: REQ-d00254-G
         # Precise RESULT->TEST links for test_id-less reporters (e.g. flutter-
         # machine), matched by real source-file path + test() source line rather
-        # than test_id. (result_id, source_file, line); resolved at build() time
-        # once every TEST node and its FILE parent exist -- preferring the single
-        # TEST at (source_file, line), falling back to every TEST in the file
-        # when line is None or unmatched.
-        self._pending_precise_result_links: list[tuple[str, str, int | None]] = []
+        # than test_id. Tuple: (result_id, source_file, line, root_file,
+        # root_line); resolved at build() time once every TEST node and its FILE
+        # parent exist -- trying (source_file, line) first, then falling back to
+        # (root_file or source_file, root_line) for testWidgets() results whose
+        # test.line is a framework wrapper, then to every TEST in the file.
+        self._pending_precise_result_links: list[
+            tuple[str, str, int | None, str | None, int | None]
+        ] = []
         # Implements: REQ-d00222-A
         self._pending_terms: list[tuple[str, dict]] = []  # (node_id, parsed_data)
         # Implements: REQ-p00014-B
@@ -3562,6 +3565,8 @@ class GraphBuilder:
             "source_file": data.get("source_file") or source_path,
             "match": data.get("match", "aggregate"),
             "line": data.get("line"),
+            "root_line": data.get("root_line"),
+            "root_file": data.get("root_file"),
         }
         self._nodes[result_id] = node
 
@@ -3584,7 +3589,13 @@ class GraphBuilder:
             source_file = node.get_field("source_file")
             if source_file:
                 self._pending_precise_result_links.append(
-                    (result_id, source_file, data.get("line"))
+                    (
+                        result_id,
+                        source_file,
+                        data.get("line"),
+                        data.get("root_file"),
+                        data.get("root_line"),
+                    )
                 )
 
     # Implements: REQ-d00222-A
@@ -4128,11 +4139,22 @@ class GraphBuilder:
                 pl = candidate.get_field("parse_line")
                 if pl:
                     tests_by_file_line[(rel, pl)] = candidate
-            for result_id, source_file, line in self._pending_precise_result_links:
+            for (
+                result_id,
+                source_file,
+                line,
+                root_file,
+                root_line,
+            ) in self._pending_precise_result_links:
                 result_node = self._nodes.get(result_id)
                 if result_node is None:
                     continue
+                # Attempt 1: primary (source_file, line) match
                 target = tests_by_file_line.get((source_file, line)) if line is not None else None
+                if target is None and root_line is not None:
+                    # Attempt 2: root fallback for testWidgets() whose test.line
+                    # is a framework wrapper line (REQ-d00254-G).
+                    target = tests_by_file_line.get((root_file or source_file, root_line))
                 if target is not None:
                     target.link(result_node, EdgeKind.YIELDS)
                     result_node.set_field("precise_scope", "test")
