@@ -302,7 +302,12 @@ class FileDispatcher:
     ) -> list:
         """Parse a test file and return ParsedContent list."""
         from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
-        from elspais.graph.parsers.prescan import ast_prescan, external_prescan, text_prescan
+        from elspais.graph.parsers.prescan import (
+            ast_prescan,
+            dart_prescan,
+            external_prescan,
+            text_prescan,
+        )
 
         if not content.endswith("\n"):
             content += "\n"
@@ -324,8 +329,6 @@ class FileDispatcher:
             except SyntaxError:
                 line_context, all_test_funcs, first_def_line = text_prescan(lines)
         elif is_dart:
-            from elspais.graph.parsers.prescan import dart_prescan
-
             line_context, all_test_funcs, first_def_line = dart_prescan(lines)
         else:
             line_context, all_test_funcs, first_def_line = text_prescan(lines)

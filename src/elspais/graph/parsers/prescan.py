@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import ast
 import re
+import sys
 from pathlib import Path
 
 # Language-aware function/class patterns for context tracking
@@ -515,8 +516,6 @@ def dart_prescan(
         - all_test_funcs: List of (test_line, None, None) for each test()/testWidgets()
         - first_def_line: Line of first detected test()/group() call (0 if none)
     """
-    import sys
-
     arr = lines
     # 0) collect ALL detected start lines (test + group) -- used to bound any
     #    runaway brace match: a span may never cross the next start line.
