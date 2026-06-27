@@ -2967,6 +2967,17 @@ class GraphBuilder:
             self.satellite_kinds = _DEFAULT_SATELLITE_KINDS
         self._nodes: dict[str, GraphNode] = {}
         self._pending_links: list[tuple[str, str, EdgeKind]] = []
+        # Implements: REQ-d00254-G
+        # Source RESULT->TEST links for test_id-less reporters (e.g. flutter-
+        # machine), matched by real source-file path + test() source line rather
+        # than test_id. Tuple: (result_id, source_file, line, root_file,
+        # root_line); resolved at build() time once every TEST node and its FILE
+        # parent exist -- trying (source_file, line) first, then falling back to
+        # (root_file or source_file, root_line) for testWidgets() results whose
+        # test.line is a framework wrapper, then to every TEST in the file.
+        self._pending_source_result_links: list[
+            tuple[str, str, int | None, str | None, int | None]
+        ] = []
         # Implements: REQ-d00222-A
         self._pending_terms: list[tuple[str, dict]] = []  # (node_id, parsed_data)
         # Implements: REQ-p00014-B
@@ -3041,7 +3052,10 @@ class GraphBuilder:
         elif content.content_type == "test_ref":
             self._add_test_ref(content)
             if file_node is not None:
-                # Find the test node that was just created
+                # Find the test node that was just created.  Mirror the ID
+                # computation in _add_test_ref exactly so we find the right
+                # node when function_line differs from start_line (e.g. Dart
+                # prescan anchors to the test() call line, not the comment).
                 data = content.parsed_data
                 source_ctx = getattr(content, "source_context", None)
                 source_id = source_ctx.source_id if source_ctx else "test"
@@ -3051,7 +3065,9 @@ class GraphBuilder:
                     rel_path = self._to_relative_path(source_id)
                     test_id = build_test_id(rel_path, func_name, class_name)
                 else:
-                    test_id = make_test_id(source_id, content.start_line)
+                    func_line = data.get("function_line", content.start_line)
+                    anchor_line = func_line or content.start_line
+                    test_id = make_test_id(source_id, anchor_line)
                 node = self._nodes.get(test_id)
                 if node:
                     self._wire_contains_edge(file_node, node, content)
@@ -3477,10 +3493,15 @@ class GraphBuilder:
             label = f"{class_name}::{func_name}" if class_name else func_name
             source_line = func_line
         else:
-            # Fallback: line-based ID for refs outside functions
-            test_id = make_test_id(source_id, content.start_line)
-            label = f"Test at {source_id}:{content.start_line}"
-            source_line = content.start_line
+            # Fallback: line-based ID keyed on the owning unit's line when a
+            # prescan supplied one (e.g. Dart test() call line), else the ref line.
+            # func_line==0 is text_prescan's "no function context" sentinel;
+            # in that case fall back to the comment's own line so each ref
+            # gets a distinct id (the pre-843a571d behaviour).
+            anchor_line = func_line or content.start_line
+            test_id = make_test_id(source_id, anchor_line)
+            label = f"Test at {source_id}:{anchor_line}"
+            source_line = anchor_line
 
         if test_id not in self._nodes:
             node = GraphNode(
@@ -3543,6 +3564,9 @@ class GraphBuilder:
             "source_path": source_path,
             "source_file": data.get("source_file") or source_path,
             "match": data.get("match", "aggregate"),
+            "line": data.get("line"),
+            "root_line": data.get("root_line"),
+            "root_file": data.get("root_file"),
         }
         self._nodes[result_id] = node
 
@@ -3555,6 +3579,24 @@ class GraphBuilder:
         if test_id and self._link_results_to_tests and data.get("match") != "aggregate":
             # Implements: REQ-d00127-E
             self._pending_links.append((result_id, test_id, EdgeKind.YIELDS))
+        elif data.get("match") == "source" and self._link_results_to_tests:
+            # Implements: REQ-d00254-G
+            # Source-matching reporters (e.g. flutter-machine) emit no test_id;
+            # they match RESULT->TEST by real source-file path + test() source
+            # line. Queue (result_id, source_file, line) resolved once all
+            # TEST/FILE nodes exist (see build()): line-precise when it
+            # resolves, file-granular fallback otherwise.
+            source_file = node.get_field("source_file")
+            if source_file:
+                self._pending_source_result_links.append(
+                    (
+                        result_id,
+                        source_file,
+                        data.get("line"),
+                        data.get("root_file"),
+                        data.get("root_line"),
+                    )
+                )
 
     # Implements: REQ-d00222-A
     def _add_definition_block(self, content: ParsedContent) -> None:
@@ -4072,6 +4114,54 @@ class GraphBuilder:
                         edge_kind=edge_kind.value,
                     )
                 )
+
+        # Implements: REQ-d00254-G
+        # Resolve source RESULT->TEST links. These reporters (e.g. flutter-
+        # machine) carry no test_id, so each result is wired by source path:
+        # preferring the single TEST at (source_file, line) and stamping
+        # match_scope="test" (per-test crediting), else falling back to every
+        # TEST sharing the file and stamping match_scope="file" (the file-level
+        # all-pass/any-fail crediting the annotator's source_file_index applies).
+        # An unmatched file links nothing (no broken reference, unlike test_id
+        # resolution). Done before orphan/root classification so RESULT nodes
+        # count as YIELDS-parented, exactly like test_id-based YIELDS edges.
+        if self._pending_source_result_links:
+            tests_by_file: dict[str, list[GraphNode]] = {}
+            tests_by_file_line: dict[tuple[str, int], GraphNode] = {}
+            for candidate in self._nodes.values():
+                if candidate.kind is not NodeKind.TEST:
+                    continue
+                file_node = candidate.file_node()
+                rel = file_node.get_field("relative_path") if file_node else None
+                if not rel:
+                    continue
+                tests_by_file.setdefault(rel, []).append(candidate)
+                pl = candidate.get_field("parse_line")
+                if pl:
+                    tests_by_file_line[(rel, pl)] = candidate
+            for (
+                result_id,
+                source_file,
+                line,
+                root_file,
+                root_line,
+            ) in self._pending_source_result_links:
+                result_node = self._nodes.get(result_id)
+                if result_node is None:
+                    continue
+                # Attempt 1: primary (source_file, line) match
+                target = tests_by_file_line.get((source_file, line)) if line is not None else None
+                if target is None and root_line is not None:
+                    # Attempt 2: root fallback for testWidgets() whose test.line
+                    # is a framework wrapper line (REQ-d00254-G).
+                    target = tests_by_file_line.get((root_file or source_file, root_line))
+                if target is not None:
+                    target.link(result_node, EdgeKind.YIELDS)
+                    result_node.set_field("match_scope", "test")
+                else:
+                    for test_node in tests_by_file.get(source_file, ()):
+                        test_node.link(result_node, EdgeKind.YIELDS)
+                    result_node.set_field("match_scope", "file")
 
         # Phase 2.5 (CUR-1353): Validate template-marker consistency over the
         # fully-resolved graph. Catches rules that need post-link context

@@ -305,6 +305,9 @@ def make_test_result(
     classname: str = "",
     source_file: str = "",
     match: str = "aggregate",
+    line: int | None = None,
+    root_line: int | None = None,
+    root_file: str | None = None,
 ) -> ParsedContent:
     """Factory for creating test result content.
 
@@ -321,7 +324,15 @@ def make_test_result(
         classname: Test class/module name
         source_file: Repo-relative path of the test source file that produced
             this result (empty → falls back to source_path in the builder).
-        match: How the result is matched to test nodes ("aggregate" or "precise").
+        match: How the result is matched to test nodes ("aggregate" or "source").
+        line: Source line number of the test() call that produced this result.
+            When provided for a source result, links to ONLY the TEST node at
+            (source_file, line) instead of every TEST in the file.
+        root_line: Fallback line number (e.g. ``test.root_line`` from the
+            flutter --machine protocol).  Used when ``line`` fails to match any
+            TEST node but ``root_line`` points to the real call site.
+        root_file: Repo-relative path for the ``root_line`` fallback.  When
+            None and ``root_line`` is set, ``source_file`` is used instead.
 
     Returns:
         ParsedContent ready for GraphBuilder.add_parsed_content()
@@ -341,6 +352,9 @@ def make_test_result(
             "classname": classname,
             "source_file": source_file,
             "match": match,
+            "line": line,
+            "root_line": root_line,
+            "root_file": root_file,
         },
     )
     content.source_context = MockSourceContext(source_id=source_path)

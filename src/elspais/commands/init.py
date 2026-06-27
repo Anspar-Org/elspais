@@ -238,7 +238,7 @@ _FIELD_COMMENTS: dict[str, str] = {
     ),
     "scanning.test.targets.coverage": ("Path to lcov/coverage-json file, relative to cwd"),
     "scanning.test.targets.match": (
-        '"precise" (per-file) | "aggregate" (whole-app green/red, default)'
+        '"source" (per-file) | "aggregate" (whole-app green/red, default)'
     ),
     "scanning.test.targets.credit_coverage": (
         '"off" | "tested" | "verified" -- lcov_tested dimension credit (default off)'
@@ -676,7 +676,7 @@ def generate_config(
         'command = "flutter test --machine --coverage"',
         'reporter = "flutter-machine"',
         'coverage = "coverage/lcov.info"',
-        'match   = "precise"',
+        'match   = "source"',
         'credit_coverage = "verified"',
         "",
         "-- Package with a shared DB (serialise test files) --",
@@ -686,7 +686,7 @@ def generate_config(
         'command = "flutter test --machine --coverage --concurrency=1"',
         'reporter = "flutter-machine"',
         'coverage = "coverage/lcov.info"',
-        'match   = "precise"',
+        'match   = "source"',
         'credit_coverage = "verified"',
         "",
         "-- Python/pytest example --",

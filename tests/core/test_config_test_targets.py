@@ -11,7 +11,7 @@ def test_target_defaults():
     t = TestTargetConfig(name="provenance")
     assert t.cwd == "" and t.command == "" and t.reporter == ""
     assert t.results == "" and t.coverage == ""
-    assert t.match == "precise"
+    assert t.match == "source"
     assert t.credit_coverage == "off"
     assert t.min_coverage_fraction == 0.0
 
@@ -23,11 +23,11 @@ def test_target_full():
         command="flutter test --machine --coverage",
         reporter="flutter-machine",
         coverage="coverage/lcov.info",
-        match="precise",
+        match="source",
         credit_coverage="verified",
         min_coverage_fraction=0.0,
     )
-    assert t.reporter == "flutter-machine" and t.match == "precise"
+    assert t.reporter == "flutter-machine" and t.match == "source"
 
 
 @pytest.mark.parametrize(

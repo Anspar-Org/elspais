@@ -11,8 +11,8 @@ suite.  Each entry tells elspais two things:
    where results are pre-produced), the `reporter` that parses output, and
    optional `coverage` file to ingest.
 2. **How to match results back to assertions** -- `match` selects between
-   per-file precise attribution or whole-app aggregate credit, and
-   `credit_coverage` controls the `lcov_tested` dimension.
+   per-test source attribution (with file-granular fallback) or whole-app
+   aggregate credit, and `credit_coverage` controls the `lcov_tested` dimension.
 
 ### Produce vs ingest split
 
@@ -44,7 +44,7 @@ This is the correct pattern for CI.
 | `reporter` | string | (required) | Parser format: `flutter-machine`, `junit`, `pytest-json` |
 | `results` | string | `""` | Glob pattern for result files (file-channel reporters) |
 | `coverage` | string | `""` | Path to an lcov.info or coverage.py JSON file (format auto-detected), relative to `cwd` |
-| `match` | string | `"precise"` | `"precise"` or `"aggregate"` -- matching strategy |
+| `match` | string | `"source"` | `"source"` or `"aggregate"` -- matching strategy |
 | `credit_coverage` | string | `"off"` | `"off"`, `"tested"`, or `"verified"` -- lcov_tested credit |
 | `min_coverage_fraction` | float | `0.0` | Fraction of impl lines that must be covered (0.0-1.0) |
 
@@ -54,7 +54,7 @@ This is the correct pattern for CI.
 
 | Reporter | Channel | Description |
 |----------|---------|-------------|
-| `flutter-machine` | stdout | Parses `flutter test --machine` JSON-line protocol; includes real `suite.path` for file-granular matching |
+| `flutter-machine` | stdout | Parses `flutter test --machine` JSON-line protocol; includes real `suite.path` and test line for per-test matching |
 | `junit` | file | Parses JUnit XML test result files matched by `results` glob |
 | `pytest-json` | file | Parses pytest `--json-report` output matched by `results` glob |
 
@@ -68,12 +68,14 @@ matched by the `results` glob.  These files can be pre-produced by CI.
 
 `match` controls how test results are attributed to `// Verifies:` edges:
 
-**`match = "precise"` (default):** File-granular attribution.  elspais matches
-each result record to the specific test file via the file path recorded in the
-result (e.g., the `suite.path` field from `flutter-machine`).  Only assertions
-linked to passing test files receive credit; a failing file marks only its own
-assertions as failing.  Requires a reporter that emits real file paths
-(`flutter-machine`).
+**`match = "source"` (default):** Per-test attribution.  elspais matches each
+result record to the specific `test()` by its source path AND line number
+(e.g., the `suite.path` + test line from `flutter-machine`).  When a line does
+not resolve to a known test node (shared-helper or generated tests), it falls
+back to file granularity: all passing results for that file credit the file's
+`Verifies:` assertions; any failure flags them.  Requires a reporter that emits
+real file paths and, for per-test resolution, the test's source line
+(`flutter-machine`); results without a line fall back to file granularity.
 
 **`match = "aggregate"` (opt-in coarse mode):** The whole target is green or
 red.  When green (at least one result ingested, zero failures), all
@@ -95,10 +97,11 @@ dimension:
 ## Flutter/Dart Recipe
 
 This is the recommended setup for Flutter/Dart packages.  Use
-`reporter = "flutter-machine"` with `match = "precise"` to get real per-file
-test attribution -- elspais reads the `suite.path` field emitted by the
-Flutter test machine protocol and matches it to the test file path recorded in
-the graph.
+`reporter = "flutter-machine"` with `match = "source"` to get real per-test
+attribution -- elspais reads the `suite.path` and test source line emitted by
+the Flutter test machine protocol and matches each result to the specific test
+node at that `(path, line)` in the graph, with a file-granular fallback for
+shared helpers and generated tests.
 
 ### Single-package example
 
@@ -109,7 +112,7 @@ cwd         = "app"
 command     = "flutter test --machine --coverage"
 reporter    = "flutter-machine"
 coverage    = "coverage/lcov.info"
-match       = "precise"
+match       = "source"
 credit_coverage = "verified"
 ```
 
@@ -127,7 +130,7 @@ cwd         = "app"
 command     = "flutter test --machine --coverage"
 reporter    = "flutter-machine"
 coverage    = "coverage/lcov.info"
-match       = "precise"
+match       = "source"
 credit_coverage = "verified"
 
 [[scanning.test.targets]]
@@ -136,7 +139,7 @@ cwd         = "backend"
 command     = "flutter test --machine --coverage --concurrency=1"
 reporter    = "flutter-machine"
 coverage    = "coverage/lcov.info"
-match       = "precise"
+match       = "source"
 credit_coverage = "verified"
 ```
 
@@ -228,9 +231,9 @@ results = "results/*.xml"
 # Omit if no coverage report.
 # coverage = "coverage/lcov.info"
 
-# "precise" (default): per-file attribution (requires file paths in results).
+# "source" (default): source-location attribution (requires file paths in results).
 # "aggregate" (opt-in): whole-suite green/red; use when results lack file paths.
-match = "precise"
+match = "source"
 
 # "off" | "tested" | "verified" -- lcov_tested dimension credit.
 # credit_coverage = "off"
@@ -256,7 +259,7 @@ reporter = "flutter-machine"
 #   results = "build/test-results.jsonl"
 # Without `results`, only coverage credit is applied (no pass/fail signal).
 coverage = "coverage/lcov.info"
-match    = "precise"
+match    = "source"
 credit_coverage = "verified"
 ```
 

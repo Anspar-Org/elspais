@@ -110,11 +110,11 @@ class TestDefaultMode:
     """Verifies: REQ-d00254-A
 
     Regression guard: default behavior must be unchanged.
-    A precise-match result with an unmatched test_id MUST still produce a broken reference.
+    A source-match result with an unmatched test_id MUST still produce a broken reference.
     """
 
     def test_unmatched_precise_result_still_broken_ref_in_default_mode(self):
-        """Default mode + match='precise': unmatched test_id is a broken ref."""
+        """Default mode + match='source': unmatched test_id is a broken ref."""
         # link_results_to_tests=True
         builder = GraphBuilder(
             repo_root=Path("."),
@@ -127,7 +127,7 @@ class TestDefaultMode:
             name="x",
             classname="does.not.exist",
             source_path="build-reports/app/TEST.xml",
-            match="precise",
+            match="source",
         )
         file_id = "file:build-reports/app/TEST.xml"
         file_node = GraphNode(id=file_id, kind=NodeKind.FILE, label="TEST.xml")
@@ -143,7 +143,7 @@ class TestDefaultMode:
         assert result is not None, "RESULT node must exist in default mode too"
         assert (
             graph.has_broken_references()
-        ), "Default mode + precise: unmatched test_id must still produce a broken reference"
+        ), "Default mode + source: unmatched test_id must still produce a broken reference"
         broken_targets = {br.target_id for br in graph.broken_references()}
         assert (
             "test:does/not/exist.py::x" in broken_targets
@@ -197,12 +197,12 @@ class TestMatchBasedSuppression:
         )
 
     def test_precise_match_still_creates_yields_with_link_flag(self):
-        """match='precise' + link_results_to_tests=True: YIELDS must be attempted.
+        """match='source' + link_results_to_tests=True: YIELDS must be attempted.
 
         (Broken ref if TEST absent.)
 
         Unlike aggregate mode (which suppresses the YIELDS attempt entirely),
-        precise mode queues a YIELDS pending link. When the TEST node does not
+        source mode queues a YIELDS pending link. When the TEST node does not
         exist the pending link resolves to a broken reference -- the key
         invariant is that a broken reference IS produced (not silently dropped).
         """
@@ -214,7 +214,7 @@ class TestMatchBasedSuppression:
             name="x",
             classname="does.not.exist",
             source_path="build-reports/app/TEST.xml",
-            match="precise",
+            match="source",
         )
         file_id = "file:build-reports/app/TEST.xml"
         file_node = GraphNode(id=file_id, kind=NodeKind.FILE, label="TEST.xml")
@@ -233,8 +233,8 @@ class TestMatchBasedSuppression:
         # mode does NOT suppress the attempt the way aggregate does.
         assert (
             graph.has_broken_references()
-        ), "match='precise' must produce a broken reference when TEST node is absent"
+        ), "match='source' must produce a broken reference when TEST node is absent"
         broken_targets = {br.target_id for br in graph.broken_references()}
         assert (
             "test:does/not/exist.py::x" in broken_targets
-        ), "match='precise' broken reference must target the unmatched test_id"
+        ), "match='source' broken reference must target the unmatched test_id"

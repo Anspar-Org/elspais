@@ -61,17 +61,17 @@ class TestDeriveCreditConfig:
     def test_unmatched_credit_verified_when_any_aggregate(self) -> None:
         """unmatched_credit='verified' iff at least one target has match='aggregate'."""
         targets = [
-            _make_target(name="a", match="precise"),
+            _make_target(name="a", match="source"),
             _make_target(name="b", match="aggregate"),
         ]
         result = _derive_credit_config(targets)
         assert result.unmatched_credit == "verified"
 
     def test_unmatched_credit_off_when_all_precise(self) -> None:
-        """All precise → unmatched_credit 'off'."""
+        """All source → unmatched_credit 'off'."""
         targets = [
-            _make_target(name="a", match="precise"),
-            _make_target(name="b", match="precise"),
+            _make_target(name="a", match="source"),
+            _make_target(name="b", match="source"),
         ]
         result = _derive_credit_config(targets)
         assert result.unmatched_credit == "off"

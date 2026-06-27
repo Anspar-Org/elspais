@@ -1015,14 +1015,16 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
     app_status = _compute_app_status(graph, credit.app_dirs) if credit.app_dirs else {}
     region_cache: dict = {}
 
-    # Build a per-file index of RESULT nodes with match=="precise" (Task 5).
+    # Build a per-file index of RESULT nodes with match=="source" (Task 5).
     # Maps repo-relative source_file -> list of status strings (lowercased).
-    precise_index: dict[str, list[str]] = {}
+    # Exclude per-test-resolved results (match_scope=="test"): those credit
+    # inline (below) rather than via file-level all-pass/any-fail semantics.
+    source_file_index: dict[str, list[str]] = {}
     for r in graph.nodes_by_kind(NodeKind.RESULT):
-        if (r.get_field("match") or "") == "precise":
+        if (r.get_field("match") or "") == "source" and r.get_field("match_scope") != "test":
             sf = r.get_field("source_file")
             if sf:
-                precise_index.setdefault(sf, []).append((r.get_field("status") or "").lower())
+                source_file_index.setdefault(sf, []).append((r.get_field("status") or "").lower())
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
 
@@ -1189,26 +1191,40 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
         for test_node, assertion_targets in test_nodes_for_result_lookup:
             saw_result = False
             for result in test_node.iter_children():
-                if result.kind == NodeKind.RESULT:
-                    saw_result = True
-                    status = (result.get_field("status", "") or "").lower()
-                    if status in ("passed", "pass", "success"):
-                        if assertion_targets:
-                            for label in assertion_targets:
-                                if label in assertion_labels:
-                                    validated_labels.add(label)
-                        else:
-                            for label in assertion_labels:
-                                validated_indirect_labels.add(label)
-                    elif status in ("failed", "fail", "failure", "error"):
-                        has_failures = True
+                if result.kind != NodeKind.RESULT:
+                    continue
+                # Implements: REQ-d00254-G
+                # Skip inline only for FILE-scope source-match results (credited
+                # via source_file_index below: all-pass credits / any-fail flags
+                # the whole file). Per-test-resolved source results
+                # (match_scope=="test") credit inline like test_id results:
+                # their pass credits their assertions; their fail flags only
+                # their own test.
+                if (
+                    (result.get_field("match") or "") == "source"
+                    and not result.get_field("test_id")
+                    and result.get_field("match_scope") != "test"
+                ):
+                    continue
+                saw_result = True
+                status = (result.get_field("status", "") or "").lower()
+                if status in ("passed", "pass", "success"):
+                    if assertion_targets:
+                        for label in assertion_targets:
+                            if label in assertion_labels:
+                                validated_labels.add(label)
+                    else:
+                        for label in assertion_labels:
+                            validated_indirect_labels.add(label)
+                elif status in ("failed", "fail", "failure", "error"):
+                    has_failures = True
             if not saw_result:
                 fn = test_node.file_node()
                 rel = fn.get_field("relative_path") if fn else None
                 # Implements: REQ-d00254-G
-                # Precise file-granular path: match RESULT nodes by source_file.
-                if rel and rel in precise_index:
-                    statuses = precise_index[rel]
+                # Source-match file-granular path: match RESULT nodes by source_file.
+                if rel and rel in source_file_index:
+                    statuses = source_file_index[rel]
                     if any(s in ("failed", "fail", "failure", "error") for s in statuses):
                         has_failures = True
                     elif any(
