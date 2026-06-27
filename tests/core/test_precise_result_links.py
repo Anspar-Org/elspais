@@ -1,5 +1,5 @@
 # Verifies: REQ-d00254-G
-"""Precise (file-granular) matching wires real RESULT->TEST YIELDS edges.
+"""Source matching wires real RESULT->TEST YIELDS edges.
 
 Part B (CUR-1533) credited the ``verified`` *metric* for ``match = "source"``
 results via a source_file path-index in the annotator, but never created the

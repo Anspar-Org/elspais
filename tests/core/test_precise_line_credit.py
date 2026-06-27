@@ -1,12 +1,12 @@
 # Verifies: REQ-d00254-G
-"""Per-test crediting for line-resolved precise results.
+"""Per-test crediting for line-resolved source results.
 
-A precise RESULT carrying ``match_scope = "test"`` (line resolved to a
+A source RESULT carrying ``match_scope = "test"`` (line resolved to a
 specific Dart test() call) credits only ITS own assertion-targets: the
 passing result credits its assertions; the failing result flags only its own
 test without dragging down unrelated assertions.
 
-A precise RESULT carrying ``match_scope = "file"`` keeps the existing
+A source RESULT carrying ``match_scope = "file"`` keeps the existing
 file-level semantics: any failure in the file flags the whole file and
 withholds credit from all assertions (regression guard).
 """

@@ -326,7 +326,7 @@ def make_test_result(
             this result (empty → falls back to source_path in the builder).
         match: How the result is matched to test nodes ("aggregate" or "source").
         line: Source line number of the test() call that produced this result.
-            When provided for a precise result, links to ONLY the TEST node at
+            When provided for a source result, links to ONLY the TEST node at
             (source_file, line) instead of every TEST in the file.
         root_line: Fallback line number (e.g. ``test.root_line`` from the
             flutter --machine protocol).  Used when ``line`` fails to match any

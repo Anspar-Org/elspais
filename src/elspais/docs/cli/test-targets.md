@@ -11,7 +11,7 @@ suite.  Each entry tells elspais two things:
    where results are pre-produced), the `reporter` that parses output, and
    optional `coverage` file to ingest.
 2. **How to match results back to assertions** -- `match` selects between
-   per-test precise attribution (with file-granular fallback) or whole-app
+   per-test source attribution (with file-granular fallback) or whole-app
    aggregate credit, and `credit_coverage` controls the `lcov_tested` dimension.
 
 ### Produce vs ingest split

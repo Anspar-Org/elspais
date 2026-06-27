@@ -1,10 +1,10 @@
 # Verifies: REQ-d00254-G
-"""Precise RESULT->TEST linking by (file, line): a result carrying ``line=L``
+"""Source RESULT->TEST linking by (file, line): a result carrying ``line=L``
 resolves to ONLY the TEST node whose ``parse_line`` equals L (not all tests in
 the file).  A result with ``line=None`` (or a line that matches no TEST) falls
 back to every TEST in the file -- the existing file-granular behaviour.
 
-This tests the Task-3 extension to the precise resolver in ``build()``:
+This tests the Task-3 extension to the source resolver in ``build()``:
   * ``tests_by_file_line[(rel_path, parse_line)]`` for O(1) single-test lookup.
   * ``match_scope`` field: "test" for a line-resolved link, "file" for fallback.
 """
