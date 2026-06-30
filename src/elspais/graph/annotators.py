@@ -1074,6 +1074,8 @@ def annotate_journey_verification(graph: FederatedGraph) -> None:
                 label = step.get_field("label")  # "step-N"
                 spass, sfail = _node_verifying_status(step)
                 passed, failed = (spass or bpass), (sfail or bfail)
+                status = "fail" if (sfail or bfail) else "pass" if (spass or bpass) else "untested"
+                step.set_metric("step_status", status)
                 if failed:
                     v.failing_steps.append(label)
                     v.has_failures = True

@@ -471,3 +471,70 @@ class TestJourneyNodeSerialization:
                     ), f"Expected empty failing_steps for unverified journey; got {steps}"
                     return
         pytest.skip("mixed_graph has no VALIDATES edges")
+
+
+# ---------------------------------------------------------------------------
+# Step serialization tests (per-step status + verifying_tests)
+# ---------------------------------------------------------------------------
+
+
+class TestJourneyStepSerialization:
+    """Verify that STEP children are serialized with status and verifying_tests."""
+
+    def _get_step_children(self, tmp_path):
+        """Build the one-step-fails graph and return STEP children from serialization."""
+        from elspais.mcp.server import _serialize_node_generic
+
+        graph = _build_uat_graph(tmp_path, "one-step-fails")
+        jny = graph.find_by_id("JNY-OQ-Login-01")
+        assert jny is not None, "JNY-OQ-Login-01 not found in one-step-fails fixture"
+        result = _serialize_node_generic(jny, None)
+        return [c for c in result["children"] if c["kind"] == "step"]
+
+    # Verifies: REQ-d00256
+    def test_journey_card_has_three_step_children(self, tmp_path):
+        """Journey serialization must include exactly 3 step children with kind='step'."""
+        steps = self._get_step_children(tmp_path)
+        assert len(steps) == 3, f"Expected 3 step children; got {len(steps)}: {steps}"
+
+    # Verifies: REQ-d00256
+    def test_step_children_have_expected_labels(self, tmp_path):
+        """Step children must have labels step-1, step-2, step-3."""
+        steps = self._get_step_children(tmp_path)
+        labels = {c["label"] for c in steps}
+        assert labels == {
+            "step-1",
+            "step-2",
+            "step-3",
+        }, f"Expected {{step-1, step-2, step-3}}; got {labels}"
+
+    # Verifies: REQ-d00256
+    def test_step2_has_fail_status(self, tmp_path):
+        """step-2 must have status='fail' in the one-step-fails fixture."""
+        steps = self._get_step_children(tmp_path)
+        by_label = {c["label"]: c for c in steps}
+        assert (
+            by_label["step-2"]["status"] == "fail"
+        ), f"Expected step-2 status='fail'; got '{by_label['step-2']['status']}'"
+
+    # Verifies: REQ-d00256
+    def test_step1_and_step3_have_pass_status(self, tmp_path):
+        """step-1 and step-3 must have status='pass' in the one-step-fails fixture."""
+        steps = self._get_step_children(tmp_path)
+        by_label = {c["label"]: c for c in steps}
+        for label in ("step-1", "step-3"):
+            assert (
+                by_label[label]["status"] == "pass"
+            ), f"Expected {label} status='pass'; got '{by_label[label]['status']}'"
+
+    # Verifies: REQ-d00256
+    def test_step2_verifying_tests_contains_failing_test(self, tmp_path):
+        """step-2's verifying_tests must be non-empty and include a test with status='fail'."""
+        steps = self._get_step_children(tmp_path)
+        by_label = {c["label"]: c for c in steps}
+        vt = by_label["step-2"]["verifying_tests"]
+        assert vt, "Expected non-empty verifying_tests for step-2"
+        statuses = [t["status"] for t in vt]
+        assert (
+            "fail" in statuses
+        ), f"Expected a failing test in step-2's verifying_tests; got statuses={statuses}"

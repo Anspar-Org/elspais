@@ -304,6 +304,39 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
             if ro is not None:
                 entry["render_order"] = ro
             children.append(entry)
+        elif child.kind == NodeKind.STEP:
+            verifying_tests = []
+            for v_edge in child.iter_edges_by_kind(EK.VERIFIES):
+                test = v_edge.target
+                result_status = ""
+                for result in test.iter_children():
+                    if result.kind != NodeKind.RESULT:
+                        continue
+                    s = (result.get_field("status") or "").lower()
+                    if s in ("failed", "fail", "failure", "error"):
+                        result_status = "fail"
+                        break
+                    elif s in ("passed", "pass", "success"):
+                        result_status = "pass"
+                verifying_tests.append(
+                    {
+                        "id": test.id,
+                        "title": test.get_label(),
+                        "status": result_status,
+                    }
+                )
+            entry = {
+                "kind": "step",
+                "id": child.id,
+                "label": child.get_field("label"),
+                "text": child.get_label(),
+                "line": child.get_field("parse_line"),
+                "status": child.get_metric("step_status") or "untested",
+                "verifying_tests": verifying_tests,
+            }
+            if ro is not None:
+                entry["render_order"] = ro
+            children.append(entry)
         else:
             entry = {
                 "kind": child.kind.value,
