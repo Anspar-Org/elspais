@@ -216,8 +216,9 @@ class TraceArgs:
 
     dimension: str = ""
     """Restrict the report to a dimension group.  Use 'uat' to show only UAT
-    (journey) coverage: requirements with an incoming VALIDATES edge, their
-    validating journeys and verdicts, and the uat_coverage/uat_verified tiers.
+    (journey) coverage: requirements validated by at least one journey (named
+    on a journey's Validates: line), their validating journeys and verdicts,
+    and the uat_coverage/uat_verified tiers.
     Code columns (implemented/tested/verified/code_tested/lcov_tested) are
     excluded from the UAT view."""
 

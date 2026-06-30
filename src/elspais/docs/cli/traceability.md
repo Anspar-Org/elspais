@@ -26,6 +26,22 @@ This answers: "How do we know this requirement is satisfied?"
   `--assertions`          Show individual assertions
   `--tests`               Show test references
   `--output PATH`         Output file path
+  `--dimension uat`       UAT-scoped report: only requirements validated by at least one journey (named on a journey's `Validates:` line), with validating journeys + verdicts and uat_coverage/uat_verified tiers; excludes code columns
+
+## UAT Dimension
+
+  $ elspais trace --dimension uat
+  $ elspais trace --dimension uat --format markdown -o uat-traceability.md
+
+Emits a focused UAT traceability report. Only requirements validated by at least
+one user journey (i.e., named on a journey's `Validates:` line) appear in the
+output. Columns: ID, Title, Level, Status, UAT Coverage, UAT Verified, Journeys
+(`JNY-id:verdict` pairs). Code-dimension columns (Implemented, Tested, Verified,
+etc.) are excluded.
+
+Journey verdicts: `pass` (all steps have a passing test, none failed), `fail`
+(at least one failure), `partial` (some steps pass but not all), `unverified`
+(no test results recorded).
 
 ## viewer Command Options
 

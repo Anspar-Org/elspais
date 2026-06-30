@@ -695,6 +695,16 @@ def generate_config(
         'command = "pytest tests/ --json-report --json-report-file=.elspais/results/pytest.json"',
         'reporter = "pytest-json"',
         'results = ".elspais/results/pytest.json"',
+        "",
+        "-- Playwright/JUnit example (feeds journey + step UAT coverage) --",
+        "[[scanning.test.targets]]",
+        'name     = "e2e"',
+        'reporter = "junit"',
+        'results  = "test-results/junit.xml"',
+        'match    = "aggregate"',
+        "# Tip: add skip_dirs to [scanning.spec] if journeys share the spec/ dir:",
+        "#   [scanning.spec]",
+        '#   skip_dirs = ["user-journeys"]',
     ]
     for line in _targets_example_lines:
         doc.add(tomlkit.comment(line))

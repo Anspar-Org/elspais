@@ -122,23 +122,54 @@ pass?) but not to the **tested** dimension (is there a test at all?).
 
 A user acceptance test scenario parsed from a journey file.
 
-ID format: `JNY-AUTH-01`
+ID format: `JNY-<slug>-<number>`, e.g., `JNY-OQ-Login-01`
 
-```markdown
-## JNY-AUTH-01: New User Registration
+```text
+# JNY-OQ-Login-01: Coordinator signs in
 
-**Actor**: Anonymous visitor
-**Goal**: Create an account and log in
+**Actor**: Study Coordinator
+**Goal**: Reach the dashboard
 
-Validates: REQ-p00001, REQ-p00002-A
+Validates: REQ-d00042-A
 
-### Steps
+## Steps
 
-1. Navigate to registration page
-2. Fill in email and password
-3. Submit form and verify confirmation
+1. Coordinator opens the login page
+2. Coordinator submits valid credentials
+3. System routes to the dashboard
 
-*End* *JNY-AUTH-01*
+## Expected Outcome
+
+The coordinator lands on the dashboard.
+
+*End* *JNY-OQ-Login-01*
+```
+
+### STEP
+
+A numbered step parsed from a journey's `## Steps` section.
+Steps are the journey-axis twin of assertions:
+
+```text
+STEP : JOURNEY :: ASSERTION : REQUIREMENT
+```
+
+ID form: `JNY-<slug>-<number>/step-N`, e.g., `JNY-OQ-Login-01/step-2`.
+
+Steps are **read-only**: the journey renders verbatim from its stored body.
+Steps exist only for graph analysis and targeted test verification.
+A STEP is linked to its parent journey via a `STRUCTURES` edge.
+
+Each step is verified iff >=1 passing test result targets it and 0 failing
+results target it. An unverified step leaves the journey in `partial` state;
+any failing step makes the journey verdict `fail`.
+
+Verifying tests target steps with `Verifies: JNY-.../step-N`:
+
+```python
+# Verifies: JNY-OQ-Login-01/step-2
+def test_coordinator_can_submit_credentials():
+    ...
 ```
 
 ### FILE
@@ -230,7 +261,7 @@ are satisfied.
 
 #### VERIFIES
 
-Produces pass/fail output applicable to the targeted assertion.
+Produces pass/fail output applicable to the targeted node.
 **Contributes to coverage.**
 
 Primarily used in test files. Only `Verifies` is a valid keyword
@@ -242,6 +273,21 @@ def test_password_hashing():
     result = hash_password("secret")
     assert result.startswith("$2b$")
 ```
+
+`Verifies:` may also target a whole journey or a journey step:
+
+```python
+# Verifies: JNY-OQ-Login-01
+def test_full_login_flow():
+    ...
+
+# Verifies: JNY-OQ-Login-01/step-2
+def test_coordinator_submits_credentials():
+    ...
+```
+
+Targeting a whole journey treats it as a single unit. Targeting a step
+enables per-step pass/fail for fine-grained UAT coverage.
 
 Also created from function names containing requirement IDs:
 
@@ -259,6 +305,7 @@ Also valid in code files, for code that generates result output
 def run_performance_benchmark():
     """Runs benchmark and writes JUnit XML results."""
     ...
+```
 
 #### VALIDATES
 
@@ -323,7 +370,7 @@ keyword produces a warning:
 | Keyword | Spec files | Code files | Test files | Journey files |
 |---------|-----------|------------|------------|---------------|
 | `Implements` | IMPLEMENTS edge | IMPLEMENTS edge | **warning** (skipped) | n/a |
-| `Verifies` | n/a | VERIFIES edge | VERIFIES edge | n/a |
+| `Verifies` | n/a | VERIFIES edge (REQ or JNY/STEP) | VERIFIES edge (REQ or JNY/STEP) | n/a |
 | `Refines` | REFINES edge | **warning** (skipped) | **warning** (skipped) | n/a |
 | `Satisfies` | SATISFIES edge | n/a | n/a | n/a |
 | `Integrates` | INTEGRATES edge (associate target only) | n/a | n/a | n/a |
@@ -345,10 +392,11 @@ connected to its source FILE node. Edge metadata includes `start_line`,
 #### STRUCTURES
 
 REQUIREMENT -> child node (ASSERTION, requirement-level REMAINDER).
+USER_JOURNEY -> child node (STEP).
 
-Represents internal structure within a requirement block. Assertions
-and named sections (Rationale, Notes, preamble) are connected to their
-parent requirement.
+Represents internal structure within a requirement or journey block.
+Assertions and named sections are connected to their parent requirement;
+numbered steps are connected to their parent journey.
 
 #### YIELDS
 
@@ -388,6 +436,34 @@ Only three edge kinds contribute to coverage metrics:
 REFINES, CONTAINS, STRUCTURES, SATISFIES, INSTANCE, DEFINES, and YIELDS
 do not contribute to coverage. See `elspais docs checks` for the full
 coverage dimensions reference.
+
+### UAT coverage roll-up
+
+Journey-level UAT verification mirrors the ASSERTION->REQUIREMENT pattern:
+
+```text
+STEP -> TEST -> RESULT    (step-level, mirrors ASSERTION coverage)
+JOURNEY -> TEST -> RESULT (whole-journey, used when no steps cited)
+```
+
+**Step verdict** (per-step): pass if >=1 passing result and 0 failing; failing
+if >=1 failing result; unverified if no results.
+
+**Journey verdict** (rolled up from steps):
+
+| Condition | Verdict |
+|---|---|
+| All steps pass (or whole journey passes, no steps) | `pass` |
+| Any step or journey-level test fails | `fail` |
+| Some steps pass, none fail, some unverified | `partial` |
+| No verifying tests recorded | `unverified` |
+
+The journey verdict feeds `uat_verified` on each requirement named in the
+journey's `Validates:` line, using the same `full-direct`, `partial`,
+`failing`, `none` tier machinery as code/test coverage.
+
+Run `elspais trace --dimension uat` for the UAT-scoped traceability report.
+Run `elspais trace --help` for all trace options.
 
 ## Graph Structure Summary
 

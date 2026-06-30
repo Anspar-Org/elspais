@@ -512,3 +512,44 @@ style = "numeric"
 digits = 0
 leading_zeros = false
 ```
+
+### User Journey UAT Setup
+
+When journey files share the `spec/` directory with requirement files, the spec
+scanner would attempt to parse them as requirements. Prevent this by adding the
+journey subdirectory to `[scanning.spec].skip_dirs`:
+
+```toml
+[scanning.spec]
+directories = ["spec"]
+file_patterns = ["*.md"]
+skip_files = ["README.md", "INDEX.md"]
+skip_dirs = ["user-journeys"]   # keep spec scanner out of the journeys folder
+
+[scanning.journey]
+directories = ["spec/user-journeys"]
+file_patterns = ["*.md"]
+```
+
+To feed Playwright (or any JUnit-emitting) test results into journey/step
+UAT coverage, add a `[[scanning.test.targets]]` entry with `reporter = "junit"`:
+
+```toml
+[scanning.test]
+enabled = true
+# ...
+
+# Playwright E2E suite writing JUnit XML output
+[[scanning.test.targets]]
+name     = "playwright"
+reporter = "junit"
+results  = "test-results/junit.xml"   # glob relative to cwd; empty = repo root
+match    = "aggregate"                 # "aggregate" for a whole-suite pass/fail
+```
+
+With this in place, a test file that declares `// Verifies: JNY-OQ-Login-01/step-2`
+links its results to journey step 2, and the journey verdict rolls up into the
+`uat_verified` dimension on any requirement the journey `Validates:`.
+
+See `elspais docs graph-model` for the full STEP/JOURNEY model and roll-up rules.
+See `elspais docs test-targets` for all `[[scanning.test.targets]]` fields.
