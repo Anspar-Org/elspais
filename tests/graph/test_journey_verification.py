@@ -1,4 +1,4 @@
-# Implements: REQ-d00131-B, REQ-d00255, REQ-d00256
+# Verifies: REQ-d00255, REQ-d00256
 """Tests for journey-id recognition inside Verifies: reference lines.
 
 These tests confirm that JOURNEY_REF_PATTERN matches JNY-... targets
@@ -40,6 +40,20 @@ def _build_trace_graph(tmp_path: Path, test_file_content: str):
     shutil.copytree(_JOURNEY_VERIFY_FIX, dest)
     (dest / "tests").mkdir(parents=True, exist_ok=True)
     (dest / "tests" / "test_verify.py").write_text(test_file_content)
+    fg = build_graph(repo_root=dest)
+    return fg._repos[fg._root_repo].graph
+
+
+def _build_trace_graph_with_spec_file(tmp_path: Path, spec_content: str):
+    """Copy the journey-verify fixture to tmp_path, add a spec file, build graph.
+
+    Returns the primary TraceGraph (not the FederatedGraph).
+    """
+    from elspais.graph.factory import build_graph
+
+    dest = tmp_path / "proj"
+    shutil.copytree(_JOURNEY_VERIFY_FIX, dest)
+    (dest / "spec" / "extra.md").write_text(spec_content)
     fg = build_graph(repo_root=dest)
     return fg._repos[fg._root_repo].graph
 
@@ -185,6 +199,18 @@ def journey_with_bad_step_graph(tmp_path):
 
 
 @pytest.fixture()
+def journey_with_implements_ref_graph(tmp_path):
+    """Graph with a requirement that ``Implements: JNY-OQ-Login-01`` (invalid target)."""
+    spec = (
+        "## REQ-d00001: A Requirement\n\n"
+        "Body.\n\n"
+        "Implements: JNY-OQ-Login-01\n\n"
+        "*End* *REQ-d00001*\n"
+    )
+    return _build_trace_graph_with_spec_file(tmp_path, spec)
+
+
+@pytest.fixture()
 def capture_broken_refs():
     """Return a function that extracts broken references from a graph."""
 
@@ -322,6 +348,29 @@ def test_unknown_step_is_broken_reference(journey_with_bad_step_graph, capture_b
     """A ``Verifies:`` targeting a non-existent step produces a BrokenReference."""
     refs = capture_broken_refs(journey_with_bad_step_graph)
     assert any(r.target_id == "JNY-OQ-Login-01/step-9" for r in refs)
+
+
+# Verifies: REQ-d00255
+def test_implements_journey_is_broken_reference(
+    journey_with_implements_ref_graph, capture_broken_refs
+):
+    """``Implements: JNY-OQ-Login-01`` targeting a journey produces a BrokenReference,
+    not a wired edge.  Journeys and steps are ``Verifies:`` targets only."""
+    from elspais.graph.relations import EdgeKind
+
+    graph = journey_with_implements_ref_graph
+    broken = capture_broken_refs(graph)
+    assert any(
+        r.target_id == "JNY-OQ-Login-01" and r.edge_kind == EdgeKind.IMPLEMENTS.value
+        for r in broken
+    ), "Expected BrokenReference(target='JNY-OQ-Login-01', edge_kind=IMPLEMENTS), got: " + repr(
+        broken
+    )
+    # The journey must NOT have been wired via an IMPLEMENTS edge
+    jny = graph.find_by_id("JNY-OQ-Login-01")
+    assert jny is not None
+    implements_out = [e for e in jny.iter_outgoing_edges() if e.kind == EdgeKind.IMPLEMENTS]
+    assert not implements_out, "Journey must not be linked via IMPLEMENTS edge"
 
 
 # ---------------------------------------------------------------------------

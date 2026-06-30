@@ -188,6 +188,11 @@ def render_node(node: GraphNode, resolver: Any | None = None) -> str:
     elif kind == NodeKind.RESULT:
         # Implements: REQ-d00131-H
         raise ValueError("RESULT nodes are read-only and cannot be rendered back to disk.")
+    elif kind == NodeKind.STEP:
+        raise ValueError(
+            "STEP nodes are parse-derived and read-only; they are reached via "
+            "STRUCTURES and never rendered directly."
+        )
     elif kind == NodeKind.FILE:
         return render_file(node, resolver=resolver)
     else:

@@ -4112,6 +4112,24 @@ class GraphBuilder:
                         )
                     )
                     continue
+                if edge_kind in (EdgeKind.IMPLEMENTS, EdgeKind.REFINES) and target.kind in (
+                    NodeKind.USER_JOURNEY,
+                    NodeKind.STEP,
+                ):
+                    # Journeys and steps are verification targets only; rejecting
+                    # Implements/Refines here prevents invalid traceability edges.
+                    self._broken_references.append(
+                        BrokenReference(
+                            source_id=source_id,
+                            target_id=target_id,
+                            edge_kind=edge_kind.value,
+                            diagnostic=(
+                                "Journeys and steps are only valid as "
+                                "`Verifies:` targets, not Implements/Refines."
+                            ),
+                        )
+                    )
+                    continue
 
                 # If target is an assertion, link from its parent requirement
                 # with assertion_targets set, so the child appears under the
