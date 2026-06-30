@@ -26,6 +26,7 @@ from elspais.utilities.patterns import IdPatternConfig, IdResolver
 # ---------------------------------------------------------------------------
 
 _JOURNEY_VERIFY_FIX = Path(__file__).parents[1] / "fixtures" / "journey-verify"
+_JOURNEY_UAT_FIX = Path(__file__).parents[1] / "fixtures" / "journey-uat"
 
 
 def _build_trace_graph(tmp_path: Path, test_file_content: str):
@@ -41,6 +42,105 @@ def _build_trace_graph(tmp_path: Path, test_file_content: str):
     (dest / "tests" / "test_verify.py").write_text(test_file_content)
     fg = build_graph(repo_root=dest)
     return fg._repos[fg._root_repo].graph
+
+
+def _build_uat_fixture(tmp_path: Path, slug: str):
+    """Copy a committed journey-uat fixture to tmp_path and build its graph.
+
+    Each fixture is a complete, tracked on-disk project: a requirement, a
+    journey that ``Validates:`` it, step test files whose ``Verifies:`` wire
+    step -> test, and a JUnit ``results.xml`` ingested via a
+    ``[[scanning.test.targets]]`` entry (``reporter = "junit"``). The factory's
+    ``_ingest_target_results`` turns each ``<testcase>`` into a RESULT node
+    linked to its TEST via YIELDS, so ``annotate_journey_verification`` sees
+    real pass/fail results.
+
+    Returns the primary TraceGraph (not the FederatedGraph).
+    """
+    from elspais.graph.factory import build_graph
+
+    dest = tmp_path / slug
+    shutil.copytree(_JOURNEY_UAT_FIX / slug, dest)
+    fg = build_graph(repo_root=dest)
+    return fg._repos[fg._root_repo].graph
+
+
+# ---------------------------------------------------------------------------
+# Fixtures: journey-verification roll-up (the tier table)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def graph_steps_all_pass(tmp_path):
+    """Journey with 3 steps, each verified by a passing test."""
+    return _build_uat_fixture(tmp_path, "steps-all-pass")
+
+
+@pytest.fixture()
+def graph_one_step_fails(tmp_path):
+    """Journey with 3 steps where step-2's verifying test fails."""
+    return _build_uat_fixture(tmp_path, "one-step-fails")
+
+
+@pytest.fixture()
+def graph_untested_step(tmp_path):
+    """Journey with 3 steps where step-2 has no verifying test."""
+    return _build_uat_fixture(tmp_path, "untested-step")
+
+
+@pytest.fixture()
+def graph_whole_journey_pass(tmp_path):
+    """Stepless journey verified as a whole by one passing test (Phase 2)."""
+    return _build_uat_fixture(tmp_path, "whole-journey-pass")
+
+
+# Verifies: REQ-d00256
+def test_all_steps_pass_gives_full_direct(graph_steps_all_pass):
+    """All steps' tests pass + Validates names an assertion -> full-direct."""
+    req = graph_steps_all_pass.find_by_id("REQ-d00001")
+    assert req.get_metric("rollup_metrics").uat_verified.tier == "full-direct"
+
+
+# Verifies: REQ-d00256
+def test_one_step_fails_gives_failing(graph_one_step_fails):
+    """A single failing step's test flips the REQ uat_verified tier to failing,
+    and the journey records the failing step's label."""
+    req = graph_one_step_fails.find_by_id("REQ-d00001")
+    assert req.get_metric("rollup_metrics").uat_verified.tier == "failing"
+    jny = graph_one_step_fails.find_by_id("JNY-OQ-Login-01")
+    jv = jny.get_metric("journey_verification")
+    assert jv.tier == "failing"
+    assert "step-2" in jv.failing_steps
+
+
+# Verifies: REQ-d00256
+def test_untested_step_gives_partial(graph_untested_step):
+    """A step with no verifying test leaves the journey partially verified."""
+    jny = graph_untested_step.find_by_id("JNY-OQ-Login-01")
+    jv = jny.get_metric("journey_verification")
+    assert jv.tier == "partial"
+    assert jv.fully_verified is False
+
+
+# Verifies: REQ-d00256
+def test_untested_step_credits_no_uat(graph_untested_step):
+    """A partial journey credits no uat_verified coverage on its Validates target."""
+    req = graph_untested_step.find_by_id("REQ-d00001")
+    uat = req.get_metric("rollup_metrics").uat_verified
+    assert uat.tier == "none"
+    assert uat.has_failures is False
+
+
+# Verifies: REQ-d00255
+def test_whole_journey_pass_no_steps_full(graph_whole_journey_pass):
+    """Phase 2: a stepless journey verified as a whole credits full uat coverage."""
+    jny = graph_whole_journey_pass.find_by_id("JNY-OQ-Login-01")
+    assert jny.get_metric("journey_verification").fully_verified is True
+    req = graph_whole_journey_pass.find_by_id("REQ-d00001")
+    assert req.get_metric("rollup_metrics").uat_verified.tier in (
+        "full-direct",
+        "full-indirect",
+    )
 
 
 # ---------------------------------------------------------------------------

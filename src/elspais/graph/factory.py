@@ -819,7 +819,11 @@ def build_graph(
 
     # Annotate keywords on all nodes so keyword search tools work
     # Annotate coverage metrics so all consumers (MCP, HTML, Flask) get coverage data
-    from elspais.graph.annotators import annotate_coverage, annotate_keywords
+    from elspais.graph.annotators import (
+        annotate_coverage,
+        annotate_journey_verification,
+        annotate_keywords,
+    )
 
     annotate_keywords(graph)
     # Derive the global coverage-credit config from [[scanning.test.targets]].
@@ -827,6 +831,10 @@ def build_graph(
     # Phase 1 homogeneous targets). Logic lives in _derive_credit_config (pure,
     # unit-tested independently).
     credit = _derive_credit_config(typed_config.scanning.test.targets)
+    # Roll each journey's verifying tests into a journey_verification metric
+    # BEFORE coverage, so the per-REQ UAT consumer can read each validating
+    # journey's verdict when populating the uat_verified dimension.
+    annotate_journey_verification(graph)
     annotate_coverage(graph, credit)
 
     # Implements: REQ-d00203-A+B+C+D+E
