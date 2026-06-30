@@ -28,6 +28,7 @@ from elspais.graph.GraphNode import (
     make_definition_id,
     make_file_id,
     make_remainder_id,
+    make_step_id,
     make_test_id,
 )
 from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
@@ -483,6 +484,13 @@ class TraceGraph:
             node = self._index.pop(new_id)
             node.set_id(old_id)
             self._index[old_id] = node
+
+        # Reverse assertion/step child-id cascade recorded during rename_node.
+        for old_child_id, new_child_id in entry.after_state.get("child_ids_renamed", []):
+            child = self._index.pop(new_child_id, None)
+            if child is not None:
+                child.set_id(old_child_id)
+                self._index[old_child_id] = child
 
     def _undo_update_title(self, entry: MutationEntry) -> None:
         """Undo a title update operation."""
@@ -967,6 +975,9 @@ class TraceGraph:
                     edge_kind=br.edge_kind,
                 )
 
+        # Collect child ID pairs for undo support (assertions and steps).
+        child_ids_renamed: list[tuple[str, str]] = []
+
         # If this is a requirement, rename its assertion children
         if node.kind == NodeKind.REQUIREMENT:
             for child in list(node.iter_children()):
@@ -979,6 +990,28 @@ class TraceGraph:
                             self._index.pop(old_assertion_id)
                             child.set_id(new_assertion_id)
                             self._index[new_assertion_id] = child
+                            child_ids_renamed.append((old_assertion_id, new_assertion_id))
+
+        # If this is a journey, cascade the rename to all STEP children.
+        # Step IDs are "<journey_id>/step-N"; renaming the journey requires
+        # updating both the _index keys and the node .id fields so that
+        # find_by_id() and graph queries return the correct nodes.
+        # Verifies: REQ-d00256
+        if node.kind == NodeKind.USER_JOURNEY:
+            for child in list(node.iter_children(edge_kinds={EdgeKind.STRUCTURES})):
+                if child.kind == NodeKind.STEP:
+                    old_step_id = child.id
+                    if old_step_id.startswith(old_id + "/"):
+                        step_suffix = old_step_id[len(old_id) :]  # "/step-N"
+                        new_step_id = new_id + step_suffix
+                        if old_step_id in self._index:
+                            self._index.pop(old_step_id)
+                            child.set_id(new_step_id)
+                            self._index[new_step_id] = child
+                            child_ids_renamed.append((old_step_id, new_step_id))
+
+        # Store cascaded pairs so _undo_rename_node can reverse them.
+        entry.after_state["child_ids_renamed"] = child_ids_renamed
 
         # Implements: REQ-d00230-C
         update_anchors_on_rename(self._comment_index, old_id, new_id, self.repo_root)
@@ -3412,6 +3445,31 @@ class GraphBuilder:
         }
         self._nodes[journey_id] = node
 
+        # Implements: REQ-d00256-A
+        # Create one STEP node per numbered step in the ## Steps section,
+        # linked from the journey via STRUCTURES edges (read-only; never rendered).
+        step_children: list[tuple[int, GraphNode]] = []
+        for step in data.get("steps", []):
+            step_id = make_step_id(journey_id, step["n"])
+            step_node = GraphNode(
+                id=step_id,
+                kind=NodeKind.STEP,
+                label=step["text"],
+            )
+            step_node._content = {
+                "n": step["n"],
+                "label": f"step-{step['n']}",
+                "parse_line": step["line"],
+                "parse_end_line": None,
+            }
+            self._nodes[step_id] = step_node
+            step_children.append((step["line"], step_node))
+
+        step_children.sort(key=lambda x: x[0])
+        for line_num, step_node in step_children:
+            edge = node.link(step_node, EdgeKind.STRUCTURES)
+            edge.metadata = {"render_order": float(line_num)}
+
         # Queue validates links for later resolution
         for addr_ref in data.get("validates", []):
             self._pending_links.append((journey_id, addr_ref, EdgeKind.VALIDATES))
@@ -4065,6 +4123,24 @@ class GraphBuilder:
                                 "on-disk identifier; target the template "
                                 "assertion directly or add a concrete "
                                 "assertion to your satisfier."
+                            ),
+                        )
+                    )
+                    continue
+                if edge_kind in (EdgeKind.IMPLEMENTS, EdgeKind.REFINES) and target.kind in (
+                    NodeKind.USER_JOURNEY,
+                    NodeKind.STEP,
+                ):
+                    # Journeys and steps are verification targets only; rejecting
+                    # Implements/Refines here prevents invalid traceability edges.
+                    self._broken_references.append(
+                        BrokenReference(
+                            source_id=source_id,
+                            target_id=target_id,
+                            edge_kind=edge_kind.value,
+                            diagnostic=(
+                                "Journeys and steps are only valid as "
+                                "`Verifies:` targets, not Implements/Refines."
                             ),
                         )
                     )

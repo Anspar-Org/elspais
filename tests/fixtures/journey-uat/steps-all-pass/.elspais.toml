@@ -1,0 +1,44 @@
+version = 3
+
+[project]
+name = "journey-uat-steps-all-pass"
+namespace = "REQ"
+
+[levels.dev]
+rank = 1
+letter = "d"
+implements = ["dev"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
+
+[id-patterns.component]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.test]
+enabled = true
+directories = ["tests"]
+file_patterns = ["test_*.py"]
+
+[scanning.journey]
+directories = ["spec"]
+
+[[scanning.test.targets]]
+name = "junit"
+reporter = "junit"
+results = "results.xml"
+match = "source"
+
+[rules.hierarchy]
+allow_circular = false
+allow_structural_orphans = true
+
+[rules.format]
+require_hash = false
+require_assertions = false
+require_status = false

@@ -25,7 +25,7 @@ Usage:
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -972,6 +972,136 @@ def _compute_lcov_tested(
     )
 
 
+# Implements: REQ-d00255, REQ-d00256
+@dataclass
+class JourneyVerification:
+    """Roll-up of a journey's UAT verification verdict.
+
+    ``STEP : JOURNEY :: ASSERTION : REQUIREMENT``. A journey is verified by
+    rolling up its steps' verifying tests (or, when it has no addressable
+    steps, its own whole-journey verifying tests).
+
+    Attributes:
+        tier: One of "full-direct", "full-indirect", "partial", "failing",
+            "none". Mirrors the coverage-tier vocabulary.
+        failing_steps: Labels (e.g. "step-2") of steps with a failing test.
+        fully_verified: True iff every unit is verified with no failures;
+            the journey's Validates targets may be credited.
+        has_failures: True iff any verifying test failed.
+    """
+
+    tier: str = "none"
+    failing_steps: list[str] = field(default_factory=list)
+    fully_verified: bool = False
+    has_failures: bool = False
+
+    @property
+    def verdict(self) -> str:
+        """Simple display verdict for this journey.
+
+        Returns:
+            'fail'       if any verifying test failed.
+            'pass'       if the journey is fully verified (all steps pass).
+            'partial'    if some steps pass but not all.
+            'unverified' if no verifying tests are recorded.
+        """
+        # Implements: REQ-d00255, REQ-d00256
+        if self.has_failures:
+            return "fail"
+        if self.fully_verified:
+            return "pass"
+        if self.tier == "partial":
+            return "partial"
+        return "unverified"
+
+
+_UAT_PASS = ("passed", "pass", "success")
+_UAT_FAIL = ("failed", "fail", "failure", "error")
+
+
+# Implements: REQ-d00255, REQ-d00256
+def _node_verifying_status(node) -> tuple[bool, bool]:
+    """Return ``(passed, failed)`` over the tests this node directly VERIFIES.
+
+    Reads ``node``'s OUTGOING VERIFIES edges (node -> test) and each test's
+    RESULT children (RESULT is a child of TEST via YIELDS). Classifies pass/fail
+    with the same status vocabulary the automated TEST loop uses. Works for both
+    a STEP (its step-scoped tests) and a JOURNEY (its whole-journey tests).
+    """
+    from elspais.graph.GraphNode import NodeKind
+    from elspais.graph.relations import EdgeKind
+
+    passed = failed = False
+    for edge in node.iter_edges_by_kind(EdgeKind.VERIFIES):
+        test_node = edge.target  # target = the verifying test
+        for result in test_node.iter_children():
+            if result.kind != NodeKind.RESULT:
+                continue
+            status = (result.get_field("status", "") or "").lower()
+            if status in _UAT_PASS:
+                passed = True
+            elif status in _UAT_FAIL:
+                failed = True
+    return passed, failed
+
+
+# Implements: REQ-d00255, REQ-d00256
+def annotate_journey_verification(graph: FederatedGraph) -> None:
+    """Roll each journey's verifying tests up into a ``JourneyVerification``.
+
+    ``STEP : JOURNEY :: ASSERTION : REQUIREMENT``. A step is verified iff it has
+    >=1 passing and 0 failing verifying tests. The journey rolls its steps up
+    with the standard tier convention; a journey with no addressable steps uses
+    its whole-journey verifying tests as a single implicit unit. The verdict is
+    stored as the ``journey_verification`` node metric, which the per-REQ UAT
+    consumer in :func:`annotate_coverage` reads to populate ``uat_verified``.
+    """
+    from elspais.graph.GraphNode import NodeKind
+    from elspais.graph.relations import EdgeKind
+
+    for journey in graph.iter_by_kind(NodeKind.USER_JOURNEY):
+        steps = [
+            c
+            for c in journey.iter_children(edge_kinds={EdgeKind.STRUCTURES})
+            if c.kind == NodeKind.STEP
+        ]
+        # Whole-journey tests (journey -> test) count toward every step.
+        bpass, bfail = _node_verifying_status(journey)
+        v = JourneyVerification()
+        if steps:
+            verified = 0
+            for step in steps:
+                label = step.get_field("label")  # "step-N"
+                spass, sfail = _node_verifying_status(step)
+                passed, failed = (spass or bpass), (sfail or bfail)
+                status = "fail" if (sfail or bfail) else "pass" if (spass or bpass) else "untested"
+                step.set_metric("step_status", status)
+                if failed:
+                    v.failing_steps.append(label)
+                    v.has_failures = True
+                elif passed:
+                    verified += 1
+                # else: untested step -> contributes to partial
+            if v.has_failures:
+                v.tier = "failing"
+            elif verified == len(steps):
+                v.tier = "full-direct"
+                v.fully_verified = True
+            elif verified > 0:
+                v.tier = "partial"
+            else:
+                v.tier = "none"
+        else:
+            # Phase 2: no addressable steps -> the journey is one unit.
+            if bfail:
+                v.tier, v.has_failures = "failing", True
+            elif bpass:
+                v.tier, v.fully_verified = "full-direct", True
+            else:
+                v.tier = "none"
+        journey.set_metric("journey_verification", v)
+
+
 # Implements: REQ-p00061-A
 def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None = None) -> None:
     """Compute and store coverage metrics for all requirement nodes.
@@ -1252,25 +1382,31 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                     elif st == "red":
                         has_failures = True
 
-        # Implements: REQ-d00069-A
-        # Process JNY children to find RESULT nodes (UAT)
+        # Implements: REQ-d00069-A, REQ-d00255, REQ-d00256
+        # UAT roll-up: source each validating journey's verdict from its
+        # journey_verification metric (computed by annotate_journey_verification,
+        # which rolls each journey's STEP/whole-journey verifying tests up). The
+        # direct/indirect split still depends on whether Validates: named
+        # assertions; only the source of the pass/fail verdict has changed.
         uat_validated_direct_labels: set[str] = set()
         uat_validated_indirect_labels: set[str] = set()
         uat_has_failures = False
         for jny_node, assertion_targets in jny_nodes_for_result_lookup:
-            for result in jny_node.iter_children():
-                if result.kind == NodeKind.RESULT:
-                    status = (result.get_field("status", "") or "").lower()
-                    if status in ("passed", "pass", "success"):
-                        if assertion_targets:
-                            for label in assertion_targets:
-                                if label in assertion_labels:
-                                    uat_validated_direct_labels.add(label)
-                        else:
-                            for label in assertion_labels:
-                                uat_validated_indirect_labels.add(label)
-                    elif status in ("failed", "fail", "failure", "error"):
-                        uat_has_failures = True
+            v = jny_node.get_metric("journey_verification")
+            if v is None:
+                continue
+            if v.has_failures:
+                uat_has_failures = True
+                continue
+            if not v.fully_verified:
+                continue  # partial / untested journey credits nothing
+            if assertion_targets:
+                for label in assertion_targets:
+                    if label in assertion_labels:
+                        uat_validated_direct_labels.add(label)
+            else:
+                for label in assertion_labels:
+                    uat_validated_indirect_labels.add(label)
 
         # Finalize metrics (computes aggregate coverage counts + implemented/uat_coverage dims)
         metrics.finalize()
@@ -1815,6 +1951,8 @@ __all__ = [
     "collect_topics",
     "get_implementation_status",
     "annotate_coverage",
+    "annotate_journey_verification",
+    "JourneyVerification",
     # Keyword extraction
     "DEFAULT_STOPWORDS",
     "STOPWORDS",

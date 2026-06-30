@@ -33,6 +33,14 @@ JNY_ID_PATTERN = re.compile(
 JNY_ID_LINE_PATTERN = re.compile(r"^#*[ \t]*(?P<id>JNY-[A-Za-z0-9-]+):[ \t]*(?P<title>.+)$")
 JNY_END_PATTERN = re.compile(r"^\*End\*\s+\*JNY-[^*]+\*", re.MULTILINE)
 
+# A ``Verifies:`` target may name a whole journey or an addressable step.
+# Matches ``JNY-<descriptor>-<number>`` optionally followed by ``/step-<number>``.
+# No capturing groups -- ``re.findall`` returns full-string matches.
+JOURNEY_REF_PATTERN = re.compile(
+    r"JNY-[A-Za-z0-9][A-Za-z0-9-]*-\d+(?:/step-\d+)?",
+    re.IGNORECASE,
+)
+
 # --- Journey metadata ------------------------------------------------------ #
 
 ACTOR_PATTERN = re.compile(r"\*\*Actor\*\*:[ \t]*(?P<actor>.+?)(?:\n|$)")

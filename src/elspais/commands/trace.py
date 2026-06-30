@@ -53,6 +53,8 @@ class ReportPreset:
     include_assertions: bool = False
     include_code_refs: bool = False
     include_test_refs: bool = False
+    dimension: str = ""
+    """Dimension group filter.  'uat' restricts the report to UAT coverage."""
 
 
 # Implements: REQ-d00084-B
@@ -97,6 +99,47 @@ REPORT_PRESETS = {
 }
 
 DEFAULT_PRESET = "standard"
+
+# Columns for the UAT dimension report -- excludes all code-dimension columns.
+# A synthetic "journeys" column is appended by the formatters.
+_UAT_COLUMNS = ["id", "title", "level", "status", "uat_coverage", "uat_verified"]
+
+
+def _get_uat_journey_verdict(journey_node) -> str:
+    """Derive a simple display verdict from a journey's verification metric.
+
+    Delegates to ``JourneyVerification.verdict`` so the mapping is
+    defined in one place.
+
+    Returns:
+        'fail'       if any verifying test failed.
+        'pass'       if the journey is fully verified (all steps pass).
+        'partial'    if some steps pass but not all.
+        'unverified' if no verifying tests are recorded.
+    """
+    v = journey_node.get_metric("journey_verification")
+    if v is None:
+        return "unverified"
+    return v.verdict
+
+
+def _get_uat_journeys(req_node) -> list[dict]:
+    """Return [{id, verdict}] for each journey that validates this requirement.
+
+    Reads OUTGOING VALIDATES edges on the requirement node.
+    The builder wires these as ``parent_req.link(journey, EdgeKind.VALIDATES)`` so
+    the requirement is the edge source and the journey is the edge target.
+    The verdict is derived from the journey's ``journey_verification`` metric;
+    call :func:`_get_uat_journey_verdict` for the mapping.
+    """
+    from elspais.graph.relations import EdgeKind
+
+    results = []
+    for edge in req_node.iter_outgoing_edges():
+        if edge.kind == EdgeKind.VALIDATES:
+            journey = edge.target
+            results.append({"id": journey.id, "verdict": _get_uat_journey_verdict(journey)})
+    return results
 
 
 def compute_trace(
@@ -316,6 +359,7 @@ def _column_headers() -> dict[str, str]:
         "lcov_tested": "LCOV Tested",
         "hash": "Hash",
         "file": "File",
+        "journeys": "Journeys",
     }
 
 
@@ -350,16 +394,31 @@ def format_markdown(graph: FederatedGraph, preset: ReportPreset | None = None) -
     yield "# Traceability Matrix"
     yield ""
 
-    # Build header based on preset columns
+    # Determine columns: UAT dimension uses fixed UAT columns + synthetic journeys column
     column_headers = _column_headers()
-    headers = [column_headers.get(col, col.title()) for col in preset.columns]
+    if preset.dimension == "uat":
+        columns = list(_UAT_COLUMNS) + ["journeys"]
+    else:
+        columns = preset.columns
+    headers = [column_headers.get(col, col.title()) for col in columns]
     yield "| " + " | ".join(headers) + " |"
     yield "|" + "|".join(["----"] * len(headers)) + "|"
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        data = _get_node_data(node, graph, assertion_labels=preset.include_assertions)
-        row_values = _format_row(data, preset.columns)
+        if preset.dimension == "uat":
+            uat_jnys = _get_uat_journeys(node)
+            if not uat_jnys:
+                continue  # exclude requirements with no VALIDATES edges
+            data = _get_node_data(node, graph, assertion_labels=preset.include_assertions)
+            data["journeys"] = "; ".join(f"{j['id']}:{j['verdict']}" for j in uat_jnys)
+        else:
+            data = _get_node_data(node, graph, assertion_labels=preset.include_assertions)
+
+        row_values = _format_row(data, columns)
         yield "| " + " | ".join(row_values) + " |"
+
+        if preset.dimension == "uat":
+            continue  # no detail rows in UAT view
 
         # Detail rows (controlled by flags, independent of preset)
         if preset.include_body and data["body"]:
@@ -394,6 +453,9 @@ def format_csv(graph: FederatedGraph, preset: ReportPreset | None = None) -> Ite
 
     When test refs are included, adds a Kind column (first) and Assertion/Test Ref
     columns (last). Each test ref gets its own TEST row after its parent REQ row.
+
+    When dimension == 'uat', uses UAT columns only (no code columns) and adds a
+    Journeys column; only requirements with incoming VALIDATES edges are emitted.
     """
     if preset is None:
         preset = REPORT_PRESETS[DEFAULT_PRESET]
@@ -402,6 +464,23 @@ def format_csv(graph: FederatedGraph, preset: ReportPreset | None = None) -> Ite
         if "," in s or '"' in s or "\n" in s:
             return '"' + s.replace('"', '""') + '"'
         return s
+
+    if preset.dimension == "uat":
+        # UAT dimension: fixed columns + journeys, no code columns, no test-ref rows
+        col_headers = _column_headers()
+        uat_csv_cols = list(_UAT_COLUMNS) + ["journeys"]
+        header_names = [col_headers.get(c, c.title()) for c in uat_csv_cols]
+        yield ",".join(header_names)
+
+        for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+            uat_jnys = _get_uat_journeys(node)
+            if not uat_jnys:
+                continue
+            data = _get_node_data(node, graph)
+            data["journeys"] = "; ".join(f"{j['id']}:{j['verdict']}" for j in uat_jnys)
+            row_values = [escape(str(data.get(c, ""))) for c in uat_csv_cols]
+            yield ",".join(row_values)
+        return
 
     # Build header — split coverage columns into Labels + % for CSV
     # when --assertions is active
@@ -469,16 +548,31 @@ def format_html(graph: FederatedGraph, preset: ReportPreset | None = None) -> It
     yield "</style></head><body>"
     yield "<h1>Traceability Matrix</h1>"
 
-    # Build header
+    # Determine columns for UAT dimension
     col_hdrs = _column_headers()
-    headers = [col_hdrs.get(col, col.title()) for col in preset.columns]
-    if preset.include_test_refs:
-        headers.append("Test Refs")
+    if preset.dimension == "uat":
+        columns = list(_UAT_COLUMNS) + ["journeys"]
+        headers = [col_hdrs.get(col, col.title()) for col in columns]
+    else:
+        columns = preset.columns
+        headers = [col_hdrs.get(col, col.title()) for col in columns]
+        if preset.include_test_refs:
+            headers.append("Test Refs")
 
     yield "<table>"
     yield "<tr>" + "".join(f"<th>{h}</th>" for h in headers) + "</tr>"
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if preset.dimension == "uat":
+            uat_jnys = _get_uat_journeys(node)
+            if not uat_jnys:
+                continue
+            data = _get_node_data(node, graph)
+            data["journeys"] = "; ".join(f"{j['id']}:{j['verdict']}" for j in uat_jnys)
+            cells = [f"<td>{escape_html(str(data.get(col, '')))}</td>" for col in columns]
+            yield f"<tr>{''.join(cells)}</tr>"
+            continue
+
         data = _get_node_data(node, graph, assertion_labels=preset.include_assertions)
         cells = []
         for val in _format_row(data, preset.columns):
@@ -514,14 +608,26 @@ def format_json(graph: FederatedGraph, preset: ReportPreset | None = None) -> It
     yield "["
     first = True
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if preset.dimension == "uat":
+            uat_jnys = _get_uat_journeys(node)
+            if not uat_jnys:
+                continue  # exclude requirements with no VALIDATES edges
+
         if not first:
             yield ","
         first = False
 
         data = _get_node_data(node, graph, assertion_labels=preset.include_assertions)
 
+        if preset.dimension == "uat":
+            # UAT view: only uat_coverage, uat_verified, and journeys; no code columns
+            node_dict: dict = {col: data.get(col) for col in _UAT_COLUMNS}
+            node_dict["journeys"] = uat_jnys
+            yield json.dumps(node_dict, indent=2)
+            continue
+
         # Build node dict based on preset columns
-        node_dict: dict = {}
+        node_dict = {}
         for col in preset.columns:
             if col == "file":
                 # Implements: REQ-d00129-D, REQ-d00129-E
@@ -575,17 +681,25 @@ def render_section(
 
     Returns (formatted_output, exit_code).
     """
-    preset_name = getattr(args, "preset", None) or DEFAULT_PRESET
-    if preset_name not in REPORT_PRESETS:
-        available = ", ".join(REPORT_PRESETS.keys())
-        return f"Error: Unknown preset '{preset_name}'\nAvailable: {available}", 1
-    preset = ReportPreset(
-        name=preset_name,
-        columns=list(REPORT_PRESETS[preset_name].columns),
-        include_body=getattr(args, "body", False),
-        include_assertions=getattr(args, "show_assertions", False),
-        include_test_refs=getattr(args, "show_tests", False),
-    )
+    dimension = getattr(args, "dimension", "")
+    if dimension == "uat":
+        preset = ReportPreset(
+            name="uat",
+            columns=list(_UAT_COLUMNS),
+            dimension="uat",
+        )
+    else:
+        preset_name = getattr(args, "preset", None) or DEFAULT_PRESET
+        if preset_name not in REPORT_PRESETS:
+            available = ", ".join(REPORT_PRESETS.keys())
+            return f"Error: Unknown preset '{preset_name}'\nAvailable: {available}", 1
+        preset = ReportPreset(
+            name=preset_name,
+            columns=list(REPORT_PRESETS[preset_name].columns),
+            include_body=getattr(args, "body", False),
+            include_assertions=getattr(args, "show_assertions", False),
+            include_test_refs=getattr(args, "show_tests", False),
+        )
 
     fmt = getattr(args, "format", "markdown")
     formatters = {
@@ -627,12 +741,15 @@ def _render_json_from_data(data: dict, preset: ReportPreset) -> None:
 
 
 def _render_table_from_graph(graph: FederatedGraph, fmt: str, preset: ReportPreset) -> int:
-    """Render non-JSON formats using graph-based formatters. Returns exit code."""
+    """Render table or JSON formats using graph-based formatters. Returns exit code."""
     formatters = {
         "text": format_markdown,
         "markdown": format_markdown,
         "csv": format_csv,
         "html": format_html,
+        # JSON is included here so UAT dimension (which always uses the graph) can
+        # route through this function for all formats including JSON.
+        "json": format_json,
     }
     formatter = formatters.get(fmt)
     if not formatter:
@@ -650,6 +767,37 @@ def run(args: argparse.Namespace) -> int:
     """
     from elspais.commands import _engine
 
+    fmt = getattr(args, "format", "markdown")
+    spec_dir = getattr(args, "spec_dir", None)
+    skip_daemon = bool(spec_dir)
+    dimension = getattr(args, "dimension", "")
+
+    if dimension == "uat":
+        # Implements: REQ-d00257
+        # UAT dimension always uses graph-based rendering (needs VALIDATES edge access)
+        preset = ReportPreset(
+            name="uat",
+            columns=list(_UAT_COLUMNS),
+            dimension="uat",
+        )
+        config_path = getattr(args, "config", None)
+        if skip_daemon:
+            from elspais.graph.factory import build_graph
+
+            graph = build_graph(
+                spec_dirs=[spec_dir] if spec_dir else None,
+                config_path=config_path,
+            )
+        else:
+            _engine.call(
+                "/api/run/trace",
+                {},
+                compute_trace,
+                config_path=config_path,
+            )
+            graph = _engine.get_graph()
+        return _render_table_from_graph(graph, fmt, preset)
+
     # Implements: REQ-d00084-B+C
     # Parse --preset and apply independent detail flags
     preset_name = getattr(args, "preset", None) or DEFAULT_PRESET
@@ -665,10 +813,6 @@ def run(args: argparse.Namespace) -> int:
         include_assertions=getattr(args, "show_assertions", False),
         include_test_refs=getattr(args, "show_tests", False),
     )
-
-    fmt = getattr(args, "format", "markdown")
-    spec_dir = getattr(args, "spec_dir", None)
-    skip_daemon = bool(spec_dir)
 
     if skip_daemon:
         # Custom spec_dir: build graph directly

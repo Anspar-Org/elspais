@@ -214,6 +214,14 @@ class TraceArgs:
     show_tests: Annotated[bool, tyro.conf.arg(name="tests")] = False
     """Show test references in detail rows."""
 
+    dimension: str = ""
+    """Restrict the report to a dimension group.  Use 'uat' to show only UAT
+    (journey) coverage: requirements validated by at least one journey (named
+    on a journey's Validates: line), their validating journeys and verdicts,
+    and the uat_coverage/uat_verified tiers.
+    Code columns (implemented/tested/verified/code_tested/lcov_tested) are
+    excluded from the UAT view."""
+
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
 

@@ -29,6 +29,7 @@ class NodeKind(Enum):
     TEST = "test"
     RESULT = "result"
     USER_JOURNEY = "journey"
+    STEP = "step"
     REMAINDER = "remainder"
     # Implements: REQ-d00126-A
     FILE = "file"
@@ -102,6 +103,15 @@ def make_test_id(source_id: str, start_line: int) -> str:
     but have a different structural form and are not interchangeable.
     """
     return f"{TEST_ID_PREFIX}{source_id}:{start_line}"
+
+
+def make_step_id(journey_id: str, n: int) -> str:
+    """Canonical id for an addressable journey step: ``JNY-.../step-N``.
+
+    Steps are the journey-axis twin of assertions: they suffix the parent
+    journey id rather than using a structural prefix.
+    """
+    return f"{journey_id}/step-{n}"
 
 
 @dataclass

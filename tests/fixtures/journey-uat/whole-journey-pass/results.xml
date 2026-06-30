@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="oq-suite" tests="1">
+  <testcase name="test_whole_journey" classname="tests.test_whole" time="0.1"/>
+</testsuite>

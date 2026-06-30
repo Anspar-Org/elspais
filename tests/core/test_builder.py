@@ -818,18 +818,21 @@ class TestGeneralizedOrphanDetection:
         root_ids = {n.id for n in graph.iter_roots()}
         assert "UJ-001" not in root_ids
 
-    def test_REQ_d00071_D_journey_with_req_children_is_root(self):
-        """REQ-d00071-D: Journey with a requirement child is a root.
+    def test_REQ_d00071_D_journey_with_test_children_is_root(self):
+        """REQ-d00071-D: Journey with a test child (via Verifies:) is a root.
 
-        A USER_JOURNEY that has a REQUIREMENT implementing it should be
-        classified as a root (the requirement child is non-satellite/meaningful).
+        A USER_JOURNEY that has a TEST verifying it is classified as a root
+        because the TEST child is a non-satellite/meaningful node.
+        Note: ``Implements:`` targeting a journey is now a BrokenReference
+        (journeys are ``Verifies:`` targets only), so this scenario uses the
+        correct VERIFIES edge kind.
         """
         graph = build_graph(
             make_journey("UJ-001", title="Login Flow", actor="User", goal="Sign in"),
-            make_requirement(
-                "REQ-o00001",
-                level="OPS",
-                implements=["UJ-001"],
+            make_test_ref(
+                ["UJ-001"],
+                source_path="tests/test_login.py",
+                start_line=5,
             ),
         )
 
@@ -837,10 +840,10 @@ class TestGeneralizedOrphanDetection:
         assert journey is not None
         assert journey.kind == NodeKind.USER_JOURNEY
 
-        # Journey has a meaningful child (requirement)
+        # Journey has a meaningful child (test)
         assert journey.child_count() > 0
         child_kinds = {c.kind for c in journey.iter_children()}
-        assert NodeKind.REQUIREMENT in child_kinds
+        assert NodeKind.TEST in child_kinds
 
         # Journey is a root
         root_ids = {n.id for n in graph.iter_roots()}

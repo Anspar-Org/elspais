@@ -397,3 +397,55 @@ G. Each target SHALL select its result-to-test matching via `match`: `source` SH
 - 2026-06-20 | 00000000 | - | Michael Lewis (michael@anspar.org) | CUR-1533: initial
 
 *End* *Coverage-Based and Aggregate Test Verification* | **Hash**: 0b87cbd4
+
+---
+
+## REQ-d00255: Test-to-Journey UAT Verification
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-o00051
+
+### Assertions
+
+A. elspais SHALL accept a `USER_JOURNEY` id as a `Verifies:` target in code and test files, recording that the referencing test (or code) verifies the journey via a VERIFIES edge carried on the journey node (mirroring how an assertion-scoped `Verifies:` attaches to its parent requirement).
+
+B. The annotation pipeline SHALL roll up verifying test results to the journey via the standard coverage convention, computing a per-journey verification metric from the pass/fail status of all tests that `Verifies:` the journey.
+
+C. A fully-verified journey SHALL feed `uat_verified` credit on each requirement that the journey's `Validates:` edges name, using the same `uat_verified` dimension populated by the existing UAT annotation pass.
+
+D. The test-to-journey-to-requirement *Traceability* chain SHALL be visible in `elspais trace` output and the viewer, showing which journeys verify which requirements and their verification status.
+
+*End* *Test-to-Journey UAT Verification* | **Hash**: 9381f1e5
+
+---
+
+## REQ-d00256: Step-Level UAT Verification
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-o00051
+
+### Assertions
+
+A. A journey's `## Steps` numbered list SHALL be parsed into addressable `STEP` nodes with ids of the form `JNY-.../step-N`, linked under the journey via `STRUCTURES` edges.
+
+B. A STEP node id (`JNY-.../step-N`) SHALL be a legal `Verifies:` target in test and code files, creating a VERIFIES edge scoped to that step on the parent journey node.
+
+C. Steps SHALL roll up to the journey's verification metric: a step SHALL be considered verified if it has at least one passing and zero failing verifying tests; an untested step SHALL leave the journey in a partial verification tier rather than fully verified.
+
+D. When a journey's verification tier is failing, the system SHALL identify the specific failing step(s) by id in the journey's verification output and API payload.
+
+*End* *Step-Level UAT Verification* | **Hash**: 44671fc1
+
+---
+
+## REQ-d00257: UAT-Scoped Traceability Report
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-o00051
+
+### Assertions
+
+A. The `trace` command SHALL accept a `--dimension uat` flag that selects a UAT-scoped output mode.
+
+B. The UAT report SHALL include only requirements that have at least one incoming VALIDATES edge, and for each such requirement SHALL list the validating journeys with their verification verdicts and the `uat_coverage`/`uat_verified` coverage tiers.
+
+C. The UAT report SHALL exclude code implementation and test verification columns (`implemented`, `tested`, `verified`, `code_tested`, `lcov_tested`).
+
+*End* *UAT-Scoped Traceability Report* | **Hash**: 45bb196f

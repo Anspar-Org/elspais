@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="oq-suite" tests="3">
+  <testcase name="test_step1" classname="tests.test_step1" time="0.1"/>
+  <testcase name="test_step2" classname="tests.test_step2" time="0.1"><failure message="assertion failed"/></testcase>
+  <testcase name="test_step3" classname="tests.test_step3" time="0.1"/>
+</testsuite>

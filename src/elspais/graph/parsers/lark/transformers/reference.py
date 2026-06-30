@@ -30,6 +30,9 @@ from lark import Tree
 
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.parsers.patterns import (
+    JOURNEY_REF_PATTERN as _JOURNEY_REF_RE,
+)
+from elspais.graph.parsers.patterns import (
     KEYWORD_PATTERN as _KEYWORD_RE,
 )
 from elspais.graph.parsers.patterns import (
@@ -403,7 +406,12 @@ class ReferenceTransformer:
     # ------------------------------------------------------------------
 
     def _extract_ids(self, text: str) -> list[str]:
-        """Extract requirement IDs from a reference line (including multi-assertion syntax)."""
+        """Extract requirement IDs from a reference line (including multi-assertion syntax).
+
+        Collects both REQ-style ids (via the namespace pattern) and JNY-style
+        ids (whole journeys and addressable steps) so that ``Verifies:``
+        annotations may target either kind.
+        """
         pattern = build_multi_assertion_pattern(
             self.resolver.config.namespace,
             self.resolver.config.assertions.multi_separator,
@@ -413,6 +421,9 @@ class ReferenceTransformer:
             ref = self.resolver.normalize_ref(m.group(0))
             if ref not in refs:
                 refs.append(ref)
+        for jny_id in _JOURNEY_REF_RE.findall(text):
+            if jny_id not in refs:
+                refs.append(jny_id)
         return refs
 
     def _detect_keyword(self, text: str) -> str:
