@@ -160,6 +160,9 @@ Steps are **read-only**: the journey renders verbatim from its stored body.
 Steps exist only for graph analysis and targeted test verification.
 A STEP is linked to its parent journey via a `STRUCTURES` edge.
 
+The viewer journey card renders a **Steps (N)** section showing each step's
+per-step pass/fail/untested status badge and the verifying tests that target it.
+
 Each step is verified iff >=1 passing test result targets it and 0 failing
 results target it. An unverified step leaves the journey in `partial` state;
 any failing step makes the journey verdict `fail`.

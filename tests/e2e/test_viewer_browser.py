@@ -491,3 +491,62 @@ class TestJourneyVerdictBrowser:
 
         # No JS errors during the interaction
         assert not js_errors, f"JS errors during journey card render: {js_errors}"
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_d00256_journey_step_status_on_card(self, page_journey, failing_journey_viewer_url):
+        # Verifies: REQ-d00256
+        """Open the failing journey card; assert that the Steps section is
+        rendered with per-step status badges and verifying-test rows.
+
+        Checks:
+        - A "Steps" section header appears in the card (rendered as "STEPS" by CSS)
+        - step-2's status badge carries the 'validation-fail' CSS class
+        - step-1 and step-3 badges do NOT carry 'validation-fail'
+        - No JS errors occur
+        """
+        js_errors: list[str] = []
+        page_journey.on("pageerror", lambda err: js_errors.append(str(err)))
+
+        page_journey.goto(failing_journey_viewer_url, wait_until="networkidle")
+        page_journey.evaluate(f"() => window.openCard('{_FAILING_JOURNEY_ID}')")
+
+        card_locator = page_journey.locator(f"#card-{_FAILING_JOURNEY_ID}")
+        card_locator.wait_for(state="visible", timeout=10_000)
+
+        # "Steps (N)" section must exist as a DOM element (text-transform may
+        # render it as "STEPS" in inner_text; use the class selector instead)
+        steps_section = card_locator.locator(".journey-steps")
+        assert (
+            steps_section.count() == 1
+        ), "Expected exactly one .journey-steps section in the journey card"
+
+        # Three step rows must appear (one per numbered step in the fixture)
+        all_step_rows = card_locator.locator(".journey-step-row").all()
+        assert len(all_step_rows) == 3, f"Expected 3 step rows, got {len(all_step_rows)}"
+
+        def row_status_class(row):
+            badge = row.locator("span[title='Step status']")
+            return badge.get_attribute("class") or ""
+
+        step1_cls = row_status_class(all_step_rows[0])
+        step2_cls = row_status_class(all_step_rows[1])
+        step3_cls = row_status_class(all_step_rows[2])
+
+        assert (
+            "validation-fail" in step2_cls
+        ), f"step-2 badge should be validation-fail, got {step2_cls!r}"
+        assert (
+            "validation-fail" not in step1_cls
+        ), f"step-1 badge should NOT be validation-fail, got {step1_cls!r}"
+        assert (
+            "validation-fail" not in step3_cls
+        ), f"step-3 badge should NOT be validation-fail, got {step3_cls!r}"
+
+        # Each step must expose at least one verifying-test row
+        all_test_rows = card_locator.locator(".journey-step-test-row").all()
+        assert (
+            len(all_test_rows) >= 3
+        ), f"Expected >= 3 verifying-test rows, got {len(all_test_rows)}"
+
+        assert not js_errors, f"JS errors during step-status render: {js_errors}"

@@ -1077,10 +1077,53 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
         'onclick="onAddJourneyRef(\'' + nodeId + '\', this)">+ Add Relationship</button>';
     html += '</div>';
 
-    // Sections (view + edit)
+    // Steps — per-step verification status with verifying tests
+    var stepStatusClass = {
+        'pass': 'validation-pass',
+        'fail': 'validation-fail',
+        'untested': 'validation-unknown'
+    };
+    var steps = (data.children || []).filter(function(c) { return c.kind === 'step'; });
+    steps.sort(function(a, b) {
+        var ao = a.render_order != null ? a.render_order : (a.line || 0);
+        var bo = b.render_order != null ? b.render_order : (b.line || 0);
+        return ao - bo;
+    });
+    if (steps.length > 0) {
+        html += '<div class="card-section journey-steps"><div class="card-section-label">Steps (' + steps.length + ')</div>';
+        steps.forEach(function(step) {
+            var sStatus = step.status || 'untested';
+            var sCls = stepStatusClass[sStatus] || 'validation-unknown';
+            var stepNum = (step.label || '').replace(/^step-/, '');
+            html += '<div class="journey-step-row" style="display:flex;align-items:baseline;gap:6px;padding:2px 0;">';
+            html += '<span class="' + sCls + ' active" style="font-size:0.6rem;padding:1px 5px;border-radius:3px;min-width:44px;display:inline-block;text-align:center;" title="Step status">' + escapeHtml(sStatus.toUpperCase()) + '</span>';
+            html += '<span class="journey-step-num" style="font-size:0.8rem;font-weight:600;min-width:18px;">' + escapeHtml(stepNum) + '.</span>';
+            html += '<span class="journey-step-text" style="font-size:0.8rem;">' + escapeHtml(step.text || '') + '</span>';
+            html += '</div>';
+            var vTests = step.verifying_tests || [];
+            if (vTests.length > 0) {
+                html += '<div class="journey-step-tests" style="margin-left:58px;margin-bottom:4px;">';
+                vTests.forEach(function(t) {
+                    var tStatus = t.status || '';
+                    var tCls = tStatus === 'pass' ? 'validation-pass' : (tStatus === 'fail' ? 'validation-fail' : 'validation-unknown');
+                    html += '<div class="journey-step-test-row" style="font-size:0.75rem;display:flex;align-items:center;gap:4px;padding:1px 0;">';
+                    html += '<span class="' + tCls + ' active" style="font-size:0.55rem;padding:1px 4px;border-radius:2px;">' + escapeHtml((tStatus || '?').toUpperCase()) + '</span>';
+                    html += '<span class="journey-step-test-id" style="font-family:monospace;">' + escapeHtml(t.id || '') + '</span>';
+                    if (t.title && t.title !== t.id) {
+                        html += '<span class="journey-step-test-title" style="color:var(--secondary-text);">' + escapeHtml(t.title) + '</span>';
+                    }
+                    html += '</div>';
+                });
+                html += '</div>';
+            }
+        });
+        html += '</div>';
+    }
+
+    // Sections (view + edit) — skip the prose "Steps" section (rendered above)
     var sections = props.sections || [];
     html += '<div class="journey-sections" data-journey-id="' + nodeId + '">';
-    sections.forEach(function(sec) {
+    sections.filter(function(sec) { return sec.name.toLowerCase() !== 'steps'; }).forEach(function(sec) {
         html += '<div class="card-body-section-wrapper journey-section" data-section-name="' + escapeAttr(sec.name) + '" data-anchor="' + nodeId + '#section:' + escapeAttr(sec.name) + '">';
         // Section header — view + edit
         html += '<div class="card-body-section-heading journey-section-header">';
