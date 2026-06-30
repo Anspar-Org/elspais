@@ -1,8 +1,13 @@
 # Verifies: REQ-d00010
+# Verifies: REQ-d00255-D
+# Verifies: REQ-d00256-D
 """Playwright-based browser tests for the elspais viewer command.
 
 Validates REQ-d00010: viewer command serves the traceability UI
 and exposes API endpoints for graph exploration.
+
+Validates REQ-d00255-D, REQ-d00256-D: journey UAT verdict badge and
+failing-step identification are visible in the viewer.
 """
 
 import os
@@ -10,6 +15,7 @@ import shutil
 import signal
 import socket
 import subprocess
+import sys
 import time
 
 import pytest
@@ -345,3 +351,143 @@ class TestTableRendering:
         assert border_widths is not None, "No <td> found for border width check"
         for side, width in border_widths.items():
             assert width == "1px", f"Expected 1px border on {side} side of <td>, got {width!r}"
+
+
+# ---------------------------------------------------------------------------
+# Journey UAT verdict badge fixture + browser test
+# ---------------------------------------------------------------------------
+
+_JOURNEY_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "journey-uat" / "one-step-fails"
+_FAILING_JOURNEY_ID = "JNY-OQ-Login-01"
+
+
+@pytest.fixture(scope="module")
+def failing_journey_viewer_url():
+    """Start an elspais viewer server against the journey-uat/one-step-fails fixture.
+
+    Uses the current worktree's Python (via PYTHONPATH) so that the version
+    with verdict/failing_steps support is used, not the installed pipx binary.
+    Yields the base URL.
+    """
+    if not _JOURNEY_FIXTURE.exists():
+        pytest.skip(f"journey-uat fixture not present at {_JOURNEY_FIXTURE}")
+
+    port = _find_free_port()
+    base_url = f"http://127.0.0.1:{port}"
+
+    # Inject the worktree src so we get the version that includes
+    # journey verdict/failing_steps in the /api/node/ response.
+    worktree_src = str(REPO_ROOT / "src")
+    env = dict(os.environ)
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = f"{worktree_src}:{existing}" if existing else worktree_src
+
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "elspais",
+            "viewer",
+            "--server",
+            "--port",
+            str(port),
+            "--path",
+            str(_JOURNEY_FIXTURE),
+        ],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+
+    try:
+        _wait_for_server(base_url)
+        yield base_url
+    finally:
+        try:
+            import urllib.request
+
+            req = urllib.request.Request(f"{base_url}/api/shutdown", method="POST")
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            pass
+
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                proc.wait(timeout=5)
+
+
+@pytest.fixture()
+def page_journey(failing_journey_viewer_url):
+    """Launch headless Chromium against the journey-uat-fixture viewer."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context()
+        pg = context.new_page()
+        pg.set_default_timeout(10_000)
+        yield pg
+        browser.close()
+
+
+class TestJourneyVerdictBrowser:
+    """Validates REQ-d00255-D, REQ-d00256-D: journey UAT verdict badge and
+    failing-step identification are visible in the viewer card."""
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_d00256_D_journey_fail_verdict_badge(self, page_journey, failing_journey_viewer_url):
+        # Verifies: REQ-d00256-D
+        """Open a FAILING journey card in the viewer; assert that:
+        - The API pre-check confirms verdict == 'fail' and failing_steps == ['step-2']
+        - The rendered card shows the 'UAT: FAIL' badge
+        - The rendered card lists 'step-2' as a failing step
+        - No JS errors occur
+        """
+        js_errors: list[str] = []
+        page_journey.on("pageerror", lambda err: js_errors.append(str(err)))
+
+        # Pre-check: API must return fail verdict with correct failing step
+        resp = page_journey.request.get(
+            f"{failing_journey_viewer_url}/api/node/{_FAILING_JOURNEY_ID}"
+        )
+        assert resp.ok, f"GET /api/node/{_FAILING_JOURNEY_ID} returned {resp.status}"
+        node_data = resp.json()
+        props = node_data.get("properties", {})
+        assert props.get("verdict") == "fail", (
+            f"Expected verdict='fail' in API, got {props.get('verdict')!r}. " f"Properties: {props}"
+        )
+        assert "step-2" in props.get(
+            "failing_steps", []
+        ), f"Expected 'step-2' in failing_steps, got {props.get('failing_steps')!r}"
+
+        # Load the viewer page
+        page_journey.goto(failing_journey_viewer_url, wait_until="networkidle")
+
+        # Open the journey card via the global openCard() function.
+        # openCard() is async (does an API fetch then re-renders the card
+        # stack); we fire it without awaiting and then wait for the DOM node.
+        page_journey.evaluate(f"() => window.openCard('{_FAILING_JOURNEY_ID}')")
+
+        # Wait for the card container to appear
+        card_locator = page_journey.locator(f"#card-{_FAILING_JOURNEY_ID}")
+        card_locator.wait_for(state="visible", timeout=10_000)
+
+        # Assert UAT: FAIL badge text
+        card_text = card_locator.inner_text()
+        assert (
+            "UAT: FAIL" in card_text
+        ), f"Expected 'UAT: FAIL' in journey card, got card text:\n{card_text!r}"
+
+        # Assert the failing step label is shown
+        assert (
+            "step-2" in card_text
+        ), f"Expected 'step-2' in journey card, got card text:\n{card_text!r}"
+
+        # No JS errors during the interaction
+        assert not js_errors, f"JS errors during journey card render: {js_errors}"

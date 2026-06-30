@@ -89,8 +89,9 @@ traceability_matrix.html
 # Developer-local config overrides
 .elspais.local.toml
 
-# Daemon state files
+# Daemon state files (any directory depth)
 .elspais/daemon.*
+**/.elspais/daemon.*
 
 # Ephemeral planning/workflow docs
 MASTER_PLAN*.md
