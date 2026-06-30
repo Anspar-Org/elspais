@@ -485,6 +485,13 @@ class TraceGraph:
             node.set_id(old_id)
             self._index[old_id] = node
 
+        # Reverse assertion/step child-id cascade recorded during rename_node.
+        for old_child_id, new_child_id in entry.after_state.get("child_ids_renamed", []):
+            child = self._index.pop(new_child_id, None)
+            if child is not None:
+                child.set_id(old_child_id)
+                self._index[old_child_id] = child
+
     def _undo_update_title(self, entry: MutationEntry) -> None:
         """Undo a title update operation."""
         node_id = entry.target_id
@@ -968,6 +975,9 @@ class TraceGraph:
                     edge_kind=br.edge_kind,
                 )
 
+        # Collect child ID pairs for undo support (assertions and steps).
+        child_ids_renamed: list[tuple[str, str]] = []
+
         # If this is a requirement, rename its assertion children
         if node.kind == NodeKind.REQUIREMENT:
             for child in list(node.iter_children()):
@@ -980,6 +990,7 @@ class TraceGraph:
                             self._index.pop(old_assertion_id)
                             child.set_id(new_assertion_id)
                             self._index[new_assertion_id] = child
+                            child_ids_renamed.append((old_assertion_id, new_assertion_id))
 
         # If this is a journey, cascade the rename to all STEP children.
         # Step IDs are "<journey_id>/step-N"; renaming the journey requires
@@ -997,6 +1008,10 @@ class TraceGraph:
                             self._index.pop(old_step_id)
                             child.set_id(new_step_id)
                             self._index[new_step_id] = child
+                            child_ids_renamed.append((old_step_id, new_step_id))
+
+        # Store cascaded pairs so _undo_rename_node can reverse them.
+        entry.after_state["child_ids_renamed"] = child_ids_renamed
 
         # Implements: REQ-d00230-C
         update_anchors_on_rename(self._comment_index, old_id, new_id, self.repo_root)

@@ -157,6 +157,78 @@ class TestRenameNode:
         assert graph.find_by_id("REQ-p00001") is not None
         assert graph.find_by_id("REQ-p00099") is None
 
+    # Verifies: REQ-o00062-G
+    def test_rename_undo_reverses_assertion_child_ids(self):
+        """Undo after rename also restores assertion child IDs to original prefix."""
+        graph = build_graph_with_assertions()
+
+        # Pre-condition: old assertion IDs exist
+        assert graph.find_by_id("REQ-p00001-A") is not None
+        assert graph.find_by_id("REQ-p00001-B") is not None
+
+        graph.rename_node("REQ-p00001", "REQ-p00099")
+
+        # After rename: new assertion IDs
+        assert graph.find_by_id("REQ-p00099-A") is not None
+        assert graph.find_by_id("REQ-p00099-B") is not None
+        assert graph.find_by_id("REQ-p00001-A") is None
+        assert graph.find_by_id("REQ-p00001-B") is None
+
+        graph.undo_last()
+
+        # After undo: original assertion IDs restored, renamed ones gone
+        assert graph.find_by_id("REQ-p00001-A") is not None
+        assert graph.find_by_id("REQ-p00001-B") is not None
+        assert graph.find_by_id("REQ-p00099-A") is None
+        assert graph.find_by_id("REQ-p00099-B") is None
+
+        # The assertion nodes themselves carry the original IDs
+        a_node = graph.find_by_id("REQ-p00001-A")
+        assert a_node.id == "REQ-p00001-A"
+
+    # Verifies: REQ-o00062-G
+    def test_rename_undo_reverses_step_child_ids(self):
+        """Undo after USER_JOURNEY rename restores step child IDs to original prefix."""
+        from pathlib import Path
+
+        from elspais.graph.builder import TraceGraph
+        from elspais.graph.GraphNode import GraphNode, NodeKind, make_step_id
+        from elspais.graph.relations import EdgeKind
+
+        graph = TraceGraph(repo_root=Path("/tmp/test-rename-undo-steps"))
+        jny = GraphNode(id="JNY-Test-01", kind=NodeKind.USER_JOURNEY, label="Test Journey")
+        s1 = GraphNode(id=make_step_id("JNY-Test-01", 1), kind=NodeKind.STEP, label="step 1")
+        s2 = GraphNode(id=make_step_id("JNY-Test-01", 2), kind=NodeKind.STEP, label="step 2")
+        jny.link(s1, EdgeKind.STRUCTURES)
+        jny.link(s2, EdgeKind.STRUCTURES)
+        graph._roots.append(jny)
+        graph._index["JNY-Test-01"] = jny
+        graph._index["JNY-Test-01/step-1"] = s1
+        graph._index["JNY-Test-01/step-2"] = s2
+
+        graph.rename_node("JNY-Test-01", "JNY-Test-99")
+
+        # After rename: new step IDs
+        assert graph.find_by_id("JNY-Test-99/step-1") is s1
+        assert graph.find_by_id("JNY-Test-99/step-2") is s2
+        assert graph.find_by_id("JNY-Test-01/step-1") is None
+
+        graph.undo_last()
+
+        # After undo: original step IDs restored, renamed ones gone
+        assert graph.find_by_id("JNY-Test-01/step-1") is s1
+        assert graph.find_by_id("JNY-Test-01/step-2") is s2
+        assert graph.find_by_id("JNY-Test-99/step-1") is None
+        assert graph.find_by_id("JNY-Test-99/step-2") is None
+
+        # Step nodes carry original IDs
+        assert s1.id == "JNY-Test-01/step-1"
+        assert s2.id == "JNY-Test-01/step-2"
+
+        # Journey itself reverted
+        assert graph.find_by_id("JNY-Test-01") is jny
+        assert graph.find_by_id("JNY-Test-99") is None
+
 
 class TestUpdateTitle:
     """Tests for TraceGraph.update_title()."""
