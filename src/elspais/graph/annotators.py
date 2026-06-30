@@ -995,6 +995,25 @@ class JourneyVerification:
     fully_verified: bool = False
     has_failures: bool = False
 
+    @property
+    def verdict(self) -> str:
+        """Simple display verdict for this journey.
+
+        Returns:
+            'fail'       if any verifying test failed.
+            'pass'       if the journey is fully verified (all steps pass).
+            'partial'    if some steps pass but not all.
+            'unverified' if no verifying tests are recorded.
+        """
+        # Implements: REQ-d00255, REQ-d00256
+        if self.has_failures:
+            return "fail"
+        if self.fully_verified:
+            return "pass"
+        if self.tier == "partial":
+            return "partial"
+        return "unverified"
+
 
 _UAT_PASS = ("passed", "pass", "success")
 _UAT_FAIL = ("failed", "fail", "failure", "error")

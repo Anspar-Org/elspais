@@ -108,6 +108,9 @@ _UAT_COLUMNS = ["id", "title", "level", "status", "uat_coverage", "uat_verified"
 def _get_uat_journey_verdict(journey_node) -> str:
     """Derive a simple display verdict from a journey's verification metric.
 
+    Delegates to ``JourneyVerification.verdict`` so the mapping is
+    defined in one place.
+
     Returns:
         'fail'       if any verifying test failed.
         'pass'       if the journey is fully verified (all steps pass).
@@ -117,13 +120,7 @@ def _get_uat_journey_verdict(journey_node) -> str:
     v = journey_node.get_metric("journey_verification")
     if v is None:
         return "unverified"
-    if v.has_failures:
-        return "fail"
-    if v.fully_verified:
-        return "pass"
-    if v.tier == "partial":
-        return "partial"
-    return "unverified"
+    return v.verdict
 
 
 def _get_uat_journeys(req_node) -> list[dict]:

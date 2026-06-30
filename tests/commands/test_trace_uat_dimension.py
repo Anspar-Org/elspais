@@ -386,3 +386,88 @@ class TestUATJourneyVerdicts:
                     f"Expected 'fail' verdict for {j['id']} in one-step-fails; "
                     f"got '{j['verdict']}'"
                 )
+
+
+# ---------------------------------------------------------------------------
+# Journey node serialization tests (Task 8)
+# ---------------------------------------------------------------------------
+
+
+def _build_journey_card_data(journey_node) -> dict:
+    """Invoke the node-serialization path and return the journey's properties.
+
+    This mirrors the ``/api/node/{node_id}`` response shape:
+    ``_serialize_node_generic`` populates ``properties`` for USER_JOURNEY
+    nodes; we extract that dict here.
+    """
+    from elspais.mcp.server import _serialize_node_generic
+
+    result = _serialize_node_generic(journey_node, None)
+    return result["properties"]
+
+
+class TestJourneyNodeSerialization:
+    """Verify that journey nodes expose verdict and failing_steps via serialization."""
+
+    # Verifies: REQ-d00256
+    def test_journey_api_exposes_verdict_for_failing(self, tmp_path):
+        """Failing journey's serialized properties must include verdict='fail'."""
+        graph = _build_uat_graph(tmp_path, "one-step-fails")
+        jny = graph.find_by_id("JNY-OQ-Login-01")
+        assert jny is not None, "JNY-OQ-Login-01 not found in one-step-fails fixture"
+        payload = _build_journey_card_data(jny)
+        assert (
+            payload["verdict"] == "fail"
+        ), f"Expected verdict='fail' for failing journey; got '{payload['verdict']}'"
+
+    # Verifies: REQ-d00256
+    def test_journey_api_exposes_failing_steps(self, tmp_path):
+        """Failing journey's serialized properties must include the failing step id."""
+        graph = _build_uat_graph(tmp_path, "one-step-fails")
+        jny = graph.find_by_id("JNY-OQ-Login-01")
+        assert jny is not None, "JNY-OQ-Login-01 not found in one-step-fails fixture"
+        payload = _build_journey_card_data(jny)
+        assert (
+            "step-2" in payload["failing_steps"]
+        ), f"Expected 'step-2' in failing_steps; got {payload['failing_steps']}"
+
+    # Verifies: REQ-d00255
+    def test_journey_api_verdict_pass_for_all_pass(self, steps_all_pass_graph):
+        """All-passing journey's serialized properties must have verdict='pass'."""
+        jny = steps_all_pass_graph.find_by_id("JNY-OQ-Login-01")
+        assert jny is not None, "JNY-OQ-Login-01 not found in steps-all-pass fixture"
+        payload = _build_journey_card_data(jny)
+        assert (
+            payload["verdict"] == "pass"
+        ), f"Expected verdict='pass' for all-pass journey; got '{payload['verdict']}'"
+
+    # Verifies: REQ-d00255
+    def test_journey_api_failing_steps_empty_for_all_pass(self, steps_all_pass_graph):
+        """Passing journey must have an empty failing_steps list."""
+        jny = steps_all_pass_graph.find_by_id("JNY-OQ-Login-01")
+        assert jny is not None, "JNY-OQ-Login-01 not found in steps-all-pass fixture"
+        payload = _build_journey_card_data(jny)
+        assert (
+            payload["failing_steps"] == []
+        ), f"Expected empty failing_steps for passing journey; got {payload['failing_steps']}"
+
+    def test_journey_api_verdict_unverified_for_no_metric(self, mixed_graph):
+        """Journey with no journey_verification metric must expose verdict='unverified'."""
+        from elspais.graph import NodeKind
+        from elspais.graph.relations import EdgeKind
+
+        for node in mixed_graph.nodes_by_kind(NodeKind.REQUIREMENT):
+            for edge in node.iter_outgoing_edges():
+                if edge.kind == EdgeKind.VALIDATES:
+                    jny = edge.target
+                    payload = _build_journey_card_data(jny)
+                    got = payload["verdict"]
+                    assert (
+                        got == "unverified"
+                    ), f"Expected verdict='unverified' for journey with no metric; got '{got}'"
+                    steps = payload["failing_steps"]
+                    assert (
+                        steps == []
+                    ), f"Expected empty failing_steps for unverified journey; got {steps}"
+                    return
+        pytest.skip("mixed_graph has no VALIDATES edges")

@@ -976,6 +976,26 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
     // Body
     html += '<div class="req-card-body">';
 
+    // UAT verdict badge (pass/fail/partial/unverified)
+    // Uses the same validation-* CSS classes as assertion test-result buttons.
+    var verdict = props.verdict || 'unverified';
+    if (verdict !== 'unverified' || props.verdict) {
+        var verdictClassMap = {
+            'pass': 'validation-pass',
+            'fail': 'validation-fail',
+            'partial': 'validation-partial',
+            'unverified': 'validation-unknown'
+        };
+        var verdictClass = verdictClassMap[verdict] || 'validation-unknown';
+        html += '<div class="card-section" style="padding:4px 12px 0;">';
+        html += '<span class="' + verdictClass + ' active" style="font-size:0.65rem;padding:2px 7px;border-radius:3px;display:inline-block;" title="UAT Verdict">UAT: ' + escapeHtml(verdict.toUpperCase()) + '</span>';
+        var failingSteps = props.failing_steps || [];
+        if (verdict === 'fail' && failingSteps.length > 0) {
+            html += ' <span style="font-size:0.7rem;color:var(--secondary-text);">Failing steps: ' + escapeHtml(failingSteps.join(', ')) + '</span>';
+        }
+        html += '</div>';
+    }
+
     // Metadata section — source file right-justified on the label line
     var sourceLink = '';
     if (sourcePath) {

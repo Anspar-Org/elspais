@@ -439,12 +439,22 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
         m = JNY_ID_PATTERN.match(node.id)
         if m:
             descriptor = m.group("descriptor")
+        # Implements: REQ-d00255, REQ-d00256
+        # Surface verdict and failing_steps so viewers can show journey UAT status
+        # without duplicating the verdict-derivation logic.
+        jv = node.get_metric("journey_verification")
+        jny_verdict = jv.verdict if jv is not None else "unverified"
+        jny_failing_steps: list[str] = (
+            jv.failing_steps if jv is not None and jv.has_failures else []
+        )
         properties = {
             "actor": node.get_field("actor", ""),
             "goal": node.get_field("goal", ""),
             "context": node.get_field("context", ""),
             "sections": node.get_field("sections", []),
             "descriptor": descriptor,
+            "verdict": jny_verdict,
+            "failing_steps": jny_failing_steps,
         }
     elif kind == NodeKind.TEST:
         properties = {
