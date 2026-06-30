@@ -56,6 +56,39 @@ def _count_hashes(text: str) -> int:
     return len(text) - len(text.lstrip("#"))
 
 
+# Implements: REQ-d00256-A
+# Matches a numbered list item: "1. text" or "1) text"
+_STEP_LINE_RE = re.compile(r"^\s*(\d+)[.)]\s+(.*\S)\s*$")
+
+
+def _extract_steps(sections: list[dict], base_line: int) -> list[dict]:
+    """Return [{n, text, line}] from a '## Steps' numbered list in sections.
+
+    Searches the sections list for one named 'Steps' (case-insensitive) and
+    parses its content for numbered list items. Falls back to base_line for
+    the absolute line number when the section dict has no 'line' field.
+    """
+    for section in sections:
+        heading = (section.get("name") or section.get("heading") or "").strip().lower()
+        if heading != "steps":
+            continue
+        steps: list[dict] = []
+        content = section.get("content", "")
+        start = section.get("content_line", section.get("line", base_line)) or base_line
+        for offset, raw in enumerate(content.splitlines()):
+            m = _STEP_LINE_RE.match(raw)
+            if m:
+                steps.append(
+                    {
+                        "n": int(m.group(1)),
+                        "text": m.group(2).strip(),
+                        "line": start + offset,
+                    }
+                )
+        return steps
+    return []
+
+
 class RequirementTransformer:
     """Transform a requirement.lark parse tree into ParsedContent objects.
 
@@ -661,6 +694,10 @@ class RequirementTransformer:
                 parsed_data["validates"] = [
                     ref.strip() for ref in refs_str.split(",") if ref.strip()
                 ]
+
+        # Implements: REQ-d00256-A
+        # Extract numbered steps from the ## Steps section into addressable entries.
+        parsed_data["steps"] = _extract_steps(parsed_data.get("sections", []), header_line)
 
         return ParsedContent(
             content_type="journey",

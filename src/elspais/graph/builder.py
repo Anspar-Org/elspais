@@ -28,6 +28,7 @@ from elspais.graph.GraphNode import (
     make_definition_id,
     make_file_id,
     make_remainder_id,
+    make_step_id,
     make_test_id,
 )
 from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
@@ -3411,6 +3412,31 @@ class GraphBuilder:
             "parse_end_line": content.end_line,
         }
         self._nodes[journey_id] = node
+
+        # Implements: REQ-d00256-A
+        # Create one STEP node per numbered step in the ## Steps section,
+        # linked from the journey via STRUCTURES edges (read-only; never rendered).
+        step_children: list[tuple[int, GraphNode]] = []
+        for step in data.get("steps", []):
+            step_id = make_step_id(journey_id, step["n"])
+            step_node = GraphNode(
+                id=step_id,
+                kind=NodeKind.STEP,
+                label=step["text"],
+            )
+            step_node._content = {
+                "n": step["n"],
+                "label": f"step-{step['n']}",
+                "parse_line": step["line"],
+                "parse_end_line": None,
+            }
+            self._nodes[step_id] = step_node
+            step_children.append((step["line"], step_node))
+
+        step_children.sort(key=lambda x: x[0])
+        for line_num, step_node in step_children:
+            edge = node.link(step_node, EdgeKind.STRUCTURES)
+            edge.metadata = {"render_order": float(line_num)}
 
         # Queue validates links for later resolution
         for addr_ref in data.get("validates", []):
