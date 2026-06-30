@@ -341,8 +341,9 @@ def direct_coverage_for(node: GraphNode) -> int:
     For non-ASSERTION nodes, the direction matters and is dispatched by
     :class:`NodeKind`:
 
-    - ``REQUIREMENT``: count only **outgoing** coverage edges (REQ ->
-      CODE/TEST/JNY is the wiring convention).
+    - ``REQUIREMENT`` / ``STEP``: count only **outgoing** coverage edges
+      (REQ -> CODE/TEST/JNY and STEP -> TEST are the outgoing convention;
+      a STEP owns its verifying tests as outgoing VERIFIES edges).
     - All other kinds (``CODE``, ``TEST``, ``FILE``, ``JOURNEY``, ...):
       count only **incoming** coverage edges -- i.e. the evidence
       *received* by this node. This avoids miscounting an outgoing
@@ -371,8 +372,8 @@ def direct_coverage_for(node: GraphNode) -> int:
                     count += 1
         return count
 
-    if node.kind == NodeKind.REQUIREMENT:
-        # REQ -> CODE/TEST/JNY is the outgoing convention.
+    if node.kind in (NodeKind.REQUIREMENT, NodeKind.STEP):
+        # REQ -> CODE/TEST/JNY and STEP -> TEST are the outgoing convention.
         return sum(1 for e in node.iter_outgoing_edges() if e.kind.contributes_to_coverage())
 
     # CODE, TEST, FILE, JOURNEY, ... -- count incoming evidence-of-coverage edges.
