@@ -71,14 +71,17 @@ other_line.1: TEXT
 // Terminals
 // ===================================================================
 
-// Single-line reference: comment + keyword + refs (optional leading whitespace)
-SINGLE_REF_LINE.5: /[ \t]*(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__):?[ \t]+__NAMESPACE__[-_][^\n]+/
+// Single-line reference: comment + keyword + refs (optional leading whitespace).
+// Matches lines starting with either the configured namespace (e.g. REQ-) or
+// the fixed JNY- prefix so that ``Verifies: JNY-OQ-Login-01/step-2`` is
+// recognized even when no REQ ID appears on the line.
+SINGLE_REF_LINE.5: /[ \t]*(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__):?[ \t]+(?:__NAMESPACE__[-_]|JNY-)[^\n]+/
 
 // Block header: comment + keyword + REQUIREMENTS: (optional leading whitespace)
 BLOCK_HEADER_LINE.5: /[ \t]*(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__)[ \t]+[Rr][Ee][Qq][Uu][Ii][Rr][Ee][Mm][Ee][Nn][Tt][Ss]?:?[ \t]*/
 
-// Block reference line: comment + indented REQ-ID
-BLOCK_REF_LINE.4: /[ \t]*(?:__COMMENT_STYLES__)[ \t]+__NAMESPACE__[-_][^\n]+/
+// Block reference line: comment + indented REQ-ID or JNY-ID
+BLOCK_REF_LINE.4: /[ \t]*(?:__COMMENT_STYLES__)[ \t]+(?:__NAMESPACE__[-_]|JNY-)[^\n]+/
 
 // Test function name containing REQ pattern
 TEST_NAME_LINE.4: /[ \t]*(?:async[ \t]+)?def[ \t]+test_\w*__NAMESPACE__[-_][^\n]+/

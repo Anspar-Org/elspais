@@ -981,6 +981,23 @@ class TraceGraph:
                             child.set_id(new_assertion_id)
                             self._index[new_assertion_id] = child
 
+        # If this is a journey, cascade the rename to all STEP children.
+        # Step IDs are "<journey_id>/step-N"; renaming the journey requires
+        # updating both the _index keys and the node .id fields so that
+        # find_by_id() and graph queries return the correct nodes.
+        # Verifies: REQ-d00256
+        if node.kind == NodeKind.USER_JOURNEY:
+            for child in list(node.iter_children(edge_kinds={EdgeKind.STRUCTURES})):
+                if child.kind == NodeKind.STEP:
+                    old_step_id = child.id
+                    if old_step_id.startswith(old_id + "/"):
+                        step_suffix = old_step_id[len(old_id) :]  # "/step-N"
+                        new_step_id = new_id + step_suffix
+                        if old_step_id in self._index:
+                            self._index.pop(old_step_id)
+                            child.set_id(new_step_id)
+                            self._index[new_step_id] = child
+
         # Implements: REQ-d00230-C
         update_anchors_on_rename(self._comment_index, old_id, new_id, self.repo_root)
 
