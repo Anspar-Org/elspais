@@ -252,6 +252,10 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
     rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
     total_a = rollup.total_assertions if rollup else 0
 
+    # Implements: REQ-d00254-I+J
+    fresh_targets = getattr(graph, "render_fresh_targets", None)
+    selective = fresh_targets is not None
+
     def _fmt_count(num: float, total: int) -> str:
         if total == 0:
             return "n/a"
@@ -310,6 +314,18 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
         if assertion_labels:
             data["code_tested_labels"] = f"{ct.direct}/{ct.total}" if ct.total else "n/a"
             data["code_tested_pct"] = f"{round(ct.direct / ct.total * 100)}%" if ct.total else "n/a"
+        # Implements: REQ-d00254-I+J
+        # Special-case the "verified" cell: distinguish "not run, no baseline"
+        # (selective run, zero signal, but test references exist) from a
+        # carried (baseline) verdict, ahead of the "n/a"/count rendering above.
+        vdim = rollup.verified
+        eps = 1e-9
+        no_verified = vdim.direct <= eps and vdim.indirect <= eps and not vdim.has_failures
+        if selective and vdim.total > 0 and no_verified and test_refs:
+            data["verified"] = "—"  # em dash: not run this PR, no baseline
+        elif vdim.carried and vdim.total > 0:
+            data["verified"] = f"{data['verified']} (baseline)"
+
         lt = rollup.lcov_tested
         if lt.total > 0:
             lt_pct = round(lt.indirect / lt.total * 100)
@@ -446,6 +462,14 @@ def format_markdown(graph: FederatedGraph, preset: ReportPreset | None = None) -
                     yield f"- `{ref}`"
                 yield ""
             yield "</details>"
+
+    # Implements: REQ-d00254-I+J
+    yield ""
+    yield (
+        "> Legend: `(baseline)` = carried from a prior run (not re-run this PR, "
+        "verdict still honored); `—` = target not run and no baseline "
+        "(skipped, not a regression)."
+    )
 
 
 def format_csv(graph: FederatedGraph, preset: ReportPreset | None = None) -> Iterator[str]:

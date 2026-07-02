@@ -382,3 +382,208 @@ directories = ["spec"]
         trace.run(args)
 
         assert captured["fresh_targets"] is None
+
+
+def _render_trace_markdown(project, targets=None):
+    """Build a real graph for `project` and render it via format_markdown().
+
+    `targets` mirrors the `--targets` CLI selector: None means a full run
+    (fresh_targets=None threaded into build_graph()); an iterable of names
+    means a selective run (fresh_targets=set(targets)).
+    """
+    from elspais.commands.trace import format_markdown
+    from elspais.graph.factory import build_graph
+
+    fresh_targets = set(targets) if targets is not None else None
+    graph = build_graph(
+        config_path=project / ".elspais.toml",
+        repo_root=project,
+        fresh_targets=fresh_targets,
+    )
+    return "\n".join(format_markdown(graph))
+
+
+def _verified_cell(markdown_text, req_id):
+    """Return the stripped 'Verified' column cell for the row containing req_id."""
+    lines = markdown_text.splitlines()
+    header_line = next((line for line in lines if line.startswith("| ID")), None)
+    assert header_line is not None, "no table header found in markdown output"
+    headers = [h.strip() for h in header_line.strip("|").split("|")]
+    verified_idx = headers.index("Verified")
+    for line in lines:
+        if line.startswith("|") and req_id in line:
+            cells = [c.strip() for c in line.strip("|").split("|")]
+            return cells[verified_idx]
+    raise AssertionError(f"no row found for {req_id!r} in markdown output")
+
+
+_TWO_TARGET_CONFIG = """\
+version = 3
+
+[project]
+name = "two-target-trace"
+namespace = "REQ"
+
+[levels.dev]
+rank = 1
+letter = "d"
+implements = ["dev"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
+
+[id-patterns.component]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.test]
+enabled = true
+directories = ["tests"]
+file_patterns = ["test_*.py"]
+
+[[scanning.test.targets]]
+name = "a"
+reporter = "junit"
+results = "results-a/results.xml"
+match = "source"
+
+[[scanning.test.targets]]
+name = "b"
+reporter = "junit"
+results = "results-b/results.xml"
+match = "source"
+
+[rules.hierarchy]
+allow_circular = false
+allow_structural_orphans = true
+
+[rules.format]
+require_hash = false
+require_assertions = false
+require_status = false
+"""
+
+_TWO_TARGET_SPEC = """\
+# Requirements
+
+---
+
+### REQ-d00001: Req A
+
+The system SHALL do A.
+
+## Assertions
+
+A. The system SHALL do A.
+
+*End* *Req A*
+---
+
+### REQ-d00002: Req B
+
+The system SHALL do B.
+
+## Assertions
+
+A. The system SHALL do B.
+
+*End* *Req B*
+---
+"""
+
+_JUNIT_ONE_PASSING = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="{suite}" tests="1">
+  <testcase name="{name}" classname="tests.{name}" time="0.01"/>
+</testsuite>
+"""
+
+
+@pytest.fixture
+def two_target_project(tmp_path):
+    """On-disk project: REQ-d00001-A verified only by target 'a', REQ-d00002-A
+    verified only by target 'b'. Both targets have seeded (passing) results,
+    so under a `--targets a` selective run, target 'b' is carried (baseline)."""
+    project = tmp_path / "project"
+    (project / "spec").mkdir(parents=True)
+    (project / "spec" / "reqs.md").write_text(_TWO_TARGET_SPEC, encoding="utf-8")
+
+    (project / "tests").mkdir(parents=True)
+    (project / "tests" / "test_a.py").write_text(
+        "# Verifies: REQ-d00001-A\ndef test_a():\n    pass\n", encoding="utf-8"
+    )
+    (project / "tests" / "test_b.py").write_text(
+        "# Verifies: REQ-d00002-A\ndef test_b():\n    pass\n", encoding="utf-8"
+    )
+
+    (project / "results-a").mkdir(parents=True)
+    (project / "results-a" / "results.xml").write_text(
+        _JUNIT_ONE_PASSING.format(suite="suite-a", name="test_a"), encoding="utf-8"
+    )
+    (project / "results-b").mkdir(parents=True)
+    (project / "results-b" / "results.xml").write_text(
+        _JUNIT_ONE_PASSING.format(suite="suite-b", name="test_b"), encoding="utf-8"
+    )
+
+    (project / ".elspais.toml").write_text(_TWO_TARGET_CONFIG, encoding="utf-8")
+    return project
+
+
+@pytest.fixture
+def no_result_target_project(tmp_path):
+    """On-disk project: REQ-d00001-A verified by target 'a' (results present),
+    REQ-d00002-A has a `# Verifies:` test reference to target 'b' but NO
+    results file was ever seeded for 'b' -- no RESULT node is ingested, so
+    the requirement has test_refs but zero verified signal (skipped, not a
+    regression)."""
+    project = tmp_path / "project"
+    (project / "spec").mkdir(parents=True)
+    (project / "spec" / "reqs.md").write_text(_TWO_TARGET_SPEC, encoding="utf-8")
+
+    (project / "tests").mkdir(parents=True)
+    (project / "tests" / "test_a.py").write_text(
+        "# Verifies: REQ-d00001-A\ndef test_a():\n    pass\n", encoding="utf-8"
+    )
+    (project / "tests" / "test_b.py").write_text(
+        "# Verifies: REQ-d00002-A\ndef test_b():\n    pass\n", encoding="utf-8"
+    )
+
+    (project / "results-a").mkdir(parents=True)
+    (project / "results-a" / "results.xml").write_text(
+        _JUNIT_ONE_PASSING.format(suite="suite-a", name="test_a"), encoding="utf-8"
+    )
+    # No results-b directory/file: target 'b' results glob matches nothing.
+
+    (project / ".elspais.toml").write_text(_TWO_TARGET_CONFIG, encoding="utf-8")
+    return project
+
+
+class TestTraceCarriedAndNoData:
+    """Verifies REQ-d00254-I (carried/baseline) and REQ-d00254-J (no-data em-dash)."""
+
+    # Verifies: REQ-d00254-I
+    def test_markdown_marks_carried_baseline(self, two_target_project):
+        out = _render_trace_markdown(two_target_project, targets=["a"])
+        # target 'b' requirement's verified cell carries the baseline marker
+        assert "(baseline)" in _verified_cell(out, "REQ-d00002")
+        # target 'a' requirement's verified cell does NOT
+        assert "(baseline)" not in _verified_cell(out, "REQ-d00001")
+
+    # Verifies: REQ-d00254-J
+    def test_markdown_no_data_dash_in_selective_run(self, no_result_target_project):
+        out = _render_trace_markdown(no_result_target_project, targets=["a"])
+        # a requirement whose only target 'b' was skipped with no seeded
+        # results -> em dash, not "0/1 (0%)"
+        assert _verified_cell(out, "REQ-d00002").strip() == "—"
+
+    # Verifies: REQ-d00254-J
+    def test_full_run_keeps_existing_rendering(self, no_result_target_project):
+        out = _render_trace_markdown(no_result_target_project, targets=None)
+        # full run: today's behavior -- no em dash, no (baseline)
+        cell = _verified_cell(out, "REQ-d00002")
+        assert "—" not in cell
+        assert "(baseline)" not in cell
