@@ -52,6 +52,12 @@ absent `--targets` runs all targets as before.
 
     elspais checks --run-tests --targets python flutter
 
+`--targets` on `checks` only controls *execution* under `--run-tests`; it
+does not itself render carried/no-data provenance -- that's `summary`/`trace`'s
+job. See `elspais docs test-targets` (Per-PR selectivity) for the full model,
+including the `(baseline)` and `—` render states on `summary --targets` /
+`trace --targets`.
+
 ## Stale result detection
 
 Even without `--run-tests`, `elspais checks` warns when:

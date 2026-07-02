@@ -269,4 +269,67 @@ Run elspais in CI after the test step:
 elspais checks
 ```
 
+## Per-PR selectivity
+
+`--targets NAME ...` (accepted by `checks`, `summary`, and `trace`) names the
+subset of `[[scanning.test.targets]]` that are **fresh** for this invocation.
+Everything else is the **complement** — targets not named on `--targets`.
+Omitting `--targets` entirely runs/marks everything as fresh (the full-run
+behavior is unchanged from before this flag existed).
+
+The flag means something slightly different depending on the command:
+
+- **`elspais checks --run-tests --targets NAME ...`** — execution. Only the
+  named targets are run (their `command`, if any, is executed and their
+  results ingested). Targets not named are skipped entirely for this
+  invocation: their `command` does not run and no new results are produced
+  for them. An unknown name is an error (exit 2).
+- **`elspais summary --targets NAME ...`** / **`elspais trace --targets NAME
+  ...`** — provenance/rendering. These commands don't run tests themselves;
+  `--targets` tells them which targets' results were freshly produced *this
+  invocation* (normally by a preceding `checks --run-tests --targets ...`
+  with the same names) versus which targets' results are left over from an
+  earlier run.
+
+On `summary`/`trace`, the complement (non-named) targets render one of two
+ways in the `verified` column, depending on whether prior result data exists
+for them:
+
+- **`(baseline)`** — carried. The target has existing RESULT data from a
+  previous run; that verdict is reused and rendered with a `(baseline)`
+  suffix (e.g. `4/4 100% (baseline)`). A carried **failing** target still
+  fails/gates — carrying only skips re-execution, it never launders a
+  failure into a pass.
+- **`—`** (em dash) — no baseline. The target has test references (so
+  coverage is expected) but zero result data at all — nothing to carry.
+  This renders as skipped and is **not** gating; it's treated as "not run
+  this PR" rather than a regression.
+
+`elspais checks` itself (the health-report / gate command) only consumes
+`--targets` for *execution* under `--run-tests`; it does not render
+`(baseline)`/`—` — that provenance rendering is `summary`/`trace`'s job.
+Running `elspais checks --targets NAME ...` without `--run-tests` accepts
+the flag but has no execution or rendering effect.
+
+### Worked example
+
+Per-PR: run only the targets touched by this change, then render the full
+matrix with the rest carried as baselines:
+
+```bash
+elspais checks --run-tests --targets clinical_diary portal_ui_evs
+elspais trace --targets clinical_diary portal_ui_evs --format markdown
+```
+
+`clinical_diary` and `portal_ui_evs` show fresh, just-run results.  Every
+other configured target shows `(baseline)` (carried from its last run) or
+`—` (no prior result data for that target).
+
+Full regression (e.g. promoting a build from qa to uat): omit `--targets` so
+every configured target runs and renders fresh:
+
+```bash
+elspais checks --run-tests
+```
+
 See also: `elspais docs checks`

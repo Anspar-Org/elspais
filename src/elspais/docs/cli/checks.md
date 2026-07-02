@@ -500,6 +500,14 @@ Run `elspais checks --help` for the full list of flags.  Options are
 defined in `commands/args.py:ChecksArgs` — that dataclass is the single
 source of truth for flag names and descriptions.
 
+`elspais checks --run-tests` executes each configured
+`[[scanning.test.targets]]` entry before evaluating checks. `--targets NAME
+...` restricts `--run-tests` to a named subset (an unknown name is exit
+code 2); it only affects execution here. Per-PR selectivity rendering
+(`(baseline)` for carried results, `—` for no baseline) is produced by
+`summary --targets` / `trace --targets`, not by `checks`. See `elspais docs
+test-targets` for the full model.
+
 ## Error Drill-Down
 
 When `spec.format_rules` or `spec.no_assertions` fails, `elspais checks` directs
