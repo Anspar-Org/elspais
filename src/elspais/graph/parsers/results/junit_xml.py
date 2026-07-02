@@ -147,22 +147,38 @@ class JUnitXMLParser:
                     status = "skipped"
                     message = skipped.get("message") or skipped.text
 
+                # A per-testcase `file` attribute (e.g. Playwright JUnit) names
+                # the real source file. Prefer it as the result's source path so
+                # `match="source"` can bind the result to the scanned test node,
+                # and DROP the classname-derived test_id (which assumes a Python
+                # `.py` module path and can never match a `.spec.ts`) so the
+                # builder takes its source-location matching path instead of a
+                # doomed test_id YIELDS.
+                file_attr = testcase.get("file")
+                result_source = file_attr or source_path
+                line_attr = testcase.get("line")
+                try:
+                    line_no = int(line_attr) if line_attr else None
+                except (TypeError, ValueError):
+                    line_no = None
+
                 # Extract requirement references from test name or classname
                 verifies = self._extract_req_ids(f"{classname} {name}", source_path)
 
                 # Generate canonical TEST node ID using test_identity utility
-                test_id = build_test_id_from_result(classname, name)
+                test_id = None if file_attr else build_test_id_from_result(classname, name)
 
                 result = {
-                    "id": f"{source_path}:{classname}::{name}",
+                    "id": f"{result_source}:{classname}::{name}",
                     "name": name,
                     "classname": classname,
                     "status": status,
                     "duration": duration,
                     "message": message[:200] if message else None,
                     "verifies": verifies,
-                    "source_path": source_path,
+                    "source_path": result_source,
                     "test_id": test_id,
+                    "line": line_no,
                 }
 
                 results.append(result)
