@@ -985,5 +985,12 @@ class TestSummaryCarriedFootnote:
         graph, config = self._build(project, targets=None)
         data = _collect_coverage(graph, config=config)
 
-        assert data["carried_result_targets"] == 0
-        assert data["total_result_targets"] == 2
+        rendered = _render(data, "csv")
+
+        # The structured carried-results row renders correctly (0 carried of 2).
+        rows = list(csv.reader(io.StringIO(rendered)))
+        carried_row = next(r for r in rows if r and r[0] == "Carried Result Targets")
+        assert carried_row == ["Carried Result Targets", "0", "Total Result Targets", "2"]
+
+        # Machine format: no asterisk anywhere in the rendered CSV.
+        assert "*" not in rendered
