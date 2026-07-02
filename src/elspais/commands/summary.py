@@ -56,20 +56,38 @@ def run(args: argparse.Namespace) -> int:
     """Run the coverage command.
 
     Tries a running daemon/viewer first for fast results,
-    falls back to local graph build.
+    falls back to local graph build. --targets forces a local build so the
+    fresh set threads into build_graph() (a cached daemon graph can't know
+    which targets this invocation considers fresh).
     """
     from elspais.commands._engine import call as engine_call
 
     fmt = getattr(args, "format", "text") or "text"
     spec_dir = getattr(args, "spec_dir", None)
+    # Implements: REQ-d00254-I
+    fresh_targets = set(args.targets) if getattr(args, "targets", None) else None
 
-    data = engine_call(
-        "/api/run/summary",
-        {},
-        compute_summary,
-        skip_daemon=bool(spec_dir),
-        config_path=getattr(args, "config", None),
-    )
+    if fresh_targets is not None:
+        from elspais.config import get_config
+        from elspais.graph.factory import build_graph
+
+        config_path = getattr(args, "config", None)
+        graph = build_graph(
+            spec_dirs=[spec_dir] if spec_dir else None,
+            config_path=config_path,
+            fresh_targets=fresh_targets,
+        )
+        config = get_config(config_path)
+        data = compute_summary(graph, config, {})
+        data["graph_source"] = {"type": "local"}
+    else:
+        data = engine_call(
+            "/api/run/summary",
+            {},
+            compute_summary,
+            skip_daemon=bool(spec_dir),
+            config_path=getattr(args, "config", None),
+        )
 
     content = _render(data, fmt)
     sys.stdout.write(content)
@@ -197,12 +215,33 @@ def _collect_coverage(graph: FederatedGraph, config: dict | None = None) -> dict
             "verified_total": tot.verified_total,
         }
 
-    return {
+    result = {
         "levels": levels,
         "excluded": excluded_counts,
         "integrations": integrations,
         "integration_total": integration_total,
     }
+
+    # Implements: REQ-d00254-I
+    # Carry-forward provenance (distinct RESULT target names + how many are
+    # carried baselines) is meaningful only for a selective `--targets` run, so
+    # a selective run isn't a silent no-op on rendered output. Omit it entirely
+    # otherwise, so a full run stays byte-identical to the pre-selectivity
+    # output in every format (JSON keys and the CSV row included).
+    if getattr(graph, "render_fresh_targets", None) is not None:
+        all_result_targets: set[str] = set()
+        carried_result_targets_set: set[str] = set()
+        for result_node in graph.iter_by_kind(NodeKind.RESULT):
+            tgt = result_node.get_field("target")
+            if not tgt:
+                continue
+            all_result_targets.add(tgt)
+            if result_node.get_field("carried"):
+                carried_result_targets_set.add(tgt)
+        result["total_result_targets"] = len(all_result_targets)
+        result["carried_result_targets"] = len(carried_result_targets_set)
+
+    return result
 
 
 def _pct(num: int, denom: int) -> float:
@@ -224,6 +263,11 @@ def _render(data: dict, fmt: str) -> str:
 
 
 def _render_text(data: dict) -> str:
+    # Implements: REQ-d00254-I
+    carried = data.get("carried_result_targets", 0) or 0
+    total_targets = data.get("total_result_targets", 0) or 0
+    carry_marker = "*" if carried > 0 else ""
+
     lines = []
     lines.append("Coverage Summary")
     lines.append("=" * 60)
@@ -247,7 +291,7 @@ def _render_text(data: dict) -> str:
         )
         lines.append(
             f"    Passing:     {fmt_assertion_count(lv['passing_assertions'])}/{ta}"
-            f" ({_pct(lv['passing_assertions'], ta):.1f}%)"
+            f" ({_pct(lv['passing_assertions'], ta):.1f}%){carry_marker}"
         )
 
     excluded = data.get("excluded", {})
@@ -282,11 +326,22 @@ def _render_text(data: dict) -> str:
         from elspais.utilities.report_meta import format_meta_line
 
         lines.append(f"  {format_meta_line(meta)}")
+
+    # Implements: REQ-d00254-I
+    if carried > 0:
+        lines.append("")
+        lines.append(f"* {carried}/{total_targets} test results from previous runs")
+
     lines.append("")
     return "\n".join(lines) + "\n"
 
 
 def _render_markdown(data: dict) -> str:
+    # Implements: REQ-d00254-I
+    carried = data.get("carried_result_targets", 0) or 0
+    total_targets = data.get("total_result_targets", 0) or 0
+    carry_marker = "*" if carried > 0 else ""
+
     lines = []
     lines.append("# Coverage Summary")
     lines.append("")
@@ -303,7 +358,7 @@ def _render_markdown(data: dict) -> str:
         pa = lv["passing_assertions"]
         impl = f"{fmt_assertion_count(ia)}/{ta} ({_pct(ia, ta):.0f}%)"
         val = f"{fmt_assertion_count(va)}/{ta} ({_pct(va, ta):.0f}%)"
-        pas = f"{fmt_assertion_count(pa)}/{ta} ({_pct(pa, ta):.0f}%)"
+        pas = f"{fmt_assertion_count(pa)}/{ta} ({_pct(pa, ta):.0f}%){carry_marker}"
         lines.append(f"| {lv['level']} | {lv['total']} | {ta} | {impl} | {val} | {pas} |")
 
     excluded = data.get("excluded", {})
@@ -329,6 +384,11 @@ def _render_markdown(data: dict) -> str:
             impl = f"{fmt_assertion_count(tot['implemented_covered'])}/{tot['implemented_total']}"
             ver = f"{fmt_assertion_count(tot['verified_covered'])}/{tot['verified_total']}"
             lines.append(f"| total | {tot['requirement_count']} | {impl} | {ver} |")
+
+    # Implements: REQ-d00254-I
+    if carried > 0:
+        lines.append("")
+        lines.append(f"* {carried}/{total_targets} test results from previous runs")
 
     meta = data.get("meta")
     if meta:
@@ -377,6 +437,22 @@ def _render_csv(data: dict) -> str:
                 _pct(va, ta),
                 pa,
                 _pct(pa, ta),
+            ]
+        )
+
+    # Implements: REQ-d00254-I
+    # Structured carried-results counts (no asterisk -- machine format).
+    # Omitted entirely when there are no RESULT-target-bearing nodes, so CSV
+    # output for graphs without test results stays unchanged.
+    total_targets = data.get("total_result_targets", 0) or 0
+    if total_targets > 0:
+        writer.writerow([])
+        writer.writerow(
+            [
+                "Carried Result Targets",
+                data.get("carried_result_targets", 0),
+                "Total Result Targets",
+                total_targets,
             ]
         )
     return buf.getvalue()

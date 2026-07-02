@@ -3008,18 +3008,38 @@ def run(args: argparse.Namespace) -> int:
             return 2
         # _validate_config is defined in this module (health.py near line 35).
         cfg = _validate_config(cfg_dict)
-        if not [t for t in cfg.scanning.test.targets if t.command]:
+        selected = getattr(args, "targets", None)
+        only = set(selected) if selected else None
+        target_names = {t.name for t in cfg.scanning.test.targets}
+        if only is not None:
+            unknown = sorted(only - target_names)
+            if unknown:
+                print(
+                    f"error: unknown --targets: {', '.join(unknown)}. "
+                    f"Configured targets: {', '.join(sorted(target_names))}.",
+                    file=sys.stderr,
+                )
+                return 2
+        commandful = [
+            t for t in cfg.scanning.test.targets if t.command and (only is None or t.name in only)
+        ]
+        if not commandful:
             print(
                 "error: --run-tests requires at least one "
-                "[[scanning.test.targets]] entry with a command field. "
+                "[[scanning.test.targets]] entry with a command field "
+                "(within --targets when given). "
                 "See docs/cli/test-targets.md for configuration examples.",
                 file=sys.stderr,
             )
             return 2
         repo_root = find_git_root() or Path.cwd()
-        results, captured_map = run_configured_targets(cfg, repo_root, fail_fast=fail_fast)
+        results, captured_map = run_configured_targets(
+            cfg, repo_root, fail_fast=fail_fast, only=only
+        )
         runner_failed = any(r.returncode != 0 for r in results)
         args._captured_results = captured_map
+        # Implements: REQ-d00254-I
+        args._fresh_targets = only
         if fail_fast and runner_failed:
             skip_due_to_fail_fast = True
 
@@ -3082,6 +3102,7 @@ def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[
     start_path = Path.cwd()
     lenient = params.get("lenient", "false") == "true"
     captured = getattr(args, "_captured_results", None)
+    fresh_targets = getattr(args, "_fresh_targets", None)
 
     report = HealthReport()
 
@@ -3116,6 +3137,7 @@ def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[
             spec_dirs=[spec_dir] if spec_dir else None,
             config_path=config_path,
             captured_results=captured,
+            fresh_targets=fresh_targets,
         )
         if config is None:
             config = get_config(config_path, start_path=start_path)

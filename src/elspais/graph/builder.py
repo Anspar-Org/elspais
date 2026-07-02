@@ -3625,6 +3625,9 @@ class GraphBuilder:
             "line": data.get("line"),
             "root_line": data.get("root_line"),
             "root_file": data.get("root_file"),
+            # Implements: REQ-d00254-I
+            "carried": data.get("carried", False),
+            "target": data.get("target"),
         }
         self._nodes[result_id] = node
 

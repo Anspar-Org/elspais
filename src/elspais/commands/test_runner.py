@@ -31,12 +31,13 @@ class RunnerResult:
         return self.returncode == 0
 
 
-# Implements: REQ-d00254-F
+# Implements: REQ-d00254-F+H
 def run_configured_targets(
     config: ElspaisConfig,
     repo_root: Path,
     *,
     fail_fast: bool = False,
+    only: set[str] | None = None,
 ) -> tuple[list[RunnerResult], dict[str, str]]:
     """Execute each configured target's command in declaration order.
 
@@ -49,6 +50,9 @@ def run_configured_targets(
         repo_root: Repository root; `cwd` overrides resolve relative to it.
         fail_fast: If True, stop after the first target that exits non-zero
             (or fails to spawn).
+        only: If given, restricts execution to targets whose ``name`` is in
+            this set; all other configured targets are skipped entirely.
+            ``None`` (the default) runs every target with a command.
 
     Returns:
         A tuple ``(results, captured)`` where ``results`` is one
@@ -64,6 +68,8 @@ def run_configured_targets(
 
     for target in config.scanning.test.targets:
         if not target.command:
+            continue
+        if only is not None and target.name not in only:
             continue
 
         # Determine whether this reporter captures stdout.

@@ -163,6 +163,14 @@ reference_keyword = "Verifies"
 
 # Configured test targets - result ingestion and coverage attribution.
 # See `elspais docs test-targets` for full documentation.
+#
+# Note: per-PR selectivity (running/marking only a subset of these targets
+# as fresh, e.g. for a PR that only touched one package) is driven entirely
+# by the `--targets NAME ...` CLI flag on `checks`/`summary`/`trace` -- there
+# is no config field for it. All targets declared here are eligible; which
+# ones are "fresh" for a given invocation is a per-command-line decision, not
+# a persistent config setting. See `elspais docs test-targets` (Per-PR
+# selectivity section).
 [[scanning.test.targets]]
 name     = "app"
 cwd      = "app"                    # relative to repo root; empty = repo root

@@ -98,6 +98,12 @@ class CoverageDimension:
         indirect_labels: Assertions with any coverage > 0
         direct_pct_by_label: Per-assertion direct fraction in [0,1]
         indirect_pct_by_label: Per-assertion fraction (incl. blanket) in [0,1]
+        carried: True when every verified signal contributing to this
+            dimension came from a "carried" (baseline, not freshly-run)
+            RESULT node (CUR-1557). Provenance only -- never affects
+            ``tier``, which is driven solely by ``has_failures``/coverage.
+            Only meaningful on the ``verified`` dimension; other dimensions
+            leave this at its default (``False``).
     """
 
     total: int = 0
@@ -108,6 +114,7 @@ class CoverageDimension:
     indirect_labels: set[str] = field(default_factory=set)
     direct_pct_by_label: dict[str, float] = field(default_factory=dict)
     indirect_pct_by_label: dict[str, float] = field(default_factory=dict)
+    carried: bool = False
 
     @property
     def direct_pct(self) -> float:
@@ -276,6 +283,7 @@ class RollupMetrics:
         verified_direct_labels: set[str],
         verified_indirect_labels: set[str],
         verified_failures: bool,
+        verified_carried: bool = False,
         uat_verified_direct_labels: set[str],
         uat_verified_indirect_labels: set[str],
         uat_verified_failures: bool,
@@ -307,6 +315,7 @@ class RollupMetrics:
             direct_pct_by_label=dict.fromkeys(verified_direct_labels, 1.0),
             indirect_pct_by_label=dict.fromkeys(verified_all, 1.0),
         )
+        self.verified.carried = verified_carried
         uat_all = uat_verified_direct_labels | uat_verified_indirect_labels
         self.uat_verified = CoverageDimension(
             total=n,

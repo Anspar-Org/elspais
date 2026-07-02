@@ -61,9 +61,15 @@ def _resolve_coverage_file_node(graph, source_file, lcov_path, repo_root):
     return graph.find_by_id(make_file_id(str(rel)))
 
 
-# Implements: REQ-d00254-F
+# Implements: REQ-d00254-F, REQ-d00254-I
 def _ingest_target_results(
-    builder, target, results_text: str, repo_root: Path, source_path: str = ""
+    builder,
+    target,
+    results_text: str,
+    repo_root: Path,
+    source_path: str = "",
+    *,
+    carried: bool = False,
 ) -> int:
     """Parse a target's reporter output and add RESULT ParsedContent.
 
@@ -132,6 +138,8 @@ def _ingest_target_results(
             "source_path": raw_src,
             "source_file": source_file,
             "match": target.match,
+            "carried": carried,
+            "target": target.name,
             "line": rec.get("line"),
             "root_line": rec.get("root_line"),
             "root_file": root_file,
@@ -485,6 +493,7 @@ def build_graph(
     strict: bool = False,
     _build_associates: bool = True,
     captured_results: dict[str, str] | None = None,
+    fresh_targets: set[str] | None = None,
 ) -> FederatedGraph:
     """Build a FederatedGraph from spec directories.
 
@@ -506,6 +515,13 @@ def build_graph(
         scan_tests: Whether to scan test directories from testing.test_dirs.
         strict: If True, raise on missing associate paths instead of soft-failing.
         _build_associates: Internal flag to prevent recursive associate building.
+        captured_results: Optional mapping of target name -> captured stdout/results
+            text, bypassing the on-disk results glob for that target.
+        fresh_targets: Optional set of [[scanning.test.targets]] names considered
+            "freshly run" (e.g. via ``--targets``). When set, every RESULT node
+            ingested for a target NOT in this set is tagged ``carried=True``.
+            When None (the default), no target is considered carried. Stashed
+            on the returned FederatedGraph as ``render_fresh_targets``.
 
     Returns:
         FederatedGraph wrapping one or more TraceGraph instances.
@@ -726,6 +742,8 @@ def build_graph(
             for target in typed_config.scanning.test.targets:
                 if not target.reporter:
                     continue
+                # Implements: REQ-d00254-I
+                carried = fresh_targets is not None and target.name not in fresh_targets
                 # cwd-escape guard: skip targets whose cwd resolves outside the repo root
                 cwd_path = (repo_root / target.cwd) if target.cwd else repo_root
                 try:
@@ -738,7 +756,9 @@ def build_graph(
                     )
                     continue
                 if target.name in _captured:
-                    _ingest_target_results(builder, target, _captured[target.name], repo_root, "")
+                    _ingest_target_results(
+                        builder, target, _captured[target.name], repo_root, "", carried=carried
+                    )
                 elif target.results:
                     matched = glob(str(cwd_path / target.results), recursive=True)
                     if matched:
@@ -752,6 +772,7 @@ def build_graph(
                                     Path(f).read_text(encoding="utf-8", errors="replace"),
                                     repo_root,
                                     str(Path(f)),
+                                    carried=carried,
                                 )
                     else:
                         _log.debug("target %r: no files matched %r", target.name, target.results)
@@ -904,9 +925,15 @@ def build_graph(
                     )
                 )
 
-            return FederatedGraph(entries, root_repo=host_name)
+            federated = FederatedGraph(entries, root_repo=host_name)
+            # Implements: REQ-d00254-I
+            federated.render_fresh_targets = fresh_targets
+            return federated
 
-    return FederatedGraph.from_single(graph, config, repo_root)
+    federated = FederatedGraph.from_single(graph, config, repo_root)
+    # Implements: REQ-d00254-I
+    federated.render_fresh_targets = fresh_targets
+    return federated
 
 
 __all__ = ["build_graph"]

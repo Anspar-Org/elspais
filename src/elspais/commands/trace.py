@@ -252,6 +252,10 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
     rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
     total_a = rollup.total_assertions if rollup else 0
 
+    # Implements: REQ-d00254-I+J
+    fresh_targets = getattr(graph, "render_fresh_targets", None)
+    selective = fresh_targets is not None
+
     def _fmt_count(num: float, total: int) -> str:
         if total == 0:
             return "n/a"
@@ -310,6 +314,26 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
         if assertion_labels:
             data["code_tested_labels"] = f"{ct.direct}/{ct.total}" if ct.total else "n/a"
             data["code_tested_pct"] = f"{round(ct.direct / ct.total * 100)}%" if ct.total else "n/a"
+        # Implements: REQ-d00254-I+J
+        # Special-case the "verified" cell: distinguish "not run, no baseline"
+        # from a carried (baseline) verdict, ahead of the "n/a"/count rendering
+        # above. "No baseline" (REQ-d00254-J) means the referenced TEST nodes
+        # have *zero* RESULT records -- the target was skipped this PR and
+        # nothing was seeded. Key on RESULT existence, not on "no pass/fail
+        # signal": results can exist yet contribute no verified signal (e.g. all
+        # skipped / xfailed), and those must NOT render as "not run".
+        vdim = rollup.verified
+        has_any_result = any(
+            child.kind == NodeKind.RESULT
+            for edge in node.iter_outgoing_edges()
+            if edge.target.kind == NodeKind.TEST
+            for child in edge.target.iter_children()
+        )
+        if selective and vdim.total > 0 and test_refs and not has_any_result:
+            data["verified"] = "—"  # em dash: not run this PR, no baseline
+        elif vdim.carried and vdim.total > 0:
+            data["verified"] = f"{data['verified']} (baseline)"
+
         lt = rollup.lcov_tested
         if lt.total > 0:
             lt_pct = round(lt.indirect / lt.total * 100)
@@ -404,6 +428,12 @@ def format_markdown(graph: FederatedGraph, preset: ReportPreset | None = None) -
     yield "| " + " | ".join(headers) + " |"
     yield "|" + "|".join(["----"] * len(headers)) + "|"
 
+    # Implements: REQ-d00254-I+J
+    # Track whether any rendered row actually produced a `(baseline)`/`—`
+    # marker in its verified cell, so the legend is only emitted when it's
+    # relevant (and full-run output stays byte-identical to before).
+    has_carry_marker = False
+
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         if preset.dimension == "uat":
             uat_jnys = _get_uat_journeys(node)
@@ -413,6 +443,11 @@ def format_markdown(graph: FederatedGraph, preset: ReportPreset | None = None) -
             data["journeys"] = "; ".join(f"{j['id']}:{j['verdict']}" for j in uat_jnys)
         else:
             data = _get_node_data(node, graph, assertion_labels=preset.include_assertions)
+
+        if "verified" in columns:
+            verified_cell = data.get("verified", "")
+            if "(baseline)" in verified_cell or "—" in verified_cell:
+                has_carry_marker = True
 
         row_values = _format_row(data, columns)
         yield "| " + " | ".join(row_values) + " |"
@@ -446,6 +481,17 @@ def format_markdown(graph: FederatedGraph, preset: ReportPreset | None = None) -
                     yield f"- `{ref}`"
                 yield ""
             yield "</details>"
+
+    # Implements: REQ-d00254-I+J
+    # Only surface the legend when a row actually used a marker it explains,
+    # and never for the UAT dimension (which has no verified column).
+    if has_carry_marker and preset.dimension != "uat":
+        yield ""
+        yield (
+            "> Legend: `(baseline)` = carried from a prior run (not re-run this PR, "
+            "verdict still honored); `—` = target not run and no baseline "
+            "(skipped, not a regression)."
+        )
 
 
 def format_csv(graph: FederatedGraph, preset: ReportPreset | None = None) -> Iterator[str]:
@@ -769,7 +815,12 @@ def run(args: argparse.Namespace) -> int:
 
     fmt = getattr(args, "format", "markdown")
     spec_dir = getattr(args, "spec_dir", None)
-    skip_daemon = bool(spec_dir)
+    # Implements: REQ-d00254-I
+    # --targets marks provenance on the rendered graph; force a local build
+    # (bypassing any cached daemon graph) so the fresh set actually threads
+    # into build_graph().
+    fresh_targets = set(args.targets) if getattr(args, "targets", None) else None
+    skip_daemon = bool(spec_dir) or fresh_targets is not None
     dimension = getattr(args, "dimension", "")
 
     if dimension == "uat":
@@ -787,6 +838,7 @@ def run(args: argparse.Namespace) -> int:
             graph = build_graph(
                 spec_dirs=[spec_dir] if spec_dir else None,
                 config_path=config_path,
+                fresh_targets=fresh_targets,
             )
         else:
             _engine.call(
@@ -815,13 +867,14 @@ def run(args: argparse.Namespace) -> int:
     )
 
     if skip_daemon:
-        # Custom spec_dir: build graph directly
+        # Custom spec_dir (or --targets): build graph directly
         from elspais.graph.factory import build_graph
 
         config_path = getattr(args, "config", None)
         graph = build_graph(
             spec_dirs=[spec_dir] if spec_dir else None,
             config_path=config_path,
+            fresh_targets=fresh_targets,
         )
         if fmt == "json":
             data = compute_trace(graph, {}, {})
@@ -856,10 +909,12 @@ def run_graph(args: argparse.Namespace) -> int:
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
+    fresh_targets = set(args.targets) if getattr(args, "targets", None) else None
 
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
+        fresh_targets=fresh_targets,
     )
 
     annotate_graph_git_state(graph)
