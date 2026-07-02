@@ -5,7 +5,7 @@ Verify requirements traceability and configuration.
 ## Synopsis
 
     elspais checks [--spec] [--code] [--tests] [--terms]
-                   [--run-tests [--fail-fast]]
+                   [--run-tests [--fail-fast]] [--targets NAME ...]
                    [--format text|markdown|json|junit|sarif]
                    [--status STATUS ...]
                    [--lenient] [--include-passing-details]
@@ -43,6 +43,15 @@ The `command` must put output where `[scanning.result].file_patterns`
 expects to find it. `cwd` is optional and resolves relative to the
 repository root; an empty value means the repo root.
 
+`--targets NAME ...` restricts `--run-tests` to the named subset of
+`[[scanning.test.targets]]` (space-separated names), instead of running
+every configured target. An unknown name is an error (exit 2); an
+absent `--targets` runs all targets as before.
+
+    elspais checks --run-tests --targets python
+
+    elspais checks --run-tests --targets python flutter
+
 ## Stale result detection
 
 Even without `--run-tests`, `elspais checks` warns when:
@@ -64,8 +73,9 @@ json`.
 
 - `0` -- all runners (if `--run-tests`) and all checks passed.
 - `1` -- any runner failed, any check failed, or `--fail-fast` triggered.
-- `2` -- `--run-tests` was passed but no runners are configured, or
-  configuration could not be loaded.
+- `2` -- `--run-tests` was passed but no runners are configured (or none
+  remain within `--targets`), `--targets` named an unconfigured target,
+  or configuration could not be loaded.
 
 ## Examples
 

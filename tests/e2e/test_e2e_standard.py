@@ -1697,6 +1697,46 @@ class TestRunTestsFlag:
         assert out.returncode == 2
         assert "targets" in (out.stderr or "").lower()
 
+    # Verifies: REQ-d00254-H
+    def test_targets_flag_runs_only_named_target(self, tmp_path, project):
+        import shutil
+
+        scratch = tmp_path / "targets_subset"
+        shutil.copytree(project, scratch)
+        marker_a = scratch / "a.txt"
+        marker_b = scratch / "b.txt"
+        raw = (scratch / ".elspais.toml").read_text()
+        before_targets = raw.split("\n[[scanning.test.targets]]")[0]
+        targets_toml = (
+            "\n[[scanning.test.targets]]\n"
+            'name = "a"\n'
+            f'command = "touch {marker_a}"\n'
+            'reporter = "junit"\n'
+            "\n[[scanning.test.targets]]\n"
+            'name = "b"\n'
+            f'command = "touch {marker_b}"\n'
+            'reporter = "junit"\n'
+        )
+        (scratch / ".elspais.toml").write_text(before_targets + targets_toml)
+        out = run_elspais(
+            "checks", "--run-tests", "--targets", "a", "--tests", "--lenient", cwd=scratch
+        )
+        assert (
+            out.returncode == 0
+        ), f"checks --run-tests --targets a failed: stdout={out.stdout!r} stderr={out.stderr!r}"
+        assert marker_a.exists(), "selected target 'a' did not run"
+        assert not marker_b.exists(), "unselected target 'b' ran despite --targets a"
+
+    # Verifies: REQ-d00254-H
+    def test_targets_flag_unknown_name_exits_2(self, tmp_path, project):
+        import shutil
+
+        scratch = tmp_path / "targets_unknown"
+        shutil.copytree(project, scratch)
+        out = run_elspais("checks", "--run-tests", "--targets", "nope", cwd=scratch)
+        assert out.returncode == 2
+        assert "unknown --targets: nope" in (out.stderr or "")
+
 
 class TestRunTestsFailFast:
     """Verifies: REQ-d00249-C, REQ-d00249-G"""

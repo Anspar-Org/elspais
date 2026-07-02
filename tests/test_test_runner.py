@@ -148,3 +148,31 @@ def test_target_without_command_is_skipped(tmp_path: Path):
     cfg = _cfg_with_targets([TestTargetConfig(name="no-cmd", reporter="junit")])
     results, _captured = run_configured_targets(cfg, tmp_path)
     assert results == []
+
+
+# Verifies: REQ-d00254-H
+def test_only_runs_named_targets(tmp_path: Path):
+    """`only` restricts execution to the named subset, in declaration order."""
+    marker = tmp_path / "log.txt"
+    cfg = _cfg_with_targets(
+        [
+            TestTargetConfig(name="a", command=f"echo a >> {marker}", reporter="junit"),
+            TestTargetConfig(name="b", command=f"echo b >> {marker}", reporter="junit"),
+        ]
+    )
+    results, _captured = run_configured_targets(cfg, tmp_path, only={"a"})
+    assert [r.name for r in results] == ["a"]
+    assert marker.read_text().splitlines() == ["a"]
+
+
+# Verifies: REQ-d00254-H
+def test_only_none_runs_all_targets(tmp_path: Path):
+    """`only=None` (the default) preserves existing run-everything behavior."""
+    cfg = _cfg_with_targets(
+        [
+            TestTargetConfig(name="a", command="true", reporter="junit"),
+            TestTargetConfig(name="b", command="true", reporter="junit"),
+        ]
+    )
+    results, _captured = run_configured_targets(cfg, tmp_path, only=None)
+    assert [r.name for r in results] == ["a", "b"]

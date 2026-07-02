@@ -3008,16 +3008,34 @@ def run(args: argparse.Namespace) -> int:
             return 2
         # _validate_config is defined in this module (health.py near line 35).
         cfg = _validate_config(cfg_dict)
-        if not [t for t in cfg.scanning.test.targets if t.command]:
+        selected = getattr(args, "targets", None)
+        only = set(selected) if selected else None
+        target_names = {t.name for t in cfg.scanning.test.targets}
+        if only is not None:
+            unknown = sorted(only - target_names)
+            if unknown:
+                print(
+                    f"error: unknown --targets: {', '.join(unknown)}. "
+                    f"Configured targets: {', '.join(sorted(target_names))}.",
+                    file=sys.stderr,
+                )
+                return 2
+        commandful = [
+            t for t in cfg.scanning.test.targets if t.command and (only is None or t.name in only)
+        ]
+        if not commandful:
             print(
                 "error: --run-tests requires at least one "
-                "[[scanning.test.targets]] entry with a command field. "
+                "[[scanning.test.targets]] entry with a command field "
+                "(within --targets when given). "
                 "See docs/cli/test-targets.md for configuration examples.",
                 file=sys.stderr,
             )
             return 2
         repo_root = find_git_root() or Path.cwd()
-        results, captured_map = run_configured_targets(cfg, repo_root, fail_fast=fail_fast)
+        results, captured_map = run_configured_targets(
+            cfg, repo_root, fail_fast=fail_fast, only=only
+        )
         runner_failed = any(r.returncode != 0 for r in results)
         args._captured_results = captured_map
         if fail_fast and runner_failed:

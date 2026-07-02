@@ -62,6 +62,11 @@ class ChecksArgs:
     fail_fast: bool = False
     """Stop at the first target failure and skip the checks pass. Requires --run-tests."""
 
+    targets: list[str] | None = None
+    """Run/mark only these [[scanning.test.targets]] by name (space-separated).
+    Default: all. With --run-tests, executes only this subset; on summary/trace,
+    marks the rest as carried baselines."""
+
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
 
