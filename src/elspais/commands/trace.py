@@ -769,7 +769,12 @@ def run(args: argparse.Namespace) -> int:
 
     fmt = getattr(args, "format", "markdown")
     spec_dir = getattr(args, "spec_dir", None)
-    skip_daemon = bool(spec_dir)
+    # Implements: REQ-d00254-I
+    # --targets marks provenance on the rendered graph; force a local build
+    # (bypassing any cached daemon graph) so the fresh set actually threads
+    # into build_graph().
+    fresh_targets = set(args.targets) if getattr(args, "targets", None) else None
+    skip_daemon = bool(spec_dir) or fresh_targets is not None
     dimension = getattr(args, "dimension", "")
 
     if dimension == "uat":
@@ -787,6 +792,7 @@ def run(args: argparse.Namespace) -> int:
             graph = build_graph(
                 spec_dirs=[spec_dir] if spec_dir else None,
                 config_path=config_path,
+                fresh_targets=fresh_targets,
             )
         else:
             _engine.call(
@@ -815,13 +821,14 @@ def run(args: argparse.Namespace) -> int:
     )
 
     if skip_daemon:
-        # Custom spec_dir: build graph directly
+        # Custom spec_dir (or --targets): build graph directly
         from elspais.graph.factory import build_graph
 
         config_path = getattr(args, "config", None)
         graph = build_graph(
             spec_dirs=[spec_dir] if spec_dir else None,
             config_path=config_path,
+            fresh_targets=fresh_targets,
         )
         if fmt == "json":
             data = compute_trace(graph, {}, {})
@@ -856,10 +863,12 @@ def run_graph(args: argparse.Namespace) -> int:
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
+    fresh_targets = set(args.targets) if getattr(args, "targets", None) else None
 
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
+        fresh_targets=fresh_targets,
     )
 
     annotate_graph_git_state(graph)

@@ -3038,6 +3038,8 @@ def run(args: argparse.Namespace) -> int:
         )
         runner_failed = any(r.returncode != 0 for r in results)
         args._captured_results = captured_map
+        # Implements: REQ-d00254-I
+        args._fresh_targets = only
         if fail_fast and runner_failed:
             skip_due_to_fail_fast = True
 
@@ -3100,6 +3102,7 @@ def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[
     start_path = Path.cwd()
     lenient = params.get("lenient", "false") == "true"
     captured = getattr(args, "_captured_results", None)
+    fresh_targets = getattr(args, "_fresh_targets", None)
 
     report = HealthReport()
 
@@ -3134,6 +3137,7 @@ def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[
             spec_dirs=[spec_dir] if spec_dir else None,
             config_path=config_path,
             captured_results=captured,
+            fresh_targets=fresh_targets,
         )
         if config is None:
             config = get_config(config_path, start_path=start_path)

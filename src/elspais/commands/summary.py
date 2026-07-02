@@ -56,20 +56,38 @@ def run(args: argparse.Namespace) -> int:
     """Run the coverage command.
 
     Tries a running daemon/viewer first for fast results,
-    falls back to local graph build.
+    falls back to local graph build. --targets forces a local build so the
+    fresh set threads into build_graph() (a cached daemon graph can't know
+    which targets this invocation considers fresh).
     """
     from elspais.commands._engine import call as engine_call
 
     fmt = getattr(args, "format", "text") or "text"
     spec_dir = getattr(args, "spec_dir", None)
+    # Implements: REQ-d00254-I
+    fresh_targets = set(args.targets) if getattr(args, "targets", None) else None
 
-    data = engine_call(
-        "/api/run/summary",
-        {},
-        compute_summary,
-        skip_daemon=bool(spec_dir),
-        config_path=getattr(args, "config", None),
-    )
+    if fresh_targets is not None:
+        from elspais.config import get_config
+        from elspais.graph.factory import build_graph
+
+        config_path = getattr(args, "config", None)
+        graph = build_graph(
+            spec_dirs=[spec_dir] if spec_dir else None,
+            config_path=config_path,
+            fresh_targets=fresh_targets,
+        )
+        config = get_config(config_path)
+        data = compute_summary(graph, config, {})
+        data["graph_source"] = {"type": "local"}
+    else:
+        data = engine_call(
+            "/api/run/summary",
+            {},
+            compute_summary,
+            skip_daemon=bool(spec_dir),
+            config_path=getattr(args, "config", None),
+        )
 
     content = _render(data, fmt)
     sys.stdout.write(content)

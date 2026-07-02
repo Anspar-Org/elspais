@@ -275,3 +275,110 @@ class TestLcovTestedTrace:
         assert (
             "lcov_tested" in REPORT_PRESETS["full"].columns
         ), "lcov_tested must be in full preset columns"
+
+
+class TestTraceFreshTargets:
+    """Verifies REQ-d00254-I: --targets threads a fresh set into build_graph()."""
+
+    @staticmethod
+    def _make_project(tmp_path):
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        (spec_dir / "reqs.md").write_text(
+            """\
+### REQ-p00001: Test Req
+
+**Level**: PRD | **Status**: Active
+
+The system SHALL do something testable.
+
+*End* *Test Req* | **Hash**: ________
+""",
+            encoding="utf-8",
+        )
+        config_path = tmp_path / ".elspais.toml"
+        config_path.write_text(
+            """\
+version = 3
+
+[project]
+name = "fresh-targets"
+namespace = "REQ"
+
+[scanning.spec]
+directories = ["spec"]
+""",
+            encoding="utf-8",
+        )
+        return config_path
+
+    # Verifies: REQ-d00254-I
+    def test_trace_targets_marks_fresh_set(self, tmp_path, monkeypatch):
+        """--targets threads a fresh set into build_graph() for the trace command."""
+        import argparse
+
+        import elspais.graph.factory as factory_mod
+        from elspais.commands import trace
+
+        config_path = self._make_project(tmp_path)
+
+        captured: dict = {}
+        original_build_graph = factory_mod.build_graph
+
+        def spy(*args, **kwargs):
+            captured["fresh_targets"] = kwargs.get("fresh_targets")
+            return original_build_graph(*args, **kwargs)
+
+        monkeypatch.setattr(factory_mod, "build_graph", spy)
+
+        args = argparse.Namespace(
+            targets=["a"],
+            format="json",
+            config=config_path,
+            spec_dir=None,
+            preset=None,
+            body=False,
+            show_assertions=False,
+            show_tests=False,
+            dimension="",
+            output=None,
+        )
+        result = trace.run(args)
+
+        assert result is None or result == 0
+        assert captured["fresh_targets"] == {"a"}
+
+    # Verifies: REQ-d00254-I
+    def test_trace_no_targets_is_none(self, tmp_path, monkeypatch):
+        """Absent --targets threads fresh_targets=None into build_graph()."""
+        import argparse
+
+        import elspais.graph.factory as factory_mod
+        from elspais.commands import trace
+
+        config_path = self._make_project(tmp_path)
+
+        captured: dict = {}
+        original_build_graph = factory_mod.build_graph
+
+        def spy(*args, **kwargs):
+            captured["fresh_targets"] = kwargs.get("fresh_targets")
+            return original_build_graph(*args, **kwargs)
+
+        monkeypatch.setattr(factory_mod, "build_graph", spy)
+
+        args = argparse.Namespace(
+            targets=None,
+            format="json",
+            config=config_path,
+            spec_dir=tmp_path / "spec",
+            preset=None,
+            body=False,
+            show_assertions=False,
+            show_tests=False,
+            dimension="",
+            output=None,
+        )
+        trace.run(args)
+
+        assert captured["fresh_targets"] is None

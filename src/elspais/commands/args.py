@@ -227,6 +227,10 @@ class TraceArgs:
     Code columns (implemented/tested/verified/code_tested/lcov_tested) are
     excluded from the UAT view."""
 
+    targets: list[str] | None = None
+    """Mark only these [[scanning.test.targets]] as freshly-run; render the rest
+    as carried baselines."""
+
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
 
@@ -336,6 +340,10 @@ class SummaryArgs:
 
     format: Literal["text", "markdown", "json", "csv"] = "text"
     """Output format."""
+
+    targets: list[str] | None = None
+    """Mark only these [[scanning.test.targets]] as freshly-run; render the rest
+    as carried baselines."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""

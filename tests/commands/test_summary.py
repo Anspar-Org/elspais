@@ -672,3 +672,94 @@ class TestTestedAndPassingUnion:
             dev["passing_assertions"] > 0
         ), "lcov_tested credit must count toward headline passing"
         assert dev["with_passing"] == 1
+
+
+class TestFreshTargetsWiring:
+    """Verifies REQ-d00254-I: --targets threads a fresh set into build_graph()."""
+
+    @staticmethod
+    def _make_project(tmp_path):
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        (spec_dir / "reqs.md").write_text(
+            """\
+### REQ-p00001: Test Req
+
+**Level**: PRD | **Status**: Active
+
+The system SHALL do something testable.
+
+*End* *Test Req* | **Hash**: ________
+""",
+            encoding="utf-8",
+        )
+        config_path = tmp_path / ".elspais.toml"
+        config_path.write_text(
+            """\
+version = 3
+
+[project]
+name = "fresh-targets"
+namespace = "REQ"
+
+[scanning.spec]
+directories = ["spec"]
+""",
+            encoding="utf-8",
+        )
+        return config_path
+
+    # Verifies: REQ-d00254-I
+    def test_summary_targets_marks_fresh_set(self, tmp_path, monkeypatch, capsys):
+        """--targets forces a local build and threads a fresh set into build_graph()."""
+        import argparse
+
+        import elspais.graph.factory as factory_mod
+        from elspais.commands import summary
+
+        config_path = self._make_project(tmp_path)
+
+        captured: dict = {}
+        original_build_graph = factory_mod.build_graph
+
+        def spy(*a, **k):
+            captured["fresh_targets"] = k.get("fresh_targets")
+            return original_build_graph(*a, **k)
+
+        monkeypatch.setattr(factory_mod, "build_graph", spy)
+
+        args = argparse.Namespace(
+            targets=["a"],
+            format="json",
+            config=config_path,
+            spec_dir=None,
+        )
+        result = summary.run(args)
+
+        assert result == 0
+        assert captured["fresh_targets"] == {"a"}
+
+    # Verifies: REQ-d00254-I
+    def test_summary_no_targets_does_not_force_local_build(self, tmp_path, monkeypatch):
+        """Absent --targets leaves the daemon-vs-local decision to _engine.call()."""
+        import argparse
+
+        from elspais.commands import summary
+
+        captured: dict = {}
+
+        def fake_engine_call(endpoint, params, compute_fn, skip_daemon=False, config_path=None):
+            captured["skip_daemon"] = skip_daemon
+            return {"levels": [], "graph_source": {"type": "local"}}
+
+        monkeypatch.setattr("elspais.commands._engine.call", fake_engine_call)
+
+        args = argparse.Namespace(
+            targets=None,
+            format="json",
+            config=None,
+            spec_dir=None,
+        )
+        summary.run(args)
+
+        assert captured["skip_daemon"] is False
