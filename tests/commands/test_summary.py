@@ -763,3 +763,227 @@ directories = ["spec"]
         summary.run(args)
 
         assert captured["skip_daemon"] is False
+
+
+_TWO_TARGET_CONFIG_SUMMARY = """\
+version = 3
+
+[project]
+name = "two-target-summary"
+namespace = "REQ"
+
+[levels.dev]
+rank = 1
+letter = "d"
+implements = ["dev"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
+
+[id-patterns.component]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.test]
+enabled = true
+directories = ["tests"]
+file_patterns = ["test_*.py"]
+
+[[scanning.test.targets]]
+name = "a"
+reporter = "junit"
+results = "results-a/results.xml"
+match = "source"
+
+[[scanning.test.targets]]
+name = "b"
+reporter = "junit"
+results = "results-b/results.xml"
+match = "source"
+
+[rules.hierarchy]
+allow_circular = false
+allow_structural_orphans = true
+
+[rules.format]
+require_hash = false
+require_assertions = false
+require_status = false
+"""
+
+_TWO_TARGET_SPEC_SUMMARY = """\
+# Requirements
+
+---
+
+### REQ-d00001: Req A
+
+**Level**: DEV | **Status**: Active
+
+The system SHALL do A.
+
+## Assertions
+
+A. The system SHALL do A.
+
+*End* *Req A*
+---
+
+### REQ-d00002: Req B
+
+**Level**: DEV | **Status**: Active
+
+The system SHALL do B.
+
+## Assertions
+
+A. The system SHALL do B.
+
+*End* *Req B*
+---
+"""
+
+_JUNIT_ONE_PASSING_SUMMARY = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="{suite}" tests="1">
+  <testcase name="{name}" classname="tests.{name}" time="0.01"/>
+</testsuite>
+"""
+
+
+class TestSummaryCarriedFootnote:
+    """Verifies REQ-d00254-I: `summary --targets` surfaces carry-forward via
+    an asterisk on the verified figure plus a footnote, instead of being a
+    silent no-op on rendered output."""
+
+    @staticmethod
+    def _make_two_target_project(tmp_path):
+        project = tmp_path / "project"
+        (project / "spec").mkdir(parents=True)
+        (project / "spec" / "reqs.md").write_text(_TWO_TARGET_SPEC_SUMMARY, encoding="utf-8")
+
+        (project / "tests").mkdir(parents=True)
+        (project / "tests" / "test_a.py").write_text(
+            "# Verifies: REQ-d00001-A\ndef test_a():\n    pass\n", encoding="utf-8"
+        )
+        (project / "tests" / "test_b.py").write_text(
+            "# Verifies: REQ-d00002-A\ndef test_b():\n    pass\n", encoding="utf-8"
+        )
+
+        (project / "results-a").mkdir(parents=True)
+        (project / "results-a" / "results.xml").write_text(
+            _JUNIT_ONE_PASSING_SUMMARY.format(suite="suite-a", name="test_a"), encoding="utf-8"
+        )
+        (project / "results-b").mkdir(parents=True)
+        (project / "results-b" / "results.xml").write_text(
+            _JUNIT_ONE_PASSING_SUMMARY.format(suite="suite-b", name="test_b"), encoding="utf-8"
+        )
+
+        (project / ".elspais.toml").write_text(_TWO_TARGET_CONFIG_SUMMARY, encoding="utf-8")
+        return project
+
+    @staticmethod
+    def _build(project, targets=None):
+        from elspais.config import get_config
+        from elspais.graph.factory import build_graph
+
+        fresh_targets = set(targets) if targets is not None else None
+        graph = build_graph(
+            config_path=project / ".elspais.toml",
+            repo_root=project,
+            fresh_targets=fresh_targets,
+        )
+        config = get_config(project / ".elspais.toml")
+        return graph, config
+
+    # Verifies: REQ-d00254-I
+    def test_collect_coverage_counts_carried_result_targets(self, tmp_path):
+        project = self._make_two_target_project(tmp_path)
+        graph, config = self._build(project, targets=["a"])
+
+        data = _collect_coverage(graph, config=config)
+
+        assert data["total_result_targets"] == 2
+        assert data["carried_result_targets"] == 1
+
+    # Verifies: REQ-d00254-I
+    def test_collect_coverage_full_run_has_zero_carried(self, tmp_path):
+        project = self._make_two_target_project(tmp_path)
+        graph, config = self._build(project, targets=None)
+
+        data = _collect_coverage(graph, config=config)
+
+        assert data["total_result_targets"] == 2
+        assert data["carried_result_targets"] == 0
+
+    # Verifies: REQ-d00254-I
+    def test_render_text_selective_run_has_asterisk_and_footnote(self, tmp_path):
+        project = self._make_two_target_project(tmp_path)
+        graph, config = self._build(project, targets=["a"])
+        data = _collect_coverage(graph, config=config)
+
+        text = _render(data, "text")
+
+        # "Passing" is the verified (test-execution-derived) coverage figure.
+        passing_line = next(
+            line for line in text.splitlines() if line.strip().startswith("Passing:")
+        )
+        assert "*" in passing_line
+        assert "* 1/2 test results from previous runs" in text
+
+    # Verifies: REQ-d00254-I
+    def test_render_text_full_run_has_no_asterisk_or_footnote(self, tmp_path):
+        project = self._make_two_target_project(tmp_path)
+        graph, config = self._build(project, targets=None)
+        data = _collect_coverage(graph, config=config)
+
+        text = _render(data, "text")
+
+        assert "*" not in text
+        assert "test results from previous runs" not in text
+
+    # Verifies: REQ-d00254-I
+    def test_render_markdown_selective_run_has_asterisk_and_footnote(self, tmp_path):
+        project = self._make_two_target_project(tmp_path)
+        graph, config = self._build(project, targets=["a"])
+        data = _collect_coverage(graph, config=config)
+
+        md = _render(data, "markdown")
+
+        assert "* 1/2 test results from previous runs" in md
+
+    # Verifies: REQ-d00254-I
+    def test_render_markdown_full_run_has_no_footnote(self, tmp_path):
+        project = self._make_two_target_project(tmp_path)
+        graph, config = self._build(project, targets=None)
+        data = _collect_coverage(graph, config=config)
+
+        md = _render(data, "markdown")
+
+        assert "test results from previous runs" not in md
+
+    # Verifies: REQ-d00254-I
+    def test_render_json_exposes_structured_counts_no_asterisk(self, tmp_path):
+        project = self._make_two_target_project(tmp_path)
+        graph, config = self._build(project, targets=["a"])
+        data = _collect_coverage(graph, config=config)
+
+        rendered = _render(data, "json")
+        parsed = json.loads(rendered)
+
+        assert parsed["carried_result_targets"] == 1
+        assert parsed["total_result_targets"] == 2
+        assert "*" not in rendered.split('"meta"')[0]
+
+    # Verifies: REQ-d00254-I
+    def test_render_csv_full_run_has_zero_carried(self, tmp_path):
+        project = self._make_two_target_project(tmp_path)
+        graph, config = self._build(project, targets=None)
+        data = _collect_coverage(graph, config=config)
+
+        assert data["carried_result_targets"] == 0
+        assert data["total_result_targets"] == 2

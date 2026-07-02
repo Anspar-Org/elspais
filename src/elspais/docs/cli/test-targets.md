@@ -291,9 +291,9 @@ The flag means something slightly different depending on the command:
   with the same names) versus which targets' results are left over from an
   earlier run.
 
-On `summary`/`trace`, the complement (non-named) targets render one of two
-ways in the `verified` column, depending on whether prior result data exists
-for them:
+On `trace`, the complement (non-named) targets render one of two ways in the
+per-requirement `verified` column, depending on whether prior result data
+exists for them:
 
 - **`(baseline)`** — carried. The target has existing RESULT data from a
   previous run; that verdict is reused and rendered with a `(baseline)`
@@ -305,9 +305,32 @@ for them:
   This renders as skipped and is **not** gating; it's treated as "not run
   this PR" rather than a regression.
 
+A `> Legend: ...` line explaining both markers is appended to `trace`'s
+markdown output whenever at least one row actually used one (never shown on
+a full run, and never shown for `--dimension uat`, which has no `verified`
+column).
+
+`summary` is level-aggregated, not per-requirement, so it can't show
+`(baseline)`/`—` inline. Instead, when any RESULT target was carried, the
+level table's **Passing** figure (the union of `verified` and `lcov_tested`
+— the "tested & passing" headline) gets a trailing `*`, and a footnote is
+appended:
+
+```text
+* 1/2 test results from previous runs
+```
+
+The `N/M` counts are distinct RESULT target names: `M` targets have any
+result data at all, `N` of those were carried (not freshly produced this
+invocation). A full run (no `--targets`, or `--targets` covering every
+result-bearing target) has zero carried targets, so neither the `*` nor the
+footnote appears — output is unchanged from before this flag existed. The
+`json`/`csv` formats expose the same counts as structured fields
+(`carried_result_targets`, `total_result_targets`) instead of the `*`.
+
 `elspais checks` itself (the health-report / gate command) only consumes
 `--targets` for *execution* under `--run-tests`; it does not render
-`(baseline)`/`—` — that provenance rendering is `summary`/`trace`'s job.
+`(baseline)`/`—`/`*` — that provenance rendering is `summary`/`trace`'s job.
 Running `elspais checks --targets NAME ...` without `--run-tests` accepts
 the flag but has no execution or rendering effect.
 

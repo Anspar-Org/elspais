@@ -587,3 +587,50 @@ class TestTraceCarriedAndNoData:
         cell = _verified_cell(out, "REQ-d00002")
         assert "—" not in cell
         assert "(baseline)" not in cell
+
+
+def _build_project_graph(project, targets=None):
+    from elspais.graph.factory import build_graph
+
+    fresh_targets = set(targets) if targets is not None else None
+    return build_graph(
+        config_path=project / ".elspais.toml",
+        repo_root=project,
+        fresh_targets=fresh_targets,
+    )
+
+
+class TestTraceLegendGating:
+    """Verifies REQ-d00254-I/J: the `> Legend: ...` line in format_markdown()
+    should only appear when a row actually rendered a `(baseline)` or `—`
+    marker in its verified cell, and never for the UAT dimension (which
+    doesn't render a verified column at all)."""
+
+    # Verifies: REQ-d00254-I/J
+    def test_legend_present_when_marker_rendered(self, two_target_project):
+        from elspais.commands.trace import format_markdown
+
+        graph = _build_project_graph(two_target_project, targets=["a"])
+        out = "\n".join(format_markdown(graph))
+
+        assert "(baseline)" in _verified_cell(out, "REQ-d00002")
+        assert "> Legend:" in out
+
+    # Verifies: REQ-d00254-I/J
+    def test_legend_absent_on_full_run(self, two_target_project):
+        from elspais.commands.trace import format_markdown
+
+        graph = _build_project_graph(two_target_project, targets=None)
+        out = "\n".join(format_markdown(graph))
+
+        assert "> Legend:" not in out
+
+    # Verifies: REQ-d00254-I/J
+    def test_legend_absent_on_uat_dimension(self, two_target_project):
+        from elspais.commands.trace import _UAT_COLUMNS, ReportPreset, format_markdown
+
+        graph = _build_project_graph(two_target_project, targets=["a"])
+        preset = ReportPreset(name="uat", columns=list(_UAT_COLUMNS), dimension="uat")
+        out = "\n".join(format_markdown(graph, preset=preset))
+
+        assert "> Legend:" not in out

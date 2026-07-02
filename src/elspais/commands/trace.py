@@ -420,6 +420,12 @@ def format_markdown(graph: FederatedGraph, preset: ReportPreset | None = None) -
     yield "| " + " | ".join(headers) + " |"
     yield "|" + "|".join(["----"] * len(headers)) + "|"
 
+    # Implements: REQ-d00254-I+J
+    # Track whether any rendered row actually produced a `(baseline)`/`—`
+    # marker in its verified cell, so the legend is only emitted when it's
+    # relevant (and full-run output stays byte-identical to before).
+    has_carry_marker = False
+
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         if preset.dimension == "uat":
             uat_jnys = _get_uat_journeys(node)
@@ -429,6 +435,11 @@ def format_markdown(graph: FederatedGraph, preset: ReportPreset | None = None) -
             data["journeys"] = "; ".join(f"{j['id']}:{j['verdict']}" for j in uat_jnys)
         else:
             data = _get_node_data(node, graph, assertion_labels=preset.include_assertions)
+
+        if "verified" in columns:
+            verified_cell = data.get("verified", "")
+            if "(baseline)" in verified_cell or "—" in verified_cell:
+                has_carry_marker = True
 
         row_values = _format_row(data, columns)
         yield "| " + " | ".join(row_values) + " |"
@@ -464,12 +475,15 @@ def format_markdown(graph: FederatedGraph, preset: ReportPreset | None = None) -
             yield "</details>"
 
     # Implements: REQ-d00254-I+J
-    yield ""
-    yield (
-        "> Legend: `(baseline)` = carried from a prior run (not re-run this PR, "
-        "verdict still honored); `—` = target not run and no baseline "
-        "(skipped, not a regression)."
-    )
+    # Only surface the legend when a row actually used a marker it explains,
+    # and never for the UAT dimension (which has no verified column).
+    if has_carry_marker and preset.dimension != "uat":
+        yield ""
+        yield (
+            "> Legend: `(baseline)` = carried from a prior run (not re-run this PR, "
+            "verdict still honored); `—` = target not run and no baseline "
+            "(skipped, not a regression)."
+        )
 
 
 def format_csv(graph: FederatedGraph, preset: ReportPreset | None = None) -> Iterator[str]:
