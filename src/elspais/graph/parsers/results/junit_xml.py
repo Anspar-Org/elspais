@@ -2,6 +2,22 @@
 
 This parser extracts test results from JUnit XML format files.
 Uses IdResolver.search_regex() for finding requirement IDs in test output.
+
+Source-file binding
+-------------------
+Standard pytest/JUnit XML has no per-test source path, so the classname is
+used to synthesize a Python ``test:...::...`` ``test_id`` that a scanned
+``.py`` test node can match (the YIELDS branch in the builder).
+
+For non-Python producers (e.g. Playwright ``.spec.ts``), a per-``<testcase>``
+``file`` attribute names the real source file.  When present, it is preferred
+as the result's ``source_path`` (so ``match = "source"`` binds the result to
+the scanned test node by path) and the classname-derived ``test_id`` is
+dropped (set to ``None``) -- a ``.py`` module id could never match a
+``.spec.ts`` node, and a non-None ``test_id`` would route the result to the
+doomed YIELDS branch instead of source matching.  An optional ``line``
+attribute is exposed as the result's ``line`` field.  Producers whose JUnit
+reporter omits ``file`` behave exactly as before (fully backward-compatible).
 """
 
 from __future__ import annotations

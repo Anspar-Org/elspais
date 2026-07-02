@@ -334,3 +334,125 @@ class TestJUnitXMLParserCustomConfig:
 
         assert len(results) == 1
         assert "TASK-d00102" in results[0]["verifies"]
+
+
+class TestJUnitXMLParserSourceBinding:
+    """Tests for per-testcase file=/line= source binding (non-Python producers).
+
+    REQ-d00254-F: RESULT nodes carry the real test-file path (source_file).
+    REQ-d00254-G: match="source" binds a result to the test node at (path, line).
+    """
+
+    # Implements: REQ-d00254-G
+    def test_file_attr_sets_source_path_and_drops_test_id(self):
+        """A per-testcase file= names the real source and drops the classname test_id."""
+        xml = """<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="link-redeem" tests="1">
+  <testcase classname="link.spec.ts" name="redeems"
+            file="e2e/link.spec.ts" line="12" time="0.5"/>
+</testsuite>"""
+        parser = JUnitXMLParser()
+
+        results = parser.parse(xml, "test-results/junit.xml")
+
+        assert len(results) == 1
+        assert results[0]["source_path"] == "e2e/link.spec.ts"
+        assert results[0]["test_id"] is None
+        assert results[0]["line"] == 12
+        assert results[0]["id"].startswith("e2e/link.spec.ts:")
+
+    # Implements: REQ-d00254-G
+    def test_file_attr_without_line(self):
+        """file= present but no line= yields line None while still dropping test_id."""
+        xml = """<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="link-redeem" tests="1">
+  <testcase classname="link.spec.ts" name="redeems"
+            file="e2e/link.spec.ts" time="0.5"/>
+</testsuite>"""
+        parser = JUnitXMLParser()
+
+        results = parser.parse(xml, "test-results/junit.xml")
+
+        assert len(results) == 1
+        assert results[0]["source_path"] == "e2e/link.spec.ts"
+        assert results[0]["test_id"] is None
+        assert results[0]["line"] is None
+
+    # Implements: REQ-d00254-G
+    def test_file_attr_with_non_integer_line(self):
+        """A non-integer line= degrades to None without raising."""
+        xml = """<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="link-redeem" tests="1">
+  <testcase classname="link.spec.ts" name="redeems"
+            file="e2e/link.spec.ts" line="not-a-number" time="0.5"/>
+</testsuite>"""
+        parser = JUnitXMLParser()
+
+        results = parser.parse(xml, "test-results/junit.xml")
+
+        assert len(results) == 1
+        assert results[0]["line"] is None
+        assert results[0]["test_id"] is None
+        assert results[0]["source_path"] == "e2e/link.spec.ts"
+
+    # Implements: REQ-d00254-F
+    def test_backward_compat_no_file_attr(self):
+        """Without file=, the classname-derived test_id and passed source_path are unchanged."""
+        xml = """<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="TestAuth" tests="1">
+  <testcase classname="tests.test_auth" name="test_login" time="0.1"/>
+</testsuite>"""
+        parser = JUnitXMLParser()
+
+        results = parser.parse(xml, "test_results.xml")
+
+        assert len(results) == 1
+        assert results[0]["source_path"] == "test_results.xml"
+        assert results[0]["test_id"] == "test:tests/test_auth.py::test_login"
+        assert results[0]["line"] is None
+        assert results[0]["id"].startswith("test_results.xml:")
+
+    # Implements: REQ-d00254-G
+    def test_mixed_testcases_in_one_suite(self):
+        """The file=/test_id decision is per-testcase, not per-file."""
+        xml = """<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="Mixed" tests="2">
+  <testcase classname="link.spec.ts" name="redeems"
+            file="e2e/link.spec.ts" line="12" time="0.5"/>
+  <testcase classname="tests.test_auth" name="test_login" time="0.1"/>
+</testsuite>"""
+        parser = JUnitXMLParser()
+
+        results = parser.parse(xml, "test-results/junit.xml")
+
+        assert len(results) == 2
+
+        spec_result = next(r for r in results if r["name"] == "redeems")
+        assert spec_result["source_path"] == "e2e/link.spec.ts"
+        assert spec_result["test_id"] is None
+        assert spec_result["line"] == 12
+
+        py_result = next(r for r in results if r["name"] == "test_login")
+        assert py_result["source_path"] == "test-results/junit.xml"
+        assert py_result["test_id"] == "test:tests/test_auth.py::test_login"
+        assert py_result["line"] is None
+
+    # Implements: REQ-d00254-G
+    def test_file_attr_on_failing_testcase(self):
+        """A failing testcase with file= still drops test_id and keeps failed status."""
+        xml = """<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="link-redeem" tests="1">
+  <testcase classname="link.spec.ts" name="redeems"
+            file="e2e/link.spec.ts" line="12" time="0.5">
+    <failure message="Timeout waiting for redeem button"/>
+  </testcase>
+</testsuite>"""
+        parser = JUnitXMLParser()
+
+        results = parser.parse(xml, "test-results/junit.xml")
+
+        assert len(results) == 1
+        assert results[0]["status"] == "failed"
+        assert results[0]["test_id"] is None
+        assert results[0]["source_path"] == "e2e/link.spec.ts"
+        assert results[0]["line"] == 12

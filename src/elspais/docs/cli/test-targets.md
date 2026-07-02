@@ -55,7 +55,7 @@ This is the correct pattern for CI.
 | Reporter | Channel | Description |
 |----------|---------|-------------|
 | `flutter-machine` | stdout | Parses `flutter test --machine` JSON-line protocol; includes real `suite.path` and test line for per-test matching |
-| `junit` | file | Parses JUnit XML test result files matched by `results` glob |
+| `junit` | file | Parses JUnit XML test result files matched by `results` glob. Honors an optional per-`<testcase>` `file` attribute (real source path) and `line` attribute so `match = "source"` can bind to a scanned test node -- see below |
 | `pytest-json` | file | Parses pytest `--json-report` output matched by `results` glob |
 
 **Stdout-channel reporters** (`flutter-machine`) capture output directly from
@@ -76,6 +76,18 @@ back to file granularity: all passing results for that file credit the file's
 `Verifies:` assertions; any failure flags them.  Requires a reporter that emits
 real file paths and, for per-test resolution, the test's source line
 (`flutter-machine`); results without a line fall back to file granularity.
+
+The `junit` reporter also supports `match = "source"` when the JUnit XML
+carries a per-`<testcase>` `file` attribute naming the test's real source path
+(and, optionally, a `line` attribute).  When `file` is present, elspais binds
+the result to the scanned test node at that path instead of trying to
+reconstruct a Python `test:...` identifier from the JUnit `classname` -- which
+is how non-Python suites (e.g. Playwright `.spec.ts`) reach source matching at
+all.  Because most JUnit reporters emit no true per-test source *line*, the
+binding is typically **file-granular** (all of a passing spec's `Verifies:`
+edges are credited; any failure flags them).  When the XML carries no `file`
+attribute (standard pytest JUnit), behavior is unchanged -- use
+`match = "aggregate"` (see the Playwright recipe below).
 
 **`match = "aggregate"` (opt-in coarse mode):** The whole target is green or
 red.  When green (at least one result ingested, zero failures), all
@@ -201,6 +213,41 @@ reporter = "junit"
 results  = ".elspais/results/TEST-*.xml"
 match    = "aggregate"
 ```
+
+## Playwright / TypeScript Recipe (source-bound JUnit)
+
+Any suite that produces JUnit XML can bind results to scanned test nodes with
+`match = "source"` **if each `<testcase>` carries a `file` attribute** naming
+the test's real source path (see the `junit` reporter note under *Reporters
+and Matching*).  This is how a Playwright `.spec.ts` suite feeds
+journey/step UAT coverage per spec rather than as one whole-suite verdict.
+
+Three things must be true:
+
+1. **Specs are scanned as TEST nodes.**  elspais cannot parse TypeScript
+   natively, so point `[scanning.test].prescan_command` at an external scanner
+   that emits `test_`-prefixed functions for each `test(...)` call, and add the
+   spec directories / `*.spec.ts` to the test `directories` / `file_patterns`.
+2. **The JUnit XML carries `file`.**  Playwright's JUnit reporter omits the
+   per-`<testcase>` `file` attribute, so a small post-processing step in the
+   runner injects `file="<repo-relative spec path>"` (derivable from
+   `classname`) into each `<testcase>` before elspais ingests it.
+3. **The target uses `match = "source"`.**
+
+```toml
+[[scanning.test.targets]]
+name     = "e2e"
+reporter = "junit"
+results  = "test-results/junit.xml"   # glob relative to cwd
+match    = "source"                    # per-spec binding via <testcase file=...>
+```
+
+Because JUnit `line` values are not true source lines, binding is
+**file-granular**: a passing spec credits all of its `// Verifies:` step-edges;
+any failing case flags them.  The journey verdict is all-or-nothing -- `full`
+only when every step is verified-passing, `partial` if any step is uncovered,
+`fail` if any is failing.  If you cannot inject `file=`, fall back to
+`match = "aggregate"` for a whole-suite pass/fail signal.
 
 ## Your Language Here
 

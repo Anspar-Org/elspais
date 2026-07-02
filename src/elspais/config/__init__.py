@@ -776,23 +776,6 @@ class IgnoreConfig:
     code_patterns: list[str]
     test_patterns: list[str]
 
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> IgnoreConfig:
-        """Create IgnoreConfig from configuration dictionary.
-
-        Args:
-            data: Dictionary from [ignore] config section
-
-        Returns:
-            IgnoreConfig instance
-        """
-        return cls(
-            global_patterns=data.get("global", []),
-            spec_patterns=data.get("spec", []),
-            code_patterns=data.get("code", []),
-            test_patterns=data.get("test", []),
-        )
-
     def should_ignore(self, path: str | Path, scope: str = "global") -> bool:
         """Check if a path should be ignored based on patterns.
 

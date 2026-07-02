@@ -497,12 +497,13 @@ class TestJourneyVerdictBrowser:
     def test_d00256_journey_step_status_on_card(self, page_journey, failing_journey_viewer_url):
         # Verifies: REQ-d00256
         """Open the failing journey card; assert that the Steps section is
-        rendered with per-step status badges and verifying-test rows.
+        rendered like REQ assertions: plain step text with right-aligned
+        Verified/result badges, plus verifying-test rows.
 
         Checks:
         - A "Steps" section header appears in the card (rendered as "STEPS" by CSS)
-        - step-2's status badge carries the 'validation-fail' CSS class
-        - step-1 and step-3 badges do NOT carry 'validation-fail'
+        - step-2's result badge carries the 'validation-fail' CSS class
+        - step-1 and step-3 result badges do NOT carry 'validation-fail'
         - No JS errors occur
         """
         js_errors: list[str] = []
@@ -526,7 +527,10 @@ class TestJourneyVerdictBrowser:
         assert len(all_step_rows) == 3, f"Expected 3 step rows, got {len(all_step_rows)}"
 
         def row_status_class(row):
-            badge = row.locator("span[title='Step status']")
+            # Steps now render like assertions: a "Verified" badge then a
+            # result ("Passed"/"Failed") badge. The result badge is the last
+            # .journey-step-badge in the row and carries the validation-* class.
+            badge = row.locator(".journey-step-badge").last
             return badge.get_attribute("class") or ""
 
         step1_cls = row_status_class(all_step_rows[0])

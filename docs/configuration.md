@@ -559,5 +559,13 @@ With this in place, a test file that declares `// Verifies: JNY-OQ-Login-01/step
 links its results to journey step 2, and the journey verdict rolls up into the
 `uat_verified` dimension on any requirement the journey `Validates:`.
 
+For **per-spec** binding instead of a whole-suite verdict, use
+`match = "source"` -- but the JUnit XML must carry a per-`<testcase>` `file`
+attribute naming each test's real source path, and the specs must be scanned as
+TEST nodes (via `[scanning.test].prescan_command`). Playwright's reporter omits
+`file`, so the runner injects it before elspais ingests the XML. See
+`elspais docs test-targets` (the *Playwright / TypeScript* recipe) for the full
+setup.
+
 See `elspais docs graph-model` for the full STEP/JOURNEY model and roll-up rules.
 See `elspais docs test-targets` for all `[[scanning.test.targets]]` fields.

@@ -799,13 +799,16 @@ body.edit-mode .view-only {
     flex-shrink: 0;
 }
 
-/* All assertion dimension buttons share base styles */
+/* All assertion dimension buttons share base styles.
+   .journey-step-badge (non-interactive step Verified/Passed badges) shares the
+   same pill shape so journey steps render like REQ assertions. */
 .assertion-implemented-btn,
 .assertion-refined-btn,
 .assertion-tested-btn,
 .assertion-verified-btn,
 .assertion-validated-btn,
-.assertion-accepted-btn {
+.assertion-accepted-btn,
+.journey-step-badge {
     flex-shrink: 0;
     padding: 2px 8px;
     font-size: 0.65rem;
@@ -820,6 +823,11 @@ body.edit-mode .view-only {
     transition: all 0.15s;
     white-space: nowrap;
     margin-left: 4px;
+}
+
+/* Step badges are status indicators, not clickable controls */
+.journey-step-badge {
+    cursor: default;
 }
 
 /* margin-left on badges area handles right-alignment */
