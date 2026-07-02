@@ -1149,12 +1149,24 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
     # Maps repo-relative source_file -> list of status strings (lowercased).
     # Exclude per-test-resolved results (match_scope=="test"): those credit
     # inline (below) rather than via file-level all-pass/any-fail semantics.
+    #
+    # source_file_carried (CUR-1557) is a parallel map recording whether
+    # EVERY contributing RESULT for that source file was carried (baseline).
+    # It's file-granular (not per-status) since source_file_index itself only
+    # retains status strings, not node identity; a file with a mix of
+    # carried/fresh results is treated as NOT fully carried (safe default:
+    # under-claim "carried" rather than mislabel fresh coverage as baseline).
     source_file_index: dict[str, list[str]] = {}
+    _source_file_carried_flags: dict[str, list[bool]] = {}
     for r in graph.nodes_by_kind(NodeKind.RESULT):
         if (r.get_field("match") or "") == "source" and r.get_field("match_scope") != "test":
             sf = r.get_field("source_file")
             if sf:
                 source_file_index.setdefault(sf, []).append((r.get_field("status") or "").lower())
+                _source_file_carried_flags.setdefault(sf, []).append(bool(r.get_field("carried")))
+    source_file_carried: dict[str, bool] = {
+        sf: all(flags) for sf, flags in _source_file_carried_flags.items()
+    }
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
 
@@ -1318,6 +1330,14 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
 
         # Process TEST children to find RESULT nodes
         validated_indirect_labels: set[str] = set()
+        # CUR-1557: track whether every verified signal (pass credit or
+        # failure flag, across all three credit paths below) came from a
+        # carried (baseline) RESULT. verified_saw_signal stays False if this
+        # requirement got no verified signal at all -- populate_test_dimensions
+        # should then leave verified.carried at its default (False), not claim
+        # baseline for coverage that doesn't exist.
+        verified_saw_signal = False
+        verified_all_carried = True
         for test_node, assertion_targets in test_nodes_for_result_lookup:
             saw_result = False
             for result in test_node.iter_children():
@@ -1346,8 +1366,14 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                     else:
                         for label in assertion_labels:
                             validated_indirect_labels.add(label)
+                    verified_saw_signal = True
+                    if not (result.get_field("carried") or False):
+                        verified_all_carried = False
                 elif status in ("failed", "fail", "failure", "error"):
                     has_failures = True
+                    verified_saw_signal = True
+                    if not (result.get_field("carried") or False):
+                        verified_all_carried = False
             if not saw_result:
                 fn = test_node.file_node()
                 rel = fn.get_field("relative_path") if fn else None
@@ -1357,6 +1383,9 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                     statuses = source_file_index[rel]
                     if any(s in ("failed", "fail", "failure", "error") for s in statuses):
                         has_failures = True
+                        verified_saw_signal = True
+                        if not source_file_carried.get(rel, False):
+                            verified_all_carried = False
                     elif any(
                         s in ("passed", "pass", "success") for s in statuses
                     ):  # >=1 passed, none failed
@@ -1367,8 +1396,15 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                         else:
                             for label in assertion_labels:
                                 validated_indirect_labels.add(label)
+                        verified_saw_signal = True
+                        if not source_file_carried.get(rel, False):
+                            verified_all_carried = False
                 elif credit.unmatched_credit == "verified":
-                    # Aggregate app-green path (unchanged).
+                    # Aggregate app-green path: derived from per-app green/red
+                    # status, not a specific RESULT node, so carried-ness can't
+                    # be recovered precisely here. Per the safe-ambiguity rule
+                    # (CUR-1557), default this signal to fresh rather than risk
+                    # mislabeling fresh coverage as "(baseline)".
                     app = _match_app_dir(rel, credit.app_dirs)
                     st = app_status.get(app) if app else None
                     if st == "green":
@@ -1379,8 +1415,12 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                         else:
                             for label in assertion_labels:
                                 validated_indirect_labels.add(label)
+                        verified_saw_signal = True
+                        verified_all_carried = False
                     elif st == "red":
                         has_failures = True
+                        verified_saw_signal = True
+                        verified_all_carried = False
 
         # Implements: REQ-d00069-A, REQ-d00255, REQ-d00256
         # UAT roll-up: source each validating journey's verdict from its
@@ -1418,6 +1458,7 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
             verified_direct_labels=validated_labels,
             verified_indirect_labels=validated_indirect_labels,
             verified_failures=has_failures,
+            verified_carried=(verified_saw_signal and verified_all_carried),
             uat_verified_direct_labels=uat_validated_direct_labels,
             uat_verified_indirect_labels=uat_validated_indirect_labels,
             uat_verified_failures=uat_has_failures,
