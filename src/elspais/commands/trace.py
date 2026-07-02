@@ -316,12 +316,20 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
             data["code_tested_pct"] = f"{round(ct.direct / ct.total * 100)}%" if ct.total else "n/a"
         # Implements: REQ-d00254-I+J
         # Special-case the "verified" cell: distinguish "not run, no baseline"
-        # (selective run, zero signal, but test references exist) from a
-        # carried (baseline) verdict, ahead of the "n/a"/count rendering above.
+        # from a carried (baseline) verdict, ahead of the "n/a"/count rendering
+        # above. "No baseline" (REQ-d00254-J) means the referenced TEST nodes
+        # have *zero* RESULT records -- the target was skipped this PR and
+        # nothing was seeded. Key on RESULT existence, not on "no pass/fail
+        # signal": results can exist yet contribute no verified signal (e.g. all
+        # skipped / xfailed), and those must NOT render as "not run".
         vdim = rollup.verified
-        eps = 1e-9
-        no_verified = vdim.direct <= eps and vdim.indirect <= eps and not vdim.has_failures
-        if selective and vdim.total > 0 and no_verified and test_refs:
+        has_any_result = any(
+            child.kind == NodeKind.RESULT
+            for edge in node.iter_outgoing_edges()
+            if edge.target.kind == NodeKind.TEST
+            for child in edge.target.iter_children()
+        )
+        if selective and vdim.total > 0 and test_refs and not has_any_result:
             data["verified"] = "—"  # em dash: not run this PR, no baseline
         elif vdim.carried and vdim.total > 0:
             data["verified"] = f"{data['verified']} (baseline)"

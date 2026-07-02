@@ -911,14 +911,16 @@ class TestSummaryCarriedFootnote:
         assert data["carried_result_targets"] == 1
 
     # Verifies: REQ-d00254-I
-    def test_collect_coverage_full_run_has_zero_carried(self, tmp_path):
+    def test_collect_coverage_full_run_omits_carried_counts(self, tmp_path):
+        # A full run (no --targets) must not surface carry-forward counts at all,
+        # so output stays byte-identical to the pre-selectivity behavior.
         project = self._make_two_target_project(tmp_path)
         graph, config = self._build(project, targets=None)
 
         data = _collect_coverage(graph, config=config)
 
-        assert data["total_result_targets"] == 2
-        assert data["carried_result_targets"] == 0
+        assert "total_result_targets" not in data
+        assert "carried_result_targets" not in data
 
     # Verifies: REQ-d00254-I
     def test_render_text_selective_run_has_asterisk_and_footnote(self, tmp_path):
@@ -980,17 +982,30 @@ class TestSummaryCarriedFootnote:
         assert "*" not in rendered.split('"meta"')[0]
 
     # Verifies: REQ-d00254-I
-    def test_render_csv_full_run_has_zero_carried(self, tmp_path):
+    def test_render_csv_selective_run_has_carried_row(self, tmp_path):
+        project = self._make_two_target_project(tmp_path)
+        graph, config = self._build(project, targets=["a"])
+        data = _collect_coverage(graph, config=config)
+
+        rendered = _render(data, "csv")
+
+        # The structured carried-results row renders correctly (1 carried of 2).
+        rows = list(csv.reader(io.StringIO(rendered)))
+        carried_row = next(r for r in rows if r and r[0] == "Carried Result Targets")
+        assert carried_row == ["Carried Result Targets", "1", "Total Result Targets", "2"]
+
+        # Machine format: no asterisk anywhere in the rendered CSV.
+        assert "*" not in rendered
+
+    # Verifies: REQ-d00254-I
+    def test_render_csv_full_run_has_no_carried_row(self, tmp_path):
+        # Full run: no carried-results row, no asterisk -- byte-identical to the
+        # pre-selectivity CSV.
         project = self._make_two_target_project(tmp_path)
         graph, config = self._build(project, targets=None)
         data = _collect_coverage(graph, config=config)
 
         rendered = _render(data, "csv")
 
-        # The structured carried-results row renders correctly (0 carried of 2).
-        rows = list(csv.reader(io.StringIO(rendered)))
-        carried_row = next(r for r in rows if r and r[0] == "Carried Result Targets")
-        assert carried_row == ["Carried Result Targets", "0", "Total Result Targets", "2"]
-
-        # Machine format: no asterisk anywhere in the rendered CSV.
+        assert "Carried Result Targets" not in rendered
         assert "*" not in rendered

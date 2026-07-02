@@ -215,28 +215,33 @@ def _collect_coverage(graph: FederatedGraph, config: dict | None = None) -> dict
             "verified_total": tot.verified_total,
         }
 
-    # Implements: REQ-d00254-I
-    # Distinct RESULT target names, and how many of those targets are carried
-    # (baseline, not freshly run this invocation) -- surfaced so a selective
-    # `--targets` run isn't a silent no-op on rendered output.
-    all_result_targets: set[str] = set()
-    carried_result_targets_set: set[str] = set()
-    for result_node in graph.iter_by_kind(NodeKind.RESULT):
-        tgt = result_node.get_field("target")
-        if not tgt:
-            continue
-        all_result_targets.add(tgt)
-        if result_node.get_field("carried"):
-            carried_result_targets_set.add(tgt)
-
-    return {
+    result = {
         "levels": levels,
         "excluded": excluded_counts,
         "integrations": integrations,
         "integration_total": integration_total,
-        "total_result_targets": len(all_result_targets),
-        "carried_result_targets": len(carried_result_targets_set),
     }
+
+    # Implements: REQ-d00254-I
+    # Carry-forward provenance (distinct RESULT target names + how many are
+    # carried baselines) is meaningful only for a selective `--targets` run, so
+    # a selective run isn't a silent no-op on rendered output. Omit it entirely
+    # otherwise, so a full run stays byte-identical to the pre-selectivity
+    # output in every format (JSON keys and the CSV row included).
+    if getattr(graph, "render_fresh_targets", None) is not None:
+        all_result_targets: set[str] = set()
+        carried_result_targets_set: set[str] = set()
+        for result_node in graph.iter_by_kind(NodeKind.RESULT):
+            tgt = result_node.get_field("target")
+            if not tgt:
+                continue
+            all_result_targets.add(tgt)
+            if result_node.get_field("carried"):
+                carried_result_targets_set.add(tgt)
+        result["total_result_targets"] = len(all_result_targets)
+        result["carried_result_targets"] = len(carried_result_targets_set)
+
+    return result
 
 
 def _pct(num: int, denom: int) -> float:

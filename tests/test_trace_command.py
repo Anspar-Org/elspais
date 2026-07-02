@@ -502,6 +502,13 @@ _JUNIT_ONE_PASSING = """\
 </testsuite>
 """
 
+_JUNIT_ONE_SKIPPED = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="{suite}" tests="1" skipped="1">
+  <testcase name="{name}" classname="tests.{name}" time="0.0"><skipped/></testcase>
+</testsuite>
+"""
+
 
 @pytest.fixture
 def two_target_project(tmp_path):
@@ -562,6 +569,37 @@ def no_result_target_project(tmp_path):
     return project
 
 
+@pytest.fixture
+def skipped_result_target_project(tmp_path):
+    """Like two_target_project, but target 'b' has a *skipped* result: a RESULT
+    node IS ingested for it, yet it contributes no pass/fail (verified) signal.
+    Under `--targets a`, target 'b' is carried but its verified signal is zero --
+    it must NOT be mistaken for "not run" (`—`), because result records exist."""
+    project = tmp_path / "project"
+    (project / "spec").mkdir(parents=True)
+    (project / "spec" / "reqs.md").write_text(_TWO_TARGET_SPEC, encoding="utf-8")
+
+    (project / "tests").mkdir(parents=True)
+    (project / "tests" / "test_a.py").write_text(
+        "# Verifies: REQ-d00001-A\ndef test_a():\n    pass\n", encoding="utf-8"
+    )
+    (project / "tests" / "test_b.py").write_text(
+        "# Verifies: REQ-d00002-A\ndef test_b():\n    pass\n", encoding="utf-8"
+    )
+
+    (project / "results-a").mkdir(parents=True)
+    (project / "results-a" / "results.xml").write_text(
+        _JUNIT_ONE_PASSING.format(suite="suite-a", name="test_a"), encoding="utf-8"
+    )
+    (project / "results-b").mkdir(parents=True)
+    (project / "results-b" / "results.xml").write_text(
+        _JUNIT_ONE_SKIPPED.format(suite="suite-b", name="test_b"), encoding="utf-8"
+    )
+
+    (project / ".elspais.toml").write_text(_TWO_TARGET_CONFIG, encoding="utf-8")
+    return project
+
+
 class TestTraceCarriedAndNoData:
     """Verifies REQ-d00254-I (carried/baseline) and REQ-d00254-J (no-data em-dash)."""
 
@@ -587,6 +625,14 @@ class TestTraceCarriedAndNoData:
         cell = _verified_cell(out, "REQ-d00002")
         assert "—" not in cell
         assert "(baseline)" not in cell
+
+    # Verifies: REQ-d00254-J
+    def test_skipped_carried_result_is_not_no_data_dash(self, skipped_result_target_project):
+        # target 'b' is carried and its only result is *skipped* (a RESULT node
+        # exists but yields no verified signal). "No baseline" (`—`) means zero
+        # result records, so this must NOT render as an em dash.
+        out = _render_trace_markdown(skipped_result_target_project, targets=["a"])
+        assert _verified_cell(out, "REQ-d00002").strip() != "—"
 
 
 def _build_project_graph(project, targets=None):
