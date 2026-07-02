@@ -387,8 +387,15 @@ F. For each configured target, the system SHALL obtain the reporter's output (ca
 
 G. Each target SHALL select its result-to-test matching via `match`: `source` SHALL credit verification per test by resolving a result's real source-file path and `test()` source line to the specific test node at that `(path, line)`; when no test node matches that line (e.g. shared-helper or generated tests), it SHALL fall back to file granularity (all passing credits the file's `Verifies:` assertions; any failure flags them). `aggregate` SHALL use the per-app green/red engine.
 
+H. `elspais checks --run-tests` SHALL accept a `--targets` selector naming a subset of `[[scanning.test.targets]]` to execute; an unknown target name SHALL be an error, and an absent selector SHALL execute all targets. The same `--targets` flag on `summary`/`trace` SHALL mark provenance without executing anything.
+
+I. A target absent from `--targets` (the fresh set) whose results are ingested from disk SHALL be tagged *carried*; its verdict SHALL be honored faithfully (a carried failing result still flags the requirement as failing), and the `verified` dimension SHALL carry a `carried` flag orthogonal to its pass/fail tier so the matrix can render it as `(baseline)`.
+
+J. In a selective run (a `--targets` set is present), a requirement with test references but zero result records SHALL render as not-run (`—`), distinct from a run-but-uncovered `0%`; in a full run (no `--targets`) zero results SHALL keep the existing rendering.
+
 ### Changelog
 
+- 2026-07-01 | 4975d47a | - | Michael Lewis (michael@anspar.org) | Auto-fix: sync changelog hash
 - 2026-06-26 | 0b87cbd4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-06-26 | abc6e487 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-06-21 | 6962b5a4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
@@ -396,7 +403,7 @@ G. Each target SHALL select its result-to-test matching via `match`: `source` SH
 - 2026-06-20 | 98120740 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (michael@anspar.org) | CUR-1533: initial
 
-*End* *Coverage-Based and Aggregate Test Verification* | **Hash**: 0b87cbd4
+*End* *Coverage-Based and Aggregate Test Verification* | **Hash**: 4975d47a
 
 ---
 
