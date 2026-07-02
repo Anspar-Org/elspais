@@ -27,9 +27,16 @@ what runs when promoting a build qa→uat).
 
 1. **Selector, not git-mapping, in elspais.** CI decides *which* targets to run and passes them
    explicitly. elspais does not map git diffs to targets.
-2. **Carry-forward is faithful — no free pass.** Freshness (ran-this-invocation vs. carried) is
-   **orthogonal** to verdict (pass/fail). A carried *failing* result still shows failing and still
-   gates `checks`. Only a target with **no data at all** is neutral.
+2. **Carry-forward is faithful — no free pass.** Freshness (fresh vs. carried) is **orthogonal** to
+   verdict (pass/fail). A carried *failing* result still shows failing and still gates `checks`. Only a
+   target with **no data at all** is neutral.
+5. **One flag: `--targets` = the targets run this PR (fresh); the complement is carried.** There is
+   no separate baseline list. Because the matrix renders in a *separate* invocation
+   (`elspais summary trace`) from the test run (`elspais checks --run-tests`) — a rebuilt graph sees
+   only files on disk — CI passes the **same** `--targets $CHANGED` to **both** commands: `checks
+   --run-tests` executes that subset, and `summary trace` marks that subset fresh and the complement
+   carried. **Empty/absent `--targets` = all fresh = full regression** (today's behavior, unchanged),
+   which is the qa→uat path.
 3. **No baselines in the repo.** elspais never trusts committed or externally-authored results.
    Baselines come only from this CI's own prior runs, materialized into the workspace by CI before
    elspais runs.
@@ -41,23 +48,25 @@ what runs when promoting a build qa→uat).
 
 ## Part 1 — elspais feature (this worktree)
 
-### 1a. Target selector on `checks --run-tests`
+### 1a. The `--targets` flag (execution + provenance)
 
-- Add `--targets a,b,c` (comma-separated) to `ChecksArgs` (`src/elspais/commands/args.py:24`).
-- It controls **execution only**. elspais still *ingests* every target's on-disk result/coverage
-  files during the graph build (`src/elspais/graph/factory.py:720`), so unselected targets carry
-  forward from whatever CI seeded into the workspace.
-- `run_configured_targets` (`src/elspais/commands/test_runner.py:35`) filters iteration to the named
-  subset. Unknown target names are an error (exit 2), listing valid names.
-- The all-or-nothing "no target has a command" guard (`src/elspais/commands/health.py:3011`) is
-  re-scoped to the **selected** subset.
-- **No `--targets` = run all** → this *is* the full-regression / qa→uat path. No separate flag.
+- Add `--targets a b c` to `ChecksArgs`, `TraceArgs`, and `SummaryArgs`
+  (`src/elspais/commands/args.py:25/199/329`). `set(--targets)` is the **fresh set**; absent/empty =
+  `None` = "all fresh" (today's behavior).
+- **On `checks --run-tests`** it *also* controls execution: `run_configured_targets`
+  (`src/elspais/commands/test_runner.py:35`) runs only the fresh set; unknown names error (exit 2);
+  the "no target has a command" guard (`src/elspais/commands/health.py:3011`) is re-scoped to the
+  fresh subset. elspais still *ingests* every target's on-disk result/coverage files during the build
+  (`src/elspais/graph/factory.py:720`), so the complement carries forward from what CI seeded.
+- **On `summary`/`trace`** (render-only, no execution) it *only* marks provenance.
 
 ### 1b. Freshness provenance (fresh vs. carried vs. no-data)
 
-- Thread the run set into the build. Tag each RESULT node with a freshness flag
-  (`carried=True/False`), extending the existing per-RESULT `match` metadata
-  (`src/elspais/graph/metrics.py:134`).
+- Thread `fresh_targets: set[str] | None` into `build_graph()` (`src/elspais/graph/factory.py:478`)
+  and the ingestion loop. Tag each RESULT node with
+  `carried = fresh_targets is not None and target.name not in fresh_targets`, extending the existing
+  per-RESULT `match` metadata (`src/elspais/graph/metrics.py:134`). `fresh_targets is None`
+  (no `--targets`) → nothing is carried.
 - **`CoverageDimension.tier` stays verdict-only** (`src/elspais/graph/metrics.py:122` —
   `failing / full-direct / full-indirect / partial / none`). Freshness rides as a **separate flag**,
   never folded into `tier`. This is what keeps carry-forward honest: a carried failing result keeps
@@ -66,9 +75,11 @@ what runs when promoting a build qa→uat).
   - **fresh** (ran this invocation) → normal, e.g. `4/4 100%`.
   - **carried** (not run this invocation, results present on disk) → `4/4 100% (baseline)` — real
     verdict, gates normally.
-  - **no-data** (not run, *no* results on disk — only a brand-new target with no image history) →
-    `—` / "not run", **non-gating** (unknown ≠ failing). This is CUR-1557's "skipped ≠ 0%" case and is
-    rare, since a new/changed target is in the run set anyway.
+  - **no-data** (a selective run — `--targets` given — where a requirement has TEST nodes but zero
+    RESULT descendants, i.e. its target was neither in the fresh set nor seeded) → `—` / "not run",
+    **non-gating** (unknown ≠ failing). This is CUR-1557's "skipped ≠ 0%" case and is rare, since a
+    new/changed target is in the fresh set anyway. In a full run (no `--targets`), zero results keeps
+    today's `n/a`/`0%` rendering.
 
 ### 1c. Stdout-channel reporters must ingest carried results from a file
 
@@ -120,7 +131,9 @@ carry-forward source for its descendants.
 3. Diff against that ancestor's commit → the changed target set.
 4. Run only the changed targets (`elspais checks --run-tests --targets <changed>`); fresh output
    overwrites the seeded files.
-5. elspais ingests: changed = fresh, rest = carried; renders the matrix; upserts the PR comment.
+5. Render the matrix passing the **same** fresh set
+   (`elspais summary trace --targets <changed> --format markdown`); upsert the PR comment. elspais
+   marks the `<changed>` results fresh and the complement `(baseline)`.
 6. Build + push the new canonical image (fresh + carried merged) tagged by this commit SHA.
 
 ### 2c. Completeness = image existence
