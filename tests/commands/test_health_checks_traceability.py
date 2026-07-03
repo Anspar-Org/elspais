@@ -19,7 +19,7 @@ from elspais.commands.health import (
 )
 from elspais.config import _merge_configs, config_defaults, get_config
 from elspais.graph.builder import TraceGraph
-from elspais.graph.federated import FederatedGraph
+from elspais.graph.federated import FederatedGraph, RepoEntry
 from elspais.graph.GraphNode import FileType, GraphNode, NodeKind
 from elspais.graph.relations import EdgeKind
 
@@ -306,12 +306,20 @@ class TestCheckBrokenReferences:
         assert finding.node_id == "REQ-d00001"
         assert "REQ-p99999" in finding.message
 
-    def test_REQ_d00085_allow_unresolved_cross_repo_suppresses_foreign_namespace(self) -> None:
-        """Foreign-namespace refs are suppressed when allow_unresolved_cross_repo=True."""
+    # Verifies: REQ-d00252-G
+    def test_REQ_d00085_no_associates_never_suppresses_foreign_looking_ref(self) -> None:
+        """Guard 1 (REQ-d00252-G): a federation-of-one has no configured
+        associates, so a foreign-*looking* (unparseable) broken ref can
+        never be presumed foreign, even with
+        allow_unresolved_cross_repo=True -- there is no other repo it
+        could belong to. This reproduces the field bug where an empty
+        ``[associates]`` table combined with a mis-styled reference
+        suffix caused genuinely-local broken references to be silently
+        suppressed as "cross-repo".
+        """
         from elspais.graph.mutations import BrokenReference
 
         graph = TraceGraph()
-        # Foreign namespace (HHT-*) — cross-repo; config gives IdResolver the local namespace
         graph._broken_references = [
             BrokenReference(source_id="REQ-d00001", target_id="HHT-p00001", edge_kind="implements"),
         ]
@@ -321,6 +329,43 @@ class TestCheckBrokenReferences:
         # Pass config to _wrap so FederatedGraph annotates presumed_foreign during init
         fed = _wrap(graph, config)
         check = check_broken_references(fed, config)
+        assert not check.passed
+        assert "suppressed" not in check.message
+
+    # Verifies: REQ-d00252-G
+    def test_REQ_d00085_allow_unresolved_cross_repo_suppresses_with_real_associate(
+        self,
+    ) -> None:
+        """Regression: suppression still applies to a genuinely foreign
+        reference once a real associate of a different namespace is
+        configured -- only the associate-less blanket case (guard 1) is
+        gated.
+        """
+        from elspais.graph.mutations import BrokenReference
+
+        host_graph = TraceGraph()
+        host_graph._broken_references = [
+            BrokenReference(source_id="REQ-d00001", target_id="HHT-p00001", edge_kind="implements"),
+        ]
+        lib_graph = TraceGraph()
+        override = {"validation": {"allow_unresolved_cross_repo": True}}
+        host_config = _merge_configs(config_defaults(), override)
+        host_config["project"] = {"name": "host", "namespace": "REQ"}
+        lib_config = config_defaults()
+        lib_config["project"] = {"name": "lib", "namespace": "HHT"}
+
+        fed = FederatedGraph(
+            [
+                RepoEntry(
+                    name="host", graph=host_graph, config=host_config, repo_root=Path("/repo/host")
+                ),
+                RepoEntry(
+                    name="lib", graph=lib_graph, config=lib_config, repo_root=Path("/repo/lib")
+                ),
+            ],
+            root_repo="host",
+        )
+        check = check_broken_references(fed, host_config)
         assert check.passed
         assert "suppressed" in check.message
 

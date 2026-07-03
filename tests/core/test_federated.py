@@ -16,7 +16,7 @@ from elspais.config import config_defaults
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph, RepoEntry
 from elspais.graph.GraphNode import NodeKind
-from elspais.graph.mutations import MutationEntry
+from elspais.graph.mutations import BrokenReference, MutationEntry
 from elspais.graph.relations import EdgeKind
 from tests.core.graph_test_helpers import (
     build_graph,
@@ -353,6 +353,156 @@ class TestFederatedGraphReadOnly:
         req_node = fed.find_by_id("REQ-p00010")
         assert req_node is not None
         assert fed.is_reachable_to_requirement(req_node) is False
+
+
+# === Presumed-Foreign Guard Tests ===
+
+
+def _namespaced_config(
+    name: str, namespace: str, separator: str = "-", multi_separator: str = "+"
+) -> dict:
+    """Build a config dict with a custom [project].namespace and assertion separators.
+
+    Mirrors the shape of a real ``.elspais.toml``-derived config: a
+    ``DIARY``-style project using a non-default assertion separator (e.g.
+    ``/``) so a dash-style suffix like ``-A+B+C`` fails to parse under it.
+    """
+    cfg = config_defaults()
+    cfg["project"] = {"name": name, "namespace": namespace}
+    cfg["id-patterns"]["assertions"]["separator"] = separator
+    cfg["id-patterns"]["assertions"]["multi_separator"] = multi_separator
+    return cfg
+
+
+class TestPresumedForeignGuards:
+    """Tests for REQ-d00252-G: guards against over-eager presumed-foreign classification.
+
+    A blanket "not locally parseable => presumed foreign" heuristic silently
+    suppresses genuinely-local broken references (via
+    ``validation.allow_unresolved_cross_repo``) whenever there are no
+    configured associates at all, or when the malformed target actually
+    carries the source repo's own namespace. Both scenarios are malformed
+    LOCAL references, not cross-repo ones.
+    """
+
+    # Verifies: REQ-d00252-G
+    def test_primary_only_unparseable_suffix_not_presumed_foreign(self) -> None:
+        """Guard 1: with no configured associates, nothing can be foreign.
+
+        Reproduces the field bug: a DIARY-namespaced project configured with
+        a ``/`` assertion separator, but a reference written with the
+        dash/plus style (``-A+B+C``) instead. Under the old blanket rule
+        this unparseable target was presumed foreign and (with
+        allow_unresolved_cross_repo) silently suppressed, even though this
+        federation has no associates at all.
+        """
+        graph = build_graph(
+            make_requirement("REQ-p00001", title="Host root", level="PRD"),
+            repo_root=Path("/repo/host"),
+        )
+        graph._broken_references = [
+            BrokenReference(
+                source_id="REQ-p00001",
+                target_id="DIARY-p00023-A+B+C",
+                edge_kind="implements",
+            ),
+        ]
+        config = _namespaced_config("host", "DIARY", separator="/", multi_separator="/")
+        fed = FederatedGraph.from_single(graph, config, repo_root=Path("/repo/host"))
+
+        brs = fed.broken_references()
+        assert len(brs) == 1
+        assert brs[0].presumed_foreign is False
+        assert "namespace" in brs[0].diagnostic
+        assert "DIARY" in brs[0].diagnostic
+
+    # Verifies: REQ-d00252-G
+    def test_federated_different_namespace_unresolved_still_presumed_foreign(self) -> None:
+        """Regression: a genuinely foreign-namespace unresolved ref is still soft.
+
+        With a real associate configured under a DIFFERENT namespace, a
+        broken reference whose target doesn't match the source's own
+        namespace or format is still presumed foreign -- the existing
+        soft-suppression behavior for true cross-repo references is
+        preserved.
+        """
+        host_graph = build_graph(
+            make_requirement("REQ-p00001", title="Host root", level="PRD"),
+            repo_root=Path("/repo/host"),
+        )
+        host_graph._broken_references = [
+            BrokenReference(
+                source_id="REQ-p00001",
+                target_id="LIB-p00099-A+B+C",
+                edge_kind="implements",
+            ),
+        ]
+        lib_graph = build_graph(
+            make_requirement("REQ-p00002", title="Lib root", level="PRD"),
+            repo_root=Path("/repo/lib"),
+        )
+        host_entry = RepoEntry(
+            name="host",
+            graph=host_graph,
+            config=_namespaced_config("host", "DIARY", separator="/", multi_separator="/"),
+            repo_root=Path("/repo/host"),
+        )
+        lib_entry = RepoEntry(
+            name="lib",
+            graph=lib_graph,
+            config=_namespaced_config("lib", "LIB"),
+            repo_root=Path("/repo/lib"),
+        )
+        fed = FederatedGraph([host_entry, lib_entry], root_repo="host")
+
+        brs = [br for br in fed.broken_references() if br.target_id == "LIB-p00099-A+B+C"]
+        assert len(brs) == 1
+        assert brs[0].presumed_foreign is True
+        assert brs[0].diagnostic == ""
+
+    # Verifies: REQ-d00252-G
+    def test_federated_primary_namespace_unparseable_not_presumed_foreign(self) -> None:
+        """Guard 2: a ref bearing the PRIMARY's own namespace is not foreign.
+
+        Even in a real multi-repo federation (an associate of a different
+        namespace is configured), a malformed reference that carries the
+        source repo's own namespace is a local formatting mistake, not a
+        cross-repo reference -- it stays hard-broken with a diagnostic.
+        """
+        host_graph = build_graph(
+            make_requirement("REQ-p00001", title="Host root", level="PRD"),
+            repo_root=Path("/repo/host"),
+        )
+        host_graph._broken_references = [
+            BrokenReference(
+                source_id="REQ-p00001",
+                target_id="DIARY-p00023-A+B+C",
+                edge_kind="implements",
+            ),
+        ]
+        lib_graph = build_graph(
+            make_requirement("REQ-p00002", title="Lib root", level="PRD"),
+            repo_root=Path("/repo/lib"),
+        )
+        host_entry = RepoEntry(
+            name="host",
+            graph=host_graph,
+            config=_namespaced_config("host", "DIARY", separator="/", multi_separator="/"),
+            repo_root=Path("/repo/host"),
+        )
+        lib_entry = RepoEntry(
+            name="lib",
+            graph=lib_graph,
+            config=_namespaced_config("lib", "LIB"),
+            repo_root=Path("/repo/lib"),
+        )
+        fed = FederatedGraph([host_entry, lib_entry], root_repo="host")
+
+        brs = [br for br in fed.broken_references() if br.target_id == "DIARY-p00023-A+B+C"]
+        assert len(brs) == 1
+        assert brs[0].presumed_foreign is False
+        assert "namespace" in brs[0].diagnostic
+        assert "DIARY" in brs[0].diagnostic
 
 
 # === Mutation Tests ===

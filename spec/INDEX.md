@@ -140,7 +140,7 @@
 | REQ-d00249 | Configured test runner execution                              | dev-cli.md              | 8a579eb1 |
 | REQ-d00250 | Section Header Depth Canonicalization                         | dev-graph-core.md       | 903349d2 |
 | REQ-d00251 | Component Style Vocabulary and Assertion Separator            | dev-graph-config.md     | e04a4e37 |
-| REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 425d61aa |
+| REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | d9d4bc98 |
 | REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | 28c8c538 |
 | REQ-d00254 | Coverage-Based and Aggregate Test Verification                | dev-graph-core.md       | 4975d47a |
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | 9381f1e5 |
