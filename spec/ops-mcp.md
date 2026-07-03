@@ -44,7 +44,7 @@ A. `get_workspace_info()` SHALL return repository path, project name, and config
 
 B. `get_project_summary()` SHALL return requirement counts by level, coverage statistics, and change metrics.
 
-C. Workspace tools SHALL use graph aggregate functions from the annotators module, not recompute statistics.
+C. Workspace tools SHALL derive statistics from the shared coverage aggregation (graph aggregation module), not recompute them.
 
 D. Configuration data SHALL be read from the unified config system, not parsed separately.
 
@@ -54,10 +54,11 @@ AI agents need context about the workspace they're operating in to provide relev
 
 ### Changelog
 
+- 2026-07-03 | aaba2940 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-05-11 | 0aa9dff4 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 0aa9dff4 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
-*End* *MCP Workspace Context Tools* | **Hash**: 0aa9dff4
+*End* *MCP Workspace Context Tools* | **Hash**: aaba2940
 ---
 
 ## REQ-o00062: MCP Graph Mutation Tools

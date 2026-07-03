@@ -3,9 +3,10 @@ elspais.commands.summary - Coverage summary report section.
 
 # Implements: REQ-d00086-A+B+C+D
 
-Produces a coverage summary showing implementation, validation, and test-passing
-status aggregated by level (PRD, OPS, DEV). Per-requirement detail is in the
-trace command. Supports text, markdown, json, and csv output formats.
+Produces a coverage summary showing Implemented/Tested/Passing and UAT
+Covered/UAT Passed status aggregated by level (PRD, OPS, DEV). Per-requirement
+detail is in the trace command. Supports text, markdown, json, and csv output
+formats.
 """
 
 from __future__ import annotations

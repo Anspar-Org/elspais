@@ -18,6 +18,47 @@ This answers: "How do we know this requirement is satisfied?"
   $ elspais viewer --static          # Interactive HTML tree (static file)
   $ elspais graph                    # Export graph structure as JSON
 
+## Coverage Columns
+
+`trace` (standard/full presets) and `summary` report five coverage columns
+using exactly this display vocabulary: **Implemented, Tested, Passing, UAT
+Covered, UAT Passed** (plus `Code Tested` and `LCOV Tested` for line
+coverage). "Validated" never denotes test coverage on any surface -- it
+collides with the `Validates:` keyword (journey → requirement UAT links).
+
+**Generous footing + `~` marker.** Every one of the five assertion-based
+columns headlines the *generous* footing -- `CoverageDimension.indirect`,
+which counts an assertion covered whether the link named it directly
+(`REQ-xxx-A`) or only the whole requirement (`REQ-xxx`). A trailing `~`
+appended to a cell means that column's count is not fully backed by
+direct (assertion-level) evidence, i.e. `indirect > direct` for at least one
+covered assertion in that row. No marker means the generous and strict
+(direct) counts agree -- every bit of credit is assertion-specific. See
+`elspais docs checks` (*Coverage Dimensions*) for the direct/indirect/tier
+model underneath this.
+
+**Passing is a union.** The `Passing` column (dimension key `verified`) is
+the union of two kinds of evidence: a passing `Verifies:` test result
+(`verified`), or a covered `Implements:` line under a target with
+`credit_coverage = "verified"` (`lcov_tested`, and only if that target isn't
+also failing). Either alone is enough to count as passing; see
+`tested_and_passing()` in `graph/metrics.py`. `summary`'s level-aggregated
+Passing figure gets a trailing `*` (footnoted) instead of `~` when any
+underlying RESULT data was carried from a previous run -- see `elspais docs
+test-targets` (*Per-PR selectivity*).
+
+**Code Tested: per-test or `n/a`.** The `Code Tested` column reports
+`code_tested.direct` -- implementation lines whose coverage.py **context**
+names the specific test that exercised them (Python only, via pytest-cov's
+`--cov-context=test`). When no per-test context data is available for a
+requirement's covered lines (aggregate-only coverage tooling, or a coverage
+format without a `contexts` map, e.g. LCOV), the cell renders `n/a` rather
+than a misleading `0/N (0%)` -- there is no per-test attribution to report,
+not zero coverage. See `elspais docs checks` (*code_tested — line coverage*)
+and `elspais docs test-targets` (*Python/pytest Recipe*) for the
+`[tool.coverage.json] show_contexts = true` + `--cov-context=test` setup
+this requires.
+
 ## trace Command Options
 
   `--format {text,markdown,html,json,csv}`  Output format (default: markdown)

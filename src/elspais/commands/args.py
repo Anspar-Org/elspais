@@ -336,7 +336,7 @@ class TermIndexArgs:
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
 class SummaryArgs:
-    """Coverage summary by level (implemented, validated, passing)."""
+    """Coverage summary by level (Implemented, Tested, Passing, UAT Covered, UAT Passed)."""
 
     format: Literal["text", "markdown", "json", "csv"] = "text"
     """Output format."""

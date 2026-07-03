@@ -569,3 +569,70 @@ setup.
 
 See `elspais docs graph-model` for the full STEP/JOURNEY model and roll-up rules.
 See `elspais docs test-targets` for all `[[scanning.test.targets]]` fields.
+
+### Coverage-Only Target with Per-Test Attribution (dogfood pattern)
+
+elspais's own suite (this repo's `.elspais.toml`) demonstrates a
+coverage-only target that still gets per-test line attribution
+(`code_tested.direct`) without a machine-readable results file:
+
+```toml
+[scanning.test]
+# ...
+
+[[scanning.test.targets]]
+name     = "elspais-unit"
+coverage = ".results/coverage.json"
+```
+
+```text
+# pyproject.toml
+[tool.coverage.json]
+show_contexts = true   # export the per-line contexts map
+
+# Do NOT also set [tool.coverage.run] dynamic_context = "test_function" --
+# that is coverage.py's own (incompatible) context switcher and silently
+# overrides pytest-cov's nodeid-shaped contexts, leaving code_tested.direct
+# at 0 everywhere even though contexts are present.
+```
+
+The `.githooks/pre-commit` hook runs pytest with `--cov-context=test`
+(pytest-cov's per-test dynamic context, keyed by nodeid + `|run`/`|setup`/
+`|teardown`) to populate those contexts. No `reporter`/`results` fields are
+set because there's no `--json-report`/`--junit-xml` step -- `Verifies:`
+wiring comes entirely from source-scanned `# Verifies:` comments in test
+files, independent of this target. See `elspais docs test-targets`
+(*Python/pytest Recipe*, *Coverage-only target with per-test direct
+attribution*) for the full recipe and gotchas.
+
+### Coverage Severity & Theme Colors
+
+`[rules.coverage]` maps each coverage dimension's tier to a severity
+(`"ok"`, `"info"`, `"warning"`, or `"error"`), which in turn drives both
+health-check exit behavior and the viewer's badge/legend colors:
+
+```toml
+[rules.coverage.implemented]
+full_direct   = "ok"       # default
+full_indirect = "info"     # default
+partial       = "warning"  # default
+none          = "error"    # default
+failing       = "error"    # default
+
+# uat_coverage/uat_verified default none/partial to "info" (UAT gaps are
+# lower-priority than code gaps); verified defaults none to "warning".
+```
+
+Severity strings are not colors themselves -- the viewer resolves each
+severity to a color via a fixed catalog in the packaged `theme.toml`
+(`severity.ok`, `severity.info`, `severity.warning`, `severity.error`, each
+with a `color_key` such as `green`/`yellow-green`/`yellow`/`red` that maps to
+themed CSS custom properties, e.g. `--val-green-bg`, with separate light/dark
+values). This catalog is internal (not user-configurable in
+`.elspais.toml`); the `[rules.coverage]` severity strings above are the only
+per-project lever. A `failing` tier (coverage exists but results are
+failing) is a separate overlay checked ahead of the severity map -- it does
+not reuse the `error` severity color in the viewer toolbar's coverage filter,
+which uses its own hardcoded color for that state. See `elspais docs checks`
+(*Dimension tiers*) for the tier model and `graph/aggregation.py` for the
+single shared aggregation these severities feed.

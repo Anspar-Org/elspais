@@ -537,8 +537,8 @@ function buildAssertionHtml(nodeId, a, data) {
         {cls: 'assertion-refined-btn', full: 'Refined', abbr: 'REF', dot: 'R', toggle: 'toggleAssertionRefines', tip: 'Refines references', linkKey: 'refined'},
         {cls: 'assertion-tested-btn', full: 'Tested', abbr: 'TST', dot: 'T', toggle: 'toggleAssertionTests', tip: 'Test coverage', linkKey: 'tested'},
         {cls: 'assertion-verified-btn', full: 'Verified', abbr: 'VER', dot: 'V', toggle: 'toggleAssertionResults', tip: 'Test results', linkKey: 'tested'},
-        {cls: 'assertion-validated-btn', full: 'Validated', abbr: 'VAL', dot: 'U', toggle: 'toggleAssertionUat', tip: 'Journey coverage', linkKey: 'validated'},
-        {cls: 'assertion-accepted-btn', full: 'Accepted', abbr: 'ACC', dot: 'A', toggle: 'toggleAssertionUatResults', tip: 'Journey results', linkKey: 'validated'}
+        {cls: 'assertion-validated-btn', full: 'UAT Covered', abbr: 'VAL', dot: 'U', toggle: 'toggleAssertionUat', tip: 'Journey coverage', linkKey: 'validated'},
+        {cls: 'assertion-accepted-btn', full: 'UAT Passed', abbr: 'ACC', dot: 'A', toggle: 'toggleAssertionUatResults', tip: 'Journey results', linkKey: 'validated'}
     ];
     var anyBadge = false;
     dimDefs.forEach(function(dim) {
@@ -1828,7 +1828,11 @@ function renderAssertionRefines(panel, reqId, label, data) {
 }
 
 // =====================================================================
-// Assertion UAT — Journey Coverage Buttons (Validated + Accepted)
+// Assertion UAT — Journey Coverage Buttons (UAT Covered + UAT Passed).
+// Function names below (updateAllValidatedButtons/updateAllAcceptedButtons)
+// keep their internal names tied to the CSS classes
+// (assertion-validated-btn/assertion-accepted-btn); only the rendered
+// full-mode label text changed.
 // =====================================================================
 
 var assertionUatCache = {};

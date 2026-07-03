@@ -135,8 +135,8 @@ DIMENSION_TIPS: dict[str, str] = {
     "implemented": "Assertions with Implements references in CODE",
     "tested": "Assertions referenced by TEST nodes",
     "verified": "Assertions with passing test results",
-    "uat_coverage": "Assertions referenced by Journey Validates",
-    "uat_verified": "Assertions with passing Journey results",
+    "uat_coverage": "Assertions covered by journey Validates references",
+    "uat_verified": "Assertions with passing journey verification",
 }
 
 # Worst-severity → filter bucket (design 2026-07-02 §2.3): the bucket honors

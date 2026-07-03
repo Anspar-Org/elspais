@@ -2103,7 +2103,8 @@ def _get_project_summary(
     """Get project summary statistics.
 
     REQ-o00061-B: Returns requirement counts by level, coverage statistics, and change metrics.
-    REQ-o00061-C: Uses graph aggregate functions from annotators module.
+    REQ-o00061-C: Derives statistics from the shared coverage aggregation
+    (graph/aggregation.py), not recomputed here.
 
     Args:
         graph: The TraceGraph to analyze.
@@ -3614,7 +3615,7 @@ def _get_assertion_uat_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]
     """Build per-assertion UAT (journey) coverage map for a requirement.
 
     Returns a structure mapping each assertion label to its USER_JOURNEY nodes
-    and their results, enabling the UI to show Validated/Accepted buttons.
+    and their results, enabling the UI to show UAT Covered/UAT Passed buttons.
 
     Uses ``_iter_assertion_coverage`` for the shared two-phase traversal
     and ``_serialize_test_info`` for the unified serializer (JNY nodes have

@@ -2100,8 +2100,8 @@ def check_dimension_coverage(
         "implemented": ("Implemented", "code"),
         "tested": ("Tested", "tests"),
         "verified": ("Verified", "tests"),
-        "uat_coverage": ("Validated", "uat"),
-        "uat_verified": ("Accepted", "uat"),
+        "uat_coverage": ("UAT Covered", "uat"),
+        "uat_verified": ("UAT Passed", "uat"),
         "code_tested": ("Code Tested (line coverage)", "code"),
         "lcov_tested": ("Coverage-Verified (lcov)", "tests"),
     }

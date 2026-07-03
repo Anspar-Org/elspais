@@ -574,6 +574,14 @@ elspais checks untested           # Checklist + untested gaps
 
 Gap commands support `--format text` (default), `--format markdown`, and `--format json`.
 
+An assertion listed in a gap can carry a `— N% via refines-conduction`
+annotation (text/markdown) or a `fraction` field (json): a whole-requirement
+(blanket) `Refines:` conducts only a fraction of its refiner's own coverage
+up to the targeted parent assertion (REQ-d00069-J -- see `elspais docs
+graph-model` for the conduction model). A fraction of `0` (no annotation) is
+uncovered outright; `0 < fraction < 1` is partially conducted and still a
+gap, but distinguishable from zero coverage.
+
 ## Prospective Reports (What-If Analysis)
 
 By default, `checks` and `gaps` only include requirements with **Active** status
