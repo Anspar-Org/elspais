@@ -237,3 +237,43 @@ class TestDocsDriftExcludesConditional:
             stale = result.details["stale"]
             assert "rules.hierarchy" not in stale
             assert "rules.naming" not in stale
+
+    def test_REQ_d00210_B_array_of_tables_header_enters_section(self, tmp_path: Path) -> None:
+        """A fenced block opening with [[array.of.tables]] must count as a section.
+
+        Regression: the header regex only matched single-bracket [section]
+        headers, so a block opening with [[scanning.test.targets]] never set
+        in_section and its bare keys (name = ..., coverage = ...) were
+        misparsed as stale top-level schema sections.
+        """
+        from textwrap import dedent
+
+        from elspais.commands.doctor import check_docs_drift
+
+        blocks = "\n".join(f"[{s}]" for s in sorted(EXPECTED_SCHEMA_SECTIONS))
+        content = dedent(
+            f"""\
+            # Configuration Reference
+
+            ```toml
+            {blocks}
+            ```
+
+            An isolated array-of-tables example:
+
+            ```toml
+            [[scanning.test.targets]]
+            name     = "elspais-unit"
+            coverage = ".results/coverage.json"
+            ```
+            """
+        )
+        docs_path = tmp_path / "configuration.md"
+        docs_path.write_text(content, encoding="utf-8")
+
+        result = check_docs_drift(docs_path)
+
+        stale = set(result.details.get("stale", []))
+        assert "name" not in stale, f"bare keys after [[...]] misparsed as sections: {stale}"
+        assert "coverage" not in stale
+        assert result.passed is True, f"Unexpected drift: {result.message}"

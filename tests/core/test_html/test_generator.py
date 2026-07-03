@@ -6,7 +6,13 @@
 import pytest
 
 from elspais.html.generator import HTMLGenerator
-from tests.core.graph_test_helpers import build_graph, make_journey, make_requirement
+from tests.core.graph_test_helpers import (
+    build_graph,
+    make_code_ref,
+    make_journey,
+    make_requirement,
+    make_test_ref,
+)
 
 
 @pytest.fixture
@@ -172,6 +178,53 @@ class TestHTMLGeneratorStats:
         assert "PRD:" in result
         assert "OPS:" in result
         assert "DEV:" in result
+
+    # Verifies: REQ-d00258-C
+    def test_REQ_d00258_C_stats_derive_from_shared_aggregation(self):
+        """Header stats source from graph/aggregation.py on the generous footing.
+
+        The fixture's TEST/CODE refs target the whole requirement (no
+        assertion labels), so all coverage is indirect: the strict footing
+        (dim.direct) is 0 while the generous footing (dim.covered) is 2.
+        A _compute_stats that reimplements the rollup on the strict footing
+        reports 0 tested assertions and fails here.
+        """
+        from elspais.graph.aggregation import aggregate_by_level
+        from elspais.graph.annotators import annotate_coverage
+
+        graph = build_graph(
+            make_requirement(
+                "REQ-p00001",
+                level="PRD",
+                title="Product Requirement",
+                assertions=[
+                    {"label": "A", "text": "First assertion"},
+                    {"label": "B", "text": "Second assertion"},
+                ],
+                hash_value="abc12345",
+                source_path="spec/prd.md",
+            ),
+            make_code_ref(implements=["REQ-p00001"]),
+            make_test_ref(verifies=["REQ-p00001"]),
+        )
+        annotate_coverage(graph)
+        generator = HTMLGenerator(graph)
+
+        stats = generator._compute_stats()
+        aggs = aggregate_by_level(graph, generator.config)
+        by_level = {a.level: a for a in aggs}
+
+        assert stats.prd_count == by_level["PRD"].total_requirements
+        assert stats.total_count == sum(a.total_requirements for a in aggs)
+        assert stats.assertion_count == sum(a.total_assertions for a in aggs)
+        assert stats.assertions_implemented == pytest.approx(
+            sum(a.implemented.covered for a in aggs)
+        )
+        assert stats.assertions_tested == pytest.approx(sum(a.tested.covered for a in aggs))
+        assert stats.assertions_passing == pytest.approx(sum(a.passing.covered for a in aggs))
+        # Generous-footing sanity: this fixture has indirect-only coverage,
+        # so the shared aggregation credits both assertions as tested.
+        assert stats.assertions_tested == pytest.approx(2.0)
 
     # Implements: REQ-d00052-F
     def test_shows_total_count(self, sample_graph):

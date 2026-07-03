@@ -80,7 +80,7 @@ D. Generators SHALL NOT create Dict[str, TraceViewRequirement] or similar interm
 
 E. Generators SHALL read node.metrics for display information, not recompute it.
 
-F. Generators SHALL use aggregate functions from annotators module for statistics.
+F. Generators SHALL derive statistics from shared aggregate functions (the graph aggregation module and annotator count helpers), not recompute them.
 
 G. All file write operations in output commands SHALL specify explicit `encoding="utf-8"` for cross-platform portability.
 
@@ -90,10 +90,11 @@ Direct graph consumption eliminates data structure conversion overhead and ensur
 
 ### Changelog
 
+- 2026-07-03 | c5dd0546 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-05-11 | a3575fcc | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | a3575fcc | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
-*End* *Output Generators Consume Graph Directly* | **Hash**: a3575fcc
+*End* *Output Generators Consume Graph Directly* | **Hash**: c5dd0546
 ---
 
 ## REQ-d00054: Annotation Pipeline Pattern

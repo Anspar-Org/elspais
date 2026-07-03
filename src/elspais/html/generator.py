@@ -91,11 +91,13 @@ class ViewStats:
     test_failed_count: int = 0  # Number of failed RESULT nodes
     associated_count: int = 0
     journey_count: int = 0
-    # Assertion-level metrics
+    # Assertion-level metrics (REQ-d00258-C: sums of the shared
+    # aggregate_by_level() fractions on the generous footing; fractional
+    # because REFINES conduction credits partial assertion coverage)
     assertion_count: int = 0  # Total unique assertions
-    assertions_implemented: int = 0  # Assertions with CODE coverage
-    assertions_tested: int = 0  # Assertions with TEST coverage
-    assertions_validated: int = 0  # Assertions with passing RESULTs
+    assertions_implemented: float = 0.0  # Implemented (generous footing)
+    assertions_tested: float = 0.0  # Tested (generous footing)
+    assertions_passing: float = 0.0  # Passing (verified | lcov union, generous)
 
 
 def _val_tier(key: str) -> tuple[str, str]:
@@ -505,36 +507,37 @@ class HTMLGenerator:
     def _compute_stats(self) -> ViewStats:
         """Compute statistics for the header.
 
-        Uses pre-computed RollupMetrics from annotate_coverage() for all
-        assertion-level coverage stats. No ad-hoc calculation.
+        REQ-d00258-C: level counts and assertion-coverage sums derive from
+        the shared aggregation module (graph/aggregation.py) on the generous
+        footing, so the viewer header agrees with CLI summary and MCP
+        get_project_summary. Node-kind tallies (CODE/TEST/RESULT) and the
+        viewer-specific associated-repo count are simple index counts, not
+        coverage rollups, and stay local.
         """
         from elspais.graph import NodeKind
-        from elspais.graph.metrics import RollupMetrics
+        from elspais.graph.aggregation import aggregate_by_level
 
         stats = ViewStats()
 
-        for node in self.graph.nodes_by_kind(NodeKind.REQUIREMENT):
-            stats.total_count += 1
-
-            level = (node.level or "").upper()
+        for agg in aggregate_by_level(self.graph, self.config):
+            level = agg.level.upper()
             if level == "PRD":
-                stats.prd_count += 1
+                stats.prd_count = agg.total_requirements
             elif level == "OPS":
-                stats.ops_count += 1
+                stats.ops_count = agg.total_requirements
             elif level == "DEV":
-                stats.dev_count += 1
+                stats.dev_count = agg.total_requirements
+            stats.total_count += agg.total_requirements
+            stats.assertion_count += agg.total_assertions
+            stats.assertions_implemented += agg.implemented.covered
+            stats.assertions_tested += agg.tested.covered
+            stats.assertions_passing += agg.passing.covered
 
-            # Count associated requirements
+        # Viewer-specific: associated-repo requirement count (repo
+        # attribution, not a coverage rollup — stays a local index count).
+        for node in self.graph.nodes_by_kind(NodeKind.REQUIREMENT):
             if self._is_associated(node):
                 stats.associated_count += 1
-
-            # Aggregate all assertion metrics from pre-computed RollupMetrics
-            rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
-            if rollup:
-                stats.assertion_count += rollup.total_assertions
-                stats.assertions_implemented += rollup.implemented.indirect
-                stats.assertions_tested += rollup.tested.direct
-                stats.assertions_validated += rollup.verified.direct
 
         # Count CODE nodes
         for _ in self.graph.nodes_by_kind(NodeKind.CODE):

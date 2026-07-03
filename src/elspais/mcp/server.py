@@ -2114,7 +2114,8 @@ def _get_project_summary(
     Returns:
         Project summary dict.
     """
-    # Use aggregate functions from annotators (REQ-o00061-C)
+    # REQ-o00061-C: derive statistics from the shared coverage aggregation
+    # (graph/aggregation.py) plus count_by_level; do not recompute here.
     level_counts = count_by_level(graph, config=config)
     from elspais.config import get_status_roles
     from elspais.graph.aggregation import tier_buckets

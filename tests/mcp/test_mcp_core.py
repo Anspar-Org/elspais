@@ -1127,7 +1127,8 @@ class TestGetProjectSummary:
         assert "branch_changed" in changes
 
     def test_REQ_o00061_C_uses_aggregate_functions(self, sample_graph):
-        """REQ-o00061-C: Uses aggregate functions from annotators module."""
+        """REQ-o00061-C: Derives statistics from shared aggregate functions
+        (graph/aggregation.py tier_buckets + annotators count_by_* helpers)."""
         pytest.importorskip("mcp")
         from elspais.graph.annotators import (
             count_by_coverage,

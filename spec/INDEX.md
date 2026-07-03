@@ -48,7 +48,7 @@
 | REQ-d00010 | Review API Server                                             | dev-traceview-review.md | b647ec64 |
 | REQ-d00050 | Node Annotator Functions                                      | dev-graph-core.md       | 8ca0389e |
 | REQ-d00051 | Graph Aggregate Functions                                     | dev-graph-core.md       | 97c0f6fc |
-| REQ-d00052 | Output Generators Consume Graph Directly                      | dev-graph-core.md       | a3575fcc |
+| REQ-d00052 | Output Generators Consume Graph Directly                      | dev-graph-core.md       | c5dd0546 |
 | REQ-d00054 | Annotation Pipeline Pattern                                   | dev-graph-core.md       | 0256df47 |
 | REQ-d00055 | Node Metrics as Extension Point                               | dev-graph-core.md       | 0073a9c3 |
 | REQ-d00060 | Graph Status Tool Implementation                              | dev-mcp-tools.md        | 4e2277cc |

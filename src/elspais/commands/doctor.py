@@ -620,8 +620,12 @@ def _parse_docs_sections(docs_path: Path) -> set[str]:
             in_toml_block = False
             continue
         if in_toml_block:
-            # Match top-level [section] or extract parent from [section.sub]
-            m = re.match(r"^\[([A-Za-z0-9_-]+)(?:\.[A-Za-z0-9_.-]+)?\]", stripped)
+            # Match top-level [section] or [[array.of.tables]] headers,
+            # extracting the parent from dotted names ([section.sub] or
+            # [[section.sub.arr]] both yield "section"). Double-bracket
+            # headers must enter a section too, or their bare keys would be
+            # misparsed as top-level sections by the fallback below.
+            m = re.match(r"^\[\[?([A-Za-z0-9_-]+)(?:\.[A-Za-z0-9_.-]+)?\]\]?", stripped)
             if m:
                 sections.add(m.group(1))
                 in_section = True
