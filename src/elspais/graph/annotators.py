@@ -796,12 +796,101 @@ def _compute_code_tested(
                 if lc.get(line_no, 0) > 0:
                     indirect_count += 1
 
+    # Implements: REQ-d00254-G
+    # Per-test attribution (coverage.py dynamic contexts, CUR-1568): a line
+    # counts as DIRECT when one of its recorded contexts belongs to a test
+    # that VERIFIES this requirement. Context string format (pytest-cov
+    # `--cov-context=test`): "path::Class::func|run" or "path::func|run"
+    # (also "|setup"/"|teardown" for fixture-phase execution). Only "|run"
+    # contexts credit direct attribution -- setup/teardown fixture execution
+    # is not evidence the *test itself* exercised the line, so those phases
+    # are deliberately excluded rather than treated as equivalent to "|run".
+    direct_count = _direct_context_count(node, lines_by_file)
+
     metrics.code_tested = CoverageDimension(
         total=len(impl_lines),
-        direct=0,  # Direct requires per-test attribution (RESULT.covered_lines)
+        direct=direct_count,
         indirect=indirect_count,
         has_failures=False,
     )
+
+
+def _normalize_run_context(ctx: str) -> str | None:
+    """Return the canonical TEST node id for a coverage.py context string.
+
+    Returns None when the context should not credit direct attribution:
+    the empty/global context (code executed outside any test), or a
+    "|setup"/"|teardown" fixture-phase context (see CUR-1568 decision above
+    -- only "|run" contexts count). Reuses ``build_test_id_from_nodeid`` (the
+    canonical pytest-nodeid normalizer) rather than re-parsing nodeids here.
+    """
+    from elspais.utilities.test_identity import build_test_id_from_nodeid
+
+    nodeid, sep, phase = ctx.rpartition("|")
+    if not sep or phase != "run" or not nodeid:
+        return None
+    return build_test_id_from_nodeid(nodeid)
+
+
+def _direct_context_count(node: GraphNode, lines_by_file: dict[str, set[int]]) -> int:
+    """Count implementation lines directly attributed to a verifying test.
+
+    Collects the TEST node ids reachable via this requirement's outgoing
+    VERIFIES edges, then checks each implementation line's recorded
+    ``line_contexts`` (set on the FILE node by coverage.json ingestion) for a
+    context that normalizes to one of those TEST ids.
+    """
+    from elspais.graph import NodeKind
+    from elspais.graph.relations import EdgeKind
+
+    verifying_test_ids: set[str] = set()
+    for edge in node.iter_outgoing_edges():
+        if edge.kind != EdgeKind.VERIFIES:
+            continue
+        target = edge.target
+        if target.kind != NodeKind.TEST:
+            continue
+        verifying_test_ids.add(target.id)
+
+    if not verifying_test_ids:
+        return 0
+
+    # Collect line_contexts per file from this requirement's IMPLEMENTS edges
+    # (same traversal shape as the line_coverage lookup above).
+    file_contexts: dict[str, dict[int, list[str]]] = {}
+    for edge in node.iter_outgoing_edges():
+        if edge.kind != EdgeKind.IMPLEMENTS:
+            continue
+        target = edge.target
+        if target.kind != NodeKind.CODE:
+            continue
+        fn = target.file_node()
+        if fn is None:
+            continue
+        rel_path = fn.get_field("relative_path")
+        if not rel_path or rel_path in file_contexts:
+            continue
+        ctxs = fn.get_field("line_contexts")
+        if ctxs:
+            file_contexts[rel_path] = ctxs
+
+    if not file_contexts:
+        return 0
+
+    direct_count = 0
+    for rel_path, lines in lines_by_file.items():
+        ctxs = file_contexts.get(rel_path)
+        if not ctxs:
+            continue
+        for line_no in lines:
+            line_ctx_ids = {
+                _normalize_run_context(c) for c in ctxs.get(line_no, []) if isinstance(c, str)
+            }
+            line_ctx_ids.discard(None)
+            if line_ctx_ids & verifying_test_ids:
+                direct_count += 1
+
+    return direct_count
 
 
 def _under_dirs(rel_path: str, dirs: tuple[str, ...]) -> bool:

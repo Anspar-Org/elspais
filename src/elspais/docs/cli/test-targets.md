@@ -214,6 +214,38 @@ results  = ".elspais/results/TEST-*.xml"
 match    = "aggregate"
 ```
 
+### Coverage-only target with per-test direct attribution
+
+If your suite produces no machine-readable results file (no `--json-report` /
+`--junit-xml` step) but you already run under `pytest-cov`, you can still get
+`code_tested.direct` (per-test line attribution, see `elspais docs checks`)
+from `coverage.json` alone. `Verifies:` wiring still comes from `# Verifies:`
+comments scanned in your test files -- independent of this target.
+
+```toml
+[[scanning.test.targets]]
+name     = "unit"
+coverage = ".results/coverage.json"
+```
+
+```toml
+# pyproject.toml
+[tool.coverage.json]
+show_contexts = true   # required to export the per-line contexts map
+```
+
+Run pytest with `--cov-context=test` (pytest-cov's own per-test dynamic
+context, keyed by pytest nodeid + `|run`/`|setup`/`|teardown`) --
+`show_contexts` alone only controls whether the JSON *report* includes the
+per-line `contexts` map; something still has to record them during the run.
+
+**Do not** also set `[tool.coverage.run] dynamic_context = "test_function"`.
+That is coverage.py's own context-switching (keyed by dotted test qualname,
+no file path, no `|run` suffix) and it silently wins over pytest-cov's
+`--cov-context=test` when both are active, replacing the nodeid-shaped
+contexts elspais expects with an incompatible format -- `code_tested.direct`
+then stays `0` everywhere even though contexts are present.
+
 ## Playwright / TypeScript Recipe (source-bound JUnit)
 
 Any suite that produces JUnit XML can bind results to scanned test nodes with

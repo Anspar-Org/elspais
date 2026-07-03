@@ -140,7 +140,15 @@ reference_keyword = "Validates"
 # Additional regex patterns for reference detection
 reference_patterns = []
 # Test targets drive result + coverage ingestion ([[scanning.test.targets]]).
-# elspais's own target choice is finalized in a later task.
+# elspais's own suite (.githooks/pre-commit) writes .results/coverage.json
+# with per-test dynamic contexts (CUR-1568, [tool.coverage.*] in
+# pyproject.toml) but no machine-readable results file -- there's no
+# pytest-json-report/--json-report step, so `reporter`/`results` are left
+# unset (coverage-only ingestion). `Verifies:` wiring for Python tests comes
+# from source-scanned `# Verifies:` comments, independent of this target.
+[[scanning.test.targets]]
+name = "elspais-unit"
+coverage = ".results/coverage.json"
 
 # User journey file scanning
 [scanning.journey]

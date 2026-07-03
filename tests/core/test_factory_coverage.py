@@ -242,3 +242,124 @@ coverage = "coverage.json"
         line_cov = file_node.get_field("line_coverage")
         assert line_cov == {1: 1, 2: 1, 3: 0}
         assert file_node.get_field("executable_lines") == 3
+
+    # Verifies: REQ-d00254-G, REQ-d00258-E
+    def test_coverage_json_contexts_annotate_line_contexts(self, tmp_path: Path) -> None:
+        """A coverage.json with a per-line `contexts` map (coverage.py
+        dynamic contexts, e.g. from `--cov-context=test` + `show_contexts`)
+        annotates the FILE node with a `line_contexts` field (CUR-1568)."""
+        import json
+
+        config_file = tmp_path / ".elspais.toml"
+        config_file.write_text(
+            """\
+[project]
+name = "test-cov-json-contexts"
+namespace = "REQ"
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = ["src"]
+
+[[scanning.test.targets]]
+name = "unit"
+coverage = "coverage.json"
+""",
+            encoding="utf-8",
+        )
+
+        _write_spec(tmp_path / "spec")
+        _write_code_file(tmp_path / "src" / "main.py")
+
+        cov_data = {
+            "files": {
+                "src/main.py": {
+                    "executed_lines": [1, 2],
+                    "missing_lines": [3],
+                    "summary": {
+                        "num_statements": 3,
+                        "covered_lines": 2,
+                    },
+                    "contexts": {
+                        "1": ["tests/test_main.py::test_work|run"],
+                        "2": ["tests/test_main.py::test_work|run"],
+                    },
+                }
+            }
+        }
+        (tmp_path / "coverage.json").write_text(json.dumps(cov_data), encoding="utf-8")
+
+        graph = build_graph(
+            config_path=config_file,
+            repo_root=tmp_path,
+            scan_tests=False,
+        )
+
+        file_node = None
+        for node in graph.iter_by_kind(NodeKind.FILE):
+            if node.id == "file:src/main.py":
+                file_node = node
+                break
+
+        assert file_node is not None
+        line_contexts = file_node.get_field("line_contexts")
+        assert line_contexts == {
+            1: ["tests/test_main.py::test_work|run"],
+            2: ["tests/test_main.py::test_work|run"],
+        }
+
+    def test_coverage_json_no_contexts_leaves_line_contexts_unset(self, tmp_path: Path) -> None:
+        """A coverage.json without a `contexts` key leaves line_contexts
+        unset (backward compatible with existing aggregate reports)."""
+        import json
+
+        config_file = tmp_path / ".elspais.toml"
+        config_file.write_text(
+            """\
+[project]
+name = "test-cov-json-no-contexts"
+namespace = "REQ"
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = ["src"]
+
+[[scanning.test.targets]]
+name = "unit"
+coverage = "coverage.json"
+""",
+            encoding="utf-8",
+        )
+
+        _write_spec(tmp_path / "spec")
+        _write_code_file(tmp_path / "src" / "main.py")
+
+        cov_data = {
+            "files": {
+                "src/main.py": {
+                    "executed_lines": [1, 2],
+                    "missing_lines": [3],
+                    "summary": {"num_statements": 3, "covered_lines": 2},
+                }
+            }
+        }
+        (tmp_path / "coverage.json").write_text(json.dumps(cov_data), encoding="utf-8")
+
+        graph = build_graph(
+            config_path=config_file,
+            repo_root=tmp_path,
+            scan_tests=False,
+        )
+
+        file_node = None
+        for node in graph.iter_by_kind(NodeKind.FILE):
+            if node.id == "file:src/main.py":
+                file_node = node
+                break
+
+        assert file_node is not None
+        assert file_node.get_field("line_contexts") is None

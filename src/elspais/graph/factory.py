@@ -827,6 +827,8 @@ def build_graph(
                     continue
                 cov_node.set_field("line_coverage", data["line_coverage"])
                 cov_node.set_field("executable_lines", data["executable_lines"])
+                if data.get("contexts"):
+                    cov_node.set_field("line_contexts", data["contexts"])
 
     # Link TEST nodes to CODE nodes via import analysis.
     # This creates TEST→CODE edges that enable transitive coverage:

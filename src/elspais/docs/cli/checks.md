@@ -310,8 +310,25 @@ Each dimension resolves to a **tier** that drives severity and UI color:
 Unlike the other five dimensions, `code_tested` counts **source lines** rather
 than assertions. It cross-references implementation line ranges (from
 `Implements:` edges to CODE nodes) against file-level line-coverage data
-(LCOV or coverage.json). `code_tested.direct` is always 0 because per-test
-line attribution is not yet implemented.
+(LCOV or coverage.json). `code_tested.indirect` counts any covered
+implementation line, regardless of which test covered it.
+
+`code_tested.direct` additionally counts implementation lines whose recorded
+test **context** names a test that `Verifies:` the requirement (Python only,
+via coverage.py's per-test dynamic contexts). A `coverage.json` produced with
+pytest-cov's `--cov-context=test` *and* `show_contexts = true` under
+`[tool.coverage.json]` carries a per-line `contexts` array of strings like
+`"tests/test_x.py::TestClass::test_method|run"` (or `"...::test_func|run"`
+with no class). Only the `|run` phase credits direct attribution --
+`|setup`/`|teardown` fixture-phase execution is not evidence the test itself
+exercised the line. Coverage formats without a `contexts` map (LCOV, or
+coverage.json exported without `show_contexts`) always report
+`code_tested.direct == 0`.
+
+Do not set `[tool.coverage.run] dynamic_context = "test_function"` alongside
+`--cov-context=test`: that is coverage.py's own (incompatible) context
+switcher and silently overrides pytest-cov's nodeid-shaped contexts. See
+`elspais docs test-targets` for the full recipe and gotcha.
 
 ## Output Formats
 
