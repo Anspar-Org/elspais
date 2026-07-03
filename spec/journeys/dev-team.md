@@ -68,7 +68,7 @@ Validates: REQ-p00001, REQ-p00003, REQ-p00004
 
 1. Marcus adds requirement references to test docstrings and names (e.g., `test_REQ_d00042_A_validates_token_format`).
 2. He runs the test suite with `pytest --junitxml=test-results.xml` to generate structured results.
-3. He runs `elspais analyze coverage` to generate the coverage report.
+3. He runs `elspais summary` to generate the coverage report.
 4. The report shows 94% assertion coverage, with three assertions in REQ-d00015 lacking test references.
 5. He writes additional tests for the uncovered assertions, adding the appropriate REQ references.
 6. He re-runs the test suite and coverage analysis.

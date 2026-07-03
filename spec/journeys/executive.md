@@ -17,7 +17,7 @@ Validates: REQ-p00003, REQ-p00006
 2. She opens the HTML dashboard in her browser and reviews the high-level statistics: total requirements, coverage percentage, and status breakdown.
 3. She navigates to the regulatory compliance section and confirms all relevant PRD requirements have Active status.
 4. She drills down into the authentication module to spot-check that DEV requirements trace back to the PRD.
-5. She runs `elspais analyze coverage` to get the aggregate coverage number for her slides.
+5. She runs `elspais summary` to get the aggregate coverage number for her slides.
 6. She captures key metrics: 47 PRD requirements, 98% implementation coverage, 100% test coverage on active DEV requirements.
 7. She exports the HTML report for distribution to board members who want to explore the details.
 

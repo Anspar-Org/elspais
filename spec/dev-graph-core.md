@@ -172,11 +172,13 @@ G. A leaf *Assertion* SHALL be defined as any *Assertion* that has no `Refines:`
 
 H. When a requirement declares `Satisfies: X`, the graph builder SHALL clone the template's REQ subtree with composite IDs (`declaring_id::original_id`), creating INSTANCE nodes linked to the declaring requirement via a SATISFIES edge. Coverage SHALL be computed through the standard coverage mechanism operating on the cloned nodes.
 
-I. 100% coverage of a template instance SHALL be achieved when every leaf *Assertion* in the cloned template subtree (excluding N/A assertions) has at least one `Implements:` reference.
+I. 100% coverage of a template instance SHALL be achieved when every leaf *Assertion* in the cloned template subtree (excluding N/A assertions) has at least one inbound coverage edge (`Implements:`, `Verifies:`, or `Validates:`) on its template original, consistent with the inherited-coverage rule (REQ-p00014-K).
 
 J. A `Refines:` relationship SHALL NOT contribute coverage by itself, but it SHALL conduct the refining requirement's own rolled-up coverage upward to the *Assertion* it targets. A requirement's coverage SHALL be the mean of its assertions' coverage (assertions are unweighted), computed independently per coverage dimension. An *Assertion*'s coverage SHALL be determined as follows: if the *Assertion* has direct coverage (local evidence on it, or any assertion-targeted `Refines:`/`Implements:` edge naming it), its coverage SHALL be the equal-weight mean of those direct contributions (each contributor -- direct evidence at full value, each assertion-targeted refining requirement at its own rolled-up coverage -- carrying equal weight regardless of how many target the *Assertion*), and whole-requirement (blanket) credit SHALL be ignored for it. Otherwise (the *Assertion* has no direct coverage), it SHALL receive whole-requirement credit: full value if the requirement has local whole-requirement evidence (a whole-requirement test/code/journey), else `1/N` times the mean coverage of the requirement's whole-requirement (blanket) `Refines:` edges, where `N` is the requirement's assertion count -- so a blanket `Refines:` names no *Assertion* and is therefore worth at most one *Assertion*'s share, and a requirement refined by many whole-requirement children is not credited beyond that share. Only the *Assertion* with direct coverage forgoes blanket credit; its sibling *Assertions* without direct coverage still accrue it.
 
 K. The system SHALL report coverage gaps on template instance nodes through the standard coverage mechanisms. Instance nodes are normal graph nodes and participate in existing health checks.
+
+L. Coverage SHALL be tracked on two footings per dimension: strict (direct, assertion-targeted evidence only) and generous (indirect, additionally counting whole-requirement, inferred, conducted, and inherited evidence). Reporting surfaces SHALL headline the generous footing and SHALL express precision as a tier (full-direct, full-indirect, partial, none, failing), rendering an indirect-evidence marker rather than a second count.
 
 ### Rationale
 
@@ -184,12 +186,13 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* 
 
 ### Changelog
 
+- 2026-07-02 | 738d94e4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-06-20 | 2d05ad7b | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-06-19 | acbdf3da | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-05-11 | e9b5c3f1 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | e9b5c3f1 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
-*End* *Indirect Coverage Source* | **Hash**: 2d05ad7b
+*End* *Indirect Coverage Source* | **Hash**: 738d94e4
 ---
 
 ## REQ-d00070: Indirect Coverage Toggle Display
@@ -456,3 +459,29 @@ B. The UAT report SHALL include only requirements that have at least one incomin
 C. The UAT report SHALL exclude code implementation and test verification columns (`implemented`, `tested`, `verified`, `code_tested`, `lcov_tested`).
 
 *End* *UAT-Scoped Traceability Report* | **Hash**: 45bb196f
+
+---
+
+## REQ-d00258: Reporting Surface Consistency
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-d00069
+
+Reporting surfaces (trace, summary, MCP project summary, HTML viewer) SHALL present coverage using a single consistent vocabulary, aggregation, and tier-derived color scheme so that identical underlying data yields identical answers across surfaces.
+
+### Assertions
+
+A. All reporting surfaces (trace, summary, MCP project summary, HTML viewer) SHALL headline coverage counts on the generous footing per REQ-d00069-L, and text surfaces SHALL append a `~` marker to any count whose evidence is not fully direct.
+
+B. Reporting surfaces SHALL use exactly five coverage display terms: Implemented, Tested, Passing, UAT Covered, UAT Passed. The term "Validated" SHALL NOT denote test coverage. Passing SHALL be the union of result-verified and line-coverage-credited evidence.
+
+C. The CLI summary, the MCP project summary, and the viewer SHALL derive their coverage statistics from a single shared aggregation so identical questions receive identical answers.
+
+D. Viewer coverage colors SHALL be resolved through the theme catalog by severity name (tier -> configured severity -> named catalog entry), never through hard-coded color values, and the coverage tier states SHALL appear in the viewer Legend.
+
+E. Viewer coverage filters SHALL bucket requirements by tier semantics (full = any full tier, partial, none, plus a failing overlay), never by color string. The requirement-level line coverage cell SHALL NOT render a direct-attribution count for targets whose tooling provides only aggregate coverage.
+
+### Changelog
+
+- 2026-07-02 | be97c170 | - | Michael Lewis (michael@anspar.org) | Auto-fix: add missing changelog section
+
+*End* *Reporting Surface Consistency* | **Hash**: be97c170

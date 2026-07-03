@@ -118,7 +118,7 @@ B. The command SHALL support column presets (`--preset minimal|standard|full`) c
 
 C. The command SHALL support independent detail flags (`--body`, `--assertions`, `--tests`) that control whether expanded rows appear beneath each requirement, orthogonal to column presets.
 
-D. Coverage columns SHALL show per-requirement *Assertion*-level coverage: Implemented (assertions with code refs, direct or transitive), Validated (assertions with test refs), Passing (validated assertions whose tests pass), each displayed as N/M (%).
+D. The standard and full presets SHALL include per-requirement coverage columns Implemented (assertions with code evidence: Implements references, conducted, or inherited via INSTANCE/INTEGRATES), Tested (assertions with test references), and Passing (tested assertions whose evidence passes, including line-coverage credit), each displayed as N/M (%) on the generous footing with the indirect-evidence marker per REQ-d00258-A.
 
 ### Rationale
 
@@ -126,10 +126,11 @@ A JSON graph output mode enables programmatic consumption of the full *Traceabil
 
 ### Changelog
 
+- 2026-07-02 | f4e1d611 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-05-11 | f8f0e0f2 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | f8f0e0f2 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
-*End* *Trace Command* | **Hash**: f8f0e0f2
+*End* *Trace Command* | **Hash**: f4e1d611
 ---
 
 ## REQ-d00085: Unified Report Composition
@@ -182,7 +183,7 @@ The `coverage` section SHALL produce a coverage report showing implementation, v
 
 A. The report SHALL group requirements by level (PRD, OPS, DEV) and show counts and percentages of requirements with code references, test references, and passing tests.
 
-B. The report SHALL compute per-requirement *Assertion* coverage: implemented (assertions with `Implements:` code refs, direct or transitive), validated (assertions with test refs), and passing (validated assertions whose tests pass).
+B. The report SHALL compute per-requirement *Assertion* coverage: Implemented (assertions with code evidence: Implements references, conducted, or inherited via INSTANCE/INTEGRATES), Tested (assertions with test references), and Passing (tested assertions whose evidence passes, including line-coverage credit), each on the generous footing with the indirect-evidence marker per REQ-d00258-A.
 
 C. The report SHALL support `text`, `markdown`, `json`, and `csv` output formats.
 
@@ -194,10 +195,11 @@ Coverage data is already computed during graph construction but is only surfaced
 
 ### Changelog
 
+- 2026-07-02 | a17871db | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-05-11 | 2fd4ab13 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 2fd4ab13 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
-*End* *Coverage Report Section* | **Hash**: 2fd4ab13
+*End* *Coverage Report Section* | **Hash**: a17871db
 ---
 
 ## REQ-d00073: Link Suggestion CLI Command
