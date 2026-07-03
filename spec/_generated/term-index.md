@@ -40,6 +40,7 @@
 - REQ-p00003-B
 - REQ-d00241-A
 - REQ-d00241-C
+- REQ-d00241-D
 - REQ-p00005-B
 - rem:spec/AI-AGENT.md:20
 - REQ-d00084:section:0

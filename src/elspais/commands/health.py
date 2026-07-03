@@ -2615,11 +2615,17 @@ def check_uat_coverage(
     )
 
 
+# Implements: REQ-d00241-D
 def check_unlinked_tests(graph: FederatedGraph) -> HealthCheck:
     """Check for test files with no traceability markers.
 
-    Finds FILE nodes of type TEST that were scanned but contain no
-    TEST child nodes (i.e. no REQ-xxx patterns or Verifies: comments found).
+    Flags FILE nodes of type TEST that either contain no TEST child
+    nodes at all, or contain TEST children none of which link to any
+    requirement. The second condition is essential: the parser emits a
+    TEST node for every discovered test function whether or not it
+    carries a Verifies: marker, so a fully marker-less test file still
+    has TEST children. Files with at least one linked test are not
+    flagged (partial marking is not "unlinked").
     """
     from elspais.graph import NodeKind
     from elspais.graph.GraphNode import FileType
@@ -2629,11 +2635,12 @@ def check_unlinked_tests(graph: FederatedGraph) -> HealthCheck:
     for file_node in graph.iter_roots(NodeKind.FILE):
         if file_node.get_field("file_type") != FileType.TEST:
             continue
-        has_test_child = any(
-            child.kind == NodeKind.TEST
+        has_linked_test = any(
+            graph.is_reachable_to_requirement(child)
             for child in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
+            if child.kind == NodeKind.TEST
         )
-        if not has_test_child:
+        if not has_linked_test:
             unlinked_files.append(file_node.get_field("relative_path") or file_node.id)
 
     if unlinked_files:

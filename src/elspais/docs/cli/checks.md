@@ -147,7 +147,7 @@ that changes to cross-cutting requirements are propagated to their consumers.
 | Check | Description |
 |-------|-------------|
 | `tests.coverage` | Test coverage statistics with rollup (informational) |
-| `tests.unlinked` | Test files with no traceability markers (no REQ-xxx patterns or `Verifies` comments); severity: info |
+| `tests.unlinked` | Test files with no traceability markers -- either no test functions found, or no test in the file links to any requirement (a file with at least one linked test is not flagged); severity: info |
 | `tests.results` | Test pass/fail status from JUnit XML or pytest JSON results |
 | `tests.retired_references` | Tests referencing requirements with retired status (Deprecated, Superseded, Rejected); default severity: warning |
 | `tests.provisional_references` | Tests referencing requirements with provisional status (Draft, Proposed); default severity: info |

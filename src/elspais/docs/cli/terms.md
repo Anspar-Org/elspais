@@ -214,7 +214,7 @@ Note: Regex-based comment extraction may produce false positives in some edge ca
 
 ## Related Check: `code.no_traceability`
 
-While not a terms check, `code.no_traceability` (configured in `[rules.format]`) is closely related to the terms workflow. It reports code and test files that contain no traceability markers at all -- no `Implements:`, `Verifies:`, or REQ-xxx references in comments. This helps identify source files that have not been linked to any requirement.
+While not a terms check, `code.no_traceability` (configured in `[rules.format]`) is closely related to the terms workflow. It reports code files that contain no traceability markers at all -- no `Implements:`, `Verifies:`, or REQ-xxx references in comments. Test files are covered separately by the `tests.unlinked` check. This helps identify source files that have not been linked to any requirement.
 
 **Configuration:**
 

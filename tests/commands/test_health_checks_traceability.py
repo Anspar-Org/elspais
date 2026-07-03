@@ -108,8 +108,12 @@ class TestCheckStructuralOrphans:
 class TestCheckUnlinkedTests:
     """Tests for check_unlinked_tests() — file-level semantics.
 
-    Unlinked means a TEST-type FILE was scanned but contains no TEST
-    child nodes (no traceability markers found).
+    Unlinked means a TEST-type FILE was scanned and either contains no
+    TEST child nodes at all, or contains TEST children none of which
+    link to any requirement (REQ-d00241-D). The second condition matters
+    because the parser emits a TEST node for every discovered test
+    function whether or not it carries a ``Verifies:`` marker, so a
+    fully marker-less file still has TEST children.
     """
 
     def test_REQ_d00085_all_test_files_have_markers_passes(self) -> None:
@@ -171,6 +175,65 @@ class TestCheckUnlinkedTests:
         finding = check.findings[0]
         assert isinstance(finding, HealthFinding)
         assert finding.file_path is not None
+
+    # Implements: REQ-d00241-D
+    def test_REQ_d00241_D_marker_less_file_with_test_children_flagged(self) -> None:
+        """A test FILE whose TEST children all lack requirement links is flagged.
+
+        The parser's third pass emits a TEST node for every discovered
+        test function even when it has no ``Verifies:`` marker, so a
+        marker-less file is NOT the zero-TEST-children case -- it has
+        children, just none linked. Before REQ-d00241-D this file was
+        reported by neither tests.unlinked (which only looked for zero
+        children) nor code.no_traceability (now code-only): a silent
+        detection gap.
+        """
+        graph = build_graph(
+            make_test_ref(
+                verifies=[],
+                source_path="tests/test_unmarked.py",
+                function_name="test_no_marker",
+                start_line=1,
+                end_line=5,
+            ),
+        )
+        # Sanity: the file really has a TEST child (not the empty-file case).
+        file_node = graph._index["file:tests/test_unmarked.py"]
+        assert any(
+            c.kind == NodeKind.TEST for c in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
+        )
+
+        check = check_unlinked_tests(graph)
+        assert not check.passed
+        assert any(f.file_path == "tests/test_unmarked.py" for f in check.findings)
+
+    # Implements: REQ-d00241-D
+    def test_REQ_d00241_D_partially_marked_file_not_flagged(self) -> None:
+        """A test FILE with at least one linked TEST child is NOT flagged.
+
+        Partial marking isn't "unlinked" -- one linked test is enough to
+        establish file-level traceability.
+        """
+        graph = build_graph(
+            make_requirement("REQ-p00001", title="Feature", level="PRD"),
+            make_test_ref(
+                verifies=["REQ-p00001"],
+                source_path="tests/test_partial.py",
+                function_name="test_marked",
+                start_line=1,
+                end_line=5,
+            ),
+            make_test_ref(
+                verifies=[],
+                source_path="tests/test_partial.py",
+                function_name="test_unmarked",
+                start_line=10,
+                end_line=15,
+            ),
+        )
+        check = check_unlinked_tests(graph)
+        assert check.passed
+        assert not any(f.file_path == "tests/test_partial.py" for f in check.findings)
 
 
 # =============================================================================
@@ -285,15 +348,16 @@ class TestRunCodeChecksNoTraceabilityWiring:
         assert not check.passed
         assert any("orphan.py" in f.message for f in check.findings)
 
-    # Implements: REQ-d00241-A, REQ-d00241-B
+    # Implements: REQ-d00241-A, REQ-d00241-B, REQ-d00241-D
     def test_REQ_d00241_A_marker_less_test_function_excluded(self) -> None:
-        """A marker-less TEST node is NOT reported by code.no_traceability.
+        """A marker-less test file moves from code.no_traceability to tests.unlinked.
 
-        Regression guard for the double-report defect: a test function
-        with no ``Verifies:`` marker still produces an unreachable TEST
-        node (per the parser's unconditional per-function emission), but
-        code.no_traceability must not surface it -- that's tests.unlinked's
-        job now.
+        Regression guard for the double-report defect AND its inverse (the
+        detection gap): a test function with no ``Verifies:`` marker still
+        produces an unreachable TEST node (per the parser's unconditional
+        per-function emission). code.no_traceability must not surface it
+        -- that's tests.unlinked's job -- and tests.unlinked MUST surface
+        it, otherwise the file silently escapes both checks.
         """
         graph = build_graph(
             make_test_ref(
@@ -313,6 +377,11 @@ class TestRunCodeChecksNoTraceabilityWiring:
         check = next(c for c in checks if c.name == "code.no_traceability")
         assert check.passed
         assert not any("test_unmarked.py" in f.message for f in check.findings)
+
+        # The file MUST be owned by tests.unlinked instead (REQ-d00241-D).
+        tests_check = check_unlinked_tests(_wrap(graph))
+        assert not tests_check.passed
+        assert any(f.file_path == "tests/test_unmarked.py" for f in tests_check.findings)
 
     # Implements: REQ-d00241-A
     def test_REQ_d00241_A_mixed_code_and_test_only_code_reported(self) -> None:

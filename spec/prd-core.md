@@ -489,14 +489,17 @@ B. The check SHALL be wired into `run_code_checks()` using `graph.iter_unlinked(
 
 C. Severity SHALL be read from `[rules.format] no_traceability_severity` (default `"warning"` if None).
 
+D. The `tests.unlinked` check (`check_unlinked_tests()`) SHALL flag a test file when it contains no TEST nodes, or when it contains TEST nodes none of which link to any requirement. A test file with at least one linked test SHALL NOT be flagged. The second condition is required because the parser emits a TEST node for every discovered test function whether or not it carries a *Traceability* marker, so a fully marker-less test file still has TEST children; without it such files would escape both `tests.unlinked` and the code-only `code.no_traceability`.
+
 ### Changelog
 
+- 2026-07-03 | 583588f9 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-07-03 | c1be56e5 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-05-11 | e1272219 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | e1272219 | - | Michael Lewis (michael@anspar.org) | Auto-fix: sync changelog hash
 - 2026-03-29 | 6e481d63 | - | Michael Lewis (michael@anspar.org) | Initial creation
 
-*End* *Code No-Traceability Health Check* | **Hash**: c1be56e5
+*End* *Code No-Traceability Health Check* | **Hash**: 583588f9
 
 ## REQ-d00246: Markdown Emphasis Normalization Utility
 
