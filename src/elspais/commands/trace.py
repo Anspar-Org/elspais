@@ -263,18 +263,26 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
         return f"{fmt_assertion_count(num)}/{total} ({pct}%)"
 
     def _fmt_code_tested(dim: CoverageDimension) -> str:
-        if dim.total == 0:
+        if dim.total == 0 or (dim.direct == 0 and dim.indirect > 0):
+            # Aggregate-only tooling (e.g. lcov/coverage.json without per-test
+            # attribution) can't prove a *direct* count -- rendering "0/N (0%)"
+            # would misrepresent real (aggregate) coverage as no coverage at
+            # all (REQ-d00258-E).
             return "n/a"
         pct = round(dim.direct / dim.total * 100)
-        return f"{dim.direct}/{dim.total} ({pct}%)"
+        return f"{fmt_assertion_count(dim.direct)}/{dim.total} ({pct}%)"
 
+    # Implements: REQ-d00258-A
     # (column_key, rollup_attr, use_indirect_for_count, use_indirect_for_labels)
+    # All five dimensions headline on the generous (indirect) footing per
+    # REQ-d00069-L; the `~` marker (appended below) signals when the count
+    # isn't fully direct rather than rendering a second strict count.
     _DIMS = [
         ("implemented", "implemented", True, True),
-        ("tested", "tested", False, False),
-        ("verified", "verified", False, False),
+        ("tested", "tested", True, True),
+        ("verified", "verified", True, True),
         ("uat_coverage", "uat_coverage", True, True),
-        ("uat_verified", "uat_verified", False, False),
+        ("uat_verified", "uat_verified", True, True),
     ]
 
     from elspais.graph.serialize import serialize_requirement_summary
@@ -294,21 +302,30 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
     )
 
     if rollup:
+        from elspais.graph.metrics import tested_and_passing
+
         for key, attr, use_ind_count, use_ind_labels in _DIMS:
-            dim: CoverageDimension = getattr(rollup, attr)
+            # Implements: REQ-d00258-A, REQ-d00258-B
+            # "Passing" (the verified column) is the union of result-verified
+            # and line-coverage-credited evidence.
+            dim: CoverageDimension = (
+                tested_and_passing(rollup) if key == "verified" else getattr(rollup, attr)
+            )
+            marker = " ~" if dim.indirect > dim.direct + 1e-9 else ""
             if assertion_labels:
                 labels = dim.indirect_labels if use_ind_labels else dim.direct_labels
-                label_str = _compact_labels(labels) if labels else "-"
+                label_str = _compact_labels(labels) if labels else f"0/{dim.total}"
                 # Percentage reflects true fractional coverage (sum of per-assertion
                 # fractions), not just how many assertions have *any* coverage.
                 covered = dim.indirect if use_ind_labels else dim.direct
                 pct = round(covered / dim.total * 100) if dim.total else 0
-                data[key] = f"{label_str} ({pct}%)" if dim.total else "n/a"
+                data[key] = f"{label_str} ({pct}%){marker}" if dim.total else "n/a"
                 data[key + "_labels"] = label_str if dim.total else "n/a"
                 data[key + "_pct"] = f"{pct}%" if dim.total else "n/a"
             else:
                 num = dim.indirect if use_ind_count else dim.direct
-                data[key] = _fmt_count(num, total_a)
+                formatted = _fmt_count(num, total_a)
+                data[key] = formatted if formatted == "n/a" else f"{formatted}{marker}"
         ct = rollup.code_tested
         data["code_tested"] = _fmt_code_tested(ct)
         if assertion_labels:
@@ -376,9 +393,9 @@ def _column_headers() -> dict[str, str]:
         "implements": "Implements",
         "implemented": "Implemented",
         "tested": "Tested",
-        "verified": "Verified",
-        "uat_coverage": "UAT Coverage",
-        "uat_verified": "UAT Verified",
+        "verified": "Passing",
+        "uat_coverage": "UAT Covered",
+        "uat_verified": "UAT Passed",
         "code_tested": "Code Tested",
         "lcov_tested": "LCOV Tested",
         "hash": "Hash",

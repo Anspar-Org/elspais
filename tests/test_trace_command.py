@@ -97,9 +97,9 @@ class TestTraceReportPresets:
                     "Status",
                     "Implemented",
                     "Tested",
-                    "Verified",
-                    "UAT Coverage",
-                    "UAT Verified",
+                    "Passing",
+                    "UAT Covered",
+                    "UAT Passed",
                     "Code Tested",
                     "LCOV Tested",
                 ],
@@ -114,9 +114,9 @@ class TestTraceReportPresets:
                     "Status",
                     "Implemented",
                     "Tested",
-                    "Verified",
-                    "UAT Coverage",
-                    "UAT Verified",
+                    "Passing",
+                    "UAT Covered",
+                    "UAT Passed",
                     "Code Tested",
                     "LCOV Tested",
                 ],
@@ -404,12 +404,16 @@ def _render_trace_markdown(project, targets=None):
 
 
 def _verified_cell(markdown_text, req_id):
-    """Return the stripped 'Verified' column cell for the row containing req_id."""
+    """Return the stripped 'Passing' column cell for the row containing req_id.
+
+    The column is still keyed "verified" in the data dict, but its display
+    header is "Passing" (REQ-d00258-B).
+    """
     lines = markdown_text.splitlines()
     header_line = next((line for line in lines if line.startswith("| ID")), None)
     assert header_line is not None, "no table header found in markdown output"
     headers = [h.strip() for h in header_line.strip("|").split("|")]
-    verified_idx = headers.index("Verified")
+    verified_idx = headers.index("Passing")
     for line in lines:
         if line.startswith("|") and req_id in line:
             cells = [c.strip() for c in line.strip("|").split("|")]
@@ -680,3 +684,231 @@ class TestTraceLegendGating:
         out = "\n".join(format_markdown(graph, preset=preset))
 
         assert "> Legend:" not in out
+
+
+_MARKER_VERIFIED_CONFIG = """\
+version = 3
+
+[project]
+name = "marker-verified-trace"
+namespace = "REQ"
+
+[levels.dev]
+rank = 1
+letter = "d"
+implements = ["dev"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
+
+[id-patterns.component]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.test]
+enabled = true
+directories = ["tests"]
+file_patterns = ["test_*.py"]
+
+[[scanning.test.targets]]
+name = "a"
+reporter = "junit"
+results = "results/results.xml"
+match = "source"
+
+[rules.hierarchy]
+allow_circular = false
+allow_structural_orphans = true
+
+[rules.format]
+require_hash = false
+require_assertions = false
+require_status = false
+"""
+
+_MARKER_VERIFIED_SPEC = """\
+# Requirements
+
+---
+
+### REQ-d00001: Req A
+
+The system SHALL do A and B.
+
+## Assertions
+
+A. The system SHALL do A.
+B. The system SHALL do B.
+
+*End* *Req A*
+---
+"""
+
+
+@pytest.fixture
+def marker_verified_project(tmp_path):
+    """On-disk project: REQ-d00001 is verified only through a blanket
+    (whole-requirement) `# Verifies:` reference with a passing result.
+
+    A blanket reference credits every assertion INDIRECTly but none
+    DIRECTly, so `tested_and_passing(rollup).indirect > .direct` -- the
+    trace 'verified' cell must show the generous (indirect) count with the
+    `~` marker appended (REQ-d00258-A).
+    """
+    project = tmp_path / "project"
+    (project / "spec").mkdir(parents=True)
+    (project / "spec" / "reqs.md").write_text(_MARKER_VERIFIED_SPEC, encoding="utf-8")
+
+    (project / "tests").mkdir(parents=True)
+    (project / "tests" / "test_a.py").write_text(
+        "# Verifies: REQ-d00001\ndef test_a():\n    pass\n", encoding="utf-8"
+    )
+
+    (project / "results").mkdir(parents=True)
+    (project / "results" / "results.xml").write_text(
+        _JUNIT_ONE_PASSING.format(suite="suite-a", name="test_a"), encoding="utf-8"
+    )
+
+    (project / ".elspais.toml").write_text(_MARKER_VERIFIED_CONFIG, encoding="utf-8")
+    return project
+
+
+_CODE_TESTED_CONFIG = """\
+version = 3
+
+[project]
+name = "code-tested-no-attribution"
+namespace = "REQ"
+
+[levels.dev]
+rank = 1
+letter = "d"
+implements = ["dev"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
+
+[id-patterns.component]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = ["src"]
+
+[scanning.test]
+enabled = true
+directories = ["tests"]
+file_patterns = ["test_*.py"]
+
+[[scanning.test.targets]]
+name = "a"
+coverage = "coverage/lcov.info"
+credit_coverage = "verified"
+
+[rules.hierarchy]
+allow_circular = false
+allow_structural_orphans = true
+
+[rules.format]
+require_hash = false
+require_assertions = false
+require_status = false
+"""
+
+_CODE_TESTED_SPEC = """\
+# Requirements
+
+---
+
+### REQ-d00001: Req A
+
+The system SHALL do A.
+
+## Assertions
+
+A. The system SHALL do A.
+
+*End* *Req A*
+---
+"""
+
+
+@pytest.fixture
+def code_tested_no_attribution_project(tmp_path):
+    """On-disk project: REQ-d00001's implementation has aggregate (lcov)
+    line-coverage data but no per-test attribution -- `code_tested.direct`
+    stays 0 while `.indirect` is > 0 (per-test attribution is not derivable
+    from aggregate tooling). REQ-d00258-E: the trace 'code_tested' cell must
+    render `n/a`, never a misleading `0/N (0%)`.
+    """
+    project = tmp_path / "project"
+    (project / "spec").mkdir(parents=True)
+    (project / "spec" / "reqs.md").write_text(_CODE_TESTED_SPEC, encoding="utf-8")
+
+    (project / "src").mkdir(parents=True)
+    (project / "src" / "main.py").write_text(
+        "# Implements: REQ-d00001\nx = 1\ny = 2\nz = 3\n", encoding="utf-8"
+    )
+
+    (project / "coverage").mkdir(parents=True)
+    (project / "coverage" / "lcov.info").write_text(
+        "SF:src/main.py\nDA:1,1\nDA:2,1\nDA:3,1\nDA:4,1\nLF:4\nLH:4\nend_of_record\n",
+        encoding="utf-8",
+    )
+
+    (project / ".elspais.toml").write_text(_CODE_TESTED_CONFIG, encoding="utf-8")
+    return project
+
+
+class TestTraceFooting:
+    """Verifies REQ-d00258-A, REQ-d00258-B, REQ-d00258-E: generous-footing
+    headline counts get a `~` marker when evidence isn't fully direct, the
+    reporting vocabulary reads Passing/UAT Covered/UAT Passed (no
+    "Validated"), and aggregate-only line coverage never renders a
+    misleading direct-attribution count."""
+
+    # Verifies: REQ-d00258-A
+    def test_indirect_only_coverage_headlines_with_marker(self, marker_verified_project):
+        from elspais.commands.trace import _get_node_data
+        from elspais.graph.metrics import fmt_assertion_count, tested_and_passing
+
+        graph = _build_project_graph(marker_verified_project, targets=None)
+        node = graph.find_by_id("REQ-d00001")
+        dim = tested_and_passing(node.get_metric("rollup_metrics"))
+        assert dim.indirect > dim.direct + 1e-9
+
+        data = _get_node_data(node, graph)
+        assert data["verified"].rstrip().endswith("~")
+        assert data["verified"].startswith(f"{fmt_assertion_count(dim.indirect)}/{dim.total}")
+
+    # Verifies: REQ-d00258-B
+    def test_headers_use_passing_vocabulary(self):
+        from elspais.commands.trace import _column_headers
+
+        h = _column_headers()
+        assert h["verified"] == "Passing"
+        assert h["uat_coverage"] == "UAT Covered"
+        assert h["uat_verified"] == "UAT Passed"
+        assert "Validated" not in h.values()
+
+    # Verifies: REQ-d00258-E
+    def test_code_tested_without_attribution_is_na(self, code_tested_no_attribution_project):
+        from elspais.commands.trace import _get_node_data
+
+        graph = _build_project_graph(code_tested_no_attribution_project, targets=None)
+        node = graph.find_by_id("REQ-d00001")
+        rollup = node.get_metric("rollup_metrics")
+        assert rollup.code_tested.direct == 0
+        assert rollup.code_tested.indirect > 0
+
+        data = _get_node_data(node, graph)
+        assert not data["code_tested"].startswith("0/")
+        assert data["code_tested"] == "n/a"

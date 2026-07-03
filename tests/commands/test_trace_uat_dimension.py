@@ -254,12 +254,12 @@ class TestUATColumns:
                 assert col not in row, f"Code column '{col}' should be excluded; row: {row}"
 
     def test_markdown_header_has_uat_coverage(self, mixed_graph, uat_preset):
-        """Markdown UAT header must include 'UAT Coverage' column."""
+        """Markdown UAT header must include 'UAT Covered' column (REQ-d00258-B)."""
         from elspais.commands.trace import format_markdown
 
         lines = list(format_markdown(mixed_graph, uat_preset))
         header = next((ln for ln in lines if "|" in ln), "")
-        assert "UAT Coverage" in header, f"Missing 'UAT Coverage' in header: {header}"
+        assert "UAT Covered" in header, f"Missing 'UAT Covered' in header: {header}"
 
     def test_markdown_header_has_journeys_column(self, mixed_graph, uat_preset):
         """Markdown UAT header must include a 'Journeys' column."""

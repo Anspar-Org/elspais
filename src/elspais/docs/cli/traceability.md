@@ -35,9 +35,12 @@ This answers: "How do we know this requirement is satisfied?"
 
 Emits a focused UAT traceability report. Only requirements validated by at least
 one user journey (i.e., named on a journey's `Validates:` line) appear in the
-output. Columns: ID, Title, Level, Status, UAT Coverage, UAT Verified, Journeys
-(`JNY-id:verdict` pairs). Code-dimension columns (Implemented, Tested, Verified,
+output. Columns: ID, Title, Level, Status, UAT Covered, UAT Passed, Journeys
+(`JNY-id:verdict` pairs). Code-dimension columns (Implemented, Tested, Passing,
 etc.) are excluded.
+
+Coverage counts headline on the generous footing (direct + indirect evidence);
+a trailing `~` marker flags a count whose evidence isn't fully direct.
 
 Journey verdicts: `pass` (all steps have a passing test, none failed), `fail`
 (at least one failure), `partial` (some steps pass but not all), `unverified`
