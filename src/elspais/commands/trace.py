@@ -329,8 +329,15 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
         ct = rollup.code_tested
         data["code_tested"] = _fmt_code_tested(ct)
         if assertion_labels:
-            data["code_tested_labels"] = f"{ct.direct}/{ct.total}" if ct.total else "n/a"
-            data["code_tested_pct"] = f"{round(ct.direct / ct.total * 100)}%" if ct.total else "n/a"
+            # Same guard as _fmt_code_tested (REQ-d00258-E): aggregate-only
+            # coverage (direct==0 while indirect>0) has no per-test attribution
+            # to report, so the label/pct cells must not claim "0/N"/"0%".
+            if ct.total == 0 or (ct.direct == 0 and ct.indirect > 0):
+                data["code_tested_labels"] = "n/a"
+                data["code_tested_pct"] = "n/a"
+            else:
+                data["code_tested_labels"] = f"{ct.direct}/{ct.total}"
+                data["code_tested_pct"] = f"{round(ct.direct / ct.total * 100)}%"
         # Implements: REQ-d00254-I+J
         # Special-case the "verified" cell: distinguish "not run, no baseline"
         # from a carried (baseline) verdict, ahead of the "n/a"/count rendering
@@ -357,7 +364,7 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
             data["lcov_tested"] = f"lcov {lt_pct}%"
             if assertion_labels:
                 labels = lt.indirect_labels if lt.indirect_labels else lt.direct_labels
-                label_str = _compact_labels(labels) if labels else "-"
+                label_str = _compact_labels(labels) if labels else f"0/{lt.total}"
                 data["lcov_tested_labels"] = label_str
                 data["lcov_tested_pct"] = f"{lt_pct}%"
         else:
