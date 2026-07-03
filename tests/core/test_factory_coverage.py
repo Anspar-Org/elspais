@@ -6,7 +6,12 @@ build_graph() parses it and annotates matching FILE nodes with line_coverage
 and executable_lines fields.
 """
 
+from __future__ import annotations
+
+import importlib.util
 from pathlib import Path
+
+import pytest
 
 from elspais.graph import NodeKind
 from elspais.graph.factory import build_graph
@@ -363,3 +368,73 @@ coverage = "coverage.json"
 
         assert file_node is not None
         assert file_node.get_field("line_contexts") is None
+
+    # Verifies: REQ-d00254-G, REQ-d00258-E
+    def test_coverage_sqlite_annotates_file_node_and_contexts(self, tmp_path: Path) -> None:
+        """A `.coverage` SQLite target (coverage.py's native data file)
+        annotates FILE nodes with line_coverage AND line_contexts, restoring
+        per-test attribution without the JSON `show_contexts` blowup
+        (CUR-1568)."""
+        coverage = pytest.importorskip("coverage")
+
+        config_file = tmp_path / ".elspais.toml"
+        config_file.write_text(
+            """\
+[project]
+name = "test-cov-sqlite"
+namespace = "REQ"
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = ["src"]
+
+[[scanning.test.targets]]
+name = "unit"
+coverage = ".coverage"
+""",
+            encoding="utf-8",
+        )
+
+        _write_spec(tmp_path / "spec")
+        code_path = tmp_path / "src" / "main.py"
+        _write_code_file(code_path)
+
+        cov_path = tmp_path / ".coverage"
+        cov = coverage.Coverage(data_file=str(cov_path), source=[str(tmp_path / "src")])
+        cov.start()
+        try:
+            spec_obj = importlib.util.spec_from_file_location(
+                "factory_coverage_sqlite_fixture", str(code_path)
+            )
+            mod = importlib.util.module_from_spec(spec_obj)
+            cov.switch_context("tests/test_main.py::test_work|run")
+            spec_obj.loader.exec_module(mod)
+            mod.work()
+        finally:
+            cov.stop()
+        cov.save()
+
+        graph = build_graph(
+            config_path=config_file,
+            repo_root=tmp_path,
+            scan_tests=False,
+        )
+
+        file_node = None
+        for node in graph.iter_by_kind(NodeKind.FILE):
+            if node.id == "file:src/main.py":
+                file_node = node
+                break
+
+        assert file_node is not None, "FILE node for src/main.py should exist"
+        line_cov = file_node.get_field("line_coverage")
+        assert line_cov is not None
+        assert line_cov.get(2) == 1  # `def work(): pass` body line
+
+        line_contexts = file_node.get_field("line_contexts")
+        assert line_contexts is not None
+        assert any(
+            "test_work" in c for c in line_contexts.get(2, [])
+        ), f"expected test_work context on line 2, got {line_contexts}"

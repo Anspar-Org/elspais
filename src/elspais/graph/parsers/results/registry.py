@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from elspais.graph.parsers.results.coverage_json import CoverageJsonParser
+from elspais.graph.parsers.results.coverage_sqlite import CoverageSqliteParser
 from elspais.graph.parsers.results.junit_xml import JUnitXMLParser
 from elspais.graph.parsers.results.lcov import LcovParser
 from elspais.graph.parsers.results.pytest_json import PytestJSONParser
@@ -47,6 +48,7 @@ def _register_builtins() -> None:
     register_reporter(ReporterSpec("pytest-json", "file", "results", PytestJSONParser))
     register_reporter(ReporterSpec("lcov", "file", "coverage", LcovParser))
     register_reporter(ReporterSpec("coverage-json", "file", "coverage", CoverageJsonParser))
+    register_reporter(ReporterSpec("coverage-sqlite", "file", "coverage", CoverageSqliteParser))
 
 
 _register_builtins()

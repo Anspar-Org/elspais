@@ -218,9 +218,50 @@ match    = "aggregate"
 
 If your suite produces no machine-readable results file (no `--json-report` /
 `--junit-xml` step) but you already run under `pytest-cov`, you can still get
-`code_tested.direct` (per-test line attribution, see `elspais docs checks`)
-from `coverage.json` alone. `Verifies:` wiring still comes from `# Verifies:`
-comments scanned in your test files -- independent of this target.
+`code_tested.direct` (per-test line attribution, see `elspais docs checks`).
+`Verifies:` wiring still comes from `# Verifies:` comments scanned in your
+test files -- independent of this target.
+
+**Recommended: point `coverage` at the `.coverage` SQLite database.**
+coverage.py already writes this file (its own native data format) to the
+repo root whenever you run under `--cov`; nothing extra needs to be
+configured to produce it. elspais reads it directly via coverage.py's public
+API (`coverage.Coverage`/`coverage.CoverageData`), never by parsing the
+SQLite schema itself. Format detection sniffs the file's SQLite header, so
+no `reporter` field is required:
+
+```toml
+[[scanning.test.targets]]
+name     = "unit"
+coverage = ".coverage"
+```
+
+Run pytest with `--cov-context=test` (pytest-cov's per-test dynamic context,
+keyed by pytest nodeid + `|run`/`|setup`/`|teardown`) to populate contexts in
+that database:
+
+```bash
+pytest tests/ --cov=src/yourpkg --cov-context=test
+```
+
+Reading `.coverage` requires the `coverage` package to be importable in
+elspais's own interpreter -- install it with `pip install elspais[coverage]`
+(or ensure `coverage`/`pytest-cov` are already present, e.g. as a dev
+dependency). If it isn't importable, ingestion degrades gracefully:
+`code_tested.direct` stays `0` and `Code Tested` renders `n/a`, with a single
+warning naming the extra to install -- it does not fail the build.
+
+**Do not** also set `[tool.coverage.run] dynamic_context = "test_function"`.
+That is coverage.py's own context-switching (keyed by dotted test qualname,
+no file path, no `|run` suffix) and it silently wins over pytest-cov's
+`--cov-context=test` when both are active, replacing the nodeid-shaped
+contexts elspais expects with an incompatible format -- `code_tested.direct`
+then stays `0` everywhere even though contexts are present.
+
+**Alternative: portable but large -- coverage.json with `show_contexts`.**
+For small suites where a self-contained JSON report is more convenient than a
+binary data file (e.g. shipping a single artifact off-host), the same
+contexts can instead be exported into the JSON report:
 
 ```toml
 [[scanning.test.targets]]
@@ -234,17 +275,14 @@ coverage = ".results/coverage.json"
 show_contexts = true   # required to export the per-line contexts map
 ```
 
-Run pytest with `--cov-context=test` (pytest-cov's own per-test dynamic
-context, keyed by pytest nodeid + `|run`/`|setup`/`|teardown`) --
 `show_contexts` alone only controls whether the JSON *report* includes the
-per-line `contexts` map; something still has to record them during the run.
-
-**Do not** also set `[tool.coverage.run] dynamic_context = "test_function"`.
-That is coverage.py's own context-switching (keyed by dotted test qualname,
-no file path, no `|run` suffix) and it silently wins over pytest-cov's
-`--cov-context=test` when both are active, replacing the nodeid-shaped
-contexts elspais expects with an incompatible format -- `code_tested.direct`
-then stays `0` everywhere even though contexts are present.
+per-line `contexts` map; `--cov-context=test` still has to record them
+during the run, same as above. Be aware this map grows with (statements x
+distinct contexts) -- on large suites (thousands of tests) it can produce a
+JSON report many gigabytes in size, with a matching spike in graph-build
+memory. The `.coverage` SQLite route above stores the same information far
+more compactly and does not have this problem, so prefer it unless you have
+a specific reason to want a portable JSON artifact.
 
 ## Playwright / TypeScript Recipe (source-bound JUnit)
 

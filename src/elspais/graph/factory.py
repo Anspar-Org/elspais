@@ -789,10 +789,12 @@ def build_graph(
     # When targets is empty (the default), this loop is a no-op.
     if typed_config.scanning.test.targets:
         from elspais.graph.parsers.results.coverage_json import CoverageJsonParser
+        from elspais.graph.parsers.results.coverage_sqlite import CoverageSqliteParser
         from elspais.graph.parsers.results.lcov import LcovParser
 
         lcov_parser = LcovParser()
         cov_json_parser = CoverageJsonParser()
+        cov_sqlite_parser = CoverageSqliteParser()
         _resolved_root = repo_root.resolve()
         for target in typed_config.scanning.test.targets:
             if not target.coverage:
@@ -816,10 +818,18 @@ def build_graph(
                 cov_parser = lcov_parser
             elif cov_json_parser.can_parse(cov_path):
                 cov_parser = cov_json_parser
+            elif cov_sqlite_parser.can_parse(cov_path):
+                cov_parser = cov_sqlite_parser
             else:
                 _log.debug("target %r: unrecognised coverage format: %s", target.name, cov_path)
                 continue
-            cov_content = cov_path.read_text(encoding="utf-8")
+            # Binary formats (e.g. the .coverage SQLite DB) can't be
+            # text-decoded -- their parser ignores `content` and reopens
+            # `source_path` directly (see CoverageSqliteParser.binary).
+            if getattr(cov_parser, "binary", False):
+                cov_content = ""
+            else:
+                cov_content = cov_path.read_text(encoding="utf-8")
             parsed_cov = cov_parser.parse(cov_content, str(cov_path))
             for source_file, data in parsed_cov.items():
                 cov_node = _resolve_coverage_file_node(graph, source_file, cov_path, repo_root)

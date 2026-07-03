@@ -140,15 +140,17 @@ reference_keyword = "Validates"
 # Additional regex patterns for reference detection
 reference_patterns = []
 # Test targets drive result + coverage ingestion ([[scanning.test.targets]]).
-# elspais's own suite (.githooks/pre-commit) writes .results/coverage.json
-# with per-test dynamic contexts (CUR-1568, [tool.coverage.*] in
-# pyproject.toml) but no machine-readable results file -- there's no
-# pytest-json-report/--json-report step, so `reporter`/`results` are left
-# unset (coverage-only ingestion). `Verifies:` wiring for Python tests comes
-# from source-scanned `# Verifies:` comments, independent of this target.
+# elspais's own suite (.githooks/pre-commit) runs pytest with
+# `--cov-context=test` (pytest-cov's per-test dynamic context), which writes
+# coverage.py's native `.coverage` SQLite data file to the repo root. Per-test
+# line attribution (code_tested.direct, CUR-1568) is read directly from that
+# database via coverage.py's public API (elspais[coverage] extra) -- no
+# machine-readable results file, so `reporter`/`results` are left unset
+# (coverage-only ingestion). `Verifies:` wiring for Python tests comes from
+# source-scanned `# Verifies:` comments, independent of this target.
 [[scanning.test.targets]]
 name = "elspais-unit"
-coverage = ".results/coverage.json"
+coverage = ".coverage"
 
 # User journey file scanning
 [scanning.journey]

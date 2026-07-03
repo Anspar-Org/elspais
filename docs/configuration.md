@@ -574,7 +574,8 @@ See `elspais docs test-targets` for all `[[scanning.test.targets]]` fields.
 
 elspais's own suite (this repo's `.elspais.toml`) demonstrates a
 coverage-only target that still gets per-test line attribution
-(`code_tested.direct`) without a machine-readable results file:
+(`code_tested.direct`) without a machine-readable results file, by pointing
+`coverage` directly at coverage.py's native `.coverage` SQLite data file:
 
 ```toml
 [scanning.test]
@@ -582,28 +583,26 @@ coverage-only target that still gets per-test line attribution
 
 [[scanning.test.targets]]
 name     = "elspais-unit"
-coverage = ".results/coverage.json"
+coverage = ".coverage"
 ```
 
-```text
-# pyproject.toml
-[tool.coverage.json]
-show_contexts = true   # export the per-line contexts map
-
-# Do NOT also set [tool.coverage.run] dynamic_context = "test_function" --
-# that is coverage.py's own (incompatible) context switcher and silently
-# overrides pytest-cov's nodeid-shaped contexts, leaving code_tested.direct
-# at 0 everywhere even though contexts are present.
-```
+Reading contexts from `.coverage` requires the `coverage` package (the
+`elspais[coverage]` extra) to be importable in elspais's own interpreter --
+if it isn't, ingestion degrades gracefully: `code_tested.direct` stays `0`
+and `Code Tested` renders the honest `n/a`, with a single warning naming the
+extra to install. No other config is required; format detection sniffs the
+SQLite file header, so no `reporter` field is needed for this target.
 
 The `.githooks/pre-commit` hook runs pytest with `--cov-context=test`
 (pytest-cov's per-test dynamic context, keyed by nodeid + `|run`/`|setup`/
-`|teardown`) to populate those contexts. No `reporter`/`results` fields are
-set because there's no `--json-report`/`--junit-xml` step -- `Verifies:`
-wiring comes entirely from source-scanned `# Verifies:` comments in test
-files, independent of this target. See `elspais docs test-targets`
+`|teardown`), which is what populates those contexts in the `.coverage` file
+that pytest-cov already writes to the repo root. No `reporter`/`results`
+fields are set because there's no `--json-report`/`--junit-xml` step --
+`Verifies:` wiring comes entirely from source-scanned `# Verifies:` comments
+in test files, independent of this target. See `elspais docs test-targets`
 (*Python/pytest Recipe*, *Coverage-only target with per-test direct
-attribution*) for the full recipe and gotchas.
+attribution*) for the full recipe, including the JSON `show_contexts`
+alternative for suites too small to worry about the JSON-report size cost.
 
 ### Coverage Severity & Theme Colors
 
