@@ -6,6 +6,7 @@
 # Validates REQ-d00067-E, REQ-d00067-F
 # Validates REQ-d00068-A, REQ-d00068-B, REQ-d00068-C, REQ-d00068-D
 # Validates REQ-d00068-E, REQ-d00068-F
+# Verifies: REQ-d00069-J
 """Tests for MCP test coverage tools.
 
 Tests REQ-o00064: MCP Test Coverage Tools
@@ -245,6 +246,104 @@ class TestGetUncoveredAssertions:
 
         req_ids = [r["req_id"] for r in result["requirements"]]
         assert req_ids == sorted(req_ids)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# REQ-d00069-J: uncovered entries gain fraction/via detail for assertions
+# partially covered via REFINES conduction. Additive alongside the existing
+# flat ``uncovered_assertions`` / ``uncovered_labels`` fields (MCP consumers
+# rely on those staying plain lists of strings).
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def refines_conduction_graph():
+    """Graph with an assertion (REQ-200-X) only partially covered via
+    REFINES conduction, and no direct test/journey reference of its own.
+
+    REQ-200 has a single assertion X. REQ-030 refines REQ-200-X and has two
+    assertions of its own (P, Q); only P is directly tested, so REQ-030's
+    own "tested" coverage is 0.5. Under equal-weight conduction
+    (REQ-d00069-J), X inherits that 0.5 fraction -- partially covered, but
+    not enough to be folded into "covered" (which requires ~1.0).
+    """
+    from elspais.graph.annotators import annotate_coverage
+    from tests.core.graph_test_helpers import build_graph, make_requirement, make_test_ref
+
+    graph = build_graph(
+        make_requirement(
+            "REQ-200",
+            level="PRD",
+            assertions=[{"label": "X", "text": "Assertion X"}],
+        ),
+        make_requirement(
+            "REQ-030",
+            level="OPS",
+            refines=["REQ-200-X"],
+            assertions=[
+                {"label": "P", "text": "Assertion P"},
+                {"label": "Q", "text": "Assertion Q"},
+            ],
+        ),
+        make_test_ref(verifies=["REQ-030-P"], source_path="tests/test_p.py"),
+    )
+    annotate_coverage(graph)
+    return graph
+
+
+class TestUncoveredFractionDetail:
+    """Uncovered entries carry per-assertion fraction/via detail (REQ-d00069-J)."""
+
+    def test_get_test_coverage_uncovered_detail_has_partial_fraction(
+        self, refines_conduction_graph
+    ):
+        from elspais.mcp.server import _get_test_coverage
+
+        result = _get_test_coverage(refines_conduction_graph, "REQ-200")
+
+        # Existing flat field is untouched (backward compatible).
+        assert result["uncovered_assertions"] == ["REQ-200-X"]
+
+        detail_by_id = {d["id"]: d for d in result["uncovered_detail"]}
+        assert detail_by_id["REQ-200-X"]["fraction"] == 0.5
+        assert detail_by_id["REQ-200-X"]["via"] == "refines-conduction"
+
+    def test_get_test_coverage_zero_fraction_has_null_via(self, coverage_graph):
+        from elspais.mcp.server import _get_test_coverage
+
+        result = _get_test_coverage(coverage_graph, "REQ-p00001")
+
+        detail_by_id = {d["id"]: d for d in result["uncovered_detail"]}
+        # REQ-p00001-B/C have no coverage at all: fraction 0.0, via None.
+        assert detail_by_id["REQ-p00001-B"]["fraction"] == 0.0
+        assert detail_by_id["REQ-p00001-B"]["via"] is None
+
+    def test_get_uncovered_assertions_req_id_detail_has_partial_fraction(
+        self, refines_conduction_graph
+    ):
+        from elspais.mcp.server import _get_uncovered_assertions
+
+        result = _get_uncovered_assertions(refines_conduction_graph, req_id="REQ-200")
+
+        # Existing flat field is untouched (backward compatible).
+        assert result["uncovered_labels"] == ["X"]
+
+        detail_by_label = {d["label"]: d for d in result["uncovered_detail"]}
+        assert detail_by_label["X"]["fraction"] == 0.5
+        assert detail_by_label["X"]["via"] == "refines-conduction"
+        assert detail_by_label["X"]["id"] == "REQ-200-X"
+
+    def test_get_uncovered_assertions_scan_all_detail_has_partial_fraction(
+        self, refines_conduction_graph
+    ):
+        from elspais.mcp.server import _get_uncovered_assertions
+
+        result = _get_uncovered_assertions(refines_conduction_graph, req_id=None)
+
+        reqs = {r["req_id"]: r for r in result["requirements"]}
+        detail_by_label = {d["label"]: d for d in reqs["REQ-200"]["uncovered_detail"]}
+        assert detail_by_label["X"]["fraction"] == 0.5
+        assert detail_by_label["X"]["via"] == "refines-conduction"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

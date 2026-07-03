@@ -975,4 +975,8 @@ class TestRefinesCoverageConduction:
 
         data = collect_gaps(graph, set())
         untested = next(e for e in data.untested if e.req_id == "PARENT")
-        assert set(untested.assertions) == parent_assertion_ids
+        # REQ-d00069-J: assertions carry (id, fraction) pairs so a partially
+        # conducted assertion (fraction 0.5 here) is distinguishable from one
+        # with no coverage at all.
+        assert {aid for aid, _frac in untested.assertions} == parent_assertion_ids
+        assert all(frac == pytest.approx(0.5) for _aid, frac in untested.assertions)

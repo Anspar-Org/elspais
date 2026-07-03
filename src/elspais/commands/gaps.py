@@ -17,11 +17,17 @@ from elspais.graph.relations import EdgeKind
 
 @dataclass
 class GapEntry:
-    """A single gap: a REQ with optionally listed uncovered assertions."""
+    """A single gap: a REQ with optionally listed uncovered assertions.
+
+    ``assertions`` holds ``(assertion_id, fraction)`` pairs, where ``fraction``
+    is the assertion's conducted coverage fraction in ``[0.0, 1.0)`` (REQ-d00069-J).
+    A fraction of ``0.0`` means no coverage at all; ``0 < fraction < 1`` means
+    the assertion is partially covered via REFINES conduction.
+    """
 
     req_id: str
     title: str
-    assertions: list[str] = field(default_factory=list)  # empty = whole REQ uncovered
+    assertions: list[tuple[str, float]] = field(default_factory=list)  # empty = whole REQ uncovered
 
 
 @dataclass
@@ -165,24 +171,30 @@ def _uncovered_assertions(
     metrics: Any,
     assertion_nodes: list[Any],
     dimension: str,
-) -> list[str]:
-    """Return the IDs of assertions that are not ~fully covered for a dimension.
+) -> list[tuple[str, float]]:
+    """Return (id, fraction) pairs for assertions not ~fully covered for a dimension.
 
     Reads the dimension's per-assertion fraction map so that coverage conducted
     upward across REFINES edges (REQ-d00069-J) is honored. The fraction map is
     keyed by assertion *label* (e.g. ``A``), so each node is looked up by its
-    label while the returned list reports assertion *IDs* (e.g. ``REQ-100-A``),
+    label while the returned pairs report assertion *IDs* (e.g. ``REQ-100-A``),
     which is what gap entries and their renderers expect. An assertion counts as
     covered only when its fraction reaches ~1.0; a partially covered assertion
     (0 < fraction < 1, e.g. a parent assertion refined by a not-fully-covered
-    child) is still reported as a gap.
+    child) is still reported as a gap, with its fraction carried along so
+    renderers can distinguish "no coverage at all" (0.0) from "partially
+    conducted" (0 < fraction < 1).
     """
     dim = getattr(metrics, dimension, None)
     if dim is None:
-        return [a.id for a in assertion_nodes]
+        return [(a.id, 0.0) for a in assertion_nodes]
     fractions = dim.indirect_pct_by_label
     covered = 1.0 - 1e-9
-    return [a.id for a in assertion_nodes if fractions.get(a.get_field("label", ""), 0.0) < covered]
+    return [
+        (a.id, fractions.get(a.get_field("label", ""), 0.0))
+        for a in assertion_nodes
+        if fractions.get(a.get_field("label", ""), 0.0) < covered
+    ]
 
 
 # =============================================================================
@@ -211,10 +223,18 @@ def render_gap_text(gap_type: str, data: GapData) -> str:
     else:
         for entry in sorted(gaps, key=lambda e: e.req_id):
             if entry.assertions:
-                # Partial gap: show REQ with uncovered assertions
-                labels = ", ".join(
-                    a.rsplit("-", 1)[-1] if "-" in a else a for a in entry.assertions
-                )
+                # Partial gap: show REQ with uncovered assertions. A partially
+                # conducted assertion (0 < fraction < 1, REQ-d00069-J) is
+                # annotated with its percentage so it reads differently from
+                # an assertion with no coverage at all (fraction 0.0).
+                parts = []
+                for aid, frac in entry.assertions:
+                    label = aid.rsplit("-", 1)[-1] if "-" in aid else aid
+                    if frac > 0:
+                        parts.append(f"{label} — {round(frac * 100)}% via refines-conduction")
+                    else:
+                        parts.append(label)
+                labels = ", ".join(parts)
                 lines.append(f"  {entry.req_id:20s} {entry.title}  [{labels}]")
             else:
                 lines.append(f"  {entry.req_id:20s} {entry.title}")
@@ -265,7 +285,14 @@ def render_gap_markdown(gap_type: str, data: GapData) -> str:
         lines.append("| Requirement | Title | Uncovered Assertions |")
         lines.append("|-------------|-------|---------------------|")
         for entry in sorted(gaps, key=lambda e: e.req_id):
-            assertions = ", ".join(entry.assertions) if entry.assertions else "(all)"
+            if entry.assertions:
+                parts = [
+                    f"{aid} ({round(frac * 100)}% via refines-conduction)" if frac > 0 else aid
+                    for aid, frac in entry.assertions
+                ]
+                assertions = ", ".join(parts)
+            else:
+                assertions = "(all)"
             lines.append(f"| {entry.req_id} | {entry.title} | {assertions} |")
     return "\n".join(lines)
 
@@ -344,10 +371,15 @@ _GAP_TYPE_MAP: dict[str, str | None] = {
 
 
 def _gap_entry_to_list(entry: GapEntry) -> list:
-    """Serialize GapEntry for JSON."""
+    """Serialize GapEntry for JSON.
+
+    Uncovered assertions are serialized as ``{"id": ..., "fraction": ...}``
+    dicts so a partially-conducted assertion (0 < fraction < 1, REQ-d00069-J)
+    is distinguishable from one with no coverage at all.
+    """
     result: list = [entry.req_id, entry.title]
     if entry.assertions:
-        result.append(entry.assertions)
+        result.append([{"id": aid, "fraction": frac} for aid, frac in entry.assertions])
     return result
 
 
@@ -356,7 +388,8 @@ def _gap_data_from_dict(data: dict[str, Any]) -> GapData:
     gd = GapData()
     for gt in ("uncovered", "untested", "unvalidated", "no_assertions"):
         for item in data.get(gt, []):
-            assertions = item[2] if len(item) > 2 else []
+            raw_assertions = item[2] if len(item) > 2 else []
+            assertions = [(a["id"], a.get("fraction", 0.0)) for a in raw_assertions]
             getattr(gd, gt).append(GapEntry(item[0], item[1], assertions))
     for item in data.get("failing", []):
         gd.failing.append(tuple(item))  # type: ignore[arg-type]

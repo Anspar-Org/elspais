@@ -1,5 +1,6 @@
-# Verifies: REQ-d00085
+# Verifies: REQ-d00085, REQ-d00069-J
 """Tests for gap data collection."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -17,6 +18,61 @@ from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind  # noqa: N817
 from elspais.graph.metrics import RollupMetrics
+
+# ===========================================================================
+# REQ-d00069-J: _uncovered_assertions carries per-assertion fractions so
+# partially-conducted assertions (0 < fraction < 1) are distinguishable from
+# assertions with no coverage at all (fraction 0.0).
+# ===========================================================================
+
+
+def test_uncovered_assertions_carry_fractions() -> None:
+    """_uncovered_assertions returns (id, fraction) pairs.
+
+    The canonical hht-like fixture has no REFINES-conduction scenario, so this
+    builds the same minimal REFINES scenario used by the REQ-d00069-J
+    conduction tests (tests/core/test_coverage_metrics.py::TestUserExample):
+    REQ-100 has assertions A-D; REQ-010 refines REQ-100-A but has no coverage
+    of its own; REQ-020 implements REQ-100-B directly; a test verifies both A
+    and B. Under equal-weight conduction, A's fraction dilutes to 0.5 (direct
+    test 1.0 averaged with the empty refiner's 0.0), B is fully covered (1.0,
+    excluded from the gap list), and C/D remain at 0.0.
+    """
+    from elspais.commands.gaps import _uncovered_assertions
+    from elspais.graph.annotators import annotate_coverage
+    from elspais.graph.relations import EdgeKind
+    from tests.core.graph_test_helpers import build_graph, make_requirement, make_test_ref
+
+    graph = build_graph(
+        make_requirement(
+            "REQ-100",
+            level="PRD",
+            assertions=[{"label": lbl, "text": f"Assertion {lbl}"} for lbl in "ABCD"],
+        ),
+        make_requirement("REQ-010", level="OPS", refines=["REQ-100-A"]),
+        make_requirement("REQ-020", level="OPS", implements=["REQ-100-B"]),
+        make_test_ref(verifies=["REQ-100-A"], source_path="tests/test_a.py"),
+        make_test_ref(verifies=["REQ-100-B"], source_path="tests/test_b.py"),
+    )
+    annotate_coverage(graph)
+
+    node = graph.find_by_id("REQ-100")
+    metrics = node.get_metric("rollup_metrics")
+    assertion_nodes = [
+        child
+        for child in node.iter_children(edge_kinds={EdgeKind.STRUCTURES})
+        if child.kind == NodeKind.ASSERTION
+    ]
+
+    uncov = _uncovered_assertions(metrics, assertion_nodes, "implemented")
+    by_id = dict(uncov)
+
+    partial = [(aid, f) for aid, f in uncov if 0 < f < 1]
+    assert partial, "expected a partially-conducted assertion in fixture"
+    assert by_id["REQ-100-A"] == 0.5
+    assert "REQ-100-B" not in by_id  # fully covered (1.0) -- not a gap
+    assert by_id["REQ-100-C"] == 0.0
+    assert by_id["REQ-100-D"] == 0.0
 
 
 def _make_req(req_id: str, title: str, status: str = "Active") -> GraphNode:
@@ -214,12 +270,35 @@ class TestRenderGapText:
         """Partial gap (some assertions uncovered) shows assertion labels."""
         data = GapData(
             uncovered=[
-                GapEntry("REQ-p00001", "Login", ["REQ-p00001-C", "REQ-p00001-D"]),
+                GapEntry(
+                    "REQ-p00001",
+                    "Login",
+                    [("REQ-p00001-C", 0.0), ("REQ-p00001-D", 0.0)],
+                ),
             ]
         )
         output = render_gap_text("uncovered", data)
         assert "REQ-p00001" in output
         assert "[C, D]" in output
+
+    def test_partial_gap_shows_fraction_and_via(self) -> None:
+        """A partially-conducted assertion (0 < fraction < 1, REQ-d00069-J) is
+        annotated with its percentage and 'via refines-conduction' so it reads
+        differently from an assertion with no coverage at all."""
+        data = GapData(
+            uncovered=[
+                GapEntry(
+                    "REQ-p00001",
+                    "Login",
+                    [("REQ-p00001-C", 0.4), ("REQ-p00001-D", 0.0)],
+                ),
+            ]
+        )
+        output = render_gap_text("uncovered", data)
+        assert "% via refines-conduction" in output
+        assert "40% via refines-conduction" in output
+        # Fully-uncovered sibling still renders as a bare label
+        assert ", D]" in output or "D]" in output
 
 
 class TestRenderGapMarkdown:
@@ -249,6 +328,55 @@ class TestRenderGapMarkdown:
         lines = output.strip().split("\n")
         # Header, separator, data row
         assert any("|---" in line for line in lines)
+
+    def test_partial_fraction_annotated(self) -> None:
+        """A partially-conducted assertion (REQ-d00069-J) shows its percentage
+        and 'via refines-conduction' in the markdown table cell."""
+        data = GapData(
+            uncovered=[
+                GapEntry("REQ-p00001", "Login", [("REQ-p00001-C", 0.4)]),
+            ]
+        )
+        output = render_gap_markdown("uncovered", data)
+        assert "40% via refines-conduction" in output
+
+
+class TestGapEntrySerialization:
+    """Round-trip tests for the JSON serialization of GapEntry.assertions
+    fraction data (REQ-d00069-J)."""
+
+    def test_gap_entry_to_list_serializes_fraction(self) -> None:
+        from elspais.commands.gaps import _gap_entry_to_list
+
+        entry = GapEntry("REQ-p00001", "Login", [("REQ-p00001-C", 0.4), ("REQ-p00001-D", 0.0)])
+        result = _gap_entry_to_list(entry)
+        assert result == [
+            "REQ-p00001",
+            "Login",
+            [
+                {"id": "REQ-p00001-C", "fraction": 0.4},
+                {"id": "REQ-p00001-D", "fraction": 0.0},
+            ],
+        ]
+
+    def test_gap_data_from_dict_round_trips_fraction(self) -> None:
+        from elspais.commands.gaps import _gap_data_from_dict
+
+        d = {
+            "uncovered": [
+                [
+                    "REQ-p00001",
+                    "Login",
+                    [{"id": "REQ-p00001-C", "fraction": 0.4}],
+                ]
+            ],
+            "untested": [],
+            "unvalidated": [],
+            "failing": [],
+            "no_assertions": [],
+        }
+        gd = _gap_data_from_dict(d)
+        assert gd.uncovered[0].assertions == [("REQ-p00001-C", 0.4)]
 
 
 class TestRenderSection:

@@ -3468,6 +3468,19 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     covered_assertions = sorted(covered_assertion_ids)
     uncovered_assertions = sorted(set(assertion_ids) - covered_assertion_ids)
 
+    # REQ-d00069-J: annotate each uncovered assertion with its conducted
+    # fraction so a partially-conducted assertion (0 < fraction < 1) is
+    # distinguishable from one with no coverage at all (fraction 0.0). This
+    # is additive alongside ``uncovered_assertions`` -- that field keeps its
+    # existing flat id-list shape for backward compatibility.
+    id_to_label = dict(assertions)
+    tested_fractions = rollup.tested.indirect_pct_by_label if rollup is not None else {}
+    uncovered_detail = []
+    for aid in uncovered_assertions:
+        frac = tested_fractions.get(id_to_label.get(aid, ""), 0.0)
+        via = "refines-conduction" if 0 < frac < 1.0 - 1e-9 else None
+        uncovered_detail.append({"id": aid, "fraction": round(frac, 4), "via": via})
+
     total = len(assertion_ids)
     covered_count = len(covered_assertions)
     referenced_pct = (covered_count / total * 100) if total > 0 else 0.0
@@ -3509,6 +3522,7 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
         "test_nodes": test_nodes,
         "covered_assertions": covered_assertions,
         "uncovered_assertions": uncovered_assertions,
+        "uncovered_detail": uncovered_detail,
         "total_assertions": total,
         "covered_count": covered_count,
         "referenced_pct": round(referenced_pct, 1),
@@ -3849,6 +3863,39 @@ def _get_uncovered_assertions(
             _fold("uat_coverage")
         return covered
 
+    def _fraction_for_label(req_node: Any, label: str) -> float:
+        # REQ-d00069-J: the strongest conducted fraction across the dimensions
+        # this call considers (per ``source``), for annotating an uncovered
+        # label with its "how close to covered" progress.
+        rollup = req_node.get_metric("rollup_metrics")
+        if rollup is None:
+            return 0.0
+        fractions = []
+        if source in ("test", "both"):
+            dim = getattr(rollup, "tested", None)
+            if dim is not None:
+                fractions.append(dim.indirect_pct_by_label.get(label, 0.0))
+        if source in ("uat", "both"):
+            dim = getattr(rollup, "uat_coverage", None)
+            if dim is not None:
+                fractions.append(dim.indirect_pct_by_label.get(label, 0.0))
+        return max(fractions) if fractions else 0.0
+
+    def _uncovered_detail(req_node: Any, labels: list[str], id_by_label: dict[str, str]) -> list:
+        detail = []
+        for label in labels:
+            frac = _fraction_for_label(req_node, label)
+            via = "refines-conduction" if 0 < frac < 1.0 - 1e-9 else None
+            detail.append(
+                {
+                    "id": id_by_label.get(label),
+                    "label": label,
+                    "fraction": round(frac, 4),
+                    "via": via,
+                }
+            )
+        return detail
+
     if req_id is not None:
         node = graph.find_by_id(req_id)
         if node is None:
@@ -3859,12 +3906,15 @@ def _get_uncovered_assertions(
 
         covered = _covered_labels_for_req(node)
         uncovered_labels = []
+        id_by_label: dict[str, str] = {}
 
         for child in node.iter_children():
             if child.kind != NodeKind.ASSERTION:
                 continue
-            if child.get_field("label", "") not in covered:
-                uncovered_labels.append(child.get_field("label", ""))
+            label = child.get_field("label", "")
+            id_by_label[label] = child.id
+            if label not in covered:
+                uncovered_labels.append(label)
 
         total = sum(1 for c in node.iter_children() if c.kind == NodeKind.ASSERTION)
 
@@ -3875,6 +3925,7 @@ def _get_uncovered_assertions(
             "total_assertions": total,
             "uncovered_count": len(uncovered_labels),
             "uncovered_labels": uncovered_labels,
+            "uncovered_detail": _uncovered_detail(node, uncovered_labels, id_by_label),
         }
 
     # REQ-d00067-A: Scan all requirements, return requirement-level summary
@@ -3889,6 +3940,8 @@ def _get_uncovered_assertions(
         if not uncovered_labels:
             continue
 
+        id_by_label = {c.get_field("label", ""): c.id for c in assertions}
+
         gaps.append(
             {
                 "req_id": req_node.id,
@@ -3896,6 +3949,7 @@ def _get_uncovered_assertions(
                 "total_assertions": len(assertions),
                 "uncovered_count": len(uncovered_labels),
                 "uncovered_labels": uncovered_labels,
+                "uncovered_detail": _uncovered_detail(req_node, uncovered_labels, id_by_label),
             }
         )
 
