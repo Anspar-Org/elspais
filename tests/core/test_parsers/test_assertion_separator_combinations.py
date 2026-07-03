@@ -19,7 +19,8 @@ file with a single ``# Verifies: <ref>`` comment.
 
 A field incident showed that journey ``Validates:`` references are the same
 risk surface: under a non-"-"/"_" separator, a correctly-styled ref wires
-assertion-targeted VALIDATES edges (REQ -> journey, per REQ-d00256-A), while
+assertion-targeted VALIDATES edges (REQ -> journey, per the ``Validates:``
+field behavior specified in spec/requirements-spec.md), while
 a ref that still uses "-" produces a hard broken reference carrying a
 separator-config diagnostic (REQ-d00252-G). The tests below extend the same
 separator/multi-separator matrix to cover that path.
@@ -185,7 +186,8 @@ def test_journey_validates_across_separator_combinations(
     sep, multi, ref, expected_labels, tmp_path
 ):
     """A `Validates:` ref using the *configured* separator/multi-separator must
-    produce assertion-targeted VALIDATES edges (REQ -> journey, REQ-d00256-A)
+    produce assertion-targeted VALIDATES edges (REQ -> journey, per the
+    ``Validates:`` field behavior specified in spec/requirements-spec.md)
     carrying exactly the referenced assertion labels, with
     ``rollup_metrics.uat_coverage.direct_labels`` matching.
 
