@@ -554,3 +554,56 @@ class TestJourneyVerdictBrowser:
         ), f"Expected >= 3 verifying-test rows, got {len(all_test_rows)}"
 
         assert not js_errors, f"JS errors during step-status render: {js_errors}"
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_d00256_journey_step_badge_toggles_test_panel(
+        self, page_journey, failing_journey_viewer_url
+    ):
+        # Verifies: REQ-d00256
+        """Journey step badges must behave like REQ assertion badges: the
+        per-step verifying-tests panel is collapsed by default and toggles
+        open/closed when a step badge (VER/PASS/FAIL) is clicked, mirroring
+        toggleAssertionTests interaction parity for REQ cards.
+
+        Checks:
+        - The step-1 test panel is hidden on initial render
+        - Clicking a step-1 badge reveals the panel (and the test row text)
+        - Clicking the badge again hides the panel
+        - No JS errors occur
+        """
+        js_errors: list[str] = []
+        page_journey.on("pageerror", lambda err: js_errors.append(str(err)))
+
+        page_journey.goto(failing_journey_viewer_url, wait_until="networkidle")
+        page_journey.evaluate(f"() => window.openCard('{_FAILING_JOURNEY_ID}')")
+
+        card_locator = page_journey.locator(f"#card-{_FAILING_JOURNEY_ID}")
+        card_locator.wait_for(state="visible", timeout=10_000)
+
+        first_row = card_locator.locator(".journey-step-row").first
+        panel = card_locator.locator(f"#journey-step-tests-{_FAILING_JOURNEY_ID}-1")
+
+        # Panel must exist but be hidden by default (collapsed, REQ-card parity)
+        assert panel.count() == 1, "Expected a step-1 test panel in the DOM"
+        assert not panel.is_visible(), "Step-1 test panel should be hidden by default"
+
+        # Click the first badge (VER) in the row — should reveal the panel
+        badge = first_row.locator(".journey-step-badge").first
+        badge.click()
+        panel.wait_for(state="visible", timeout=5_000)
+        assert (
+            "test_step1" in panel.inner_text()
+        ), f"Expected verifying test id in revealed panel, got: {panel.inner_text()!r}"
+        assert "active" in (
+            badge.get_attribute("class") or ""
+        ), "Badge should carry 'active' class while its panel is open"
+
+        # Click again — should hide the panel
+        badge.click()
+        panel.wait_for(state="hidden", timeout=5_000)
+        assert "active" not in (
+            badge.get_attribute("class") or ""
+        ), "Badge should lose 'active' class once its panel is closed"
+
+        assert not js_errors, f"JS errors during step-badge toggle: {js_errors}"

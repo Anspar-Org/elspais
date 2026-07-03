@@ -1108,7 +1108,8 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
             var verTip = verified
                 ? (vTests.length + (vTests.length === 1 ? ' test verifies' : ' tests verify') + ' this step')
                 : 'No test verifies this step';
-            html += '<span class="journey-step-badge ' + verCls + '" title="' + escapeAttr(verTip) + '">' + verLabel + '</span>';
+            html += '<button class="journey-step-badge ' + verCls + '" title="' + escapeAttr(verTip) + '"' +
+                ' onclick="event.stopPropagation(); toggleJourneyStepTests(this, \'' + nodeId + '\', \'' + escapeAttr(stepNum) + '\')">' + verLabel + '</button>';
 
             // Result badge — pass/fail/untested (mirrors the "Verified" result tier)
             var resTerm, resCls, resTip;
@@ -1126,13 +1127,17 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
                 resTip = 'No test result for this step yet';
             }
             var resLabel = stepBadgeMode === 'full' ? resTerm.full : (stepBadgeMode === 'dots' ? resTerm.dot : resTerm.abbr);
-            html += '<span class="journey-step-badge ' + resCls + '" title="' + escapeAttr(resTip) + '">' + resLabel + '</span>';
+            html += '<button class="journey-step-badge ' + resCls + '" title="' + escapeAttr(resTip) + '"' +
+                ' onclick="event.stopPropagation(); toggleJourneyStepTests(this, \'' + nodeId + '\', \'' + escapeAttr(stepNum) + '\')">' + resLabel + '</button>';
 
             html += '</span>'; // .assertion-badges-area
             html += '</div>'; // .journey-step-row
 
-            if (vTests.length > 0) {
-                html += '<div class="journey-step-tests" style="margin-left:34px;margin-bottom:4px;">';
+            html += '<div class="journey-step-tests" id="journey-step-tests-' + nodeId + '-' + escapeAttr(stepNum) + '"' +
+                ' style="display:none;margin-left:34px;margin-bottom:4px;">';
+            if (vTests.length === 0) {
+                html += '<div class="assertion-tests-empty">No test verifies this step</div>';
+            } else {
                 vTests.forEach(function(t) {
                     var tStatus = t.status || '';
                     var tCls = tStatus === 'pass' ? 'validation-pass' : (tStatus === 'fail' ? 'validation-fail' : 'validation-unknown');
@@ -1144,8 +1149,8 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
                     }
                     html += '</div>';
                 });
-                html += '</div>';
             }
+            html += '</div>';
         });
         html += '</div>';
     }
@@ -1433,6 +1438,23 @@ function toggleBodySection(nodeId, idx) {
 // =====================================================================
 
 var assertionTestsCache = {};
+
+// Journey step "Verified"/result badges toggle a per-step test panel.
+// Unlike toggleAssertionTests, the verifying-test data is already embedded
+// in the journey card payload (step.verifying_tests) — no fetch needed.
+function toggleJourneyStepTests(btn, nodeId, stepNum) {
+    var panel = document.getElementById('journey-step-tests-' + nodeId + '-' + stepNum);
+    if (!panel) return;
+    var row = btn.closest('.journey-step-row');
+    var buttons = row ? row.querySelectorAll('.journey-step-badge') : [btn];
+    if (panel.style.display !== 'none') {
+        panel.style.display = 'none';
+        buttons.forEach(function(b) { b.classList.remove('active'); });
+        return;
+    }
+    panel.style.display = 'block';
+    buttons.forEach(function(b) { b.classList.add('active'); });
+}
 
 async function toggleAssertionTests(btn, reqId, label) {
     var panelId = 'assertion-tests-' + reqId + '-' + label;

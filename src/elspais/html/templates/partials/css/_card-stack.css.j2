@@ -800,8 +800,9 @@ body.edit-mode .view-only {
 }
 
 /* All assertion dimension buttons share base styles.
-   .journey-step-badge (non-interactive step Verified/Passed badges) shares the
-   same pill shape so journey steps render like REQ assertions. */
+   .journey-step-badge (clickable step Verified/Passed badges — toggles the
+   per-step test panel via toggleJourneyStepTests) shares the same pill shape
+   so journey steps render and behave like REQ assertion badges. */
 .assertion-implemented-btn,
 .assertion-refined-btn,
 .assertion-tested-btn,
@@ -825,9 +826,12 @@ body.edit-mode .view-only {
     margin-left: 4px;
 }
 
-/* Step badges are status indicators, not clickable controls */
-.journey-step-badge {
-    cursor: default;
+/* Normalize <button> defaults (font-family, line-height) so
+   button.journey-step-badge renders identically to the sibling <span>-based
+   assertion badges above. */
+button.journey-step-badge {
+    font: inherit;
+    cursor: pointer;
 }
 
 /* margin-left on badges area handles right-alignment */
@@ -837,7 +841,8 @@ body.edit-mode .view-only {
 .assertion-tested-btn:hover,
 .assertion-verified-btn:hover,
 .assertion-validated-btn:hover,
-.assertion-accepted-btn:hover {
+.assertion-accepted-btn:hover,
+.journey-step-badge:hover {
     background: var(--assertion-btn-hover-bg);
     border-color: var(--assertion-btn-hover-border);
 }
@@ -928,7 +933,8 @@ body.edit-mode .view-only {
 .assertion-tested-btn.active,
 .assertion-verified-btn.active,
 .assertion-validated-btn.active,
-.assertion-accepted-btn.active {
+.assertion-accepted-btn.active,
+.journey-step-badge.active {
     font-weight: 700;
 }
 
