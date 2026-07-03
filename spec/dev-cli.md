@@ -114,7 +114,7 @@ The `trace` command SHALL generate *Traceability* output from the requirement gr
 
 A. The command SHALL support structured JSON graph output via `--graph-json`, including git change annotations when available.
 
-B. The command SHALL support column presets (`--preset minimal|standard|full`) controlling which columns appear in tabular output: minimal (ID, Title, Level, Status), standard (+ Implemented, Validated), full (+ Passing).
+B. The command SHALL support column presets (`--preset minimal|standard|full`) controlling which columns appear in tabular output: minimal (ID, Title, Level, Status), standard and full (+ Implemented, Tested, Passing per *Assertion* D).
 
 C. The command SHALL support independent detail flags (`--body`, `--assertions`, `--tests`) that control whether expanded rows appear beneath each requirement, orthogonal to column presets.
 
@@ -126,11 +126,12 @@ A JSON graph output mode enables programmatic consumption of the full *Traceabil
 
 ### Changelog
 
+- 2026-07-02 | 64954432 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-07-02 | f4e1d611 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-05-11 | f8f0e0f2 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | f8f0e0f2 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
-*End* *Trace Command* | **Hash**: f4e1d611
+*End* *Trace Command* | **Hash**: 64954432
 ---
 
 ## REQ-d00085: Unified Report Composition
@@ -177,7 +178,7 @@ Report-producing commands (`health`, `trace`, `coverage`, `changed`) currently e
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00003
 
-The `coverage` section SHALL produce a coverage report showing implementation, validation, and test-passing status at the requirement and *Assertion* level.
+The `coverage` section SHALL produce a coverage report showing implemented, tested, and passing status at the requirement and *Assertion* level.
 
 ### Assertions
 
