@@ -89,6 +89,8 @@
             <div class="filter-group" data-group="coverage">
                 <span class="filter-group-label">Coverage</span>
                 <div class="filter-group-buttons">
+                    <button class="filter-btn on" data-group="coverage" data-key="failing"
+                            onclick="filterGroups.coverage.handleClick('failing', event)">Failing</button>
                     <button class="filter-btn on" data-group="coverage" data-key="none"
                             onclick="filterGroups.coverage.handleClick('none', event)">None</button>
                     <button class="filter-btn on" data-group="coverage" data-key="partial"

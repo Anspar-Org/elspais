@@ -114,11 +114,12 @@ filterGroups.coverage = new FilterGroup({
     name: 'coverage',
     container: document.getElementById('edit-toolbar'),
     buttons: [
+        {key: 'failing', label: 'Failing'},
         {key: 'none', label: 'None'},
         {key: 'partial', label: 'Partial'},
         {key: 'full', label: 'Full'},
     ],
-    defaultOn: new Set(['none', 'partial', 'full']),
+    defaultOn: new Set(['failing', 'none', 'partial', 'full']),
     sensitiveEvents: new Set(['mutation-edge', 'refresh']),
     countFn: function(key, rows) {
         var count = 0;

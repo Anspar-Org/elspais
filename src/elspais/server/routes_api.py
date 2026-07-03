@@ -614,11 +614,11 @@ async def api_tree_data(request: Request) -> JSONResponse:
         # Comment presence: direct comments on this node or its sub-elements
         _has_direct_comments = any(True for _ in g.iter_comments_for_card(node.id))
         tiers = compute_coverage_tiers(node, state.config)
-        # Derive coverage tier from combined_color for filtering
-        _cc = tiers.get("combined_color", "")
-        coverage = (
-            "full" if _cc == "green" else ("partial" if _cc in ("yellow", "orange") else "none")
-        )
+        # REQ-d00258-E: coverage filter bucket comes from the severity-aware
+        # combined_bucket (Task 6), not a naive combined_color check -- this
+        # correctly classifies e.g. "yellow-green" (full-indirect / info
+        # severity) as "full" instead of dropping it into "none".
+        coverage = tiers.get("combined_bucket") or "none"
 
         _ns_entry = ns_catalog.get(_get_repo_prefix(node)) or {}
         rows.append(
