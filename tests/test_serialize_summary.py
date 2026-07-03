@@ -1,4 +1,4 @@
-# Implements: REQ-d00064-A, REQ-d00064-C
+# Verifies: REQ-d00064-A, REQ-d00064-C
 """Public node-summary serializers in ``graph.serialize``.
 
 ``serialize_requirement_summary`` and ``serialize_assertion`` are the

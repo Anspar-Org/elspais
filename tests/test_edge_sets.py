@@ -1,4 +1,4 @@
-# Implements: REQ-d00127-C
+# Verifies: REQ-d00127-C
 """Behavior tests for centralized EdgeKind sets in elspais.graph.edge_sets.
 
 Guards the semantic distinctions between the four edge-set constants:

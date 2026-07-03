@@ -36,14 +36,14 @@ def dispatcher(real_resolver):
 class TestRealWorldSpecs:
     """Tests against the actual spec/ directory."""
 
-    # Implements: REQ-p00013-C
+    # Verifies: REQ-p00013-C
     def test_spec_directory_exists(self):
         """Verify spec directory exists for testing."""
         if not SPEC_DIR.exists():
             pytest.skip("No spec/ directory found")
         assert SPEC_DIR.is_dir()
 
-    # Implements: REQ-p00013-C
+    # Verifies: REQ-p00013-C
     def test_can_parse_spec_files(self, dispatcher):
         """Verify parser can process real spec files."""
         if not SPEC_DIR.exists():
@@ -55,7 +55,7 @@ class TestRealWorldSpecs:
         # Should get some parsed content
         assert len(results) > 0
 
-    # Implements: REQ-p00013-C
+    # Verifies: REQ-p00013-C
     def test_finds_prd_requirements(self, dispatcher):
         """Verify PRD requirements are found in real specs."""
         if not SPEC_DIR.exists():
@@ -77,7 +77,7 @@ class TestRealWorldSpecs:
         # Should find at least one PRD requirement
         assert len(prd_reqs) > 0
 
-    # Implements: REQ-p00013-C
+    # Verifies: REQ-p00013-C
     def test_graph_has_roots(self, dispatcher):
         """Verify graph identifies root requirements."""
         if not SPEC_DIR.exists():
@@ -94,7 +94,7 @@ class TestRealWorldSpecs:
         # Should have at least one root (top-level PRD req)
         assert graph.root_count() > 0
 
-    # Implements: REQ-p00013-C
+    # Verifies: REQ-p00013-C
     def test_assertions_are_created(self, dispatcher):
         """Verify assertions are extracted from requirements."""
         if not SPEC_DIR.exists():
@@ -113,7 +113,7 @@ class TestRealWorldSpecs:
         # Real specs have assertions (A, B, C, etc.)
         assert len(assertions) > 0
 
-    # Implements: REQ-p00013-C
+    # Verifies: REQ-p00013-C
     def test_implements_relationships(self, dispatcher):
         """Verify implements relationships are parsed."""
         if not SPEC_DIR.exists():

@@ -1,7 +1,5 @@
-"""term-index generation uses primary terms only unless index_associates=True.
-
-Implements: REQ-d00253-C
-"""
+# Verifies: REQ-d00253-C
+"""term-index generation uses primary terms only unless index_associates=True."""
 
 from elspais.commands.fix_cmd import _select_terms_dictionary
 

@@ -1,6 +1,5 @@
+# Verifies: REQ-d00253-C
 """INDEX.md content includes associate reqs only when index_associates=True.
-
-Implements: REQ-d00253-C
 
 NOTE: The canonical_federated_graph fixture uses the hht-like fixture which has
 no [associates] configured, so it has no associate repos. This test therefore

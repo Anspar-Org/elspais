@@ -18,7 +18,7 @@ from elspais.utilities.version_check import (
 
 
 class TestParseVersionTuple:
-    # Implements: REQ-d00213-A
+    # Verifies: REQ-d00213-A
     @pytest.mark.parametrize(
         ("version_str", "expected"),
         [
@@ -49,7 +49,7 @@ class TestParseVersionTuple:
 
 
 class TestIsNewer:
-    # Implements: REQ-d00213-B
+    # Verifies: REQ-d00213-B
     @pytest.mark.parametrize(
         ("latest", "current", "expected"),
         [
@@ -66,7 +66,7 @@ class TestIsNewer:
 
 
 class TestDetectInstallMethod:
-    # Implements: REQ-d00213-C
+    # Verifies: REQ-d00213-C
     def test_pipx(self):
         fake_path = (
             "/home/user/.local/pipx/venvs/elspais/lib/python3.10/site-packages/elspais/__init__.py"
@@ -78,7 +78,7 @@ class TestDetectInstallMethod:
             with patch.object(elspais, "__file__", fake_path):
                 assert detect_install_method() == "pipx"
 
-    # Implements: REQ-d00213-C
+    # Verifies: REQ-d00213-C
     def test_brew_apple_silicon(self):
         fake_path = "/opt/homebrew/lib/python3.12/site-packages/elspais/__init__.py"
         import elspais
@@ -86,7 +86,7 @@ class TestDetectInstallMethod:
         with patch.object(elspais, "__file__", fake_path):
             assert detect_install_method() == "brew"
 
-    # Implements: REQ-d00213-C
+    # Verifies: REQ-d00213-C
     def test_brew_intel(self):
         fake_path = (
             "/usr/local/Cellar/elspais/0.58.0/lib/python3.12/site-packages/elspais/__init__.py"
@@ -96,7 +96,7 @@ class TestDetectInstallMethod:
         with patch.object(elspais, "__file__", fake_path):
             assert detect_install_method() == "brew"
 
-    # Implements: REQ-d00213-C
+    # Verifies: REQ-d00213-C
     def test_editable(self):
         fake_path = "/home/user/projects/elspais/src/elspais/__init__.py"
         import elspais
@@ -104,7 +104,7 @@ class TestDetectInstallMethod:
         with patch.object(elspais, "__file__", fake_path):
             assert detect_install_method() == "editable"
 
-    # Implements: REQ-d00213-C
+    # Verifies: REQ-d00213-C
     def test_user_install(self):
         fake_path = "/home/user/.local/lib/python3.10/site-packages/elspais/__init__.py"
         import sys
@@ -118,7 +118,7 @@ class TestDetectInstallMethod:
         ):
             assert detect_install_method() == "user"
 
-    # Implements: REQ-d00213-C
+    # Verifies: REQ-d00213-C
     def test_venv(self):
         fake_path = "/home/user/myproject/.venv/lib/python3.12/site-packages/elspais/__init__.py"
         import sys
@@ -134,26 +134,26 @@ class TestDetectInstallMethod:
 
 
 class TestGetUpgradeCommand:
-    # Implements: REQ-d00213-D
+    # Verifies: REQ-d00213-D
     def test_pipx_command(self):
         assert get_upgrade_command("pipx") == "pipx upgrade elspais"
 
-    # Implements: REQ-d00213-D
+    # Verifies: REQ-d00213-D
     def test_brew_command(self):
         assert get_upgrade_command("brew") == "brew upgrade elspais"
 
-    # Implements: REQ-d00213-D
+    # Verifies: REQ-d00213-D
     def test_venv_command(self):
         assert "pip install --upgrade" in get_upgrade_command("venv")
 
-    # Implements: REQ-d00213-D
+    # Verifies: REQ-d00213-D
     def test_editable_command(self):
-        # Implements: REQ-d00213-D
+        # Verifies: REQ-d00213-D
         assert "git pull" in get_upgrade_command("editable")
 
 
 class TestFetchLatestVersion:
-    # Implements: REQ-d00213-E
+    # Verifies: REQ-d00213-E
     def test_success(self):
         fake_response = json.dumps({"info": {"version": "1.0.0"}}).encode()
         with patch("elspais.utilities.version_check.urllib.request.urlopen") as mock_urlopen:
@@ -162,7 +162,7 @@ class TestFetchLatestVersion:
             mock_urlopen.return_value.read.return_value = fake_response
             assert fetch_latest_version() == "1.0.0"
 
-    # Implements: REQ-d00213-E
+    # Verifies: REQ-d00213-E
     def test_network_failure(self):
         import urllib.error
 
@@ -172,7 +172,7 @@ class TestFetchLatestVersion:
         ):
             assert fetch_latest_version() is None
 
-    # Implements: REQ-d00213-E
+    # Verifies: REQ-d00213-E
     def test_bad_json(self):
         with patch("elspais.utilities.version_check.urllib.request.urlopen") as mock_urlopen:
             mock_urlopen.return_value.__enter__ = lambda s: s
@@ -182,7 +182,7 @@ class TestFetchLatestVersion:
 
 
 class TestCheckForUpdates:
-    # Implements: REQ-d00213-F
+    # Verifies: REQ-d00213-F
     def test_up_to_date(self, capsys):
         with patch("elspais.utilities.version_check.fetch_latest_version", return_value="0.58.0"):
             result = check_for_updates("0.58.0")
@@ -190,7 +190,7 @@ class TestCheckForUpdates:
             output = capsys.readouterr().out
             assert "up to date" in output
 
-    # Implements: REQ-d00213-F
+    # Verifies: REQ-d00213-F
     def test_update_available(self, capsys):
         with (
             patch("elspais.utilities.version_check.fetch_latest_version", return_value="0.59.0"),
@@ -203,7 +203,7 @@ class TestCheckForUpdates:
             assert "0.59.0" in output
             assert "pipx upgrade elspais" in output
 
-    # Implements: REQ-d00213-F
+    # Verifies: REQ-d00213-F
     def test_network_failure(self, capsys):
         with patch("elspais.utilities.version_check.fetch_latest_version", return_value=None):
             result = check_for_updates("0.58.0")

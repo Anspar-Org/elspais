@@ -1,5 +1,4 @@
 # elspais: expected-broken-links 3
-# Validates REQ-o00063-A, REQ-o00063-B
 """
 Tests for the edit command.
 """
@@ -10,7 +9,7 @@ from pathlib import Path
 class TestModifyImplements:
     """Tests for modifying the Implements field."""
 
-    # Implements: REQ-o00063-A
+    # Verifies: REQ-o00063-A
     def test_modify_implements_single_value(self, tmp_path: Path):
         """Test changing implements to a single value."""
         from elspais.commands.edit import modify_implements
@@ -40,7 +39,7 @@ Body text here.
         assert "**Implements**: p00002" in content
         assert "**Implements**: p00001" not in content
 
-    # Implements: REQ-o00063-A
+    # Verifies: REQ-o00063-A
     def test_modify_implements_multiple_values(self, tmp_path: Path):
         """Test changing implements to multiple values."""
         from elspais.commands.edit import modify_implements
@@ -65,7 +64,7 @@ Body text here.
         content = spec_file.read_text()
         assert "**Implements**: p00002, p00003" in content
 
-    # Implements: REQ-o00063-A
+    # Verifies: REQ-o00063-A
     def test_modify_implements_to_none(self, tmp_path: Path):
         """Test clearing implements (set to dash)."""
         from elspais.commands.edit import modify_implements
@@ -90,7 +89,7 @@ Body text here.
         content = spec_file.read_text()
         assert "**Implements**: -" in content
 
-    # Implements: REQ-o00063-A
+    # Verifies: REQ-o00063-A
     def test_modify_implements_dry_run(self, tmp_path: Path):
         """Test dry run doesn't modify file."""
         from elspais.commands.edit import modify_implements
@@ -115,7 +114,7 @@ Body text here.
         # File should be unchanged
         assert spec_file.read_text() == original
 
-    # Implements: REQ-o00063-A
+    # Verifies: REQ-o00063-A
     def test_modify_implements_req_not_found(self, tmp_path: Path):
         """Test error when requirement not found."""
         from elspais.commands.edit import modify_implements
@@ -143,7 +142,7 @@ Body text here.
 class TestModifyStatus:
     """Tests for modifying the Status field."""
 
-    # Implements: REQ-o00063-A
+    # Verifies: REQ-o00063-A
     def test_modify_status(self, tmp_path: Path):
         """Test changing status."""
         from elspais.commands.edit import modify_status
@@ -172,7 +171,7 @@ Body text here.
         assert "**Status**: Active" in content
         assert "**Status**: Draft" not in content
 
-    # Implements: REQ-o00063-A
+    # Verifies: REQ-o00063-A
     def test_modify_status_dry_run(self, tmp_path: Path):
         """Test dry run doesn't modify file."""
         from elspais.commands.edit import modify_status
@@ -199,7 +198,7 @@ Body text here.
 class TestModifyImplementsEdgeCases:
     """Edge case tests for modify_implements."""
 
-    # Implements: REQ-o00063-A
+    # Verifies: REQ-o00063-A
     def test_modify_implements_field_missing(self, tmp_path: Path):
         """Test error when Implements field is missing."""
         from elspais.commands.edit import modify_implements
@@ -227,7 +226,7 @@ Body text here.
 class TestModifyStatusEdgeCases:
     """Edge case tests for modify_status."""
 
-    # Implements: REQ-o00063-A
+    # Verifies: REQ-o00063-A
     def test_modify_status_field_missing(self, tmp_path: Path):
         """Test error when Status field is missing."""
         from elspais.commands.edit import modify_status
@@ -255,7 +254,7 @@ Body text here.
 class TestMoveRequirement:
     """Tests for moving requirements between files."""
 
-    # Implements: REQ-o00063-B
+    # Verifies: REQ-o00063-B
     def test_move_requirement(self, tmp_path: Path):
         """Test moving a requirement to another file."""
         from elspais.commands.edit import move_requirement
@@ -312,7 +311,7 @@ Existing body.
         assert "First body" in dest_content
         assert "REQ-d00010" in dest_content
 
-    # Implements: REQ-o00063-B
+    # Verifies: REQ-o00063-B
     def test_move_requirement_dry_run(self, tmp_path: Path):
         """Test dry run doesn't modify files."""
         from elspais.commands.edit import move_requirement
@@ -341,7 +340,7 @@ Body text.
         assert source_file.read_text() == source_original
         assert dest_file.read_text() == dest_original
 
-    # Implements: REQ-o00063-B
+    # Verifies: REQ-o00063-B
     def test_move_requirement_creates_dest_file(self, tmp_path: Path):
         """Test move creates destination file if it doesn't exist."""
         from elspais.commands.edit import move_requirement
@@ -369,7 +368,7 @@ Body text.
         assert dest_file.exists()
         assert "REQ-d00001" in dest_file.read_text()
 
-    # Implements: REQ-o00063-B
+    # Verifies: REQ-o00063-B
     def test_move_requirement_source_becomes_empty(self, tmp_path: Path):
         """Test move when source file becomes empty after move."""
         from elspais.commands.edit import move_requirement
@@ -398,7 +397,7 @@ Body text.
         # Source should be effectively empty
         assert source_file.read_text().strip() == ""
 
-    # Implements: REQ-o00063-B
+    # Verifies: REQ-o00063-B
     def test_move_requirement_not_found(self, tmp_path: Path):
         """Test error when requirement not found in source."""
         from elspais.commands.edit import move_requirement
@@ -429,7 +428,7 @@ Body text.
 class TestFindRequirementInFiles:
     """Tests for finding requirements across files."""
 
-    # Implements: REQ-o00063-A
+    # Verifies: REQ-o00063-A
     def test_find_requirement_in_files(self, tmp_path: Path):
         """Test finding a requirement in spec files."""
         from elspais.commands.edit import find_requirement_in_files
@@ -469,7 +468,7 @@ DEV body.
         assert result["file_path"] == spec_dir / "dev-core.md"
         assert result["req_id"] == "REQ-d00001"
 
-    # Implements: REQ-o00063-A
+    # Verifies: REQ-o00063-A
     def test_find_requirement_not_found(self, tmp_path: Path):
         """Test when requirement doesn't exist."""
         from elspais.commands.edit import find_requirement_in_files
@@ -498,7 +497,7 @@ DEV body.
 class TestValidateImplementsReferences:
     """Tests for validating implements references."""
 
-    # Implements: REQ-o00063-A
+    # Verifies: REQ-o00063-A
     def test_batch_edit_validates_implements_refs(self, tmp_path: Path):
         """Test that batch edit can validate implements references exist."""
         from elspais.commands.edit import batch_edit
@@ -549,7 +548,7 @@ DEV body.
             "invalid" in results[0]["error"].lower() or "not found" in results[0]["error"].lower()
         )
 
-    # Implements: REQ-o00063-A
+    # Verifies: REQ-o00063-A
     def test_batch_edit_no_validation_by_default(self, tmp_path: Path):
         """Test that batch edit doesn't validate by default."""
         from elspais.commands.edit import batch_edit
@@ -581,7 +580,7 @@ DEV body.
 class TestBatchEdit:
     """Tests for batch editing from JSON."""
 
-    # Implements: REQ-o00063-A
+    # Verifies: REQ-o00063-A
     def test_batch_edit_from_json(self, tmp_path: Path):
         """Test batch editing multiple requirements."""
         from elspais.commands.edit import batch_edit
@@ -625,7 +624,7 @@ Second body.
         assert "**Implements**: p00002" in content
         assert "**Status**: Active" in content
 
-    # Implements: REQ-o00063-B
+    # Verifies: REQ-o00063-B
     def test_batch_edit_with_move(self, tmp_path: Path):
         """Test batch edit including move operation."""
         from elspais.commands.edit import batch_edit
@@ -661,7 +660,7 @@ Body text.
         assert "REQ-d00001" not in (spec_dir / "dev-core.md").read_text()
         assert "REQ-d00001" in (spec_dir / "dev-features.md").read_text()
 
-    # Implements: REQ-o00063-A
+    # Verifies: REQ-o00063-A
     def test_batch_edit_dry_run(self, tmp_path: Path):
         """Test batch edit dry run."""
         from elspais.commands.edit import batch_edit

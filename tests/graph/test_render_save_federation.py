@@ -1,7 +1,5 @@
-"""render_save must not write associate files unless write_associates=True.
-
-Implements: REQ-d00253-B
-"""
+# Verifies: REQ-d00253-B
+"""render_save must not write associate files unless write_associates=True."""
 
 import pathlib
 
@@ -140,7 +138,7 @@ def test_render_save_ownership_map_path(monkeypatch, write_associates, expect_as
     using the repo field this test will fail (the associate would not be filtered
     and would be written even with write_associates=False).
 
-    Implements: REQ-d00253-B
+    Verifies: REQ-d00253-B
     """
     from elspais.graph import render
 
