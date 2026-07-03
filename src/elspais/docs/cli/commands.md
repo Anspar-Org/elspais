@@ -395,7 +395,7 @@ Manage links to associated repositories.
 **Notes:**
 
   Links are stored in `.elspais.local.toml` (gitignored, not shared)
-  Validates target has `project.type = "associated"` in its config
+  Validates target has a `.elspais.toml` that loads under the standard schema (no `project.type` marker required)
   Accepts a path or a name (searches sibling directories)
   Worktree-safe: resolves relative paths from canonical repo root
 

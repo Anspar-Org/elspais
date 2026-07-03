@@ -22,7 +22,7 @@ elspais associate /path/to/callisto
 # Linked callisto (CAL) at /path/to/callisto
 ```
 
-Validates the target has a valid `.elspais.toml` with `project.type = "associated"`.
+Validates the target has a `.elspais.toml` that loads successfully under the standard config schema. There is no `project.type` marker to opt in or out -- any directory with a loadable config is accepted.
 
 ### Linking by name
 
@@ -41,7 +41,7 @@ elspais associate --all
 # Linked 1 associate
 ```
 
-Scans sibling directories for any repository with `project.type = "associated"` in its config.
+Scans sibling directories for any repository whose `.elspais.toml` loads successfully (excluding the current repo itself).
 
 ### Listing links
 
