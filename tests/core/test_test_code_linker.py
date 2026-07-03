@@ -13,35 +13,27 @@ from tests.core.graph_test_helpers import wire_file_parent
 
 
 class TestCamelToSnake:
-    # Verifies: REQ-d00072-C
     def test_simple(self):
         assert _camel_to_snake("AnnotateCoverage") == "annotate_coverage"
 
-    # Verifies: REQ-d00072-C
     def test_single_word(self):
         assert _camel_to_snake("Graph") == "graph"
 
-    # Verifies: REQ-d00072-C
     def test_consecutive_uppercase(self):
         assert _camel_to_snake("HTMLParser") == "html_parser"
 
-    # Verifies: REQ-d00072-C
     def test_already_lowercase(self):
         assert _camel_to_snake("already") == "already"
 
-    # Verifies: REQ-d00072-C
     def test_numbers(self):
         assert _camel_to_snake("Test2Things") == "test2_things"
 
-    # Verifies: REQ-d00072-C
     def test_empty_string(self):
         assert _camel_to_snake("") == ""
 
-    # Verifies: REQ-d00072-C
     def test_single_char(self):
         assert _camel_to_snake("A") == "a"
 
-    # Verifies: REQ-d00072-C
     def test_all_uppercase(self):
         result = _camel_to_snake("ABC")
         assert result == "abc"
