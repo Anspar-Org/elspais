@@ -269,33 +269,27 @@ def _render_text(data: dict) -> str:
         lines.append(f"  ({', '.join(parts)} not included in coverage)")
 
     # REQ-d00252-F: External integrations grouped by owning associate.
-    # Column stays "verified (no lcov)" rather than "Passing" (REQ-d00258-B
-    # vocabulary): integrates_rollup()/integrates_by_associate() only inherit
-    # the library node's `verified` dimension (Verifies:-based test results),
-    # not `lcov_tested`, so labeling it "Passing" would overclaim
-    # line-coverage credit the consumer hasn't actually inherited.
+    # "Passing" (REQ-d00258-B vocabulary): integrates_by_associate() now folds
+    # the library node's tested_and_passing() union (result-verified OR
+    # line-coverage-credited) into these figures, so the label matches the
+    # other coverage columns.
     integrations = data.get("integrations") or []
     if integrations:
         lines.append("")
         lines.append("External integrations (by associate)")
-        lines.append(
-            f"  {'associate':<18} {'reqs':>5}   {'implemented':>11}   {'verified (no lcov)':>19}"
-        )
+        lines.append(f"  {'associate':<18} {'reqs':>5}   {'implemented':>11}   {'passing':>19}")
         for row in integrations:
             impl = f"{fmt_assertion_count(row['implemented_covered'])}/{row['implemented_total']}"
             ver = f"{fmt_assertion_count(row['verified_covered'])}/{row['verified_total']}"
             lines.append(
-                f"  {row['associate']:<18} {row['requirement_count']:>5}"
-                f"   {impl:>11}   {ver:>19}"
+                f"  {row['associate']:<18} {row['requirement_count']:>5}   {impl:>11}   {ver:>19}"
             )
         lines.append("  " + "-" * 57)
         tot = data.get("integration_total")
         if tot:
             impl = f"{fmt_assertion_count(tot['implemented_covered'])}/{tot['implemented_total']}"
             ver = f"{fmt_assertion_count(tot['verified_covered'])}/{tot['verified_total']}"
-            lines.append(
-                f"  {'total':<18} {tot['requirement_count']:>5}" f"   {impl:>11}   {ver:>19}"
-            )
+            lines.append(f"  {'total':<18} {tot['requirement_count']:>5}   {impl:>11}   {ver:>19}")
 
     meta = data.get("meta")
     if meta:
@@ -353,18 +347,17 @@ def _render_markdown(data: dict) -> str:
         lines.append(f"*{', '.join(parts)} not included in coverage.*")
 
     # REQ-d00252-F: External integrations grouped by owning associate.
-    # "Verified (no lcov)" rather than "Passing" (REQ-d00258-B vocabulary):
-    # integrates_rollup()/integrates_by_associate() only inherit the library
-    # node's `verified` dimension (Verifies:-based test results), not
-    # `lcov_tested`, so "Passing" would overclaim line-coverage credit the
-    # consumer hasn't actually inherited.
+    # "Passing" (REQ-d00258-B vocabulary): integrates_by_associate() now folds
+    # the library node's tested_and_passing() union (result-verified OR
+    # line-coverage-credited) into these figures, so the label matches the
+    # other coverage columns.
     integrations = data.get("integrations") or []
     if integrations:
         lines.append("")
         lines.append("## External integrations (by associate)")
         lines.append("")
-        lines.append("| Associate | Reqs | Implemented | Verified (no lcov) |")
-        lines.append("|-----------|------|-------------|---------------------|")
+        lines.append("| Associate | Reqs | Implemented | Passing |")
+        lines.append("|-----------|------|-------------|---------|")
         for row in integrations:
             impl = f"{fmt_assertion_count(row['implemented_covered'])}/{row['implemented_total']}"
             ver = f"{fmt_assertion_count(row['verified_covered'])}/{row['verified_total']}"

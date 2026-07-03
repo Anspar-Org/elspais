@@ -1,10 +1,14 @@
-# Verifies: REQ-d00252
+# Verifies: REQ-d00252, REQ-d00258-B
 """Validates REQ-d00252-F.
 
 Coverage reports summarize integrated requirements grouped by the owning
 associate, with a federation total. This exercises the data helper
 ``integrates_by_associate`` (and the optional ``integrates_total`` aggregate).
+The inherited "verified" figures are the passing union (result-verified or
+line-coverage-credited, REQ-d00258-B `tested_and_passing()`), not raw
+`verified`.
 """
+
 import shutil
 from pathlib import Path
 
@@ -12,7 +16,12 @@ from elspais.config import get_config
 from elspais.graph.annotators import annotate_coverage
 from elspais.graph.factory import build_graph
 from elspais.graph.GraphNode import GraphNode, NodeKind
-from elspais.graph.metrics import integrates_by_associate, integrates_total
+from elspais.graph.metrics import (
+    CoverageDimension,
+    RollupMetrics,
+    integrates_by_associate,
+    integrates_total,
+)
 from elspais.graph.relations import EdgeKind
 
 FIX = Path(__file__).parents[2] / "fixtures" / "e2e-integrates"
@@ -71,6 +80,36 @@ def test_REQ_d00252_F_total_aggregates(tmp_path):
     # The federation has exactly one integration.
     assert total.requirement_count == 1
     assert total.verified_covered >= 1
+
+
+def test_REQ_d00252_F_lcov_only_credit_counts_as_passing(tmp_path):
+    """A library REQ with only lcov_tested (line-coverage) credit -- no
+    Verifies:-based result -- still counts toward the associate's passing
+    figure (REQ-d00258-B union), not just raw `verified`.
+    """
+    fed = _federate(tmp_path)
+    lib_req = fed._repos["library"].graph._index["LIB-d00007"]
+    lib_req.set_metric(
+        "rollup_metrics",
+        RollupMetrics(
+            total_assertions=1,
+            lcov_tested=CoverageDimension(
+                total=1,
+                direct=1.0,
+                indirect=1.0,
+                direct_labels={"A"},
+                indirect_labels={"A"},
+                direct_pct_by_label={"A": 1.0},
+                indirect_pct_by_label={"A": 1.0},
+            ),
+        ),
+    )
+
+    rows = integrates_by_associate(fed)
+    by_name = {r.associate: r for r in rows}
+    lib = by_name["library"]
+    assert lib.verified_covered >= 1
+    assert lib.verified_total >= 1
 
 
 def test_REQ_d00252_F_no_integrates_yields_empty(tmp_path):

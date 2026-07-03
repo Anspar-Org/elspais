@@ -648,6 +648,62 @@ class TestSummaryIntegrations:
         # must count toward with_code_refs (implemented requirements).
         assert dev_levels[0]["with_code_refs"] >= 1
 
+    # Verifies: REQ-d00252-F, REQ-d00258-B
+    def test_REQ_d00258_B_integrations_header_is_passing(self, tmp_path):
+        """The External integrations column header reads 'Passing', not the
+        old 'verified (no lcov)' -- the figures are now the tested_and_passing()
+        union (REQ-d00258-B), so the vocabulary matches the rest of the report."""
+        fed = _federate_integrates(tmp_path)
+        data = _collect_coverage(fed, config=None)
+        text = _render(data, "text")
+        md = _render(data, "markdown")
+
+        assert "no lcov" not in text
+        assert "no lcov" not in md
+        assert "passing" in text.lower()
+        assert "Passing" in md
+
+    # Verifies: REQ-d00252-D, REQ-d00252-F, REQ-d00258-B
+    def test_REQ_d00252_F_lcov_only_library_propagates_in_summary(self, tmp_path):
+        """A library requirement whose only evidence is lcov_tested credit (no
+        Verifies:-based result) still shows up as passing in the summary's
+        per-associate integrations table -- the union propagates through
+        federation, not just the raw verified dimension."""
+        from elspais.graph.metrics import CoverageDimension
+
+        dest = tmp_path / "proj"
+        shutil.copytree(_INTEGRATES_FIX, dest)
+        from elspais.config import get_config
+        from elspais.graph.factory import build_graph
+
+        fed = build_graph(
+            config=get_config(None, dest / "app"),
+            repo_root=dest / "app",
+            scan_code=False,
+            scan_tests=False,
+        )
+        lib_req = fed._repos["library"].graph._index["LIB-d00007"]
+        lib_req.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                lcov_tested=CoverageDimension(
+                    total=1,
+                    direct=1.0,
+                    indirect=1.0,
+                    direct_labels={"A"},
+                    indirect_labels={"A"},
+                    direct_pct_by_label={"A": 1.0},
+                    indirect_pct_by_label={"A": 1.0},
+                ),
+            ),
+        )
+
+        data = _collect_coverage(fed, config=None)
+        by_name = {row["associate"]: row for row in data["integrations"]}
+        assert by_name["library"]["verified_covered"] >= 1
+        assert by_name["library"]["verified_total"] >= 1
+
 
 class TestTestedAndPassingUnion:
     """Validates REQ-d00215-B: lcov_tested credit counts toward headline passing score."""

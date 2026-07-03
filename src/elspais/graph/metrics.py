@@ -489,7 +489,7 @@ def satisfier_rollup(node: GraphNode) -> SatisfierRollup:
 
 @dataclass(frozen=True)
 class IntegratesRollup:
-    """Coverage/verification a consumer REQ inherits across INTEGRATES edges.
+    """Coverage/passing status a consumer REQ inherits across INTEGRATES edges.
 
     Derived live by reading each library child's own persisted RollupMetrics.
     Nothing is persisted on the consumer node -- the INTEGRATES edge is the
@@ -501,6 +501,12 @@ class IntegratesRollup:
     # non-integer. Totals are assertion counts and stay int.
     implemented_covered: float
     implemented_total: int
+    # NOTE (REQ-d00258-B): despite the field name (kept for MCP/GUI wire
+    # compatibility -- see `integrates_rollup()`), these are NOT the raw
+    # `verified` dimension. They are the "passing" union of result-verified
+    # and line-coverage-credited evidence (`tested_and_passing()`), so a
+    # library requirement whose only evidence is lcov credit still propagates
+    # to integrating consumers.
     verified_covered: float
     verified_total: int
 
@@ -526,11 +532,16 @@ def has_integration(node: GraphNode) -> bool:
 
 # Implements: REQ-d00252
 def integrates_rollup(node: GraphNode) -> IntegratesRollup:
-    """Inherit implemented/verified status from library nodes via INTEGRATES.
+    """Inherit implemented/passing status from library nodes via INTEGRATES.
 
     For each outgoing INTEGRATES edge (consumer REQ -> library node), read the
     library node's finalized ``rollup_metrics`` (computed in its own repo) and
-    fold its implemented and verified dimensions in. A consumer REQ with no
+    fold its implemented dimension and its *passing* union in. "Passing" is
+    the result-verified-or-line-coverage-credited union computed by
+    :func:`tested_and_passing` (REQ-d00258-B) -- not the raw ``verified``
+    dimension -- so a library requirement whose only evidence is lcov credit
+    (e.g. an aggregate-tooling repo with no `Verifies:`-based results) still
+    propagates as passing coverage to the consumer. A consumer REQ with no
     INTEGRATES edges yields all zeros.
     """
     from elspais.graph.relations import EdgeKind
@@ -544,8 +555,9 @@ def integrates_rollup(node: GraphNode) -> IntegratesRollup:
             continue
         impl_c += metrics.implemented.indirect
         impl_t += metrics.implemented.total
-        ver_c += metrics.verified.indirect
-        ver_t += metrics.verified.total
+        passing = tested_and_passing(metrics)
+        ver_c += passing.indirect
+        ver_t += passing.total
     return IntegratesRollup(
         implemented_covered=impl_c,
         implemented_total=impl_t,
@@ -564,6 +576,9 @@ class AssociateIntegration:
     # REQ-d00069-J); totals are assertion counts and stay int.
     implemented_covered: float
     implemented_total: int
+    # NOTE (REQ-d00258-B): the "verified" field name is kept for MCP/summary
+    # wire compatibility, but the value is the "passing" union (result-verified
+    # or line-coverage-credited, `tested_and_passing()`), not raw `verified`.
     verified_covered: float
     verified_total: int
 
@@ -574,10 +589,11 @@ def integrates_by_associate(graph) -> list[AssociateIntegration]:
 
     Scans every INTEGRATES edge in the federation (consumer REQ -> library REQ),
     groups by the owning associate repo of the target library node, and sums the
-    inherited implemented/verified coverage (read live from each target's
-    ``rollup_metrics``). Returns one entry per associate, sorted by associate
-    name. A federation total is the caller's concern (see
-    :func:`integrates_total`). ``graph`` is a FederatedGraph.
+    inherited implemented coverage plus the *passing* union (REQ-d00258-B
+    `tested_and_passing()`: result-verified or line-coverage-credited), read
+    live from each target's ``rollup_metrics``. Returns one entry per
+    associate, sorted by associate name. A federation total is the caller's
+    concern (see :func:`integrates_total`). ``graph`` is a FederatedGraph.
     """
     from elspais.graph.GraphNode import NodeKind
     from elspais.graph.relations import EdgeKind
@@ -617,8 +633,9 @@ def integrates_by_associate(graph) -> list[AssociateIntegration]:
                 continue
             impl_c[owner] += metrics.implemented.indirect
             impl_t[owner] += metrics.implemented.total
-            ver_c[owner] += metrics.verified.indirect
-            ver_t[owner] += metrics.verified.total
+            passing = tested_and_passing(metrics)
+            ver_c[owner] += passing.indirect
+            ver_t[owner] += passing.total
 
     return [
         AssociateIntegration(

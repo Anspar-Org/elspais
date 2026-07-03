@@ -759,11 +759,15 @@ function buildCardHtml(nodeId, data, collapsed) {
     }
 
     // Integrated coverage rollup (consumer REQs declaring `Integrates:` only):
-    // implemented/verified coverage inherited from the external associate
+    // implemented/passing coverage inherited from the external associate
     // (library) node this requirement integrates, across the INTEGRATES edge.
     // Surfaced by _serialize_node_generic when the REQ has integrations.
     // See CUR-1419 / REQ-d00252-D. Fields differ from satisfier_rollup:
     // implemented_covered/total + verified_covered/total (no covered_fraction).
+    // NOTE (REQ-d00258-B): despite the `verified_*` field names (kept for
+    // wire compatibility), the value is the tested_and_passing() union
+    // (result-verified OR line-coverage-credited), so it is labeled
+    // "passing" here rather than "verified".
     if (props.integrates_rollup && props.integrates_rollup.implemented_total > 0) {
         var ir = props.integrates_rollup;
         var ipct = Math.round((ir.implemented_covered / ir.implemented_total) * 100);
@@ -772,7 +776,7 @@ function buildCardHtml(nodeId, data, collapsed) {
             'title="Coverage inherited from the external associate library this requirement integrates">';
         html += '<span class="card-meta-key">Integrated coverage:</span>';
         html += '<span class="card-meta-value">implemented ' + ir.implemented_covered + '/' + ir.implemented_total +
-            ' (' + ipct + '%), verified ' + ir.verified_covered + '/' + ir.verified_total + ' (' + vpct + '%)' +
+            ' (' + ipct + '%), passing ' + ir.verified_covered + '/' + ir.verified_total + ' (' + vpct + '%)' +
             ' <span style="font-size:0.7rem;color:var(--secondary-text);">— inherited from an external associate</span></span>';
         html += '</div>';
     }
