@@ -950,3 +950,19 @@ color_key = "red"
 [validation_tiers.anomalous]
 css_class = "val-orange"
 color_key = "orange"
+
+[severity.ok]
+css_class = "val-green"
+color_key = "green"
+
+[severity.info]
+css_class = "val-yellow-green"
+color_key = "yellow-green"
+
+[severity.warning]
+css_class = "val-yellow"
+color_key = "yellow"
+
+[severity.error]
+css_class = "val-red"
+color_key = "red"

@@ -109,20 +109,25 @@ def _val_tier(key: str) -> tuple[str, str]:
 # ── Severity-driven coverage tiers ──
 
 SEVERITY_PRIORITY: dict[str, int] = {"error": 0, "warning": 1, "info": 2, "ok": 3}
-SEVERITY_TO_COLOR: dict[str, str] = {
-    "error": "red",
-    "warning": "yellow",
-    "info": "yellow-green",
-    "ok": "green",
-}
 
-# Human-readable descriptions for each dimension
+
+def _severity_color(severity: str) -> str:
+    """Resolve a severity name to its theme-catalog color_key (REQ-d00258-D)."""
+    from elspais.html.theme import get_catalog
+
+    try:
+        return get_catalog().by_key(f"severity.{severity}").color_key
+    except KeyError:
+        return ""
+
+
+# Human-readable descriptions for each dimension (REQ-d00258-B vocabulary)
 _DIMENSION_LABELS: dict[str, str] = {
     "implemented": "Implemented",
     "tested": "Tested",
-    "verified": "Verified",
-    "uat_coverage": "Validated",
-    "uat_verified": "Accepted",
+    "verified": "Passing",
+    "uat_coverage": "UAT Covered",
+    "uat_verified": "UAT Passed",
 }
 
 # Tooltip definitions for card-view badges
@@ -133,6 +138,9 @@ DIMENSION_TIPS: dict[str, str] = {
     "uat_coverage": "Assertions referenced by Journey Validates",
     "uat_verified": "Assertions with passing Journey results",
 }
+
+# Worst-to-best tier ordering for computing the combined bucket
+_TIER_ORDER = ("failing", "none", "partial", "full-indirect", "full-direct")
 
 # Tier descriptions for tooltip text
 _TIER_DESCRIPTIONS: dict[str, str] = {
@@ -165,9 +173,10 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         config: Project config dict (from load_config()). If None, uses defaults.
 
     Returns:
-        Dict with keys: impl_color, impl_tip, tested_color, tested_tip,
-        verified_color, verified_tip, uat_cov_color, uat_cov_tip,
-        uat_ver_color, uat_ver_tip, combined_color, combined_tip.
+        Dict with keys: impl_color, impl_tip, impl_tier, tested_color, tested_tip,
+        tested_tier, verified_color, verified_tip, verified_tier, uat_cov_color,
+        uat_cov_tip, uat_cov_tier, uat_ver_color, uat_ver_tip, uat_ver_tier,
+        combined_color, combined_tip, combined_bucket.
         All empty strings if node is not ACTIVE or has no assertions.
     """
     from elspais.config.schema import CoverageConfig, CoverageSeverityConfig
@@ -175,16 +184,22 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
     empty: dict[str, str] = {
         "impl_color": "",
         "impl_tip": "",
+        "impl_tier": "",
         "tested_color": "",
         "tested_tip": "",
+        "tested_tier": "",
         "verified_color": "",
         "verified_tip": "",
+        "verified_tier": "",
         "uat_cov_color": "",
         "uat_cov_tip": "",
+        "uat_cov_tier": "",
         "uat_ver_color": "",
         "uat_ver_tip": "",
+        "uat_ver_tier": "",
         "combined_color": "",
         "combined_tip": "",
+        "combined_bucket": "",
     }
 
     status = (node.status or "").upper()
@@ -227,18 +242,20 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
     result: dict[str, str] = {}
     worst_severity_priority = 999
     worst_color = ""
+    worst_tier_idx = len(_TIER_ORDER) - 1
     tip_parts: list[str] = []
 
     for dim_key, dim, sev_cfg, prefix in dim_map:
         tier = dim.tier
         severity = _tier_to_severity(tier, sev_cfg)
-        color = SEVERITY_TO_COLOR.get(severity, "")
+        color = _severity_color(severity)
         label = _DIMENSION_LABELS[dim_key]
         desc = _TIER_DESCRIPTIONS.get(tier, tier)
         tip = f"{label}: {desc}"
 
         result[f"{prefix}_color"] = color
         result[f"{prefix}_tip"] = tip
+        result[f"{prefix}_tier"] = tier
 
         # Track worst severity for combined
         sev_pri = SEVERITY_PRIORITY.get(severity, 999)
@@ -246,10 +263,15 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
             worst_severity_priority = sev_pri
             worst_color = color
 
+        worst_tier_idx = min(worst_tier_idx, _TIER_ORDER.index(tier))
+
         tip_parts.append(tip)
+
+    from elspais.graph.aggregation import TIER_TO_BUCKET
 
     result["combined_color"] = worst_color
     result["combined_tip"] = " | ".join(tip_parts)
+    result["combined_bucket"] = TIER_TO_BUCKET[_TIER_ORDER[worst_tier_idx]]
 
     return result
 

@@ -226,3 +226,41 @@ class TestComputeValidationColorCatalog:
 
         assert tiers["impl_color"] == expected_entry.color_key
         assert tiers["combined_color"] == expected_entry.color_key
+
+
+class TestSeverityCatalog:
+    """Test severity colors resolved through the theme catalog (REQ-d00258-D)."""
+
+    # Verifies: REQ-d00258-D
+    def test_severity_entries_in_catalog(self):
+        from elspais.html.theme import get_catalog
+
+        cat = get_catalog()
+        for sev, color in (
+            ("ok", "green"),
+            ("info", "yellow-green"),
+            ("warning", "yellow"),
+            ("error", "red"),
+        ):
+            entry = cat.by_key(f"severity.{sev}")
+            assert entry.color_key == color
+
+    # Verifies: REQ-d00258-D
+    def test_no_hardcoded_severity_dict(self):
+        import elspais.html.generator as g
+
+        assert not hasattr(g, "SEVERITY_TO_COLOR")
+
+    # Verifies: REQ-d00258-D
+    def test_tiers_payload_has_bucket(self, canonical_graph, canonical_config):
+        from elspais.graph.GraphNode import NodeKind
+        from elspais.html.generator import compute_coverage_tiers
+
+        node = next(
+            n
+            for n in canonical_graph.nodes_by_kind(NodeKind.REQUIREMENT)
+            if (n.status or "").upper() == "ACTIVE" and n.get_metric("rollup_metrics")
+        )
+        tiers = compute_coverage_tiers(node, canonical_config)
+        assert tiers["combined_bucket"] in ("full", "partial", "none", "failing")
+        assert "verified_tier" in tiers

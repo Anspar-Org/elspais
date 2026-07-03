@@ -287,3 +287,23 @@ label = "Anomalous"
 description = "Unexpected coverage gaps"
 long_description = """Tests exist but results are missing, or tests exist but
 no code implementation is found. Investigate the test/code linkage."""
+
+# ---------------------------------------------------------------------------
+# Coverage Severity (theme-catalog severity colors)
+# ---------------------------------------------------------------------------
+
+[severity.ok]
+label = "Ok"
+description = "Fully covered by direct evidence"
+
+[severity.info]
+label = "Info"
+description = "Fully covered including indirect evidence"
+
+[severity.warning]
+label = "Warning"
+description = "Partially covered"
+
+[severity.error]
+label = "Error"
+description = "No coverage or failures"
