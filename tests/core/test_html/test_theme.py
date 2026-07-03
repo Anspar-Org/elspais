@@ -264,3 +264,71 @@ class TestSeverityCatalog:
         tiers = compute_coverage_tiers(node, canonical_config)
         assert tiers["combined_bucket"] in ("full", "partial", "none", "failing")
         assert "verified_tier" in tiers
+
+    def _make_active_node_with_metrics(self, rollup):
+        """Build a minimal Active requirement node and attach rollup metrics."""
+        from tests.core.graph_test_helpers import build_graph, make_requirement
+
+        graph = build_graph(
+            make_requirement("REQ-p00001", title="Test Req", status="Active"),
+        )
+        node = graph.find_by_id("REQ-p00001")
+        node.set_metric("rollup_metrics", rollup)
+        return node
+
+    # Verifies: REQ-d00258-D, REQ-d00258-E
+    def test_bucket_full_despite_uat_none(self):
+        """No-journey project: uat tiers 'none' map to info severity (default
+        config) and must NOT drag the bucket below 'full' (design section 2.3)."""
+        from elspais.graph.metrics import CoverageDimension, RollupMetrics
+        from elspais.html.generator import compute_coverage_tiers
+
+        rollup = RollupMetrics(
+            total_assertions=2,
+            implemented=CoverageDimension(total=2, direct=2, indirect=2),
+            tested=CoverageDimension(total=2, direct=2, indirect=2),
+            verified=CoverageDimension(total=2, direct=2, indirect=2),
+            uat_coverage=CoverageDimension(total=2, direct=0, indirect=0),
+            uat_verified=CoverageDimension(total=2, direct=0, indirect=0),
+        )
+        node = self._make_active_node_with_metrics(rollup)
+        tiers = compute_coverage_tiers(node)
+
+        assert tiers["uat_cov_tier"] == "none"
+        assert tiers["combined_bucket"] == "full"
+
+    # Verifies: REQ-d00258-D, REQ-d00258-E
+    def test_bucket_none_when_implemented_none(self):
+        """implemented tier 'none' maps to error severity -> bucket 'none'."""
+        from elspais.graph.metrics import CoverageDimension, RollupMetrics
+        from elspais.html.generator import compute_coverage_tiers
+
+        rollup = RollupMetrics(
+            total_assertions=2,
+            implemented=CoverageDimension(total=2, direct=0, indirect=0),
+            tested=CoverageDimension(total=2, direct=2, indirect=2),
+            verified=CoverageDimension(total=2, direct=2, indirect=2),
+        )
+        node = self._make_active_node_with_metrics(rollup)
+        tiers = compute_coverage_tiers(node)
+
+        assert tiers["impl_tier"] == "none"
+        assert tiers["combined_bucket"] == "none"
+
+    # Verifies: REQ-d00258-D, REQ-d00258-E
+    def test_bucket_failing_when_any_dim_fails(self):
+        """has_failures on any dimension -> bucket 'failing' (overlay)."""
+        from elspais.graph.metrics import CoverageDimension, RollupMetrics
+        from elspais.html.generator import compute_coverage_tiers
+
+        rollup = RollupMetrics(
+            total_assertions=2,
+            implemented=CoverageDimension(total=2, direct=2, indirect=2),
+            tested=CoverageDimension(total=2, direct=2, indirect=2),
+            verified=CoverageDimension(total=2, direct=1, indirect=1, has_failures=True),
+        )
+        node = self._make_active_node_with_metrics(rollup)
+        tiers = compute_coverage_tiers(node)
+
+        assert tiers["verified_tier"] == "failing"
+        assert tiers["combined_bucket"] == "failing"

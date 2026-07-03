@@ -139,8 +139,16 @@ DIMENSION_TIPS: dict[str, str] = {
     "uat_verified": "Assertions with passing Journey results",
 }
 
-# Worst-to-best tier ordering for computing the combined bucket
-_TIER_ORDER = ("failing", "none", "partial", "full-indirect", "full-direct")
+# Worst-severity → filter bucket (design 2026-07-02 §2.3): the bucket honors
+# each dimension's configured severity, so info-severity gaps (e.g. UAT "none"
+# under the default config) do not drag the bucket below "full". A "failing"
+# tier on any dimension is an overlay checked before the severity mapping.
+_SEVERITY_TO_BUCKET: dict[str, str] = {
+    "error": "none",
+    "warning": "partial",
+    "info": "full",
+    "ok": "full",
+}
 
 # Tier descriptions for tooltip text
 _TIER_DESCRIPTIONS: dict[str, str] = {
@@ -241,8 +249,9 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
 
     result: dict[str, str] = {}
     worst_severity_priority = 999
+    worst_severity = ""
     worst_color = ""
-    worst_tier_idx = len(_TIER_ORDER) - 1
+    any_failing = False
     tip_parts: list[str] = []
 
     for dim_key, dim, sev_cfg, prefix in dim_map:
@@ -261,17 +270,22 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         sev_pri = SEVERITY_PRIORITY.get(severity, 999)
         if sev_pri < worst_severity_priority:
             worst_severity_priority = sev_pri
+            worst_severity = severity
             worst_color = color
 
-        worst_tier_idx = min(worst_tier_idx, _TIER_ORDER.index(tier))
+        if tier == "failing":
+            any_failing = True
 
         tip_parts.append(tip)
 
-    from elspais.graph.aggregation import TIER_TO_BUCKET
-
     result["combined_color"] = worst_color
     result["combined_tip"] = " | ".join(tip_parts)
-    result["combined_bucket"] = TIER_TO_BUCKET[_TIER_ORDER[worst_tier_idx]]
+    # Failing overlay first, else severity-aware bucket (design §2.3):
+    # info/ok gaps (e.g. UAT dims by default) still bucket "full".
+    if any_failing:
+        result["combined_bucket"] = "failing"
+    else:
+        result["combined_bucket"] = _SEVERITY_TO_BUCKET.get(worst_severity, "none")
 
     return result
 
