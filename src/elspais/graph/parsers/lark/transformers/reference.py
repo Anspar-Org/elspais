@@ -415,6 +415,7 @@ class ReferenceTransformer:
         pattern = build_multi_assertion_pattern(
             self.resolver.config.namespace,
             self.resolver.config.assertions.multi_separator,
+            self.resolver.config.assertions.separator,
         )
         refs = []
         for m in pattern.finditer(text):
