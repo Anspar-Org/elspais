@@ -347,6 +347,17 @@ def canonical_federated_graph():
 
 
 @pytest.fixture(scope="session")
+def canonical_config(canonical_federated_graph) -> dict:
+    """The config dict already loaded for the canonical hht-like fixture.
+
+    Reuses the config the root repo loaded while building
+    ``canonical_federated_graph`` -- does not reload or rebuild it.
+    """
+    fg = canonical_federated_graph
+    return fg._repos[fg._root_repo].config
+
+
+@pytest.fixture(scope="session")
 def canonical_graph(canonical_federated_graph):
     """The primary TraceGraph from the hht-like fixture.
 
