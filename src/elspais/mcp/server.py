@@ -3394,6 +3394,19 @@ def _query_nodes(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-d00069-J
+def _via_provenance(fraction: float) -> str | None:
+    """Provenance tag for an uncovered assertion's coverage fraction.
+
+    Returns ``"refines-conduction"`` when the fraction is partial
+    (0 < fraction < ~1.0, i.e. coverage conducted up a REFINES edge from a
+    not-fully-covered refiner), else ``None`` (no coverage at all, or ~fully
+    covered). Shared by every uncovered-detail assembly so the wording and
+    the covered threshold (1.0 - 1e-9) cannot drift between surfaces.
+    """
+    return "refines-conduction" if 0 < fraction < 1.0 - 1e-9 else None
+
+
 def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     """Get test coverage information for a requirement.
 
@@ -3478,8 +3491,9 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     uncovered_detail = []
     for aid in uncovered_assertions:
         frac = tested_fractions.get(id_to_label.get(aid, ""), 0.0)
-        via = "refines-conduction" if 0 < frac < 1.0 - 1e-9 else None
-        uncovered_detail.append({"id": aid, "fraction": round(frac, 4), "via": via})
+        uncovered_detail.append(
+            {"id": aid, "fraction": round(frac, 4), "via": _via_provenance(frac)}
+        )
 
     total = len(assertion_ids)
     covered_count = len(covered_assertions)
@@ -3885,13 +3899,12 @@ def _get_uncovered_assertions(
         detail = []
         for label in labels:
             frac = _fraction_for_label(req_node, label)
-            via = "refines-conduction" if 0 < frac < 1.0 - 1e-9 else None
             detail.append(
                 {
                     "id": id_by_label.get(label),
                     "label": label,
                     "fraction": round(frac, 4),
-                    "via": via,
+                    "via": _via_provenance(frac),
                 }
             )
         return detail

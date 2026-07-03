@@ -6,7 +6,7 @@
 # Validates REQ-d00067-E, REQ-d00067-F
 # Validates REQ-d00068-A, REQ-d00068-B, REQ-d00068-C, REQ-d00068-D
 # Validates REQ-d00068-E, REQ-d00068-F
-# Verifies: REQ-d00069-J
+# Verifies: REQ-d00069-J, REQ-d00258-A
 """Tests for MCP test coverage tools.
 
 Tests REQ-o00064: MCP Test Coverage Tools
@@ -291,6 +291,7 @@ def refines_conduction_graph():
     return graph
 
 
+# Verifies: REQ-d00069-J, REQ-d00258-A
 class TestUncoveredFractionDetail:
     """Uncovered entries carry per-assertion fraction/via detail (REQ-d00069-J)."""
 

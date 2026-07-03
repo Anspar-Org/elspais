@@ -928,6 +928,7 @@ class TestRefinesCoverageConduction:
         assert parent.tested.indirect_pct_by_label["B"] == pytest.approx(0.0)
 
     # Implements: REQ-d00069-J
+    # Verifies: REQ-d00258-A
     def test_partial_conducted_coverage_is_a_gap(self):
         """Partial conducted coverage (0 < f < 1) is still reported as a gap.
 

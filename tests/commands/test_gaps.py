@@ -1,4 +1,4 @@
-# Verifies: REQ-d00085, REQ-d00069-J
+# Verifies: REQ-d00085, REQ-d00069-J, REQ-d00258-A
 """Tests for gap data collection."""
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from elspais.graph.metrics import RollupMetrics
 # ===========================================================================
 
 
+# Verifies: REQ-d00069-J, REQ-d00258-A
 def test_uncovered_assertions_carry_fractions() -> None:
     """_uncovered_assertions returns (id, fraction) pairs.
 
@@ -281,6 +282,7 @@ class TestRenderGapText:
         assert "REQ-p00001" in output
         assert "[C, D]" in output
 
+    # Verifies: REQ-d00069-J, REQ-d00258-A
     def test_partial_gap_shows_fraction_and_via(self) -> None:
         """A partially-conducted assertion (0 < fraction < 1, REQ-d00069-J) is
         annotated with its percentage and 'via refines-conduction' so it reads
@@ -329,6 +331,7 @@ class TestRenderGapMarkdown:
         # Header, separator, data row
         assert any("|---" in line for line in lines)
 
+    # Verifies: REQ-d00069-J, REQ-d00258-A
     def test_partial_fraction_annotated(self) -> None:
         """A partially-conducted assertion (REQ-d00069-J) shows its percentage
         and 'via refines-conduction' in the markdown table cell."""
@@ -341,6 +344,7 @@ class TestRenderGapMarkdown:
         assert "40% via refines-conduction" in output
 
 
+# Verifies: REQ-d00069-J, REQ-d00258-A
 class TestGapEntrySerialization:
     """Round-trip tests for the JSON serialization of GapEntry.assertions
     fraction data (REQ-d00069-J)."""
