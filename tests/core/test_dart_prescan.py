@@ -2,9 +2,10 @@
 # Verifies: REQ-d00254-G
 """dart_prescan detects test() boundaries by regex + brace matching so each
 Dart test case becomes a line-anchored unit, without a Dart parser."""
+
 from __future__ import annotations
 
-from elspais.graph.parsers.prescan import dart_prescan
+from elspais.graph.parsers.prescan import _match_brace_end, dart_prescan
 
 
 def _lines(src: str) -> list[tuple[int, str]]:
@@ -151,3 +152,80 @@ void main() {
     assert starts == [2, 6]
     assert lc[3][3] == 5  # first test closes at its own `});` (line 5), not clamped
     assert "may be inaccurate" not in capsys.readouterr().err
+
+
+def test_multiline_string_does_not_break_balance(capsys):
+    # Verifies: REQ-d00254-G
+    # Reduced from the real-world regression in
+    # apps/sponsor-portal/portal_server_evs/test/seed_config_test.dart: a
+    # triple-quoted heredoc string spans several lines and its embedded JSON
+    # braces/brackets must not be counted as Dart code brackets, and must not
+    # cause the first test's span to be clamped by the second test's start.
+    src = """\
+void main() {
+  test('parses users + assignments with all scope encodings', () {
+    final seed = parseSeedUsers('''
+{
+  "users": [
+    { "role": "SystemOperator", "scope": { "class": "tier", "wildcard": true } }
+  ]
+}
+''');
+    expect(seed.entries, hasLength(4));
+  });
+  test('second test', () {
+    expect(1, 1);
+  });
+}
+"""
+    lc, funcs, _first = dart_prescan(_lines(src))
+    starts = sorted(f[0] for f in funcs)
+    assert starts == [2, 12]
+    # line 5 is inside the heredoc, owned by the first test (2), not corrupted
+    # by the embedded braces
+    assert lc[5][2] == 2
+    # first test closes at its own `});` (line 11), not clamped by the second
+    # test's start (line 12)
+    assert lc[5][3] == 11
+    assert "may be inaccurate" not in capsys.readouterr().err
+
+
+def test_raw_string_single_backslash_is_not_an_escape(capsys):
+    # Verifies: REQ-d00254-G
+    # Reduced from the real-world regression in
+    # apps/common-dart/canonical_json_jcs/test/canonical_json_test.dart line
+    # 98: `r'\\'` is a RAW string containing one literal backslash -- the
+    # backslash does NOT escape the closing quote. A scanner that applies
+    # normal escape rules inside raw strings mis-finds the string boundary,
+    # corrupting the bracket count for the rest of the line and clamping (or
+    # miscounting) the test's span.
+    src = """\
+void main() {
+  test('JSON special escapes', () {
+    expect(canonicalize(r'\\'), r'"\\\\"');
+  });
+  test('next test', () {
+    expect(1, 1);
+  });
+}
+"""
+    lc, funcs, _first = dart_prescan(_lines(src))
+    starts = sorted(f[0] for f in funcs)
+    assert starts == [2, 5]
+    # first test closes at its own `});` (line 4), not clamped to the second
+    # test's start (line 5)
+    assert lc[3][3] == 4
+    assert "may be inaccurate" not in capsys.readouterr().err
+
+
+def test_span_never_inverts():
+    # Verifies: REQ-d00254-G
+    # A clamped span must never produce end < start (the observed regression:
+    # a TEST node with parse_line=56, parse_end_line=53). Exercise the clamp
+    # path in _match_brace_end directly with an adversarial stop_line equal to
+    # the span's own start line -- without the max() guard this computes
+    # `stop_line - 1`, one line BEFORE the start.
+    lines = [(56, "  test('adversarial', () {"), (57, "    expect(1, 1);")]
+    end, accurate = _match_brace_end(lines, 0, stop_line=56)
+    assert end >= lines[0][0]
+    assert accurate is False

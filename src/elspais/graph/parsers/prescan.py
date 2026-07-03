@@ -434,33 +434,70 @@ def text_prescan(
     return line_context, all_test_funcs, first_def_line
 
 
-def _iter_code_brackets(code: str):
-    """Yield bracket chars in ONE line of source, skipping string literals
-    ('...'/"...", honoring \\ escapes) and a `//` line-comment -- but only when
-    the `//` is NOT inside a string (so a URL like 'http://x' is not mistaken
-    for a comment). Triple-quoted/raw strings and /* */ blocks are not special-
-    cased; a residual miscount there warns honestly rather than wrongly."""
-    i = 0
-    n = len(code)
-    while i < n:
-        c = code[i]
-        if c == "/" and i + 1 < n and code[i + 1] == "/":
-            return  # real line comment: rest of line is not code
-        if c == "'" or c == '"':
-            quote = c
-            i += 1
-            while i < n:
-                if code[i] == "\\":
-                    i += 2
-                    continue
-                if code[i] == quote:
-                    i += 1
-                    break
+class _DartLineScanner:
+    """Cross-line bracket scanner for Dart.
+
+    Tracks multiline strings (''' / \"\"\"), raw strings (r-prefix: backslash
+    is literal, applies to both quote styles and to raw triple-quoted
+    strings), single-line strings (unterminated ones run to EOL, which is
+    intentional -- Dart single-line strings cannot legally span lines), //
+    line comments, and /* */ block comments that may span lines. Yields only
+    bracket characters that are real code."""
+
+    def __init__(self) -> None:
+        self.multiline_quote: str | None = None  # "'''" or '"""' while inside
+        self.in_block_comment = False
+
+    def brackets(self, code: str):
+        i = 0
+        n = len(code)
+        while i < n:
+            if self.multiline_quote:
+                end = code.find(self.multiline_quote, i)
+                if end < 0:
+                    return  # string continues past EOL
+                i = end + 3
+                self.multiline_quote = None
+                continue
+            if self.in_block_comment:
+                end = code.find("*/", i)
+                if end < 0:
+                    return
+                i = end + 2
+                self.in_block_comment = False
+                continue
+            c = code[i]
+            if c == "/" and i + 1 < n and code[i + 1] == "/":
+                return  # line comment: rest of line is not code
+            if c == "/" and i + 1 < n and code[i + 1] == "*":
+                self.in_block_comment = True
+                i += 2
+                continue
+            # r-prefix applies to both quote styles, including raw triple-
+            # quoted strings -- resolve it before the triple-quote check.
+            raw = c == "r" and i + 1 < n and code[i + 1] in "'\""
+            if raw:
                 i += 1
-            continue
-        if c in "([{)]}":
-            yield c
-        i += 1
+                c = code[i]
+            if c == "'" or c == '"':
+                if code[i : i + 3] in ("'''", '"""'):
+                    self.multiline_quote = code[i : i + 3]
+                    i += 3
+                    continue
+                quote = c
+                i += 1
+                while i < n:
+                    if not raw and code[i] == "\\":
+                        i += 2
+                        continue
+                    if code[i] == quote:
+                        i += 1
+                        break
+                    i += 1
+                continue
+            if c in "([{)]}":
+                yield c
+            i += 1
 
 
 def _match_brace_end(
@@ -472,15 +509,22 @@ def _match_brace_end(
     did not balance before the bound -- i.e. the span was clamped to `stop_line`
     (the next detected test()/group() start) or ran to EOF without depth<=0.
     A clean close is accurate even if a bracket appeared inside a quoted string
-    on the way (a slightly-wrong END is harmless; attachment uses the START line)."""
+    on the way (a slightly-wrong END is harmless; attachment uses the START line).
+
+    A single `_DartLineScanner` instance is threaded across all lines of the
+    span so multiline strings/comments that open on one line and close on a
+    later one are tracked correctly."""
     depth = 0
     seen = False
     last = lines[start_idx][0]
+    scanner = _DartLineScanner()
     for ln, text in lines[start_idx:]:
         if stop_line is not None and ln >= stop_line:
-            return stop_line - 1, False  # clamped: never balanced before next test
-        # (no more //-prestrip; _iter_code_brackets handles comments + strings)
-        for ch in _iter_code_brackets(text):
+            # clamped: never balanced before next test. Guard against
+            # inversion -- the clamp must never produce an end before the
+            # span's own start line.
+            return max(lines[start_idx][0], stop_line - 1), False
+        for ch in scanner.brackets(text):
             if ch in "([{":
                 depth += 1
                 seen = True
