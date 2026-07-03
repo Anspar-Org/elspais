@@ -496,32 +496,23 @@ def count_by_coverage(
 
     Returns:
         Dict with 'total', 'full_coverage', 'partial_coverage', 'no_coverage' counts.
+
+    Note:
+        Thin delegate to `graph.aggregation.tier_buckets()` (REQ-d00258-C),
+        kept here for API compatibility. `failing` folds into `no_coverage`
+        below only because the legacy dict has three buckets and the
+        "implemented" dimension never sets `has_failures`, so `b.failing`
+        is always 0 for this dimension -- the fold is a no-op guard.
     """
-    from elspais.graph import NodeKind
+    from elspais.graph.aggregation import tier_buckets
 
-    counts: dict[str, int] = {
-        "total": 0,
-        "full_coverage": 0,
-        "partial_coverage": 0,
-        "no_coverage": 0,
+    b = tier_buckets(graph, "implemented", exclude_status=exclude_status)
+    return {
+        "total": b.total,
+        "full_coverage": b.full,
+        "partial_coverage": b.partial,
+        "no_coverage": b.none + b.failing,
     }
-
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if exclude_status and node.status in exclude_status:
-            continue
-
-        counts["total"] += 1
-        rollup = node.get_metric("rollup_metrics")
-        pct = rollup.implemented.indirect_pct if rollup else 0
-
-        if pct >= 100:
-            counts["full_coverage"] += 1
-        elif pct > 0:
-            counts["partial_coverage"] += 1
-        else:
-            counts["no_coverage"] += 1
-
-    return counts
 
 
 def count_with_code_refs(

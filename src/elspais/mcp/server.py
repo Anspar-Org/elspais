@@ -2116,9 +2116,19 @@ def _get_project_summary(
     # Use aggregate functions from annotators (REQ-o00061-C)
     level_counts = count_by_level(graph, config=config)
     from elspais.config import get_status_roles
+    from elspais.graph.aggregation import tier_buckets
 
     coverage_exclude = get_status_roles(config or {}).coverage_excluded_statuses()
-    coverage_stats = count_by_coverage(graph, exclude_status=coverage_exclude)
+    # REQ-d00258-C: coverage bucket counts derive from the shared tier_buckets()
+    # aggregation so this MCP surface and the CLI summary agree exactly.
+    b = tier_buckets(graph, "implemented", exclude_status=coverage_exclude)
+    coverage_stats = {
+        "total": b.total,
+        "full_coverage": b.full,
+        "partial_coverage": b.partial,
+        "no_coverage": b.none,
+        "failing": b.failing,
+    }
     # Annotate git state before counting (idempotent, safe to call multiple times)
     annotate_graph_git_state(graph)
     change_metrics = count_by_git_status(graph)
@@ -2131,6 +2141,13 @@ def _get_project_summary(
         "orphan_count": graph.orphan_count(),
         "broken_reference_count": len(graph.broken_references()),
     }
+
+    # REQ-d00258-C: per-level coverage stats reuse the CLI summary's collector
+    # (elspais.commands.summary._collect_coverage) as the single source of
+    # truth for the dict shape, so MCP and CLI can never diverge.
+    from elspais.commands.summary import _collect_coverage
+
+    result["coverage_by_level"] = _collect_coverage(graph, config)["levels"]
 
     code_cov = count_code_coverage(graph)
     if code_cov["total_executable_lines"] > 0:

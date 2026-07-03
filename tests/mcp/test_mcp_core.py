@@ -1144,7 +1144,14 @@ class TestGetProjectSummary:
         result = _get_project_summary(sample_graph, Path("/test/repo"))
 
         assert result["requirements_by_level"] == expected_levels
-        assert result["coverage"] == expected_coverage
+        # REQ-d00258-C: "coverage" now sources from the shared tier_buckets()
+        # aggregation (still an aggregate function, just relocated out of
+        # annotators) and gains an additive "failing" key; the three legacy
+        # buckets must still agree with count_by_coverage()'s delegate.
+        assert result["coverage"]["total"] == expected_coverage["total"]
+        assert result["coverage"]["full_coverage"] == expected_coverage["full_coverage"]
+        assert result["coverage"]["partial_coverage"] == expected_coverage["partial_coverage"]
+        assert result["coverage"]["no_coverage"] == expected_coverage["no_coverage"]
         assert result["changes"] == expected_git
 
     # Implements: REQ-o00060-A
@@ -1195,6 +1202,42 @@ class TestGetProjectSummary:
         assert coverage["full_coverage"] == 1  # PRD at 100%
         assert coverage["partial_coverage"] == 1  # OPS at 50%
         assert coverage["no_coverage"] == 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test: get_project_summary() consistency with CLI summary - REQ-d00258-C
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# Verifies: REQ-d00258-C
+class TestSummaryConsistency:
+    """MCP project summary and CLI summary derive identical statistics."""
+
+    def test_mcp_and_cli_summaries_agree(self, canonical_graph, canonical_config, tmp_path):
+        pytest.importorskip("mcp")
+        from elspais.commands.summary import _collect_coverage
+        from elspais.mcp.server import _get_project_summary
+
+        cli = _collect_coverage(canonical_graph, canonical_config)
+        mcp = _get_project_summary(canonical_graph, tmp_path, canonical_config)
+        assert mcp["coverage_by_level"] == cli["levels"]
+
+    def test_coverage_buckets_from_tiers(self, canonical_graph, canonical_config, tmp_path):
+        pytest.importorskip("mcp")
+        from elspais.config import get_status_roles
+        from elspais.graph.aggregation import tier_buckets
+        from elspais.mcp.server import _get_project_summary
+
+        exclude = get_status_roles(canonical_config).coverage_excluded_statuses()
+        b = tier_buckets(canonical_graph, "implemented", exclude_status=exclude)
+        mcp = _get_project_summary(canonical_graph, tmp_path, canonical_config)
+        assert mcp["coverage"] == {
+            "total": b.total,
+            "full_coverage": b.full,
+            "partial_coverage": b.partial,
+            "no_coverage": b.none,
+            "failing": b.failing,
+        }
 
 
 class TestRoundTripFidelity:
