@@ -129,7 +129,7 @@
 | REQ-d00238 | Graph-Wide Term Scan                                          | prd-core.md             | d3a202d4 |
 | REQ-d00239 | Federated Graph Term Scanner Pass                             | prd-core.md             | 7d9a30c4 |
 | REQ-d00240 | New Term Health Checks                                        | prd-core.md             | 76a49db3 |
-| REQ-d00241 | Code No-Traceability Health Check                             | prd-core.md             | e1272219 |
+| REQ-d00241 | Code No-Traceability Health Check                             | prd-core.md             | c1be56e5 |
 | REQ-d00242 | Terms API Endpoints                                           | prd-features.md         | 6c934e14 |
 | REQ-d00243 | Terms Tab in Viewer Nav Tree                                  | prd-features.md         | 3328f677 |
 | REQ-d00244 | Term Cards in Viewer Card Stack                               | prd-features.md         | 5dd49a51 |

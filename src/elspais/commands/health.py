@@ -2305,7 +2305,12 @@ def check_no_traceability(
     unlinked_files: list[str],
     severity: str = "warning",
 ) -> HealthCheck:
-    """Check for code/test files with no traceability markers."""
+    """Check for code files with no traceability markers.
+
+    Test files are deliberately excluded -- ``tests.unlinked``
+    (``check_unlinked_tests``) already reports marker-less test files;
+    including them here too would double-report the same file.
+    """
     if severity == "off":
         return HealthCheck(
             name="code.no_traceability",
@@ -2319,7 +2324,7 @@ def check_no_traceability(
         return HealthCheck(
             name="code.no_traceability",
             passed=True,
-            message="All code/test files have traceability markers",
+            message="All code files have traceability markers",
             category="code",
             severity=severity,
         )
@@ -2381,13 +2386,12 @@ def run_code_checks(
     # Implements: REQ-d00241-B, REQ-d00241-C
     no_trace_sev = typed_config.rules.format.no_traceability_severity
     unlinked_files = []
-    for kind in (NodeKind.CODE, NodeKind.TEST):
-        for node in graph.iter_unlinked(kind):
-            file_n = node.file_node()
-            if file_n:
-                rel = file_n.get_field("relative_path")
-                if rel:
-                    unlinked_files.append(rel)
+    for node in graph.iter_unlinked(NodeKind.CODE):
+        file_n = node.file_node()
+        if file_n:
+            rel = file_n.get_field("relative_path")
+            if rel:
+                unlinked_files.append(rel)
     checks.append(check_no_traceability(unlinked_files, severity=no_trace_sev))
 
     return checks

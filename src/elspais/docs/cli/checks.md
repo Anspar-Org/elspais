@@ -137,7 +137,7 @@ that changes to cross-cutting requirements are propagated to their consumers.
 |-------|-------------|
 | `code.coverage` | Code coverage statistics (informational) |
 | `code.unlinked` | Code files with no traceability markers (no `# Implements:` or `# Verifies:` comments); severity: info |
-| `code.no_traceability` | Code/test files with no traceability markers at all; default severity: info |
+| `code.no_traceability` | Code files with no traceability markers at all (test files are covered separately by `tests.unlinked`); default severity: info |
 | `code.retired_references` | Code referencing requirements with retired status (Deprecated, Superseded, Rejected); default severity: warning |
 | `code.provisional_references` | Code referencing requirements with provisional status (Draft, Proposed); default severity: info |
 | `code.aspirational_references` | Code referencing requirements with aspirational status (Roadmap, Future, Idea); default severity: info |

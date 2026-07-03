@@ -1,8 +1,9 @@
-# Verifies: REQ-d00085
+# Verifies: REQ-d00085, REQ-d00241
 """Tests for traceability-focused health checks.
 
 Tests check_structural_orphans(), check_unlinked_tests(), check_unlinked_code(),
-check_broken_references(), and config backward compatibility for allow_orphans.
+check_broken_references(), config backward compatibility for allow_orphans, and
+the code.no_traceability wiring in run_code_checks() (REQ-d00241).
 """
 from __future__ import annotations
 
@@ -15,6 +16,7 @@ from elspais.commands.health import (
     check_structural_orphans,
     check_unlinked_code,
     check_unlinked_tests,
+    run_code_checks,
     run_spec_checks,
 )
 from elspais.config import _merge_configs, config_defaults, get_config
@@ -238,6 +240,103 @@ class TestCheckUnlinkedCode:
         finding = check.findings[0]
         assert isinstance(finding, HealthFinding)
         assert finding.file_path is not None
+
+
+# =============================================================================
+# code.no_traceability wiring — REQ-d00241 (code-only; tests owned by
+# tests.unlinked)
+# =============================================================================
+
+
+class TestRunCodeChecksNoTraceabilityWiring:
+    """Tests for the code.no_traceability wiring in run_code_checks().
+
+    REQ-d00241-A/B previously described ``check_no_traceability`` as
+    covering "code and test files" / "CODE/TEST nodes", and
+    ``run_code_checks()`` fed it unlinked nodes of *both*
+    ``NodeKind.CODE`` and ``NodeKind.TEST``. Because the test-file parser
+    unconditionally creates a TEST node for every test function found
+    (marked or not -- see ``GraphBuilder._add_test_ref``), a test file
+    with unmarked functions produced marker-less TEST nodes that were
+    *also* separately reported by ``tests.unlinked``
+    (``check_unlinked_tests``), double-reporting the same file once
+    under each category. REQ-d00241 was reworded to scope
+    ``code.no_traceability`` to CODE nodes only; test files are now
+    exclusively the responsibility of ``tests.unlinked``.
+    """
+
+    # Implements: REQ-d00241-B
+    def test_REQ_d00241_B_unlinked_code_node_still_appears(self) -> None:
+        """An unlinked CODE node is still reported by code.no_traceability.
+
+        Uses a dangling ``implements`` target (rather than an empty list)
+        because ``GraphBuilder._add_code_ref`` only creates a CODE node
+        per referenced id -- unlike TEST, there's no unconditional
+        per-function pass, so a target that fails to resolve is what
+        makes the node exist-but-unreachable.
+        """
+        graph = build_graph(
+            make_code_ref(
+                implements=["REQ-p09999"], source_path="src/orphan.py", start_line=1, end_line=5
+            ),
+        )
+        checks = run_code_checks(_wrap(graph))
+        check = next(c for c in checks if c.name == "code.no_traceability")
+        assert not check.passed
+        assert any("orphan.py" in f.message for f in check.findings)
+
+    # Implements: REQ-d00241-A, REQ-d00241-B
+    def test_REQ_d00241_A_marker_less_test_function_excluded(self) -> None:
+        """A marker-less TEST node is NOT reported by code.no_traceability.
+
+        Regression guard for the double-report defect: a test function
+        with no ``Verifies:`` marker still produces an unreachable TEST
+        node (per the parser's unconditional per-function emission), but
+        code.no_traceability must not surface it -- that's tests.unlinked's
+        job now.
+        """
+        graph = build_graph(
+            make_test_ref(
+                verifies=[],
+                source_path="tests/test_unmarked.py",
+                function_name="test_something",
+                start_line=1,
+                end_line=5,
+            ),
+        )
+        # Sanity: the TEST node really is unlinked (has a FILE parent,
+        # unreachable to any requirement) -- otherwise this test would
+        # pass vacuously regardless of the wiring fix.
+        assert list(graph.iter_unlinked(NodeKind.TEST))
+
+        checks = run_code_checks(_wrap(graph))
+        check = next(c for c in checks if c.name == "code.no_traceability")
+        assert check.passed
+        assert not any("test_unmarked.py" in f.message for f in check.findings)
+
+    # Implements: REQ-d00241-A
+    def test_REQ_d00241_A_mixed_code_and_test_only_code_reported(self) -> None:
+        """With both an unlinked CODE node and a marker-less TEST node,
+        only the CODE file is reported by code.no_traceability.
+        """
+        graph = build_graph(
+            make_code_ref(
+                implements=["REQ-p09999"], source_path="src/orphan.py", start_line=1, end_line=5
+            ),
+            make_test_ref(
+                verifies=[],
+                source_path="tests/test_unmarked.py",
+                function_name="test_something",
+                start_line=1,
+                end_line=5,
+            ),
+        )
+        checks = run_code_checks(_wrap(graph))
+        check = next(c for c in checks if c.name == "code.no_traceability")
+        assert not check.passed
+        messages = [f.message for f in check.findings]
+        assert any("orphan.py" in m for m in messages)
+        assert not any("test_unmarked.py" in m for m in messages)
 
 
 # =============================================================================

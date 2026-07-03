@@ -483,19 +483,20 @@ D. `run_term_checks()` SHALL call all six term checks (`duplicates`, `undefined`
 
 ### Assertions
 
-A. `check_no_traceability(unlinked_files, severity)` SHALL return a `HealthCheck` reporting code and test files with no *Traceability* markers. Default severity: `"warning"`. When `severity="off"`, return passed/info.
+A. `check_no_traceability(unlinked_files, severity)` SHALL return a `HealthCheck` reporting code files with no *Traceability* markers. Default severity: `"warning"`. When `severity="off"`, return passed/info. Test files SHALL NOT be reported here because the separate `tests.unlinked` check already covers marker-less test files; including them in both would double-report the same file.
 
-B. The check SHALL be wired into `run_code_checks()` using `graph.iter_unlinked()` to find CODE/TEST nodes not linked to any requirement.
+B. The check SHALL be wired into `run_code_checks()` using `graph.iter_unlinked()` to find CODE nodes not linked to any requirement.
 
 C. Severity SHALL be read from `[rules.format] no_traceability_severity` (default `"warning"` if None).
 
 ### Changelog
 
+- 2026-07-03 | c1be56e5 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-05-11 | e1272219 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | e1272219 | - | Michael Lewis (michael@anspar.org) | Auto-fix: sync changelog hash
 - 2026-03-29 | 6e481d63 | - | Michael Lewis (michael@anspar.org) | Initial creation
 
-*End* *Code No-Traceability Health Check* | **Hash**: e1272219
+*End* *Code No-Traceability Health Check* | **Hash**: c1be56e5
 
 ## REQ-d00246: Markdown Emphasis Normalization Utility
 
