@@ -110,6 +110,42 @@ def test_REQ_d00252_F_lcov_only_credit_counts_as_passing(tmp_path):
     lib = by_name["library"]
     assert lib.verified_covered >= 1
     assert lib.verified_total >= 1
+    assert lib.has_failures is False
+
+
+def test_REQ_d00252_F_library_failures_flag_associate_row(tmp_path):
+    """A library assertion with a FAILING Verifies-result but full lcov credit
+    still counts as covered in the union, but the per-associate row (and the
+    federation total) must carry has_failures=True so a red library suite is
+    never reported as clean (REQ-d00258-B).
+    """
+    fed = _federate(tmp_path)
+    lib_req = fed._repos["library"].graph._index["LIB-d00007"]
+    lib_req.set_metric(
+        "rollup_metrics",
+        RollupMetrics(
+            total_assertions=1,
+            verified=CoverageDimension(total=1, has_failures=True),
+            lcov_tested=CoverageDimension(
+                total=1,
+                direct=1.0,
+                indirect=1.0,
+                direct_labels={"A"},
+                indirect_labels={"A"},
+                direct_pct_by_label={"A": 1.0},
+                indirect_pct_by_label={"A": 1.0},
+            ),
+        ),
+    )
+
+    rows = integrates_by_associate(fed)
+    by_name = {r.associate: r for r in rows}
+    lib = by_name["library"]
+    assert lib.verified_covered >= 1  # union covered, yet...
+    assert lib.has_failures is True  # ...flagged failing
+
+    total = integrates_total(rows)
+    assert total.has_failures is True  # OR'd across associates
 
 
 def test_REQ_d00252_F_no_integrates_yields_empty(tmp_path):

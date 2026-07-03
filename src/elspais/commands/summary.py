@@ -161,6 +161,7 @@ def _collect_coverage(graph: FederatedGraph, config: dict | None = None) -> dict
             "implemented_total": row.implemented_total,
             "verified_covered": row.verified_covered,
             "verified_total": row.verified_total,
+            "has_failures": row.has_failures,
         }
         for row in integration_rows
     ]
@@ -174,6 +175,7 @@ def _collect_coverage(graph: FederatedGraph, config: dict | None = None) -> dict
             "implemented_total": tot.implemented_total,
             "verified_covered": tot.verified_covered,
             "verified_total": tot.verified_total,
+            "has_failures": tot.has_failures,
         }
 
     result = {
@@ -272,15 +274,21 @@ def _render_text(data: dict) -> str:
     # "Passing" (REQ-d00258-B vocabulary): integrates_by_associate() now folds
     # the library node's tested_and_passing() union (result-verified OR
     # line-coverage-credited) into these figures, so the label matches the
-    # other coverage columns.
+    # other coverage columns. `!` marks a row whose library suite has failing
+    # results -- the union's covered count can still read full in that case,
+    # so the marker (footnoted below, like `~`/`*`) is the only red signal.
     integrations = data.get("integrations") or []
     if integrations:
+        any_failing = any(row.get("has_failures") for row in integrations)
         lines.append("")
         lines.append("External integrations (by associate)")
         lines.append(f"  {'associate':<18} {'reqs':>5}   {'implemented':>11}   {'passing':>19}")
         for row in integrations:
             impl = f"{fmt_assertion_count(row['implemented_covered'])}/{row['implemented_total']}"
-            ver = f"{fmt_assertion_count(row['verified_covered'])}/{row['verified_total']}"
+            ver = (
+                f"{fmt_assertion_count(row['verified_covered'])}/{row['verified_total']}"
+                f"{' !' if row.get('has_failures') else ''}"
+            )
             lines.append(
                 f"  {row['associate']:<18} {row['requirement_count']:>5}   {impl:>11}   {ver:>19}"
             )
@@ -288,8 +296,13 @@ def _render_text(data: dict) -> str:
         tot = data.get("integration_total")
         if tot:
             impl = f"{fmt_assertion_count(tot['implemented_covered'])}/{tot['implemented_total']}"
-            ver = f"{fmt_assertion_count(tot['verified_covered'])}/{tot['verified_total']}"
+            ver = (
+                f"{fmt_assertion_count(tot['verified_covered'])}/{tot['verified_total']}"
+                f"{' !' if tot.get('has_failures') else ''}"
+            )
             lines.append(f"  {'total':<18} {tot['requirement_count']:>5}   {impl:>11}   {ver:>19}")
+        if any_failing:
+            lines.append("  ! failing test results in the integrated library")
 
     meta = data.get("meta")
     if meta:
@@ -350,9 +363,12 @@ def _render_markdown(data: dict) -> str:
     # "Passing" (REQ-d00258-B vocabulary): integrates_by_associate() now folds
     # the library node's tested_and_passing() union (result-verified OR
     # line-coverage-credited) into these figures, so the label matches the
-    # other coverage columns.
+    # other coverage columns. `!` marks a row whose library suite has failing
+    # results -- the union's covered count can still read full in that case,
+    # so the marker (footnoted below, like `*`) is the only red signal.
     integrations = data.get("integrations") or []
     if integrations:
+        any_failing = any(row.get("has_failures") for row in integrations)
         lines.append("")
         lines.append("## External integrations (by associate)")
         lines.append("")
@@ -360,13 +376,22 @@ def _render_markdown(data: dict) -> str:
         lines.append("|-----------|------|-------------|---------|")
         for row in integrations:
             impl = f"{fmt_assertion_count(row['implemented_covered'])}/{row['implemented_total']}"
-            ver = f"{fmt_assertion_count(row['verified_covered'])}/{row['verified_total']}"
+            ver = (
+                f"{fmt_assertion_count(row['verified_covered'])}/{row['verified_total']}"
+                f"{' !' if row.get('has_failures') else ''}"
+            )
             lines.append(f"| {row['associate']} | {row['requirement_count']} | {impl} | {ver} |")
         tot = data.get("integration_total")
         if tot:
             impl = f"{fmt_assertion_count(tot['implemented_covered'])}/{tot['implemented_total']}"
-            ver = f"{fmt_assertion_count(tot['verified_covered'])}/{tot['verified_total']}"
+            ver = (
+                f"{fmt_assertion_count(tot['verified_covered'])}/{tot['verified_total']}"
+                f"{' !' if tot.get('has_failures') else ''}"
+            )
             lines.append(f"| total | {tot['requirement_count']} | {impl} | {ver} |")
+        if any_failing:
+            lines.append("")
+            lines.append("*! failing test results in the integrated library*")
 
     # Implements: REQ-d00254-I
     if carried > 0:

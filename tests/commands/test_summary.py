@@ -703,6 +703,60 @@ class TestSummaryIntegrations:
         by_name = {row["associate"]: row for row in data["integrations"]}
         assert by_name["library"]["verified_covered"] >= 1
         assert by_name["library"]["verified_total"] >= 1
+        assert by_name["library"]["has_failures"] is False
+
+    # Verifies: REQ-d00252-F, REQ-d00258-B
+    def test_REQ_d00258_B_library_failures_flagged_in_summary(self, tmp_path):
+        """A library assertion with a FAILING Verifies-result but full lcov
+        credit reads as covered in the union, so the covered/total figures
+        alone would show 100% passing. The summary must carry has_failures
+        through to the integrations row/total and mark the rendered table so
+        a red library suite is never displayed as clean."""
+        from elspais.graph.metrics import CoverageDimension
+
+        dest = tmp_path / "proj"
+        shutil.copytree(_INTEGRATES_FIX, dest)
+        from elspais.config import get_config
+        from elspais.graph.factory import build_graph
+
+        fed = build_graph(
+            config=get_config(None, dest / "app"),
+            repo_root=dest / "app",
+            scan_code=False,
+            scan_tests=False,
+        )
+        lib_req = fed._repos["library"].graph._index["LIB-d00007"]
+        lib_req.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                verified=CoverageDimension(total=1, has_failures=True),
+                lcov_tested=CoverageDimension(
+                    total=1,
+                    direct=1.0,
+                    indirect=1.0,
+                    direct_labels={"A"},
+                    indirect_labels={"A"},
+                    direct_pct_by_label={"A": 1.0},
+                    indirect_pct_by_label={"A": 1.0},
+                ),
+            ),
+        )
+
+        data = _collect_coverage(fed, config=None)
+        by_name = {row["associate"]: row for row in data["integrations"]}
+        assert by_name["library"]["verified_covered"] >= 1  # union covered
+        assert by_name["library"]["has_failures"] is True
+        assert data["integration_total"]["has_failures"] is True
+
+        # Rendered surfaces mark the failing row (text `!` marker + footnote,
+        # markdown `!` marker + footnote).
+        text = _render(dict(data), "text")
+        assert "!" in text
+        assert "failing test result" in text
+        md = _render(dict(data), "markdown")
+        assert "!" in md
+        assert "failing test result" in md
 
 
 class TestTestedAndPassingUnion:

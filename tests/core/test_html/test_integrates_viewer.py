@@ -187,10 +187,43 @@ class TestIntegratesRollupSerialized:
             "implemented_total": 1,
             "verified_covered": 0,
             "verified_total": 1,
+            "has_failures": False,
         }, (
             "integrates_rollup numerics mismatch (library REQ has 1 assertion, "
             f"implemented by code, not verified); got {props['integrates_rollup']!r}"
         )
+
+    # Verifies: REQ-d00252-D, REQ-d00258-B
+    def test_REQ_d00258_B_library_failure_flag_serialized(self, federation):
+        """A failing library Verifies-result with full lcov credit reads as
+        covered in the passing union, but the serialized rollup must carry
+        has_failures=True so the viewer can flag the red library suite."""
+        from elspais.graph.metrics import CoverageDimension, RollupMetrics
+
+        lib_req = federation._repos["library"].graph._index["LIB-p00001"]
+        lib_req.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                implemented=CoverageDimension(total=1, direct=1.0, indirect=1.0),
+                verified=CoverageDimension(total=1, has_failures=True),
+                lcov_tested=CoverageDimension(
+                    total=1,
+                    direct=1.0,
+                    indirect=1.0,
+                    direct_labels={"A"},
+                    indirect_labels={"A"},
+                    direct_pct_by_label={"A": 1.0},
+                    indirect_pct_by_label={"A": 1.0},
+                ),
+            ),
+        )
+
+        html = HTMLGenerator(federation).generate(embed_content=True)
+        nodes = _extract_node_index(html)
+        rollup = (nodes["APP-p00001"].get("properties") or {})["integrates_rollup"]
+        assert rollup["verified_covered"] == 1  # union covered despite the failure
+        assert rollup["has_failures"] is True
 
     def test_REQ_d00252_D_non_integrating_req_has_no_integrates_rollup(self, federation):
         """Library LIB-p00001 (no outbound INTEGRATES) carries no rollup field."""

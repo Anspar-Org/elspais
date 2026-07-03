@@ -93,3 +93,39 @@ def test_REQ_d00252_D_lcov_only_credit_propagates_as_passing(tmp_path):
     rollup = integrates_rollup(app_req)
     assert rollup.verified_covered >= 1  # lcov-only credit propagates as passing
     assert rollup.verified_total >= 1
+    assert rollup.has_failures is False
+
+
+def test_REQ_d00252_D_library_failures_propagate_to_consumer(tmp_path):
+    """A library assertion with a FAILING Verifies-test result but full lcov
+    credit reads as covered in the tested_and_passing() union (max per-label
+    fraction), so the covered count alone would show 100% passing. The rollup
+    must also carry has_failures=True so a red library suite is never
+    displayed as clean to INTEGRATES consumers (REQ-d00258-B).
+    """
+    fed = _federate(tmp_path)
+    app_req = fed._repos["app"].graph._index["APP-d00001"]
+    lib_req = fed._repos["library"].graph._index["LIB-d00007"]
+
+    lib_req.set_metric(
+        "rollup_metrics",
+        RollupMetrics(
+            total_assertions=1,
+            # Failed Verifies-result: zero verified coverage, has_failures set.
+            verified=CoverageDimension(total=1, has_failures=True),
+            # Full line-coverage credit on the same assertion.
+            lcov_tested=CoverageDimension(
+                total=1,
+                direct=1.0,
+                indirect=1.0,
+                direct_labels={"A"},
+                indirect_labels={"A"},
+                direct_pct_by_label={"A": 1.0},
+                indirect_pct_by_label={"A": 1.0},
+            ),
+        ),
+    )
+
+    rollup = integrates_rollup(app_req)
+    assert rollup.verified_covered >= 1  # union max() still reads covered...
+    assert rollup.has_failures is True  # ...but the failure flag survives

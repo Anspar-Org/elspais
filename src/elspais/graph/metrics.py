@@ -509,6 +509,13 @@ class IntegratesRollup:
     # to integrating consumers.
     verified_covered: float
     verified_total: int
+    # True if any integrated library node's passing union reports a failure.
+    # The union's covered count uses max() per assertion, so an assertion with
+    # a FAILING Verifies-result but full lcov credit still reads as covered --
+    # this flag is the only signal that the library suite is red, and every
+    # surface showing the covered/total figures must surface it too
+    # (REQ-d00258-B).
+    has_failures: bool = False
 
     @property
     def has_integrations(self) -> bool:
@@ -547,6 +554,7 @@ def integrates_rollup(node: GraphNode) -> IntegratesRollup:
     from elspais.graph.relations import EdgeKind
 
     impl_c = impl_t = ver_c = ver_t = 0
+    fails = False
     for edge in node.iter_outgoing_edges():
         if edge.kind != EdgeKind.INTEGRATES:
             continue
@@ -558,11 +566,13 @@ def integrates_rollup(node: GraphNode) -> IntegratesRollup:
         passing = tested_and_passing(metrics)
         ver_c += passing.indirect
         ver_t += passing.total
+        fails = fails or passing.has_failures
     return IntegratesRollup(
         implemented_covered=impl_c,
         implemented_total=impl_t,
         verified_covered=ver_c,
         verified_total=ver_t,
+        has_failures=fails,
     )
 
 
@@ -581,6 +591,10 @@ class AssociateIntegration:
     # or line-coverage-credited, `tested_and_passing()`), not raw `verified`.
     verified_covered: float
     verified_total: int
+    # True if any integrated library node under this associate reports a
+    # failing result in the passing union -- the covered figures alone can
+    # read full even when the library suite is red (see IntegratesRollup).
+    has_failures: bool = False
 
 
 # Implements: REQ-d00252
@@ -604,6 +618,7 @@ def integrates_by_associate(graph) -> list[AssociateIntegration]:
     impl_t: dict[str, int] = {}
     ver_c: dict[str, int] = {}
     ver_t: dict[str, int] = {}
+    fails: dict[str, bool] = {}
 
     for req in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         for edge in req.iter_outgoing_edges():
@@ -627,6 +642,7 @@ def integrates_by_associate(graph) -> list[AssociateIntegration]:
             impl_t.setdefault(owner, 0)
             ver_c.setdefault(owner, 0)
             ver_t.setdefault(owner, 0)
+            fails.setdefault(owner, False)
 
             metrics = target.get_metric("rollup_metrics")
             if metrics is None:
@@ -636,6 +652,7 @@ def integrates_by_associate(graph) -> list[AssociateIntegration]:
             passing = tested_and_passing(metrics)
             ver_c[owner] += passing.indirect
             ver_t[owner] += passing.total
+            fails[owner] = fails[owner] or passing.has_failures
 
     return [
         AssociateIntegration(
@@ -645,6 +662,7 @@ def integrates_by_associate(graph) -> list[AssociateIntegration]:
             implemented_total=impl_t[name],
             verified_covered=ver_c[name],
             verified_total=ver_t[name],
+            has_failures=fails[name],
         )
         for name in sorted(consumers)
     ]
@@ -666,6 +684,7 @@ def integrates_total(items: list[AssociateIntegration]) -> AssociateIntegration:
         implemented_total=sum(i.implemented_total for i in items),
         verified_covered=sum(i.verified_covered for i in items),
         verified_total=sum(i.verified_total for i in items),
+        has_failures=any(i.has_failures for i in items),
     )
 
 

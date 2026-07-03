@@ -767,16 +767,22 @@ function buildCardHtml(nodeId, data, collapsed) {
     // NOTE (REQ-d00258-B): despite the `verified_*` field names (kept for
     // wire compatibility), the value is the tested_and_passing() union
     // (result-verified OR line-coverage-credited), so it is labeled
-    // "passing" here rather than "verified".
+    // "passing" here rather than "verified". `has_failures` flags a red
+    // library suite whose covered count can still read full via the union's
+    // per-assertion max() -- render a FAILING badge (same validation-fail
+    // styling as the UAT verdict badge) so it is never displayed clean.
     if (props.integrates_rollup && props.integrates_rollup.implemented_total > 0) {
         var ir = props.integrates_rollup;
         var ipct = Math.round((ir.implemented_covered / ir.implemented_total) * 100);
         var vpct = ir.verified_total ? Math.round((ir.verified_covered / ir.verified_total) * 100) : 0;
+        var irFail = ir.has_failures ?
+            ' <span class="validation-fail active" style="font-size:0.65rem;padding:1px 6px;border-radius:3px;display:inline-block;"' +
+            ' title="A verifying test result in the integrated library failed">FAILING</span>' : '';
         html += '<div class="card-meta-item integrates-rollup" ' +
             'title="Coverage inherited from the external associate library this requirement integrates">';
         html += '<span class="card-meta-key">Integrated coverage:</span>';
         html += '<span class="card-meta-value">implemented ' + ir.implemented_covered + '/' + ir.implemented_total +
-            ' (' + ipct + '%), passing ' + ir.verified_covered + '/' + ir.verified_total + ' (' + vpct + '%)' +
+            ' (' + ipct + '%), passing ' + ir.verified_covered + '/' + ir.verified_total + ' (' + vpct + '%)' + irFail +
             ' <span style="font-size:0.7rem;color:var(--secondary-text);">— inherited from an external associate</span></span>';
         html += '</div>';
     }
