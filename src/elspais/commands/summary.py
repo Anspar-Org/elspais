@@ -22,12 +22,9 @@ if TYPE_CHECKING:
 
 from elspais.graph import NodeKind
 from elspais.graph.metrics import (
-    RollupMetrics,
     fmt_assertion_count,
-    has_integration,
     integrates_by_associate,
     integrates_total,
-    tested_and_passing,
 )
 
 
@@ -98,17 +95,19 @@ def run(args: argparse.Namespace) -> int:
 def _collect_coverage(graph: FederatedGraph, config: dict | None = None) -> dict:
     """Collect coverage data from the graph.
 
-    Uses pre-computed RollupMetrics from annotate_coverage().
+    Delegates per-level aggregation to the shared `aggregate_by_level()`
+    (REQ-d00258-C) so the CLI summary, MCP project summary, and viewer derive
+    identical statistics from identical data.
     """
-    from elspais.config import get_status_roles
+    from elspais.config import default_level_keys, get_status_roles
+    from elspais.graph.aggregation import aggregate_by_level
 
     roles = get_status_roles(config or {})
     exclude_status = roles.coverage_excluded_statuses()
 
-    # Build level list from config, sorted by rank. Falls back to the schema's
-    # default level keys when config is absent or has no [levels] section.
-    from elspais.config import default_level_keys
-
+    # Known level keys (case-insensitive), mirroring aggregate_by_level's own
+    # level-key derivation, so excluded_counts only reflects requirements that
+    # actually land in a rendered level bucket.
     levels_cfg = (config or {}).get("levels") or {}
     if isinstance(levels_cfg, dict) and levels_cfg:
         ordered = sorted(
@@ -121,74 +120,33 @@ def _collect_coverage(graph: FederatedGraph, config: dict | None = None) -> dict
         level_keys = [k for k, rank in ordered if rank is not None] or default_level_keys()
     else:
         level_keys = default_level_keys()
+    known_levels = {k.lower() for k in level_keys}
 
-    # Group requirements by level. `node.level` is normalized upstream (see
-    # api_tree_data's upper-casing); user-defined `[levels.<key>]` keys may be
-    # any case, so we compare case-insensitively by keying groups on the
-    # lowercased version of the user's key.
-    level_groups: dict[str, list] = {k.lower(): [] for k in level_keys}
+    # excluded_counts is still computed locally (aggregate_by_level excludes
+    # these statuses from its sums but doesn't report per-status counts).
+    excluded_counts: dict[str, int] = {}
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        lvl = (node.level or "").lower()
-        if lvl in level_groups:
-            level_groups[lvl].append(node)
+        if (node.level or "").lower() in known_levels and node.status in exclude_status:
+            excluded_counts[node.status] = excluded_counts.get(node.status, 0) + 1
 
     levels = []
-    excluded_counts: dict[str, int] = {}
-
-    for level_key in level_keys:
-        display_name = level_key.upper()
-        nodes = level_groups[level_key.lower()]
-        active_nodes = [n for n in nodes if n.status not in exclude_status]
-        excluded = len(nodes) - len(active_nodes)
-        if excluded > 0:
-            for n in nodes:
-                if n.status in exclude_status:
-                    excluded_counts[n.status] = excluded_counts.get(n.status, 0) + 1
-
-        level_totals = {
-            "level": display_name,
-            "total": len(active_nodes),
-            "with_code_refs": 0,
-            "with_test_refs": 0,
-            "with_passing": 0,
-            "total_assertions": 0,
-            "implemented_assertions": 0,
-            "validated_assertions": 0,
-            "passing_assertions": 0,
-        }
-
-        for node in sorted(active_nodes, key=lambda n: n.id):
-            rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
-            if rollup is None:
-                total = 0
-                implemented = 0
-                validated = 0
-                passing = 0
-            else:
-                total = rollup.total_assertions
-                implemented = rollup.implemented.indirect
-                validated = rollup.tested.direct
-                passing = tested_and_passing(rollup).direct
-
-            # REQ-d00252-F: a requirement that delegates implementation via
-            # INTEGRATES counts as implemented in the main coverage classification
-            # (it inherits the library node's coverage and is not a phantom gap).
-            if implemented > 0 or has_integration(node):
-                level_totals["with_code_refs"] += 1
-            if validated > 0:
-                level_totals["with_test_refs"] += 1
-            if passing > 0:
-                level_totals["with_passing"] += 1
-            level_totals["total_assertions"] += total
-            level_totals["implemented_assertions"] += implemented
-            level_totals["validated_assertions"] += validated
-            level_totals["passing_assertions"] += passing
-
-        # Covered counts are sums of per-assertion fractions (REQ-d00069-J);
-        # round to avoid float noise in serialized output.
-        for _k in ("implemented_assertions", "validated_assertions", "passing_assertions"):
-            level_totals[_k] = round(level_totals[_k], 3)
-        levels.append(level_totals)
+    for agg in aggregate_by_level(graph, config):
+        levels.append(
+            {
+                "level": agg.level,
+                "total": agg.total_requirements,
+                "with_code_refs": agg.with_code_refs,
+                "with_test_refs": agg.with_test_refs,
+                "with_passing": agg.with_passing,
+                "total_assertions": agg.total_assertions,
+                "implemented_assertions": round(agg.implemented.covered, 3),
+                "implemented_direct": round(agg.implemented.direct, 3),
+                "tested_assertions": round(agg.tested.covered, 3),
+                "tested_direct": round(agg.tested.direct, 3),
+                "passing_assertions": round(agg.passing.covered, 3),
+                "passing_direct": round(agg.passing.direct, 3),
+            }
+        )
 
     # REQ-d00252-F: per-associate Integrates rollup + federation total.
     integration_rows = integrates_by_associate(graph)
@@ -262,6 +220,11 @@ def _render(data: dict, fmt: str) -> str:
         return _render_text(data)
 
 
+def _marker(covered: float, direct: float) -> str:
+    """REQ-d00258-A: `~` flags a count whose evidence is not fully direct."""
+    return " ~" if covered > direct + 1e-9 else ""
+
+
 def _render_text(data: dict) -> str:
     # Implements: REQ-d00254-I
     carried = data.get("carried_result_targets", 0) or 0
@@ -284,14 +247,17 @@ def _render_text(data: dict) -> str:
         lines.append(
             f"    Implemented: {fmt_assertion_count(lv['implemented_assertions'])}/{ta}"
             f" ({_pct(lv['implemented_assertions'], ta):.1f}%)"
+            f"{_marker(lv['implemented_assertions'], lv['implemented_direct'])}"
         )
         lines.append(
-            f"    Validated:   {fmt_assertion_count(lv['validated_assertions'])}/{ta}"
-            f" ({_pct(lv['validated_assertions'], ta):.1f}%)"
+            f"    Tested:      {fmt_assertion_count(lv['tested_assertions'])}/{ta}"
+            f" ({_pct(lv['tested_assertions'], ta):.1f}%)"
+            f"{_marker(lv['tested_assertions'], lv['tested_direct'])}"
         )
         lines.append(
             f"    Passing:     {fmt_assertion_count(lv['passing_assertions'])}/{ta}"
             f" ({_pct(lv['passing_assertions'], ta):.1f}%){carry_marker}"
+            f"{_marker(lv['passing_assertions'], lv['passing_direct'])}"
         )
 
     excluded = data.get("excluded", {})
@@ -349,17 +315,26 @@ def _render_markdown(data: dict) -> str:
     # Level summary
     lines.append("## Summary by Level")
     lines.append("")
-    lines.append("| Level | Requirements | Assertions | Implemented | Validated | Passing |")
-    lines.append("|-------|-------------|------------|-------------|-----------|---------|")
+    lines.append("| Level | Requirements | Assertions | Implemented | Tested | Passing |")
+    lines.append("|-------|-------------|------------|-------------|--------|---------|")
     for lv in data["levels"]:
         ta = lv["total_assertions"]
         ia = lv["implemented_assertions"]
-        va = lv["validated_assertions"]
+        ta_tested = lv["tested_assertions"]
         pa = lv["passing_assertions"]
-        impl = f"{fmt_assertion_count(ia)}/{ta} ({_pct(ia, ta):.0f}%)"
-        val = f"{fmt_assertion_count(va)}/{ta} ({_pct(va, ta):.0f}%)"
-        pas = f"{fmt_assertion_count(pa)}/{ta} ({_pct(pa, ta):.0f}%){carry_marker}"
-        lines.append(f"| {lv['level']} | {lv['total']} | {ta} | {impl} | {val} | {pas} |")
+        impl = (
+            f"{fmt_assertion_count(ia)}/{ta} ({_pct(ia, ta):.0f}%)"
+            f"{_marker(ia, lv['implemented_direct'])}"
+        )
+        tested = (
+            f"{fmt_assertion_count(ta_tested)}/{ta} ({_pct(ta_tested, ta):.0f}%)"
+            f"{_marker(ta_tested, lv['tested_direct'])}"
+        )
+        pas = (
+            f"{fmt_assertion_count(pa)}/{ta} ({_pct(pa, ta):.0f}%){carry_marker}"
+            f"{_marker(pa, lv['passing_direct'])}"
+        )
+        lines.append(f"| {lv['level']} | {lv['total']} | {ta} | {impl} | {tested} | {pas} |")
 
     excluded = data.get("excluded", {})
     if excluded:
@@ -415,8 +390,8 @@ def _render_csv(data: dict) -> str:
             "Assertions",
             "Implemented",
             "Implemented %",
-            "Validated",
-            "Validated %",
+            "Tested",
+            "Tested %",
             "Passing",
             "Passing %",
         ]
@@ -424,7 +399,7 @@ def _render_csv(data: dict) -> str:
     for lv in data["levels"]:
         ta = lv["total_assertions"]
         ia = lv["implemented_assertions"]
-        va = lv["validated_assertions"]
+        te = lv["tested_assertions"]
         pa = lv["passing_assertions"]
         writer.writerow(
             [
@@ -433,8 +408,8 @@ def _render_csv(data: dict) -> str:
                 ta,
                 ia,
                 _pct(ia, ta),
-                va,
-                _pct(va, ta),
+                te,
+                _pct(te, ta),
                 pa,
                 _pct(pa, ta),
             ]

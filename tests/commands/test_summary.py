@@ -14,6 +14,8 @@ import json
 import shutil
 from pathlib import Path
 
+import pytest
+
 from elspais.commands.summary import _collect_coverage, _pct, _render
 from elspais.graph.builder import TraceGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind
@@ -216,19 +218,19 @@ class TestLevelGrouping:
         # PRD: p00001(3) + p00002(2) = 5 total assertions
         assert prd["total_assertions"] == 5
         assert prd["implemented_assertions"] == 4  # 2 + 2
-        assert prd["validated_assertions"] == 3  # 1 + 2
+        assert prd["tested_assertions"] == 3  # 1 + 2
         assert prd["passing_assertions"] == 1  # 1 + 0
 
         # OPS: o00001 only
         assert ops["total_assertions"] == 4
         assert ops["implemented_assertions"] == 3
-        assert ops["validated_assertions"] == 2
+        assert ops["tested_assertions"] == 2
         assert ops["passing_assertions"] == 2
 
         # DEV: d00001 only (d00002 Draft excluded, d00003 Deprecated excluded)
         assert dev["total_assertions"] == 1
         assert dev["implemented_assertions"] == 1
-        assert dev["validated_assertions"] == 1
+        assert dev["tested_assertions"] == 1
         assert dev["passing_assertions"] == 1
 
     def test_REQ_d00086_A_with_code_refs_count(self):
@@ -341,7 +343,7 @@ class TestTextFormat:
         assert "Summary by Level" in output
         assert "PRD:" in output
         assert "Implemented:" in output
-        assert "Validated:" in output
+        assert "Tested:" in output
         assert "Passing:" in output
 
     def test_REQ_d00086_C_text_no_per_requirement_section(self):
@@ -394,7 +396,7 @@ class TestMarkdownFormat:
         output = _render(data, "markdown")
 
         assert "## Summary by Level" in output
-        assert "| Level | Requirements | Assertions | Implemented | Validated | Passing |" in output
+        assert "| Level | Requirements | Assertions | Implemented | Tested | Passing |" in output
         assert "|-------|" in output
 
     def test_REQ_d00086_C_markdown_no_per_requirement_table(self):
@@ -457,7 +459,7 @@ class TestJsonFormat:
         assert prd["total"] == 1
         assert prd["total_assertions"] == 3
         assert prd["implemented_assertions"] == 2
-        assert prd["validated_assertions"] == 1
+        assert prd["tested_assertions"] == 1
         assert prd["passing_assertions"] == 1
 
     def test_REQ_d00086_C_json_excluded_counts(self):
@@ -494,8 +496,8 @@ class TestCsvFormat:
             "Assertions",
             "Implemented",
             "Implemented %",
-            "Validated",
-            "Validated %",
+            "Tested",
+            "Tested %",
             "Passing",
             "Passing %",
         ]
@@ -526,14 +528,19 @@ class TestCsvFormat:
         _header = next(reader)
         row = next(reader)  # PRD row
 
+        # Coverage counts are sums of per-assertion fractions (REQ-d00069-J)
+        # sourced from DimensionSums (a float accumulator), so whole-number
+        # counts render with a trailing ".0" in the raw machine formats
+        # (CSV/JSON); only the text renderer uses fmt_assertion_count() to
+        # strip it for human display.
         assert row[0] == "PRD"  # Level
         assert row[1] == "1"  # Requirements
         assert row[2] == "4"  # Assertions
-        assert row[3] == "3"  # Implemented
+        assert row[3] == "3.0"  # Implemented
         assert row[4] == "75.0"  # Implemented %
-        assert row[5] == "2"  # Validated
-        assert row[6] == "50.0"  # Validated %
-        assert row[7] == "1"  # Passing
+        assert row[5] == "2.0"  # Tested
+        assert row[6] == "50.0"  # Tested %
+        assert row[7] == "1.0"  # Passing
         assert row[8] == "25.0"  # Passing %
 
     def test_REQ_d00086_C_csv_parseable(self):
@@ -549,11 +556,13 @@ class TestCsvFormat:
         for row in rows:
             int(row["Requirements"])
             int(row["Assertions"])
-            int(row["Implemented"])
+            # Coverage counts are fractional sums (REQ-d00069-J) rendered as
+            # floats in machine formats; parse as float, not int.
+            float(row["Implemented"])
             float(row["Implemented %"])
-            int(row["Validated"])
-            float(row["Validated %"])
-            int(row["Passing"])
+            float(row["Tested"])
+            float(row["Tested %"])
+            float(row["Passing"])
             float(row["Passing %"])
 
 
@@ -1009,3 +1018,36 @@ class TestSummaryCarriedFootnote:
 
         assert "Carried Result Targets" not in rendered
         assert "*" not in rendered
+
+
+# ===========================================================================
+# Verifies: REQ-d00258-A, REQ-d00258-B, REQ-d00258-C
+# ===========================================================================
+
+
+class TestSummaryFooting:
+    """Verifies REQ-d00258-A/B/C: shared aggregation, generous footing, and
+    the Implemented/Tested/Passing vocabulary (no "Validated")."""
+
+    def test_tested_and_passing_use_generous_footing(self, canonical_graph, canonical_config):
+        from elspais.commands.summary import _collect_coverage
+
+        data = _collect_coverage(canonical_graph, canonical_config)
+        from elspais.graph.aggregation import aggregate_by_level
+
+        agg = {lv.level: lv for lv in aggregate_by_level(canonical_graph, canonical_config)}
+        for lv in data["levels"]:
+            assert lv["tested_assertions"] == pytest.approx(
+                round(agg[lv["level"]].tested.covered, 3)
+            )
+            assert lv["passing_assertions"] == pytest.approx(
+                round(agg[lv["level"]].passing.covered, 3)
+            )
+            assert "validated_assertions" not in lv
+
+    def test_text_render_uses_tested_label_and_marker(self, canonical_graph, canonical_config):
+        from elspais.commands.summary import _collect_coverage, _render_text
+
+        text = _render_text(_collect_coverage(canonical_graph, canonical_config))
+        assert "Validated" not in text
+        assert "Tested:" in text
