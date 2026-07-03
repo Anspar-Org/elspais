@@ -2099,7 +2099,7 @@ def check_dimension_coverage(
     dim_labels = {
         "implemented": ("Implemented", "code"),
         "tested": ("Tested", "tests"),
-        "verified": ("Verified", "tests"),
+        "verified": ("Passing", "tests"),
         "uat_coverage": ("UAT Covered", "uat"),
         "uat_verified": ("UAT Passed", "uat"),
         "code_tested": ("Code Tested (line coverage)", "code"),

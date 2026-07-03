@@ -332,3 +332,30 @@ class TestSeverityCatalog:
 
         assert tiers["verified_tier"] == "failing"
         assert tiers["combined_bucket"] == "failing"
+
+    # Verifies: REQ-d00258-B
+    def test_passing_badge_credits_lcov_only_coverage(self):
+        """A requirement fully credited via lcov only (no `Verifies:` refs at
+        all) must still show a full "Passing" badge -- the 'verified' slot in
+        compute_coverage_tiers is `tested_and_passing(rollup)`, the union of
+        `verified` and `lcov_tested` (REQ-d00258-B), not the raw `verified`
+        dimension. combined_bucket must not degrade to 'partial' solely
+        because the evidence came from line coverage rather than a Verifies:
+        reference."""
+        from elspais.graph.metrics import CoverageDimension, RollupMetrics
+        from elspais.html.generator import compute_coverage_tiers
+
+        rollup = RollupMetrics(
+            total_assertions=2,
+            implemented=CoverageDimension(total=2, direct=2, indirect=2),
+            tested=CoverageDimension(total=2, direct=2, indirect=2),
+            # No Verifies: coverage at all on this dimension...
+            verified=CoverageDimension(total=2, direct=0, indirect=0),
+            # ...but full line-coverage credit via lcov_tested.
+            lcov_tested=CoverageDimension(total=2, direct=2, indirect=2),
+        )
+        node = self._make_active_node_with_metrics(rollup)
+        tiers = compute_coverage_tiers(node)
+
+        assert tiers["verified_tier"] == "full-direct"
+        assert tiers["combined_bucket"] == "full"

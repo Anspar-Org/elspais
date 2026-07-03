@@ -91,13 +91,7 @@ class ViewStats:
     test_failed_count: int = 0  # Number of failed RESULT nodes
     associated_count: int = 0
     journey_count: int = 0
-    # Assertion-level metrics (REQ-d00258-C: sums of the shared
-    # aggregate_by_level() fractions on the generous footing; fractional
-    # because REFINES conduction credits partial assertion coverage)
     assertion_count: int = 0  # Total unique assertions
-    assertions_implemented: float = 0.0  # Implemented (generous footing)
-    assertions_tested: float = 0.0  # Tested (generous footing)
-    assertions_passing: float = 0.0  # Passing (verified | lcov union, generous)
 
 
 def _val_tier(key: str) -> tuple[str, str]:
@@ -136,7 +130,7 @@ _DIMENSION_LABELS: dict[str, str] = {
 DIMENSION_TIPS: dict[str, str] = {
     "implemented": "Assertions with Implements references in CODE",
     "tested": "Assertions referenced by TEST nodes",
-    "verified": "Assertions with passing test results",
+    "verified": "Assertions with passing test results or line-coverage credit",
     "uat_coverage": "Assertions covered by journey Validates references",
     "uat_verified": "Assertions with passing journey verification",
 }
@@ -216,7 +210,7 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
     if status != "ACTIVE":
         return empty
 
-    from elspais.graph.metrics import RollupMetrics
+    from elspais.graph.metrics import RollupMetrics, tested_and_passing
 
     rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
     if not rollup or rollup.total_assertions == 0:
@@ -241,10 +235,14 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
             cov_config = rules.coverage
 
     # Map dimension key → (CoverageDimension, CoverageSeverityConfig, output_prefix)
+    # "verified" (rendered as the "Passing" badge) uses tested_and_passing(),
+    # the union of result-verified and line-coverage-credited evidence
+    # (REQ-d00258-B) -- NOT the raw `rollup.verified` dimension, which would
+    # miss lcov-only credit and understate the badge/bucket.
     dim_map = [
         ("implemented", rollup.implemented, cov_config.implemented, "impl"),
         ("tested", rollup.tested, cov_config.tested, "tested"),
-        ("verified", rollup.verified, cov_config.verified, "verified"),
+        ("verified", tested_and_passing(rollup), cov_config.verified, "verified"),
         ("uat_coverage", rollup.uat_coverage, cov_config.uat_coverage, "uat_cov"),
         ("uat_verified", rollup.uat_verified, cov_config.uat_verified, "uat_ver"),
     ]
@@ -507,8 +505,8 @@ class HTMLGenerator:
     def _compute_stats(self) -> ViewStats:
         """Compute statistics for the header.
 
-        REQ-d00258-C: level counts and assertion-coverage sums derive from
-        the shared aggregation module (graph/aggregation.py) on the generous
+        REQ-d00258-C: level counts and assertion counts derive from the
+        shared aggregation module (graph/aggregation.py) on the generous
         footing, so the viewer header agrees with CLI summary and MCP
         get_project_summary. Node-kind tallies (CODE/TEST/RESULT) and the
         viewer-specific associated-repo count are simple index counts, not
@@ -529,9 +527,6 @@ class HTMLGenerator:
                 stats.dev_count = agg.total_requirements
             stats.total_count += agg.total_requirements
             stats.assertion_count += agg.total_assertions
-            stats.assertions_implemented += agg.implemented.covered
-            stats.assertions_tested += agg.tested.covered
-            stats.assertions_passing += agg.passing.covered
 
         # Viewer-specific: associated-repo requirement count (repo
         # attribution, not a coverage rollup — stays a local index count).

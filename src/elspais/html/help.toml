@@ -223,32 +223,32 @@ long_description = """No code file references this assertion. This is the
 code references to achieve coverage."""
 
 # ---------------------------------------------------------------------------
-# Validation Status Buttons
+# Result Status Buttons
 # ---------------------------------------------------------------------------
 
 [buttons.validation.pass]
 label = "Pass"
-description = "Assertion validation passed"
+description = "Assertion verification passed"
 long_description = """All tests covering this assertion are passing. The
-assertion is fully validated by its test suite."""
+assertion is fully verified by its test suite."""
 
 [buttons.validation.partial]
 label = "Partial"
-description = "Assertion has partial validation"
+description = "Assertion has partial verification"
 long_description = """Some tests pass but coverage is incomplete. The
 assertion may need additional tests or some existing tests are
 not yet passing."""
 
 [buttons.validation.fail]
 label = "Fail"
-description = "Assertion validation failed"
+description = "Assertion verification failed"
 long_description = """One or more tests covering this assertion have failed.
 The implementation needs to be fixed to match the assertion's expected
 behavior."""
 
 [buttons.validation.unknown]
 label = "Unknown"
-description = "Assertion validation status is unknown"
+description = "Assertion verification status is unknown"
 long_description = """No test results are available for this assertion. Tests
 may not have been run, or the test results have not been imported into
 the traceability graph."""

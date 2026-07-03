@@ -44,7 +44,7 @@ _CATEGORY_LABELS: dict[str, str] = {
     "badges.assertion": "Assertion Badges",
     "badges.result": "Test Results",
     "buttons.implemented": "Implementation Status",
-    "buttons.validation": "Validation Status",
+    "buttons.validation": "Result Status",
     "validation_tiers": "Active Badge Quality",
     "severity": "Coverage Severity",
 }
