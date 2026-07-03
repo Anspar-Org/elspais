@@ -251,6 +251,11 @@ dependency). If it isn't importable, ingestion degrades gracefully:
 `code_tested.direct` stays `0` and `Code Tested` renders `n/a`, with a single
 warning naming the extra to install -- it does not fail the build.
 
+A stale `.coverage` file misattributes contexts: line numbers were recorded
+against the source as it was at measurement time, so after editing source
+files the per-test attribution points at the old line numbers. Regenerate
+`.coverage` (rerun the suite) after editing sources.
+
 **Do not** also set `[tool.coverage.run] dynamic_context = "test_function"`.
 That is coverage.py's own context-switching (keyed by dotted test qualname,
 no file path, no `|run` suffix) and it silently wins over pytest-cov's

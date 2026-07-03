@@ -438,3 +438,83 @@ coverage = ".coverage"
         assert any(
             "test_work" in c for c in line_contexts.get(2, [])
         ), f"expected test_work context on line 2, got {line_contexts}"
+
+    # Verifies: REQ-d00254-G, REQ-d00258-E
+    def test_coverage_sqlite_unresolvable_file_contexts_not_materialized(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Measured files that don't resolve to a FILE node (e.g. sources
+        outside the scanned dirs) must never have their per-line context
+        lists materialized -- the factory passes a FILE-node-resolution
+        predicate to the sqlite parser so contexts_by_lineno() is only
+        called for resolvable files (CUR-1568 hardening)."""
+        coverage = pytest.importorskip("coverage")
+
+        config_file = tmp_path / ".elspais.toml"
+        config_file.write_text(
+            """\
+[project]
+name = "test-cov-sqlite-lazy"
+namespace = "REQ"
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = ["src"]
+
+[[scanning.test.targets]]
+name = "unit"
+coverage = ".coverage"
+""",
+            encoding="utf-8",
+        )
+
+        _write_spec(tmp_path / "spec")
+        code_path = tmp_path / "src" / "main.py"
+        _write_code_file(code_path)
+        # A second measured module OUTSIDE the scanned dirs -- no FILE node.
+        outside_path = tmp_path / "other" / "helper.py"
+        outside_path.parent.mkdir(parents=True, exist_ok=True)
+        outside_path.write_text("def helper():\n    return 42\n", encoding="utf-8")
+
+        cov_path = tmp_path / ".coverage"
+        cov = coverage.Coverage(data_file=str(cov_path), source=[str(tmp_path)])
+        cov.start()
+        try:
+            cov.switch_context("tests/test_main.py::test_work|run")
+            for name, path in (
+                ("factory_lazy_main", code_path),
+                ("factory_lazy_helper", outside_path),
+            ):
+                spec_obj = importlib.util.spec_from_file_location(name, str(path))
+                mod = importlib.util.module_from_spec(spec_obj)
+                spec_obj.loader.exec_module(mod)
+        finally:
+            cov.stop()
+        cov.save()
+
+        queried: list[str] = []
+        orig = coverage.CoverageData.contexts_by_lineno
+
+        def _spy(self, filename):
+            queried.append(filename)
+            return orig(self, filename)
+
+        monkeypatch.setattr(coverage.CoverageData, "contexts_by_lineno", _spy)
+
+        graph = build_graph(
+            config_path=config_file,
+            repo_root=tmp_path,
+            scan_tests=False,
+        )
+
+        assert str(code_path) in queried, "resolvable file's contexts should be read"
+        assert (
+            str(outside_path) not in queried
+        ), "unresolvable measured file's contexts must never be materialized"
+
+        # And the resolvable file's annotation still works end-to-end.
+        file_node = graph.find_by_id("file:src/main.py")
+        assert file_node is not None
+        assert file_node.get_field("line_contexts") is not None

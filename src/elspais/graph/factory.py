@@ -830,7 +830,21 @@ def build_graph(
                 cov_content = ""
             else:
                 cov_content = cov_path.read_text(encoding="utf-8")
-            parsed_cov = cov_parser.parse(cov_content, str(cov_path))
+            if cov_parser is cov_sqlite_parser:
+                # Contexts are the suite-scaled part of the data (every test
+                # context string per executed line). Only materialize them
+                # for measured files that actually resolve to a FILE node --
+                # unresolvable ones (test files, out-of-tree sources) are
+                # discarded by the annotation loop below anyway.
+                def _wanted(source_file: str, _cov_path: Path = cov_path) -> bool:
+                    return (
+                        _resolve_coverage_file_node(graph, source_file, _cov_path, repo_root)
+                        is not None
+                    )
+
+                parsed_cov = cov_parser.parse(cov_content, str(cov_path), wanted_files=_wanted)
+            else:
+                parsed_cov = cov_parser.parse(cov_content, str(cov_path))
             for source_file, data in parsed_cov.items():
                 cov_node = _resolve_coverage_file_node(graph, source_file, cov_path, repo_root)
                 if cov_node is None:

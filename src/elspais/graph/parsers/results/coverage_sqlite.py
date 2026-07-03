@@ -20,6 +20,8 @@ existing FILE nodes.
 from __future__ import annotations
 
 import logging
+import sqlite3
+from collections.abc import Callable
 from pathlib import Path
 
 _log = logging.getLogger(__name__)
@@ -49,12 +51,28 @@ class CoverageSqliteParser:
     #: and must not be read via `Path.read_text()`.
     binary = True
 
-    def parse(self, content: str, source_path: str) -> dict[str, dict]:
+    def parse(
+        self,
+        content: str,
+        source_path: str,
+        *,
+        wanted_files: Callable[[str], bool] | None = None,
+    ) -> dict[str, dict]:
         """Parse a `.coverage` SQLite database into per-file coverage dicts.
 
         Args:
             content: Unused (binary format; see ``binary`` flag above).
             source_path: Path to the `.coverage` file.
+            wanted_files: Optional predicate over measured-file paths. When
+                provided, per-line context lists are only materialized for
+                files it accepts; rejected files still get
+                ``line_coverage``/``executable_lines`` but ``contexts`` stays
+                ``None`` and ``contexts_by_lineno()`` is never called for
+                them. The contexts map is the suite-scaled part of the data
+                (every distinct test context string per executed line), so
+                the factory passes a FILE-node-resolution predicate here to
+                avoid materializing contexts for measured files that have no
+                node in the graph (e.g. test files or out-of-tree sources).
 
         Returns:
             Dict keyed by source file path (as recorded by coverage.py at
@@ -80,7 +98,10 @@ class CoverageSqliteParser:
         cov = coverage.Coverage(data_file=source_path, config_file=False)
         try:
             cov.load()
-        except (CoverageException, OSError):
+        except (CoverageException, OSError, sqlite3.Error):
+            # sqlite3.Error is defensive: coverage.py currently wraps sqlite
+            # errors in DataError (a CoverageException), but a future version
+            # letting a bare sqlite3 error escape must not crash the build.
             _log.debug("coverage-sqlite: failed to load %s", source_path, exc_info=True)
             return {}
 
@@ -90,7 +111,7 @@ class CoverageSqliteParser:
         for file_path in cov_data.measured_files():
             try:
                 _, statements, _excluded, missing, _ = cov.analysis2(file_path)
-            except (CoverageException, OSError):
+            except (CoverageException, OSError, sqlite3.Error):
                 # Source no longer available/parseable (moved, deleted, etc.)
                 # -- fall back to executed-lines-only (no missing-line data).
                 executed = cov_data.lines(file_path) or []
@@ -102,12 +123,13 @@ class CoverageSqliteParser:
             executable_lines = len(statements)
             covered_lines = executable_lines - len(missing_set)
 
-            raw_contexts = cov_data.contexts_by_lineno(file_path)
             contexts: dict[int, list[str]] | None = None
-            if raw_contexts:
-                contexts = {ln: ctxs for ln, ctxs in raw_contexts.items() if ctxs}
-                if not contexts:
-                    contexts = None
+            if wanted_files is None or wanted_files(file_path):
+                raw_contexts = cov_data.contexts_by_lineno(file_path)
+                if raw_contexts:
+                    contexts = {ln: ctxs for ln, ctxs in raw_contexts.items() if ctxs}
+                    if not contexts:
+                        contexts = None
 
             results[file_path] = {
                 "line_coverage": line_coverage,

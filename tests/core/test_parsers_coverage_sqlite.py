@@ -155,6 +155,54 @@ class TestParse:
         bogus.write_bytes(_SQLITE_MAGIC + b"not really a coverage db")
         assert CoverageSqliteParser().parse("", str(bogus)) == {}
 
+    def test_wanted_files_rejection_never_materializes_contexts(
+        self, cov_fixture: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A measured file rejected by `wanted_files` gets line_coverage but
+        its per-line context lists are NEVER materialized -- coverage.py's
+        contexts_by_lineno() must not even be called for it (the contexts
+        map is the suite-scaled part of the data)."""
+        mod_path, cov_path = cov_fixture
+
+        queried: list[str] = []
+        orig = coverage.CoverageData.contexts_by_lineno
+
+        def _spy(self, filename):
+            queried.append(filename)
+            return orig(self, filename)
+
+        monkeypatch.setattr(coverage.CoverageData, "contexts_by_lineno", _spy)
+
+        results = CoverageSqliteParser().parse("", str(cov_path), wanted_files=lambda f: False)
+
+        assert queried == [], "contexts_by_lineno must not be called for rejected files"
+        data = results[str(mod_path)]
+        assert data["contexts"] is None
+        # Non-context data is still emitted for rejected files.
+        assert data["line_coverage"].get(2) == 1
+        assert data["executable_lines"] >= 2
+
+    def test_wanted_files_acceptance_materializes_contexts(
+        self, cov_fixture: tuple[Path, Path]
+    ) -> None:
+        """A measured file accepted by `wanted_files` gets the same contexts
+        as an unfiltered parse; the predicate receives coverage.py's recorded
+        (absolute) path so callers can resolve it against the graph."""
+        mod_path, cov_path = cov_fixture
+
+        seen: list[str] = []
+
+        def _accept(f: str) -> bool:
+            seen.append(f)
+            return True
+
+        filtered = CoverageSqliteParser().parse("", str(cov_path), wanted_files=_accept)
+        unfiltered = CoverageSqliteParser().parse("", str(cov_path))
+
+        assert str(mod_path) in seen
+        assert filtered[str(mod_path)]["contexts"] == unfiltered[str(mod_path)]["contexts"]
+        assert filtered[str(mod_path)]["contexts"] is not None
+
     def test_missing_coverage_package_degrades_to_empty_dict(
         self, cov_fixture: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
     ) -> None:

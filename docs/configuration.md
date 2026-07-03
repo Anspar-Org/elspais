@@ -591,7 +591,9 @@ Reading contexts from `.coverage` requires the `coverage` package (the
 if it isn't, ingestion degrades gracefully: `code_tested.direct` stays `0`
 and `Code Tested` renders the honest `n/a`, with a single warning naming the
 extra to install. No other config is required; format detection sniffs the
-SQLite file header, so no `reporter` field is needed for this target.
+SQLite file header, so no `reporter` field is needed for this target. A
+stale `.coverage` misattributes contexts to old line numbers after source
+edits -- regenerate it (rerun the suite) after editing sources.
 
 The `.githooks/pre-commit` hook runs pytest with `--cov-context=test`
 (pytest-cov's per-test dynamic context, keyed by nodeid + `|run`/`|setup`/
