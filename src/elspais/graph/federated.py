@@ -1821,6 +1821,14 @@ class FederatedGraph:
            malformed-local case is left a hard broken reference with a
            diagnostic pointing at the likely cause.
         """
+        # Deliberate: count ALL RepoEntry objects, including error-state
+        # associates (graph=None, e.g. a configured path that doesn't exist
+        # on this machine). A configured-but-unreachable associate is a real
+        # signal that a foreign repository exists which could own the ref --
+        # the soft presumed-foreign classification is exactly for that
+        # "associate not present here" situation. Precedent: REQ-d00200-A/H
+        # -- error-state repos remain represented in the federation
+        # (iter_repos() yields them) even though aggregation skips them.
         has_associates = len(self._repos) > 1
 
         for source_entry in self._repos.values():
@@ -1837,6 +1845,15 @@ class FederatedGraph:
                 if br.presumed_foreign or resolver.is_local_id(br.target_id):
                     continue
                 target_id = br.target_id
+                # Prefix match here vs. exact equality in
+                # _namespace_claimed_by_other_repo: this asymmetry means a
+                # nested-namespace pair (host "REQ" vs associate "REQ-EXTRA")
+                # would prefix-match the host and not be exact-claimed by the
+                # associate, mis-classifying a malformed "REQ-EXTRA-..." ref
+                # as local-to-host. Accepted as out of scope: namespaces are
+                # shape-validated identifiers (validate_namespace) and the
+                # `elspais associate` workflow makes one namespace being a
+                # dash-prefix of another improbable in practice.
                 matches_own_namespace = target_id == own_namespace or target_id.startswith(
                     f"{own_namespace}-"
                 )

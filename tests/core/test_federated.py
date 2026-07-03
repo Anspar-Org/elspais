@@ -504,6 +504,76 @@ class TestPresumedForeignGuards:
         assert "namespace" in brs[0].diagnostic
         assert "DIARY" in brs[0].diagnostic
 
+    def _error_state_federation(self) -> FederatedGraph:
+        """Host (DIARY namespace, ``/`` separators) + one error-state associate.
+
+        The associate is configured but unreachable (graph=None,
+        config=None -- e.g. its path does not exist on this machine),
+        matching the RepoEntry shape ``build_graph()`` produces for a
+        missing associate path (REQ-d00203-C). Host carries two broken
+        refs: one foreign-looking, one bearing the host's own namespace
+        in the wrong (dash+plus) style.
+        """
+        host_graph = build_graph(
+            make_requirement("REQ-p00001", title="Host root", level="PRD"),
+            repo_root=Path("/repo/host"),
+        )
+        host_graph._broken_references = [
+            BrokenReference(
+                source_id="REQ-p00001",
+                target_id="LIB-p00099-A+B+C",
+                edge_kind="implements",
+            ),
+            BrokenReference(
+                source_id="REQ-p00001",
+                target_id="DIARY-p00023-A+B+C",
+                edge_kind="implements",
+            ),
+        ]
+        host_entry = RepoEntry(
+            name="host",
+            graph=host_graph,
+            config=_namespaced_config("host", "DIARY", separator="/", multi_separator="/"),
+            repo_root=Path("/repo/host"),
+        )
+        error_entry = RepoEntry(
+            name="lib",
+            graph=None,
+            config=None,
+            repo_root=Path("/repo/lib"),
+            error="Path does not exist: /repo/lib",
+        )
+        return FederatedGraph([host_entry, error_entry], root_repo="host")
+
+    # Verifies: REQ-d00252-G
+    def test_error_state_associate_counts_for_presumed_foreign(self) -> None:
+        """An error-state associate (graph=None) still counts as "associates
+        exist" for guard 1: a configured-but-unreachable associate is a real
+        signal a foreign repo could own the ref, so a foreign-looking
+        unresolved target is still presumed foreign. Precedent: REQ-d00200-A/H
+        -- error-state repos remain represented in the federation.
+        """
+        fed = self._error_state_federation()
+        brs = [br for br in fed.broken_references() if br.target_id == "LIB-p00099-A+B+C"]
+        assert len(brs) == 1
+        assert brs[0].presumed_foreign is True
+        assert brs[0].diagnostic == ""
+
+    # Verifies: REQ-d00252-G
+    def test_error_state_associate_own_namespace_still_caught_by_guard_2(self) -> None:
+        """Companion: even with an error-state associate keeping guard 1
+        open, a target bearing the host's OWN namespace is caught by guard 2
+        -- not foreign, hard broken, diagnostic set. (The unreachable
+        associate's namespace can't be probed, but the host-namespace match
+        is decided by the host's own resolver alone.)
+        """
+        fed = self._error_state_federation()
+        brs = [br for br in fed.broken_references() if br.target_id == "DIARY-p00023-A+B+C"]
+        assert len(brs) == 1
+        assert brs[0].presumed_foreign is False
+        assert "namespace" in brs[0].diagnostic
+        assert "DIARY" in brs[0].diagnostic
+
 
 # === Mutation Tests ===
 
