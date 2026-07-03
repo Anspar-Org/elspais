@@ -375,11 +375,13 @@ def _gap_entry_to_list(entry: GapEntry) -> list:
 
     Uncovered assertions are serialized as ``{"id": ..., "fraction": ...}``
     dicts so a partially-conducted assertion (0 < fraction < 1, REQ-d00069-J)
-    is distinguishable from one with no coverage at all.
+    is distinguishable from one with no coverage at all. ``fraction`` is
+    rounded to 4 places, matching the MCP surface (server.py), so the two
+    JSON surfaces agree on precision rather than one emitting raw floats.
     """
     result: list = [entry.req_id, entry.title]
     if entry.assertions:
-        result.append([{"id": aid, "fraction": frac} for aid, frac in entry.assertions])
+        result.append([{"id": aid, "fraction": round(frac, 4)} for aid, frac in entry.assertions])
     return result
 
 

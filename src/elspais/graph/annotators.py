@@ -24,12 +24,14 @@ Usage:
 
 from __future__ import annotations
 
+import functools
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from elspais.config.schema import ElspaisConfig
+from elspais.utilities.test_identity import build_test_id_from_nodeid
 
 _SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
     ElspaisConfig.model_fields.keys()
@@ -815,6 +817,7 @@ def _compute_code_tested(
     )
 
 
+@functools.lru_cache(maxsize=4096)
 def _normalize_run_context(ctx: str) -> str | None:
     """Return the canonical TEST node id for a coverage.py context string.
 
@@ -823,9 +826,11 @@ def _normalize_run_context(ctx: str) -> str | None:
     "|setup"/"|teardown" fixture-phase context (see CUR-1568 decision above
     -- only "|run" contexts count). Reuses ``build_test_id_from_nodeid`` (the
     canonical pytest-nodeid normalizer) rather than re-parsing nodeids here.
-    """
-    from elspais.utilities.test_identity import build_test_id_from_nodeid
 
+    Pure str -> str|None mapping over a small alphabet of context strings
+    (one per test x phase) reused across many lines/requirements in a single
+    annotation pass, so it is memoized with ``lru_cache`` (CUR-1568).
+    """
     nodeid, sep, phase = ctx.rpartition("|")
     if not sep or phase != "run" or not nodeid:
         return None

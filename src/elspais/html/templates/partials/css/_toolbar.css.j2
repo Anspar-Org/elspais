@@ -121,18 +121,19 @@
 .filter-btn.on[data-group="hierarchy"]   { background: #6f42c1; border-color: #6f42c1; color: #fff; }
 
 /* Coverage */
-/* "failing" is a hardcoded hex (not a theme.toml `severity.*` var) like its
-   none/partial/full siblings below: the toolbar's whole coverage row
-   predates the theme catalog and doesn't adapt per-theme. It also has no
-   catalog entry of its own -- "failing" is a tier overlay checked ahead of
-   the severity map (generator.py's `_SEVERITY_TO_BUCKET`), distinct from
-   `severity.error` (which "none" already uses), so it can't just borrow an
-   existing color_key. Wiring it through the catalog means adding a new
-   severity/color_key entry plus light+dark theme tokens -- real plumbing,
-   out of scope here. Eventual home: `severity.*` in theme.toml + a new
-   `--val-<key>-bg` token pair, consumed here as `var(--val-<key>-bg)`. */
-.filter-btn[data-group="coverage"][data-key="failing"]    { border-color: #6c0a1e; color: #6c0a1e; }
-.filter-btn.on[data-group="coverage"][data-key="failing"]  { background: #6c0a1e; border-color: #6c0a1e; color: #fff; }
+/* "failing" is wired to the theme catalog (REQ-d00258-D): `[severity.failing]`
+   in theme.toml resolves to `color_key = "maroon"`, whose `--val-maroon-bg`
+   token is defined per-theme in `[themes.light.tokens]` /
+   `[themes.dark.tokens]`, so the chip now adapts per-theme via
+   `var(--val-maroon-bg)` instead of a hardcoded hex. It stays a distinct
+   maroon (not `severity.error`'s red, which "none" below uses) because
+   "failing" is a tier overlay checked ahead of the severity map
+   (generator.py's `_SEVERITY_TO_BUCKET`) and must remain visually
+   distinguishable from the "none" bucket. Its none/partial/full siblings
+   below still predate the theme catalog and remain hardcoded hex -- out of
+   scope here. */
+.filter-btn[data-group="coverage"][data-key="failing"]    { border-color: var(--val-maroon-bg); color: var(--val-maroon-bg); }
+.filter-btn.on[data-group="coverage"][data-key="failing"]  { background: var(--val-maroon-bg); border-color: var(--val-maroon-bg); color: #fff; }
 .filter-btn[data-group="coverage"][data-key="none"]    { border-color: #dc3545; color: #dc3545; }
 .filter-btn.on[data-group="coverage"][data-key="none"]  { background: #dc3545; border-color: #dc3545; color: #fff; }
 .filter-btn[data-group="coverage"][data-key="partial"] { border-color: #ffc107; color: #ffc107; }

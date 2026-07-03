@@ -67,6 +67,8 @@ val-red-bg = "#dc3545"
 val-red-text = "#fff"
 val-orange-bg = "#fd7e14"
 val-orange-text = "#fff"
+val-maroon-bg = "#6c0a1e"
+val-maroon-text = "#fff"
 
 # Tooltip
 tooltip-bg = "#212529"
@@ -479,6 +481,8 @@ val-red-bg = "#a52834"
 val-red-text = "#f8d7da"
 val-orange-bg = "#b35b0e"
 val-orange-text = "#ffe5d0"
+val-maroon-bg = "#8f2436"
+val-maroon-text = "#fff"
 
 # Tooltip
 tooltip-bg = "#f8f9fa"
@@ -966,3 +970,7 @@ color_key = "yellow"
 [severity.error]
 css_class = "val-red"
 color_key = "red"
+
+[severity.failing]
+css_class = "val-maroon"
+color_key = "maroon"

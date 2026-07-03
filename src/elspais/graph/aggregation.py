@@ -60,7 +60,31 @@ class TierBuckets:
     failing: int = 0
 
 
+@dataclass
+class DimensionAggregate:
+    """Whole-graph per-dimension sums plus the per-REQ counts health reports.
+
+    ``total``/``direct``/``covered`` are the same assertion-fraction sums as
+    ``DimensionSums`` (generous footing on ``covered``); the ``req_*`` fields
+    and ``has_failures`` are the additional per-requirement tallies
+    health.py's dimension-coverage check needs for its message.
+    """
+
+    total: int = 0
+    direct: float = 0.0
+    covered: float = 0.0
+    req_count: int = 0
+    req_with_any: int = 0
+    req_with_direct: int = 0
+    has_failures: bool = False
+
+
 def _level_keys(config: dict[str, Any] | None) -> list[str]:
+    """Ordered [levels] keys: ranked keys first (by rank), rank-less keys after.
+
+    A key missing ``rank`` still aggregates -- it is not excluded -- it just
+    sorts after every ranked key, in stable (declaration) order among peers.
+    """
     from elspais.config import default_level_keys
 
     levels_cfg = (config or {}).get("levels") or {}
@@ -72,7 +96,7 @@ def _level_keys(config: dict[str, Any] | None) -> list[str]:
             ),
             key=lambda kv: kv[1] if kv[1] is not None else 9999,
         )
-        keys = [k for k, rank in ordered if rank is not None]
+        keys = [k for k, _rank in ordered]
         if keys:
             return keys
     return default_level_keys()
@@ -120,6 +144,51 @@ def aggregate_by_level(graph: Any, config: dict[str, Any] | None = None) -> list
     return [groups[k.lower()] for k in keys]
 
 
+def aggregate_dimension(
+    graph: Any,
+    dimension: str,
+    exclude_status: set[str] | None = None,
+) -> DimensionAggregate:
+    """Whole-graph sums + per-REQ counts for one CoverageDimension.
+
+    Mirrors the per-level accumulation in ``aggregate_by_level`` but flattened
+    across all levels (no level grouping) and generalized to any dimension
+    name on ``RollupMetrics`` (e.g. 'implemented', 'tested', 'verified',
+    'uat_coverage', 'uat_verified'). This is the single place health.py's
+    dimension-coverage check should read counts from -- it must not
+    re-implement this walk (REQ-d00258-C).
+
+    REQ-d00252-F: an INTEGRATES-delegating requirement has no local
+    ``rollup_metrics`` but is still covered for the 'implemented' dimension
+    specifically; other dimensions do not receive the INTEGRATES credit.
+    """
+    agg = DimensionAggregate()
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if exclude_status and node.status in exclude_status:
+            continue
+        agg.req_count += 1
+        integrates = dimension == "implemented" and has_integration(node)
+        rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
+        if rollup is None:
+            if integrates:
+                agg.req_with_any += 1
+                agg.req_with_direct += 1
+            continue
+        dim: CoverageDimension | None = getattr(rollup, dimension, None)
+        if dim is None:
+            continue
+        agg.total += dim.total
+        agg.direct += dim.direct
+        agg.covered += dim.indirect
+        if dim.indirect > 0 or integrates:
+            agg.req_with_any += 1
+        if dim.direct > 0 or integrates:
+            agg.req_with_direct += 1
+        if dim.has_failures:
+            agg.has_failures = True
+    return agg
+
+
 def tier_buckets(
     graph: Any,
     dimension: str = "implemented",
@@ -143,9 +212,11 @@ def tier_buckets(
 
 __all__ = [
     "TIER_TO_BUCKET",
+    "DimensionAggregate",
     "DimensionSums",
     "LevelAggregate",
     "TierBuckets",
     "aggregate_by_level",
+    "aggregate_dimension",
     "tier_buckets",
 ]

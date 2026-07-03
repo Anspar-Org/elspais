@@ -246,6 +246,35 @@ class TestSeverityCatalog:
             assert entry.color_key == color
 
     # Verifies: REQ-d00258-D
+    def test_failing_severity_has_own_maroon_color_distinct_from_error(self):
+        """The toolbar's "failing" coverage chip resolves through the theme
+        catalog like the other severities (CUR-1568), with its own color_key
+        so it stays visually distinct from severity.error/"none"."""
+        from elspais.html.theme import get_catalog
+
+        cat = get_catalog()
+        failing = cat.by_key("severity.failing")
+        error = cat.by_key("severity.error")
+        assert failing.color_key == "maroon"
+        assert failing.color_key != error.color_key
+        assert failing.css_class == "val-maroon"
+        assert failing.label == "Failing"
+
+    # Verifies: REQ-d00258-D
+    def test_failing_color_tokens_defined_for_both_themes(self):
+        """`--val-maroon-bg` must exist in both themes.light.tokens and
+        themes.dark.tokens so the toolbar chip stays legible when switching
+        themes (not just hardcoded for one)."""
+        from elspais.html.theme import get_catalog
+
+        cat = get_catalog()
+        theme_names = {t.name for t in cat.themes}
+        assert {"light", "dark"} <= theme_names
+        for theme in cat.themes:
+            assert "val-maroon-bg" in theme.tokens
+            assert theme.tokens["val-maroon-bg"].startswith("#")
+
+    # Verifies: REQ-d00258-D
     def test_no_hardcoded_severity_dict(self):
         import elspais.html.generator as g
 

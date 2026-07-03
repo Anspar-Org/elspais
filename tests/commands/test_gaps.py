@@ -363,6 +363,15 @@ class TestGapEntrySerialization:
             ],
         ]
 
+    def test_gap_entry_to_list_rounds_fraction_to_4_places(self) -> None:
+        """Fractions round to 4 places, matching MCP's server.py rounding
+        (REQ-d00258-C) instead of serializing raw floats."""
+        from elspais.commands.gaps import _gap_entry_to_list
+
+        entry = GapEntry("REQ-p00001", "Login", [("REQ-p00001-C", 1 / 3)])
+        result = _gap_entry_to_list(entry)
+        assert result[2] == [{"id": "REQ-p00001-C", "fraction": 0.3333}]
+
     def test_gap_data_from_dict_round_trips_fraction(self) -> None:
         from elspais.commands.gaps import _gap_data_from_dict
 

@@ -307,3 +307,7 @@ description = "Partially covered"
 [severity.error]
 label = "Error"
 description = "No coverage or failures"
+
+[severity.failing]
+label = "Failing"
+description = "Test failures detected"

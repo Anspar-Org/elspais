@@ -2088,8 +2088,8 @@ def check_dimension_coverage(
         exclude_status: Statuses to exclude from counts.
         config: Project config dict.
     """
-    from elspais.graph import NodeKind
-    from elspais.graph.metrics import fmt_assertion_count, has_integration
+    from elspais.graph.aggregation import aggregate_dimension
+    from elspais.graph.metrics import fmt_assertion_count
 
     if exclude_status is None:
         from elspais.config import get_status_roles
@@ -2107,40 +2107,17 @@ def check_dimension_coverage(
     }
     label, category = dim_labels.get(dimension, (dimension, "code"))
 
-    req_count = 0
-    req_with_any = 0  # REQs where dim.indirect > 0
-    req_with_direct = 0  # REQs where dim.direct > 0
-    total_assertions = 0
-    direct_assertions = 0
-    indirect_assertions = 0
-    has_any_failures = False
-
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if node.status in exclude_status:
-            continue
-        req_count += 1
-        # An integrating consumer requirement inherits implemented status from
-        # its library node via INTEGRATES (REQ-d00252-D/F); count it as covered
-        # so it is not reported as a coverage gap.
-        integrates = dimension == "implemented" and has_integration(node)
-        metrics = node.get_metric("rollup_metrics")
-        if metrics is None:
-            if integrates:
-                req_with_any += 1
-                req_with_direct += 1
-            continue
-        dim = getattr(metrics, dimension, None)
-        if dim is None:
-            continue
-        total_assertions += dim.total
-        direct_assertions += dim.direct
-        indirect_assertions += dim.indirect
-        if dim.indirect > 0 or integrates:
-            req_with_any += 1
-        if dim.direct > 0 or integrates:
-            req_with_direct += 1
-        if dim.has_failures:
-            has_any_failures = True
+    # REQ-d00258-C: whole-graph per-dimension sums + per-REQ counts (incl. the
+    # REQ-d00252-F INTEGRATES exception) come from the single shared
+    # aggregation module -- not a second re-implementation of the walk here.
+    agg = aggregate_dimension(graph, dimension, exclude_status=exclude_status)
+    req_count = agg.req_count
+    req_with_any = agg.req_with_any  # REQs where dim.indirect > 0
+    req_with_direct = agg.req_with_direct  # REQs where dim.direct > 0
+    total_assertions = agg.total
+    direct_assertions = agg.direct
+    indirect_assertions = agg.covered
+    has_any_failures = agg.has_failures
 
     req_pct = (req_with_any / req_count * 100) if req_count > 0 else 0
     direct_pct = (direct_assertions / total_assertions * 100) if total_assertions > 0 else 0
