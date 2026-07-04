@@ -1,4 +1,4 @@
-# Implements: REQ-p00013-A
+# Verifies: REQ-p00013-A
 from elspais.utilities.docs_loader import TOPIC_ORDER, get_available_topics, load_topic
 
 
