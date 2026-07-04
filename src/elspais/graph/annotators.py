@@ -1199,8 +1199,11 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
     Coverage is determined by outgoing edges from REQUIREMENT nodes:
     - The builder links TEST/CODE/REQ as children of the parent REQ
     - Edges have assertion_targets when they target specific assertions
-    - VERIFIES to TEST with assertion_targets → DIRECT coverage
-    - IMPLEMENTS to CODE with assertion_targets → DIRECT coverage
+    - VERIFIES to TEST with assertion_targets → TEST_DIRECT (feeds `tested`)
+    - VERIFIES to TEST without assertion_targets → TEST_INDIRECT (feeds `tested`)
+      NOTE: test Verifies evidence feeds `tested`, NOT `implemented`
+      (REQ-d00084-D).
+    - IMPLEMENTS to CODE with assertion_targets → DIRECT coverage (implemented)
     - IMPLEMENTS to CODE → VERIFIES to TEST → INDIRECT coverage (transitive)
     - IMPLEMENTS to REQ with assertion_targets → EXPLICIT coverage
     - IMPLEMENTS to REQ without assertion_targets → INFERRED coverage
@@ -1274,20 +1277,24 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
         validated_labels: set[str] = set()  # Assertions with passing tests
         has_failures = False
 
-        # Implements: REQ-d00069-B
-        # Compute TEST (VERIFIES) coverage contributions via shared helper
+        # Implements: REQ-d00069-B, REQ-d00084-D
+        # Compute TEST (VERIFIES) coverage contributions via shared helper.
+        # These use dedicated TEST_* sources so they feed only the `tested`
+        # dimension -- a test that Verifies an assertion is NOT evidence the
+        # assertion is *implemented* (REQ-d00084-D). Using CoverageSource.DIRECT
+        # here previously leaked test coverage into `implemented`.
         test_contribs, test_nodes_for_result_lookup = _compute_coverage_from_source(
             node,
             assertion_labels,
             EdgeKind.VERIFIES,
-            CoverageSource.DIRECT,
-            CoverageSource.INDIRECT,
+            CoverageSource.TEST_DIRECT,
+            CoverageSource.TEST_INDIRECT,
         )
         for c in test_contribs:
             metrics.add_contribution(c)
-            if c.source_type == CoverageSource.DIRECT:
+            if c.source_type == CoverageSource.TEST_DIRECT:
                 tested_labels.add(c.assertion_label)
-            elif c.source_type == CoverageSource.INDIRECT:
+            elif c.source_type == CoverageSource.TEST_INDIRECT:
                 tested_indirect_labels.add(c.assertion_label)
 
         # Implements: REQ-d00069-A

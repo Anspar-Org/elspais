@@ -157,15 +157,15 @@ The coverage annotation system SHALL support an INDIRECT coverage source for who
 
 ### Assertions
 
-A. `CoverageSource` enum SHALL include an `INDIRECT` value representing whole-requirement test coverage.
+A. `CoverageSource` enum SHALL include distinct test-evidence values -- `TEST_DIRECT` for an assertion-targeted `Verifies:` and `TEST_INDIRECT` for a whole-requirement `Verifies:` -- kept separate from implementation-evidence sources (`DIRECT`/`EXPLICIT`/`INFERRED`) so that a test that verifies an *Assertion* credits the Tested dimension only and never the Implemented dimension (REQ-d00084-D). (`INDIRECT` remains for the transitive CODE->TEST provenance path.)
 
 B. `RollupMetrics` SHALL track `indirect_referenced_pct` as a separate percentage alongside strict `referenced_pct`.
 
 C. `RollupMetrics` SHALL track `validated_with_indirect` count for assertions validated when including INDIRECT sources.
 
-D. `RollupMetrics.finalize()` SHALL compute `indirect_referenced_pct` by including INDIRECT contributions alongside DIRECT, EXPLICIT, and INFERRED sources.
+D. `RollupMetrics.finalize()` SHALL compute the Implemented dimension from implementation-evidence sources only (`DIRECT`/`EXPLICIT`/`INFERRED`); test-evidence sources (`TEST_DIRECT`/`TEST_INDIRECT`) SHALL populate the Tested dimension via `populate_test_dimensions()` and SHALL NOT be counted toward Implemented (REQ-d00084-D).
 
-E. The coverage annotator SHALL emit INDIRECT contributions for all *Assertion* labels when a TEST edge has empty `assertion_targets`.
+E. The coverage annotator SHALL emit `TEST_INDIRECT` contributions for all *Assertion* labels when a TEST (`Verifies:`) edge has empty `assertion_targets`, and `TEST_DIRECT` contributions for the named labels of an assertion-targeted TEST edge; both feed the Tested dimension, not Implemented (REQ-d00084-D).
 
 F. When a whole-requirement test has passing results, the annotator SHALL count all assertions as validated for indirect mode.
 
@@ -187,13 +187,14 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* 
 
 ### Changelog
 
+- 2026-07-03 | ddbc50c8 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-07-02 | 738d94e4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-06-20 | 2d05ad7b | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-06-19 | acbdf3da | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-05-11 | e9b5c3f1 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | e9b5c3f1 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
-*End* *Indirect Coverage Source* | **Hash**: 738d94e4
+*End* *Indirect Coverage Source* | **Hash**: ddbc50c8
 ---
 
 ## REQ-d00070: Indirect Coverage Toggle Display

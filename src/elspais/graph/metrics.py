@@ -38,19 +38,32 @@ if TYPE_CHECKING:
 class CoverageSource(Enum):
     """Source type for coverage contributions.
 
-    Different sources have different confidence levels:
-    - DIRECT: High confidence - TEST verifies or CODE implements assertion
+    Different sources have different confidence levels. Note the split between
+    *implementation* evidence (CODE/REQ — feeds the ``implemented`` dimension in
+    :meth:`RollupMetrics.finalize`) and *test* evidence (TEST via ``Verifies:``
+    — feeds only the ``tested``/``verified`` dimensions, NEVER ``implemented``,
+    per REQ-d00084-D). A test that verifies an assertion is not evidence that
+    the assertion is implemented, so the two must not be conflated.
+
+    - DIRECT: High confidence - CODE implements a specific assertion
     - EXPLICIT: High confidence - REQ implements specific assertion(s) via syntax
     - INFERRED: Review recommended - REQ implements parent REQ (claims all assertions)
-    - INDIRECT: TEST verifies whole REQ (all assertions implied)
+    - INDIRECT: transitive CODE->TEST evidence (CODE implements, that CODE is
+      verified by a TEST); provenance only — does not itself feed ``implemented``
+    - TEST_DIRECT: TEST verifies a specific assertion (Verifies: REQ-xxx-A);
+      feeds ``tested``, NOT ``implemented``
+    - TEST_INDIRECT: TEST verifies whole REQ (Verifies: REQ-xxx), all assertions
+      implied; feeds ``tested``, NOT ``implemented``
     - UAT_EXPLICIT: JNY names specific assertion (Validates: REQ-xxx-A)
     - UAT_INFERRED: JNY names whole REQ (Validates: REQ-xxx), all assertions implied
     """
 
-    DIRECT = "direct"  # TEST/CODE verifies/implements assertion
+    DIRECT = "direct"  # CODE implements assertion (implementation evidence)
     EXPLICIT = "explicit"  # REQ implements specific assertions (e.g., REQ-100-A-B)
     INFERRED = "inferred"  # REQ implements parent REQ (all assertions implied)
-    INDIRECT = "indirect"  # TEST verifies whole REQ (all assertions implied)
+    INDIRECT = "indirect"  # transitive CODE->TEST evidence (provenance only)
+    TEST_DIRECT = "test_direct"  # TEST verifies specific assertion (Verifies: REQ-xxx-A)
+    TEST_INDIRECT = "test_indirect"  # TEST verifies whole REQ (Verifies: REQ-xxx)
     UAT_EXPLICIT = "uat_explicit"  # JNY names specific assertion (Validates: REQ-xxx-A)
     UAT_INFERRED = (
         "uat_inferred"  # JNY names whole REQ (Validates: REQ-xxx), all assertions implied
@@ -230,6 +243,10 @@ class RollupMetrics:
 
         for label, contributions in self.assertion_coverage.items():
             for contrib in contributions:
+                # NOTE (REQ-d00084-D): TEST_DIRECT / TEST_INDIRECT (a test
+                # `Verifies:` an assertion) are deliberately NOT bucketed here.
+                # Test evidence feeds the `tested`/`verified` dimensions
+                # (populated by populate_test_dimensions), never `implemented`.
                 if contrib.source_type == CoverageSource.DIRECT:
                     direct_labels.add(label)
                 elif contrib.source_type == CoverageSource.EXPLICIT:

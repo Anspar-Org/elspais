@@ -39,13 +39,18 @@ def _federate(tmp_path):
 
 
 def _build_with_verified_library(tmp_path):
-    """Federate the e2e-integrates fixture and give the library REQ a passing
-    test so its own verified dimension is non-zero (proven recipe copied from
-    test_integrates_propagation.py)."""
+    """Federate the e2e-integrates fixture and give the library REQ CODE that
+    implements A (so its `implemented` dimension is non-zero -- a test Verifies
+    alone is not implementation evidence, REQ-d00084-D) plus a passing test (so
+    its verified dimension is non-zero). Proven recipe shared with
+    test_integrates_propagation.py."""
     fed = _federate(tmp_path)
     lib_req = fed._repos["library"].graph._index["LIB-d00007"]
     lib_graph = fed._repos["library"].graph
 
+    code = GraphNode(id="LIB-code-1", kind=NodeKind.CODE, label="append_only")
+    lib_req.link(code, EdgeKind.IMPLEMENTS, ["A"])  # REQ --IMPLEMENTS(A)--> CODE
+    lib_graph._index[code.id] = code
     test = GraphNode(id="LIB-test-1", kind=NodeKind.TEST, label="test_append_only")
     result = GraphNode(id="LIB-test-1::result", kind=NodeKind.RESULT, label="result")
     result.set_field("status", "passed")

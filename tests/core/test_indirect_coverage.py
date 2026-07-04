@@ -35,7 +35,9 @@ class TestIndirectCoverageSource:
         """INDIRECT is distinct from other coverage sources."""
         values = {s.value for s in CoverageSource}
         assert "indirect" in values
-        assert len(values) == 6  # DIRECT, EXPLICIT, INFERRED, INDIRECT, UAT_EXPLICIT, UAT_INFERRED
+        # DIRECT, EXPLICIT, INFERRED, INDIRECT, TEST_DIRECT, TEST_INDIRECT,
+        # UAT_EXPLICIT, UAT_INFERRED
+        assert len(values) == 8
 
 
 class TestIndirectCoverageContributions:
@@ -45,7 +47,7 @@ class TestIndirectCoverageContributions:
     """
 
     def test_REQ_d00069_B_whole_req_test_adds_indirect(self):
-        """Whole-req test (no assertion suffix) adds INDIRECT for all assertions."""
+        """Whole-req test (no assertion suffix) adds TEST_INDIRECT for all assertions."""
         graph = build_graph(
             make_requirement(
                 "REQ-100",
@@ -72,10 +74,10 @@ class TestIndirectCoverageContributions:
         assert "B" in rollup.assertion_coverage
         assert "C" in rollup.assertion_coverage
 
-        # All should be INDIRECT source type
+        # All should be TEST_INDIRECT source type (test evidence, feeds `tested`)
         for label in ["A", "B", "C"]:
             sources = [c.source_type for c in rollup.assertion_coverage[label]]
-            assert CoverageSource.INDIRECT in sources
+            assert CoverageSource.TEST_INDIRECT in sources
 
     def test_REQ_d00069_B_whole_req_test_zero_strict_coverage(self):
         """Whole-req test gives 0% strict coverage (INDIRECT excluded)."""
@@ -254,9 +256,10 @@ class TestEdgeCase1MixedDirectIndirect:
         node = graph.find_by_id("REQ-100")
         rollup: RollupMetrics = node.get_metric("rollup_metrics")
 
-        # Implemented: 3 direct (assertion-targeted tests produce DIRECT contributions)
-        assert rollup.implemented.direct == 3
-        assert rollup.implemented.indirect == 3  # No INFERRED, so same as direct
+        # Implemented: 0 -- assertion-targeted tests are TEST evidence (TEST_DIRECT),
+        # not implementation evidence (REQ-d00084-D). No CODE/REQ here.
+        assert rollup.implemented.direct == 0
+        assert rollup.implemented.indirect == 0
 
         # Tested: 3 direct, 11 indirect (whole-req test covers all)
         assert rollup.tested.direct == 3
@@ -486,10 +489,11 @@ class TestIndirectWithExistingSources:
         # Test indirect also 100% (whole-req test covers all)
         assert rollup.tested.indirect_pct == 100.0
 
-        # Both sources present in assertion_coverage
+        # Both sources present in assertion_coverage: INFERRED (implemented
+        # evidence from REQ-020) and TEST_INDIRECT (test evidence from whole-req test)
         a_sources = {c.source_type for c in rollup.assertion_coverage["A"]}
         assert CoverageSource.INFERRED in a_sources
-        assert CoverageSource.INDIRECT in a_sources
+        assert CoverageSource.TEST_INDIRECT in a_sources
 
 
 # =============================================================================
@@ -655,9 +659,10 @@ class TestTransitiveCoverageThroughCode:
         annotate_coverage(graph)
 
         metrics = req.get_metric("rollup_metrics")
-        # A has both DIRECT (from direct test) and INDIRECT (from transitive)
+        # A has both TEST_DIRECT (from the direct test Verifies) and INDIRECT
+        # (from the transitive CODE->TEST chain).
         a_contribs = metrics.assertion_coverage.get("A", [])
-        assert any(c.source_type == CoverageSource.DIRECT for c in a_contribs)
+        assert any(c.source_type == CoverageSource.TEST_DIRECT for c in a_contribs)
         assert any(c.source_type == CoverageSource.INDIRECT for c in a_contribs)
 
         # A should be directly tested AND verified

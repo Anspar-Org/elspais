@@ -36,7 +36,12 @@ def test_REQ_d00252_D_consumer_inherits_library_coverage(tmp_path):
     lib_req = fed._repos["library"].graph._index["LIB-d00007"]
     lib_graph = fed._repos["library"].graph
 
-    # Library REQ has assertion A; give it a passing test so its own verified populates.
+    # Library REQ has assertion A. Give it CODE that implements A so its
+    # `implemented` dimension populates (test Verifies alone is NOT implemented
+    # evidence -- REQ-d00084-D), plus a passing test so its verified populates.
+    code = GraphNode(id="LIB-code-1", kind=NodeKind.CODE, label="append_only")
+    lib_req.link(code, EdgeKind.IMPLEMENTS, ["A"])  # REQ --IMPLEMENTS(A)--> CODE
+    lib_graph._index[code.id] = code
     test = GraphNode(id="LIB-test-1", kind=NodeKind.TEST, label="test_append_only")
     result = GraphNode(id="LIB-test-1::result", kind=NodeKind.RESULT, label="result")
     result.set_field("status", "passed")

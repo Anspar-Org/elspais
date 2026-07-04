@@ -77,10 +77,16 @@ class TestRollupMetrics:
 class TestAnnotateCoverageDirect:
     """Tests for direct coverage (TEST/CODE -> assertion)."""
 
-    # Verifies: REQ-d00086-B
+    # Verifies: REQ-d00086-B, REQ-d00084-D
     def test_direct_coverage_from_test(self):
-        """TEST node validates assertion -> DIRECT coverage."""
-        # Build: REQ-100 with assertion A, validated by test
+        """TEST node verifies assertion -> `tested`, NOT `implemented`.
+
+        Corrected over-counting (REQ-d00084-D): a test that Verifies an
+        assertion is test evidence, so it credits the `tested` dimension. It
+        used to also inflate `implemented` — implemented is now CODE evidence
+        only.
+        """
+        # Build: REQ-100 with assertion A, verified by a test (no code)
         graph = build_graph(
             make_requirement(
                 "REQ-100",
@@ -96,9 +102,13 @@ class TestAnnotateCoverageDirect:
         metrics: RollupMetrics = node.get_metric("rollup_metrics")
 
         assert metrics.total_assertions == 1
-        assert metrics.implemented.direct == 1
-        assert metrics.implemented.indirect == 1
-        assert metrics.implemented.indirect_pct == 100.0
+        # No implementing code -> implemented stays empty.
+        assert metrics.implemented.direct == 0
+        assert metrics.implemented.indirect == 0
+        # Test evidence lands in `tested`.
+        assert metrics.tested.direct == 1
+        assert metrics.tested.indirect == 1
+        assert metrics.tested.indirect_pct == 100.0
 
     # Verifies: REQ-d00086-B
     def test_direct_coverage_from_code(self):
@@ -236,14 +246,107 @@ class TestAnnotateCoverageRefines:
         assert metrics.implemented.indirect_pct == 0.0
 
 
+class TestImplementedExcludesTestVerifies:
+    """A test that Verifies an assertion must NOT inflate `implemented`.
+
+    Implemented = CODE evidence only (Implements refs, conducted, or inherited)
+    per REQ-d00084-D. A `Verifies:` reference is TEST evidence: it populates the
+    `tested` dimension, never `implemented`. This keeps the Implemented-vs-Tested
+    distinction that REQ-d00258-B rests on. (Regression: test Verifies used to
+    leak into implemented via CoverageSource.DIRECT.)
+    """
+
+    # Verifies: REQ-d00084-D
+    def test_verifies_alone_does_not_imply_implemented(self):
+        """A test Verifies with NO implementing code -> implemented == 0, tested == 1."""
+        graph = build_graph(
+            make_requirement(
+                "REQ-100",
+                level="PRD",
+                assertions=[{"label": "A", "text": "The system shall..."}],
+            ),
+            make_test_ref(verifies=["REQ-100-A"]),
+        )
+
+        annotate_coverage(graph)
+
+        node = graph.find_by_id("REQ-100")
+        metrics: RollupMetrics = node.get_metric("rollup_metrics")
+
+        assert metrics.total_assertions == 1
+        # No implementing code -> implemented is empty.
+        assert metrics.implemented.direct == 0
+        assert metrics.implemented.indirect == 0
+        # The test evidence lands in the `tested` dimension instead.
+        assert metrics.tested.direct == 1
+        assert metrics.tested.indirect == 1
+
+    # Verifies: REQ-d00084-D
+    def test_code_implements_gives_implemented(self):
+        """CODE Implements -> implemented credited (the positive control)."""
+        graph = build_graph(
+            make_requirement(
+                "REQ-100",
+                level="PRD",
+                assertions=[{"label": "A", "text": "The system shall..."}],
+            ),
+            make_code_ref(implements=["REQ-100-A"]),
+        )
+
+        annotate_coverage(graph)
+
+        node = graph.find_by_id("REQ-100")
+        metrics: RollupMetrics = node.get_metric("rollup_metrics")
+
+        assert metrics.implemented.direct == 1
+        assert metrics.implemented.indirect == 1
+        # No test evidence -> tested empty.
+        assert metrics.tested.direct == 0
+
+    # Verifies: REQ-d00084-D
+    def test_code_implemented_stays_credited_when_also_tested(self):
+        """CODE Implements + TEST Verifies the same assertion.
+
+        The implemented credit comes from the CODE Implements edge and must
+        survive alongside a verifying test; the test adds `tested`, not a second
+        (or inflated) implemented credit.
+        """
+        graph = build_graph(
+            make_requirement(
+                "REQ-100",
+                level="PRD",
+                assertions=[{"label": "A", "text": "The system shall..."}],
+            ),
+            make_code_ref(implements=["REQ-100-A"]),
+            make_test_ref(verifies=["REQ-100-A"]),
+        )
+
+        annotate_coverage(graph)
+
+        node = graph.find_by_id("REQ-100")
+        metrics: RollupMetrics = node.get_metric("rollup_metrics")
+
+        # Implemented credited from CODE (unchanged by the presence of a test).
+        assert metrics.implemented.direct == 1
+        assert metrics.implemented.indirect == 1
+        # Tested credited from the verifying test.
+        assert metrics.tested.direct == 1
+
+
 class TestAnnotateCoverageMixed:
     """Tests for mixed coverage sources."""
 
-    # Verifies: REQ-d00086-B
+    # Verifies: REQ-d00086-B, REQ-d00084-D
     def test_mixed_coverage_sources(self):
-        """Multiple coverage sources on different assertions."""
+        """Multiple coverage sources on different assertions.
+
+        Corrected over-counting (REQ-d00084-D): assertion A is only *tested*
+        (a Verifies with no code), so it no longer counts toward `implemented`.
+        Implemented now reflects the CODE/REQ evidence for B (explicit) and C
+        (code) only.
+        """
         # REQ-100 has A, B, C, D
-        # - A: covered by TEST (direct)
+        # - A: verified by TEST -> `tested`, NOT `implemented`
         # - B: covered by REQ-020 implements B (explicit)
         # - C: covered by CODE (direct)
         # - D: no coverage
@@ -258,7 +361,7 @@ class TestAnnotateCoverageMixed:
                     {"label": "D", "text": "Assertion D"},
                 ],
             ),
-            make_test_ref(verifies=["REQ-100-A"]),  # A - direct
+            make_test_ref(verifies=["REQ-100-A"]),  # A - tested only (not implemented)
             make_requirement(
                 "REQ-020",
                 level="OPS",
@@ -274,13 +377,16 @@ class TestAnnotateCoverageMixed:
         metrics: RollupMetrics = node.get_metric("rollup_metrics")
 
         assert metrics.total_assertions == 4
-        # implemented.direct = DIRECT + EXPLICIT = {A, B, C} = 3
-        assert metrics.implemented.direct == 3
-        # implemented.indirect = DIRECT + EXPLICIT + INFERRED = {A, B, C} = 3
-        assert metrics.implemented.indirect == 3
+        # implemented.direct = DIRECT(code C) + EXPLICIT(req B) = {B, C} = 2
+        # (A is test-only -> not implemented)
+        assert metrics.implemented.direct == 2
+        assert metrics.implemented.indirect == 2
         # No inferred: indirect - direct == 0
         assert metrics.implemented.indirect - metrics.implemented.direct == 0
-        assert metrics.implemented.indirect_pct == 75.0
+        assert metrics.implemented.indirect_pct == 50.0
+        # A is credited to `tested` instead.
+        assert metrics.tested.direct == 1
+        assert "A" in metrics.tested.direct_labels
 
 
 class TestUserExample:
@@ -289,15 +395,15 @@ class TestUserExample:
     REQ-100: 4 assertions (A, B, C, D)
     REQ-010 refines REQ-100-A (no coverage!)
     REQ-020 implements REQ-100-B (explicit coverage)
-    TEST validates REQ-100-A and REQ-100-B
+    TEST verifies REQ-100-A and REQ-100-B
 
-    Expected:
-    - A: DIRECT from TEST (validates)
-    - B: DIRECT from TEST + EXPLICIT from REQ-020
+    Expected (implemented dimension, REQ-d00084-D):
+    - A: TEST_DIRECT from TEST (tested only, NOT implemented)
+    - B: EXPLICIT from REQ-020 (implemented); also TEST_DIRECT (tested)
     - C, D: no coverage
     """
 
-    # Verifies: REQ-d00069-J
+    # Verifies: REQ-d00069-J, REQ-d00084-D
     def test_user_example_scenario(self):
         """User's 4-assertion scenario with refines vs implements."""
         graph = build_graph(
@@ -339,26 +445,29 @@ class TestUserExample:
         # Total assertions: 4
         assert metrics.total_assertions == 4
 
-        # Under REQ-d00069-J equal-weight conduction, the empty refiner REQ-010
-        # (refines REQ-100-A but has no assertions, so conducts 0.0) is an extra
-        # equal-weight contributor to A alongside the direct test (1.0). A's
-        # fraction is therefore mean(1.0, 0.0) = 0.5, diluting it from 1.0.
-        # B = 1.0 (test + REQ-020 explicit, no diluting refiner). C, D = 0.
-        # Covered sum: A=0.5 + B=1.0 + C=0 + D=0 = 1.5.
-        assert metrics.implemented.indirect == 1.5
+        # IMPLEMENTED dimension (REQ-d00084-D): only CODE/REQ evidence counts.
+        # - A: TEST-only (Verifies) -> NOT implemented. Its sole refiner REQ-010
+        #   is empty (conducts 0.0), so A's implemented fraction is 0.0.
+        # - B: REQ-020 implements it (EXPLICIT) -> 1.0. No diluting refiner.
+        # - C, D: 0. Covered sum = 1.0.
+        assert metrics.implemented.indirect == 1.0
 
-        # A is covered by TEST (DIRECT)
+        # A's coverage contribution from the test is TEST_DIRECT (feeds `tested`),
+        # so A lands in the `tested` dimension, not `implemented`.
         assert "A" in metrics.assertion_coverage
-        assert any(c.source_type == CoverageSource.DIRECT for c in metrics.assertion_coverage["A"])
+        assert any(
+            c.source_type == CoverageSource.TEST_DIRECT for c in metrics.assertion_coverage["A"]
+        )
+        assert "A" in metrics.tested.direct_labels
+        assert "A" not in metrics.implemented.indirect_labels
 
-        # B is covered by TEST (DIRECT) AND REQ-020 (EXPLICIT)
+        # B is verified by a TEST (TEST_DIRECT) AND implemented by REQ-020 (EXPLICIT)
         assert "B" in metrics.assertion_coverage
         b_sources = {c.source_type for c in metrics.assertion_coverage["B"]}
-        assert CoverageSource.DIRECT in b_sources
+        assert CoverageSource.TEST_DIRECT in b_sources
         assert CoverageSource.EXPLICIT in b_sources
 
         # REFINES from REQ-010 should NOT contribute to A's coverage
-        # (we already verified A is only DIRECT from TEST, not from REQ-010)
         a_contributors = [c.source_id for c in metrics.assertion_coverage["A"]]
         assert all("REQ-010" not in c for c in a_contributors)
 
@@ -366,8 +475,8 @@ class TestUserExample:
         assert "C" not in metrics.assertion_coverage
         assert "D" not in metrics.assertion_coverage
 
-        # Coverage percentage: 1.5/4 = 37.5% (A diluted to 0.5 by empty refiner)
-        assert metrics.implemented.indirect_pct == 37.5
+        # Implemented percentage: 1.0/4 = 25% (only B is implemented).
+        assert metrics.implemented.indirect_pct == 25.0
 
 
 class TestNoAssertions:
@@ -409,7 +518,7 @@ class TestCoveragePercentStored:
                     {"label": "B", "text": "Assertion B"},
                 ],
             ),
-            make_test_ref(verifies=["REQ-100-A"]),  # 1/2 = 50%
+            make_code_ref(implements=["REQ-100-A"]),  # implemented 1/2 = 50%
         )
 
         annotate_coverage(graph)
@@ -447,7 +556,9 @@ class TestTestSpecificMetrics:
         rollup: RollupMetrics = node.get_metric("rollup_metrics")
 
         assert rollup.tested.direct == 1  # Only A (TEST), not B (CODE)
-        assert rollup.implemented.indirect == 2  # Both A and B covered
+        # Implemented is CODE/REQ evidence only (REQ-d00084-D): B is implemented
+        # by CODE; A is TEST-only so it does NOT count toward implemented.
+        assert rollup.implemented.indirect == 1  # Only B (CODE)
 
     # Verifies: REQ-d00069-F
     def test_validated_counts_passing_tests(self):
