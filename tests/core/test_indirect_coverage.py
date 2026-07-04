@@ -565,7 +565,7 @@ class TestTransitiveCoverageThroughCode:
 
         return graph, req, code, test, result_node
 
-    # Implements: REQ-d00069-E
+    # Verifies: REQ-d00069-E
     def test_transitive_provides_indirect_coverage(self):
         """CODE->TEST chain provides INDIRECT coverage to requirement."""
         graph, req, code, test, result = self._build_chain()
@@ -582,7 +582,7 @@ class TestTransitiveCoverageThroughCode:
             indirect = [c for c in contribs if c.source_type == CoverageSource.INDIRECT]
             assert len(indirect) > 0, f"Expected INDIRECT coverage for assertion {label}"
 
-    # Implements: REQ-d00069-E
+    # Verifies: REQ-d00069-E
     def test_transitive_with_assertion_targets(self):
         """CODE targeting specific assertions only provides INDIRECT for those."""
         graph, req, code, test, result = self._build_chain(assertion_targets=["A"])
@@ -598,7 +598,7 @@ class TestTransitiveCoverageThroughCode:
         b_contribs = metrics.assertion_coverage.get("B", [])
         assert len(b_contribs) == 0
 
-    # Implements: REQ-d00069-F
+    # Verifies: REQ-d00069-F
     def test_transitive_with_passing_result_validates_indirect(self):
         """Passing TEST_RESULT via CODE chain marks assertions as indirectly validated."""
         graph, req, code, test, result = self._build_chain(result_status="passed")
@@ -607,7 +607,7 @@ class TestTransitiveCoverageThroughCode:
         metrics = req.get_metric("rollup_metrics")
         assert metrics.verified.indirect == 2  # Both A and B
 
-    # Implements: REQ-d00069-F
+    # Verifies: REQ-d00069-F
     def test_transitive_with_failing_result_marks_failure(self):
         """Failed TEST_RESULT via CODE chain sets has_failures."""
         graph, req, code, test, result = self._build_chain(result_status="failed")
@@ -616,7 +616,7 @@ class TestTransitiveCoverageThroughCode:
         metrics = req.get_metric("rollup_metrics")
         assert metrics.verified.has_failures is True
 
-    # Implements: REQ-d00069-E
+    # Verifies: REQ-d00069-E
     def test_transitive_without_result_still_covers(self):
         """TEST via CODE without TEST_RESULT still provides INDIRECT contributions."""
         graph, req, code, test, _ = self._build_chain(with_result=False)
@@ -630,7 +630,7 @@ class TestTransitiveCoverageThroughCode:
         # But verified.indirect should be 0 (no passing result)
         assert metrics.verified.indirect == 0
 
-    # Implements: REQ-d00069-E
+    # Verifies: REQ-d00069-E
     def test_direct_test_overrides_transitive(self):
         """Direct TEST->REQ edge takes precedence; transitive adds INDIRECT."""
         graph, req, code, test, result = self._build_chain()
@@ -664,7 +664,7 @@ class TestTransitiveCoverageThroughCode:
         assert metrics.tested.direct >= 1
         assert metrics.verified.direct >= 1
 
-    # Implements: REQ-d00069-J
+    # Verifies: REQ-d00069-J
     def test_no_transitive_for_refines_edge(self):
         """REFINES edges should NOT trigger transitive coverage lookup."""
         graph = TraceGraph()
@@ -701,7 +701,7 @@ class TestTransitiveCoverageThroughCode:
         assert metrics.tested.indirect_pct == 0
         assert metrics.implemented.indirect_pct == 0
 
-    # Implements: REQ-d00069-B
+    # Verifies: REQ-d00069-B
     def test_transitive_strict_coverage_excludes_indirect(self):
         """Transitive CODE->TEST only provides INDIRECT contributions, not implemented."""
         graph, req, code, test, result = self._build_chain()
@@ -718,7 +718,7 @@ class TestTransitiveCoverageThroughCode:
         # And verified.indirect captures them (since there's a passing result)
         assert metrics.verified.indirect == 2
 
-    # Implements: REQ-d00069-E
+    # Verifies: REQ-d00069-E
     def test_transitive_multiple_code_nodes(self):
         """Multiple CODE nodes each with TEST children all contribute INDIRECT."""
         graph = TraceGraph()
@@ -762,7 +762,7 @@ class TestTransitiveCoverageThroughCode:
 class TestFactoryIntegration:
     """Tests that factory.build_graph() calls link_tests_to_code."""
 
-    # Implements: REQ-d00054-A
+    # Verifies: REQ-d00054-A
     def test_factory_calls_linker(self, tmp_path):
         """Build graph from spec + code + test files, verify transitive edges."""
         # This is a lightweight integration test. We create minimal files.
@@ -823,7 +823,7 @@ class TestFactoryIntegration:
         # integration doesn't crash)
         assert graph is not None
 
-    # Implements: REQ-d00054-A
+    # Verifies: REQ-d00054-A
     def test_factory_no_linker_when_tests_disabled(self, tmp_path):
         """When scan_tests=False, no linker is called."""
         spec_dir = tmp_path / "spec"
@@ -871,7 +871,7 @@ class TestFactoryIntegration:
                 # No VALIDATES edges from CODE to TEST
                 assert edge.kind != EdgeKind.VERIFIES or edge.target.kind != NodeKind.TEST
 
-    # Implements: REQ-d00054-A
+    # Verifies: REQ-d00054-A
     def test_factory_no_linker_when_code_disabled(self, tmp_path):
         """When scan_code=False, no linker is called."""
         spec_dir = tmp_path / "spec"

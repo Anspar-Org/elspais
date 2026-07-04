@@ -62,7 +62,7 @@ class TestSatisfiesPipedMetadataLine:
     line alongside Level, Status, Implements, and Refines.
     """
 
-    # Implements: REQ-p00014-A
+    # Verifies: REQ-p00014-A
     def test_REQ_p00014_A_piped_satisfies_single_target(self) -> None:
         """A piped metadata line containing Satisfies parses cleanly.
 
@@ -85,7 +85,7 @@ class TestSatisfiesPipedMetadataLine:
         assert data["level"] == "dev"
         assert data["status"] == "Active"
 
-    # Implements: REQ-p00014-A
+    # Verifies: REQ-p00014-A
     def test_REQ_p00014_A_piped_satisfies_multi_target(self) -> None:
         """Comma-separated multiple Satisfies targets all extracted."""
         text = (
@@ -99,7 +99,7 @@ class TestSatisfiesPipedMetadataLine:
         assert len(results) == 1
         assert results[0].parsed_data["satisfies"] == ["REQ-p00004", "REQ-p00005"]
 
-    # Implements: REQ-p00014-A
+    # Verifies: REQ-p00014-A
     def test_REQ_p00014_A_piped_satisfies_first_position(self) -> None:
         """Satisfies as the FIRST field on the piped line.
 
@@ -120,7 +120,7 @@ class TestSatisfiesPipedMetadataLine:
         assert data["level"] == "dev"
         assert data["status"] == "Active"
 
-    # Implements: REQ-p00014-A
+    # Verifies: REQ-p00014-A
     def test_REQ_p00014_A_piped_satisfies_middle_position(self) -> None:
         """Satisfies in the MIDDLE of the piped line."""
         text = (
@@ -137,7 +137,7 @@ class TestSatisfiesPipedMetadataLine:
         assert data["level"] == "dev"
         assert data["status"] == "Active"
 
-    # Implements: REQ-p00014-A
+    # Verifies: REQ-p00014-A
     def test_REQ_p00014_A_piped_satisfies_last_position(self) -> None:
         """Satisfies as the LAST field on the piped line."""
         text = (
@@ -154,7 +154,7 @@ class TestSatisfiesPipedMetadataLine:
         assert data["level"] == "dev"
         assert data["status"] == "Active"
 
-    # Implements: REQ-p00014-A
+    # Verifies: REQ-p00014-A
     def test_REQ_p00014_A_piped_satisfies_with_implements(self) -> None:
         """Implements and Satisfies coexist on the same piped line."""
         text = (
@@ -171,7 +171,7 @@ class TestSatisfiesPipedMetadataLine:
         assert data["implements"] == ["REQ-p00001"]
         assert data["satisfies"] == ["REQ-p00004"]
 
-    # Implements: REQ-p00014-A
+    # Verifies: REQ-p00014-A
     def test_REQ_p00014_A_no_pipe_greedy_consumption(self) -> None:
         """Regression for the regex tightening: Satisfies must NOT eat past PIPE.
 
@@ -198,7 +198,7 @@ class TestSatisfiesPipedMetadataLine:
             assert "|" not in v
             assert "status" not in v.lower()
 
-    # Implements: REQ-p00014-A
+    # Verifies: REQ-p00014-A
     def test_REQ_p00014_A_standalone_satisfies_still_parses(self) -> None:
         """The standalone form `Satisfies: REQ-X` (own line, no PIPE) remains
         valid because `metadata_line: _field (PIPE _field)*` accepts a single

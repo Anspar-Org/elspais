@@ -1,4 +1,4 @@
-# Validates: REQ-d00211-A, REQ-d00211-B, REQ-d00211-C, REQ-d00211-D
+# Verifies: REQ-d00211-A, REQ-d00211-B, REQ-d00211-C, REQ-d00211-D
 """Tests for _extract_viewer_config() in elspais.server.app.
 
 Validates REQ-d00211-A: config_types from id_patterns.types

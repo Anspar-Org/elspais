@@ -16,7 +16,7 @@ from tests.core.graph_test_helpers import (
 class TestRollupMetrics:
     """Tests for RollupMetrics dataclass."""
 
-    # Implements: REQ-d00086-B
+    # Verifies: REQ-d00086-B
     def test_add_contribution(self):
         """Contributions are stored by assertion label."""
         metrics = RollupMetrics(total_assertions=2)
@@ -31,7 +31,7 @@ class TestRollupMetrics:
         assert metrics.assertion_coverage["A"][0] == contrib_a
         assert metrics.assertion_coverage["B"][0] == contrib_b
 
-    # Implements: REQ-d00069-D
+    # Verifies: REQ-d00069-D
     def test_finalize_computes_aggregates(self):
         """Finalize computes aggregate counts and percentage."""
         metrics = RollupMetrics(total_assertions=4)
@@ -50,7 +50,7 @@ class TestRollupMetrics:
         # 2/4 = 50%
         assert metrics.implemented.indirect_pct == 50.0
 
-    # Implements: REQ-d00069-D
+    # Verifies: REQ-d00069-D
     def test_finalize_handles_zero_assertions(self):
         """Finalize handles zero assertions gracefully."""
         metrics = RollupMetrics(total_assertions=0)
@@ -59,7 +59,7 @@ class TestRollupMetrics:
 
         assert metrics.implemented.indirect_pct == 0.0
 
-    # Implements: REQ-d00086-B
+    # Verifies: REQ-d00086-B
     def test_multiple_contributors_same_assertion(self):
         """Multiple contributors to same assertion only count once."""
         metrics = RollupMetrics(total_assertions=1)
@@ -77,7 +77,7 @@ class TestRollupMetrics:
 class TestAnnotateCoverageDirect:
     """Tests for direct coverage (TEST/CODE -> assertion)."""
 
-    # Implements: REQ-d00086-B
+    # Verifies: REQ-d00086-B
     def test_direct_coverage_from_test(self):
         """TEST node validates assertion -> DIRECT coverage."""
         # Build: REQ-100 with assertion A, validated by test
@@ -100,7 +100,7 @@ class TestAnnotateCoverageDirect:
         assert metrics.implemented.indirect == 1
         assert metrics.implemented.indirect_pct == 100.0
 
-    # Implements: REQ-d00086-B
+    # Verifies: REQ-d00086-B
     def test_direct_coverage_from_code(self):
         """CODE node implements assertion -> DIRECT coverage."""
         graph = build_graph(
@@ -125,7 +125,7 @@ class TestAnnotateCoverageDirect:
 class TestAnnotateCoverageExplicit:
     """Tests for explicit coverage (REQ -> specific assertions)."""
 
-    # Implements: REQ-d00086-B
+    # Verifies: REQ-d00086-B
     def test_explicit_coverage_from_req_with_assertion_syntax(self):
         """REQ implements specific assertion(s) -> EXPLICIT coverage."""
         # REQ-020 implements REQ-100-B (explicit assertion syntax)
@@ -166,7 +166,7 @@ class TestAnnotateCoverageExplicit:
 class TestAnnotateCoverageInferred:
     """Tests for inferred coverage (REQ -> parent REQ)."""
 
-    # Implements: REQ-d00086-B
+    # Verifies: REQ-d00086-B
     def test_inferred_coverage_from_req_implements_parent(self):
         """REQ implements parent REQ -> INFERRED coverage for all assertions."""
         # REQ-020 implements REQ-100 (all assertions implied)
@@ -202,7 +202,7 @@ class TestAnnotateCoverageInferred:
 class TestAnnotateCoverageRefines:
     """Tests for REFINES edge coverage conduction (REQ-d00069-J)."""
 
-    # Implements: REQ-d00069-J
+    # Verifies: REQ-d00069-J
     def test_refines_does_not_contribute_coverage(self):
         """An empty refining requirement conducts 0 coverage.
 
@@ -239,7 +239,7 @@ class TestAnnotateCoverageRefines:
 class TestAnnotateCoverageMixed:
     """Tests for mixed coverage sources."""
 
-    # Implements: REQ-d00086-B
+    # Verifies: REQ-d00086-B
     def test_mixed_coverage_sources(self):
         """Multiple coverage sources on different assertions."""
         # REQ-100 has A, B, C, D
@@ -297,7 +297,7 @@ class TestUserExample:
     - C, D: no coverage
     """
 
-    # Implements: REQ-d00069-J
+    # Verifies: REQ-d00069-J
     def test_user_example_scenario(self):
         """User's 4-assertion scenario with refines vs implements."""
         graph = build_graph(
@@ -373,7 +373,7 @@ class TestUserExample:
 class TestNoAssertions:
     """Tests for requirements without assertions."""
 
-    # Implements: REQ-d00051-E
+    # Verifies: REQ-d00051-E
     def test_requirement_with_no_assertions(self):
         """Requirements with no assertions have zero metrics."""
         graph = build_graph(
@@ -397,7 +397,7 @@ class TestNoAssertions:
 class TestCoveragePercentStored:
     """Verify implemented.indirect_pct is accessible from rollup_metrics."""
 
-    # Implements: REQ-d00055-D
+    # Verifies: REQ-d00055-D
     def test_coverage_pct_accessible_from_rollup(self):
         """implemented.indirect_pct is accessible from the rollup_metrics object."""
         graph = build_graph(
@@ -423,7 +423,7 @@ class TestCoveragePercentStored:
 class TestTestSpecificMetrics:
     """Tests for TEST-specific metrics (tested, verified dimensions)."""
 
-    # Implements: REQ-d00069-B
+    # Verifies: REQ-d00069-B
     def test_direct_tested_counts_test_coverage(self):
         """tested.direct counts assertions with TEST nodes (not CODE)."""
         graph = build_graph(
@@ -449,7 +449,7 @@ class TestTestSpecificMetrics:
         assert rollup.tested.direct == 1  # Only A (TEST), not B (CODE)
         assert rollup.implemented.indirect == 2  # Both A and B covered
 
-    # Implements: REQ-d00069-F
+    # Verifies: REQ-d00069-F
     def test_validated_counts_passing_tests(self):
         """verified.direct counts assertions with passing TEST_RESULTs."""
         from tests.core.graph_test_helpers import make_test_result
@@ -494,7 +494,7 @@ class TestTestSpecificMetrics:
         assert rollup.verified.direct == 1  # Only A has passing result
         assert rollup.verified.has_failures is True  # B failed
 
-    # Implements: REQ-d00069-F
+    # Verifies: REQ-d00069-F
     def test_has_failures_true_when_test_fails(self):
         """verified.has_failures is True when any TEST_RESULT is failed/error."""
         from tests.core.graph_test_helpers import make_test_result
@@ -518,7 +518,7 @@ class TestTestSpecificMetrics:
 
         assert rollup.verified.has_failures is True
 
-    # Implements: REQ-d00069-F
+    # Verifies: REQ-d00069-F
     def test_has_failures_false_when_all_pass(self):
         """verified.has_failures is False when all tests pass."""
         from tests.core.graph_test_helpers import make_test_result
@@ -543,7 +543,7 @@ class TestTestSpecificMetrics:
         assert rollup.verified.has_failures is False
         assert rollup.verified.direct == 1
 
-    # Implements: REQ-d00069-B
+    # Verifies: REQ-d00069-B
     def test_no_tests_means_zero_test_metrics(self):
         """Without TEST nodes, test metrics are zero."""
         graph = build_graph(
@@ -574,7 +574,7 @@ class TestRefinesCoverageConduction:
     targeted parent *Assertion*, computed per dimension and recursively.
     """
 
-    # Implements: REQ-d00069-J
+    # Verifies: REQ-d00069-J
     def test_basic_propagation_with_negative_control(self):
         """A tested refiner lifts its targeted parent assertion; siblings stay 0.
 
@@ -612,7 +612,7 @@ class TestRefinesCoverageConduction:
         child = graph.find_by_id("REQ-010").get_metric("rollup_metrics")
         assert child.tested.direct_pct_by_label["A"] == 1.0
 
-    # Implements: REQ-d00069-J
+    # Verifies: REQ-d00069-J
     def test_equal_weight_per_refine_edge(self):
         """Each assertion-targeted refine edge is one equal-weight contributor.
 
@@ -666,7 +666,7 @@ class TestRefinesCoverageConduction:
         assert parent.tested.direct_pct_by_label["B"] == 1.0
         assert parent.tested.direct_pct == pytest.approx(83.33, abs=0.01)
 
-    # Implements: REQ-d00069-J
+    # Verifies: REQ-d00069-J
     def test_recursion_over_two_hop_chain(self):
         """Coverage conducts recursively through a 2-hop refine chain.
 
@@ -699,7 +699,7 @@ class TestRefinesCoverageConduction:
         top = graph.find_by_id("REQ-700").get_metric("rollup_metrics")
         assert top.tested.direct_pct_by_label["A"] == 1.0
 
-    # Implements: REQ-d00069-J
+    # Verifies: REQ-d00069-J
     def test_blanket_refine_contributes_to_indirect_only(self):
         """A whole-requirement refine shows in indirect, not direct.
 
@@ -739,7 +739,7 @@ class TestRefinesCoverageConduction:
         assert parent.tested.indirect_pct_by_label["A"] == 0.5
         assert parent.tested.indirect_pct_by_label["B"] == 0.5
 
-    # Implements: REQ-d00069-J
+    # Verifies: REQ-d00069-J
     def test_dimensions_propagate_independently(self):
         """Conduction is per-dimension: a tested refiner lifts `tested` only.
 
@@ -770,7 +770,7 @@ class TestRefinesCoverageConduction:
         assert parent.uat_coverage.direct_pct_by_label["A"] == 0.0
         assert parent.uat_coverage.indirect_pct_by_label["A"] == 0.0
 
-    # Implements: REQ-d00069-J
+    # Verifies: REQ-d00069-J
     def test_cycle_safety(self):
         """A refine cycle degrades gracefully -- no hang, finite [0,1] values.
 
@@ -803,7 +803,7 @@ class TestRefinesCoverageConduction:
                 assert isinstance(value, float)
                 assert 0.0 <= value <= 1.0
 
-    # Implements: REQ-d00069-J
+    # Verifies: REQ-d00069-J
     def test_blanket_refine_multiple_edges_averaged(self):
         """Multiple blanket refines are averaged, then scaled by 1/N.
 
@@ -858,7 +858,7 @@ class TestRefinesCoverageConduction:
         assert parent.tested.direct_pct_by_label["B"] == 0.0
         assert parent.tested.direct_pct_by_label["C"] == 0.0
 
-    # Implements: REQ-d00069-J
+    # Verifies: REQ-d00069-J
     def test_blanket_credit_skips_assertions_with_direct_coverage(self):
         """Blanket credit applies only to parent assertions lacking direct cover.
 
@@ -894,7 +894,7 @@ class TestRefinesCoverageConduction:
         # B has no direct coverage -> blanket credit (1/2) * 1.0 == 0.5.
         assert parent.tested.indirect_pct_by_label["B"] == pytest.approx(0.5)
 
-    # Implements: REQ-d00069-J
+    # Verifies: REQ-d00069-J
     def test_assertion_targeted_refine_keeps_full_weight(self):
         """An assertion-targeted refine contributes at full weight, not 1/N.
 
@@ -927,7 +927,7 @@ class TestRefinesCoverageConduction:
         assert parent.tested.indirect_pct_by_label["A"] == pytest.approx(1.0)
         assert parent.tested.indirect_pct_by_label["B"] == pytest.approx(0.0)
 
-    # Implements: REQ-d00069-J
+    # Verifies: REQ-d00069-J
     # Verifies: REQ-d00258-A
     def test_partial_conducted_coverage_is_a_gap(self):
         """Partial conducted coverage (0 < f < 1) is still reported as a gap.

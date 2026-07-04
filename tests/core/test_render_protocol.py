@@ -151,7 +151,7 @@ class TestRenderDispatch:
         result = render_node(rem)
         assert result == "hello world"
 
-    # Implements: REQ-d00131-D
+    # Verifies: REQ-d00131-D
     def test_render_remainder_kind_raises(self):
         """render_node() should handle all known kinds gracefully."""
         from elspais.graph.render import render_node
@@ -232,7 +232,7 @@ class TestRequirementRender:
         assert "A. SHALL do X." in result
         assert "B. SHALL do Y." in result
 
-    # Implements: REQ-d00131-B
+    # Verifies: REQ-d00131-B
     def test_render_requirement_sorts_by_render_order(self):
         """_render_requirement() must sort STRUCTURES children by render_order."""
         from elspais.graph.render import _render_requirement
@@ -628,7 +628,7 @@ class TestRenderRoundTrip:
         graph = build_graph(repo_root=tmp_path)
         return graph, spec_dir / "test.md", content
 
-    # Implements: REQ-d00131-I
+    # Verifies: REQ-d00131-I
     def test_render_roundtrip_line_identical(self, built_graph):
         """Rendered output matches original file line-by-line (except hash/canonical header)."""
         from elspais.graph.render import render_file
@@ -669,7 +669,7 @@ class TestRenderRoundTrip:
             f"rendered={len(rendered_lines)}"
         )
 
-    # Implements: REQ-d00131-I
+    # Verifies: REQ-d00131-I
     def test_render_roundtrip_assertion_sub_headings(self, tmp_path):
         """REQ-d00131-B: Assertion sub-headings (*italic*) survive round-trip."""
         from elspais.graph.factory import build_graph
@@ -738,7 +738,7 @@ class TestRenderRoundTrip:
         assert "### Core Functionality" not in rendered
         assert "### Data Management" not in rendered
 
-    # Implements: REQ-d00131-I
+    # Verifies: REQ-d00131-I
     def test_render_roundtrip_lowercase_assertions_canonicalized(self, tmp_path):
         """Lowercase ``## assertions`` in source is canonicalized to
         ``## Assertions`` on render.
@@ -805,7 +805,7 @@ class TestRenderRoundTrip:
         assert "A. SHALL do X." in rendered
         assert "B. SHALL do Y." in rendered
 
-    # Implements: REQ-d00131-I
+    # Verifies: REQ-d00131-I
     def test_render_hash_headings_inside_assertions_become_named_sections(self, tmp_path):
         """CUR-1199: With SECTION_HDR=#{1,6}, ### headings inside ## Assertions
         exit the assertion_block and become named sections.
@@ -902,7 +902,7 @@ class TestRenderRoundTrip:
             f"Expected exactly one *End* marker, found {end_count}.\n" f"Rendered:\n{rendered}"
         )
 
-    # Implements: REQ-d00131-I
+    # Verifies: REQ-d00131-I
     def test_render_hash_heading_before_assertions_becomes_named_section(self, tmp_path):
         """CUR-1199: With SECTION_HDR=#{1,6}, ### heading immediately after
         ## Assertions exits the assertion_block as a named section.
@@ -983,7 +983,7 @@ class TestRenderRoundTrip:
 class TestReconstructBodyText:
     """Validates REQ-d00131-B: reconstruct_body_text() produces text from STRUCTURES children."""
 
-    # Implements: REQ-d00131-B
+    # Verifies: REQ-d00131-B
     def test_reconstruct_body_text_from_children(self):
         """reconstruct_body_text() should produce text from STRUCTURES children."""
         from elspais.graph.render import reconstruct_body_text
@@ -1015,7 +1015,7 @@ class TestReconstructBodyText:
         # A should appear before B (render_order)
         assert body.index("A. First thing") < body.index("B. Second thing")
 
-    # Implements: REQ-d00131-B
+    # Verifies: REQ-d00131-B
     def test_reconstruct_body_text_empty_node(self):
         """reconstruct_body_text() returns empty string for node with no STRUCTURES children."""
         from elspais.graph.render import reconstruct_body_text
@@ -1026,7 +1026,7 @@ class TestReconstructBodyText:
         body = reconstruct_body_text(req)
         assert body == ""
 
-    # Implements: REQ-d00131-B
+    # Verifies: REQ-d00131-B
     def test_reconstruct_body_text_assertions_only(self):
         """reconstruct_body_text() works with assertions only (no remainder)."""
         from elspais.graph.render import reconstruct_body_text
@@ -1046,7 +1046,7 @@ class TestReconstructBodyText:
 class TestFulltextHashFromStructuredChildren:
     """Full-text hash mode should compute from structured children, not body_text."""
 
-    # Implements: REQ-d00131-B
+    # Verifies: REQ-d00131-B
     def test_fulltext_hash_from_structured_children(self):
         """Full-text hash mode should compute from structured children, not body_text."""
         from elspais.graph.render import _render_requirement

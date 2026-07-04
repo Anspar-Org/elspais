@@ -11,7 +11,7 @@ from elspais.graph.parsers.journey import JourneyParser
 class TestJourneyParserPriority:
     """Tests for JourneyParser priority."""
 
-    # Implements: REQ-d00128-G
+    # Verifies: REQ-d00128-G
     def test_priority_is_60(self):
         parser = JourneyParser()
         assert parser.priority == 60
@@ -20,7 +20,7 @@ class TestJourneyParserPriority:
 class TestJourneyParserBasic:
     """Tests for basic journey parsing."""
 
-    # Implements: REQ-o00050-C
+    # Verifies: REQ-o00050-C
     def test_claims_simple_journey(self):
         parser = JourneyParser()
         lines = [
@@ -45,7 +45,7 @@ class TestJourneyParserBasic:
         assert results[0].parsed_data["id"] == "JNY-Spec-Author-01"
         assert results[0].parsed_data["actor"] == "Spec Author"
 
-    # Implements: REQ-o00050-C
+    # Verifies: REQ-o00050-C
     def test_no_journeys_returns_empty(self):
         parser = JourneyParser()
         lines = [

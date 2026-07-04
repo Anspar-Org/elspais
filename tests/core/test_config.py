@@ -79,7 +79,7 @@ directories = ["specs"]
 class TestLocalConfigOverride:
     """Tests for .elspais.local.toml deep-merge support."""
 
-    # Implements: REQ-d00207-B
+    # Verifies: REQ-d00207-B
     def test_local_toml_merges_over_base(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             base = Path(tmpdir) / ".elspais.toml"
@@ -93,7 +93,7 @@ class TestLocalConfigOverride:
             assert config["project"]["namespace"] == "REQ"
             assert config["project"]["name"] == "local-override"
 
-    # Implements: REQ-d00207-B
+    # Verifies: REQ-d00207-B
     def test_local_toml_overrides_base_values(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             base = Path(tmpdir) / ".elspais.toml"
@@ -106,7 +106,7 @@ class TestLocalConfigOverride:
 
             assert config["project"]["namespace"] == "LOCAL"
 
-    # Implements: REQ-d00207-B
+    # Verifies: REQ-d00207-B
     def test_missing_local_toml_is_silently_ignored(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
             f.write('[project]\nname = "test"\nnamespace = "REQ"\n')
@@ -116,7 +116,7 @@ class TestLocalConfigOverride:
 
             assert config["project"]["namespace"] == "REQ"
 
-    # Implements: REQ-d00207-B
+    # Verifies: REQ-d00207-B
     def test_local_toml_deep_merges_nested_sections(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             base = Path(tmpdir) / ".elspais.toml"
@@ -138,7 +138,7 @@ class TestLocalConfigOverride:
 class TestFindConfigFile:
     """Tests for find_config_file function."""
 
-    # Implements: REQ-p00002
+    # Verifies: REQ-p00002
     def test_finds_config_in_current_dir(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             config_path = Path(tmpdir) / ".elspais.toml"
@@ -148,7 +148,7 @@ class TestFindConfigFile:
 
             assert found.resolve() == config_path.resolve()
 
-    # Implements: REQ-p00002
+    # Verifies: REQ-p00002
     def test_returns_none_when_not_found(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create a .git marker to stop search
@@ -162,7 +162,7 @@ class TestFindConfigFile:
 class TestFindGitRoot:
     """Tests for find_git_root function."""
 
-    # Implements: REQ-p00005-F
+    # Verifies: REQ-p00005-F
     def test_finds_git_root_in_current_dir(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             git_dir = Path(tmpdir) / ".git"
@@ -172,7 +172,7 @@ class TestFindGitRoot:
 
             assert root.resolve() == Path(tmpdir).resolve()
 
-    # Implements: REQ-p00005-F
+    # Verifies: REQ-p00005-F
     def test_finds_git_root_from_subdirectory(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             git_dir = Path(tmpdir) / ".git"
@@ -185,7 +185,7 @@ class TestFindGitRoot:
 
             assert root.resolve() == Path(tmpdir).resolve()
 
-    # Implements: REQ-p00005-F
+    # Verifies: REQ-p00005-F
     def test_returns_none_when_not_in_repo(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             # No .git directory
@@ -194,7 +194,7 @@ class TestFindGitRoot:
 
             assert root is None
 
-    # Implements: REQ-p00005-F
+    # Verifies: REQ-p00005-F
     def test_handles_git_worktree_file(self):
         """Git worktrees use a .git file pointing to the actual gitdir."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -207,7 +207,7 @@ class TestFindGitRoot:
             # Should still recognize this as a git root
             assert root.resolve() == Path(tmpdir).resolve()
 
-    # Implements: REQ-p00005-F
+    # Verifies: REQ-p00005-F
     def test_defaults_to_cwd(self):
         # Should not raise when called without arguments
         # (will find actual git root of test repo)
