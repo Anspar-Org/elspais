@@ -148,6 +148,7 @@ def aggregate_dimension(
     graph: Any,
     dimension: str,
     exclude_status: set[str] | None = None,
+    level_filter: Any = None,
 ) -> DimensionAggregate:
     """Whole-graph sums + per-REQ counts for one CoverageDimension.
 
@@ -158,6 +159,12 @@ def aggregate_dimension(
     dimension-coverage check should read counts from -- it must not
     re-implement this walk (REQ-d00258-C).
 
+    ``level_filter`` (optional) is a predicate ``(level: str | None) -> bool``.
+    When given, only requirements whose level satisfies it are counted (both
+    numerator and denominator). Used by the UAT coverage check so that
+    non-``expects_validation`` levels neither count toward nor drag the gap
+    (REQ-d00258-F).
+
     REQ-d00252-F: an INTEGRATES-delegating requirement has no local
     ``rollup_metrics`` but is still covered for the 'implemented' dimension
     specifically; other dimensions do not receive the INTEGRATES credit.
@@ -165,6 +172,8 @@ def aggregate_dimension(
     agg = DimensionAggregate()
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         if exclude_status and node.status in exclude_status:
+            continue
+        if level_filter is not None and not level_filter(node.level):
             continue
         agg.req_count += 1
         integrates = dimension == "implemented" and has_integration(node)

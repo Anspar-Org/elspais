@@ -122,7 +122,7 @@ The `ElspaisConfig` Pydantic schema SHALL be restructured to v3 shape with first
 
 ### Assertions
 
-A. A `LevelConfig` model SHALL define per-level properties: `rank` (int), `letter` (str), `display_name` (str, optional), and `implements` (list[str]). Unknown fields SHALL be rejected.
+A. A `LevelConfig` model SHALL define per-level properties: `rank` (int), `letter` (str), `display_name` (str, optional), `implements` (list[str]), and `expects_validation` (bool, default false). Unknown fields SHALL be rejected.
 
 B. A `ScanningKindConfig` base model SHALL define common scanning fields: `directories` (list[str]), `file_patterns` (list[str]), `skip_files` (list[str]), `skip_dirs` (list[str]). Per-kind subclasses SHALL add kind-specific extras (e.g., `SpecScanningConfig` adds `index_file`, `TestScanningConfig` adds `enabled`, `prescan_command`, `reference_keyword`, `reference_patterns`).
 
@@ -152,11 +152,12 @@ N. A `_migrate_v3_to_v4` migration SHALL move flat `duplicate_severity`, `undefi
 
 ### Changelog
 
+- 2026-07-03 | e4cda67b | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-05-11 | db4ad28c | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | db4ad28c | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 - 2026-03-29 | c75b87f8 | - | Michael Lewis (michael@anspar.org) | Add assertion N for config migration v3 to v4
 
-*End* *Config Schema v3 Models* | **Hash**: db4ad28c
+*End* *Config Schema v3 Models* | **Hash**: e4cda67b
 ---
 
 ## REQ-d00251: Component Style Vocabulary and Assertion Separator

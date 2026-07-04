@@ -166,7 +166,7 @@ def _tier_to_severity(tier: str, severity_config: Any) -> str:
     return getattr(severity_config, field_name, "error")
 
 
-def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None) -> dict[str, str]:
+def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None) -> dict[str, Any]:
     """Compute per-dimension severity colors and combined worst-of-all.
 
     Uses each CoverageDimension's tier property, maps through config
@@ -185,7 +185,7 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
     """
     from elspais.config.schema import CoverageConfig, CoverageSeverityConfig
 
-    empty: dict[str, str] = {
+    empty: dict[str, Any] = {
         "impl_color": "",
         "impl_tip": "",
         "impl_tier": "",
@@ -204,6 +204,7 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         "combined_color": "",
         "combined_tip": "",
         "combined_bucket": "",
+        "expects_validation": False,
     }
 
     status = (node.status or "").upper()
@@ -234,6 +235,21 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         elif hasattr(rules, "coverage"):
             cov_config = rules.coverage
 
+    # Per-level UAT expectation (REQ-d00258-F). By default a UAT `none` tier is
+    # soft (config `_uat_severity` sets none="info") so a journey-less
+    # requirement is not dragged below "full". When the requirement's level
+    # `expects_validation`, that absence is a REAL gap: override the UAT
+    # severity config so `none` resolves to "error" (-> red badge + drags
+    # combined_bucket). Partial stays "warning" regardless (from 1a7fc2c7).
+    from elspais.config import level_expects_validation
+
+    expects_validation = level_expects_validation(config or {}, node.level)
+    uat_cov_cfg = cov_config.uat_coverage
+    uat_ver_cfg = cov_config.uat_verified
+    if expects_validation:
+        uat_cov_cfg = uat_cov_cfg.model_copy(update={"none": "error"})
+        uat_ver_cfg = uat_ver_cfg.model_copy(update={"none": "error"})
+
     # Map dimension key → (CoverageDimension, CoverageSeverityConfig, output_prefix)
     # "verified" (rendered as the "Passing" badge) uses tested_and_passing(),
     # the union of result-verified and line-coverage-credited evidence
@@ -243,11 +259,11 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         ("implemented", rollup.implemented, cov_config.implemented, "impl"),
         ("tested", rollup.tested, cov_config.tested, "tested"),
         ("verified", tested_and_passing(rollup), cov_config.verified, "verified"),
-        ("uat_coverage", rollup.uat_coverage, cov_config.uat_coverage, "uat_cov"),
-        ("uat_verified", rollup.uat_verified, cov_config.uat_verified, "uat_ver"),
+        ("uat_coverage", rollup.uat_coverage, uat_cov_cfg, "uat_cov"),
+        ("uat_verified", rollup.uat_verified, uat_ver_cfg, "uat_ver"),
     ]
 
-    result: dict[str, str] = {}
+    result: dict[str, Any] = {}
     worst_severity_priority = 999
     worst_severity = ""
     worst_color = ""
@@ -286,6 +302,11 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         result["combined_bucket"] = "failing"
     else:
         result["combined_bucket"] = _SEVERITY_TO_BUCKET.get(worst_severity, "none")
+
+    # Surface the per-level UAT expectation so the viewer can gate the two UAT
+    # header badges: a journey-less expects_validation requirement still shows a
+    # (red) UAT badge; a non-expecting one shows none (REQ-d00258-F).
+    result["expects_validation"] = expects_validation
 
     return result
 

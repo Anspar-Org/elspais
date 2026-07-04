@@ -193,6 +193,47 @@ class TestCollectGaps:
         data = collect_gaps(graph, exclude_status=set())
         assert any(item[0] == "REQ-p00001" and item[2] == "uat" for item in data.failing)
 
+    # Verifies: REQ-d00258-F
+    def test_unvalidated_only_for_expects_validation_levels(self) -> None:
+        """An expects_validation req with no UAT coverage is 'unvalidated'; a
+        req at a non-expecting level is not, even with zero UAT coverage."""
+        from elspais.graph.metrics import CoverageDimension
+
+        prd = _make_req("REQ-p00001", "User-facing")  # level prd
+        prd.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                uat_coverage=CoverageDimension(total=1, direct=0, indirect=0),
+            ),
+        )
+        dev = GraphNode(id="REQ-d00001", kind=NodeKind.REQUIREMENT, label="Internal")
+        dev.set_field("level", "dev")
+        dev.set_field("status", "Active")
+        dev.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                uat_coverage=CoverageDimension(total=1, direct=0, indirect=0),
+            ),
+        )
+        graph = _make_graph(prd, dev)
+
+        config = {
+            "levels": {
+                "prd": {"rank": 1, "expects_validation": True},
+                "dev": {"rank": 3, "expects_validation": False},
+            }
+        }
+        data = collect_gaps(graph, exclude_status=set(), config=config)
+        ids = {e.req_id for e in data.unvalidated}
+        assert "REQ-p00001" in ids  # expects_validation -> gap
+        assert "REQ-d00001" not in ids  # non-expecting -> not a gap
+
+        # Without config, no level expects validation -> no unvalidated gaps.
+        data_no_cfg = collect_gaps(graph, exclude_status=set())
+        assert len(data_no_cfg.unvalidated) == 0
+
     def test_collect_gaps_includes_no_assertions(self) -> None:
         # Verifies: REQ-d00204
         """A REQ with no ASSERTION children appears in no_assertions."""

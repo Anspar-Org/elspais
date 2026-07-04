@@ -196,6 +196,10 @@ _FIELD_COMMENTS: dict[str, str] = {
     "levels.*.color": (
         'Optional badge color (hex "#RRGGBB"); omit for a deterministic ' "hash-derived color"
     ),
+    "levels.*.expects_validation": (
+        "Set true for levels that should have a user-journey validating them; "
+        "absent UAT is then a reported gap (health uat.coverage + gaps) and red in the viewer"
+    ),
     # --- [scanning] ---
     "scanning": "File scanning configuration",
     "scanning.skip": "Global skip patterns (applied to all scan kinds)",

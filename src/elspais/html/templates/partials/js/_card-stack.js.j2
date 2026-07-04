@@ -680,11 +680,15 @@ function buildCardHtml(nodeId, data, collapsed) {
             for (var lbl in aLinksAll) {
                 if (aLinksAll[lbl][d.assertLinkKey]) { hasAssertionLinks = true; break; }
             }
-            // UAT dims (gateOnEvidence) only render with actual journey Validates
+            // UAT dims (gateOnEvidence) render with actual journey Validates
             // evidence — a journey-less requirement shows no UAT badge (its colored
-            // "none" tier is not a real gap). Code dims still show on 0-coverage.
+            // "none" tier is not a real gap). Exception: when the requirement's
+            // level expects_validation, a journey-less req DOES show the badge —
+            // in RED (its "none" tier resolves to error severity server-side), a
+            // real gap. Code dims still show on 0-coverage.
+            var expectsValidation = dim && dim.expects_validation;
             var hasData = d.gateOnEvidence
-                ? (hasReqLinks || hasAssertionLinks)
+                ? (hasReqLinks || hasAssertionLinks || expectsValidation)
                 : ((dim && dim.color) || hasReqLinks || hasAssertionLinks);
             if (!hasData) return; // hide badge if no data
             var colorClass = dim && dim.color ? ' active val-' + dim.color : '';

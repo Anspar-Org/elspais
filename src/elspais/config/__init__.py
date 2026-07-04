@@ -53,6 +53,36 @@ def default_level_keys() -> list[str]:
     return [k for k, _r in ranked]
 
 
+def level_expects_validation(config: dict[str, Any], level_key: str | None) -> bool:
+    """Return whether a level is expected to have UAT validation.
+
+    Single source of truth for "does this level expect a USER_JOURNEY to
+    Validate its requirements". When true, absence of UAT coverage for a
+    requirement at that level is a real gap (health `uat.coverage` + `gaps
+    unvalidated`) and renders red in the viewer. Default false so existing
+    projects are unaffected until they opt in.
+
+    The lookup is case-insensitive on the level key: `[levels]` sections are
+    typically keyed lowercase (`prd`) while ``node.level`` is often upper
+    (`PRD`) -- mirrors how summary.py / aggregation.py normalize level case.
+    Consumers (viewer, health, gaps) MUST call this helper rather than reading
+    ``config["levels"]`` directly.
+    """
+    if not level_key:
+        return False
+    levels = (config or {}).get("levels")
+    if not isinstance(levels, dict):
+        return False
+    target = level_key.lower()
+    for key, spec in levels.items():
+        if not isinstance(key, str) or key.lower() != target:
+            continue
+        if isinstance(spec, dict):
+            return bool(spec.get("expects_validation", False))
+        return bool(getattr(spec, "expects_validation", False))
+    return False
+
+
 def _migrate_legacy_patterns(config: dict[str, Any]) -> dict[str, Any]:
     """Migrate legacy [patterns] config to [id-patterns] + [levels] format.
 
@@ -924,6 +954,7 @@ __all__ = [
     "IgnoreConfig",
     "config_defaults",
     "default_level_keys",
+    "level_expects_validation",
     "load_config",
     "find_config_file",
     "find_git_root",

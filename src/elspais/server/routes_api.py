@@ -352,14 +352,21 @@ async def api_node(request: Request) -> JSONResponse:
                 "uat_coverage": "uat_cov",
                 "uat_verified": "uat_ver",
             }
-            dims: dict[str, dict[str, str]] = {}
+            expects_validation = bool(tiers.get("expects_validation", False))
+            dims: dict[str, dict[str, Any]] = {}
             for dim_key in DIMENSION_KEYS:
                 prefix = prefix_map[dim_key]
-                dims[dim_key] = {
+                entry: dict[str, Any] = {
                     "color": tiers.get(f"{prefix}_color", ""),
                     "tip": DIMENSION_TIPS.get(dim_key, ""),
                     "status_tip": tiers.get(f"{prefix}_tip", ""),
                 }
+                # UAT dims carry the per-level expectation so the viewer can
+                # render a (red) UAT badge on a journey-less expects_validation
+                # requirement (REQ-d00258-F).
+                if dim_key in ("uat_coverage", "uat_verified"):
+                    entry["expects_validation"] = expects_validation
+                dims[dim_key] = entry
             result["coverage_dimensions"] = dims
 
             # Per-assertion direct link flags + REQ-level links

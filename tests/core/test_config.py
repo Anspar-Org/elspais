@@ -5,7 +5,40 @@ from pathlib import Path
 
 import pytest
 
-from elspais.config import config_defaults, find_config_file, find_git_root, load_config
+from elspais.config import (
+    config_defaults,
+    find_config_file,
+    find_git_root,
+    level_expects_validation,
+    load_config,
+)
+
+
+# Verifies: REQ-d00258-F
+class TestLevelExpectsValidation:
+    """Tests for the level_expects_validation resolver."""
+
+    def test_true_when_declared(self):
+        cfg = {"levels": {"prd": {"expects_validation": True}}}
+        assert level_expects_validation(cfg, "prd") is True
+
+    def test_case_insensitive_on_level_key(self):
+        """node.level is often upper ('PRD'); config keys are lower ('prd')."""
+        cfg = {"levels": {"prd": {"expects_validation": True}}}
+        assert level_expects_validation(cfg, "PRD") is True
+
+    def test_default_false_when_undeclared(self):
+        cfg = {"levels": {"prd": {"rank": 1}}}
+        assert level_expects_validation(cfg, "prd") is False
+
+    def test_false_for_unknown_level(self):
+        cfg = {"levels": {"prd": {"expects_validation": True}}}
+        assert level_expects_validation(cfg, "dev") is False
+
+    def test_false_for_missing_levels_or_none(self):
+        assert level_expects_validation({}, "prd") is False
+        assert level_expects_validation({"levels": {}}, "prd") is False
+        assert level_expects_validation({"levels": {"prd": {}}}, None) is False
 
 
 class TestConfigDefaults:

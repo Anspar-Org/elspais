@@ -188,7 +188,7 @@ coverage and results from user journey validation.
 
 | Check | Description |
 |-------|-------------|
-| `uat.coverage` | Requirements validated by USER_JOURNEY nodes (informational) |
+| `uat.coverage` | UAT coverage for requirements at levels that set `expects_validation = true`. Such a requirement with no validating USER_JOURNEY is flagged as a gap. Levels without `expects_validation` are not counted; when no level expects validation the check passes trivially. |
 | `uat.results` | Journey pass/fail status from a CSV results file |
 
 ### Terms Checks (`--terms`)

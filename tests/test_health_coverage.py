@@ -40,6 +40,11 @@ def _make_graph(*nodes: GraphNode) -> FederatedGraph:
     )
 
 
+# A config whose `dev` level expects UAT validation, so the (dev-level) test
+# requirements exercise the expects_validation gap path (REQ-d00258-F).
+_DEV_EXPECTS_CONFIG: dict = {"levels": {"dev": {"rank": 3, "expects_validation": True}}}
+
+
 # =============================================================================
 # REQ-d00218: check_test_coverage
 # =============================================================================
@@ -226,27 +231,27 @@ class TestCheckTestCoverage:
 class TestCheckUatCoverage:
     """Tests for check_uat_coverage health check."""
 
-    # Verifies: REQ-d00219-A
+    # Verifies: REQ-d00219-A, REQ-d00258-F
     def test_returns_info_severity(self):
-        """check_uat_coverage always returns severity=info."""
+        """Empty graph (no uncovered reqs) returns severity=info, passed."""
         graph = _make_graph()
-        result = check_uat_coverage(graph, exclude_status=set())
+        result = check_uat_coverage(graph, exclude_status=set(), config=_DEV_EXPECTS_CONFIG)
         assert result.severity == "info"
         assert result.passed is True
         assert result.category == "uat"
 
-    # Verifies: REQ-d00219-A
+    # Verifies: REQ-d00219-A, REQ-d00258-F
     def test_no_requirements_zero_uat(self):
         """Empty graph reports 0/0 UAT coverage."""
         graph = _make_graph()
-        result = check_uat_coverage(graph, exclude_status=set())
+        result = check_uat_coverage(graph, exclude_status=set(), config=_DEV_EXPECTS_CONFIG)
         assert result.name == "uat.uat_coverage"
         assert result.details["total_requirements"] == 0
         assert result.details["reqs_with_any_coverage"] == 0
 
-    # Verifies: REQ-d00219-A
+    # Verifies: REQ-d00219-A, REQ-d00258-F
     def test_req_with_uat_covered_counted(self):
-        """Requirement with uat_covered > 0 is counted."""
+        """Requirement with uat_covered > 0 is counted and check passes."""
         req = _make_req("REQ-d00001")
         metrics = RollupMetrics(
             total_assertions=2,
@@ -255,14 +260,16 @@ class TestCheckUatCoverage:
         req.set_metric("rollup_metrics", metrics)
 
         graph = _make_graph(req)
-        result = check_uat_coverage(graph, exclude_status=set())
+        result = check_uat_coverage(graph, exclude_status=set(), config=_DEV_EXPECTS_CONFIG)
 
         assert result.details["reqs_with_any_coverage"] == 1
         assert result.details["req_coverage_percent"] == 100.0
+        assert result.passed is True
 
-    # Verifies: REQ-d00219-A
-    def test_req_without_uat_covered_not_counted(self):
-        """Requirement with uat_coverage.indirect == 0 is not counted."""
+    # Verifies: REQ-d00258-F
+    def test_expects_validation_req_without_uat_is_gap(self):
+        """An expects_validation req with no UAT coverage fails the check with
+        a finding for that req (REQ-d00258-F)."""
         req = _make_req("REQ-d00001")
         metrics = RollupMetrics(
             total_assertions=2,
@@ -271,11 +278,57 @@ class TestCheckUatCoverage:
         req.set_metric("rollup_metrics", metrics)
 
         graph = _make_graph(req)
-        result = check_uat_coverage(graph, exclude_status=set())
+        result = check_uat_coverage(graph, exclude_status=set(), config=_DEV_EXPECTS_CONFIG)
 
         assert result.details["reqs_with_any_coverage"] == 0
+        assert result.passed is False
+        assert any(f.node_id == "REQ-d00001" for f in result.findings)
 
-    # Verifies: REQ-d00219-A
+    # Verifies: REQ-d00258-F
+    def test_non_expecting_level_req_not_a_gap(self):
+        """A req at a level that does NOT expect_validation is neither counted
+        nor flagged, even with zero UAT coverage (REQ-d00258-F)."""
+        # Config: prd expects validation, dev does not. Requirement is dev-level.
+        config = {
+            "levels": {
+                "prd": {"rank": 1, "expects_validation": True},
+                "dev": {"rank": 3, "expects_validation": False},
+            }
+        }
+        req = _make_req("REQ-d00001", level="dev")
+        req.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=2,
+                uat_coverage=CoverageDimension(total=2, direct=0, indirect=0),
+            ),
+        )
+        graph = _make_graph(req)
+        result = check_uat_coverage(graph, exclude_status=set(), config=config)
+
+        # dev req excluded from the count entirely; nothing to validate -> passes.
+        assert result.details["total_requirements"] == 0
+        assert result.passed is True
+
+    # Verifies: REQ-d00258-F
+    def test_no_level_expects_trivial_pass(self):
+        """When no level expects validation, the check passes trivially."""
+        req = _make_req("REQ-d00001")
+        req.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=2,
+                uat_coverage=CoverageDimension(total=2, direct=0, indirect=0),
+            ),
+        )
+        graph = _make_graph(req)
+        result = check_uat_coverage(graph, exclude_status=set(), config={})
+
+        assert result.passed is True
+        assert result.severity == "info"
+        assert "expects_validation" in result.message
+
+    # Verifies: REQ-d00219-A, REQ-d00258-F
     def test_excluded_statuses_filter(self):
         """UAT coverage excludes requirements with excluded status."""
         active = _make_req("REQ-d00001", status="Active")
@@ -295,20 +348,21 @@ class TestCheckUatCoverage:
         )
 
         graph = _make_graph(active, rejected)
-        result = check_uat_coverage(graph, exclude_status={"Rejected"})
+        result = check_uat_coverage(graph, exclude_status={"Rejected"}, config=_DEV_EXPECTS_CONFIG)
 
         assert result.details["total_requirements"] == 1
         assert result.details["reqs_with_any_coverage"] == 1
 
-    # Verifies: REQ-d00219-A
+    # Verifies: REQ-d00219-A, REQ-d00258-F
     def test_no_rollup_metrics_not_counted(self):
-        """Requirement with no metrics is not UAT-covered."""
+        """Requirement with no metrics is not UAT-covered (and is a gap)."""
         req = _make_req("REQ-d00001")
         graph = _make_graph(req)
-        result = check_uat_coverage(graph, exclude_status=set())
+        result = check_uat_coverage(graph, exclude_status=set(), config=_DEV_EXPECTS_CONFIG)
 
         assert result.details["reqs_with_any_coverage"] == 0
         assert result.details["total_requirements"] == 1
+        assert result.passed is False
 
 
 # =============================================================================
@@ -518,7 +572,7 @@ class TestRunUatChecks:
         )
 
         graph = _make_graph(req_active, req_deprecated)
-        checks = run_uat_checks(graph, exclude_status={"Deprecated"}, config={})
+        checks = run_uat_checks(graph, exclude_status={"Deprecated"}, config=_DEV_EXPECTS_CONFIG)
 
         coverage_check = next(c for c in checks if c.name == "uat.uat_coverage")
         assert coverage_check.details["total_requirements"] == 1

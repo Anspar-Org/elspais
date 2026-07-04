@@ -86,16 +86,26 @@ def _integrates_associates(graph: FederatedGraph, node: Any) -> list[str]:
     return sorted(owners)
 
 
-def collect_gaps(graph: FederatedGraph, exclude_status: set[str]) -> GapData:
+def collect_gaps(
+    graph: FederatedGraph,
+    exclude_status: set[str],
+    config: dict[str, Any] | None = None,
+) -> GapData:
     """Single-pass collection of coverage gaps from the graph.
 
     Args:
         graph: The federated traceability graph.
         exclude_status: Set of status values to skip (e.g. {"Retired"}).
+        config: Project config dict. Used to resolve per-level
+            ``expects_validation`` so only levels that expect UAT validation
+            produce ``unvalidated`` gaps (REQ-d00258-F).
 
     Returns:
         GapData with all gap lists populated.
     """
+    from elspais.config import level_expects_validation
+
+    cfg = config or {}
     data = GapData()
 
     excluded_ids: set[str] = set()
@@ -145,13 +155,16 @@ def collect_gaps(graph: FederatedGraph, exclude_status: set[str]) -> GapData:
             if uncov:
                 data.untested.append(GapEntry(req_id, title, uncov))
 
-        # Unvalidated: no UAT coverage
-        if metrics is None or metrics.uat_coverage.indirect <= 0:
-            data.unvalidated.append(GapEntry(req_id, title))
-        elif metrics.uat_coverage.indirect < metrics.uat_coverage.total:
-            uncov = _uncovered_assertions(metrics, assertion_nodes, "uat_coverage")
-            if uncov:
-                data.unvalidated.append(GapEntry(req_id, title, uncov))
+        # Unvalidated: no UAT coverage. Only levels that expect_validation can
+        # be "unvalidated" -- an internal level that never gets a journey is not
+        # a gap (REQ-d00258-F).
+        if level_expects_validation(cfg, node.level):
+            if metrics is None or metrics.uat_coverage.indirect <= 0:
+                data.unvalidated.append(GapEntry(req_id, title))
+            elif metrics.uat_coverage.indirect < metrics.uat_coverage.total:
+                uncov = _uncovered_assertions(metrics, assertion_nodes, "uat_coverage")
+                if uncov:
+                    data.unvalidated.append(GapEntry(req_id, title, uncov))
 
         # No assertions: not testable
         if not assertion_nodes:
@@ -322,7 +335,7 @@ def render_section(
         gap_types = _ALL_GAP_TYPES
 
     exclude_status = _resolve_exclude_status(args, config=config or {})
-    data = collect_gaps(graph, exclude_status)
+    data = collect_gaps(graph, exclude_status, config=config)
 
     fmt = getattr(args, "format", "text")
 
@@ -417,7 +430,7 @@ def compute_gaps(graph: FederatedGraph, config: dict, params: dict[str, str]) ->
     fake_args.status = status_str.split(",") if status_str else None
 
     exclude_status = _resolve_exclude_status(fake_args, config=config)
-    data = collect_gaps(graph, exclude_status)
+    data = collect_gaps(graph, exclude_status, config=config)
 
     def _serialize_gap_list(gt: str) -> list:
         items = getattr(data, gt)

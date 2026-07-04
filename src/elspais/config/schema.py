@@ -248,6 +248,11 @@ class LevelConfig(_StrictModel):
     display_name: str = ""
     implements: list[str]
     color: str | None = None
+    # When true, requirements at this level are expected to have UAT validation
+    # (a USER_JOURNEY that Validates them). Absence is then a real gap: reported
+    # by health `uat.coverage` + `gaps unvalidated` and rendered red in the
+    # viewer. Default false -- absent UAT is neither flagged nor badged.
+    expects_validation: bool = False
 
     @field_validator("color")
     @classmethod

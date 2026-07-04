@@ -565,6 +565,11 @@
           ],
           "default": null,
           "title": "Color"
+        },
+        "expects_validation": {
+          "default": false,
+          "title": "Expects Validation",
+          "type": "boolean"
         }
       },
       "required": [

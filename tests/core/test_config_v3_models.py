@@ -49,6 +49,14 @@ class TestLevelConfig:
         lc = LevelConfig(rank=2, letter="o", implements=["prd"])
         assert lc.display_name == ""
 
+    # Verifies: REQ-d00212-A, REQ-d00258-F
+    def test_REQ_d00212_A_expects_validation_defaults_false(self):
+        """expects_validation defaults False and is accepted when set."""
+        lc = LevelConfig(rank=1, letter="p", implements=["prd"])
+        assert lc.expects_validation is False
+        lc2 = LevelConfig(rank=1, letter="p", implements=["prd"], expects_validation=True)
+        assert lc2.expects_validation is True
+
     def test_REQ_d00212_A_level_config_rank_required(self):
         """rank is required."""
         with pytest.raises(ValidationError):

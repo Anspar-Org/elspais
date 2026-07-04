@@ -101,7 +101,7 @@
 | REQ-d00209 | Schema-Driven Init Template Generation                        | dev-graph-config.md     | 44aeb496 |
 | REQ-d00210 | Documentation Drift Detection                                 | dev-graph-config.md     | eb94434a |
 | REQ-d00211 | Config-Driven Viewer UI Values                                | dev-graph-config.md     | a9cc41d2 |
-| REQ-d00212 | Config Schema v3 Models                                       | dev-graph-config.md     | db4ad28c |
+| REQ-d00212 | Config Schema v3 Models                                       | dev-graph-config.md     | e4cda67b |
 | REQ-d00213 | Version Check and Update Notification                         | dev-cli.md              | 56b62d01 |
 | REQ-d00214 | MCP Server Install/Uninstall CLI Commands                     | dev-mcp-tools.md        | f1518d2c |
 | REQ-d00215 | Keyword Extraction Annotator                                  | dev-graph-core.md       | ebe57660 |
@@ -147,7 +147,7 @@
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | 9381f1e5 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | 44671fc1 |
 | REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 45bb196f |
-| REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | be97c170 |
+| REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | c843c727 |
 | REQ-d00259 | Requirement Format Reference Command                          | dev-cli.md              | 8e05d02e |
 
 ## User Journeys

@@ -415,3 +415,54 @@ class TestSeverityCatalog:
 
         assert tiers["verified_tier"] == "full-direct"
         assert tiers["combined_bucket"] == "full"
+
+    # Verifies: REQ-d00258-F
+    def test_expects_validation_uat_none_is_red_and_drags(self):
+        """When the requirement's level expects_validation, a UAT 'none' tier
+        resolves to error severity (red) and drags combined_bucket to 'none';
+        the tiers payload advertises expects_validation for the JS gate."""
+        from elspais.graph.metrics import CoverageDimension, RollupMetrics
+        from elspais.html.generator import compute_coverage_tiers
+
+        rollup = RollupMetrics(
+            total_assertions=2,
+            implemented=CoverageDimension(total=2, direct=2, indirect=2),
+            tested=CoverageDimension(total=2, direct=2, indirect=2),
+            verified=CoverageDimension(total=2, direct=2, indirect=2),
+            uat_coverage=CoverageDimension(total=2, direct=0, indirect=0),
+            uat_verified=CoverageDimension(total=2, direct=0, indirect=0),
+        )
+        node = self._make_active_node_with_metrics(rollup)  # level PRD
+        config = {"levels": {"prd": {"expects_validation": True}}}
+        tiers = compute_coverage_tiers(node, config)
+
+        assert tiers["uat_cov_tier"] == "none"
+        assert tiers["uat_cov_color"] == "red"
+        assert tiers["expects_validation"] is True
+        # error severity on a UAT dim drags the combined bucket to 'none'.
+        assert tiers["combined_bucket"] == "none"
+
+    # Verifies: REQ-d00258-F
+    def test_non_expecting_level_uat_none_stays_soft(self):
+        """A level that does NOT expect_validation keeps the soft UAT 'none'
+        (info, does not drag) -- preserves test_bucket_full_despite_uat_none."""
+        from elspais.graph.metrics import CoverageDimension, RollupMetrics
+        from elspais.html.generator import compute_coverage_tiers
+
+        rollup = RollupMetrics(
+            total_assertions=2,
+            implemented=CoverageDimension(total=2, direct=2, indirect=2),
+            tested=CoverageDimension(total=2, direct=2, indirect=2),
+            verified=CoverageDimension(total=2, direct=2, indirect=2),
+            uat_coverage=CoverageDimension(total=2, direct=0, indirect=0),
+            uat_verified=CoverageDimension(total=2, direct=0, indirect=0),
+        )
+        node = self._make_active_node_with_metrics(rollup)  # level PRD
+        # Config where prd does NOT expect validation.
+        config = {"levels": {"prd": {"expects_validation": False}}}
+        tiers = compute_coverage_tiers(node, config)
+
+        assert tiers["uat_cov_tier"] == "none"
+        assert tiers["expects_validation"] is False
+        # soft 'none' -> info -> does not drag the bucket below 'full'.
+        assert tiers["combined_bucket"] == "full"

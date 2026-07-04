@@ -52,6 +52,13 @@ name = "my-project"
 # Defines requirement levels with rank, letter, display name, and implements rules.
 # Lower rank = higher in hierarchy (PRD=1 is parent of DEV=3).
 # The `implements` list declares which levels this level may implement.
+#
+# expects_validation (bool, default false): set true for levels that should have
+# a user-journey validating them (a USER_JOURNEY that `Validates:` the requirement).
+# When true, a requirement of that level with no UAT coverage is a reported gap
+# (health `uat.coverage` + `gaps unvalidated`) and its viewer UAT badge renders red.
+# When false (the default), absent UAT is neither flagged nor badged, and does not
+# drag the requirement's combined coverage bucket.
 #──────────────────────────────────────────────────────────────────────────────
 
 [levels.prd]
@@ -59,6 +66,7 @@ rank = 1
 letter = "p"
 display_name = "Product"
 implements = ["prd"]            # PRD can implement other PRD (sub-requirements)
+# expects_validation = true     # user-facing PRD reqs should have a validating journey
 
 [levels.ops]
 rank = 2
@@ -71,6 +79,7 @@ rank = 3
 letter = "d"
 display_name = "Development"
 implements = ["dev", "ops", "prd"]  # DEV can implement DEV, OPS, or PRD
+# expects_validation = false    # internal DEV reqs are not expected to have journeys
 
 #──────────────────────────────────────────────────────────────────────────────
 # ID PATTERNS - Requirement ID Format

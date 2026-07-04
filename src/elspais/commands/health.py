@@ -2075,6 +2075,8 @@ def check_dimension_coverage(
     dimension: str,
     exclude_status: set[str] | None = None,
     config: dict[str, Any] | None = None,
+    level_filter: Any = None,
+    message_suffix: str = "",
 ) -> HealthCheck:
     """Check coverage for one of the 5 CoverageDimension dimensions.
 
@@ -2087,6 +2089,9 @@ def check_dimension_coverage(
                    'uat_coverage', 'uat_verified'.
         exclude_status: Statuses to exclude from counts.
         config: Project config dict.
+        level_filter: Optional predicate ``(level) -> bool`` limiting which
+            requirement levels are counted (see ``aggregate_dimension``).
+        message_suffix: Optional clarifying text appended to the message.
     """
     from elspais.graph.aggregation import aggregate_dimension
     from elspais.graph.metrics import fmt_assertion_count
@@ -2110,7 +2115,9 @@ def check_dimension_coverage(
     # REQ-d00258-C: whole-graph per-dimension sums + per-REQ counts (incl. the
     # REQ-d00252-F INTEGRATES exception) come from the single shared
     # aggregation module -- not a second re-implementation of the walk here.
-    agg = aggregate_dimension(graph, dimension, exclude_status=exclude_status)
+    agg = aggregate_dimension(
+        graph, dimension, exclude_status=exclude_status, level_filter=level_filter
+    )
     req_count = agg.req_count
     req_with_any = agg.req_with_any  # REQs where dim.indirect > 0
     req_with_direct = agg.req_with_direct  # REQs where dim.direct > 0
@@ -2136,7 +2143,7 @@ def check_dimension_coverage(
         )
     if has_any_failures:
         msg_parts.append("FAILURES DETECTED")
-    message = ", ".join(msg_parts) + note
+    message = ", ".join(msg_parts) + note + message_suffix
 
     return HealthCheck(
         name=f"{category}.{dimension}",
@@ -2604,15 +2611,76 @@ def check_test_coverage(
     return check_dimension_coverage(graph, "tested", exclude_status=exclude_status, config=config)
 
 
+# Implements: REQ-d00258-F
 def check_uat_coverage(
     graph: FederatedGraph,
     exclude_status: set[str] | None = None,
     config: dict[str, Any] | None = None,
 ) -> HealthCheck:
-    """Check UAT coverage — delegates to dimension check for 'uat_coverage'."""
-    return check_dimension_coverage(
-        graph, "uat_coverage", exclude_status=exclude_status, config=config
+    """Check UAT coverage — delegates to dimension check for 'uat_coverage'.
+
+    Only requirements whose level ``expects_validation`` are considered:
+    non-expecting levels (the default) contribute to neither numerator nor
+    denominator. When no level expects validation the check passes trivially
+    (nothing to validate).
+    """
+    from elspais.config import level_expects_validation
+
+    cfg = config or {}
+    levels = cfg.get("levels") if isinstance(cfg, dict) else None
+    any_expects = isinstance(levels, dict) and any(
+        level_expects_validation(cfg, key) for key in levels
     )
+    if not any_expects:
+        return HealthCheck(
+            name="uat.uat_coverage",
+            passed=True,
+            message="UAT Covered: no levels expect validation (expects_validation)",
+            category="uat",
+            severity="info",
+            details={"dimension": "uat_coverage", "expects_validation_levels": 0},
+        )
+
+    level_filter = lambda level: level_expects_validation(cfg, level)  # noqa: E731
+    check = check_dimension_coverage(
+        graph,
+        "uat_coverage",
+        exclude_status=exclude_status,
+        config=config,
+        level_filter=level_filter,
+        message_suffix=" (expects_validation levels only)",
+    )
+
+    # An expects_validation requirement lacking UAT coverage is a real gap:
+    # collect those reqs as findings and fail the check (REQ-d00258-F). The
+    # dimension sums come from check_dimension_coverage; this only identifies
+    # WHICH reqs are uncovered (no re-implementation of the sum walk).
+    from elspais.graph import NodeKind
+
+    if exclude_status is None:
+        from elspais.config import get_status_roles
+
+        exclude_status = get_status_roles(cfg).coverage_excluded_statuses()
+
+    uncovered: list[HealthFinding] = []
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if node.status in exclude_status or not level_filter(node.level):
+            continue
+        rollup = node.get_metric("rollup_metrics")
+        if rollup is None or rollup.uat_coverage.indirect <= 0:
+            uncovered.append(
+                HealthFinding(
+                    message=f"{node.id}: no UAT validation (level expects_validation)",
+                    node_id=node.id,
+                )
+            )
+
+    if uncovered:
+        check.passed = False
+        check.severity = "warning"
+        check.findings = uncovered
+        check.details["uncovered_expects_validation"] = [f.node_id for f in uncovered]
+    return check
 
 
 # Implements: REQ-d00241-D
