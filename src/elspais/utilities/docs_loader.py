@@ -20,6 +20,7 @@ TOPIC_ORDER = [
     "format",
     "hierarchy",
     "assertions",
+    "authoring",
     "traceability",
     "linking",
     "validation",
