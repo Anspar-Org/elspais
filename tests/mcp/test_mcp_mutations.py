@@ -126,7 +126,7 @@ class TestMutateRenameNode:
         assert "before_state" in mutation
         assert "after_state" in mutation
 
-    # Implements: REQ-o00062-A
+    # Verifies: REQ-o00062-A
     def test_rename_nonexistent_node_returns_error(self, mutation_graph):
         """Renaming non-existent node returns error."""
         pytest.importorskip("mcp")
@@ -141,7 +141,7 @@ class TestMutateRenameNode:
 class TestMutateUpdateTitle:
     """Tests for mutate_update_title() tool."""
 
-    # Implements: REQ-o00062-A
+    # Verifies: REQ-o00062-A
     def test_delegates_to_graph_update_title(self, mutation_graph):
         """Delegates to graph.update_title()."""
         pytest.importorskip("mcp")
@@ -153,7 +153,7 @@ class TestMutateUpdateTitle:
         node = mutation_graph.find_by_id("REQ-p00001")
         assert node.get_label() == "Updated Platform Security"
 
-    # Implements: REQ-o00062-E
+    # Verifies: REQ-o00062-E
     def test_returns_mutation_entry(self, mutation_graph):
         """Returns MutationEntry for audit."""
         pytest.importorskip("mcp")
@@ -169,7 +169,7 @@ class TestMutateUpdateTitle:
 class TestMutateChangeStatus:
     """Tests for mutate_change_status() tool."""
 
-    # Implements: REQ-o00062-A
+    # Verifies: REQ-o00062-A
     def test_delegates_to_graph_change_status(self, mutation_graph):
         """Delegates to graph.change_status()."""
         pytest.importorskip("mcp")
@@ -181,7 +181,7 @@ class TestMutateChangeStatus:
         node = mutation_graph.find_by_id("REQ-p00001")
         assert node.status == "Deprecated"
 
-    # Implements: REQ-o00062-E
+    # Verifies: REQ-o00062-E
     def test_returns_mutation_entry(self, mutation_graph):
         """Returns MutationEntry for audit."""
         pytest.importorskip("mcp")
@@ -216,7 +216,7 @@ class TestMutateAddRequirement:
         assert node is not None
         assert node.get_label() == "New DEV Requirement"
 
-    # Implements: REQ-o00062-E
+    # Verifies: REQ-o00062-E
     def test_returns_mutation_entry(self, mutation_graph):
         """Returns MutationEntry for audit."""
         pytest.importorskip("mcp")
@@ -260,7 +260,7 @@ class TestMutateDeleteRequirement:
         assert result["success"] is True
         assert mutation_graph.find_by_id("REQ-o00001") is None
 
-    # Implements: REQ-o00062-E
+    # Verifies: REQ-o00062-E
     def test_returns_mutation_entry(self, mutation_graph):
         """Returns MutationEntry for audit."""
         pytest.importorskip("mcp")
@@ -280,7 +280,7 @@ class TestMutateDeleteRequirement:
 class TestMutateAddAssertion:
     """Tests for mutate_add_assertion() tool."""
 
-    # Implements: REQ-o00062-B
+    # Verifies: REQ-o00062-B
     def test_delegates_to_graph_add_assertion(self, mutation_graph):
         """Delegates to graph.add_assertion()."""
         pytest.importorskip("mcp")
@@ -298,7 +298,7 @@ class TestMutateAddAssertion:
         assert assertion is not None
         assert assertion.get_label() == "SHALL log all access attempts"
 
-    # Implements: REQ-o00062-E
+    # Verifies: REQ-o00062-E
     def test_returns_mutation_entry(self, mutation_graph):
         """Returns MutationEntry for audit."""
         pytest.importorskip("mcp")
@@ -313,7 +313,7 @@ class TestMutateAddAssertion:
 class TestMutateUpdateAssertion:
     """Tests for mutate_update_assertion() tool."""
 
-    # Implements: REQ-o00062-B
+    # Verifies: REQ-o00062-B
     def test_delegates_to_graph_update_assertion(self, mutation_graph):
         """Delegates to graph.update_assertion()."""
         pytest.importorskip("mcp")
@@ -327,7 +327,7 @@ class TestMutateUpdateAssertion:
         assertion = mutation_graph.find_by_id("REQ-p00001-A")
         assert "AES-256" in assertion.get_label()
 
-    # Implements: REQ-o00062-E
+    # Verifies: REQ-o00062-E
     def test_returns_mutation_entry(self, mutation_graph):
         """Returns MutationEntry for audit."""
         pytest.importorskip("mcp")
@@ -342,7 +342,7 @@ class TestMutateUpdateAssertion:
 class TestMutateDeleteAssertion:
     """Tests for mutate_delete_assertion() tool."""
 
-    # Implements: REQ-o00062-F
+    # Verifies: REQ-o00062-F
     def test_requires_confirm_true(self, mutation_graph):
         """Requires confirm=True for destructive operations."""
         pytest.importorskip("mcp")
@@ -353,7 +353,7 @@ class TestMutateDeleteAssertion:
         assert result["success"] is False
         assert mutation_graph.find_by_id("REQ-p00001-A") is not None
 
-    # Implements: REQ-o00062-B
+    # Verifies: REQ-o00062-B
     def test_deletes_when_confirmed(self, mutation_graph):
         """Deletes assertion when confirmed."""
         pytest.importorskip("mcp")
@@ -371,7 +371,7 @@ class TestMutateDeleteAssertion:
             # A still exists but has different content (was B, now compacted to A)
             assert mutation_graph.find_by_id("REQ-p00001-A").get_label() != original_text
 
-    # Implements: REQ-o00062-E
+    # Verifies: REQ-o00062-E
     def test_returns_mutation_entry(self, mutation_graph):
         """Returns MutationEntry for audit."""
         pytest.importorskip("mcp")
@@ -386,7 +386,7 @@ class TestMutateDeleteAssertion:
 class TestMutateRenameAssertion:
     """Tests for mutate_rename_assertion() tool."""
 
-    # Implements: REQ-o00062-B
+    # Verifies: REQ-o00062-B
     def test_delegates_to_graph_rename_assertion(self, mutation_graph):
         """Delegates to graph.rename_assertion()."""
         pytest.importorskip("mcp")
@@ -398,7 +398,7 @@ class TestMutateRenameAssertion:
         assert mutation_graph.find_by_id("REQ-p00001-X") is not None
         assert mutation_graph.find_by_id("REQ-p00001-A") is None
 
-    # Implements: REQ-o00062-E
+    # Verifies: REQ-o00062-E
     def test_returns_mutation_entry(self, mutation_graph):
         """Returns MutationEntry for audit."""
         pytest.importorskip("mcp")
@@ -597,7 +597,7 @@ class TestMutateRemainder:
 class TestMutateAddEdge:
     """Tests for mutate_add_edge() tool."""
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_delegates_to_graph_add_edge(self, mutation_graph):
         """Delegates to graph.add_edge()."""
         pytest.importorskip("mcp")
@@ -621,7 +621,7 @@ class TestMutateAddEdge:
 
         assert result["success"] is True
 
-    # Implements: REQ-o00062-E
+    # Verifies: REQ-o00062-E
     def test_returns_mutation_entry(self, mutation_graph):
         """Returns MutationEntry for audit."""
         pytest.importorskip("mcp")
@@ -641,7 +641,7 @@ class TestMutateAddEdge:
         assert "mutation" in result
         assert result["mutation"]["operation"] == "add_edge"
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_normalizes_full_assertion_ids_to_bare_labels(self, mutation_graph):
         """Full assertion IDs like REQ-o00001-A are normalized to bare labels."""
         pytest.importorskip("mcp")
@@ -697,7 +697,7 @@ class TestMutateAddEdge:
 class TestMutateChangeEdgeKind:
     """Tests for mutate_change_edge_kind() tool."""
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_delegates_to_graph_change_edge_kind(self, mutation_graph):
         """Delegates to graph.change_edge_kind()."""
         pytest.importorskip("mcp")
@@ -708,7 +708,7 @@ class TestMutateChangeEdgeKind:
 
         assert result["success"] is True
 
-    # Implements: REQ-o00062-E
+    # Verifies: REQ-o00062-E
     def test_returns_mutation_entry(self, mutation_graph):
         """Returns MutationEntry for audit."""
         pytest.importorskip("mcp")
@@ -757,7 +757,7 @@ class TestMutateChangeEdgeTargets:
         mutation = result["mutation"]
         assert mutation["operation"] == "change_edge_targets"
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_change_edge_targets_error_no_edge(self, mutation_graph):
         """Returns error when no edge exists between nodes."""
         pytest.importorskip("mcp")
@@ -773,7 +773,7 @@ class TestMutateChangeEdgeTargets:
 class TestMutateDeleteEdge:
     """Tests for mutate_delete_edge() tool."""
 
-    # Implements: REQ-o00062-F
+    # Verifies: REQ-o00062-F
     def test_requires_confirm_true(self, mutation_graph):
         """Requires confirm=True for destructive operations."""
         pytest.importorskip("mcp")
@@ -783,7 +783,7 @@ class TestMutateDeleteEdge:
 
         assert result["success"] is False
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_deletes_when_confirmed(self, mutation_graph):
         """Deletes edge when confirmed."""
         pytest.importorskip("mcp")
@@ -793,7 +793,7 @@ class TestMutateDeleteEdge:
 
         assert result["success"] is True
 
-    # Implements: REQ-o00062-E
+    # Verifies: REQ-o00062-E
     def test_returns_mutation_entry(self, mutation_graph):
         """Returns MutationEntry for audit."""
         pytest.importorskip("mcp")
@@ -808,7 +808,7 @@ class TestMutateDeleteEdge:
 class TestMutateFixBrokenReference:
     """Tests for mutate_fix_broken_reference() tool."""
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_delegates_to_graph_fix_broken_reference(self, mutation_graph):
         """Delegates to graph.fix_broken_reference()."""
         pytest.importorskip("mcp")
@@ -829,7 +829,7 @@ class TestMutateFixBrokenReference:
 
         assert result["success"] is True
 
-    # Implements: REQ-o00062-E
+    # Verifies: REQ-o00062-E
     def test_returns_mutation_entry(self, mutation_graph):
         """Returns MutationEntry for audit."""
         pytest.importorskip("mcp")
@@ -980,7 +980,7 @@ class TestUndoLastMutation:
         assert result["success"] is True
         assert mutation_graph.find_by_id("REQ-p00001").get_label() == "Platform Security"
 
-    # Implements: REQ-o00062-G
+    # Verifies: REQ-o00062-G
     def test_returns_undone_mutation_entry(self, mutation_graph):
         """Returns the mutation that was undone."""
         pytest.importorskip("mcp")
@@ -1026,7 +1026,7 @@ class TestUndoToMutation:
 class TestGetMutationLog:
     """Tests for get_mutation_log() tool."""
 
-    # Implements: REQ-o00062-E
+    # Verifies: REQ-o00062-E
     def test_returns_mutation_history(self, mutation_graph):
         """Returns list of mutation entries."""
         pytest.importorskip("mcp")
@@ -1044,7 +1044,7 @@ class TestGetMutationLog:
         assert "mutations" in result
         assert len(result["mutations"]) == 2
 
-    # Implements: REQ-o00062-E
+    # Verifies: REQ-o00062-E
     def test_respects_limit_parameter(self, mutation_graph):
         """Respects limit parameter."""
         pytest.importorskip("mcp")
@@ -1071,7 +1071,7 @@ class TestGetMutationLog:
 class TestGetOrphanedNodes:
     """Tests for get_orphaned_nodes() tool."""
 
-    # Implements: REQ-o00060-A
+    # Verifies: REQ-o00060-A
     def test_returns_orphaned_node_list(self, mutation_graph):
         """Returns list of orphaned nodes."""
         pytest.importorskip("mcp")
@@ -1089,7 +1089,7 @@ class TestGetOrphanedNodes:
 class TestGetBrokenReferences:
     """Tests for get_broken_references() tool."""
 
-    # Implements: REQ-o00060-A
+    # Verifies: REQ-o00060-A
     def test_returns_broken_reference_list(self, mutation_graph):
         """Returns list of broken references."""
         pytest.importorskip("mcp")
@@ -1119,7 +1119,7 @@ class TestGetBrokenReferences:
 class TestSerializeMutationEntry:
     """Tests for serialize_mutation_entry() function."""
 
-    # Implements: REQ-d00064-B
+    # Verifies: REQ-d00064-B
     def test_serializes_all_fields(self, mutation_graph):
         """Serializes all MutationEntry fields."""
         pytest.importorskip("mcp")
@@ -1135,7 +1135,7 @@ class TestSerializeMutationEntry:
         assert "after_state" in mutation
         assert "timestamp" in mutation
 
-    # Implements: REQ-d00064-B
+    # Verifies: REQ-d00064-B
     def test_handles_affects_hash_flag(self, mutation_graph):
         """Includes affects_hash flag for assertion mutations."""
         pytest.importorskip("mcp")

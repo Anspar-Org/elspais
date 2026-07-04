@@ -114,7 +114,7 @@ class TestTermNameEmphasis:
             ("Email Address", "Email Address"),
         ],
     )
-    # Implements: REQ-d00246-B
+    # Verifies: REQ-d00246-B
     def test_REQ_d00246_B_term_name_emphasis_stripped(
         self, resolver: IdResolver, decorated: str, expected: str
     ) -> None:
@@ -138,7 +138,7 @@ A. First assertion
             f"got {def_data.get('term')!r}"
         )
 
-    # Implements: REQ-d00246-B
+    # Verifies: REQ-d00246-B
     def test_REQ_d00246_B_term_name_unbalanced_left_intact(self, resolver: IdResolver) -> None:
         """Unbalanced wrappers (different markers / unequal widths) are left alone."""
         content = """\
@@ -170,7 +170,7 @@ A. First assertion
 class TestJourneyMetadataEmphasis:
     """Validates REQ-d00246-B: journey metadata values are normalized."""
 
-    # Implements: REQ-d00246-B
+    # Verifies: REQ-d00246-B
     def test_REQ_d00246_B_journey_actor_goal_context_double_asterisk(
         self, resolver: IdResolver
     ) -> None:
@@ -199,7 +199,7 @@ class TestJourneyMetadataEmphasis:
             jny.get("context") == "Pre-screening visit"
         ), f"context wrapped in '**...**' must be unwrapped, got {jny.get('context')!r}"
 
-    # Implements: REQ-d00246-B
+    # Verifies: REQ-d00246-B
     def test_REQ_d00246_B_journey_actor_plain_value_unchanged(self, resolver: IdResolver) -> None:
         """Plain (undecorated) values pass through unchanged."""
         content = """\
@@ -218,7 +218,7 @@ class TestJourneyMetadataEmphasis:
             jny.get("goal") == "A simple goal"
         ), f"Plain goal must pass through unchanged, got {jny.get('goal')!r}"
 
-    # Implements: REQ-d00246-B
+    # Verifies: REQ-d00246-B
     def test_REQ_d00246_B_journey_actor_underscore_wrapped(self, resolver: IdResolver) -> None:
         """Underscore emphasis on the value (label is plain) is also stripped."""
         content = """\
@@ -234,7 +234,7 @@ Goal: Plain goal
             jny.get("actor") == "Bold User"
         ), f"Value wrapped in '__...__' must be unwrapped, got {jny.get('actor')!r}"
 
-    # Implements: REQ-d00246-B
+    # Verifies: REQ-d00246-B
     def test_REQ_d00246_B_journey_actor_unbalanced_value_intact(self, resolver: IdResolver) -> None:
         """Unbalanced wrappers on the value are NOT stripped."""
         content = """\
@@ -268,7 +268,7 @@ class TestReferenceTermSourceEmphasis:
             ("ISO 9001", "ISO 9001"),
         ],
     )
-    # Implements: REQ-d00246-B
+    # Verifies: REQ-d00246-B
     def test_REQ_d00246_B_reference_term_emphasis_stripped(
         self, resolver: IdResolver, decorated: str, expected: str
     ) -> None:
@@ -301,7 +301,7 @@ A. First assertion
             ("*ANSI*", "ANSI"),
         ],
     )
-    # Implements: REQ-d00246-B
+    # Verifies: REQ-d00246-B
     def test_REQ_d00246_B_reference_source_emphasis_stripped(
         self, resolver: IdResolver, decorated: str, expected: str
     ) -> None:
@@ -326,7 +326,7 @@ A. First assertion
             f"{expected!r}, got {def_data.get('reference_source')!r}"
         )
 
-    # Implements: REQ-d00246-B
+    # Verifies: REQ-d00246-B
     def test_REQ_d00246_B_reference_term_unbalanced_intact(self, resolver: IdResolver) -> None:
         """Unbalanced `*ISO_9001_` would have been wrongly stripped by the
         old `.strip("_").strip("*")` logic. New behavior: leave it alone."""
@@ -376,7 +376,7 @@ class TestNoAdHocStripCalls:
         sorted(_TRANSFORMER_DIR.glob("*.py")),
         ids=lambda p: p.name,
     )
-    # Implements: REQ-d00246-B
+    # Verifies: REQ-d00246-B
     def test_REQ_d00246_B_no_ad_hoc_emphasis_strip(self, transformer_file: Path) -> None:
         """`.strip("*")`, `.strip('_')`, and similar variants must not appear.
 

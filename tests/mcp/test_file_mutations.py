@@ -122,7 +122,7 @@ Child of REQ-p00001.
 class TestGitSafetyBranch:
     """Tests for git safety branch utilities."""
 
-    # Implements: REQ-o00063-D
+    # Verifies: REQ-o00063-D
     def test_create_safety_branch(self, git_repo):
         """Create a safety branch with timestamped name."""
         from elspais.utilities.git import create_safety_branch
@@ -145,7 +145,7 @@ class TestGitSafetyBranch:
         )
         assert result["branch_name"] in branches.stdout
 
-    # Implements: REQ-o00063-D
+    # Verifies: REQ-o00063-D
     def test_list_safety_branches(self, git_repo):
         """List all safety branches."""
         from elspais.utilities.git import create_safety_branch, list_safety_branches
@@ -159,7 +159,7 @@ class TestGitSafetyBranch:
         assert len(result) >= 2
         assert all(b.startswith("safety/") for b in result)
 
-    # Implements: REQ-o00063-D
+    # Verifies: REQ-o00063-D
     def test_get_current_branch(self, git_repo):
         """Get the current branch name."""
         from elspais.utilities.git import get_current_branch
@@ -170,7 +170,7 @@ class TestGitSafetyBranch:
         assert branch is not None
         assert len(branch) > 0
 
-    # Implements: REQ-o00063-E
+    # Verifies: REQ-o00063-E
     def test_restore_from_safety_branch(self, git_repo):
         """Restore files from a safety branch."""
         from elspais.utilities.git import (
@@ -197,7 +197,7 @@ class TestGitSafetyBranch:
         restored_content = req_file.read_text()
         assert restored_content == original_content
 
-    # Implements: REQ-o00063-D
+    # Verifies: REQ-o00063-D
     def test_delete_safety_branch(self, git_repo):
         """Delete a safety branch."""
         from elspais.utilities.git import (
@@ -267,7 +267,7 @@ class TestChangeReferenceType:
         branches = list_safety_branches(git_repo)
         assert len(branches) >= 1
 
-    # Implements: REQ-o00063-A
+    # Verifies: REQ-o00063-A
     def test_returns_error_for_nonexistent_requirement(self, git_repo):
         """Returns error when requirement doesn't exist."""
         pytest.importorskip("mcp")
@@ -378,7 +378,7 @@ class TestRestoreFromSafetyBranch:
         content_restored = (git_repo / "spec" / "requirements.md").read_text()
         assert "Implements" in content_restored
 
-    # Implements: REQ-o00063-E
+    # Verifies: REQ-o00063-E
     def test_returns_error_for_invalid_branch(self, git_repo):
         """Returns error when branch doesn't exist."""
         pytest.importorskip("mcp")
@@ -441,7 +441,7 @@ class TestGraphRefreshIntegration:
 class TestMCPToolRegistration:
     """Tests that file mutation tools are properly registered with MCP."""
 
-    # Implements: REQ-o00063-A
+    # Verifies: REQ-o00063-A
     def test_file_mutation_tools_registered(self, git_repo):
         """File mutation tools are registered as MCP tools."""
         pytest.importorskip("mcp")

@@ -127,7 +127,7 @@ def _build_two_repo_federation(
 class TestSingleRepoBucketsByName:
     """Validates REQ-d00217-B: single-repo nodes bucket under primary repo name."""
 
-    # Implements: REQ-d00217-B
+    # Verifies: REQ-d00217-B
     def test_REQ_d00217_B_single_repo_uses_repo_name_label(self, tmp_path: Path) -> None:
         """A single-repo federation buckets every REQ/JNY under the repo's name.
 
@@ -170,7 +170,7 @@ class TestSingleRepoBucketsByName:
 class TestFederatedMultiRepoBuckets:
     """Validates REQ-d00217-B: federated REQs bucket under their owning repo."""
 
-    # Implements: REQ-d00217-B
+    # Verifies: REQ-d00217-B
     def test_REQ_d00217_B_multi_repo_buckets_by_owning_repo(self, tmp_path: Path) -> None:
         """Each REQ appears under a section labeled with its owning repo's name.
 
@@ -225,7 +225,7 @@ class TestFederatedMultiRepoBuckets:
 class TestUnattributedBucket:
     """Validates REQ-d00217-B: orphan IDs (KeyError from repo_for) bucket as Unattributed."""
 
-    # Implements: REQ-d00217-B
+    # Verifies: REQ-d00217-B
     def test_REQ_d00217_B_unknown_ownership_buckets_as_unattributed(self, tmp_path: Path) -> None:
         """A node whose ID is not in ``_ownership`` must bucket as 'Unattributed'.
 
@@ -288,7 +288,7 @@ class TestUnattributedBucket:
 class TestNoSpecDirPathMatching:
     """Validates REQ-d00217-B: classification ignores spec_dirs path matching."""
 
-    # Implements: REQ-d00217-B
+    # Verifies: REQ-d00217-B
     def test_REQ_d00217_B_file_outside_spec_dirs_still_buckets_by_repo(
         self, tmp_path: Path
     ) -> None:
@@ -338,7 +338,7 @@ class TestNoSpecDirPathMatching:
 class TestCrossGeneratorConsistency:
     """Validates REQ-d00217-B: INDEX.md and term-index.md agree on bucket label."""
 
-    # Implements: REQ-d00217-B
+    # Verifies: REQ-d00217-B
     def test_REQ_d00217_B_index_label_matches_term_index_namespace(self, tmp_path: Path) -> None:
         """For a federated graph, any REQ ID present in both INDEX.md and
         term-index.md must use the same bucket label.

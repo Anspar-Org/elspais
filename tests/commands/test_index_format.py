@@ -142,7 +142,7 @@ class TestFormatTable:
 class TestResolveSpecDirInfo:
     """Tests for _resolve_spec_dir_info."""
 
-    # Implements: REQ-d00217-A
+    # Verifies: REQ-d00217-A
     def test_with_config(self, tmp_path):
         """Info uses project name and level config from .elspais.toml."""
         (tmp_path / ".elspais.toml").write_text(
@@ -160,7 +160,7 @@ class TestResolveSpecDirInfo:
         assert info.level_order["dev"] == 3
         assert info.level_names["prd"] == "PRODUCT"
 
-    # Implements: REQ-d00217-A
+    # Verifies: REQ-d00217-A
     def test_no_config_falls_back(self, tmp_path):
         """Without .elspais.toml, falls back to empty level info."""
         spec_dir = tmp_path / "spec"

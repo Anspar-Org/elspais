@@ -194,7 +194,7 @@ class TestCollectGaps:
         assert any(item[0] == "REQ-p00001" and item[2] == "uat" for item in data.failing)
 
     def test_collect_gaps_includes_no_assertions(self) -> None:
-        # Implements: REQ-d00204
+        # Verifies: REQ-d00204
         """A REQ with no ASSERTION children appears in no_assertions."""
         from elspais.graph import EdgeKind
 
@@ -252,7 +252,7 @@ class TestRenderGapText:
         assert "UNVALIDATED (no UAT coverage)" in output
 
     def test_no_assertions_section(self) -> None:
-        # Implements: REQ-d00204
+        # Verifies: REQ-d00204
         """no_assertions gap type renders with NOT TESTABLE label."""
         data = GapData(no_assertions=[GapEntry("REQ-p00005", "No Asserts")])
         output = render_gap_text("no_assertions", data)

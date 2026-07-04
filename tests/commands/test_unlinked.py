@@ -84,7 +84,7 @@ def _make_args(**kwargs: object) -> argparse.Namespace:
 class TestCollectUnlinked:
     """Tests for collect_unlinked() function."""
 
-    # Implements: REQ-d00085-A
+    # Verifies: REQ-d00085-A
     def test_returns_empty_when_all_linked(self) -> None:
         """All linked files produce empty collections."""
         graph = _make_graph(linked_test_files=2)
@@ -92,14 +92,14 @@ class TestCollectUnlinked:
         assert data.tests == []
         assert data.code == []
 
-    # Implements: REQ-d00085-A
+    # Verifies: REQ-d00085-A
     def test_returns_unlinked_test_files(self) -> None:
         """Test files with no markers are collected."""
         graph = _make_graph(unlinked_test_files=2)
         data = collect_unlinked(graph)
         assert len(data.tests) == 2
 
-    # Implements: REQ-d00085-A
+    # Verifies: REQ-d00085-A
     def test_returns_unlinked_code_files(self) -> None:
         """Code files with no markers are collected."""
         graph = _make_graph(unlinked_code_files=3)
@@ -113,13 +113,13 @@ class TestCollectUnlinked:
 class TestRenderUnlinkedText:
     """Tests for render_unlinked_text()."""
 
-    # Implements: REQ-d00085-E
+    # Verifies: REQ-d00085-E
     def test_empty_shows_none(self) -> None:
         """No unlinked nodes shows 'none'."""
         output = render_unlinked_text(UnlinkedData())
         assert "none" in output
 
-    # Implements: REQ-d00085-E
+    # Verifies: REQ-d00085-E
     def test_shows_counts_when_populated(self) -> None:
         """Unlinked files show counts by kind."""
         data = UnlinkedData(
@@ -134,7 +134,7 @@ class TestRenderUnlinkedText:
         assert "Test files (2)" in output
         assert "Code files (1)" in output
 
-    # Implements: REQ-d00085-E
+    # Verifies: REQ-d00085-E
     def test_label_present(self) -> None:
         """Output contains the UNLINKED FILES label."""
         output = render_unlinked_text(UnlinkedData())
@@ -147,13 +147,13 @@ class TestRenderUnlinkedText:
 class TestRenderUnlinkedMarkdown:
     """Tests for render_unlinked_markdown()."""
 
-    # Implements: REQ-d00085-E
+    # Verifies: REQ-d00085-E
     def test_empty_shows_no_unlinked(self) -> None:
         """No unlinked files shows informative message."""
         output = render_unlinked_markdown(UnlinkedData())
         assert "No unlinked files found" in output
 
-    # Implements: REQ-d00085-E
+    # Verifies: REQ-d00085-E
     def test_shows_table_when_populated(self) -> None:
         """Unlinked files render as markdown table."""
         data = UnlinkedData(
@@ -163,7 +163,7 @@ class TestRenderUnlinkedMarkdown:
         assert "| File |" in output
         assert "tests/test_a.py" in output
 
-    # Implements: REQ-d00085-E
+    # Verifies: REQ-d00085-E
     def test_heading_with_count(self) -> None:
         """Heading includes total count."""
         data = UnlinkedData(
@@ -180,7 +180,7 @@ class TestRenderUnlinkedMarkdown:
 class TestRenderSection:
     """Tests for render_section()."""
 
-    # Implements: REQ-d00085-E
+    # Verifies: REQ-d00085-E
     def test_json_format(self) -> None:
         """JSON format produces valid JSON with test/code keys."""
         graph = _make_graph(unlinked_test_files=1, unlinked_code_files=1)
@@ -191,14 +191,14 @@ class TestRenderSection:
         assert parsed["tests"]["count"] == 1
         assert parsed["code"]["count"] == 1
 
-    # Implements: REQ-d00085-C
+    # Verifies: REQ-d00085-C
     def test_exit_code_0_when_no_unlinked(self) -> None:
         """Exit code is 0 when no unlinked files."""
         graph = _make_graph(linked_test_files=1)
         _output, exit_code = render_section(graph, None, _make_args())
         assert exit_code == 0
 
-    # Implements: REQ-d00085-C
+    # Verifies: REQ-d00085-C
     def test_exit_code_1_when_unlinked(self) -> None:
         """Exit code is 1 when unlinked files exist."""
         graph = _make_graph(unlinked_test_files=1)
@@ -212,7 +212,7 @@ class TestRenderSection:
 class TestUnlinkedComposability:
     """Tests for unlinked section composability registration."""
 
-    # Implements: REQ-d00085-A
+    # Verifies: REQ-d00085-A
     def test_returns_tuple(self) -> None:
         """render_section returns (str, int) tuple."""
         graph = _make_graph()
@@ -222,14 +222,14 @@ class TestUnlinkedComposability:
         assert isinstance(result[0], str)
         assert isinstance(result[1], int)
 
-    # Implements: REQ-d00085-A
+    # Verifies: REQ-d00085-A
     def test_registered_in_composable_sections(self) -> None:
         """Unlinked section is registered in COMPOSABLE_SECTIONS."""
         from elspais.commands.report import COMPOSABLE_SECTIONS
 
         assert "unlinked" in COMPOSABLE_SECTIONS
 
-    # Implements: REQ-d00085-E
+    # Verifies: REQ-d00085-E
     def test_format_support(self) -> None:
         """Unlinked section declares text, markdown, json support."""
         from elspais.commands.report import FORMAT_SUPPORT
@@ -238,7 +238,7 @@ class TestUnlinkedComposability:
         assert "markdown" in FORMAT_SUPPORT["unlinked"]
         assert "json" in FORMAT_SUPPORT["unlinked"]
 
-    # Implements: REQ-d00085-C
+    # Verifies: REQ-d00085-C
     def test_exit_bit(self) -> None:
         """Unlinked section has exit bit 64."""
         from elspais.commands.report import EXIT_BIT

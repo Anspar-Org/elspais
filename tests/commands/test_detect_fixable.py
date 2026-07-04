@@ -1,4 +1,4 @@
-# Validates: REQ-p00004-A
+# Verifies: REQ-p00004-A
 """Tests for _detect_fixable unified fix detection.
 
 Validates REQ-p00004-A: unified fix detection function that inspects

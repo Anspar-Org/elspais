@@ -132,7 +132,7 @@ class TestRefinesTemplateRaises:
         )
 
     def test_ops_refines_prd_template_single_broken_ref_with_remedy(self) -> None:
-        # Implements: REQ-p00014-G
+        # Verifies: REQ-p00014-G
         """An OPS REQ refining a PRD ``**Template**`` is ONE mistake.
 
         This exercises a different level combination (OPS -> PRD) than

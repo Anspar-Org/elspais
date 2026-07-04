@@ -176,7 +176,7 @@ class TestCheckUnlinkedTests:
         assert isinstance(finding, HealthFinding)
         assert finding.file_path is not None
 
-    # Implements: REQ-d00241-D
+    # Verifies: REQ-d00241-D
     def test_REQ_d00241_D_marker_less_file_with_test_children_flagged(self) -> None:
         """A test FILE whose TEST children all lack requirement links is flagged.
 
@@ -207,7 +207,7 @@ class TestCheckUnlinkedTests:
         assert not check.passed
         assert any(f.file_path == "tests/test_unmarked.py" for f in check.findings)
 
-    # Implements: REQ-d00241-D
+    # Verifies: REQ-d00241-D
     def test_REQ_d00241_D_partially_marked_file_not_flagged(self) -> None:
         """A test FILE with at least one linked TEST child is NOT flagged.
 
@@ -328,7 +328,7 @@ class TestRunCodeChecksNoTraceabilityWiring:
     exclusively the responsibility of ``tests.unlinked``.
     """
 
-    # Implements: REQ-d00241-B
+    # Verifies: REQ-d00241-B
     def test_REQ_d00241_B_unlinked_code_node_still_appears(self) -> None:
         """An unlinked CODE node is still reported by code.no_traceability.
 
@@ -348,7 +348,7 @@ class TestRunCodeChecksNoTraceabilityWiring:
         assert not check.passed
         assert any("orphan.py" in f.message for f in check.findings)
 
-    # Implements: REQ-d00241-A, REQ-d00241-B, REQ-d00241-D
+    # Verifies: REQ-d00241-A, REQ-d00241-B, REQ-d00241-D
     def test_REQ_d00241_A_marker_less_test_function_excluded(self) -> None:
         """A marker-less test file moves from code.no_traceability to tests.unlinked.
 
@@ -383,7 +383,7 @@ class TestRunCodeChecksNoTraceabilityWiring:
         assert not tests_check.passed
         assert any(f.file_path == "tests/test_unmarked.py" for f in tests_check.findings)
 
-    # Implements: REQ-d00241-A
+    # Verifies: REQ-d00241-A
     def test_REQ_d00241_A_mixed_code_and_test_only_code_reported(self) -> None:
         """With both an unlinked CODE node and a marker-less TEST node,
         only the CODE file is reported by code.no_traceability.
@@ -573,7 +573,7 @@ class TestCheckBrokenReferences:
 class TestCheckNoCycles:
     """Tests for check_no_cycles() — REQ-d00204-G."""
 
-    # Implements: REQ-d00204-G
+    # Verifies: REQ-d00204-G
     def test_REQ_d00204_G_acyclic_graph_passes(self) -> None:
         """A normal acyclic requirement graph reports no cycles."""
         graph = build_graph(
@@ -584,7 +584,7 @@ class TestCheckNoCycles:
         assert check.passed is True
         assert check.name == "spec.no_cycles"
 
-    # Implements: REQ-d00204-G
+    # Verifies: REQ-d00204-G
     def test_REQ_d00204_G_injected_cycle_fails_and_names_both_ids(self) -> None:
         """A 2-node requirement cycle is detected; the finding names both ids."""
         graph = build_graph(
