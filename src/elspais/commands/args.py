@@ -650,6 +650,7 @@ DOCS_TOPICS = Literal[
     "format",
     "hierarchy",
     "assertions",
+    "authoring",
     "traceability",
     "linking",
     "validation",

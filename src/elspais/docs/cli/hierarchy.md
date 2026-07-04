@@ -1,8 +1,8 @@
 # REQUIREMENT HIERARCHY
 
-## The Three Levels
+## The Levels
 
-elspais enforces a **PRD -> OPS -> DEV** hierarchy:
+The built-in default hierarchy is **PRD -> OPS -> DEV**:
 
   **PRD (Product)**    - Business needs, user outcomes
                      "What the product must achieve"
@@ -12,6 +12,20 @@ elspais enforces a **PRD -> OPS -> DEV** hierarchy:
 
   **DEV (Development)** - Technical specifications
                      "How we implement it technically"
+
+## Levels Are Configurable
+
+PRD/OPS/DEV is a **default exemplar**, not a fixed law. Levels are
+defined in `[levels]` in `.elspais.toml` (each with a rank and an
+`implements` list), so a project can add tiers -- e.g. an apex framing
+level above PRD, or a presentation level between PRD and DEV -- or use an
+entirely different set. Choose the schema that fits your project.
+
+A level is an **altitude and audience**, not a measure of testability.
+Leaf-ness (whether an obligation is directly testable) is independent of
+level: a high-level obligation can be a directly testable leaf. For the
+judgment of when to create a requirement at which level -- and when a
+test may cite an abstract parent -- see `elspais docs authoring`.
 
 ## Implements Relationships
 
