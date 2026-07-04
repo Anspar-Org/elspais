@@ -40,6 +40,7 @@
 | REQ-o00069 | MCP Minimize Requirement Set Tool   | ops-mcp.md          | c667abd2 |
 | REQ-o00070 | MCP Scoped Search Tool              | ops-mcp.md          | 7f1e6589 |
 | REQ-o00071 | MCP Discover Requirements Tool      | ops-mcp.md          | fea647ee |
+| REQ-o00072 | Domain Deserialization Layer        | ops-architecture.md | e568082e |
 
 ## DEVELOPMENT
 

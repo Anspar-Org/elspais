@@ -14,7 +14,7 @@ def dispatcher(hht_resolver):
 class TestDomainFile:
     """Tests for DomainFile deserializer."""
 
-    # Implements: REQ-o00050-A
+    # Implements: REQ-o00072-A
     def test_iterate_sources_single_file(self, temp_spec_dir):
         prd_file = temp_spec_dir / "prd.md"
         deserializer = DomainFile(prd_file)
@@ -27,7 +27,7 @@ class TestDomainFile:
         assert "prd.md" in ctx.source_id
         assert "REQ-p00001" in content
 
-    # Implements: REQ-o00050-A
+    # Implements: REQ-o00072-A
     def test_iterate_sources_directory(self, temp_spec_dir):
         deserializer = DomainFile(temp_spec_dir, patterns=["*.md"])
 
@@ -38,7 +38,7 @@ class TestDomainFile:
         assert any("prd.md" in s for s in source_ids)
         assert any("ops.md" in s for s in source_ids)
 
-    # Implements: REQ-o00050-A
+    # Implements: REQ-o00072-C
     def test_deserialize_produces_parsed_content(self, temp_spec_dir, dispatcher):
         deserializer = DomainFile(temp_spec_dir, patterns=["*.md"])
 

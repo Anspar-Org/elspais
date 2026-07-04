@@ -50,7 +50,7 @@ class FakeClaimingParser:
 class TestDomainContext:
     """Tests for DomainContext dataclass."""
 
-    # Verifies: REQ-o00050-A
+    # Verifies: REQ-o00072-A
     def test_metadata_default_not_shared_between_instances(self):
         """Each DomainContext must get its own metadata dict.
 
@@ -72,7 +72,7 @@ class TestDomainContext:
 class TestParsedContentWithContext:
     """Tests for ParsedContentWithContext dataclass."""
 
-    # Verifies: REQ-o00050-A
+    # Verifies: REQ-o00072-A
     def test_source_context_defaults_to_none(self):
         parsed = ParsedContentWithContext(
             content_type="requirement",
@@ -83,7 +83,7 @@ class TestParsedContentWithContext:
 
         assert parsed.source_context is None
 
-    # Verifies: REQ-o00050-A
+    # Verifies: REQ-o00072-A
     def test_carries_real_domain_context(self):
         ctx = DomainContext(source_type="stdin", source_id="<stdin>")
 
@@ -98,7 +98,7 @@ class TestParsedContentWithContext:
         assert parsed.source_context is ctx
         assert parsed.source_context.source_type == "stdin"
 
-    # Verifies: REQ-o00050-A
+    # Verifies: REQ-o00072-B
     def test_inherits_line_count_computation(self):
         """ParsedContentWithContext must genuinely inherit ParsedContent's
         computed line_count property, not merely have the same field names.
@@ -118,7 +118,7 @@ class TestParsedContentWithContext:
 class TestDomainDeserializerProtocol:
     """Tests for the DomainDeserializer runtime-checkable Protocol."""
 
-    # Verifies: REQ-o00050-A
+    # Verifies: REQ-o00072-C
     def test_domain_file_satisfies_protocol(self):
         from elspais.graph.deserializer import DomainFile
 
@@ -126,13 +126,13 @@ class TestDomainDeserializerProtocol:
 
         assert isinstance(deserializer, DomainDeserializer)
 
-    # Verifies: REQ-o00050-A
+    # Verifies: REQ-o00072-C
     def test_domain_stdio_satisfies_protocol(self):
         deserializer = DomainStdio("some content")
 
         assert isinstance(deserializer, DomainDeserializer)
 
-    # Verifies: REQ-o00050-A
+    # Verifies: REQ-o00072-C
     def test_unrelated_duck_typed_object_satisfies_protocol(self):
         """The Protocol is structural: any object exposing both required
         methods conforms, regardless of its class hierarchy.
@@ -147,7 +147,7 @@ class TestDomainDeserializerProtocol:
 
         assert isinstance(DuckDeserializer(), DomainDeserializer)
 
-    # Verifies: REQ-o00050-A
+    # Verifies: REQ-o00072-C
     def test_object_missing_a_method_does_not_satisfy_protocol(self):
         """An object missing one of the two required methods must NOT be
         recognized as a DomainDeserializer -- proves the protocol actually
@@ -166,7 +166,7 @@ class TestDomainDeserializerProtocol:
 class TestDomainStdio:
     """Tests for DomainStdio deserializer."""
 
-    # Verifies: REQ-o00050-A
+    # Verifies: REQ-o00072-A
     def test_iterate_sources_yields_single_tuple_with_defaults(self):
         deserializer = DomainStdio("hello\nworld")
 
@@ -178,7 +178,7 @@ class TestDomainStdio:
         assert ctx.source_id == "<stdin>"
         assert content == "hello\nworld"
 
-    # Verifies: REQ-o00050-A
+    # Verifies: REQ-o00072-A
     def test_iterate_sources_honors_custom_source_id(self):
         deserializer = DomainStdio("content", source_id="custom-id")
 
@@ -186,7 +186,7 @@ class TestDomainStdio:
 
         assert ctx.source_id == "custom-id"
 
-    # Verifies: REQ-o00050-A
+    # Verifies: REQ-o00072-B
     def test_deserialize_splits_content_into_1_indexed_lines(self):
         parser = FakeClaimingParser(claimable=set())
         registry = ParserRegistry()
@@ -201,7 +201,7 @@ class TestDomainStdio:
             (3, "third"),
         ]
 
-    # Verifies: REQ-o00050-A
+    # Verifies: REQ-o00072-A
     def test_deserialize_attaches_same_context_used_in_iteration(self):
         parser = FakeClaimingParser(claimable={"claim-me"})
         registry = ParserRegistry()
@@ -216,7 +216,7 @@ class TestDomainStdio:
         assert result.source_context.source_type == "stdin"
         assert result.source_context.source_id == "ctx-check"
 
-    # Verifies: REQ-o00050-A
+    # Verifies: REQ-o00072-B
     def test_deserialize_passes_through_underlying_parsed_content_fields(self):
         parser = FakeClaimingParser(claimable={"claim-me"})
         registry = ParserRegistry()
@@ -231,7 +231,7 @@ class TestDomainStdio:
         assert result.start_line == 1
         assert result.end_line == 1
 
-    # Verifies: REQ-o00050-A
+    # Verifies: REQ-o00072-B
     def test_deserialize_yields_nothing_for_unclaimed_lines(self):
         """Lines the fake parser does not claim must produce no output --
         DomainStdio.deserialize only emits what parse_all yields, so
@@ -247,7 +247,7 @@ class TestDomainStdio:
         assert len(results) == 1
         assert results[0].raw_text == "claim-me"
 
-    # Verifies: REQ-o00050-A
+    # Verifies: REQ-o00072-B
     def test_deserialize_on_empty_content_does_not_raise(self):
         """ "".split("\n") yields [""], i.e. one empty line, not zero lines.
         Confirm DomainStdio handles this without crashing and that an
