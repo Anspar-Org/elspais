@@ -233,28 +233,33 @@ class RollupMetrics:
 
         n = self.total_assertions
 
-        # Track unique assertions by coverage source type
+        # Track unique assertions by coverage source type. Only
+        # implementation-evidence sources (DIRECT/EXPLICIT/INFERRED) are
+        # collected here; they build the `implemented` dimension below.
         direct_labels: set[str] = set()
         explicit_labels: set[str] = set()
         inferred_labels: set[str] = set()
-        indirect_labels: set[str] = set()
         uat_explicit_labels: set[str] = set()
         uat_inferred_labels: set[str] = set()
 
         for label, contributions in self.assertion_coverage.items():
             for contrib in contributions:
-                # NOTE (REQ-d00084-D): TEST_DIRECT / TEST_INDIRECT (a test
-                # `Verifies:` an assertion) are deliberately NOT bucketed here.
-                # Test evidence feeds the `tested`/`verified` dimensions
-                # (populated by populate_test_dimensions), never `implemented`.
+                # NOTE (REQ-d00084-D): the following sources are deliberately
+                # NOT bucketed into `implemented`, and fall through:
+                #   - TEST_DIRECT / TEST_INDIRECT: a test `Verifies:` an
+                #     assertion -- test evidence, feeds `tested`/`verified`
+                #     (via populate_test_dimensions), never `implemented`.
+                #   - INDIRECT: the transitive CODE->TEST provenance edge. A
+                #     tested CODE node's implemented credit already comes from
+                #     its own DIRECT `Implements:` edge, and the verifying test
+                #     is registered separately for result lookup (`verified`);
+                #     this source adds no `implemented` credit of its own.
                 if contrib.source_type == CoverageSource.DIRECT:
                     direct_labels.add(label)
                 elif contrib.source_type == CoverageSource.EXPLICIT:
                     explicit_labels.add(label)
                 elif contrib.source_type == CoverageSource.INFERRED:
                     inferred_labels.add(label)
-                elif contrib.source_type == CoverageSource.INDIRECT:
-                    indirect_labels.add(label)
                 elif contrib.source_type == CoverageSource.UAT_EXPLICIT:
                     uat_explicit_labels.add(label)
                 elif contrib.source_type == CoverageSource.UAT_INFERRED:
