@@ -422,3 +422,33 @@ and the checks pass warns when results are out of date even without
 running tests.
 
 *End* *Configured test runner execution* | **Hash**: 8a579eb1
+
+## REQ-d00259: Requirement Format Reference Command
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+The `example` command SHALL display requirement format reference material to help authors discover and follow the correct structure, without requiring a spec directory or a built graph.
+
+### Assertions
+
+A. Invoking `elspais example` with no subcommand SHALL print a quick-reference summary covering the basic requirement structure and the available `example` subcommands.
+
+B. `elspais example requirement` SHALL print example requirement templates for each configured level (PRD, OPS, DEV), each including an `## Assertions` section and an `*End*` footer with a hash placeholder.
+
+C. `elspais example journey` SHALL print an example user journey template covering Actor, Goal, Steps, and Requirements sections.
+
+D. `elspais example assertion` SHALL print assertion format rules covering label styles, SHALL/SHOULD/MAY keywords, placeholder values for removed assertions, and the assertion-related configuration syntax.
+
+E. `elspais example ids` SHALL print the ID pattern configuration for the current project (namespace, canonical ID template, and level types), loaded from the active config file when present and falling back to schema defaults otherwise.
+
+F. `elspais example --full` SHALL display the full contents of the project's `requirements-spec.md` (or `requirements-format.md`) file when found, and SHALL return a non-zero exit code with the searched paths listed when neither file exists.
+
+### Rationale
+
+Authors writing their first requirement, or reviewers checking format conventions, need a fast, offline reference without opening the full *Specification*. `example` fills this role independently of `elspais init` (which scaffolds a new project's configuration) by surfacing format templates and rules on demand.
+
+### Changelog
+
+- 2026-07-03 | 8e05d02e | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms, update hash, add missing changelog section
+
+*End* *Requirement Format Reference Command* | **Hash**: 8e05d02e
