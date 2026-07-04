@@ -327,6 +327,33 @@ class TestSeverityCatalog:
         assert tiers["combined_bucket"] == "full"
 
     # Verifies: REQ-d00258-D, REQ-d00258-E
+    def test_uat_partial_maps_to_warning_not_info(self):
+        """A journey that PARTIALLY validates a requirement must surface a real
+        'partial' state: uat 'partial' tier maps to severity 'warning' (yellow),
+        not 'info' (yellow-green). UAT 'none' stays 'info' so a journey-less
+        requirement is not dragged down (see test_bucket_full_despite_uat_none).
+        Colors represent the real state (CUR-1568)."""
+        from elspais.graph.metrics import CoverageDimension, RollupMetrics
+        from elspais.html.generator import compute_coverage_tiers
+
+        rollup = RollupMetrics(
+            total_assertions=2,
+            implemented=CoverageDimension(total=2, direct=2, indirect=2),
+            tested=CoverageDimension(total=2, direct=2, indirect=2),
+            verified=CoverageDimension(total=2, direct=2, indirect=2),
+            # A journey validates 1 of 2 assertions -> partial.
+            uat_coverage=CoverageDimension(total=2, direct=1, indirect=1),
+        )
+        node = self._make_active_node_with_metrics(rollup)
+        tiers = compute_coverage_tiers(node)
+
+        assert tiers["uat_cov_tier"] == "partial"
+        # warning -> yellow (was info -> yellow-green under the old default)
+        assert tiers["uat_cov_color"] == "yellow"
+        # warning drags the severity-aware bucket to 'partial'
+        assert tiers["combined_bucket"] == "partial"
+
+    # Verifies: REQ-d00258-D, REQ-d00258-E
     def test_bucket_none_when_implemented_none(self):
         """implemented tier 'none' maps to error severity -> bucket 'none'."""
         from elspais.graph.metrics import CoverageDimension, RollupMetrics

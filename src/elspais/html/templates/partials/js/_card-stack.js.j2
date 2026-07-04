@@ -669,8 +669,8 @@ function buildCardHtml(nodeId, data, collapsed) {
             {key: null, linkKey: 'refined', assertLinkKey: 'refined', label: 'REFINED'},
             {key: 'tested', linkKey: 'tested', assertLinkKey: 'tested', label: 'TESTED'},
             {key: 'verified', linkKey: 'verified', assertLinkKey: 'tested', label: 'VERIFIED'},
-            {key: 'uat_coverage', linkKey: 'validated', assertLinkKey: 'validated', label: 'VALIDATED'},
-            {key: 'uat_verified', linkKey: 'accepted', assertLinkKey: 'validated', label: 'ACCEPTED'}
+            {key: 'uat_coverage', linkKey: 'validated', assertLinkKey: 'validated', label: 'UAT COVERED', gateOnEvidence: true},
+            {key: 'uat_verified', linkKey: 'accepted', assertLinkKey: 'validated', label: 'UAT PASSED', gateOnEvidence: true}
         ];
         headerDims.forEach(function(d) {
             var dim = d.key ? data.coverage_dimensions[d.key] : null;
@@ -680,7 +680,12 @@ function buildCardHtml(nodeId, data, collapsed) {
             for (var lbl in aLinksAll) {
                 if (aLinksAll[lbl][d.assertLinkKey]) { hasAssertionLinks = true; break; }
             }
-            var hasData = (dim && dim.color) || hasReqLinks || hasAssertionLinks;
+            // UAT dims (gateOnEvidence) only render with actual journey Validates
+            // evidence — a journey-less requirement shows no UAT badge (its colored
+            // "none" tier is not a real gap). Code dims still show on 0-coverage.
+            var hasData = d.gateOnEvidence
+                ? (hasReqLinks || hasAssertionLinks)
+                : ((dim && dim.color) || hasReqLinks || hasAssertionLinks);
             if (!hasData) return; // hide badge if no data
             var colorClass = dim && dim.color ? ' active val-' + dim.color : '';
             var tipParts = [];

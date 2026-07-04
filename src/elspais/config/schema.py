@@ -197,7 +197,7 @@ class CoverageSeverityConfig(_StrictModel):
 
 
 def _uat_severity() -> CoverageSeverityConfig:
-    return CoverageSeverityConfig(none="info", partial="info")
+    return CoverageSeverityConfig(none="info")
 
 
 class CoverageConfig(_StrictModel):
