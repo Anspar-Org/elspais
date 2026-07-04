@@ -1,5 +1,5 @@
 # Verifies: REQ-d00222-A+B+C+D, REQ-d00220-E
-# Implements: REQ-d00237, REQ-d00238, REQ-d00240
+# Verifies: REQ-d00237, REQ-d00238, REQ-d00240
 """Tests for TermDictionary integration with TraceGraph and GraphBuilder.
 
 Validates REQ-d00222-A+B+C: TraceGraph._terms field, GraphBuilder definition_block
@@ -332,7 +332,7 @@ class TestBuilderNamespaceOnTermEntry:
 # =============================================================================
 # Full pipeline integration: definitions -> scan -> health checks
 #
-# Implements: REQ-d00237, REQ-d00238, REQ-d00240
+# Verifies: REQ-d00237, REQ-d00238, REQ-d00240
 # =============================================================================
 
 
@@ -387,7 +387,7 @@ class _FakeGraph:
         self.term_duplicates = term_duplicates or []
 
 
-# Implements: REQ-d00238-A
+# Verifies: REQ-d00238-A
 def test_REQ_d00238_A_full_pipeline_definitions_to_health_checks():
     """Integration: definitions -> scan_graph -> extract unmarked -> health check."""
     # 1. Create term dictionary with a defined term
@@ -488,7 +488,7 @@ def test_REQ_d00238_A_full_pipeline_definitions_to_health_checks():
     assert len(plain_findings) >= 1, "Expected plain unmarked finding"
 
 
-# Implements: REQ-d00237-D
+# Verifies: REQ-d00237-D
 def test_REQ_d00237_D_scan_detects_no_false_positives_for_partial_matches():
     """Integration: partial word matches are not flagged."""
     td = TermDictionary()
@@ -520,7 +520,7 @@ def test_REQ_d00237_D_scan_detects_no_false_positives_for_partial_matches():
     ), "Partial match 'terminology' should not produce a reference for 'term'"
 
 
-# Implements: REQ-d00240-A
+# Verifies: REQ-d00240-A
 def test_REQ_d00240_A_unused_term_detected_after_scan():
     """Integration: a defined term with zero scan hits triggers unused check."""
     td = TermDictionary()
@@ -560,7 +560,7 @@ def test_REQ_d00240_A_unused_term_detected_after_scan():
     assert "Gadget" in result.findings[0].message
 
 
-# Implements: REQ-d00238-A
+# Verifies: REQ-d00238-A
 def test_REQ_d00238_A_multiple_terms_scanned_independently():
     """Integration: multiple terms are tracked independently in one scan."""
     td = TermDictionary()
@@ -621,7 +621,7 @@ def test_REQ_d00238_A_multiple_terms_scanned_independently():
     assert any(r.node_id == "REQ-d00070" and not r.marked for r in gadget.references)
 
 
-# Implements: REQ-d00240-A
+# Verifies: REQ-d00240-A
 def test_REQ_d00240_A_run_term_checks_aggregator_with_populated_terms():
     """Integration: run_term_checks with a populated TermDictionary."""
     td = TermDictionary()
@@ -680,7 +680,7 @@ def test_REQ_d00240_A_run_term_checks_aggregator_with_populated_terms():
     assert bad_def_check[0].passed is True
 
 
-# Implements: REQ-d00238-B
+# Verifies: REQ-d00238-B
 def test_REQ_d00238_B_code_comments_only_in_pipeline(tmp_path):
     """Integration: CODE nodes only scan comments, not identifiers."""
     td = TermDictionary()
@@ -752,7 +752,7 @@ def _embedded_term_entry() -> TermEntry:
     )
 
 
-# Implements: REQ-d00237-F
+# Verifies: REQ-d00237-F
 def test_REQ_d00237_F_unmarked_check_skips_embedded_ref():
     """run_term_checks: a term appearing only inside a compound ID is NOT
     reported as an unmarked-emphasis violation."""
@@ -781,7 +781,7 @@ def test_REQ_d00237_F_unmarked_check_skips_embedded_ref():
     ), f"embedded ref must not be flagged unmarked, findings: {unmarked[0].findings}"
 
 
-# Implements: REQ-d00237-F
+# Verifies: REQ-d00237-F
 def test_REQ_d00237_F_unmarked_check_still_flags_free_standing_ref():
     """Contrast: an identical but non-embedded plain-text ref IS flagged,
     proving the skip is the embedded flag and not a disabled check."""
@@ -812,7 +812,7 @@ def test_REQ_d00237_F_unmarked_check_still_flags_free_standing_ref():
     assert any(r.node_id == "REQ-d00080" for r in unmarked[0].findings)
 
 
-# Implements: REQ-d00237-F
+# Verifies: REQ-d00237-F
 def test_REQ_d00237_F_canonical_form_check_skips_embedded_ref():
     """check_term_canonical_form: an embedded ref is not reported as a
     non-canonical term reference."""
@@ -826,7 +826,7 @@ def test_REQ_d00237_F_canonical_form_check_skips_embedded_ref():
     ), f"embedded ref must not be non-canonical, findings: {result.findings}"
 
 
-# Implements: REQ-d00237-F
+# Verifies: REQ-d00237-F
 def test_REQ_d00237_F_canonical_form_check_still_flags_free_standing_ref():
     """Contrast: the same ref when NOT embedded is non-canonical (unmarked
     surface form), so the check fails — confirms the skip hinges on embedded."""

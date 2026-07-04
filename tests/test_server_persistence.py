@@ -592,7 +592,7 @@ class TestEdgeCoalescing:
 class TestAssertionTargetPersistence:
     """Tests that assertion_targets on edges are preserved when saving to disk."""
 
-    # Implements: REQ-d00132-F
+    # Verifies: REQ-d00132-F
     def test_assertion_target_written_to_file(self, tmp_path: Path):
         """Edge with assertion_targets=["A"] produces REQ-p00001-A in file."""
         graph, spec_file = _build_graph_with_spec(tmp_path, "placeholder")
@@ -617,7 +617,7 @@ class TestAssertionTargetPersistence:
                         break
                 break
 
-    # Implements: REQ-d00132-F
+    # Verifies: REQ-d00132-F
     def test_whole_req_and_assertion_target_coexist(self, tmp_path: Path):
         """Whole-req ref and assertion-targeted ref coexist in Implements line."""
         graph, spec_file = _build_graph_with_spec(tmp_path, "placeholder")
@@ -651,7 +651,7 @@ class TestAssertionTargetPersistence:
                 break
         assert found, "No Implements line found for REQ-t00001"
 
-    # Implements: REQ-d00132-F
+    # Verifies: REQ-d00132-F
     def test_no_duplicate_refs_written(self, tmp_path: Path):
         """Deleting and re-adding the same edge does not produce duplicate refs."""
         graph, spec_file = _build_graph_with_spec(tmp_path, "placeholder")
@@ -762,7 +762,7 @@ def _build_refines_graph(
 class TestSaveRefinesEdge:
     """Tests for REFINES edge rendering in render_save."""
 
-    # Implements: REQ-d00132-F
+    # Verifies: REQ-d00132-F
     def test_add_refines_edge_persisted(self, tmp_path: Path):
         """Adding a REFINES edge is persisted to the Refines field."""
         graph, spec_file = _build_refines_graph(tmp_path, has_refines_edge=False)
@@ -778,7 +778,7 @@ class TestSaveRefinesEdge:
         # Implements should still be there
         assert "**Implements**: REQ-p00001" in content
 
-    # Implements: REQ-d00132-F
+    # Verifies: REQ-d00132-F
     def test_delete_refines_edge_persisted(self, tmp_path: Path):
         """Deleting a REFINES edge removes it from the output."""
         graph, spec_file = _build_refines_graph(tmp_path, has_refines_edge=True)
@@ -794,7 +794,7 @@ class TestSaveRefinesEdge:
         # Implements should be untouched
         assert "**Implements**: REQ-p00001" in content
 
-    # Implements: REQ-d00132-F
+    # Verifies: REQ-d00132-F
     def test_refines_with_assertion_targets(self, tmp_path: Path):
         """REFINES edge with assertion_targets produces qualified IDs."""
         graph, spec_file = _build_refines_graph(tmp_path, has_refines_edge=False)
@@ -807,7 +807,7 @@ class TestSaveRefinesEdge:
         content = spec_file.read_text(encoding="utf-8")
         assert "REQ-p00002-A" in content
 
-    # Implements: REQ-d00132-F
+    # Verifies: REQ-d00132-F
     def test_mixed_implements_and_refines_mutations(self, tmp_path: Path):
         """Both IMPLEMENTS and REFINES edge changes on same req render correctly."""
         graph, spec_file = _build_refines_graph(tmp_path, has_refines_edge=True)
@@ -844,7 +844,7 @@ class TestSaveRefinesEdge:
 class TestSaveDeleteAssertion:
     """Tests for saving delete_assertion mutations to disk via render_save."""
 
-    # Implements: REQ-d00132-A
+    # Verifies: REQ-d00132-A
     def test_delete_assertion_removes_line(self, tmp_path: Path):
         """delete_assertion mutation removes the assertion from rendered output."""
         graph, spec_file = _build_graph_with_spec(tmp_path, "placeholder")
@@ -868,7 +868,7 @@ class TestSaveDeleteAssertion:
 class TestSaveRenameAssertion:
     """Tests for saving rename_assertion mutations to disk via render_save."""
 
-    # Implements: REQ-d00132-A
+    # Verifies: REQ-d00132-A
     def test_rename_assertion_changes_label(self, tmp_path: Path):
         """rename_assertion mutation changes the assertion label in rendered output."""
         graph, spec_file = _build_graph_with_spec(tmp_path, "placeholder")
@@ -893,7 +893,7 @@ class TestSaveRenameAssertion:
 class TestSaveAddRequirement:
     """Tests for saving add_requirement mutations to disk via render_save."""
 
-    # Implements: REQ-d00132-A
+    # Verifies: REQ-d00132-A
     def test_add_requirement_renders_to_parent_file(self, tmp_path: Path):
         """add_requirement renders the new requirement to the parent's file."""
         graph, spec_file = _build_graph_with_spec(tmp_path, "placeholder")
@@ -923,7 +923,7 @@ class TestSaveAddRequirement:
 class TestSaveDeleteRequirement:
     """Tests for saving delete_requirement mutations to disk via render_save."""
 
-    # Implements: REQ-d00132-A
+    # Verifies: REQ-d00132-A
     def test_delete_requirement_removes_block(self, tmp_path: Path):
         """delete_requirement removes the requirement from rendered output."""
         graph, spec_file = _build_two_req_graph(tmp_path)
@@ -938,7 +938,7 @@ class TestSaveDeleteRequirement:
         assert "REQ-t00002" not in content  # Second req should be gone
         assert "Second Requirement" not in content
 
-    # Implements: REQ-d00132-A
+    # Verifies: REQ-d00132-A
     def test_delete_requirement_preserves_other_reqs(self, tmp_path: Path):
         """Deleting one requirement doesn't affect others in the same file."""
         graph, spec_file = _build_two_req_graph(tmp_path)

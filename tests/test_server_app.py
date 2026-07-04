@@ -1552,7 +1552,7 @@ def disk_client(disk_app):
 class TestMutateSaveRoundTrip:
     """End-to-end: mutate via API -> save -> verify file on disk."""
 
-    # Implements: REQ-d00132-F
+    # Verifies: REQ-d00132-F
     def test_add_refines_edge_and_save(self, disk_app_with_graph):
         """POST /api/mutate/edge (add REFINES) -> POST /api/save -> file has Refines."""
         app, graph, spec_file = disk_app_with_graph
@@ -1593,7 +1593,7 @@ class TestMutateSaveRoundTrip:
         assert "**Refines**: REQ-p00002" in content
         assert "**Implements**: REQ-p00001" in content
 
-    # Implements: REQ-d00132-A
+    # Verifies: REQ-d00132-A
     def test_change_status_and_save(self, disk_app):
         """POST /api/mutate/status -> POST /api/save -> file has new status."""
         app, spec_file = disk_app
@@ -1612,7 +1612,7 @@ class TestMutateSaveRoundTrip:
         content = spec_file.read_text(encoding="utf-8")
         assert "**Status**: Deprecated" in content
 
-    # Implements: REQ-d00132-A
+    # Verifies: REQ-d00132-A
     def test_update_title_and_save(self, disk_app):
         """POST /api/mutate/title -> POST /api/save -> file has new title."""
         app, spec_file = disk_app
@@ -1631,7 +1631,7 @@ class TestMutateSaveRoundTrip:
         content = spec_file.read_text(encoding="utf-8")
         assert "## REQ-t00001: Updated Title" in content
 
-    # Implements: REQ-d00132-A
+    # Verifies: REQ-d00132-A
     def test_update_assertion_and_save(self, disk_app):
         """POST /api/mutate/assertion -> POST /api/save -> file has new text."""
         app, spec_file = disk_app
@@ -1654,7 +1654,7 @@ class TestMutateSaveRoundTrip:
         assert "A. The system SHALL do something NEW." in content
         assert "B. The system SHALL do another thing." in content
 
-    # Implements: REQ-d00132-A
+    # Verifies: REQ-d00132-A
     def test_add_assertion_and_save(self, disk_app):
         """POST /api/mutate/assertion/add -> POST /api/save -> file has new assertion."""
         app, spec_file = disk_app
@@ -1677,7 +1677,7 @@ class TestMutateSaveRoundTrip:
         content = spec_file.read_text(encoding="utf-8")
         assert "C. The system SHALL do a third thing." in content
 
-    # Implements: REQ-d00132-F
+    # Verifies: REQ-d00132-F
     def test_add_implements_edge_and_save(self, disk_app_with_graph):
         """POST /api/mutate/edge (add IMPLEMENTS) -> POST /api/save -> file updated."""
         app, graph, spec_file = disk_app_with_graph
@@ -1715,7 +1715,7 @@ class TestMutateSaveRoundTrip:
         assert "REQ-p00001" in content
         assert "REQ-p00002" in content
 
-    # Implements: REQ-d00132-F
+    # Verifies: REQ-d00132-F
     def test_delete_edge_and_save(self, disk_app):
         """POST /api/mutate/edge (delete) -> POST /api/save -> reference removed."""
         app, spec_file = disk_app
@@ -1739,7 +1739,7 @@ class TestMutateSaveRoundTrip:
         # After deleting the only implements target, the field value should be empty
         assert "REQ-p00001" not in content or "**Implements**: -" in content
 
-    # Implements: REQ-d00132-F
+    # Verifies: REQ-d00132-F
     def test_change_edge_kind_and_save(self, disk_app):
         """POST /api/mutate/edge (change_kind) -> POST /api/save -> Implements->Refines."""
         app, spec_file = disk_app
@@ -1764,7 +1764,7 @@ class TestMutateSaveRoundTrip:
         assert "**Refines**: REQ-p00001" in content
         assert "**Implements**: REQ-p00001" not in content
 
-    # Implements: REQ-d00132-A
+    # Verifies: REQ-d00132-A
     def test_delete_assertion_and_save(self, disk_app):
         """POST /api/mutate/assertion/delete -> POST /api/save -> assertion removed."""
         app, spec_file = disk_app
@@ -1785,7 +1785,7 @@ class TestMutateSaveRoundTrip:
         assert "A. The system SHALL do something." in content
         assert "do another thing" not in content
 
-    # Implements: REQ-d00132-A
+    # Verifies: REQ-d00132-A
     def test_delete_requirement_and_save(self, disk_app_two_reqs):
         """POST /api/mutate/requirement/delete -> POST /api/save -> req removed from file."""
         app, graph, spec_file = disk_app_two_reqs
@@ -1808,7 +1808,7 @@ class TestMutateSaveRoundTrip:
         assert "REQ-t00002" not in content
         assert "Second Requirement" not in content
 
-    # Implements: REQ-d00134-A
+    # Verifies: REQ-d00134-A
     def test_multiple_mutations_then_save(self, disk_app):
         """Multiple mutations followed by a single save all persist correctly."""
         app, spec_file = disk_app
@@ -1852,7 +1852,7 @@ class TestMutateSaveRoundTrip:
         # Assertion A should be untouched
         assert "A. The system SHALL do something." in content
 
-    # Implements: REQ-d00134-F
+    # Verifies: REQ-d00134-F
     def test_undo_then_save_persists_remaining(self, disk_app):
         """Mutate twice, undo one, save -> only first mutation persists."""
         app, spec_file = disk_app
@@ -1887,7 +1887,7 @@ class TestMutateSaveRoundTrip:
         assert "## REQ-t00001: Test Requirement" in content  # title unchanged
         assert "Should Be Undone" not in content
 
-    # Implements: REQ-d00132-A
+    # Verifies: REQ-d00132-A
     def test_save_with_no_mutations_succeeds(self, disk_app):
         """POST /api/save with no pending mutations succeeds with count 0."""
         app, spec_file = disk_app
@@ -1903,7 +1903,7 @@ class TestMutateSaveRoundTrip:
         # File should be unchanged
         assert spec_file.read_text(encoding="utf-8") == original_content
 
-    # Implements: REQ-d00132-E
+    # Verifies: REQ-d00132-E
     def test_dirty_reflects_mutation_state(self, disk_app):
         """GET /api/dirty tracks pending mutation count."""
         app, _ = disk_app
@@ -1928,7 +1928,7 @@ class TestMutateSaveRoundTrip:
         data = resp.json()
         assert data["dirty"] is False, "Save should clear the dirty flag"
 
-    # Implements: REQ-d00134-F
+    # Verifies: REQ-d00134-F
     def test_add_assertion_then_delete_it_then_save(self, disk_app):
         """Add assertion, then delete it, then save -> file unchanged."""
         app, spec_file = disk_app
@@ -1962,7 +1962,7 @@ class TestMutateSaveRoundTrip:
         assert "A. The system SHALL do something." in content
         assert "B. The system SHALL do another thing." in content
 
-    # Implements: REQ-d00132-F
+    # Verifies: REQ-d00132-F
     def test_change_edge_kind_then_add_edge_then_save(self, disk_app_with_graph):
         """Change IMPLEMENTS->REFINES, add new IMPLEMENTS, save -> both persisted."""
         app, graph, spec_file = disk_app_with_graph
@@ -2013,7 +2013,7 @@ class TestMutateSaveRoundTrip:
         assert "**Refines**: REQ-p00001" in content
         assert "**Implements**: REQ-p00002" in content
 
-    # Implements: REQ-d00134-A
+    # Verifies: REQ-d00134-A
     def test_mutations_across_two_reqs_then_save(self, disk_app_two_reqs):
         """Mutate two different requirements, save once -> both persisted."""
         app, graph, spec_file = disk_app_two_reqs
@@ -2060,7 +2060,7 @@ class TestMutateSaveRoundTrip:
                         break
                 break
 
-    # Implements: REQ-d00134-A
+    # Verifies: REQ-d00134-A
     def test_add_assertion_to_two_reqs_then_save(self, disk_app_two_reqs):
         """Add assertions to different reqs, save once -> both persisted."""
         app, graph, spec_file = disk_app_two_reqs
@@ -2098,12 +2098,12 @@ class TestMutateSaveRoundTrip:
 class TestMutateValidation:
     """Validate error handling for mutation API endpoints."""
 
-    # Implements: REQ-d00010-A
+    # Verifies: REQ-d00010-A
     def test_mutate_status_missing_fields(self, disk_client):
         resp = disk_client.post("/api/mutate/status", json={"node_id": "REQ-t00001"})
         assert resp.status_code == 400
 
-    # Implements: REQ-d00010-A
+    # Verifies: REQ-d00010-A
     def test_mutate_status_unknown_node(self, disk_client):
         resp = disk_client.post(
             "/api/mutate/status",
@@ -2111,17 +2111,17 @@ class TestMutateValidation:
         )
         assert resp.status_code == 400
 
-    # Implements: REQ-d00010-A
+    # Verifies: REQ-d00010-A
     def test_mutate_title_missing_fields(self, disk_client):
         resp = disk_client.post("/api/mutate/title", json={"node_id": "REQ-t00001"})
         assert resp.status_code == 400
 
-    # Implements: REQ-d00010-A
+    # Verifies: REQ-d00010-A
     def test_mutate_assertion_missing_fields(self, disk_client):
         resp = disk_client.post("/api/mutate/assertion", json={"assertion_id": "REQ-t00001-A"})
         assert resp.status_code == 400
 
-    # Implements: REQ-d00010-A
+    # Verifies: REQ-d00010-A
     def test_mutate_assertion_add_missing_fields(self, disk_client):
         resp = disk_client.post(
             "/api/mutate/assertion/add",
@@ -2129,7 +2129,7 @@ class TestMutateValidation:
         )
         assert resp.status_code == 400
 
-    # Implements: REQ-d00010-A
+    # Verifies: REQ-d00010-A
     def test_mutate_assertion_delete_no_confirm(self, disk_client):
         resp = disk_client.post(
             "/api/mutate/assertion/delete",
@@ -2137,7 +2137,7 @@ class TestMutateValidation:
         )
         assert resp.status_code == 400
 
-    # Implements: REQ-d00010-A
+    # Verifies: REQ-d00010-A
     def test_mutate_requirement_delete_no_confirm(self, disk_client):
         resp = disk_client.post(
             "/api/mutate/requirement/delete",
@@ -2145,7 +2145,7 @@ class TestMutateValidation:
         )
         assert resp.status_code == 400
 
-    # Implements: REQ-d00010-A
+    # Verifies: REQ-d00010-A
     def test_mutate_edge_missing_action(self, disk_client):
         resp = disk_client.post(
             "/api/mutate/edge",
@@ -2153,7 +2153,7 @@ class TestMutateValidation:
         )
         assert resp.status_code == 400
 
-    # Implements: REQ-d00010-A
+    # Verifies: REQ-d00010-A
     def test_mutate_edge_unknown_action(self, disk_client):
         resp = disk_client.post(
             "/api/mutate/edge",
@@ -2165,7 +2165,7 @@ class TestMutateValidation:
         )
         assert resp.status_code == 400
 
-    # Implements: REQ-d00010-A
+    # Verifies: REQ-d00010-A
     def test_mutate_edge_add_missing_kind(self, disk_client):
         resp = disk_client.post(
             "/api/mutate/edge",
@@ -2177,7 +2177,7 @@ class TestMutateValidation:
         )
         assert resp.status_code == 400
 
-    # Implements: REQ-d00010-A
+    # Verifies: REQ-d00010-A
     def test_mutate_edge_change_kind_missing_new_kind(self, disk_client):
         resp = disk_client.post(
             "/api/mutate/edge",
@@ -2189,7 +2189,7 @@ class TestMutateValidation:
         )
         assert resp.status_code == 400
 
-    # Implements: REQ-d00010-A
+    # Verifies: REQ-d00010-A
     def test_undo_with_no_mutations(self, disk_client):
         """Undo with no pending mutations returns error."""
         resp = disk_client.post("/api/mutate/undo")
@@ -2622,7 +2622,7 @@ class TestGitSuggestBranchName:
 class TestSpecFiles:
     """Validates GET /api/spec-files endpoint."""
 
-    # Implements: REQ-d00010
+    # Verifies: REQ-d00010
 
     @pytest.fixture
     def spec_files_graph(self):
@@ -2702,7 +2702,7 @@ class TestSpecFiles:
         return TestClient(app)
 
     def test_spec_files_returns_spec_file_list(self, spec_files_client):
-        # Implements: REQ-d00010
+        # Verifies: REQ-d00010
         """Endpoint returns only SPEC files, not CODE or TEST."""
         resp = spec_files_client.get("/api/spec-files")
         assert resp.status_code == 200
@@ -2722,7 +2722,7 @@ class TestSpecFiles:
         assert "file:tests/test_main.py" not in ids
 
     def test_spec_files_sorted_by_path(self, spec_files_client):
-        # Implements: REQ-d00010
+        # Verifies: REQ-d00010
         """Results are sorted alphabetically by relative_path."""
         resp = spec_files_client.get("/api/spec-files")
         assert resp.status_code == 200
@@ -2734,7 +2734,7 @@ class TestSpecFiles:
         assert paths[1] == "spec/requirements.md"
 
     def test_spec_files_empty_when_no_spec_files(self):
-        # Implements: REQ-d00010
+        # Verifies: REQ-d00010
         """Returns empty list when no SPEC files exist."""
         graph = TraceGraph(repo_root=Path("/test/repo"))
         code_file = GraphNode(
@@ -2830,7 +2830,7 @@ def full_disk_app(tmp_path):
 class TestMoveToNewFile:
     """Tests for moving a node to a newly-created file via the API."""
 
-    # Implements: REQ-d00010
+    # Verifies: REQ-d00010
     def test_move_to_new_file_creates_and_moves(self, full_disk_app):
         """POST /api/mutate/move-to-file with non-existent target creates file and moves."""
         app, state, _spec_file = full_disk_app
@@ -2858,7 +2858,7 @@ class TestMoveToNewFile:
         new_file_node = state.graph.find_by_id("file:spec/new-reqs.md")
         assert new_file_node is not None
 
-    # Implements: REQ-d00010
+    # Verifies: REQ-d00010
     def test_move_to_new_file_rejects_invalid_path(self, full_disk_app):
         """POST /api/mutate/move-to-file rejects target outside configured spec dirs."""
         app, state, _spec_file = full_disk_app
@@ -2879,7 +2879,7 @@ class TestMoveToNewFile:
         # File should NOT have been created
         assert not (state.repo_root / "random" / "not-a-spec.md").exists()
 
-    # Implements: REQ-d00010
+    # Verifies: REQ-d00010
     def test_move_to_new_file_rejects_path_traversal(self, full_disk_app):
         """Path traversal attempts are rejected."""
         app, state, _spec_file = full_disk_app
@@ -2896,7 +2896,7 @@ class TestMoveToNewFile:
         data = resp.json()
         assert "Invalid path" in data["error"] or "escapes" in data["error"]
 
-    # Implements: REQ-d00010
+    # Verifies: REQ-d00010
     def test_move_to_existing_file_still_works(self, full_disk_app):
         """POST /api/mutate/move-to-file with existing target file works as before."""
         app, state, _spec_file = full_disk_app

@@ -228,7 +228,7 @@ class TestFixIdempotency:
     """Validates REQ-d00248-A: `elspais fix` is idempotent across runs."""
 
     def test_REQ_d00248_A_fix_twice_produces_no_changes(self, project):
-        # Implements: REQ-d00248-A
+        # Verifies: REQ-d00248-A
         # First run: settle the project. May produce hash updates, generated
         # glossary/term-index artifacts, etc.
         first = run_elspais("fix", cwd=project)

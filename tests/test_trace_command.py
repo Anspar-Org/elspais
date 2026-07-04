@@ -24,7 +24,7 @@ from elspais.commands.trace import (
 class TestTraceCommand:
     """Tests for basic trace command functionality."""
 
-    # Implements: REQ-p00003-A, REQ-d00084-A
+    # Verifies: REQ-p00003-A, REQ-d00084-A
     @pytest.mark.parametrize(
         "fmt,expected_marker",
         [
@@ -49,7 +49,7 @@ class TestTraceCommand:
         assert expected_marker in content
         assert "REQ-p00001" in content
 
-    # Implements: REQ-d00084-A
+    # Verifies: REQ-d00084-A
     def test_trace_json_format_output(self, canonical_federated_graph, capsys):
         """Test trace command produces correct JSON output."""
         data = compute_trace(canonical_federated_graph, {}, {})
@@ -79,7 +79,7 @@ class TestTraceReportPresets:
             columns=list(REPORT_PRESETS[preset_name].columns),
         )
 
-    # Implements: REQ-d00084-B
+    # Verifies: REQ-d00084-B
     @pytest.mark.parametrize(
         "preset,should_have,should_not_have",
         [
@@ -143,7 +143,7 @@ class TestTraceReportPresets:
         for col in should_not_have:
             assert col not in header, f"Unexpected column: {col}"
 
-    # Implements: REQ-d00084-D
+    # Verifies: REQ-d00084-D
     @pytest.mark.parametrize(
         "preset,should_have_fields",
         [
@@ -184,7 +184,7 @@ class TestTraceReportPresets:
         if not should_have_fields:
             assert "implemented" not in parent
 
-    # Implements: REQ-d00084-B
+    # Verifies: REQ-d00084-B
     def test_report_invalid_preset_returns_error(self, capsys):
         """Test invalid --preset returns error."""
         import argparse
@@ -204,7 +204,7 @@ class TestTraceReportPresets:
         assert "Unknown preset" in captured.err
         assert "minimal" in captured.err
 
-    # Implements: REQ-d00084-B
+    # Verifies: REQ-d00084-B
     def test_report_default_is_standard(self, canonical_federated_graph, capsys):
         """Test that no --preset defaults to standard."""
         default_preset = self._make_preset("standard")

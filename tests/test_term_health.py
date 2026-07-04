@@ -33,7 +33,7 @@ class TestTermHealthChecks:
 
     # -- REQ-d00223-A: duplicate definitions --------------------------------
 
-    # Implements: REQ-d00223-A
+    # Verifies: REQ-d00223-A
     def test_REQ_d00223_A_duplicates_reported(self):
         """Duplicate term definitions produce a failing check."""
         entry_a = TermEntry(
@@ -59,7 +59,7 @@ class TestTermHealthChecks:
         assert result.severity == "error"
         assert len(result.findings) > 0
 
-    # Implements: REQ-d00223-A
+    # Verifies: REQ-d00223-A
     def test_REQ_d00223_A_no_duplicates_passes(self):
         """Empty duplicates list produces a passing check."""
         result = check_term_duplicates([])
@@ -69,7 +69,7 @@ class TestTermHealthChecks:
 
     # -- REQ-d00223-B: undefined terms --------------------------------------
 
-    # Implements: REQ-d00223-B
+    # Verifies: REQ-d00223-B
     def test_REQ_d00223_B_undefined_terms_reported(self):
         """Undefined term tokens produce a failing check."""
         undefined = [
@@ -82,7 +82,7 @@ class TestTermHealthChecks:
         assert result.passed is False
         assert result.severity == "warning"
 
-    # Implements: REQ-d00223-B
+    # Verifies: REQ-d00223-B
     def test_REQ_d00223_B_no_undefined_passes(self):
         """Empty undefined list produces a passing check."""
         result = check_undefined_terms([])
@@ -92,7 +92,7 @@ class TestTermHealthChecks:
 
     # -- REQ-d00223-C: unmarked usage ---------------------------------------
 
-    # Implements: REQ-d00223-C
+    # Verifies: REQ-d00223-C
     def test_REQ_d00223_C_unmarked_usage_reported(self):
         """Unmarked usage of indexed terms produces a failing check."""
         unmarked = [
@@ -105,7 +105,7 @@ class TestTermHealthChecks:
         assert result.passed is False
         assert result.severity == "warning"
 
-    # Implements: REQ-d00223-C
+    # Verifies: REQ-d00223-C
     def test_REQ_d00223_C_no_unmarked_passes(self):
         """Empty unmarked list produces a passing check."""
         result = check_unmarked_usage([])
@@ -115,7 +115,7 @@ class TestTermHealthChecks:
 
     # -- REQ-d00223-D: severity "off" skips check --------------------------
 
-    # Implements: REQ-d00223-D
+    # Verifies: REQ-d00223-D
     def test_REQ_d00223_D_off_severity_skips_duplicates(self):
         """severity='off' returns passed info for duplicates check."""
         entry_a = TermEntry(
@@ -134,7 +134,7 @@ class TestTermHealthChecks:
         assert result.passed is True
         assert result.severity == "info"
 
-    # Implements: REQ-d00223-D
+    # Verifies: REQ-d00223-D
     def test_REQ_d00223_D_off_severity_skips_undefined(self):
         """severity='off' returns passed info for undefined terms check."""
         undefined = [
@@ -146,7 +146,7 @@ class TestTermHealthChecks:
         assert result.passed is True
         assert result.severity == "info"
 
-    # Implements: REQ-d00223-D
+    # Verifies: REQ-d00223-D
     def test_REQ_d00223_D_off_severity_skips_unmarked(self):
         """severity='off' returns passed info for unmarked usage check."""
         unmarked = [
@@ -167,7 +167,7 @@ class TestTermHealthChecks:
 class TestCheckTermUnused:
     """Validates REQ-d00240-A: unused term detection."""
 
-    # Implements: REQ-d00240-A
+    # Verifies: REQ-d00240-A
     def test_REQ_d00240_A_unused_term_fails(self):
         """A term with 0 references produces a failing finding."""
         entries = [
@@ -190,7 +190,7 @@ class TestCheckTermUnused:
         assert len(result.findings) == 1
         assert "Orphan Term" in result.findings[0].message
 
-    # Implements: REQ-d00240-A
+    # Verifies: REQ-d00240-A
     def test_REQ_d00240_A_used_term_passes(self):
         """A term with references produces no finding."""
         entries = [
@@ -218,7 +218,7 @@ class TestCheckTermUnused:
         assert result.passed is True
         assert len(result.findings) == 0
 
-    # Implements: REQ-d00240-A
+    # Verifies: REQ-d00240-A
     def test_REQ_d00240_A_severity_off_skips(self):
         """severity='off' returns passed/info even with unused terms."""
         entries = [
@@ -239,7 +239,7 @@ class TestCheckTermUnused:
 class TestCheckTermBadDefinition:
     """Validates REQ-d00240-B: bad definition detection."""
 
-    # Implements: REQ-d00240-B
+    # Verifies: REQ-d00240-B
     def test_REQ_d00240_B_empty_definition_fails(self):
         """A term with an empty definition produces a failing finding."""
         entries = [
@@ -261,7 +261,7 @@ class TestCheckTermBadDefinition:
         assert len(result.findings) == 1
         assert "Empty Def" in result.findings[0].message
 
-    # Implements: REQ-d00240-B
+    # Verifies: REQ-d00240-B
     def test_REQ_d00240_B_short_definition_fails(self):
         """A term with a <10 char definition produces a failing finding."""
         entries = [
@@ -282,7 +282,7 @@ class TestCheckTermBadDefinition:
         assert len(result.findings) == 1
         assert "Short Def" in result.findings[0].message
 
-    # Implements: REQ-d00240-B
+    # Verifies: REQ-d00240-B
     def test_REQ_d00240_B_adequate_definition_passes(self):
         """A term with an adequate definition (>=10 chars) passes."""
         entries = [
@@ -302,7 +302,7 @@ class TestCheckTermBadDefinition:
         assert result.passed is True
         assert len(result.findings) == 0
 
-    # Implements: REQ-d00240-B
+    # Verifies: REQ-d00240-B
     def test_REQ_d00240_B_severity_off_skips(self):
         """severity='off' returns passed/info even with bad definitions."""
         entries = [
@@ -318,7 +318,7 @@ class TestCheckTermBadDefinition:
         assert result.passed is True
         assert result.severity == "info"
 
-    # Implements: REQ-d00240-B
+    # Verifies: REQ-d00240-B
     def test_REQ_d00240_B_exempts_reference_type(self):
         """Reference-type terms are exempt: empty prose definition is expected."""
         entries = [
@@ -344,7 +344,7 @@ class TestCheckTermBadDefinition:
         assert result.passed is True
         assert len(result.findings) == 0
 
-    # Implements: REQ-d00240-B
+    # Verifies: REQ-d00240-B
     def test_REQ_d00240_B_non_reference_with_empty_still_fails(self):
         """Non-reference term with empty definition still produces a finding.
 
@@ -372,7 +372,7 @@ class TestCheckTermBadDefinition:
 class TestCheckTermCollectionEmpty:
     """Validates REQ-d00240-C: empty collection term detection."""
 
-    # Implements: REQ-d00240-C
+    # Verifies: REQ-d00240-C
     def test_REQ_d00240_C_empty_collection_fails(self):
         """A collection term with 0 references produces a failing finding."""
         entries = [
@@ -396,7 +396,7 @@ class TestCheckTermCollectionEmpty:
         assert len(result.findings) == 1
         assert "Glossary Section" in result.findings[0].message
 
-    # Implements: REQ-d00240-C
+    # Verifies: REQ-d00240-C
     def test_REQ_d00240_C_collection_with_refs_passes(self):
         """A collection term with references passes."""
         entries = [
@@ -425,7 +425,7 @@ class TestCheckTermCollectionEmpty:
         assert result.passed is True
         assert len(result.findings) == 0
 
-    # Implements: REQ-d00240-C
+    # Verifies: REQ-d00240-C
     def test_REQ_d00240_C_non_collection_ignored(self):
         """A non-collection term with 0 references is not reported."""
         entries = [
@@ -447,7 +447,7 @@ class TestCheckTermCollectionEmpty:
         assert result.passed is True
         assert len(result.findings) == 0
 
-    # Implements: REQ-d00240-C
+    # Verifies: REQ-d00240-C
     def test_REQ_d00240_C_severity_off_skips(self):
         """severity='off' returns passed/info even with empty collections."""
         entries = [
@@ -481,7 +481,7 @@ class _FakeGraph:
 class TestRunTermChecks:
     """Validates REQ-d00223-E and REQ-d00240-D: run_term_checks aggregator."""
 
-    # Implements: REQ-d00223-E
+    # Verifies: REQ-d00223-E
     def test_REQ_d00223_E_run_term_checks_returns_list(self):
         """run_term_checks returns a list of HealthCheck objects."""
         config = {
@@ -504,7 +504,7 @@ class TestRunTermChecks:
         for check in result:
             assert isinstance(check, HealthCheck)
 
-    # Implements: REQ-d00223-E
+    # Verifies: REQ-d00223-E
     def test_REQ_d00223_E_run_term_checks_reads_severity_from_config(self):
         """run_term_checks passes severity values from config to sub-checks."""
         entry_a = TermEntry(
@@ -538,7 +538,7 @@ class TestRunTermChecks:
         assert len(dup_check) == 1
         assert dup_check[0].severity == "warning"
 
-    # Implements: REQ-d00223-E
+    # Verifies: REQ-d00223-E
     def test_REQ_d00223_E_run_term_checks_off_severity_skips(self):
         """severity='off' produces passed/info checks for all seven."""
         entry_a = TermEntry(
@@ -572,7 +572,7 @@ class TestRunTermChecks:
             assert check.passed is True
             assert check.severity == "info"
 
-    # Implements: REQ-d00223-E
+    # Verifies: REQ-d00223-E
     def test_REQ_d00223_E_run_term_checks_extracts_duplicates(self):
         """run_term_checks passes graph._term_duplicates to check_term_duplicates."""
         entry_a = TermEntry(
@@ -610,7 +610,7 @@ class TestRunTermChecks:
         assert dup_check[0].passed is False
         assert len(dup_check[0].findings) > 0
 
-    # Implements: REQ-d00223-E
+    # Verifies: REQ-d00223-E
     def test_REQ_d00223_E_run_term_checks_empty_graph(self):
         """Empty graph (no terms, no duplicates) produces all-passed checks."""
         config = {
@@ -632,7 +632,7 @@ class TestRunTermChecks:
         for check in result:
             assert check.passed is True
 
-    # Implements: REQ-d00240-D
+    # Verifies: REQ-d00240-D
     def test_REQ_d00240_D_run_term_checks_returns_seven_checks(self):
         """run_term_checks returns all 7 HealthCheck items."""
         config = {
@@ -681,7 +681,7 @@ class TestCheckNoTraceability:
     the formatter with illustrative code-file paths.
     """
 
-    # Implements: REQ-d00241
+    # Verifies: REQ-d00241
     def test_REQ_d00241_A_unlinked_files_fails(self):
         """Files with no traceability markers produce a failing check."""
         unlinked = ["src/utils/helper.py", "src/utils/other.py"]
@@ -695,7 +695,7 @@ class TestCheckNoTraceability:
         assert any("helper.py" in f.message for f in result.findings)
         assert any("other.py" in f.message for f in result.findings)
 
-    # Implements: REQ-d00241
+    # Verifies: REQ-d00241
     def test_REQ_d00241_A_empty_list_passes(self):
         """Empty unlinked list produces a passing check."""
         result = check_no_traceability([])
@@ -704,7 +704,7 @@ class TestCheckNoTraceability:
         assert result.passed is True
         assert len(result.findings) == 0
 
-    # Implements: REQ-d00241
+    # Verifies: REQ-d00241
     def test_REQ_d00241_A_severity_off_skips(self):
         """severity='off' returns passed/info even with unlinked files."""
         unlinked = ["src/utils/helper.py"]
@@ -723,7 +723,7 @@ class TestCheckNoTraceability:
 class TestUnmarkedWrongMarking:
     """Validates REQ-d00223-F: distinct messages for wrong-marking."""
 
-    # Implements: REQ-d00223-F
+    # Verifies: REQ-d00223-F
     def test_REQ_d00223_F_wrong_marking_distinct_message(self):
         """Wrong-marking items get a distinct message mentioning the delimiter."""
         unmarked = [
@@ -743,7 +743,7 @@ class TestUnmarkedWrongMarking:
         assert "Wrong markup" in msg or "wrong markup" in msg.lower()
         assert "__" in msg
 
-    # Implements: REQ-d00223-F
+    # Verifies: REQ-d00223-F
     def test_REQ_d00223_F_plain_unmarked_standard_message(self):
         """Plain unmarked items get the standard message."""
         unmarked = [
@@ -762,7 +762,7 @@ class TestUnmarkedWrongMarking:
         assert "Unmarked usage" in msg
         assert "Wrong markup" not in msg
 
-    # Implements: REQ-d00223-F
+    # Verifies: REQ-d00223-F
     def test_REQ_d00223_F_mixed_items_distinct_messages(self):
         """Mix of wrong-marking and plain unmarked produces distinct messages."""
         unmarked = [

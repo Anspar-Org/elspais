@@ -147,7 +147,7 @@ def _rel(*parts: str) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-# Implements: REQ-d00085-I
+# Verifies: REQ-d00085-I
 def test_builder_creates_synthetic_id_for_second_occurrence(tmp_path: Path) -> None:
     """The second cross-file occurrence of a REQ ID becomes a synthetic node.
 
@@ -203,7 +203,7 @@ def test_builder_creates_synthetic_id_for_second_occurrence(tmp_path: Path) -> N
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-# Implements: REQ-d00085-I
+# Verifies: REQ-d00085-I
 def test_duplicate_req_ids_accessor_lists_all_sources(tmp_path: Path) -> None:
     """``graph.duplicate_req_ids()`` returns the canonical→sources map.
 
@@ -233,7 +233,7 @@ def test_duplicate_req_ids_accessor_lists_all_sources(tmp_path: Path) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-# Implements: REQ-d00085-I
+# Verifies: REQ-d00085-I
 def test_check_spec_no_duplicates_fires_on_cross_file_collision(tmp_path: Path) -> None:
     """``check_spec_no_duplicates`` must fail when two files define the same REQ ID.
 
@@ -266,7 +266,7 @@ def test_check_spec_no_duplicates_fires_on_cross_file_collision(tmp_path: Path) 
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-# Implements: REQ-d00085-I
+# Verifies: REQ-d00085-I
 def test_fix_command_aborts_when_duplicates_exist(tmp_path: Path, capsys) -> None:
     """``fix_cmd.run`` must abort with exit code 1 and leave files untouched.
 
@@ -311,7 +311,7 @@ def test_fix_command_aborts_when_duplicates_exist(tmp_path: Path, capsys) -> Non
     ), f"stderr should list file B as a colliding source; got: {stderr!r}"
 
 
-# Implements: REQ-d00085-I
+# Verifies: REQ-d00085-I
 def test_non_duplicate_fix_failure_still_runs_index_and_term_passes(
     tmp_path: Path,
     monkeypatch,
@@ -367,7 +367,7 @@ def test_non_duplicate_fix_failure_still_runs_index_and_term_passes(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-# Implements: REQ-d00085-I
+# Verifies: REQ-d00085-I
 def test_render_save_skips_files_in_duplicates(tmp_path: Path) -> None:
     """``render_save`` must refuse to write any file that participated in a duplicate.
 
