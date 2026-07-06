@@ -158,6 +158,52 @@ def test_whole_journey_pass_no_steps_full(graph_whole_journey_pass):
 
 
 # ---------------------------------------------------------------------------
+# Serializer: journey STEP verifying_tests carry file/line (viewer link data)
+# ---------------------------------------------------------------------------
+
+
+def _build_uat_federated(tmp_path: Path, slug: str):
+    """Copy a journey-uat fixture and return the FederatedGraph (not primary)."""
+    from elspais.graph.factory import build_graph
+
+    dest = tmp_path / slug
+    shutil.copytree(_JOURNEY_UAT_FIX / slug, dest)
+    return build_graph(repo_root=dest)
+
+
+# Verifies: REQ-d00256
+def test_step_verifying_tests_include_file_and_line(tmp_path):
+    """A journey STEP's serialized ``verifying_tests`` entries must carry
+    ``file`` and ``line`` (repo-relative, via the unified _serialize_test_info),
+    not just id/title -- so the viewer can render one clickable source link
+    instead of duplicated path text.
+    """
+    from elspais.mcp.server import _serialize_node_generic
+
+    fg = _build_uat_federated(tmp_path, "steps-all-pass")
+    jny = fg.find_by_id("JNY-OQ-Login-01")
+    ser = _serialize_node_generic(jny, fg)
+
+    steps = [c for c in ser["children"] if c.get("kind") == "step"]
+    assert steps, "expected step children in serialized journey"
+    for step in steps:
+        vtests = step["verifying_tests"]
+        assert vtests, f"step {step['id']} should have verifying_tests"
+        vt = vtests[0]
+        # Regression: entries previously carried only id/title/status.
+        assert "file" in vt, f"verifying_tests entry missing 'file': {vt}"
+        assert "line" in vt, f"verifying_tests entry missing 'line': {vt}"
+        assert vt["file"], f"'file' should be a repo-relative path, got {vt!r}"
+        assert not Path(
+            vt["file"]
+        ).is_absolute(), f"'file' must be repo-relative, got absolute {vt['file']!r}"
+        assert vt["file"].startswith("tests/"), vt["file"]
+        assert isinstance(vt["line"], int) and vt["line"] >= 1, vt
+        # Aggregated pass/fail status preserved alongside the new fields.
+        assert vt["status"] == "pass", vt
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 

@@ -673,3 +673,70 @@ class TestJourneyVerdictBrowser:
         ), "Badge should lose 'active' class once its panel is closed"
 
         assert not js_errors, f"JS errors during step-badge toggle: {js_errors}"
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_d00256_journey_step_test_row_single_link(
+        self, page_journey, failing_journey_viewer_url
+    ):
+        # Verifies: REQ-d00256
+        """Each verifying-test row shows a status chip plus exactly ONE
+        clickable source link (calling showSource) -- not the same path text
+        rendered twice with no link (the CUR-1568 bug).
+
+        Checks:
+        - The revealed step-1 panel contains exactly one <a> link
+        - That link's onclick calls showSource(...)
+        - The row does not repeat its display text (no duplicated path)
+        """
+        js_errors: list[str] = []
+        page_journey.on("pageerror", lambda err: js_errors.append(str(err)))
+
+        page_journey.goto(failing_journey_viewer_url, wait_until="networkidle")
+        page_journey.evaluate(f"() => window.openCard('{_FAILING_JOURNEY_ID}')")
+
+        card_locator = page_journey.locator(f"#card-{_FAILING_JOURNEY_ID}")
+        card_locator.wait_for(state="visible", timeout=10_000)
+
+        first_row = card_locator.locator(".journey-step-row").first
+        panel = card_locator.locator(f"#journey-step-tests-{_FAILING_JOURNEY_ID}-1")
+        badge = first_row.locator(".journey-step-badge").first
+
+        # Badge sizing parity: the step badge must render at the shared
+        # assertion-badge size (0.65rem), not the ballooned inherited size
+        # from a `font: inherit` override (CUR-1568).
+        badge_rem = page_journey.evaluate(
+            "(el) => parseFloat(getComputedStyle(el).fontSize) "
+            "/ parseFloat(getComputedStyle(document.documentElement).fontSize)",
+            badge.element_handle(),
+        )
+        assert abs(badge_rem - 0.65) < 0.06, (
+            f"step badge font-size should be ~0.65rem (matching assertion "
+            f"badges), got {badge_rem:.3f}rem"
+        )
+
+        badge.click()
+        panel.wait_for(state="visible", timeout=5_000)
+
+        test_row = panel.locator(".journey-step-test-row").first
+        # Exactly one clickable link per test row (the bug rendered zero links
+        # and two duplicated <span> texts instead).
+        links = test_row.locator("a")
+        assert links.count() == 1, (
+            f"Expected exactly one link in the step-test row, got {links.count()}: "
+            f"{test_row.inner_html()!r}"
+        )
+        onclick = links.first.get_attribute("onclick") or ""
+        assert (
+            "showSource(" in onclick
+        ), f"Step-test link must call showSource, got onclick={onclick!r}"
+
+        # The display text must appear only once (no id + duplicate title spans).
+        link_text = links.first.inner_text().strip()
+        assert link_text, "link should have display text"
+        assert test_row.inner_text().count(link_text) == 1, (
+            f"Display text {link_text!r} should not be duplicated in row: "
+            f"{test_row.inner_text()!r}"
+        )
+
+        assert not js_errors, f"JS errors during step-test link render: {js_errors}"

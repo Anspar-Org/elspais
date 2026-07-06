@@ -102,13 +102,14 @@ def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _relative_source_path(node: Any, graph: FederatedGraph) -> str:
+def _relative_source_path(node: Any, graph: FederatedGraph | None) -> str:
     """Return the node's source file path, relative to repo root.
 
     Implements: REQ-d00129-D
     Navigates to the FILE parent node to get the repo-relative path.
     Some parsers (notably CodeRefParser) may store absolute paths;
-    this helper normalises the value.
+    this helper normalises the value. Tolerates ``graph is None``
+    (degrades to the raw stored path rather than crashing).
     """
     fn = node.file_node()
     if not fn:
@@ -118,6 +119,8 @@ def _relative_source_path(node: Any, graph: FederatedGraph) -> str:
         return ""
     p = Path(raw)
     if p.is_absolute():
+        if graph is None:
+            return raw  # no repo root to relativise against
         try:
             return str(p.relative_to(graph.repo_root))
         except ValueError:
@@ -318,13 +321,13 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
                         break
                     elif s in ("passed", "pass", "success"):
                         result_status = "pass"
-                verifying_tests.append(
-                    {
-                        "id": test.id,
-                        "title": test.get_label(),
-                        "status": result_status,
-                    }
-                )
+                # Reuse the unified TEST serializer so each entry carries
+                # file/line/label/name/results (viewer renders one clickable
+                # source link). Merge in the aggregated pass/fail status
+                # already computed above. REQ-d00256.
+                test_info = _serialize_test_info(test, graph)
+                test_info["status"] = result_status
+                verifying_tests.append(test_info)
             entry = {
                 "kind": "step",
                 "id": child.id,

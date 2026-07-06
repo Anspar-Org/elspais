@@ -1194,11 +1194,18 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
                 vTests.forEach(function(t) {
                     var tStatus = t.status || '';
                     var tCls = tStatus === 'pass' ? 'validation-pass' : (tStatus === 'fail' ? 'validation-fail' : 'validation-unknown');
+                    // Clean, non-duplicated display text: prefer the test name,
+                    // then repo-relative file:line, then the label/id fallback.
+                    var displayText = t.name
+                        ? t.name
+                        : (t.file ? (t.file + ':' + (t.line || 0)) : (t.label || t.id || ''));
                     html += '<div class="journey-step-test-row" style="font-size:0.75rem;display:flex;align-items:center;gap:4px;padding:1px 0;">';
                     html += '<span class="' + tCls + ' active" style="font-size:0.55rem;padding:1px 4px;border-radius:2px;">' + escapeHtml((tStatus || '?').toUpperCase()) + '</span>';
-                    html += '<span class="journey-step-test-id" style="font-family:monospace;">' + escapeHtml(t.id || '') + '</span>';
-                    if (t.title && t.title !== t.id) {
-                        html += '<span class="journey-step-test-title" style="color:var(--secondary-text);">' + escapeHtml(t.title) + '</span>';
+                    if (t.file) {
+                        html += '<a class="journey-step-test-link" href="#" style="font-family:monospace;" onclick="event.preventDefault(); showSource(\'' +
+                            escapeJsInAttr(t.file) + '\', ' + (t.line || 0) + ', \'' + escapeAttr(t.id || '') + '\')">' + escapeHtml(displayText) + '</a>';
+                    } else {
+                        html += '<span class="journey-step-test-link" style="font-family:monospace;">' + escapeHtml(displayText) + '</span>';
                     }
                     html += '</div>';
                 });
