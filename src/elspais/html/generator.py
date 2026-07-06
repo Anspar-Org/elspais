@@ -181,7 +181,8 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         tested_tier, verified_color, verified_tip, verified_tier, uat_cov_color,
         uat_cov_tip, uat_cov_tier, uat_ver_color, uat_ver_tip, uat_ver_tier,
         combined_color, combined_tip, combined_bucket.
-        All empty strings if node is not ACTIVE or has no assertions.
+        All empty strings if the node's status is coverage-excluded
+        (per [rules.format.status_roles]) or it has no assertions.
     """
     from elspais.config.schema import CoverageConfig, CoverageSeverityConfig
 
@@ -207,8 +208,16 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         "expects_validation": False,
     }
 
-    status = (node.status or "").upper()
-    if status != "ACTIVE":
+    # Blank colors only for coverage-EXCLUDED statuses (per
+    # [rules.format.status_roles]), consistent with the shared aggregation used
+    # by summary/health/trace (REQ-d00258-C). Compare raw ``node.status`` against
+    # the excluded set the SAME way graph/aggregation.py does, so the viewer and
+    # the aggregation agree on the identical creditable requirement set. When
+    # config is absent, defaults apply (only "Active"-role statuses are
+    # creditable). Do NOT hardcode "ACTIVE": projects may credit Draft, etc.
+    from elspais.config import get_status_roles
+
+    if node.status in get_status_roles(config or {}).coverage_excluded_statuses():
         return empty
 
     from elspais.graph.metrics import RollupMetrics, tested_and_passing

@@ -466,3 +466,98 @@ class TestSeverityCatalog:
         assert tiers["expects_validation"] is False
         # soft 'none' -> info -> does not drag the bucket below 'full'.
         assert tiers["combined_bucket"] == "full"
+
+
+class TestStatusRoleGating:
+    """compute_coverage_tiers blanks colors only for coverage-EXCLUDED statuses
+    (per [rules.format.status_roles]), staying consistent with the shared
+    aggregation used by summary/health/trace -- not a hardcoded "ACTIVE" gate.
+
+    Regression: the viewer previously gated on ``status != "ACTIVE"``, so in a
+    project that configures e.g. ``active = ["Active", "Draft"]`` (every
+    requirement is Draft during build-out) the viewer blanked coverage colors
+    on every card while every other surface credited them. That divergence
+    violates REQ-d00258-C (viewer derives coverage from the shared aggregation).
+    """
+
+    def _make_node_with_status(self, status, rollup):
+        """Build a minimal requirement node with the given status + metrics."""
+        from tests.core.graph_test_helpers import build_graph, make_requirement
+
+        graph = build_graph(
+            make_requirement("REQ-p00001", title="Test Req", status=status),
+        )
+        node = graph.find_by_id("REQ-p00001")
+        node.set_metric("rollup_metrics", rollup)
+        return node
+
+    @staticmethod
+    def _full_rollup():
+        from elspais.graph.metrics import CoverageDimension, RollupMetrics
+
+        return RollupMetrics(
+            total_assertions=2,
+            implemented=CoverageDimension(total=2, direct=2, indirect=2),
+            tested=CoverageDimension(total=2, direct=2, indirect=2),
+            verified=CoverageDimension(total=2, direct=2, indirect=2),
+        )
+
+    # Verifies: REQ-d00258-C
+    def test_draft_creditable_status_gets_colors(self):
+        """A Draft requirement under a config whose status_roles.active includes
+        "Draft" is coverage-creditable, so a fully-covered dimension must yield
+        a non-empty (green) color -- NOT the old blanked-out empty payload."""
+        from elspais.html.generator import compute_coverage_tiers
+        from elspais.html.theme import get_catalog
+
+        expected = get_catalog().by_key("validation_tiers.full-direct").color_key
+        # active includes Draft: essentially every req is Draft during build-out.
+        config = {"rules": {"format": {"status_roles": {"active": ["Active", "Draft"]}}}}
+        node = self._make_node_with_status("Draft", self._full_rollup())
+
+        tiers = compute_coverage_tiers(node, config)
+
+        assert tiers["impl_color"] == expected
+        assert tiers["impl_color"] != ""
+        assert tiers["combined_bucket"] == "full"
+
+    # Verifies: REQ-d00258-C
+    def test_coverage_excluded_status_still_empty(self):
+        """A requirement with a coverage-EXCLUDED status (Deprecated -> retired
+        role by default) still returns an all-empty payload."""
+        from elspais.html.generator import compute_coverage_tiers
+
+        node = self._make_node_with_status("Deprecated", self._full_rollup())
+
+        tiers = compute_coverage_tiers(node)
+
+        assert tiers["impl_color"] == ""
+        assert tiers["combined_bucket"] == ""
+
+    # Verifies: REQ-d00258-C
+    def test_default_config_active_gets_colors_draft_empty(self):
+        """Under default status_roles (no config), Active is creditable (colors)
+        and Draft is provisional -> coverage-excluded -> empty. This preserves
+        the historical default-project behavior."""
+        from elspais.html.generator import compute_coverage_tiers
+
+        active = self._make_node_with_status("Active", self._full_rollup())
+        draft = self._make_node_with_status("Draft", self._full_rollup())
+
+        assert compute_coverage_tiers(active)["impl_color"] != ""
+        assert compute_coverage_tiers(draft)["impl_color"] == ""
+
+    # Verifies: REQ-d00258-C
+    def test_creditable_status_with_no_assertions_still_empty(self):
+        """The total_assertions==0 empty guard is independent of status gating:
+        a creditable req with no assertions still returns empty."""
+        from elspais.graph.metrics import RollupMetrics
+        from elspais.html.generator import compute_coverage_tiers
+
+        config = {"rules": {"format": {"status_roles": {"active": ["Active", "Draft"]}}}}
+        node = self._make_node_with_status("Draft", RollupMetrics(total_assertions=0))
+
+        tiers = compute_coverage_tiers(node, config)
+
+        assert tiers["impl_color"] == ""
+        assert tiers["combined_bucket"] == ""
