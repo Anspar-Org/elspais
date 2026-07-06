@@ -1289,3 +1289,41 @@ a.assertion-test-link:hover {
     border-radius: 3px;
     font-size: 0.7rem;
 }
+
+/* Incoming Links — reverse traceability (one collapsible toggle per kind) */
+.card-incoming-links {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.incoming-link-toggle {
+    align-self: flex-start;
+    background: var(--assertion-code-panel-bg);
+    color: var(--card-section-label);
+    border: none;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.incoming-link-toggle:hover {
+    filter: brightness(1.08);
+}
+
+.incoming-link-panel {
+    margin: 2px 0 4px;
+    padding: 4px 8px;
+}
+
+.incoming-link-row {
+    gap: 8px;
+}
+
+.incoming-state-badge {
+    flex-shrink: 0;
+    font-size: 0.6rem;
+    padding: 1px 5px;
+}

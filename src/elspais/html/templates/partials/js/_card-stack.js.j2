@@ -862,6 +862,40 @@ function buildCardHtml(nodeId, data, collapsed) {
         'onclick="onAddRelationship(\'' + nodeId + '\', this)">+ Add Relationship</button>';
     html += '</div>';
 
+    // Incoming Links section — reverse traceability (things pointing AT this req).
+    // One collapsible toggle per present kind; each link shows a state badge +
+    // an informative hover tooltip. (REQ-p00006-A)
+    var incoming = data.incoming_links || [];
+    if (incoming.length > 0) {
+        html += '<div class="card-section"><div class="card-section-label">Incoming Links</div>';
+        html += '<div class="card-incoming-links">';
+        incoming.forEach(function(section, si) {
+            var panelId = 'incoming-' + nodeId + '-' + si;
+            html += '<button class="incoming-link-toggle" ' +
+                'onclick="event.stopPropagation(); toggleIncomingLinks(\'' + panelId + '\')">' +
+                escapeHtml(section.kind) + ' (' + section.links.length + ')</button>';
+            html += '<div class="req-level-links-panel incoming-link-panel" id="' + panelId + '" style="display:none;">';
+            section.links.forEach(function(link) {
+                var st = link.state || {};
+                var badge = '';
+                if (st.label) {
+                    var colorClass = st.color ? ' active val-' + st.color : '';
+                    badge = '<span class="status-badge incoming-state-badge' + colorClass + '">' +
+                        escapeHtml(st.label) + '</span>';
+                }
+                html += '<div class="assertion-test-item incoming-link-row" title="' +
+                    escapeAttr(link.tooltip || '') + '">';
+                html += badge;
+                html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
+                    escapeAttr(link.id) + '\')">' +
+                    escapeHtml(link.ref_id || link.id) + ' - ' + escapeHtml(link.title || '') + '</a>';
+                html += '</div>';
+            });
+            html += '</div>';
+        });
+        html += '</div></div>';
+    }
+
     // Structure section — assertions and body sections
     var allChildren = data.children || [];
     var assertions = allChildren.filter(function(c) { return c.kind === 'assertion'; });
@@ -2043,6 +2077,13 @@ function renderAssertionUatResults(panel, reqId, label, data) {
 // =====================================================================
 // REQ-Level Link Expansion (header badge click)
 // =====================================================================
+
+function toggleIncomingLinks(panelId) {
+    // Show/hide a single Incoming Links kind panel (collapsed by default).
+    var panel = document.getElementById(panelId);
+    if (!panel) return;
+    panel.style.display = (panel.style.display === 'none') ? 'block' : 'none';
+}
 
 function toggleReqLevelLinks(badge, reqId, dimKey, assertLinkKey) {
     var panelId = 'req-links-' + reqId + '-' + dimKey;

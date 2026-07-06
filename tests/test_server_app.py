@@ -1027,6 +1027,112 @@ class TestGetNode:
         assert data["properties"]["goal"] == "Log into the system"
 
 
+@pytest.fixture
+def incoming_graph():
+    """Graph exercising reverse-traceability: a partially-verified journey
+    validating a requirement, plus a refining requirement, plus a requirement
+    with NO incoming traceability edges."""
+    from elspais.graph.annotators import JourneyVerification
+
+    graph = TraceGraph(repo_root=Path("/test/repo"))
+
+    req = GraphNode(id="REQ-p00006", kind=NodeKind.REQUIREMENT, label="Traceability Viewer")
+    req._content = {"level": "PRD", "status": "Active", "hash": "aaa11111"}
+    a = GraphNode(id="REQ-p00006-A", kind=NodeKind.ASSERTION, label="SHALL show cards")
+    a._content = {"label": "A"}
+    req.link(a, EdgeKind.STRUCTURES)
+    b = GraphNode(id="REQ-p00006-B", kind=NodeKind.ASSERTION, label="SHALL show reverse links")
+    b._content = {"label": "B"}
+    req.link(b, EdgeKind.STRUCTURES)
+
+    # Journey validates the requirement's A and B assertions; 5/7 steps verified.
+    jny = GraphNode(id="JNY-ENROLL-01", kind=NodeKind.USER_JOURNEY, label="Joining the Study")
+    jny._content = {}
+    req.link(jny, EdgeKind.VALIDATES, assertion_targets=["A"])
+    req.link(jny, EdgeKind.VALIDATES, assertion_targets=["B"])
+    steps = []
+    for i in range(7):
+        s = GraphNode(id=f"JNY-ENROLL-01:step:{i}", kind=NodeKind.STEP, label=f"step-{i}")
+        s._content = {"label": f"step-{i}"}
+        s.set_metric("step_status", "pass" if i < 5 else "untested")
+        jny.link(s, EdgeKind.STRUCTURES)
+        steps.append(s)
+    jny.set_metric("journey_verification", JourneyVerification(tier="partial"))
+
+    # A refining requirement -> req gains an INCOMING REFINES edge.
+    refiner = GraphNode(id="REQ-o00009", kind=NodeKind.REQUIREMENT, label="Linking Error Detail")
+    refiner._content = {"level": "OPS", "status": "Active", "hash": "bbb22222"}
+    refiner.link(req, EdgeKind.REFINES)
+
+    # A requirement with NO incoming traceability edges.
+    lonely = GraphNode(id="REQ-p00007", kind=NodeKind.REQUIREMENT, label="Lonely Req")
+    lonely._content = {"level": "PRD", "status": "Active", "hash": "ccc33333"}
+
+    graph._roots = [req, refiner, lonely]
+    graph._index = {
+        "REQ-p00006": req,
+        "REQ-p00006-A": a,
+        "REQ-p00006-B": b,
+        "JNY-ENROLL-01": jny,
+        "REQ-o00009": refiner,
+        "REQ-p00007": lonely,
+    }
+    for i in range(7):
+        graph._index[f"JNY-ENROLL-01:step:{i}"] = steps[i]
+    return _wrap(graph, Path("/test/repo"))
+
+
+@pytest.fixture
+def incoming_client(incoming_graph):
+    state = AppState(
+        graph=incoming_graph,
+        repo_root=Path("/test/repo"),
+        config={"project": {"name": "test", "namespace": "REQ"}},
+    )
+    return TestClient(create_app(state, mount_mcp=False))
+
+
+class TestIncomingLinks:
+    """Validates REQ-p00006-A: reverse-traceability 'Incoming Links' payload."""
+
+    def test_REQ_p00006_A_validated_by_journey_partial(self, incoming_client):
+        """A requirement validated by a partially-verified journey exposes a
+        'Validated by' section naming the journey with a yellow partial state
+        and an informative step-count tooltip."""
+        resp = incoming_client.get("/api/node/REQ-p00006")
+        assert resp.status_code == 200
+        data = resp.json()
+        sections = data["incoming_links"]
+        by_kind = {s["kind"]: s for s in sections}
+        assert "Validated by" in by_kind
+        links = by_kind["Validated by"]["links"]
+        assert len(links) == 1
+        link = links[0]
+        assert link["id"] == "JNY-ENROLL-01"
+        assert link["source_kind"] == "journey"
+        assert link["state"]["label"] == "partial"
+        assert link["state"]["color"] == "yellow"
+        assert "5/7 steps verified" in link["tooltip"]
+        assert "JNY-ENROLL-01" in link["tooltip"]
+
+    def test_REQ_p00006_A_refined_by_requirement(self, incoming_client):
+        """An incoming REFINES edge surfaces as a 'Refined by' section naming
+        the refining requirement (a state color is optional/absent)."""
+        data = incoming_client.get("/api/node/REQ-p00006").json()
+        by_kind = {s["kind"]: s for s in data["incoming_links"]}
+        assert "Refined by" in by_kind
+        links = by_kind["Refined by"]["links"]
+        assert [link["id"] for link in links] == ["REQ-o00009"]
+        assert links[0]["source_kind"] == "requirement"
+        assert "refines this requirement" in links[0]["tooltip"]
+
+    def test_REQ_p00006_A_no_incoming_edges_empty(self, incoming_client):
+        """A requirement with no reverse-traceability edges has an empty
+        incoming_links list, so the card section does not render."""
+        data = incoming_client.get("/api/node/REQ-p00007").json()
+        assert data["incoming_links"] == []
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Query Endpoint Tests
 # ─────────────────────────────────────────────────────────────────────────────

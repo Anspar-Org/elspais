@@ -1,4 +1,4 @@
-# Implements: REQ-p00006-B
+# Implements: REQ-p00006-A, REQ-p00006-B
 # Implements: REQ-d00010-A, REQ-d00010-F, REQ-d00010-G
 # Implements: REQ-d00231-A+B+C+D+E
 # Implements: REQ-d00242-A+B+C
@@ -242,6 +242,170 @@ def _compute_link_data(
     return a_links, r_links
 
 
+# Journey verification tier/verdict -> val-color vocabulary (green/yellow/red/'').
+_JNY_VERDICT_COLOR = {
+    "pass": "green",
+    "partial": "yellow",
+    "fail": "red",
+    "unverified": "",
+}
+
+
+def _journey_state(journey: Any) -> dict[str, Any]:
+    """Summarize a validating journey's UAT verification for a state badge.
+
+    Reads the pre-computed ``journey_verification`` metric (never recomputes
+    coverage) and derives step counts from the journey's STEP children. Returns
+    a dict ``{label, color, verified_steps, total_steps, whole_journey}``. Robust
+    to a journey with no metric (returns an unverified/grey state).
+    """
+    from elspais.graph.relations import EdgeKind
+
+    jv = journey.get_metric("journey_verification")
+    verdict = jv.verdict if jv is not None else "unverified"
+    steps = [
+        c
+        for c in journey.iter_children(edge_kinds={EdgeKind.STRUCTURES})
+        if c.kind == NodeKind.STEP
+    ]
+    total = len(steps)
+    verified = sum(1 for s in steps if (s.get_metric("step_status") or "") == "pass")
+    return {
+        "label": verdict,
+        "color": _JNY_VERDICT_COLOR.get(verdict, ""),
+        "verified_steps": verified,
+        "total_steps": total,
+        "whole_journey": total == 0,
+    }
+
+
+def _compute_incoming_links(node: Any) -> list[dict[str, Any]]:
+    """Reverse-traceability view: things that point AT this requirement.
+
+    Surfaces, per present traceability kind, the nodes that reference this
+    requirement — distinct from the structural Children/assertions already
+    shown. Each returned section is ``{kind, links}`` where every link is
+    ``{id, ref_id, title, source_kind, state:{label,color}, tooltip}``. Only
+    kinds with >=1 incoming edge are included; the list is empty when this
+    requirement has no reverse-traceability edges.
+
+    Edge directions (as wired by the builder):
+      - Validated by:   OUTGOING VALIDATES (req -> USER_JOURNEY), possibly
+                        per-assertion; also assertion-level VALIDATES edges.
+      - Refined by:     INCOMING REFINES from another REQUIREMENT.
+      - Satisfied by:   INCOMING SATISFIES from a declaring REQUIREMENT.
+      - Instantiated by:INCOMING INSTANCE from a clone REQUIREMENT.
+      - Integrated by:  INCOMING INTEGRATES from a consumer REQUIREMENT.
+    """
+    from elspais.graph.relations import EdgeKind
+
+    def _entry(
+        source: Any, source_kind: str, state: dict[str, Any] | None, tooltip: str
+    ) -> dict[str, Any]:
+        return {
+            "id": source.id,
+            "ref_id": source.id,
+            "title": source.get_label() or source.id,
+            "source_kind": source_kind,
+            "state": state or {"label": "", "color": ""},
+            "tooltip": tooltip,
+        }
+
+    # ── Validated by (journeys) ──
+    # Collect journeys reached via VALIDATES from the requirement and from its
+    # assertion children, accumulating which assertion labels each validates.
+    jny_targets: dict[str, set[str]] = {}
+    jny_nodes: dict[str, Any] = {}
+    jny_blanket: set[str] = set()
+
+    def _collect_validates(edge: Any) -> None:
+        if edge.kind != EdgeKind.VALIDATES:
+            return
+        tgt = edge.target
+        if tgt.kind != NodeKind.USER_JOURNEY:
+            return
+        jny_nodes[tgt.id] = tgt
+        labels = jny_targets.setdefault(tgt.id, set())
+        if edge.assertion_targets:
+            labels.update(edge.assertion_targets)
+        else:
+            jny_blanket.add(tgt.id)
+
+    for edge in node.iter_outgoing_edges():
+        _collect_validates(edge)
+    for child in node.iter_children(edge_kinds={EdgeKind.STRUCTURES}):
+        if child.kind != NodeKind.ASSERTION:
+            continue
+        for edge in child.iter_outgoing_edges():
+            _collect_validates(edge)
+
+    validated_links: list[dict[str, Any]] = []
+    for jid, journey in jny_nodes.items():
+        state = _journey_state(journey)
+        labels = jny_targets.get(jid, set())
+        if jid in jny_blanket or not labels:
+            scope = "all assertions"
+        else:
+            scope = f"{len(labels)} assertion(s)"
+        if state["whole_journey"]:
+            steps_txt = f"journey verification: {state['label']}"
+        else:
+            steps_txt = (
+                f"journey {state['verified_steps']}/{state['total_steps']} "
+                f"steps verified ({state['label']})"
+            )
+        tooltip = f"{journey.id} validates {scope}; {steps_txt}"
+        validated_links.append(_entry(journey, "journey", state, tooltip))
+
+    # ── Incoming traceability edges from other requirements ──
+    refined_links: list[dict[str, Any]] = []
+    satisfied_links: list[dict[str, Any]] = []
+    instantiated_links: list[dict[str, Any]] = []
+    integrated_links: list[dict[str, Any]] = []
+
+    for edge in node.iter_incoming_edges():
+        src = edge.source
+        title = src.get_label() or src.id
+        if edge.kind == EdgeKind.REFINES and src.kind == NodeKind.REQUIREMENT:
+            refined_links.append(
+                _entry(src, "requirement", None, f"{src.id} refines this requirement - {title}")
+            )
+        elif edge.kind == EdgeKind.SATISFIES and src.kind == NodeKind.REQUIREMENT:
+            satisfied_links.append(
+                _entry(
+                    src,
+                    "requirement",
+                    None,
+                    f"{src.id} satisfies this requirement (declares compliance) - {title}",
+                )
+            )
+        elif edge.kind == EdgeKind.INSTANCE and src.kind == NodeKind.REQUIREMENT:
+            instantiated_links.append(
+                _entry(
+                    src,
+                    "requirement",
+                    None,
+                    f"{src.id} is an instance of this template - {title}",
+                )
+            )
+        elif edge.kind == EdgeKind.INTEGRATES and src.kind == NodeKind.REQUIREMENT:
+            integrated_links.append(
+                _entry(src, "requirement", None, f"{src.id} integrates this requirement - {title}")
+            )
+
+    sections: list[dict[str, Any]] = []
+    for kind_label, links in (
+        ("Validated by", validated_links),
+        ("Refined by", refined_links),
+        ("Satisfied by", satisfied_links),
+        ("Instantiated by", instantiated_links),
+        ("Integrated by", integrated_links),
+    ):
+        if links:
+            sections.append({"kind": kind_label, "links": links})
+    return sections
+
+
 # ─────────────────────────────────────────────────────────────────
 # Read-only GET endpoints
 # ─────────────────────────────────────────────────────────────────
@@ -371,6 +535,9 @@ async def api_node(request: Request) -> JSONResponse:
 
             # Per-assertion direct link flags + REQ-level links
             result["assertion_links"], result["req_level_links"] = _compute_link_data(node)
+
+            # Reverse-traceability: what points AT this requirement (REQ-p00006-A)
+            result["incoming_links"] = _compute_incoming_links(node)
 
     return JSONResponse(result)
 

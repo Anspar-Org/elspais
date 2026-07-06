@@ -494,6 +494,47 @@ class TestJourneyVerdictBrowser:
 
     @pytest.mark.browser
     @pytest.mark.e2e
+    def test_REQ_p00006_A_incoming_links_validated_by(
+        self, page_journey, failing_journey_viewer_url
+    ):
+        # Verifies: REQ-p00006-A
+        """Open the requirement card validated by a journey; assert that:
+        - The API payload carries an incoming_links 'Validated by' section
+        - The card shows an 'Incoming Links' section with a 'Validated by' toggle
+        - Clicking the toggle reveals the validating journey link
+        - No JS errors occur
+        """
+        req_id = "REQ-d00001"
+        js_errors: list[str] = []
+        page_journey.on("pageerror", lambda err: js_errors.append(str(err)))
+
+        # Pre-check: API returns a Validated by incoming-links section.
+        resp = page_journey.request.get(f"{failing_journey_viewer_url}/api/node/{req_id}")
+        assert resp.ok, f"GET /api/node/{req_id} returned {resp.status}"
+        sections = resp.json().get("incoming_links", [])
+        by_kind = {s["kind"]: s for s in sections}
+        assert "Validated by" in by_kind, f"Expected 'Validated by' section, got {sections!r}"
+        assert by_kind["Validated by"]["links"][0]["id"] == "JNY-OQ-Login-01"
+
+        page_journey.goto(failing_journey_viewer_url, wait_until="networkidle")
+        page_journey.evaluate(f"() => window.openCard('{req_id}')")
+        card_locator = page_journey.locator(f"#card-{req_id}")
+        card_locator.wait_for(state="visible", timeout=10_000)
+
+        assert "incoming links" in card_locator.inner_text().lower()
+
+        # Click the "Validated by" toggle and confirm the journey link appears.
+        toggle = card_locator.locator("button.incoming-link-toggle", has_text="Validated by")
+        toggle.wait_for(state="visible", timeout=10_000)
+        toggle.click()
+        panel = card_locator.locator(".incoming-link-panel", has_text="JNY-OQ-Login-01")
+        panel.wait_for(state="visible", timeout=10_000)
+        assert "JNY-OQ-Login-01" in panel.inner_text()
+
+        assert not js_errors, f"JS errors during incoming-links render: {js_errors}"
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
     def test_d00256_journey_step_status_on_card(self, page_journey, failing_journey_viewer_url):
         # Verifies: REQ-d00256
         """Open the failing journey card; assert that the Steps section is
