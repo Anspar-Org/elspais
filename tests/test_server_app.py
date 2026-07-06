@@ -1068,7 +1068,33 @@ def incoming_graph():
     lonely = GraphNode(id="REQ-p00007", kind=NodeKind.REQUIREMENT, label="Lonely Req")
     lonely._content = {"level": "PRD", "status": "Active", "hash": "ccc33333"}
 
-    graph._roots = [req, refiner, lonely]
+    # A requirement whose single assertion is validated by an assertion-level
+    # (direct assertion -> journey) VALIDATES edge that carries NO
+    # assertion_targets. The scope must resolve to that one assertion, not to a
+    # blanket "all assertions". A separate journey uses a genuine whole-req
+    # blanket validate (no assertion named) to exercise the "all" scope.
+    req8 = GraphNode(id="REQ-p00008", kind=NodeKind.REQUIREMENT, label="Assertion Scope Req")
+    req8._content = {"level": "PRD", "status": "Active", "hash": "ddd44444"}
+    x = GraphNode(id="REQ-p00008-X", kind=NodeKind.ASSERTION, label="SHALL do X")
+    x._content = {"label": "X"}
+    req8.link(x, EdgeKind.STRUCTURES)
+    y = GraphNode(id="REQ-p00008-Y", kind=NodeKind.ASSERTION, label="SHALL do Y")
+    y._content = {"label": "Y"}
+    req8.link(y, EdgeKind.STRUCTURES)
+    # Assertion-level direct validate (no targets): attribute to label "X".
+    jny_x = GraphNode(id="JNY-ASSERT-X", kind=NodeKind.USER_JOURNEY, label="Validates X")
+    jny_x._content = {}
+    x.link(jny_x, EdgeKind.VALIDATES)  # direct assertion -> journey, no targets
+    jny_x.set_metric(
+        "journey_verification", JourneyVerification(tier="full-direct", fully_verified=True)
+    )
+    # Whole-req blanket validate (no assertion named): scope is "all assertions".
+    jny_all = GraphNode(id="JNY-BLANKET", kind=NodeKind.USER_JOURNEY, label="Validates All")
+    jny_all._content = {}
+    req8.link(jny_all, EdgeKind.VALIDATES)  # no assertion_targets -> blanket
+    jny_all.set_metric("journey_verification", JourneyVerification(tier="none"))
+
+    graph._roots = [req, refiner, lonely, req8]
     graph._index = {
         "REQ-p00006": req,
         "REQ-p00006-A": a,
@@ -1076,6 +1102,11 @@ def incoming_graph():
         "JNY-ENROLL-01": jny,
         "REQ-o00009": refiner,
         "REQ-p00007": lonely,
+        "REQ-p00008": req8,
+        "REQ-p00008-X": x,
+        "REQ-p00008-Y": y,
+        "JNY-ASSERT-X": jny_x,
+        "JNY-BLANKET": jny_all,
     }
     for i in range(7):
         graph._index[f"JNY-ENROLL-01:step:{i}"] = steps[i]
@@ -1114,6 +1145,22 @@ class TestIncomingLinks:
         assert link["state"]["color"] == "yellow"
         assert "5/7 steps verified" in link["tooltip"]
         assert "JNY-ENROLL-01" in link["tooltip"]
+        # Journey validates assertions A and B -> accurate count, not "all".
+        assert "validates 2 assertion(s)" in link["tooltip"]
+
+    def test_REQ_p00006_A_assertion_level_validate_scope(self, incoming_client):
+        """An assertion-level (direct assertion -> journey) VALIDATES edge with
+        no assertion_targets is attributed to that one assertion, so the tooltip
+        reads 'validates 1 assertion(s)' — not the blanket 'all assertions'."""
+        data = incoming_client.get("/api/node/REQ-p00008").json()
+        by_kind = {s["kind"]: s for s in data["incoming_links"]}
+        assert "Validated by" in by_kind
+        by_journey = {link["id"]: link for link in by_kind["Validated by"]["links"]}
+        # Assertion-level direct validate -> scoped to its single assertion.
+        assert "validates 1 assertion(s)" in by_journey["JNY-ASSERT-X"]["tooltip"]
+        assert "all assertions" not in by_journey["JNY-ASSERT-X"]["tooltip"]
+        # Whole-req blanket validate (no assertion named) -> "all assertions".
+        assert "validates all assertions" in by_journey["JNY-BLANKET"]["tooltip"]
 
     def test_REQ_p00006_A_refined_by_requirement(self, incoming_client):
         """An incoming REFINES edge surfaces as a 'Refined by' section naming

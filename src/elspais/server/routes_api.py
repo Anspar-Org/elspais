@@ -314,30 +314,45 @@ def _compute_incoming_links(node: Any) -> list[dict[str, Any]]:
     # ── Validated by (journeys) ──
     # Collect journeys reached via VALIDATES from the requirement and from its
     # assertion children, accumulating which assertion labels each validates.
+    # A journey lands in ``jny_blanket`` only for a genuine whole-requirement
+    # validate (no assertion named). Assertion-scoped validates contribute a
+    # label so the tooltip reports an accurate assertion count. Two on-disk
+    # representations exist and both must be attributed correctly:
+    #   1. req -> journey edge with ``assertion_targets`` set (the common case:
+    #      ``Validates: REQ-x-A`` is rewired onto the parent REQ, see builder).
+    #   2. assertion <-> journey edge with NO ``assertion_targets`` (fallback /
+    #      direct wiring): the assertion's own label IS the scope, so treating
+    #      it as blanket would wrongly read "validates all assertions".
     jny_targets: dict[str, set[str]] = {}
     jny_nodes: dict[str, Any] = {}
     jny_blanket: set[str] = set()
 
-    def _collect_validates(edge: Any) -> None:
-        if edge.kind != EdgeKind.VALIDATES:
-            return
-        tgt = edge.target
-        if tgt.kind != NodeKind.USER_JOURNEY:
-            return
-        jny_nodes[tgt.id] = tgt
-        labels = jny_targets.setdefault(tgt.id, set())
-        if edge.assertion_targets:
-            labels.update(edge.assertion_targets)
+    def _register_journey(journey: Any, edge_labels: Any, source_label: str | None) -> None:
+        jny_nodes[journey.id] = journey
+        labels = jny_targets.setdefault(journey.id, set())
+        if edge_labels:
+            labels.update(edge_labels)
+        elif source_label:
+            labels.add(source_label)
         else:
-            jny_blanket.add(tgt.id)
+            jny_blanket.add(journey.id)
 
+    # Representation 1: req-level outgoing VALIDATES (req -> journey).
     for edge in node.iter_outgoing_edges():
-        _collect_validates(edge)
+        if edge.kind == EdgeKind.VALIDATES and edge.target.kind == NodeKind.USER_JOURNEY:
+            _register_journey(edge.target, edge.assertion_targets, None)
+    # Representation 2: assertion-level VALIDATES wired directly on the assertion
+    # node (either direction) with no assertion_targets -> attribute the label.
     for child in node.iter_children(edge_kinds={EdgeKind.STRUCTURES}):
         if child.kind != NodeKind.ASSERTION:
             continue
+        label = child.get_field("label", "")
         for edge in child.iter_outgoing_edges():
-            _collect_validates(edge)
+            if edge.kind == EdgeKind.VALIDATES and edge.target.kind == NodeKind.USER_JOURNEY:
+                _register_journey(edge.target, edge.assertion_targets, label)
+        for edge in child.iter_incoming_edges():
+            if edge.kind == EdgeKind.VALIDATES and edge.source.kind == NodeKind.USER_JOURNEY:
+                _register_journey(edge.source, edge.assertion_targets, label)
 
     validated_links: list[dict[str, Any]] = []
     for jid, journey in jny_nodes.items():
