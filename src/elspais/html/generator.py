@@ -22,6 +22,7 @@ from elspais.utilities.patterns import INSTANCE_SEPARATOR
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
     from elspais.graph.GraphNode import GraphNode
+    from elspais.graph.metrics import CoverageDimension
 
 
 @dataclass
@@ -160,6 +161,34 @@ def _tier_to_severity(tier: str, severity_config: Any) -> str:
     which are exactly the CoverageSeverityConfig field names (REQ-d00258).
     """
     return getattr(severity_config, tier, "error")
+
+
+def _relative_tier(
+    num_dim: CoverageDimension,
+    denom_labels: set[str],
+    *,
+    allow_indirect: bool = True,
+) -> tuple[str, bool]:
+    """Tier of ``num_dim`` measured over the relative denominator ``denom_labels``.
+
+    Returns ``(tier, is_na)``. ``is_na`` is True when the denominator is empty
+    (nothing to measure -> ``missing`` at neutral severity, design §1/§2). A
+    failing label within the denominator wins (``failing``). ``allow_indirect``
+    selects the credited per-label fractions (Phase 4 threads the config).
+    """
+    eps = 1e-9
+    if not denom_labels:
+        return "missing", True
+    if num_dim.failing_labels & denom_labels:
+        return "failing", False
+    pct = num_dim.indirect_pct_by_label if allow_indirect else num_dim.direct_pct_by_label
+    covered = sum(min(pct.get(lbl, 0.0), 1.0) for lbl in denom_labels)
+    n = len(denom_labels)
+    if covered >= n - eps:
+        return "full", False
+    if covered > eps:
+        return "partial", False
+    return "missing", False
 
 
 def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -402,7 +431,7 @@ def compute_assertion_coverage_states(
     """
     from elspais.config import get_status_roles
     from elspais.graph.GraphNode import NodeKind
-    from elspais.graph.metrics import CoverageDimension, tested_and_passing
+    from elspais.graph.metrics import tested_and_passing
 
     if node.status in get_status_roles(config or {}).coverage_excluded_statuses():
         return {}
