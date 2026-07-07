@@ -83,6 +83,7 @@ def level_expects_validation(config: dict[str, Any], level_key: str | None) -> b
     return False
 
 
+# Implements: REQ-d00258-L
 def status_expects_implementation(config: dict[str, Any], status: str | None) -> bool:
     """Whether a requirement's STATUS expects implementation (design §3).
 

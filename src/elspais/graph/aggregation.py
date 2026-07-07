@@ -20,6 +20,10 @@ from elspais.graph.metrics import (
     tested_and_passing,
 )
 
+# Implements: REQ-d00258-H
+# Unified coverage-state vocabulary: the requirement tier, per-assertion standing,
+# and viewer filter bucket all draw from this single {full,partial,failing,missing}
+# set (identity map -- no separate direct/indirect tier states).
 TIER_TO_BUCKET: dict[str, str] = {
     "full": "full",
     "partial": "partial",
@@ -42,6 +46,7 @@ DENOMINATOR_DIMENSION: dict[str, str] = {
 }
 
 
+# Implements: REQ-d00258-I
 def relative_tier(
     num_dim: CoverageDimension,
     denom_labels: set[str],

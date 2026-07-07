@@ -1,3 +1,4 @@
+# Verifies: REQ-d00258-K
 """Per-relationship status-word map is the single source for coverage labels.
 
 REQ-d00258 (per-relationship status word): the label shown on a coverage

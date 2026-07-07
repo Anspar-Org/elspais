@@ -147,7 +147,7 @@
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | bdad84a0 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | 44671fc1 |
 | REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 45bb196f |
-| REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | 06550baf |
+| REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | 172301f4 |
 | REQ-d00259 | Requirement Format Reference Command                          | dev-cli.md              | 8e05d02e |
 
 ## User Journeys

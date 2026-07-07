@@ -323,6 +323,7 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         label = status_words[dim_key]
         desc = _TIER_DESCRIPTIONS.get(tier, tier)
 
+        # Implements: REQ-d00258-J
         # Provenance caveat (REQ-d00069-L). The badge STATE color no longer
         # distinguishes direct from indirect coverage (Phase 1 collapsed
         # full-direct/full-indirect into one green); the distinction is surfaced

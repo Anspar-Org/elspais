@@ -1,7 +1,5 @@
-"""Tests for the status_expects_implementation resolver (config layer).
-
-Verifies: REQ-d00258
-"""
+# Verifies: REQ-d00258-L
+"""Tests for the status_expects_implementation resolver (config layer)."""
 
 from elspais.config import config_defaults, status_expects_implementation
 

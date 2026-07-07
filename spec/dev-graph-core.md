@@ -472,7 +472,7 @@ Reporting surfaces (trace, summary, MCP project summary, HTML viewer) SHALL pres
 
 ### Assertions
 
-A. All reporting surfaces (trace, summary, MCP project summary, HTML viewer) SHALL headline coverage counts on the generous footing per REQ-d00069-L, and text surfaces SHALL append a `~` marker to any count whose evidence is not fully direct.
+A. All reporting surfaces (trace, summary, MCP project summary, HTML viewer) SHALL headline coverage counts on the generous footing per REQ-d00069-L, and text surfaces SHALL append a `~` marker, per coverage dimension, to any count whose evidence is not fully direct.
 
 B. Reporting surfaces SHALL use exactly five coverage display terms: Implemented, Tested, Passing, UAT Covered, UAT Passed. The term "Validated" SHALL NOT denote test coverage. Passing SHALL be the union of result-verified and line-coverage-credited evidence.
 
@@ -480,18 +480,29 @@ C. The CLI summary, the MCP project summary, and the viewer SHALL derive their c
 
 D. Viewer coverage colors SHALL be resolved through the theme catalog by severity name (tier -> configured severity -> named catalog entry), never through hard-coded color values, and the coverage tier states SHALL appear in the viewer Legend.
 
-E. Viewer coverage filters SHALL bucket requirements by tier semantics (full = any full tier, partial, none, plus a failing overlay), never by color string. The requirement-level line coverage cell SHALL NOT render a direct-attribution count for targets whose tooling provides only aggregate coverage.
+E. Viewer coverage filters SHALL bucket requirements by tier semantics using the unified state names (full, partial, failing, missing), never by color string. The requirement-level line coverage cell SHALL NOT render a direct-attribution count for targets whose tooling provides only aggregate coverage.
 
 F. A per-level `expects_validation` flag (default false) SHALL declare that requirements at that level are expected to have UAT validation (a USER_JOURNEY that `Validates:` them). When a level expects validation, a requirement of that level with no UAT coverage SHALL be a reported gap: flagged by the health `uat.coverage` check and listed under `gaps unvalidated`, and its viewer UAT badge SHALL render at error severity (red). When a level does not expect validation (the default), absent UAT SHALL be neither flagged by health, listed as a gap, nor badged in the viewer, and SHALL NOT drag the requirement's combined coverage bucket. The `uat.coverage` check SHALL count only requirements at expects_validation levels; when no level expects validation it SHALL pass trivially. All surfaces SHALL resolve this flag through a single shared helper rather than reading the level config independently.
 
 G. The viewer SHALL assign each *Assertion* a semantic coverage *standing* (full, partial, failing, or missing) per coverage dimension, projected from the requirement's rollup metrics, so that if every *Assertion* is full on a dimension the requirement badge for that dimension reads full, and if any *Assertion* is failing the requirement dimension reports a failure. An *Assertion*'s standing SHALL read failing only when that *Assertion* itself has a failing result or verification for the dimension, not because a sibling *Assertion* covered by a different, non-failing test or journey failed; a failing test or journey attributes the failure to exactly the assertions it covers (its named targets, or every assertion when it covers the whole requirement). The standing SHALL be computed server-side and applied on initial render, without depending on a lazy client prefetch. Standing colors SHALL be resolved through the theme catalog by standing name (never hard-coded in the badge logic), the same decoupling severity colors use per D, so the standing-to-color association is configurable, and the standings SHALL appear in the viewer Legend. The direct-versus-indirect distinction need not be surfaced at the *Assertion* badge level.
 
+H. The requirement-level coverage tier, the per-*Assertion* coverage standing, and the viewer filter bucket SHALL be drawn from one shared set of coverage state names — full, partial, failing, and missing — so that a given coverage condition maps to the same state word on every surface. The prior split of the full state into separate direct and indirect states SHALL NOT reappear as distinct tier states.
+
+I. Tested SHALL be measured as the coverage of the implemented assertions, Passing as the coverage of the tested assertions, and UAT Passed as the coverage of the UAT-covered assertions. A chained dimension whose relative denominator is empty SHALL read missing at neutral severity — neither a reported gap nor error-colored — and SHALL NOT drag the requirement's combined coverage bucket. A failing result on any assertion within a dimension's denominator SHALL render that dimension failing regardless of the covered fraction.
+
+J. The distinction between direct and indirect coverage (for example, coverage conducted through a refinement relationship) SHALL be surfaced as a caveat — a `~` marker accompanied by hover provenance — rather than as a distinct tier color. A configurable `allow_indirect` setting (default enabled) SHALL govern whether indirect coverage credits a dimension's state: when disabled, only direct coverage credits the state and indirect coverage SHALL be reported as present but not credited.
+
+K. The coverage dimension labels SHALL be derived from a single configurable mapping from each coverage-conferring relationship to its display word, and every surface SHALL render dimension labels through that one mapping.
+
+L. A per-status `expects_implementation` flag SHALL declare whether a requirement in that status is expected to have implementation; its default SHALL be derived from the status's role, so that active-role statuses expect implementation and others do not. When a status does not expect implementation, absent implementation SHALL be neither flagged as a gap, nor error-colored, nor counted against aggregate implemented coverage. All surfaces SHALL resolve this flag through a single shared helper, and it SHALL supersede the coverage-exclusion role when determining coverage inclusion.
+
 ### Changelog
 
+- 2026-07-07 | 172301f4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-07-06 | 06550baf | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-07-06 | dd54712c | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-07-06 | 489752cd | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-07-03 | c843c727 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-07-02 | be97c170 | - | Michael Lewis (michael@anspar.org) | Auto-fix: add missing changelog section
 
-*End* *Reporting Surface Consistency* | **Hash**: 06550baf
+*End* *Reporting Surface Consistency* | **Hash**: 172301f4

@@ -1,3 +1,4 @@
+# Verifies: REQ-d00258-L
 """Coverage badges always render; `Implemented` gap severity gated by
 ``status_expects_implementation`` (REQ-d00258).
 

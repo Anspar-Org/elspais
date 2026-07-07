@@ -27,6 +27,7 @@ _DEFAULT_WORDS: dict[str, str] = {
 }
 
 
+# Implements: REQ-d00258-K
 def get_status_words(config: dict[str, Any] | None) -> dict[str, str]:
     """dimension-key -> label, defaults overridable via [rules.coverage.status_words]."""
     words = dict(_DEFAULT_WORDS)

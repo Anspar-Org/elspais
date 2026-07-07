@@ -1,5 +1,5 @@
 # Verifies: REQ-d00069-L
-# Verifies: REQ-d00258
+# Verifies: REQ-d00258-J
 """Hover provenance + per-dimension ``~`` caveat marker (Phase 4, Task 4.2).
 
 The badge STATE color no longer distinguishes direct from indirect coverage

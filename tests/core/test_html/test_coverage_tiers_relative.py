@@ -1,4 +1,4 @@
-# Verifies: REQ-d00258-B
+# Verifies: REQ-d00258-I
 """Relative-denominator wiring in ``compute_coverage_tiers`` (REQ-d00258, Phase-2).
 
 Phase 2 wires ``relative_tier`` into the badge projection so the chained

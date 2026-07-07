@@ -1,4 +1,4 @@
-# Verifies: REQ-d00258
+# Verifies: REQ-d00258-J
 # Verifies: REQ-d00069-L
 """``[rules.coverage] allow_indirect`` toggles whether indirect (REFINES-conducted
 etc.) coverage credits the badge/tier state (Phase 4, Task 4.1).
