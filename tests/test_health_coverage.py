@@ -227,6 +227,40 @@ class TestCheckTestCoverage:
         assert result.details["reqs_with_any_coverage"] == 2
         assert result.details["req_coverage_percent"] == round(2 / 3 * 100, 1)
 
+    # Verifies: REQ-d00258
+    def test_counts_only_expects_implementation_statuses(self):
+        """(d) The tests.tested COUNT denominator includes only requirements
+        whose status expects implementation (preserved from Task 3.3). An
+        unknown status defaults to expects_implementation=True and is counted;
+        marking it ``expects_implementation=False`` in config drops it."""
+        covered = _make_req("REQ-d00001", status="Active")
+        covered.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                tested=CoverageDimension(total=1, direct=1, indirect=1),
+            ),
+        )
+        other = _make_req("REQ-d00002", status="Wibble")
+        other.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                tested=CoverageDimension(total=1, direct=0, indirect=0),
+            ),
+        )
+        graph = _make_graph(covered, other)
+
+        # Unknown status defaults to expects_implementation=True -> counted.
+        baseline = check_test_coverage(graph, config={})
+        assert baseline.details["total_requirements"] == 2
+
+        # Config marking it False drops it from the count denominator.
+        cfg = {"statuses": {"Wibble": {"expects_implementation": False}}}
+        result = check_test_coverage(graph, config=cfg)
+        assert result.details["total_requirements"] == 1
+        assert result.details["reqs_with_any_coverage"] == 1
+
 
 # =============================================================================
 # REQ-d00219: check_uat_coverage

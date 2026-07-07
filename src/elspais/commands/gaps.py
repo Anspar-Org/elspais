@@ -147,13 +147,29 @@ def collect_gaps(
             if uncov:
                 data.uncovered.append(GapEntry(req_id, title, uncov))
 
-        # Untested: no direct test coverage
-        if metrics is None or metrics.tested.indirect <= 0:
-            data.untested.append(GapEntry(req_id, title))
-        elif metrics.tested.indirect < metrics.tested.total:
-            uncov = _uncovered_assertions(metrics, assertion_nodes, "tested")
+        # Testing gap (untested): an assertion is a testing gap iff it is
+        # IMPLEMENTED but not tested to ~100% (relative denominator,
+        # REQ-d00258, REQ-d00069-J). A wholly-UNIMPLEMENTED assertion is NOT a
+        # testing gap -- there is nothing built to test yet. Such a REQ still
+        # surfaces as an implementation gap in the ``uncovered`` section above,
+        # so narrowing here never silently drops an unbuilt requirement.
+        if metrics is not None and metrics.implemented.indirect > 0:
+            uncov = _uncovered_assertions(
+                metrics, assertion_nodes, "tested", restrict_to_dimension="implemented"
+            )
             if uncov:
-                data.untested.append(GapEntry(req_id, title, uncov))
+                # Whole-REQ formatting (empty assertion list = "all") only when
+                # the REQ has NO test coverage at all AND every assertion is
+                # implemented, so "all" is accurate. When any test coverage
+                # exists (partial conduction, 0 < fraction < 1) or an
+                # unimplemented sibling is present, list the specific
+                # implemented-untested assertions so per-assertion fractions
+                # survive (REQ-d00069-J) and no unimplemented sibling is implied.
+                whole_req = metrics.tested.indirect <= 0 and len(uncov) == len(assertion_nodes)
+                if whole_req:
+                    data.untested.append(GapEntry(req_id, title))
+                else:
+                    data.untested.append(GapEntry(req_id, title, uncov))
 
         # Unvalidated: no UAT coverage. Only levels that expect_validation can
         # be "unvalidated" -- an internal level that never gets a journey is not
@@ -184,6 +200,7 @@ def _uncovered_assertions(
     metrics: Any,
     assertion_nodes: list[Any],
     dimension: str,
+    restrict_to_dimension: str | None = None,
 ) -> list[tuple[str, float]]:
     """Return (id, fraction) pairs for assertions not ~fully covered for a dimension.
 
@@ -197,17 +214,32 @@ def _uncovered_assertions(
     child) is still reported as a gap, with its fraction carried along so
     renderers can distinguish "no coverage at all" (0.0) from "partially
     conducted" (0 < fraction < 1).
+
+    ``restrict_to_dimension`` implements the RELATIVE denominator (REQ-d00258):
+    when given, the candidate set is intersected with assertions that HAVE
+    coverage in that dimension (fraction > 0). A *testing* gap passes
+    ``restrict_to_dimension="implemented"`` so an unimplemented assertion --
+    which has nothing built to test yet -- is not reported as a testing gap.
     """
     dim = getattr(metrics, dimension, None)
-    if dim is None:
-        return [(a.id, 0.0) for a in assertion_nodes]
-    fractions = dim.indirect_pct_by_label
+    fractions = dim.indirect_pct_by_label if dim is not None else {}
+
+    restrict_labels: set[str] | None = None
+    if restrict_to_dimension is not None:
+        rdim = getattr(metrics, restrict_to_dimension, None)
+        rfractions = rdim.indirect_pct_by_label if rdim is not None else {}
+        restrict_labels = {lbl for lbl, frac in rfractions.items() if frac > 0}
+
     covered = 1.0 - 1e-9
-    return [
-        (a.id, fractions.get(a.get_field("label", ""), 0.0))
-        for a in assertion_nodes
-        if fractions.get(a.get_field("label", ""), 0.0) < covered
-    ]
+    result: list[tuple[str, float]] = []
+    for a in assertion_nodes:
+        label = a.get_field("label", "")
+        if restrict_labels is not None and label not in restrict_labels:
+            continue
+        frac = fractions.get(label, 0.0)
+        if frac < covered:
+            result.append((a.id, frac))
+    return result
 
 
 # =============================================================================
@@ -216,7 +248,7 @@ def _uncovered_assertions(
 
 _LABELS = {
     "uncovered": "UNCOVERED (no code refs)",
-    "untested": "UNTESTED (no test coverage)",
+    "untested": "UNTESTED (implemented, not tested)",
     "unvalidated": "UNVALIDATED (no UAT coverage)",
     "failing": "FAILING",
     "no_assertions": "NOT TESTABLE (no assertions)",

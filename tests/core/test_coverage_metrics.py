@@ -1173,9 +1173,12 @@ class TestRefinesCoverageConduction:
     def test_partial_conducted_coverage_is_a_gap(self):
         """Partial conducted coverage (0 < f < 1) is still reported as a gap.
 
-        PARENT has N=2 assertions (A, B), one fully-tested blanket refiner, so
-        each parent assertion gets (1/2) * 1.0 == 0.5. The gaps surface treats
-        an assertion as covered only at ~1.0, so both A and B remain gaps.
+        PARENT has N=2 assertions (A, B), both directly implemented by code, and
+        one fully-tested blanket refiner, so each parent assertion's TESTED
+        fraction conducts to (1/2) * 1.0 == 0.5. The gaps surface treats an
+        assertion as covered only at ~1.0, so both A and B remain *testing*
+        gaps -- they are IMPLEMENTED but only partially tested (REQ-d00258's
+        relative denominator: a testing gap is implemented AND not tested).
 
         Exercises the real ``collect_gaps`` entry point, which passes assertion
         nodes (IDs keyed by label) -- guarding against the regression where the
@@ -1199,11 +1202,19 @@ class TestRefinesCoverageConduction:
                 assertions=[{"label": "A", "text": "Refined A"}],
             ),
             make_test_ref(verifies=["REQ-BLANK-A"], source_path="tests/test_blank.py"),
+            # PARENT's assertions must be IMPLEMENTED for a partial TEST gap to
+            # count under the relative denominator (REQ-d00258): code implements
+            # A and B directly (implemented dimension), leaving TEST coverage
+            # partial (0.5) via refines conduction.
+            make_code_ref(implements=["PARENT-A"], source_path="src/parent_a.py"),
+            make_code_ref(implements=["PARENT-B"], source_path="src/parent_b.py"),
         )
 
         annotate_coverage(graph)
 
         metrics = graph.find_by_id("PARENT").get_metric("rollup_metrics")
+        assert metrics.implemented.indirect_pct_by_label["A"] == pytest.approx(1.0)
+        assert metrics.implemented.indirect_pct_by_label["B"] == pytest.approx(1.0)
         assert metrics.tested.indirect_pct_by_label["A"] == pytest.approx(0.5)
         assert metrics.tested.indirect_pct_by_label["B"] == pytest.approx(0.5)
 

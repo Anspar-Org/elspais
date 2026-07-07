@@ -119,12 +119,24 @@ class TestCollectGaps:
         assert "REQ-p00001" in ids
         assert "REQ-p00002" in ids
 
-    def test_untested_finds_zero_test_reqs(self, gap_graph: FederatedGraph) -> None:
-        """Both REQs have no tests, so both appear in untested list."""
+    # Verifies: REQ-d00258, REQ-d00069-J
+    def test_unimplemented_reqs_not_untested_but_uncovered(self, gap_graph: FederatedGraph) -> None:
+        """A REQ with no implementation is NOT a testing gap (nothing built to
+        test yet) -- but it stays visible as an implementation gap in
+        'uncovered', so it is not silently dropped (REQ-d00258).
+
+        The relative denominator: a *testing* gap is IMPLEMENTED and not tested.
+        Both fixture REQs have no rollup metrics (unimplemented), so neither is
+        an ``untested`` gap; both remain ``uncovered``.
+        """
         data = collect_gaps(gap_graph, exclude_status=set())
-        ids = {e.req_id for e in data.untested}
-        assert "REQ-p00001" in ids
-        assert "REQ-p00002" in ids
+        untested_ids = {e.req_id for e in data.untested}
+        uncovered_ids = {e.req_id for e in data.uncovered}
+        assert "REQ-p00001" not in untested_ids
+        assert "REQ-p00002" not in untested_ids
+        # Still visible as implementation gaps (not dropped from all reporting).
+        assert "REQ-p00001" in uncovered_ids
+        assert "REQ-p00002" in uncovered_ids
 
     def test_exclude_status_filters(self, gap_graph: FederatedGraph) -> None:
         """Excluding Active status filters out both reqs (both are Active)."""
@@ -251,6 +263,139 @@ class TestCollectGaps:
         assert "REQ-p00002" not in ids
 
 
+# ===========================================================================
+# REQ-d00258, REQ-d00069-J: a *testing* gap = IMPLEMENTED and NOT tested
+# (relative denominator). An unimplemented assertion is NOT a testing gap --
+# there is nothing built to test yet. It surfaces as an implementation gap.
+# ===========================================================================
+
+
+def _req_with_assertions(
+    req_id: str,
+    labels: list[str],
+    *,
+    implemented: dict[str, float] | None = None,
+    tested: dict[str, float] | None = None,
+    status: str = "Active",
+) -> GraphNode:
+    """Build a REQUIREMENT with ASSERTION children and a rollup whose
+    ``implemented``/``tested`` per-assertion fraction maps are supplied
+    directly (keyed by short assertion label, e.g. ``A``).
+
+    Dimension totals are ``len(labels)`` so the whole-REQ vs partial gap
+    branches behave as they do in production.
+    """
+    from elspais.graph import EdgeKind
+    from elspais.graph.metrics import CoverageDimension
+
+    impl = implemented or {}
+    tstd = tested or {}
+    req = _make_req(req_id, req_id, status=status)
+    for lbl in labels:
+        assertion = GraphNode(
+            id=f"{req_id}-{lbl}", kind=NodeKind.ASSERTION, label=f"{req_id}-{lbl}"
+        )
+        assertion.set_field("label", lbl)
+        req.link(assertion, EdgeKind.STRUCTURES)
+
+    def _dim(fractions: dict[str, float]) -> CoverageDimension:
+        return CoverageDimension(
+            total=len(labels),
+            direct=sum(1 for f in fractions.values() if f >= 1.0),
+            indirect=sum(fractions.values()),
+            indirect_pct_by_label=dict(fractions),
+        )
+
+    req.set_metric(
+        "rollup_metrics",
+        RollupMetrics(
+            total_assertions=len(labels),
+            implemented=_dim(impl),
+            tested=_dim(tstd),
+        ),
+    )
+    return req
+
+
+class TestTestingGapDenominator:
+    """A testing gap is implemented AND not tested (REQ-d00258)."""
+
+    # Verifies: REQ-d00258, REQ-d00069-J
+    def test_implemented_untested_assertion_is_testing_gap(self) -> None:
+        """(a) An implemented-but-untested assertion IS a testing gap."""
+        req = _req_with_assertions("REQ-p00001", ["A"], implemented={"A": 1.0}, tested={"A": 0.0})
+        data = collect_gaps(_make_graph(req), exclude_status=set())
+        assert "REQ-p00001" in {e.req_id for e in data.untested}
+
+    # Verifies: REQ-d00258, REQ-d00069-J
+    def test_unimplemented_untested_assertion_not_testing_gap(self) -> None:
+        """(b) An unimplemented+untested assertion is NOT a testing gap, but the
+        REQ stays visible as an implementation gap (uncovered)."""
+        req = _req_with_assertions("REQ-p00001", ["A"], implemented={"A": 0.0}, tested={"A": 0.0})
+        data = collect_gaps(_make_graph(req), exclude_status=set())
+        assert "REQ-p00001" not in {e.req_id for e in data.untested}
+        assert "REQ-p00001" in {e.req_id for e in data.uncovered}
+
+    # Verifies: REQ-d00258, REQ-d00069-J
+    def test_only_implemented_untested_assertions_listed(self) -> None:
+        """A partial gap lists ONLY implemented-untested assertions: an
+        implemented+tested one (A) and an unimplemented one (C) are both
+        excluded; only the implemented+untested B remains."""
+        req = _req_with_assertions(
+            "REQ-p00001",
+            ["A", "B", "C"],
+            implemented={"A": 1.0, "B": 1.0, "C": 0.0},
+            tested={"A": 1.0, "B": 0.0, "C": 0.0},
+        )
+        data = collect_gaps(_make_graph(req), exclude_status=set())
+        entry = next(e for e in data.untested if e.req_id == "REQ-p00001")
+        gap_labels = {aid.rsplit("-", 1)[-1] for aid, _ in entry.assertions}
+        assert gap_labels == {"B"}
+
+    # Verifies: REQ-d00258, REQ-d00069-J
+    def test_all_implemented_none_tested_is_whole_req_gap(self) -> None:
+        """When every assertion is implemented and none tested, the gap renders
+        as a whole-REQ entry (empty assertion list)."""
+        req = _req_with_assertions(
+            "REQ-p00001",
+            ["A", "B"],
+            implemented={"A": 1.0, "B": 1.0},
+            tested={"A": 0.0, "B": 0.0},
+        )
+        data = collect_gaps(_make_graph(req), exclude_status=set())
+        entry = next(e for e in data.untested if e.req_id == "REQ-p00001")
+        assert entry.assertions == []
+
+    # Verifies: REQ-d00258, REQ-d00069-J
+    def test_health_and_gaps_agree_on_testing_gap_set(self) -> None:
+        """(c) ``tests.tested`` health and ``gaps untested`` agree: an
+        unimplemented+untested REQ (r3) is a testing gap in NEITHER surface,
+        though health still counts it in its (status-gated) denominator."""
+        from elspais.commands.health import check_test_coverage
+
+        r1 = _req_with_assertions(
+            "REQ-d00001", ["A"], implemented={"A": 1.0}, tested={"A": 0.0}
+        )  # implemented, untested -> gap
+        r2 = _req_with_assertions(
+            "REQ-d00002", ["A"], implemented={"A": 1.0}, tested={"A": 1.0}
+        )  # implemented, tested -> not a gap
+        r3 = _req_with_assertions(
+            "REQ-d00003", ["A"], implemented={"A": 0.0}, tested={"A": 0.0}
+        )  # unimplemented, untested -> not a testing gap
+        graph = _make_graph(r1, r2, r3)
+
+        data = collect_gaps(graph, exclude_status=set())
+        untested_ids = {e.req_id for e in data.untested}
+        assert untested_ids == {"REQ-d00001"}
+        assert "REQ-d00003" not in untested_ids
+
+        check = check_test_coverage(graph, config={})
+        # r3 remains in the status-gated denominator, but is not counted as a
+        # tested REQ -- and is not a phantom testing gap in gaps either.
+        assert check.details["total_requirements"] == 3
+        assert check.details["reqs_with_any_coverage"] == 1  # only r2
+
+
 # ---- Rendering tests ----
 
 
@@ -284,7 +429,7 @@ class TestRenderGapText:
     def test_untested_section(self) -> None:
         data = GapData(untested=[GapEntry("REQ-p00003", "Search")])
         output = render_gap_text("untested", data)
-        assert "UNTESTED (no test coverage)" in output
+        assert "UNTESTED (implemented, not tested)" in output
         assert "(1)" in output
 
     def test_unvalidated_section(self) -> None:
