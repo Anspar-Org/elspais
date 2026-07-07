@@ -1,7 +1,7 @@
 # Verifies: REQ-d00258-B
 """Relative-denominator wiring in ``compute_coverage_tiers`` (REQ-d00258, Phase-2).
 
-Phase 2 wires ``_relative_tier`` into the badge projection so the chained
+Phase 2 wires ``relative_tier`` into the badge projection so the chained
 dimensions (Tested / Passing / UAT-Passed) are measured against their RELATIVE
 denominator (the prior link's label-set), not against every assertion:
 

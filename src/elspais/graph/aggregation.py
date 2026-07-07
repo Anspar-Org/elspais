@@ -27,6 +27,75 @@ TIER_TO_BUCKET: dict[str, str] = {
     "missing": "missing",
 }
 
+# The coverage chain's RELATIVE-denominator convention, single-sourced here so
+# both the requirement-level tier buckets (this module) and the badge
+# projection (html/generator.py) measure each chained dimension over the SAME
+# label set (REQ-d00258-C). Each measured dimension is scored over the labels
+# that qualified at the PRIOR link of the chain, not over every assertion:
+# Tested over IMPLEMENTED labels, Passing (verified) over TESTED labels,
+# UAT-Passed over UAT-COVERED labels. ``implemented`` and ``uat_coverage`` are
+# ABSOLUTE (measured over all assertions) and deliberately absent from this map.
+DENOMINATOR_DIMENSION: dict[str, str] = {
+    "tested": "implemented",
+    "verified": "tested",
+    "uat_verified": "uat_coverage",
+}
+
+
+def relative_tier(
+    num_dim: CoverageDimension,
+    denom_labels: set[str],
+    *,
+    allow_indirect: bool = True,
+) -> tuple[str, bool]:
+    """Tier of ``num_dim`` measured over the relative denominator ``denom_labels``.
+
+    Returns ``(tier, is_na)``. ``is_na`` is True when the denominator is empty
+    (nothing to measure -> ``missing`` at neutral severity, design §1/§2). A
+    failing label within the denominator wins (``failing``). ``allow_indirect``
+    selects the credited per-label fractions (Phase 4 threads the config).
+
+    Single home for the relative-tier logic (REQ-d00258-C): both the badge
+    projection (html/generator.py) and the requirement-level tier buckets read
+    this one helper so identical questions receive identical answers.
+    """
+    eps = 1e-9
+    if not denom_labels:
+        return "missing", True
+    if num_dim.failing_labels & denom_labels:
+        return "failing", False
+    pct = num_dim.indirect_pct_by_label if allow_indirect else num_dim.direct_pct_by_label
+    covered = sum(min(pct.get(lbl, 0.0), 1.0) for lbl in denom_labels)
+    n = len(denom_labels)
+    if covered >= n - eps:
+        return "full", False
+    if covered > eps:
+        return "partial", False
+    return "missing", False
+
+
+def relative_tier_for(
+    rollup: RollupMetrics,
+    dimension: str,
+    *,
+    allow_indirect: bool = True,
+) -> tuple[str, bool]:
+    """``(tier, is_na)`` for one dimension of a rollup, honoring the chain.
+
+    For a chained dimension (in ``DENOMINATOR_DIMENSION``) the tier is measured
+    RELATIVELY over the label-set that qualified at the prior link. The
+    'verified' numerator is ``tested_and_passing`` (verified | lcov credit),
+    matching the badge projection -- NOT the raw ``rollup.verified`` dimension,
+    which would miss line-coverage credit. An absolute dimension (implemented,
+    uat_coverage) returns its own ``.tier`` and is never N/A.
+    """
+    denom_name = DENOMINATOR_DIMENSION.get(dimension)
+    if denom_name is None:
+        return getattr(rollup, dimension).tier, False
+    denom_labels = set(getattr(rollup, denom_name).indirect_pct_by_label)
+    num_dim = tested_and_passing(rollup) if dimension == "verified" else getattr(rollup, dimension)
+    return relative_tier(num_dim, denom_labels, allow_indirect=allow_indirect)
+
 
 @dataclass
 class DimensionSums:
@@ -202,23 +271,32 @@ def tier_buckets(
     dimension: str = "implemented",
     exclude_status: set[str] | None = None,
 ) -> TierBuckets:
-    """Requirement-level tier bucket counts for one dimension."""
+    """Requirement-level tier bucket counts for one dimension.
+
+    Chained dimensions (tested/verified/uat_verified) bucket by their RELATIVE
+    tier -- measured over the prior link's label set via ``relative_tier_for``
+    (REQ-d00258-C) -- so a requirement whose every implemented assertion is
+    tested lands in ``full`` even when some assertions are unimplemented. The
+    absolute dimensions (implemented/uat_coverage) bucket by their own tier. A
+    node with no rollup counts as ``missing``.
+    """
     buckets = TierBuckets()
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         if exclude_status and node.status in exclude_status:
             continue
         buckets.total += 1
         rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
-        dim: CoverageDimension | None = getattr(rollup, dimension, None) if rollup else None
-        if dim is None:
+        if rollup is None or getattr(rollup, dimension, None) is None:
             buckets.missing += 1
             continue
-        bucket = TIER_TO_BUCKET.get(dim.tier, "missing")
+        tier, _is_na = relative_tier_for(rollup, dimension)
+        bucket = TIER_TO_BUCKET.get(tier, "missing")
         setattr(buckets, bucket, getattr(buckets, bucket) + 1)
     return buckets
 
 
 __all__ = [
+    "DENOMINATOR_DIMENSION",
     "TIER_TO_BUCKET",
     "DimensionAggregate",
     "DimensionSums",
@@ -226,5 +304,7 @@ __all__ = [
     "TierBuckets",
     "aggregate_by_level",
     "aggregate_dimension",
+    "relative_tier",
+    "relative_tier_for",
     "tier_buckets",
 ]

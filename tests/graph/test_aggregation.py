@@ -4,10 +4,13 @@ from pathlib import Path
 import pytest
 
 from elspais.graph.aggregation import (
+    DENOMINATOR_DIMENSION,
     TIER_TO_BUCKET,
     _level_keys,
     aggregate_by_level,
     aggregate_dimension,
+    relative_tier,
+    relative_tier_for,
     tier_buckets,
 )
 from elspais.graph.builder import TraceGraph
@@ -211,3 +214,148 @@ class TestTierBuckets:
         b = tier_buckets(canonical_graph, "uat_verified")
         # canonical fixture has requirements with no UAT verification -> missing
         assert b.missing >= 1
+
+
+def _dim(labels, *, direct=None, failing=(), total=0):
+    """A CoverageDimension crediting ``labels`` at fraction 1.0.
+
+    ``total`` sets the absolute assertion count (only relevant to the absolute
+    ``.tier``); relative measurement ignores it and uses the label dicts.
+    """
+    labels = set(labels)
+    direct = set(labels if direct is None else direct)
+    return CoverageDimension(
+        total=total,
+        direct=len(direct),
+        indirect=len(labels),
+        failing_labels=set(failing),
+        direct_pct_by_label=dict.fromkeys(direct, 1.0),
+        indirect_pct_by_label=dict.fromkeys(labels, 1.0),
+    )
+
+
+# Verifies: REQ-d00258-C
+# Verifies: REQ-d00258-E
+class TestRelativeTierFor:
+    """``relative_tier_for`` picks the relative denominator per dimension."""
+
+    def test_denominator_map_covers_the_chained_dimensions(self):
+        """Only the chained dimensions have a relative denominator; the
+        absolute dimensions (implemented, uat_coverage) are NOT in the map."""
+        assert DENOMINATOR_DIMENSION == {
+            "tested": "implemented",
+            "verified": "tested",
+            "uat_verified": "uat_coverage",
+        }
+
+    def test_tested_measured_over_implemented_labels(self):
+        """implemented=partial (A of A,B) but every implemented label tested ->
+        tested is RELATIVELY full, not partial."""
+        rollup = RollupMetrics(
+            total_assertions=2,
+            implemented=_dim({"A"}, total=2),
+            tested=_dim({"A"}, total=2),
+        )
+        # Relative: denom = implemented labels {A}; A tested -> full.
+        assert relative_tier_for(rollup, "tested") == ("full", False)
+        # Absolute would have been partial (1 of 2 assertions).
+        assert rollup.tested.tier == "partial"
+
+    def test_tested_empty_denominator_is_na(self):
+        """Nothing implemented -> tested has an empty denominator -> N/A
+        ('missing', is_na=True), a neutral non-gap (REQ-d00258-E)."""
+        rollup = RollupMetrics(
+            total_assertions=2,
+            implemented=_dim(set(), total=2),
+            tested=_dim(set(), total=2),
+        )
+        assert relative_tier_for(rollup, "tested") == ("missing", True)
+
+    def test_verified_uses_tested_and_passing_union(self):
+        """The 'verified' numerator is tested_and_passing (verified | lcov),
+        NOT the raw verified dimension -- lcov-only credit still counts."""
+        rollup = RollupMetrics(
+            total_assertions=1,
+            tested=_dim({"A"}, total=1),
+            verified=_dim(set(), total=1),  # no // Verifies: result
+            lcov_tested=_dim({"A"}, total=1),  # but line-coverage credits A
+        )
+        # denom = tested labels {A}; union credits A -> full.
+        assert relative_tier_for(rollup, "verified") == ("full", False)
+        # Raw verified alone would be a gap.
+        assert rollup.verified.tier == "missing"
+
+    def test_absolute_dimension_returns_dim_tier(self):
+        """A dimension NOT in the denominator map returns the absolute
+        ``.tier`` (never N/A)."""
+        rollup = RollupMetrics(
+            total_assertions=2,
+            implemented=_dim({"A"}, total=2),
+        )
+        assert relative_tier_for(rollup, "implemented") == ("partial", False)
+
+
+# Verifies: REQ-d00258-C
+# Verifies: REQ-d00258-E
+class TestTierBucketsRelative:
+    """``tier_buckets`` honors the relative denominators for chained dims."""
+
+    def test_tested_bucket_is_relative_full(self):
+        """implemented=partial, all-implemented tested -> the req lands in the
+        ``full`` tested bucket (relative), not ``partial``."""
+        req = _make_req("REQ-d00001")
+        req.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=2,
+                implemented=_dim({"A"}, total=2),
+                tested=_dim({"A"}, total=2),
+            ),
+        )
+        graph = _make_graph(req)
+        b = tier_buckets(graph, "tested")
+        assert b.full == 1
+        assert b.partial == 0
+
+    def test_nothing_implemented_tested_bucket_is_missing(self):
+        """No implemented labels -> tested denominator empty -> the req is in
+        the ``missing`` bucket (N/A), not partial or full."""
+        req = _make_req("REQ-d00002")
+        req.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                implemented=_dim(set(), total=1),
+                tested=_dim(set(), total=1),
+            ),
+        )
+        graph = _make_graph(req)
+        b = tier_buckets(graph, "tested")
+        assert b.missing == 1
+        assert b.full == 0
+        assert b.partial == 0
+
+    def test_implemented_bucket_stays_absolute(self):
+        """The absolute 'implemented' dimension still buckets by its own tier
+        (partial when 1 of 2 assertions implemented)."""
+        req = _make_req("REQ-d00003")
+        req.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=2,
+                implemented=_dim({"A"}, total=2),
+            ),
+        )
+        graph = _make_graph(req)
+        b = tier_buckets(graph, "implemented")
+        assert b.partial == 1
+        assert b.full == 0
+
+
+# Verifies: REQ-d00258-C
+def test_relative_tier_shared_helper_measures_over_denominator():
+    """The shared ``relative_tier`` lives in aggregation and measures a
+    numerator dimension over an explicit label-set denominator."""
+    dim = _dim({"A"})
+    assert relative_tier(dim, {"A", "B"}) == ("partial", False)
+    assert relative_tier(dim, set()) == ("missing", True)
