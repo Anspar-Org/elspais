@@ -98,7 +98,10 @@ class ViewStats:
 
 # ── Severity-driven coverage tiers ──
 
-SEVERITY_PRIORITY: dict[str, int] = {"error": 0, "warning": 1, "info": 2, "ok": 3}
+# `neutral` (the forced N/A override, REQ-d00258-H) sits at the same low
+# priority as `info` so it never out-ranks a real gap (error/warning) for the
+# combined worst-severity — a genuine gap still wins the combined badge/bucket.
+SEVERITY_PRIORITY: dict[str, int] = {"error": 0, "warning": 1, "info": 2, "neutral": 2, "ok": 3}
 
 
 def _severity_color(severity: str) -> str:
@@ -132,6 +135,9 @@ _SEVERITY_TO_BUCKET: dict[str, str] = {
     "error": "missing",
     "warning": "partial",
     "info": "full",
+    # `neutral` (N/A override, REQ-d00258-H) is non-dragging exactly like `info`:
+    # a not-applicable dimension must never pull the combined bucket below "full".
+    "neutral": "full",
     "ok": "full",
 }
 
@@ -310,9 +316,10 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         else:
             tier, is_na = relative_tier(dim, denom, allow_indirect=cov_config.allow_indirect)
         # A `missing` tier that is N/A (empty relative denominator) is neutral:
-        # nothing to measure, so it resolves to `info` regardless of the
-        # dimension's configured `missing` severity. A non-N/A `missing` is a
-        # real gap and uses the configured severity.
+        # nothing to measure, so it resolves to the `neutral` severity (GREY,
+        # REQ-d00258-H) regardless of the dimension's configured `missing`
+        # severity. A non-N/A `missing` is a real gap and uses the configured
+        # severity.
         neutral = tier == "missing" and is_na
         # The `Implemented` gap is only a REAL (red) gap when the requirement's
         # status expects implementation (REQ-d00258, Phase 3). For a status that
@@ -325,7 +332,13 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
             and not status_expects_implementation(config or {}, node.status)
         ):
             neutral = True
-        severity = "info" if neutral else _tier_to_severity(tier, sev_cfg)
+        # The forced-neutral override renders GREY (`neutral` severity), matching
+        # the per-assertion `missing` standing and the user's green/yellow/red/grey
+        # palette -- NOT the yellow-green `info` severity, which is a real
+        # "fully-covered-including-indirect" state (REQ-d00258-H). This is a color
+        # change only: the tier stays `missing` and the dimension stays
+        # non-dragging for combined-bucket purposes (neutral maps to "full").
+        severity = "neutral" if neutral else _tier_to_severity(tier, sev_cfg)
         color = _severity_color(severity)
         label = status_words[dim_key]
         desc = _TIER_DESCRIPTIONS.get(tier, tier)

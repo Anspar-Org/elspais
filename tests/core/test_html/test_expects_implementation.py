@@ -7,7 +7,7 @@ Phase-3 behavior change: ``compute_coverage_tiers`` and
 for coverage-excluded statuses. Badges ALWAYS render. The only status-sensitive
 projection that remains is the ``Implemented`` dimension's gap severity: a
 ``missing`` implemented tier is a REAL (red) gap only when the requirement's
-status expects implementation; otherwise it renders NEUTRAL grey (``info``
+status expects implementation; otherwise it renders NEUTRAL grey (``neutral``
 severity), exactly like an N/A dimension.
 """
 
@@ -37,9 +37,10 @@ def _uncovered_rollup(n=2):
     return RollupMetrics(total_assertions=n)
 
 
-# The color a NEUTRAL (grey) badge resolves to: the same "info" severity color
-# an N/A dimension already renders. Semantic, not a hard-coded hue.
-GREY = _severity_color("info")
+# The color a NEUTRAL (grey) badge resolves to: the `neutral` severity that the
+# N/A / not-expected-implementation override renders (REQ-d00258-H). Semantic,
+# not a hard-coded hue.
+GREY = _severity_color("neutral")
 RED = _severity_color("error")
 GREEN = _severity_color("ok")
 

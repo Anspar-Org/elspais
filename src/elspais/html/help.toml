@@ -277,6 +277,10 @@ description = "No coverage or failures"
 label = "Failing"
 description = "Test failures detected"
 
+[severity.neutral]
+label = "Not applicable"
+description = "Nothing to measure on this dimension (grey, like a missing standing)"
+
 [coverage_standing.full]
 label = "Full"
 description = "Assertion fully covered on this dimension (100%)"

@@ -69,14 +69,18 @@ def test_REQ_d00258_B_empty_denominator_tested_is_neutral_not_yellow():
     assert result["impl_tier"] == "missing"
     assert result["impl_color"] == _severity_color("error")
 
-    # Tested relative to an EMPTY implemented denominator -> N/A -> neutral.
+    # Tested relative to an EMPTY implemented denominator -> N/A -> neutral GREY
+    # (matches the per-assertion `missing` standing; NOT the yellow-green `info`
+    # severity that the design never intended for the not-applicable case).
     assert result["tested_tier"] == "missing"
-    assert result["tested_color"] == _severity_color("info")
-    assert result["tested_color"] != _severity_color("error")
-    assert result["tested_color"] != _severity_color("warning")
+    assert result["tested_color"] == _severity_color("neutral")
+    assert _severity_color("neutral") == "grey"
+    assert result["tested_color"] != _severity_color("error")  # not red
+    assert result["tested_color"] != _severity_color("warning")  # not yellow
+    assert result["tested_color"] != _severity_color("ok")  # not green
 
-    # Passing relative to an EMPTY tested denominator -> also N/A neutral.
-    assert result["verified_color"] == _severity_color("info")
+    # Passing relative to an EMPTY tested denominator -> also N/A neutral grey.
+    assert result["verified_color"] == _severity_color("neutral")
 
 
 def test_REQ_d00258_B_empty_denominator_does_not_drag_bucket_below_implemented():
@@ -131,7 +135,7 @@ def test_REQ_d00258_B_nonempty_denominator_uncovered_is_real_gap():
 
     assert result["tested_tier"] == "missing"
     assert result["tested_color"] == _severity_color("error")
-    assert result["tested_color"] != _severity_color("info")
+    assert result["tested_color"] != _severity_color("neutral")  # not the grey N/A override
 
     # Worst applicable is the red Tested gap -> bucket missing.
     assert result["combined_bucket"] == "missing"
@@ -198,7 +202,7 @@ def test_REQ_d00258_I_all_zero_implemented_makes_tested_na_neutral():
     result = compute_coverage_tiers(_node(rollup))
 
     assert result["tested_tier"] == "missing"
-    assert result["tested_color"] == _severity_color("info")
+    assert result["tested_color"] == _severity_color("neutral")
     assert result["tested_color"] != _severity_color("ok")
 
 
@@ -220,4 +224,4 @@ def test_REQ_d00258_F_expects_validation_still_reds_empty_uat_coverage():
     assert result["uat_cov_tier"] == "missing"
     assert result["uat_cov_color"] == _severity_color("error")
     # UAT-Passed relative to empty UAT-Covered denom -> neutral N/A grey.
-    assert result["uat_ver_color"] == _severity_color("info")
+    assert result["uat_ver_color"] == _severity_color("neutral")

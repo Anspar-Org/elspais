@@ -967,6 +967,19 @@ color_key = "red"
 css_class = "val-maroon"
 color_key = "maroon"
 
+# Neutral / not-applicable severity (REQ-d00258-H). Used ONLY by the forced
+# NEUTRAL override in the badge projection (an N/A relative dimension, or a
+# `missing` Implemented tier on a status that does not expect implementation).
+# It mirrors [coverage_standing.missing] GREY so the requirement-level "N/A"
+# badge matches the per-assertion `missing` standing -- the canonical
+# "missing / no-coverage / not-applicable is grey" semantic. It is NOT a
+# per-dimension configurable tier severity; no dimension's configured severity
+# defaults to it. Distinct from `info` (yellow-green), which is a real
+# "fully-covered-including-indirect" state that must not read grey.
+[severity.neutral]
+css_class = "val-grey"
+color_key = "grey"
+
 # Per-assertion coverage standings (REQ-d00258-G). A "standing" is the semantic
 # state of one assertion on one coverage dimension; the viewer emits the standing
 # token and resolves its color HERE via the catalog, so the color association is
