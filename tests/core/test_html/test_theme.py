@@ -602,15 +602,15 @@ class TestUnifiedSeverityVocabulary:
 
 
 class TestStatusRoleGating:
-    """compute_coverage_tiers blanks colors only for coverage-EXCLUDED statuses
-    (per [rules.format.status_roles]), staying consistent with the shared
-    aggregation used by summary/health/trace -- not a hardcoded "ACTIVE" gate.
+    """compute_coverage_tiers renders coverage badges for EVERY status
+    (REQ-d00258, Phase 3). The status no longer blanks the payload; it only
+    gates whether a `missing` Implemented tier is a red gap (status expects
+    implementation) or neutral grey (it does not). The only remaining empty
+    payload is the genuine no-assertions case.
 
-    Regression: the viewer previously gated on ``status != "ACTIVE"``, so in a
-    project that configures e.g. ``active = ["Active", "Draft"]`` (every
-    requirement is Draft during build-out) the viewer blanked coverage colors
-    on every card while every other surface credited them. That divergence
-    violates REQ-d00258-C (viewer derives coverage from the shared aggregation).
+    Regression history: the viewer once gated on ``status != "ACTIVE"`` and
+    later on the coverage-excluded set, blanking badges on non-active cards.
+    Phase 3 retires that suppression outright (REQ-d00258).
     """
 
     def _make_node_with_status(self, status, rollup):
@@ -654,31 +654,34 @@ class TestStatusRoleGating:
         assert tiers["impl_color"] != ""
         assert tiers["combined_bucket"] == "full"
 
-    # Verifies: REQ-d00258-C
-    def test_coverage_excluded_status_still_empty(self):
-        """A requirement with a coverage-EXCLUDED status (Deprecated -> retired
-        role by default) still returns an all-empty payload."""
+    # Verifies: REQ-d00258
+    def test_coverage_excluded_status_still_renders_badges(self):
+        """Phase 3 (REQ-d00258): a coverage-EXCLUDED status (Deprecated ->
+        retired role by default) NO LONGER blanks the payload. A fully-covered
+        Deprecated requirement renders its real green coverage; only the
+        Implemented gap severity is gated by status (and here impl is full, so
+        no gap to gate)."""
         from elspais.html.generator import compute_coverage_tiers
 
         node = self._make_node_with_status("Deprecated", self._full_rollup())
 
         tiers = compute_coverage_tiers(node)
 
-        assert tiers["impl_color"] == ""
-        assert tiers["combined_bucket"] == ""
+        assert tiers["impl_color"] != ""
+        assert tiers["combined_bucket"] == "full"
 
-    # Verifies: REQ-d00258-C
-    def test_default_config_active_gets_colors_draft_empty(self):
-        """Under default status_roles (no config), Active is creditable (colors)
-        and Draft is provisional -> coverage-excluded -> empty. This preserves
-        the historical default-project behavior."""
+    # Verifies: REQ-d00258
+    def test_default_config_active_and_draft_both_render_full_coverage(self):
+        """Under default status_roles (no config), a fully-covered requirement
+        renders green coverage for BOTH Active and Draft statuses (Phase 3:
+        badges always render; suppression retired)."""
         from elspais.html.generator import compute_coverage_tiers
 
         active = self._make_node_with_status("Active", self._full_rollup())
         draft = self._make_node_with_status("Draft", self._full_rollup())
 
         assert compute_coverage_tiers(active)["impl_color"] != ""
-        assert compute_coverage_tiers(draft)["impl_color"] == ""
+        assert compute_coverage_tiers(draft)["impl_color"] != ""
 
     # Verifies: REQ-d00258-C
     def test_creditable_status_with_no_assertions_still_empty(self):

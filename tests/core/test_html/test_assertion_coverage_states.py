@@ -253,9 +253,15 @@ class TestAssertionCoverageStates:
         assert states["A"]["uat_verified"] == "failing"
         assert states["B"]["uat_verified"] == "full"  # NOT failing
 
-    def test_REQ_d00258_G_excluded_status_returns_empty(self):
+    def test_REQ_d00258_excluded_status_still_projects_states(self):
+        # Phase 3 (REQ-d00258): the coverage-excluded suppression is retired.
+        # A Deprecated requirement's per-assertion standings still compute --
+        # badges always render, they are never blanked by status.
         node = _req_with_rollup(_spread_rollup(), status="Deprecated")
-        assert compute_assertion_coverage_states(node) == {}
+        states = compute_assertion_coverage_states(node)
+        assert states != {}
+        assert states["A"]["implemented"] == "full"
+        assert states["B"]["verified"] == "failing"
 
     def test_REQ_d00258_G_no_rollup_returns_empty(self):
         from tests.core.graph_test_helpers import build_graph, make_requirement

@@ -179,8 +179,10 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         tested_tier, verified_color, verified_tip, verified_tier, uat_cov_color,
         uat_cov_tip, uat_cov_tier, uat_ver_color, uat_ver_tip, uat_ver_tier,
         combined_color, combined_tip, combined_bucket.
-        All empty strings if the node's status is coverage-excluded
-        (per [rules.format.status_roles]) or it has no assertions.
+        All empty strings only if the node has no rollup / no assertions.
+        Badges render for EVERY status (REQ-d00258, Phase 3); the status only
+        gates whether a `missing` Implemented tier is a red gap (status expects
+        implementation) or a neutral grey one (it does not).
     """
     from elspais.config.schema import CoverageConfig, CoverageSeverityConfig
     from elspais.config.status_words import get_status_words
@@ -207,18 +209,12 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         "expects_validation": False,
     }
 
-    # Blank colors only for coverage-EXCLUDED statuses (per
-    # [rules.format.status_roles]), consistent with the shared aggregation used
-    # by summary/health/trace (REQ-d00258-C). Compare raw ``node.status`` against
-    # the excluded set the SAME way graph/aggregation.py does, so the viewer and
-    # the aggregation agree on the identical creditable requirement set. When
-    # config is absent, defaults apply (only "Active"-role statuses are
-    # creditable). Do NOT hardcode "ACTIVE": projects may credit Draft, etc.
-    from elspais.config import get_status_roles
-
-    if node.status in get_status_roles(config or {}).coverage_excluded_statuses():
-        return empty
-
+    # Coverage badges ALWAYS render, regardless of status (REQ-d00258, Phase 3).
+    # Suppressing badges for coverage-excluded statuses is retired: a Draft or
+    # Deprecated requirement now shows its coverage. The only status-sensitive
+    # projection is the ``Implemented`` dimension's gap severity, gated below on
+    # ``status_expects_implementation``.
+    from elspais.config import status_expects_implementation
     from elspais.graph.metrics import RollupMetrics, tested_and_passing
 
     rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
@@ -313,7 +309,19 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         # nothing to measure, so it resolves to `info` regardless of the
         # dimension's configured `missing` severity. A non-N/A `missing` is a
         # real gap and uses the configured severity.
-        severity = "info" if (tier == "missing" and is_na) else _tier_to_severity(tier, sev_cfg)
+        neutral = tier == "missing" and is_na
+        # The `Implemented` gap is only a REAL (red) gap when the requirement's
+        # status expects implementation (REQ-d00258, Phase 3). For a status that
+        # does not (e.g. Draft/Deprecated by default), a missing implemented tier
+        # renders NEUTRAL grey -- badges still show, but the absence is not
+        # flagged as a defect.
+        if (
+            dim_key == "implemented"
+            and tier == "missing"
+            and not status_expects_implementation(config or {}, node.status)
+        ):
+            neutral = True
+        severity = "info" if neutral else _tier_to_severity(tier, sev_cfg)
         color = _severity_color(severity)
         label = status_words[dim_key]
         desc = _TIER_DESCRIPTIONS.get(tier, tier)
@@ -423,16 +431,16 @@ def compute_assertion_coverage_states(
     ``missing`` otherwise. An assertion is NEVER reddened by a failing SIBLING
     (REQ-d00258-G).
     No coverage is recomputed here -- only the pre-computed per-label fractions
-    are projected. Returns ``{}`` for coverage-excluded statuses or a node with
-    no rollup / no assertions (same gate as ``compute_coverage_tiers``).
+    are projected. Returns ``{}`` only for a node with no rollup / no assertions
+    (same gate as ``compute_coverage_tiers``); standings compute for EVERY
+    status (REQ-d00258, Phase 3).
     """
-    from elspais.config import get_status_roles
     from elspais.graph.GraphNode import NodeKind
     from elspais.graph.metrics import tested_and_passing
 
-    if node.status in get_status_roles(config or {}).coverage_excluded_statuses():
-        return {}
-
+    # Per-assertion standings ALWAYS compute, regardless of status (REQ-d00258,
+    # Phase 3). The coverage-excluded suppression is retired to match
+    # ``compute_coverage_tiers``.
     rollup = node.get_metric("rollup_metrics")
     if not rollup or rollup.total_assertions == 0:
         return {}
