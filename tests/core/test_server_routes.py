@@ -202,11 +202,14 @@ match = "source"
     def full_indirect_client(self, tmp_path: Path) -> TestClient:
         """Project with full code+test+passing-result coverage but no UAT/journey.
 
-        This yields a combined validation_color of "yellow-green" (severity.info,
-        since uat_coverage/uat_verified default to "missing" -> info severity when no
-        journey references the requirement). Under the OLD combined_color-based
-        bucketing (only exact "green" mapped to "full"), this landed as "missing";
-        the severity-aware tier bucket must classify it as "full".
+        The worst-severity dimension is the journey-less UAT (uat_coverage/
+        uat_verified default to a "missing" tier at info severity). Its badge
+        color now resolves from the STANDING (missing -> grey, REQ-d00258-D),
+        NOT the retired yellow-green info-severity color, so combined
+        validation_color is "grey". The severity-aware tier bucket must STILL
+        classify the requirement as "full": info severity is non-dragging, so the
+        coverage bucket is drawn from tier semantics (combined_bucket), never from
+        the color string (REQ-d00258-E).
         """
         from elspais.server.app import create_app
         from elspais.server.state import AppState
@@ -246,9 +249,12 @@ match = "source"
         assert all(r["coverage"] in ("full", "partial", "missing", "failing") for r in req_rows)
 
         row = next(r for r in req_rows if r["id"] == "REQ-p00001")
-        assert row["validation_color"] == "yellow-green"
-        # A fully-but-indirectly-covered (yellow-green) requirement must bucket
-        # as "full", not "missing".
+        # Color decoupled from severity (REQ-d00258-D): the journey-less UAT
+        # missing standing is grey, not the retired yellow-green.
+        assert row["validation_color"] == "grey"
+        assert row["validation_color"] != "yellow-green"
+        # ...yet the info-severity UAT gap is non-dragging, so the bucket derives
+        # from tier semantics and stays "full", not "missing".
         assert row["coverage"] == "full"
 
 

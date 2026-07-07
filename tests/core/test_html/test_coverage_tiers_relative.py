@@ -19,7 +19,11 @@ drag ``combined_bucket`` below the (already red) Implemented dim.
 
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.metrics import CoverageDimension, RollupMetrics
-from elspais.html.generator import _severity_color, compute_coverage_tiers
+from elspais.html.generator import (
+    _severity_color,
+    _standing_color,
+    compute_coverage_tiers,
+)
 
 
 def _dim(labels=(), *, total=5, failing=()):
@@ -101,15 +105,16 @@ def test_REQ_d00258_B_relative_full_when_the_one_implemented_is_covered():
     result = compute_coverage_tiers(node)
 
     assert result["impl_tier"] == "partial"
-    assert result["impl_color"] == _severity_color("warning")
+    # Badge color resolves from the STANDING (REQ-d00258-D), not severity.
+    assert result["impl_color"] == _standing_color("partial")
 
     # 1 of 1 implemented label is tested -> full green (RELATIVE, not 1/5).
     assert result["tested_tier"] == "full"
-    assert result["tested_color"] == _severity_color("ok")
+    assert result["tested_color"] == _standing_color("full")
 
     # 1 of 1 tested label is passing -> full green.
     assert result["verified_tier"] == "full"
-    assert result["verified_color"] == _severity_color("ok")
+    assert result["verified_color"] == _standing_color("full")
 
 
 def test_REQ_d00258_B_green_relatives_do_not_drag_bucket_up_or_down():
@@ -146,7 +151,7 @@ def test_REQ_d00258_B_partial_relative_when_some_denom_covered():
     node = _node(_rollup(implemented={"A", "B"}, tested={"A"}, passing={"A"}))
     result = compute_coverage_tiers(node)
     assert result["tested_tier"] == "partial"
-    assert result["tested_color"] == _severity_color("warning")
+    assert result["tested_color"] == _standing_color("partial")
 
 
 # ── Scenario D: 0.0-conducted labels must not enter the relative denominator ──
@@ -188,7 +193,7 @@ def test_REQ_d00258_I_zero_conducted_label_excluded_from_tested_denominator():
     result = compute_coverage_tiers(_node(rollup))
 
     assert result["tested_tier"] == "full"
-    assert result["tested_color"] == _severity_color("ok")
+    assert result["tested_color"] == _standing_color("full")
 
 
 def test_REQ_d00258_I_all_zero_implemented_makes_tested_na_neutral():

@@ -338,8 +338,25 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         # "fully-covered-including-indirect" state (REQ-d00258-H). This is a color
         # change only: the tier stays `missing` and the dimension stays
         # non-dragging for combined-bucket purposes (neutral maps to "full").
+        #
+        # SEVERITY drives the combined bucket (`_SEVERITY_TO_BUCKET`) and the
+        # `elspais checks` gate; it is computed exactly as before so those two
+        # jobs are unchanged.
         severity = "neutral" if neutral else _tier_to_severity(tier, sev_cfg)
-        color = _severity_color(severity)
+        # COLOR is decoupled from severity (REQ-d00258-D): it resolves from the
+        # coverage STANDING through the theme catalog -- the SAME source the
+        # per-*Assertion* badges use -- so a given standing is one color
+        # everywhere (full->green, partial->yellow, failing->red), regardless of
+        # the dimension's configured severity. This kills the
+        # `uat partial=info -> yellow-green` bug: a partial badge is always
+        # yellow. The ONE deliberate exception: a `missing` standing renders RED
+        # only when it is a hard REQUIRED gap (resolved severity == "error");
+        # every other missing (soft info/warning, or N/A neutral) renders GREY.
+        # Severity therefore no longer recolors full/partial/failing.
+        if tier == "missing":
+            color = _severity_color("error") if severity == "error" else _standing_color("missing")
+        else:
+            color = _standing_color(tier)
         label = status_words[dim_key]
         desc = _TIER_DESCRIPTIONS.get(tier, tier)
 

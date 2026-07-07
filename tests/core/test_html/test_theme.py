@@ -128,9 +128,9 @@ class TestComputeValidationColorCatalog:
         from elspais.html.theme import get_catalog
 
         catalog = get_catalog()
-        # The unified vocabulary collapses full-direct/full-indirect into the
-        # single `full` tier -> severity `ok` -> green.
-        expected_entry = catalog.by_key("severity.ok")
+        # Badge COLOR resolves from the coverage STANDING, not severity
+        # (REQ-d00258-D): the `full` standing -> green.
+        expected_entry = catalog.by_key("coverage_standing.full")
 
         rollup = RollupMetrics(
             total_assertions=2,
@@ -150,8 +150,9 @@ class TestComputeValidationColorCatalog:
         from elspais.html.theme import get_catalog
 
         catalog = get_catalog()
-        # A failing tier resolves to error severity -> red in the badge color.
-        expected_entry = catalog.by_key("severity.error")
+        # A failing tier badges from the `failing` STANDING -> red (REQ-d00258-D),
+        # independent of the dimension's configured severity.
+        expected_entry = catalog.by_key("coverage_standing.failing")
 
         # A/B both implemented and tested; the Passing dim FAILS on A (within the
         # tested denominator) -> relative 'failing' tier -> red (REQ-d00258-B).
@@ -194,8 +195,9 @@ class TestComputeValidationColorCatalog:
         from elspais.html.theme import get_catalog
 
         catalog = get_catalog()
-        # A partial tier resolves to warning severity -> yellow.
-        expected_entry = catalog.by_key("severity.warning")
+        # A partial tier badges from the `partial` STANDING -> yellow
+        # (REQ-d00258-D), never the severity's yellow-green.
+        expected_entry = catalog.by_key("coverage_standing.partial")
 
         rollup = RollupMetrics(
             total_assertions=3,
@@ -219,7 +221,7 @@ class TestComputeValidationColorCatalog:
         from elspais.html.theme import get_catalog
 
         catalog = get_catalog()
-        green = catalog.by_key("severity.ok").color_key
+        green = catalog.by_key("coverage_standing.full").color_key
 
         # A/B fully-but-INDIRECTLY covered on every dimension: implemented over
         # all assertions (absolute), tested over implemented labels, verified

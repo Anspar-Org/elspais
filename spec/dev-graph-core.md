@@ -478,7 +478,7 @@ B. Reporting surfaces SHALL use exactly five coverage display terms: Implemented
 
 C. The CLI summary, the MCP project summary, and the viewer SHALL derive their coverage statistics from a single shared aggregation so identical questions receive identical answers.
 
-D. Viewer coverage colors SHALL be resolved through the theme catalog by severity name (tier -> configured severity -> named catalog entry), never through hard-coded color values, and the coverage tier states SHALL appear in the viewer Legend.
+D. Viewer coverage badge colors SHALL resolve from the coverage standing through the theme catalog by standing name — the same resolution for requirement dimension badges and per-*Assertion* badges — so a given standing is one color on every surface (full green, partial yellow, failing red), never through hard-coded color values and never recolored by the dimension's configured severity. A missing standing SHALL render red only when it is a required gap (its resolved severity is error) and grey otherwise. Severity SHALL govern combined-bucket dragging and the checks gate, not the badge color for the full, partial, and failing standings. The coverage standings SHALL appear in the viewer Legend.
 
 E. Viewer coverage filters SHALL bucket requirements by tier semantics using the unified state names (full, partial, failing, missing), never by color string. The requirement-level line coverage cell SHALL NOT render a direct-attribution count for targets whose tooling provides only aggregate coverage.
 
@@ -498,6 +498,7 @@ L. A per-status `expects_implementation` flag SHALL declare whether a requiremen
 
 ### Changelog
 
+- 2026-07-07 | 4767b41c | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-07-07 | 172301f4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-07-06 | 06550baf | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-07-06 | dd54712c | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
@@ -505,4 +506,4 @@ L. A per-status `expects_implementation` flag SHALL declare whether a requiremen
 - 2026-07-03 | c843c727 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-07-02 | be97c170 | - | Michael Lewis (michael@anspar.org) | Auto-fix: add missing changelog section
 
-*End* *Reporting Surface Consistency* | **Hash**: 172301f4
+*End* *Reporting Surface Consistency* | **Hash**: 4767b41c
