@@ -5,9 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from elspais.commands.health import (
+    _config_with_status_overlay,
+    _excluded_note,
+    check_code_coverage,
+    check_dimension_coverage,
     check_test_coverage,
     check_uat_coverage,
     check_uat_results,
+    run_code_checks,
     run_uat_checks,
 )
 from elspais.graph.builder import TraceGraph
@@ -601,6 +606,111 @@ def _federate_integrates(tmp_path):
         scan_code=False,
         scan_tests=False,
     )
+
+
+class TestStatusOverlayCoverageConsistency:
+    """REQ-d00258-C: ``--status <S>`` is a per-call config overlay forcing
+    ``expects_implementation=True`` for S, so the dimension-coverage COUNTS and
+    the trailing ``[... excluded]`` NOTE always read the SAME source and can no
+    longer contradict each other.
+
+    Regression guard for the finding where ``--status Draft`` moved the note
+    (Draft dropped from 'excluded') but NOT the counts (Draft still uncounted),
+    so the message implied Draft was included while the numbers excluded it.
+    """
+
+    @staticmethod
+    def _active_plus_draft() -> FederatedGraph:
+        active = _make_req("REQ-d00001", status="Active")
+        active.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                implemented=CoverageDimension(total=1, direct=1, indirect=1),
+            ),
+        )
+        draft = _make_req("REQ-d00002", status="Draft")
+        draft.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                implemented=CoverageDimension(total=1, direct=0, indirect=0),
+            ),
+        )
+        return _make_graph(active, draft)
+
+    # Verifies: REQ-d00258-C
+    def test_overlay_is_noop_when_no_flags(self):
+        """Empty flag set returns the input config object unchanged (default is
+        byte-identical)."""
+        cfg = {"statuses": {"Draft": {"color": "#abc"}}}
+        assert _config_with_status_overlay(cfg, set()) is cfg
+
+    # Verifies: REQ-d00258-C
+    def test_overlay_forces_expects_implementation_preserving_fields(self):
+        """The overlay only forces ``expects_implementation=True``; other
+        per-status fields survive and the input config is not mutated."""
+        cfg = {"statuses": {"Draft": {"color": "#abc"}}}
+        overlay = _config_with_status_overlay(cfg, {"Draft"})
+        assert overlay["statuses"]["Draft"]["expects_implementation"] is True
+        assert overlay["statuses"]["Draft"]["color"] == "#abc"
+        # input untouched
+        assert "expects_implementation" not in cfg["statuses"]["Draft"]
+
+    # Verifies: REQ-d00258-C
+    def test_default_excludes_draft_and_notes_it(self):
+        """Baseline (no --status): Draft is NOT counted and the note lists it as
+        excluded -- proving the flag has real work to do."""
+        graph = self._active_plus_draft()
+        check = check_dimension_coverage(graph, "implemented", config={})
+        assert check.details["total_requirements"] == 1  # Active only
+        assert "draft" in check.message.lower()
+        assert "excluded" in check.message.lower()
+
+    # Verifies: REQ-d00258-C
+    def test_status_overlay_counts_draft_and_note_omits_it(self):
+        """--status Draft (as an overlay) counts Draft in numerator+denominator
+        AND drops Draft from the excluded-note -- counts and note AGREE."""
+        graph = self._active_plus_draft()
+        overlay = _config_with_status_overlay({}, {"Draft"})
+        check = check_dimension_coverage(graph, "implemented", config=overlay)
+        # Draft now counted (denominator = both reqs).
+        assert check.details["total_requirements"] == 2
+        # ... and NOT listed as excluded (note agrees with the counts).
+        assert "draft" not in check.message.lower()
+
+    # Verifies: REQ-d00258-C
+    def test_run_code_checks_status_overlay_consistent(self):
+        """End-to-end at the run_code_checks seam: with the overlay config the
+        code.implemented check counts Draft and omits it from the note. Guards
+        the caller that previously dropped ``config`` (counts excluded Draft
+        while the note implied inclusion)."""
+        graph = self._active_plus_draft()
+        overlay = _config_with_status_overlay({}, {"Draft"})
+        checks = run_code_checks(graph, exclude_status=set(), config=overlay)
+        implemented = next(c for c in checks if c.name == "code.implemented")
+        assert implemented.details["total_requirements"] == 2
+        assert "draft" not in implemented.message.lower()
+
+    # Verifies: REQ-d00258-C
+    def test_config_expects_implementation_composes_with_overlay(self):
+        """Task 3.3's config mechanism (no flag) still works: a status marked
+        ``expects_implementation=true`` in config is counted and not noted, and
+        the overlay composes on top rather than clobbering it."""
+        graph = self._active_plus_draft()
+        cfg = {"statuses": {"Draft": {"expects_implementation": True}}}
+        check = check_code_coverage(graph, config=cfg)
+        assert check.details["total_requirements"] == 2
+        assert "draft" not in check.message.lower()
+
+    # Verifies: REQ-d00258-C
+    def test_excluded_note_reads_overlay_resolver(self):
+        """``_excluded_note`` derives 'excluded' from the same resolver the
+        counts use, so a promoted status is absent from the note."""
+        graph = self._active_plus_draft()
+        assert "draft" in _excluded_note(graph, config={}).lower()
+        overlay = _config_with_status_overlay({}, {"Draft"})
+        assert _excluded_note(graph, config=overlay) == ""
 
 
 class TestCheckCoverageIntegrates:

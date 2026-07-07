@@ -605,8 +605,17 @@ This is useful for planning: before promoting a batch of Draft requirements,
 run a prospective report to see which ones still need code references, tests,
 or UAT validation.
 
-The `--status` flag accepts any configured status name (case-sensitive).
-See `elspais docs config` for how status roles are configured.
+A promoted status is **counted in the coverage numerator and denominator** and
+is correspondingly **absent from the trailing `[... excluded]` note** — the
+counts and the note always agree. Under the hood `--status <S>` is an overlay
+that forces `expects_implementation = true` for `<S>`, so it is exactly
+equivalent to setting `[statuses.<S>] expects_implementation = true` in
+`.elspais.toml` for the duration of the run (and composes with any such config
+already present).
+
+The `--status` flag accepts any configured status name (case-insensitive; the
+name is title-cased before matching). See `elspais docs config` for how status
+roles are configured.
 
 ## Exit Codes
 

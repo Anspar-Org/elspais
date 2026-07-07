@@ -2026,43 +2026,88 @@ def run_spec_checks(
 # =============================================================================
 
 
+def _status_flags(args: argparse.Namespace) -> set[str]:
+    """Title-cased set of statuses named via ``--status`` (empty when unset)."""
+    raw: list[str] | None = getattr(args, "status", None)
+    return {s.title() for s in raw} if raw else set()
+
+
+def _config_with_status_overlay(
+    config: dict[str, Any] | None,
+    status_flags: set[str],
+) -> dict[str, Any] | None:
+    """Config overlay forcing ``expects_implementation=True`` for --status names.
+
+    ``--status Draft`` makes Draft count toward coverage (the documented
+    capability, ``docs/cli/checks.md``). Rather than a second coverage-inclusion
+    predicate, ``--status`` is expressed as a per-call CONFIG overlay so the ONE
+    resolver (``status_expects_implementation``) drives both the dimension
+    COUNTS (``aggregate_dimension``) and the excluded-NOTE from the same source
+    -- they can no longer disagree (REQ-d00258-C).
+
+    Empty ``status_flags`` returns ``config`` unchanged (byte-identical default
+    behaviour). Otherwise a shallow copy whose ``statuses`` table gains
+    ``expects_implementation=True`` for each named status, preserving any other
+    per-status fields (and composing with an existing
+    ``[statuses.<S>].expects_implementation``). The input config is never
+    mutated.
+    """
+    if not status_flags:
+        return config
+    overlaid = dict(config or {})
+    statuses = dict(overlaid.get("statuses") or {})
+    # Merge into an existing entry (case-insensitively) rather than shadowing it
+    # with a second, differently-cased key that the resolver might reach first.
+    existing_by_lower = {k.lower(): k for k in statuses if isinstance(k, str)}
+    for flag in status_flags:
+        key = existing_by_lower.get(flag.lower(), flag)
+        entry = dict(statuses.get(key) or {})
+        entry["expects_implementation"] = True
+        statuses[key] = entry
+    overlaid["statuses"] = statuses
+    return overlaid
+
+
 def _resolve_exclude_status(
     args: argparse.Namespace,
     config: dict[str, Any] | None = None,
 ) -> set[str]:
-    """Compute the set of statuses to exclude from coverage.
+    """Statuses treated as coverage-EXCLUDED for the reference-status checks.
 
-    If --status is provided, add those statuses to the normally-included set
-    (e.g. --status Draft includes both Active and Draft). Without --status,
-    use status_roles config to determine exclusions.
+    This drives ``_check_status_references`` (retired/provisional/aspirational
+    reference flagging): ``--status Draft`` promotes Draft to active-like, so it
+    is removed from this set and Draft references stop being flagged. Coverage
+    COUNTS and the excluded-note no longer read this set -- they route through
+    ``_config_with_status_overlay`` + ``status_expects_implementation`` so a
+    single resolver keeps them consistent (REQ-d00258-C). Without ``--status``,
+    the role system supplies the default exclusion set.
     """
     from elspais.config import get_status_roles
 
     roles = get_status_roles(config or {})
-    include_raw: list[str] | None = getattr(args, "status", None)
-    if not include_raw:
-        return roles.coverage_excluded_statuses()
-    # --status flag: add these statuses to the normally-included set
-    extra = {s.title() for s in include_raw}
     default_excluded = roles.coverage_excluded_statuses()
-    return default_excluded - extra
+    return default_excluded - _status_flags(args)
 
 
 def _excluded_note(
     graph: FederatedGraph,
-    exclude_status: set[str] | None = None,
     config: dict[str, Any] | None = None,
 ) -> str:
-    """Build a note about excluded requirements."""
+    """Note listing requirements EXCLUDED from coverage counts.
+
+    A status is 'excluded' iff it does NOT expect implementation under the given
+    config -- the SAME resolver (``status_expects_implementation``) that gates
+    ``aggregate_dimension``'s counts (REQ-d00258-C). Passing the ``--status``
+    overlay here keeps the note and the counts in agreement: a status promoted
+    by ``--status`` (or by ``[statuses.<S>].expects_implementation``) is counted
+    and therefore NOT listed as excluded.
+    """
+    from elspais.config import status_expects_implementation
     from elspais.graph import NodeKind
 
-    if exclude_status is None:
-        from elspais.config import get_status_roles
-
-        exclude_status = get_status_roles(config or {}).coverage_excluded_statuses()
     counts: dict[str, int] = {}
     for n in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if n.status in exclude_status:
+        if n.status and not status_expects_implementation(config or {}, n.status):
             counts[n.status] = counts.get(n.status, 0) + 1
     if not counts:
         return ""
@@ -2087,19 +2132,17 @@ def check_dimension_coverage(
         graph: The graph to check.
         dimension: One of 'implemented', 'tested', 'verified',
                    'uat_coverage', 'uat_verified'.
-        exclude_status: Statuses to exclude from counts.
-        config: Project config dict.
+        exclude_status: Vestigial; coverage inclusion is now gated entirely by
+            ``config`` (the ``--status`` overlay) via
+            ``status_expects_implementation`` (REQ-d00258-C). Retained only for
+            call-site signature stability.
+        config: Project config dict (the ``--status`` overlay when applicable).
         level_filter: Optional predicate ``(level) -> bool`` limiting which
             requirement levels are counted (see ``aggregate_dimension``).
         message_suffix: Optional clarifying text appended to the message.
     """
     from elspais.graph.aggregation import aggregate_dimension
     from elspais.graph.metrics import fmt_assertion_count
-
-    if exclude_status is None:
-        from elspais.config import get_status_roles
-
-        exclude_status = get_status_roles(config or {}).coverage_excluded_statuses()
 
     dim_labels = {
         "implemented": ("Implemented", "code"),
@@ -2127,7 +2170,9 @@ def check_dimension_coverage(
     req_pct = (req_with_any / req_count * 100) if req_count > 0 else 0
     direct_pct = (direct_assertions / total_assertions * 100) if total_assertions > 0 else 0
     indirect_pct = (indirect_assertions / total_assertions * 100) if total_assertions > 0 else 0
-    note = _excluded_note(graph, exclude_status)
+    # REQ-d00258-C: note and counts read the SAME config (the --status overlay),
+    # so a promoted status is counted AND absent from the excluded-note.
+    note = _excluded_note(graph, config=config)
 
     # Build message showing both levels
     msg_parts = [
@@ -2363,7 +2408,7 @@ def run_code_checks(
     ref_sev = typed_config.rules.references
 
     checks = [
-        check_code_coverage(graph, exclude_status=exclude_status),
+        check_code_coverage(graph, exclude_status=exclude_status, config=config),
         check_unlinked_code(graph),
         _check_status_references(
             graph, NodeKind.CODE, StatusRole.RETIRED, ref_sev.retired, exclude_status
@@ -2913,11 +2958,14 @@ def render_section(
     if graph:
         raw_config = config if config else {}
         exclude_status = _resolve_exclude_status(args, config=raw_config)
-        for check in run_code_checks(graph, exclude_status=exclude_status, config=raw_config):
+        # REQ-d00258-C: --status becomes a coverage-config overlay so dimension
+        # counts AND the excluded-note agree (both read this one overlay).
+        cov_config = _config_with_status_overlay(raw_config, _status_flags(args))
+        for check in run_code_checks(graph, exclude_status=exclude_status, config=cov_config):
             report.add(check)
-        for check in run_test_checks(graph, exclude_status=exclude_status, config=raw_config):
+        for check in run_test_checks(graph, exclude_status=exclude_status, config=cov_config):
             report.add(check)
-        for check in run_uat_checks(graph, exclude_status=exclude_status, config=raw_config):
+        for check in run_uat_checks(graph, exclude_status=exclude_status, config=cov_config):
             report.add(check)
         for check in run_term_checks(graph, config=raw_config):
             report.add(check)
@@ -2956,6 +3004,8 @@ def compute_checks(
     fake_args.status = status_str.split(",") if status_str else None
 
     exclude_status = _resolve_exclude_status(fake_args, config=config)
+    # REQ-d00258-C: --status overlay drives coverage counts + note consistently.
+    cov_config = _config_with_status_overlay(config, _status_flags(fake_args))
 
     # Config checks
     if run_all:
@@ -2984,17 +3034,17 @@ def compute_checks(
 
     # Code checks
     if run_all or code_only:
-        for check in run_code_checks(graph, exclude_status=exclude_status, config=config):
+        for check in run_code_checks(graph, exclude_status=exclude_status, config=cov_config):
             report.add(check)
 
     # Test checks
     if run_all or tests_only:
-        for check in run_test_checks(graph, exclude_status=exclude_status, config=config):
+        for check in run_test_checks(graph, exclude_status=exclude_status, config=cov_config):
             report.add(check)
 
     # UAT checks
     if run_all or tests_only:
-        for check in run_uat_checks(graph, exclude_status=exclude_status, config=config):
+        for check in run_uat_checks(graph, exclude_status=exclude_status, config=cov_config):
             report.add(check)
 
     # Term checks
