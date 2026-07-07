@@ -210,6 +210,10 @@ class CoverageConfig(_StrictModel):
     )
     uat_coverage: CoverageSeverityConfig = Field(default_factory=_uat_severity)
     uat_verified: CoverageSeverityConfig = Field(default_factory=_uat_severity)
+    # Per-relationship label overrides (REQ-d00258). Keyed by relationship name
+    # (implements/verifies/yields/validates/validated); resolved to dimension
+    # labels via elspais.config.status_words.get_status_words().
+    status_words: dict[str, str] = Field(default_factory=dict)
 
 
 class ReferenceSeverityConfig(_StrictModel):

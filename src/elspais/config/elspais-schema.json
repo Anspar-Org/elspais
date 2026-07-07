@@ -272,6 +272,13 @@
         },
         "uat_verified": {
           "$ref": "#/$defs/CoverageSeverityConfig"
+        },
+        "status_words": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Status Words",
+          "type": "object"
         }
       },
       "title": "CoverageConfig",

@@ -117,14 +117,9 @@ def _severity_color(severity: str) -> str:
         return ""
 
 
-# Human-readable descriptions for each dimension (REQ-d00258-B vocabulary)
-_DIMENSION_LABELS: dict[str, str] = {
-    "implemented": "Implemented",
-    "tested": "Tested",
-    "verified": "Passing",
-    "uat_coverage": "UAT Covered",
-    "uat_verified": "UAT Passed",
-}
+# Dimension labels (the "Implemented/Tested/Passing/UAT Covered/UAT Passed"
+# vocabulary, REQ-d00258-B) now live in a single per-relationship source:
+# elspais.config.status_words.get_status_words(config).
 
 # Tooltip definitions for card-view badges
 DIMENSION_TIPS: dict[str, str] = {
@@ -186,6 +181,7 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         (per [rules.format.status_roles]) or it has no assertions.
     """
     from elspais.config.schema import CoverageConfig, CoverageSeverityConfig
+    from elspais.config.status_words import get_status_words
 
     empty: dict[str, Any] = {
         "impl_color": "",
@@ -236,7 +232,14 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
             if isinstance(cov_raw, dict):
                 cov_config = CoverageConfig(
                     **{
-                        k: CoverageSeverityConfig(**v) if isinstance(v, dict) else v
+                        # ``status_words`` is a flat dict[str, str] label-override
+                        # map (REQ-d00258), not a per-dimension severity block --
+                        # pass it through un-wrapped so it validates.
+                        k: (
+                            v
+                            if k == "status_words" or not isinstance(v, dict)
+                            else CoverageSeverityConfig(**v)
+                        )
                         for k, v in cov_raw.items()
                     }
                 )
@@ -273,6 +276,8 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         ("uat_verified", rollup.uat_verified, uat_ver_cfg, "uat_ver"),
     ]
 
+    status_words = get_status_words(config)
+
     result: dict[str, Any] = {}
     worst_severity_priority = 999
     worst_severity = ""
@@ -284,7 +289,7 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         tier = dim.tier
         severity = _tier_to_severity(tier, sev_cfg)
         color = _severity_color(severity)
-        label = _DIMENSION_LABELS[dim_key]
+        label = status_words[dim_key]
         desc = _TIER_DESCRIPTIONS.get(tier, tier)
         tip = f"{label}: {desc}"
 
