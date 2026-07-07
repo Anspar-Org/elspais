@@ -74,6 +74,48 @@ def relative_tier(
     return "missing", False
 
 
+def absolute_tier(dim: CoverageDimension, *, allow_indirect: bool = True) -> str:
+    """Absolute tier of a dimension, honoring ``allow_indirect``.
+
+    With ``allow_indirect=True`` this is exactly ``dim.tier`` (the generous
+    footing, REQ-d00069-L). With ``allow_indirect=False`` only DIRECT coverage
+    credits the state: a dimension covered solely via indirect conduction reads
+    ``missing`` (REQ-d00258, Phase 4). A failing dimension is ``failing`` either
+    way. The ``CoverageDimension.tier`` property is deliberately unchanged (it
+    remains the allow_indirect=True semantics used elsewhere).
+    """
+    if allow_indirect:
+        return dim.tier
+    eps = 1e-9
+    if dim.has_failures:
+        return "failing"
+    if dim.total > 0 and dim.direct >= dim.total - eps:
+        return "full"
+    if dim.direct > eps:
+        return "partial"
+    return "missing"
+
+
+def _allow_indirect_from_config(config: Any | None) -> bool:
+    """Extract ``[rules.coverage] allow_indirect`` from a config dict/model.
+
+    Defaults to True (generous footing) when absent. Accepts both the plain
+    config ``dict`` form and an already-parsed model, mirroring how
+    ``compute_coverage_tiers`` reads its coverage config.
+    """
+    if not config:
+        return True
+    rules = config.get("rules", {}) if isinstance(config, dict) else getattr(config, "rules", None)
+    if rules is None:
+        return True
+    cov = rules.get("coverage", {}) if isinstance(rules, dict) else getattr(rules, "coverage", None)
+    if cov is None:
+        return True
+    if isinstance(cov, dict):
+        return bool(cov.get("allow_indirect", True))
+    return bool(getattr(cov, "allow_indirect", True))
+
+
 def relative_tier_for(
     rollup: RollupMetrics,
     dimension: str,
@@ -91,7 +133,7 @@ def relative_tier_for(
     """
     denom_name = DENOMINATOR_DIMENSION.get(dimension)
     if denom_name is None:
-        return getattr(rollup, dimension).tier, False
+        return absolute_tier(getattr(rollup, dimension), allow_indirect=allow_indirect), False
     denom_labels = set(getattr(rollup, denom_name).indirect_pct_by_label)
     num_dim = tested_and_passing(rollup) if dimension == "verified" else getattr(rollup, dimension)
     return relative_tier(num_dim, denom_labels, allow_indirect=allow_indirect)
@@ -304,6 +346,7 @@ def tier_buckets(
     shared ``status_expects_implementation`` resolver (REQ-d00258-C).
     Behavior-preserving for default config.
     """
+    allow_indirect = _allow_indirect_from_config(config)
     buckets = TierBuckets()
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         if not _counts_for_coverage(config, node.status):
@@ -313,7 +356,7 @@ def tier_buckets(
         if rollup is None or getattr(rollup, dimension, None) is None:
             buckets.missing += 1
             continue
-        tier, _is_na = relative_tier_for(rollup, dimension)
+        tier, _is_na = relative_tier_for(rollup, dimension, allow_indirect=allow_indirect)
         bucket = TIER_TO_BUCKET.get(tier, "missing")
         setattr(buckets, bucket, getattr(buckets, bucket) + 1)
     return buckets
@@ -326,6 +369,7 @@ __all__ = [
     "DimensionSums",
     "LevelAggregate",
     "TierBuckets",
+    "absolute_tier",
     "aggregate_by_level",
     "aggregate_dimension",
     "relative_tier",

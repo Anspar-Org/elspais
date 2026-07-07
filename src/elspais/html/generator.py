@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from elspais import __version__
-from elspais.graph.aggregation import relative_tier
+from elspais.graph.aggregation import absolute_tier, relative_tier
 from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.html.theme import get_catalog
 from elspais.utilities.patterns import INSTANCE_SEPARATOR
@@ -299,12 +299,12 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
 
     for dim_key, dim, sev_cfg, prefix, denom in dim_map:
         if denom is None:
-            tier = dim.tier  # absolute: measured over all assertions
+            # absolute: measured over all assertions. When allow_indirect is
+            # False, only direct coverage credits the state (REQ-d00258, Phase 4).
+            tier = absolute_tier(dim, allow_indirect=cov_config.allow_indirect)
             is_na = False
         else:
-            # allow_indirect stays at its default here; the config knob is
-            # threaded in Phase 4 (Task 4.1).
-            tier, is_na = relative_tier(dim, denom)
+            tier, is_na = relative_tier(dim, denom, allow_indirect=cov_config.allow_indirect)
         # A `missing` tier that is N/A (empty relative denominator) is neutral:
         # nothing to measure, so it resolves to `info` regardless of the
         # dimension's configured `missing` severity. A non-N/A `missing` is a

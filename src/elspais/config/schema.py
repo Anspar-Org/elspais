@@ -210,6 +210,11 @@ class CoverageConfig(_StrictModel):
     )
     uat_coverage: CoverageSeverityConfig = Field(default_factory=_uat_severity)
     uat_verified: CoverageSeverityConfig = Field(default_factory=_uat_severity)
+    # When True (default), indirect coverage (REFINES-conducted, blanket, and
+    # other transitive evidence) credits a dimension's badge/tier state -- the
+    # generous footing (REQ-d00069-L). When False, ONLY direct coverage lifts a
+    # state; indirect-only coverage reads `missing` (REQ-d00258, Phase 4).
+    allow_indirect: bool = True
     # Per-relationship label overrides (REQ-d00258). Keyed by relationship name
     # (implements/verifies/yields/validates/validated); resolved to dimension
     # labels via elspais.config.status_words.get_status_words().

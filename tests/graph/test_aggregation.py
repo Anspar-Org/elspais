@@ -7,6 +7,7 @@ from elspais.graph.aggregation import (
     DENOMINATOR_DIMENSION,
     TIER_TO_BUCKET,
     _level_keys,
+    absolute_tier,
     aggregate_by_level,
     aggregate_dimension,
     relative_tier,
@@ -361,6 +362,114 @@ def test_relative_tier_shared_helper_measures_over_denominator():
     dim = _dim({"A"})
     assert relative_tier(dim, {"A", "B"}) == ("partial", False)
     assert relative_tier(dim, set()) == ("missing", True)
+
+
+# Verifies: REQ-d00258
+# Verifies: REQ-d00069-L
+class TestAllowIndirect:
+    """``allow_indirect`` toggles whether indirect coverage credits the state.
+
+    Default True preserves the generous footing (REQ-d00069-L). When False, only
+    direct coverage lifts a tier -- for the absolute helper (``absolute_tier``),
+    the shared relative helper (``relative_tier_for``), and the requirement-level
+    ``tier_buckets`` rollup.
+    """
+
+    def test_absolute_tier_indirect_only_true_full_false_missing(self):
+        """An absolute dimension covered only indirectly (direct=0) is ``full``
+        when allow_indirect=True and ``missing`` when False."""
+        dim = _dim({"A", "B"}, direct=set(), total=2)
+        assert absolute_tier(dim) == "full"  # default True
+        assert absolute_tier(dim, allow_indirect=True) == "full"
+        assert absolute_tier(dim, allow_indirect=False) == "missing"
+
+    def test_absolute_tier_direct_full_under_both(self):
+        """Direct coverage credits the absolute tier regardless of the flag."""
+        dim = _dim({"A", "B"}, direct={"A", "B"}, total=2)
+        assert absolute_tier(dim, allow_indirect=True) == "full"
+        assert absolute_tier(dim, allow_indirect=False) == "full"
+
+    def test_absolute_tier_direct_partial_when_false(self):
+        """Partial direct credit -> ``partial`` under allow_indirect=False."""
+        dim = _dim({"A", "B"}, direct={"A"}, total=2)
+        assert absolute_tier(dim, allow_indirect=False) == "partial"
+
+    def test_absolute_tier_failing_wins(self):
+        """A failing dimension is ``failing`` under both settings."""
+        dim = CoverageDimension(
+            total=1,
+            direct=1,
+            indirect=1,
+            has_failures=True,
+            failing_labels={"A"},
+            direct_pct_by_label={"A": 1.0},
+            indirect_pct_by_label={"A": 1.0},
+        )
+        assert absolute_tier(dim, allow_indirect=False) == "failing"
+        assert absolute_tier(dim, allow_indirect=True) == "failing"
+
+    def test_relative_tier_for_absolute_dim_honors_allow_indirect(self):
+        """``relative_tier_for`` on an absolute dim (implemented) credits direct
+        only when allow_indirect=False."""
+        rollup = RollupMetrics(
+            total_assertions=2,
+            implemented=_dim({"A", "B"}, direct=set(), total=2),
+        )
+        assert relative_tier_for(rollup, "implemented") == ("full", False)
+        assert relative_tier_for(rollup, "implemented", allow_indirect=False) == (
+            "missing",
+            False,
+        )
+
+    def test_relative_tier_for_chained_dim_honors_allow_indirect(self):
+        """A chained dim (tested) credits its direct numerator only when False."""
+        rollup = RollupMetrics(
+            total_assertions=2,
+            implemented=_dim({"A", "B"}, total=2),
+            tested=_dim({"A", "B"}, direct=set(), total=2),
+        )
+        assert relative_tier_for(rollup, "tested") == ("full", False)
+        assert relative_tier_for(rollup, "tested", allow_indirect=False) == (
+            "missing",
+            False,
+        )
+
+    def test_tier_buckets_absolute_dim_config_false(self):
+        """`[rules.coverage] allow_indirect=false` moves an indirect-only
+        implemented req from the ``full`` bucket to ``missing``."""
+        req = _make_req("REQ-d00010")
+        req.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=2,
+                implemented=_dim({"A", "B"}, direct=set(), total=2),
+            ),
+        )
+        graph = _make_graph(req)
+        assert tier_buckets(graph, "implemented").full == 1  # default True
+        cfg = {"rules": {"coverage": {"allow_indirect": False}}}
+        b = tier_buckets(graph, "implemented", config=cfg)
+        assert b.missing == 1
+        assert b.full == 0
+
+    def test_tier_buckets_relative_dim_config_false(self):
+        """allow_indirect=false also moves an indirect-only tested req to
+        ``missing``."""
+        req = _make_req("REQ-d00011")
+        req.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=2,
+                implemented=_dim({"A", "B"}, total=2),
+                tested=_dim({"A", "B"}, direct=set(), total=2),
+            ),
+        )
+        graph = _make_graph(req)
+        assert tier_buckets(graph, "tested").full == 1
+        cfg = {"rules": {"coverage": {"allow_indirect": False}}}
+        b = tier_buckets(graph, "tested", config=cfg)
+        assert b.missing == 1
+        assert b.full == 0
 
 
 # Verifies: REQ-d00258-C

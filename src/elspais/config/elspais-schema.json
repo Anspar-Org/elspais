@@ -273,6 +273,11 @@
         "uat_verified": {
           "$ref": "#/$defs/CoverageSeverityConfig"
         },
+        "allow_indirect": {
+          "default": true,
+          "title": "Allow Indirect",
+          "type": "boolean"
+        },
         "status_words": {
           "additionalProperties": {
             "type": "string"
