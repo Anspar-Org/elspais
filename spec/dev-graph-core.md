@@ -422,11 +422,11 @@ A. elspais SHALL accept a `USER_JOURNEY` id as a `Verifies:` target in code and 
 
 B. The annotation pipeline SHALL roll up verifying test results to the journey via the standard coverage convention, computing a per-journey verification metric from the pass/fail status of all tests that `Verifies:` the journey.
 
-C. A fully-verified journey SHALL feed `uat_verified` credit on each requirement that the journey's `Validates:` edges name, using the same `uat_verified` dimension populated by the existing UAT annotation pass.
+C. A journey SHALL feed `uat_verified` credit on each requirement its `Validates:` edges name in proportion to its verification, using the same `uat_verified` dimension populated by the existing UAT annotation pass: a fully-verified journey SHALL credit full; a partially-verified journey with no failing step SHALL credit partial (its verified-step ratio); a journey with any failing step SHALL contribute a failure signal (`has_failures`) to the named assertions rather than positive credit; an unverified journey SHALL credit none. This aligns with the partial verification tier of REQ-d00256-C.
 
 D. The test-to-journey-to-requirement *Traceability* chain SHALL be visible in `elspais trace` output and the viewer, showing which journeys verify which requirements and their verification status.
 
-*End* *Test-to-Journey UAT Verification* | **Hash**: 9381f1e5
+*End* *Test-to-Journey UAT Verification* | **Hash**: bdad84a0
 
 ---
 

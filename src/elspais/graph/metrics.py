@@ -306,14 +306,18 @@ class RollupMetrics:
         verified_indirect_labels: set[str],
         verified_failures: bool,
         verified_carried: bool = False,
-        uat_verified_direct_labels: set[str],
-        uat_verified_indirect_labels: set[str],
+        uat_verified_direct_pct: dict[str, float],
+        uat_verified_indirect_pct: dict[str, float],
         uat_verified_failures: bool,
     ) -> None:
         """Populate tested, verified, and uat_verified dimensions.
 
         Called by annotate_coverage() after finalize() with the label sets
-        from the annotator's tracking variables.
+        from the annotator's tracking variables. ``uat_verified`` credit is
+        FRACTIONAL per assertion (REQ-d00255-C): a partially-verified journey
+        credits its verified-step ratio, so the annotator passes per-label
+        fraction maps rather than plain label sets. tested/verified remain
+        all-or-nothing (1.0) label sets.
         """
         n = self.total_assertions
         tested_all = tested_direct_labels | tested_indirect_labels
@@ -338,16 +342,27 @@ class RollupMetrics:
             indirect_pct_by_label=dict.fromkeys(verified_all, 1.0),
         )
         self.verified.carried = verified_carried
-        uat_all = uat_verified_direct_labels | uat_verified_indirect_labels
+        # uat_verified is fractional (REQ-d00255-C): indirect (generous) footing
+        # is the per-label max of the direct and blanket fractions. direct /
+        # indirect are the sums of those fractions, so a partial journey yields
+        # a sub-total sum -> a "partial" tier and per-assertion standing.
+        uat_labels = set(uat_verified_direct_pct) | set(uat_verified_indirect_pct)
+        uat_indirect_pct_by_label = {
+            label: max(
+                uat_verified_direct_pct.get(label, 0.0),
+                uat_verified_indirect_pct.get(label, 0.0),
+            )
+            for label in uat_labels
+        }
         self.uat_verified = CoverageDimension(
             total=n,
-            direct=len(uat_verified_direct_labels),
-            indirect=len(uat_all),
+            direct=sum(uat_verified_direct_pct.values()),
+            indirect=sum(uat_indirect_pct_by_label.values()),
             has_failures=uat_verified_failures,
-            direct_labels=set(uat_verified_direct_labels),
-            indirect_labels=set(uat_all),
-            direct_pct_by_label=dict.fromkeys(uat_verified_direct_labels, 1.0),
-            indirect_pct_by_label=dict.fromkeys(uat_all, 1.0),
+            direct_labels={lbl for lbl, f in uat_verified_direct_pct.items() if f > 0},
+            indirect_labels={lbl for lbl, f in uat_indirect_pct_by_label.items() if f > 0},
+            direct_pct_by_label=dict(uat_verified_direct_pct),
+            indirect_pct_by_label=uat_indirect_pct_by_label,
         )
 
 

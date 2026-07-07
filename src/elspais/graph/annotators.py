@@ -1073,12 +1073,35 @@ class JourneyVerification:
         fully_verified: True iff every unit is verified with no failures;
             the journey's Validates targets may be credited.
         has_failures: True iff any verifying test failed.
+        verified_steps: Count of steps verified (>=1 pass, 0 fail).
+        total_steps: Count of addressable steps (0 for a whole-journey unit).
     """
 
     tier: str = "none"
     failing_steps: list[str] = field(default_factory=list)
     fully_verified: bool = False
     has_failures: bool = False
+    verified_steps: int = 0
+    total_steps: int = 0
+
+    @property
+    def fraction(self) -> float:
+        """Verified-step ratio in [0, 1] used to credit ``uat_verified``.
+
+        A fully-verified journey credits full (1.0); a partial journey (some
+        steps verified, none failing) credits its verified/total step ratio
+        (e.g. 5 of 7 -> ~0.71 -> a partial standing / yellow); an unverified
+        journey credits none (0.0). This proportional crediting is what lets a
+        partially-verified journey read as "partial" rather than "missing"
+        (REQ-d00255-C). Whole-journey (stepless) units have no ratio, so they
+        credit full only when ``fully_verified`` (else 0.0).
+        """
+        # Implements: REQ-d00255-C
+        if self.fully_verified:
+            return 1.0
+        if self.total_steps > 0:
+            return self.verified_steps / self.total_steps
+        return 0.0
 
     @property
     def verdict(self) -> str:
@@ -1167,6 +1190,8 @@ def annotate_journey_verification(graph: FederatedGraph) -> None:
                 elif passed:
                     verified += 1
                 # else: untested step -> contributes to partial
+            v.verified_steps = verified
+            v.total_steps = len(steps)
             if v.has_failures:
                 v.tier = "failing"
             elif verified == len(steps):
@@ -1514,14 +1539,23 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                         verified_saw_signal = True
                         verified_all_carried = False
 
-        # Implements: REQ-d00069-A, REQ-d00255, REQ-d00256
+        # Implements: REQ-d00069-A, REQ-d00255-C, REQ-d00256
         # UAT roll-up: source each validating journey's verdict from its
         # journey_verification metric (computed by annotate_journey_verification,
         # which rolls each journey's STEP/whole-journey verifying tests up). The
         # direct/indirect split still depends on whether Validates: named
-        # assertions; only the source of the pass/fail verdict has changed.
-        uat_validated_direct_labels: set[str] = set()
-        uat_validated_indirect_labels: set[str] = set()
+        # assertions. Crediting is PROPORTIONAL to the journey's verification
+        # (REQ-d00255-C): a fully-verified journey credits full (1.0); a
+        # partially-verified journey with no failing step credits its
+        # verified-step ratio (e.g. 5 of 7 -> ~0.71), which makes the named
+        # assertions read "partial" (yellow) rather than "missing"; a journey
+        # with any failing step contributes only a failure signal (-> red); an
+        # unverified journey credits none (-> missing). Per-label fractions are
+        # combined across journeys by max (a failure by any journey still flags
+        # has_failures), mirroring how uat_coverage distinguishes blanket vs
+        # assertion-targeted Validates.
+        uat_direct_pct: dict[str, float] = {}
+        uat_indirect_pct: dict[str, float] = {}
         uat_has_failures = False
         for jny_node, assertion_targets in jny_nodes_for_result_lookup:
             v = jny_node.get_metric("journey_verification")
@@ -1530,15 +1564,16 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
             if v.has_failures:
                 uat_has_failures = True
                 continue
-            if not v.fully_verified:
-                continue  # partial / untested journey credits nothing
+            frac = v.fraction  # 1.0 full, verified/total for partial, 0 none
+            if frac <= 0:
+                continue  # unverified journey credits nothing
             if assertion_targets:
                 for label in assertion_targets:
                     if label in assertion_labels:
-                        uat_validated_direct_labels.add(label)
+                        uat_direct_pct[label] = max(uat_direct_pct.get(label, 0.0), frac)
             else:
                 for label in assertion_labels:
-                    uat_validated_indirect_labels.add(label)
+                    uat_indirect_pct[label] = max(uat_indirect_pct.get(label, 0.0), frac)
 
         # Finalize metrics (computes aggregate coverage counts + implemented/uat_coverage dims)
         metrics.finalize()
@@ -1551,8 +1586,8 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
             verified_indirect_labels=validated_indirect_labels,
             verified_failures=has_failures,
             verified_carried=(verified_saw_signal and verified_all_carried),
-            uat_verified_direct_labels=uat_validated_direct_labels,
-            uat_verified_indirect_labels=uat_validated_indirect_labels,
+            uat_verified_direct_pct=uat_direct_pct,
+            uat_verified_indirect_pct=uat_indirect_pct,
             uat_verified_failures=uat_has_failures,
         )
 
@@ -1623,7 +1658,12 @@ def _conduct_refines_coverage(graph: FederatedGraph) -> None:
     # Snapshot per-requirement assertion labels and local (pre-conduction) leaf
     # evidence so the recursion reads immutable input while we overwrite dims.
     labels_by_req: dict[str, list[str]] = {}
-    local_evidence: dict[str, dict[str, tuple[set[str], set[str]]]] = {}
+    # Snapshot the local per-label FRACTIONS (not just label membership) so
+    # conduction preserves fractional local evidence. Most dimensions have
+    # all-or-nothing local evidence (1.0), but uat_verified is fractional
+    # (a partially-verified journey credits its verified-step ratio,
+    # REQ-d00255-C); snapping it back to 1.0 here would discard that partial.
+    local_evidence: dict[str, dict[str, tuple[dict[str, float], dict[str, float]]]] = {}
     for req in reqs:
         metrics = req.get_metric("rollup_metrics")
         if metrics is None:
@@ -1634,10 +1674,10 @@ def _conduct_refines_coverage(graph: FederatedGraph) -> None:
             if child.kind == NodeKind.ASSERTION and child.get_field("label", "")
         ]
         labels_by_req[req.id] = labels
-        ev: dict[str, tuple[set[str], set[str]]] = {}
+        ev: dict[str, tuple[dict[str, float], dict[str, float]]] = {}
         for dim_name in _PROPAGATING_DIMENSIONS:
             dim = getattr(metrics, dim_name)
-            ev[dim_name] = (set(dim.direct_labels), set(dim.indirect_labels))
+            ev[dim_name] = (dict(dim.direct_pct_by_label), dict(dim.indirect_pct_by_label))
         local_evidence[req.id] = ev
 
     memo: dict[tuple[str, str, str], float] = {}
@@ -1649,10 +1689,11 @@ def _conduct_refines_coverage(graph: FederatedGraph) -> None:
         mode: str,
         visiting: frozenset[str],
     ) -> float:
-        direct_labels, indirect_labels = local_evidence[req.id][dim_name]
+        direct_pct_local, indirect_pct_local = local_evidence[req.id][dim_name]
         direct_vals: list[float] = []
-        if label in direct_labels:
-            direct_vals.append(1.0)
+        local_direct = direct_pct_local.get(label, 0.0)
+        if local_direct > 0:
+            direct_vals.append(local_direct)
         blanket_refines_vals: list[float] = []
         for edge in req.iter_outgoing_edges():
             if not edge.kind.conducts_coverage():
@@ -1667,10 +1708,13 @@ def _conduct_refines_coverage(graph: FederatedGraph) -> None:
             return sum(direct_vals) / len(direct_vals)
         if mode == "indirect":
             candidates: list[float] = []
-            if label in indirect_labels:
+            local_indirect = indirect_pct_local.get(label, 0.0)
+            if local_indirect > 0:
                 # Local whole-requirement leaf evidence (a whole-req test/code/
-                # journey) genuinely exercises every assertion -> full credit.
-                candidates.append(1.0)
+                # journey) exercises every assertion -> its own local fraction
+                # (1.0 for all-or-nothing dims; the journey's verified-step
+                # ratio for a partial uat_verified, REQ-d00255-C).
+                candidates.append(local_indirect)
             if blanket_refines_vals:
                 # A whole-requirement Refines names no assertion, so it is worth
                 # only one assertion's share (1/N) of the refining requirement's

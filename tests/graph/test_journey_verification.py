@@ -136,13 +136,62 @@ def test_untested_step_gives_partial(graph_untested_step):
     assert jv.fully_verified is False
 
 
-# Verifies: REQ-d00256
-def test_untested_step_credits_no_uat(graph_untested_step):
-    """A partial journey credits no uat_verified coverage on its Validates target."""
+# Verifies: REQ-d00255-C
+def test_untested_step_credits_partial_uat(graph_untested_step):
+    """A partial journey (2 of 3 steps verified, none failing) now credits
+    PARTIAL uat_verified on its Validates target -- proportional to its
+    verified-step ratio -- rather than nothing (REQ-d00255-C).
+
+    Deliberate semantics change: this previously asserted ``tier == "none"``
+    (all-or-nothing crediting). Under proportional crediting the assertion the
+    journey validates is credited its 2/3 verified-step fraction, so the
+    dimension reads "partial" (yellow) not "missing" (grey).
+    """
     req = graph_untested_step.find_by_id("REQ-d00001")
     uat = req.get_metric("rollup_metrics").uat_verified
-    assert uat.tier == "none"
+    assert uat.tier == "partial"
     assert uat.has_failures is False
+    # Validates: REQ-d00001-A is assertion-targeted -> the fraction lands on A,
+    # strictly between 0 and 1 (2 of 3 steps verified ~= 0.667).
+    frac = uat.indirect_pct_by_label["A"]
+    assert 0.0 < frac < 1.0
+    assert frac == pytest.approx(2 / 3)
+
+
+# Verifies: REQ-d00255-C, REQ-d00258-G
+def test_partial_journey_consistency_standing_and_tier(graph_untested_step):
+    """The SINGLE uat_verified metric change flows to BOTH levels: the
+    per-assertion UAT Passed standing (compute_assertion_coverage_states) reads
+    "partial" for the validated assertion AND the requirement-level uat_verified
+    tier reads "partial" -- both projected from the same rollup, no recompute."""
+    from elspais.html.generator import compute_assertion_coverage_states
+
+    req = graph_untested_step.find_by_id("REQ-d00001")
+    # Requirement-level dimension tier.
+    assert req.get_metric("rollup_metrics").uat_verified.tier == "partial"
+    # Per-assertion standing for the validated assertion A.
+    states = compute_assertion_coverage_states(req)
+    assert states["A"]["uat_verified"] == "partial"
+
+
+# Verifies: REQ-d00255-C
+def test_all_steps_pass_credits_full_uat(graph_steps_all_pass):
+    """A fully-verified journey credits FULL (1.0) uat_verified -- unchanged."""
+    req = graph_steps_all_pass.find_by_id("REQ-d00001")
+    uat = req.get_metric("rollup_metrics").uat_verified
+    assert uat.tier == "full-direct"
+    assert uat.has_failures is False
+    assert uat.indirect_pct_by_label["A"] == pytest.approx(1.0)
+
+
+# Verifies: REQ-d00255-C
+def test_failing_step_credits_failure_signal(graph_one_step_fails):
+    """A journey with a failing step contributes has_failures (-> red), not
+    positive uat_verified credit (REQ-d00255-C)."""
+    req = graph_one_step_fails.find_by_id("REQ-d00001")
+    uat = req.get_metric("rollup_metrics").uat_verified
+    assert uat.tier == "failing"
+    assert uat.has_failures is True
 
 
 # Verifies: REQ-d00255

@@ -144,7 +144,7 @@
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | d9d4bc98 |
 | REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | 28c8c538 |
 | REQ-d00254 | Coverage-Based and Aggregate Test Verification                | dev-graph-core.md       | 4975d47a |
-| REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | 9381f1e5 |
+| REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | bdad84a0 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | 44671fc1 |
 | REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 45bb196f |
 | REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | dd54712c |
