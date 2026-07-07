@@ -96,14 +96,6 @@ class ViewStats:
     assertion_count: int = 0  # Total unique assertions
 
 
-def _val_tier(key: str) -> tuple[str, str]:
-    """Look up a validation tier from the catalog, returning (color_key, description)."""
-    from elspais.html.theme import get_catalog
-
-    entry = get_catalog().by_key(key)
-    return (entry.color_key, entry.description)
-
-
 # ── Severity-driven coverage tiers ──
 
 SEVERITY_PRIORITY: dict[str, int] = {"error": 0, "warning": 1, "info": 2, "ok": 3}

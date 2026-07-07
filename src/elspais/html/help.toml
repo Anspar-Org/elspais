@@ -254,41 +254,6 @@ may not have been run, or the test results have not been imported into
 the traceability graph."""
 
 # ---------------------------------------------------------------------------
-# Validation Tiers (Active Badge Quality)
-# ---------------------------------------------------------------------------
-
-[validation_tiers.full-direct]
-label = "Full Direct"
-description = "All assertions covered and validated"
-long_description = """All assertions have direct code implementations and all
-tests are passing. This is the highest quality tier."""
-
-[validation_tiers.full-indirect]
-label = "Full Indirect"
-description = "All assertions validated (including indirect)"
-long_description = """All assertions are validated, but some coverage comes
-through inherited implementations from child requirements rather than
-direct code references."""
-
-[validation_tiers.partial]
-label = "Partial"
-description = "Some coverage, no failures"
-long_description = """Some assertions have implementations and passing tests,
-but not all assertions are fully covered yet."""
-
-[validation_tiers.failing]
-label = "Failing"
-description = "Test failures detected"
-long_description = """One or more tests referencing this requirement are failing.
-This takes priority over coverage level."""
-
-[validation_tiers.anomalous]
-label = "Anomalous"
-description = "Unexpected coverage gaps"
-long_description = """Tests exist but results are missing, or tests exist but
-no code implementation is found. Investigate the test/code linkage."""
-
-# ---------------------------------------------------------------------------
 # Coverage Severity (theme-catalog severity colors)
 # ---------------------------------------------------------------------------
 
@@ -327,3 +292,12 @@ description = "A verifying result for this assertion failed"
 [coverage_standing.missing]
 label = "Missing"
 description = "No evidence for this assertion on this dimension"
+
+[coverage_caveat.indirect]
+label = "Indirect (~)"
+description = "Coverage credited via indirect evidence"
+long_description = """The trailing ~ marks credit that is not fully direct
+(indirect > direct) -- e.g. a link that named the whole requirement rather than
+the specific assertion, or REFINES-conducted coverage. The state color is
+unchanged; hover text always states the direct/indirect split. Set
+[rules.coverage] allow_indirect = false to require direct evidence."""

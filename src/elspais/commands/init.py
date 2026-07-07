@@ -295,6 +295,21 @@ _FIELD_COMMENTS: dict[str, str] = {
     "rules.coverage.*.partial": "Some assertions covered, some not",
     "rules.coverage.*.failing": "Has coverage but test results show failures",
     "rules.coverage.*.missing": "No coverage at all",
+    "rules.coverage.allow_indirect": (
+        "true (default): indirect (REFINES-conducted/whole-req) evidence credits "
+        "a dimension's state; false: only direct assertion-level evidence credits "
+        "it (indirect shown as not-credited in hover)"
+    ),
+    "rules.coverage.status_words": (
+        "Per-relationship coverage labels. Keys: implements|verifies|yields|"
+        'validates|validated. Defaults: Implemented / Tested / Passing / "UAT '
+        'Covered" / "UAT Passed"'
+    ),
+    "rules.coverage.status_words.implements": "Label for implemented dimension",
+    "rules.coverage.status_words.verifies": "Label for tested dimension",
+    "rules.coverage.status_words.yields": "Label for passing dimension",
+    "rules.coverage.status_words.validates": "Label for UAT-covered dimension",
+    "rules.coverage.status_words.validated": "Label for UAT-passed dimension",
     "rules.references": "Severity for code/test references to non-active requirements",
     "rules.references.retired": ('"ok" | "info" | "warning" | "error" — refs to retired REQs'),
     "rules.references.provisional": (
@@ -361,6 +376,12 @@ _FIELD_COMMENTS: dict[str, str] = {
     "statuses.*.color": (
         'Optional badge color for this status (hex "#RRGGBB"); omit for a '
         "deterministic hash-derived color"
+    ),
+    "statuses.*.expects_implementation": (
+        "Whether this status expects code implementation. Unset = derive from "
+        "role (active-role -> true, else false). true: absent implementation is "
+        "a red gap counted in %-implemented; false: neutral grey, excluded from "
+        "the aggregate"
     ),
 }
 
@@ -487,8 +508,8 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
-def _add_field_comment(container: Any, field_path: str) -> None:
-    """Add a TOML comment line above a field if one exists in _FIELD_COMMENTS."""
+def _resolve_field_comment(field_path: str) -> str | None:
+    """Resolve a field's comment string, honoring `parent.*.field` wildcards."""
     comment = _FIELD_COMMENTS.get(field_path)
     if not comment:
         # Try wildcard match for dict-of-model fields like levels.*, coverage.*
@@ -500,6 +521,12 @@ def _add_field_comment(container: Any, field_path: str) -> None:
                 comment = _FIELD_COMMENTS.get(f"{parent_parts[0]}.*.{field}")
             if not comment:
                 comment = _FIELD_COMMENTS.get(f"{parent}.*.{field}")
+    return comment
+
+
+def _add_field_comment(container: Any, field_path: str) -> None:
+    """Add a TOML comment line above a field if one exists in _FIELD_COMMENTS."""
+    comment = _resolve_field_comment(field_path)
     if comment:
         container.add(tomlkit.comment(comment))
 
@@ -538,10 +565,25 @@ def _add_table(
                             continue
                         _add_field_comment(inner, f"{sub_field_path}.{ik}")
                         inner.add(ik, iv)
+                    inner_comment = _FIELD_COMMENTS.get(sub_field_path)
+                    if inner_comment:
+                        inner.comment(inner_comment)
                     sub.add(sk, inner)
                 else:
-                    _add_field_comment(sub, sub_field_path)
-                    sub.add(sk, sv)
+                    # A bare scalar sharing a table with sub-tables (e.g.
+                    # rules.coverage.allow_indirect alongside the per-dimension
+                    # tables) gets hoisted above them by tomlkit, orphaning a
+                    # standalone comment. Attach it inline so it stays with the
+                    # value.
+                    parent_has_tables = any(isinstance(x, dict) for x in v.values())
+                    field_comment = _resolve_field_comment(sub_field_path)
+                    if parent_has_tables and field_comment:
+                        it = tomlkit.item(sv)
+                        it.comment(field_comment)
+                        sub.add(sk, it)
+                    else:
+                        _add_field_comment(sub, sub_field_path)
+                        sub.add(sk, sv)
             sub_comment = _FIELD_COMMENTS.get(field_path)
             if sub_comment:
                 sub.comment(sub_comment)
@@ -713,6 +755,24 @@ def generate_config(
         '#   skip_dirs = ["user-journeys"]',
     ]
     for line in _targets_example_lines:
+        doc.add(tomlkit.comment(line))
+
+    # Append a commented-out [statuses.<Name>] example so users see how to set
+    # per-status metadata (color, expects_implementation) without activating it.
+    _statuses_example_lines = [
+        "",
+        "[statuses.<Name>] -- optional per-status metadata (opt-in)",
+        "expects_implementation gates the Implemented badge/rollup for reqs with",
+        "this status. Unset = derive from role (active-role -> true, else false).",
+        "  true  -> absent implementation is a red gap, counted in %-implemented",
+        "  false -> absent implementation is neutral grey, excluded from the aggregate",
+        "A surgical alternative to reassigning a status into the `active` role",
+        "(which also changes color, sort order, analysis inclusion, and visibility).",
+        "",
+        "[statuses.Draft]",
+        "expects_implementation = true   # Draft reqs are expected to be built",
+    ]
+    for line in _statuses_example_lines:
         doc.add(tomlkit.comment(line))
 
     return tomlkit.dumps(doc)

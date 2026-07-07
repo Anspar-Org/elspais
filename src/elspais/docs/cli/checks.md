@@ -299,10 +299,28 @@ Each dimension resolves to a **tier** that drives severity and UI color:
 
 | Tier | Meaning |
 |------|---------|
-| `missing` | No coverage at all |
+| `missing` | No coverage at all (grey/neutral when the denominator is empty; a red gap only when in-scope) |
 | `partial` | Some assertions covered, not all |
 | `full` | All assertions covered (the direct/indirect distinction is shown as a `~` marker, not a separate tier) |
 | `failing` | Coverage exists but results are failing |
+
+Tier, per-assertion standing, and bucket share this one vocabulary
+(`full` / `partial` / `failing` / `missing`).
+
+**Relative denominators.** `Tested` and `Passing` are measured against their
+*own* denominator, not the whole spec: `Tested` counts tested / **implemented**
+assertions, and `Passing` counts passing / **tested** assertions. An empty
+denominator (nothing implemented, or nothing tested) resolves to `missing` at
+neutral severity (grey) rather than a red gap -- you cannot test what is not
+built. A failing in-denominator label is always `failing` (red), regardless of
+the fraction.
+
+**Direct vs indirect credit.** By default (`[rules.coverage] allow_indirect =
+true`) indirect evidence (a whole-requirement link, or `Refines:` conduction)
+credits the tier, and a trailing `~` flags any tier whose evidence is not fully
+direct. Set `allow_indirect = false` to require direct assertion-level evidence;
+indirect-only coverage then reads `missing`/`partial` and is shown as
+"not credited" in the viewer hover.
 
 ### `code_tested` — line coverage
 

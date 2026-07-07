@@ -295,9 +295,14 @@ index_associates = false
 
 #──────────────────────────────────────────────────────────────────────────────
 # STATUSES - Optional Per-Status Metadata
-# Attach color (and future metadata) to status names referenced by
-# [rules.format.status_roles]. Unspecified statuses fall back to a
-# deterministic hash-derived color.
+# Attach metadata to status names referenced by [rules.format.status_roles].
+#   color:                  badge color; unspecified statuses fall back to a
+#                           deterministic hash-derived color.
+#   expects_implementation: whether this status expects code implementation.
+#                           Unset = derive from role (active-role -> true, else
+#                           false). true  -> absent implementation is a red gap,
+#                           counted in the project %-implemented denominator;
+#                           false -> neutral grey, excluded from the aggregate.
 #──────────────────────────────────────────────────────────────────────────────
 
 [statuses.Active]
@@ -305,6 +310,21 @@ color = "#198754"
 
 [statuses.Legacy]
 color = "#6c757d"
+
+# expects_implementation is the surgical alternative to reassigning a status
+# into the `active` role. The blunt approach also changes color, sort order,
+# analysis inclusion, and default visibility:
+#
+#   [rules.format.status_roles]
+#   active = ["Active", "Draft"]        # Draft becomes active for EVERYTHING
+#
+# The surgical approach keeps Draft in its provisional role and flips only the
+# implementation expectation:
+#
+#   [rules.format.status_roles]
+#   active = ["Active"]
+#   [statuses.Draft]
+#   expects_implementation = true       # only impl-expectation flips
 
 #──────────────────────────────────────────────────────────────────────────────
 # VALIDATION RULES
@@ -619,18 +639,22 @@ alternative for suites too small to worry about the JSON-report size cost.
 
 `[rules.coverage]` maps each coverage dimension's tier to a severity
 (`"ok"`, `"info"`, `"warning"`, or `"error"`), which in turn drives both
-health-check exit behavior and the viewer's badge/legend colors:
+health-check exit behavior and the viewer's badge/legend colors. Tiers use
+the unified state vocabulary -- `full` / `partial` / `failing` / `missing`
+(the legacy `full_direct` / `full_indirect` / `none` keys are retired;
+`missing` replaces `none`, and the direct-vs-indirect quality is now a caveat,
+not a tier):
 
 ```toml
 [rules.coverage.implemented]
-full_direct   = "ok"       # default
-full_indirect = "info"     # default
-partial       = "warning"  # default
-none          = "error"    # default
-failing       = "error"    # default
+full    = "ok"       # default: 100% of the dimension's denominator
+partial = "warning"  # default: 0 < fraction < 1
+failing = "error"    # default: a failed result on an in-denominator label
+missing = "error"    # default: no coverage
 
-# uat_coverage/uat_verified default none/partial to "info" (UAT gaps are
-# lower-priority than code gaps); verified defaults none to "warning".
+# uat_coverage/uat_verified default missing to "info" (UAT gaps are
+# lower-priority than code gaps); verified (Passing) defaults missing to
+# "warning".
 ```
 
 Severity strings are not colors themselves -- the viewer resolves each
@@ -646,3 +670,54 @@ not reuse the `error` severity color in the viewer toolbar's coverage filter,
 which uses its own hardcoded color for that state. See `elspais docs checks`
 (*Dimension tiers*) for the tier model and `graph/aggregation.py` for the
 single shared aggregation these severities feed.
+
+#### Relative denominators (the coverage chain)
+
+Each downstream dimension is measured against its *own* denominator, not the
+whole spec, so an upstream gap is not double-counted downstream:
+
+```text
+Implemented   built     / ALL assertions        (absolute)
+Tested        tested    / IMPLEMENTED assertions (relative)
+Passing       passing   / TESTED assertions      (relative)
+```
+
+An **empty denominator** (nothing implemented -> Tested; nothing tested ->
+Passing) renders `missing` at neutral severity (grey), never a red gap -- you
+cannot test what is not built. A **failing** in-denominator label renders
+`failing` (red) regardless of the fraction.
+
+#### `allow_indirect` (direct vs indirect credit)
+
+```toml
+[rules.coverage]
+allow_indirect = true   # default
+```
+
+Indirect coverage is evidence that named the whole requirement rather than the
+specific assertion (`Implements: REQ-xxx`), or that reached an assertion via
+`Refines:` conduction. When `allow_indirect = true` (default), indirect
+evidence credits a dimension's headline state, and a trailing `~` marker flags
+any state whose evidence is not fully direct (`indirect > direct`); hover text
+always states the direct/indirect split. When `false`, only **direct**
+assertion-level evidence lifts the state -- a requirement covered only
+indirectly reads `missing`/`partial`, and the indirect evidence is shown in
+hover as "not credited" so the fallback stays visible.
+
+#### `status_words` (per-relationship dimension labels)
+
+The coverage dimension labels shown on badges, buttons, hover, and reports are
+defined per relationship, and can be overridden:
+
+```toml
+[rules.coverage.status_words]
+implements = "Implemented"   # default
+verifies   = "Tested"        # default
+yields     = "Passing"       # default
+validates  = "UAT Covered"   # default
+validated  = "UAT Passed"    # default
+```
+
+The display vocabulary is exactly **Implemented / Tested / Passing / UAT
+Covered / UAT Passed**. "Validated" is deliberately not a test-coverage label
+(it collides with the `Validates:` journey keyword).

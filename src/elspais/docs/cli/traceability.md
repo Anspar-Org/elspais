@@ -37,6 +37,13 @@ covered assertion in that row. No marker means the generous and strict
 `elspais docs checks` (*Coverage Dimensions*) for the direct/indirect/tier
 model underneath this.
 
+**Relative denominators.** `Tested` and `Passing` measure against their own
+denominator, not the whole spec: `Tested` is tested / **implemented** and
+`Passing` is passing / **tested**. A row with nothing implemented shows an
+empty `Tested`/`Passing` denominator as neutral `missing` (grey), never a red
+gap -- the "not all built" story lives on the `Implemented` column. A failing
+in-denominator label always reads `failing` (red).
+
 **Passing is a union.** The `Passing` column (dimension key `verified`) is
 the union of two kinds of evidence: a passing `Verifies:` test result
 (`verified`), or a covered `Implements:` line under a target with

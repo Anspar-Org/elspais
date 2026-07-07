@@ -941,25 +941,11 @@ css_class = "assertion-validation-btn validation-fail"
 [buttons.validation.unknown]
 css_class = "assertion-validation-btn validation-unknown"
 
-[validation_tiers.full-direct]
-css_class = "val-green"
-color_key = "green"
-
-[validation_tiers.full-indirect]
-css_class = "val-yellow-green"
-color_key = "yellow-green"
-
-[validation_tiers.partial]
-css_class = "val-yellow"
-color_key = "yellow"
-
-[validation_tiers.failing]
-css_class = "val-red"
-color_key = "red"
-
-[validation_tiers.anomalous]
-css_class = "val-orange"
-color_key = "orange"
+# NOTE: the legacy `validation_tiers` catalog (full-direct / full-indirect /
+# anomalous) is retired (REQ-d00258). Requirement tier, per-assertion standing,
+# and bucket now share ONE vocabulary -- see `coverage_standing` below
+# (full / partial / failing / missing). The direct-vs-indirect quality is a
+# caveat (the `~` marker + hover), not a separate tier color.
 
 [severity.ok]
 css_class = "val-green"
@@ -1001,3 +987,10 @@ color_key = "red"
 [coverage_standing.missing]
 css_class = "val-grey"
 color_key = "grey"
+
+# Direct/indirect caveat marker (REQ-d00258). The `~` appended to a coverage
+# badge/cell means the credit is not fully direct (indirect > direct) -- the
+# state color is unchanged; only the caveat is flagged. See `[rules.coverage]
+# allow_indirect` to control whether indirect evidence credits the state.
+[coverage_caveat.indirect]
+symbol = "~"

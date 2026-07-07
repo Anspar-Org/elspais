@@ -63,13 +63,13 @@ class TestCatalogEntries:
 
     def test_REQ_p00006_A_entries_have_descriptions(self):
         catalog = get_catalog()
-        entry = catalog.by_key("validation_tiers.full-direct")
+        entry = catalog.by_key("coverage_caveat.indirect")
         assert entry.description
         assert entry.long_description
 
-    def test_REQ_p00006_A_validation_tiers_have_color_key(self):
+    def test_REQ_p00006_A_coverage_standing_have_color_key(self):
         catalog = get_catalog()
-        entry = catalog.by_key("validation_tiers.full-direct")
+        entry = catalog.by_key("coverage_standing.full")
         assert entry.color_key == "green"
 
 
@@ -128,7 +128,9 @@ class TestComputeValidationColorCatalog:
         from elspais.html.theme import get_catalog
 
         catalog = get_catalog()
-        expected_entry = catalog.by_key("validation_tiers.full-direct")
+        # The unified vocabulary collapses full-direct/full-indirect into the
+        # single `full` tier -> severity `ok` -> green.
+        expected_entry = catalog.by_key("severity.ok")
 
         rollup = RollupMetrics(
             total_assertions=2,
@@ -148,7 +150,8 @@ class TestComputeValidationColorCatalog:
         from elspais.html.theme import get_catalog
 
         catalog = get_catalog()
-        expected_entry = catalog.by_key("validation_tiers.failing")
+        # A failing tier resolves to error severity -> red in the badge color.
+        expected_entry = catalog.by_key("severity.error")
 
         # A/B both implemented and tested; the Passing dim FAILS on A (within the
         # tested denominator) -> relative 'failing' tier -> red (REQ-d00258-B).
@@ -191,7 +194,8 @@ class TestComputeValidationColorCatalog:
         from elspais.html.theme import get_catalog
 
         catalog = get_catalog()
-        expected_entry = catalog.by_key("validation_tiers.partial")
+        # A partial tier resolves to warning severity -> yellow.
+        expected_entry = catalog.by_key("severity.warning")
 
         rollup = RollupMetrics(
             total_assertions=3,
@@ -259,7 +263,7 @@ class TestComputeValidationColorCatalog:
         catalog = get_catalog()
         # With the unified vocabulary, "missing" coverage maps to "error" severity
         # which is "red" color, not the old single-tier "orange"
-        expected_entry = catalog.by_key("validation_tiers.failing")
+        expected_entry = catalog.by_key("severity.error")
 
         rollup = RollupMetrics(
             total_assertions=2,
@@ -643,7 +647,7 @@ class TestStatusRoleGating:
         from elspais.html.generator import compute_coverage_tiers
         from elspais.html.theme import get_catalog
 
-        expected = get_catalog().by_key("validation_tiers.full-direct").color_key
+        expected = get_catalog().by_key("severity.ok").color_key
         # active includes Draft: essentially every req is Draft during build-out.
         config = {"rules": {"format": {"status_roles": {"active": ["Active", "Draft"]}}}}
         node = self._make_node_with_status("Draft", self._full_rollup())
