@@ -292,7 +292,13 @@ def _compute_incoming_links(node: Any) -> list[dict[str, Any]]:
     Edge directions (as wired by the builder):
       - Validated by:   OUTGOING VALIDATES (req -> USER_JOURNEY), possibly
                         per-assertion; also assertion-level VALIDATES edges.
-      - Refined by:     INCOMING REFINES from another REQUIREMENT.
+      - Refined by:     OUTGOING REFINES to another REQUIREMENT. REFINES is
+                        stored refined->refiner (edge.source is the abstract
+                        target, edge.target the concrete refiner), so a node's
+                        refiners are the TARGETS of its outgoing REFINES edges.
+                        This is the same direction render.py._derive_refines_refs
+                        reads (there, a node's INCOMING REFINES name what it
+                        refines); reading incoming here would invert it.
       - Satisfied by:   INCOMING SATISFIES from a declaring REQUIREMENT.
       - Instantiated by:INCOMING INSTANCE from a clone REQUIREMENT.
       - Integrated by:  INCOMING INTEGRATES from a consumer REQUIREMENT.
@@ -378,14 +384,27 @@ def _compute_incoming_links(node: Any) -> list[dict[str, Any]]:
     instantiated_links: list[dict[str, Any]] = []
     integrated_links: list[dict[str, Any]] = []
 
+    # Refined by: requirements that refine THIS one. Because REFINES is stored
+    # refined->refiner, `node`'s refiners are the TARGETS of its OUTGOING REFINES
+    # edges (edge.source is `node` itself, edge.target the refiner) — matching
+    # render.py._derive_refines_refs's direction.
+    for edge in node.iter_outgoing_edges():
+        if edge.kind == EdgeKind.REFINES and edge.target.kind == NodeKind.REQUIREMENT:
+            refiner = edge.target
+            title = refiner.get_label() or refiner.id
+            refined_links.append(
+                _entry(
+                    refiner,
+                    "requirement",
+                    None,
+                    f"{refiner.id} refines this requirement - {title}",
+                )
+            )
+
     for edge in node.iter_incoming_edges():
         src = edge.source
         title = src.get_label() or src.id
-        if edge.kind == EdgeKind.REFINES and src.kind == NodeKind.REQUIREMENT:
-            refined_links.append(
-                _entry(src, "requirement", None, f"{src.id} refines this requirement - {title}")
-            )
-        elif edge.kind == EdgeKind.SATISFIES and src.kind == NodeKind.REQUIREMENT:
+        if edge.kind == EdgeKind.SATISFIES and src.kind == NodeKind.REQUIREMENT:
             satisfied_links.append(
                 _entry(
                     src,

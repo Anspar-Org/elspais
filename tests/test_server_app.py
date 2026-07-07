@@ -1059,10 +1059,15 @@ def incoming_graph():
         steps.append(s)
     jny.set_metric("journey_verification", JourneyVerification(tier="partial"))
 
-    # A refining requirement -> req gains an INCOMING REFINES edge.
+    # A refining requirement REQ-o00009 refines req (REQ-p00006). The builder
+    # stores REFINES as refined->refiner (abstract target -> concrete refiner):
+    # ``Refines: REQ-p00006`` on REQ-o00009 wires ``target.link(source)`` i.e.
+    # ``req.link(refiner)`` -> edge source=req(refined), target=refiner. So the
+    # refiner is reached via req's OUTGOING REFINES edge, and req is what the
+    # refiner names in its ``Refines:`` line (render.py._derive_refines_refs).
     refiner = GraphNode(id="REQ-o00009", kind=NodeKind.REQUIREMENT, label="Linking Error Detail")
     refiner._content = {"level": "OPS", "status": "Active", "hash": "bbb22222"}
-    refiner.link(req, EdgeKind.REFINES)
+    req.link(refiner, EdgeKind.REFINES)
 
     # A requirement with NO incoming traceability edges.
     lonely = GraphNode(id="REQ-p00007", kind=NodeKind.REQUIREMENT, label="Lonely Req")
@@ -1162,9 +1167,11 @@ class TestIncomingLinks:
         # Whole-req blanket validate (no assertion named) -> "all assertions".
         assert "validates all assertions" in by_journey["JNY-BLANKET"]["tooltip"]
 
-    def test_REQ_p00006_A_refined_by_requirement(self, incoming_client):
-        """An incoming REFINES edge surfaces as a 'Refined by' section naming
-        the refining requirement (a state color is optional/absent)."""
+    def test_REQ_p00006_A_refined_by_names_the_refiner(self, incoming_client):
+        """The REFINED target's 'Refined by' section names the requirement that
+        refines it. REQ-o00009 refines REQ-p00006, so REQ-p00006's card lists
+        REQ-o00009 under 'Refined by' (reached via req's OUTGOING REFINES edge —
+        REFINES is stored refined->refiner)."""
         data = incoming_client.get("/api/node/REQ-p00006").json()
         by_kind = {s["kind"]: s for s in data["incoming_links"]}
         assert "Refined by" in by_kind
@@ -1173,11 +1180,82 @@ class TestIncomingLinks:
         assert links[0]["source_kind"] == "requirement"
         assert "refines this requirement" in links[0]["tooltip"]
 
+    def test_REQ_p00006_A_refiner_has_no_phantom_refined_by(self, incoming_client):
+        """The refiner's own card must NOT show a phantom 'Refined by' naming
+        the requirement it refines. REQ-o00009 refines REQ-p00006 (it is not
+        refined BY it), so REQ-o00009 exposes no 'Refined by' section. Under the
+        pre-fix incoming-edge reading this section wrongly listed REQ-p00006."""
+        data = incoming_client.get("/api/node/REQ-o00009").json()
+        by_kind = {s["kind"]: s for s in data["incoming_links"]}
+        assert "Refined by" not in by_kind
+
     def test_REQ_p00006_A_no_incoming_edges_empty(self, incoming_client):
         """A requirement with no reverse-traceability edges has an empty
         incoming_links list, so the card section does not render."""
         data = incoming_client.get("/api/node/REQ-p00007").json()
         assert data["incoming_links"] == []
+
+
+@pytest.fixture(scope="module")
+def self_spec_graph():
+    """Build elspais's own spec as a real builder-wired fixture.
+
+    The self-spec is a clean source of a genuine REFINES relationship:
+    REQ-p00005 declares ``Refines: REQ-p00001``. Built without code/test
+    scanning or associates (spec-level REFINES edges are unaffected) for speed.
+    """
+    from elspais.graph.factory import build_graph
+
+    repo_root = Path(__file__).parent.parent
+    return build_graph(
+        repo_root=repo_root,
+        scan_code=False,
+        scan_tests=False,
+        _build_associates=False,
+    )
+
+
+class TestRefinedByDirection:
+    """Validates REQ-p00006-A: the viewer 'Refined by' reverse-traceability
+    section reflects requirements that refine this one (its REFINES-refiners),
+    agreeing with the canonical ``render.py._derive_refines_refs`` direction.
+
+    Ground truth: for a declaration ``D Refines T``, ``_derive_refines_refs(D)``
+    lists T (what D refines). Therefore T's 'Refined by' lists D, and D's
+    'Refined by' does NOT list T. REQ-p00005 refines REQ-p00001 in the self-spec.
+    """
+
+    def _refined_by(self, graph, node_id):
+        from elspais.server.routes_api import _compute_incoming_links
+
+        node = graph.find_by_id(node_id)
+        sections = _compute_incoming_links(node)
+        for section in sections:
+            if section["kind"] == "Refined by":
+                return [link["id"] for link in section["links"]]
+        return []
+
+    def test_REQ_p00006_A_refiner_omits_phantom_refined_by(self, self_spec_graph):
+        """The refiner REQ-p00005 (which declares Refines: REQ-p00001) has no
+        'Refined by' entry for REQ-p00001 — that would be the inverted phantom."""
+        refined_by = self._refined_by(self_spec_graph, "REQ-p00005")
+        assert "REQ-p00001" not in refined_by
+
+    def test_REQ_p00006_A_refined_target_lists_real_refiner(self, self_spec_graph):
+        """The refined target REQ-p00001 lists its real refiner REQ-p00005 under
+        'Refined by' — the entry omitted by the pre-fix incoming-edge reading."""
+        refined_by = self._refined_by(self_spec_graph, "REQ-p00001")
+        assert "REQ-p00005" in refined_by
+
+    def test_REQ_p00006_A_agrees_with_render_derive_refines(self, self_spec_graph):
+        """The viewer and render.py agree on direction: the declarer's Refines
+        list (render ground truth) names REQ-p00001, while the declarer's
+        'Refined by' does not — the two renderers are no longer inverted."""
+        from elspais.graph.render import _derive_refines_refs
+
+        declarer = self_spec_graph.find_by_id("REQ-p00005")
+        assert "REQ-p00001" in _derive_refines_refs(declarer)
+        assert "REQ-p00001" not in self._refined_by(self_spec_graph, "REQ-p00005")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
