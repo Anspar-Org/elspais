@@ -139,7 +139,15 @@ def relative_tier_for(
     denom_name = DENOMINATOR_DIMENSION.get(dimension)
     if denom_name is None:
         return absolute_tier(getattr(rollup, dimension), allow_indirect=allow_indirect), False
-    denom_labels = set(getattr(rollup, denom_name).indirect_pct_by_label)
+    # The denominator is the set of labels ACTUALLY covered in the prior
+    # dimension (fraction > 0), NOT every label present in the per-label map:
+    # ``_conduct_refines_coverage`` seeds a 0.0 entry for every assertion label
+    # (incl. unimplemented ones), so building the set from the dict keys would
+    # silently make this "relative" chain absolute and disagree with the
+    # gaps/MCP surfaces (which filter frac > 0). REQ-d00258-I.
+    denom_labels = {
+        lbl for lbl, frac in getattr(rollup, denom_name).indirect_pct_by_label.items() if frac > 0
+    }
     num_dim = tested_and_passing(rollup) if dimension == "verified" else getattr(rollup, dimension)
     return relative_tier(num_dim, denom_labels, allow_indirect=allow_indirect)
 

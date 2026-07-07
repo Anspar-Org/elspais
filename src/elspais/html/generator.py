@@ -266,10 +266,17 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
     # assertions). An EMPTY denominator means "nothing to measure" -> N/A, which
     # resolves to NEUTRAL (info) severity so it renders grey and does not drag
     # combined_bucket (fixes the DIARY-GUI "Passing: no coverage shows yellow").
+    # Each relative denominator is the set of labels ACTUALLY covered in the
+    # prior dimension (fraction > 0), NOT every label present in the per-label
+    # map: ``_conduct_refines_coverage`` seeds a 0.0 entry for every assertion
+    # label (incl. unimplemented ones), so building the set from the dict keys
+    # would silently make the "relative" chain absolute and disagree with the
+    # gaps/MCP surfaces (which filter frac > 0) and the aggregation buckets.
+    # REQ-d00258-I.
     passing = tested_and_passing(rollup)
-    impl_labels = set(rollup.implemented.indirect_pct_by_label)
-    tested_labels = set(rollup.tested.indirect_pct_by_label)
-    uatcov_labels = set(rollup.uat_coverage.indirect_pct_by_label)
+    impl_labels = {lbl for lbl, f in rollup.implemented.indirect_pct_by_label.items() if f > 0}
+    tested_labels = {lbl for lbl, f in rollup.tested.indirect_pct_by_label.items() if f > 0}
+    uatcov_labels = {lbl for lbl, f in rollup.uat_coverage.indirect_pct_by_label.items() if f > 0}
 
     # Map dimension key → (CoverageDimension, CoverageSeverityConfig, prefix,
     # denom-label-set-or-None-for-absolute).

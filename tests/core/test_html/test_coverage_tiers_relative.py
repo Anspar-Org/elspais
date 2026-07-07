@@ -145,6 +145,63 @@ def test_REQ_d00258_B_partial_relative_when_some_denom_covered():
     assert result["tested_color"] == _severity_color("warning")
 
 
+# ── Scenario D: 0.0-conducted labels must not enter the relative denominator ──
+
+
+def _dim_with_zeros(covered=(), zeros=(), *, total=5, failing=()):
+    """A CoverageDimension crediting ``covered`` at 1.0 while seeding ``zeros``
+    at 0.0 in the per-label maps.
+
+    Mirrors ``_conduct_refines_coverage``, which rebuilds
+    ``indirect_pct_by_label`` with a 0.0 entry for every unimplemented
+    assertion label. The relative denominator must EXCLUDE those 0.0 labels
+    (REQ-d00258-I).
+    """
+    covered = set(covered)
+    zeros = set(zeros)
+    pct = {**dict.fromkeys(covered, 1.0), **dict.fromkeys(zeros, 0.0)}
+    return CoverageDimension(
+        total=total,
+        direct=len(covered),
+        indirect=len(covered),
+        has_failures=bool(failing),
+        failing_labels=set(failing),
+        direct_labels=set(covered),
+        indirect_labels=set(covered),
+        direct_pct_by_label=dict(pct),
+        indirect_pct_by_label=dict(pct),
+    )
+
+
+def test_REQ_d00258_I_zero_conducted_label_excluded_from_tested_denominator():
+    """REGRESSION: implemented seeds a 0.0 entry for unimplemented label B; the
+    Tested denominator must exclude B so the single implemented+tested label A
+    reads FULL/green, not partial over {A, B}."""
+    rollup = RollupMetrics(total_assertions=2)
+    rollup.implemented = _dim_with_zeros({"A"}, {"B"}, total=2)
+    rollup.tested = _dim_with_zeros({"A"}, {"B"}, total=2)
+    rollup.verified = _dim_with_zeros({"A"}, {"B"}, total=2)
+    result = compute_coverage_tiers(_node(rollup))
+
+    assert result["tested_tier"] == "full"
+    assert result["tested_color"] == _severity_color("ok")
+
+
+def test_REQ_d00258_I_all_zero_implemented_makes_tested_na_neutral():
+    """REGRESSION: implemented all-0.0 (nothing implemented) but every label has
+    a test edge -> Tested denominator is EMPTY -> N/A neutral grey, NOT
+    full/green. (Self-repo REQ-d00125.)"""
+    rollup = RollupMetrics(total_assertions=2)
+    rollup.implemented = _dim_with_zeros(set(), {"A", "B"}, total=2)
+    rollup.tested = _dim_with_zeros({"A", "B"}, set(), total=2)
+    rollup.verified = _dim_with_zeros({"A", "B"}, set(), total=2)
+    result = compute_coverage_tiers(_node(rollup))
+
+    assert result["tested_tier"] == "missing"
+    assert result["tested_color"] == _severity_color("info")
+    assert result["tested_color"] != _severity_color("ok")
+
+
 def test_REQ_d00258_F_expects_validation_still_reds_empty_uat_coverage():
     """expects_validation level: empty UAT-Covered is a real red gap, not neutral.
 

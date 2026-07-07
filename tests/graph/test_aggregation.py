@@ -355,6 +355,94 @@ class TestTierBucketsRelative:
         assert b.full == 0
 
 
+def _dim_with_zeros(covered, zeros, *, total=0, failing=()):
+    """A CoverageDimension crediting ``covered`` at 1.0 while seeding ``zeros``
+    at 0.0 in the per-label maps.
+
+    Mirrors ``_conduct_refines_coverage`` (annotators.py), which rebuilds
+    ``indirect_pct_by_label`` with an entry for EVERY assertion label -- 0.0 for
+    the ones not covered in that dimension. A denominator built from the dict
+    KEYS would therefore wrongly include those unimplemented labels
+    (REQ-d00258-I).
+    """
+    covered = set(covered)
+    zeros = set(zeros)
+    pct = {**dict.fromkeys(covered, 1.0), **dict.fromkeys(zeros, 0.0)}
+    return CoverageDimension(
+        total=total,
+        direct=len(covered),
+        indirect=len(covered),
+        has_failures=bool(failing),
+        failing_labels=set(failing),
+        direct_labels=set(covered),
+        indirect_labels=set(covered),
+        direct_pct_by_label=dict(pct),
+        indirect_pct_by_label=dict(pct),
+    )
+
+
+# Verifies: REQ-d00258-I
+class TestDenominatorExcludesUnimplementedLabels:
+    """REGRESSION (REQ-d00258-I): the relative denominator is the set of labels
+    ACTUALLY covered in the prior dimension (indirect fraction > 0), NOT every
+    label present in ``indirect_pct_by_label``.
+
+    ``_conduct_refines_coverage`` seeds a 0.0 entry for every assertion label
+    (including unimplemented ones), so building the denominator from the dict
+    keys silently makes the "relative" chain absolute -- disagreeing with the
+    gaps/MCP surfaces (which filter frac > 0).
+    """
+
+    def test_relative_tier_for_excludes_zero_conducted_label(self):
+        # implemented: A covered (1.0), B present-but-unimplemented (0.0).
+        rollup = RollupMetrics(
+            total_assertions=2,
+            implemented=_dim_with_zeros({"A"}, {"B"}, total=2),
+            tested=_dim_with_zeros({"A"}, {"B"}, total=2),
+        )
+        # denom must be {A} only -> A tested -> full, NOT partial over {A,B}.
+        assert relative_tier_for(rollup, "tested") == ("full", False)
+
+    def test_relative_tier_for_all_zero_denominator_is_na(self):
+        # Nothing implemented (both labels present at 0.0), but tested credits
+        # both -> the denominator is EMPTY -> N/A, not a spurious full.
+        rollup = RollupMetrics(
+            total_assertions=2,
+            implemented=_dim_with_zeros(set(), {"A", "B"}, total=2),
+            tested=_dim_with_zeros({"A", "B"}, set(), total=2),
+        )
+        assert relative_tier_for(rollup, "tested") == ("missing", True)
+
+    def test_tier_buckets_excludes_zero_conducted_label(self):
+        req = _make_req("REQ-d00020")
+        req.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=2,
+                implemented=_dim_with_zeros({"A"}, {"B"}, total=2),
+                tested=_dim_with_zeros({"A"}, {"B"}, total=2),
+            ),
+        )
+        b = tier_buckets(_make_graph(req), "tested")
+        assert b.full == 1
+        assert b.partial == 0
+
+    def test_tier_buckets_all_zero_denominator_is_missing(self):
+        req = _make_req("REQ-d00021")
+        req.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=2,
+                implemented=_dim_with_zeros(set(), {"A", "B"}, total=2),
+                tested=_dim_with_zeros({"A", "B"}, set(), total=2),
+            ),
+        )
+        b = tier_buckets(_make_graph(req), "tested")
+        assert b.missing == 1
+        assert b.full == 0
+        assert b.partial == 0
+
+
 # Verifies: REQ-d00258-C
 def test_relative_tier_shared_helper_measures_over_denominator():
     """The shared ``relative_tier`` lives in aggregation and measures a
