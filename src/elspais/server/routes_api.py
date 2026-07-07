@@ -511,7 +511,12 @@ async def api_requirement(request: Request) -> JSONResponse:
 
 async def api_node(request: Request) -> JSONResponse:
     """GET /api/node/{node_id} - Full details for any node kind."""
-    from elspais.html.generator import DIMENSION_KEYS, DIMENSION_TIPS, compute_coverage_tiers
+    from elspais.html.generator import (
+        DIMENSION_KEYS,
+        DIMENSION_TIPS,
+        compute_assertion_coverage_states,
+        compute_coverage_tiers,
+    )
 
     state = _st(request)
     node_id = request.path_params["node_id"]
@@ -550,6 +555,14 @@ async def api_node(request: Request) -> JSONResponse:
 
             # Per-assertion direct link flags + REQ-level links
             result["assertion_links"], result["req_level_links"] = _compute_link_data(node)
+
+            # Per-assertion coverage states (full/partial/failing/none) projected
+            # from the SAME rollup metrics as the header badges, so the tiny
+            # per-assertion badges color consistently on initial render without
+            # waiting for a lazy prefetch (REQ-d00258-G).
+            result["assertion_coverage_states"] = compute_assertion_coverage_states(
+                node, state.config
+            )
 
             # Reverse-traceability: what points AT this requirement (REQ-p00006-A)
             result["incoming_links"] = _compute_incoming_links(node)

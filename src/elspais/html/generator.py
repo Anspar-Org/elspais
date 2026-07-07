@@ -320,6 +320,135 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
     return result
 
 
+# The semantic per-assertion coverage "standings" (REQ-d00258-G). These are the
+# tokens the server emits per assertion per dimension; their COLORS are NOT
+# defined here -- they live in the theme catalog ([coverage_standing.*] in
+# theme.toml) and are resolved through it, exactly as severity colors are
+# (REQ-d00258-D). This keeps the standing->color association configurable and
+# out of the badge logic.
+COVERAGE_STANDINGS = ("full", "partial", "failing", "missing")
+
+
+def _standing_color(standing: str) -> str:
+    """Resolve a coverage standing to its theme-catalog color_key (REQ-d00258-G).
+
+    Mirrors ``_severity_color``: the association lives in the catalog
+    (``[coverage_standing.*]``), never hard-coded here.
+    """
+    from elspais.html.theme import get_catalog
+
+    try:
+        return get_catalog().by_key(f"coverage_standing.{standing}").color_key
+    except KeyError:
+        return ""
+
+
+def standing_class_map() -> dict[str, str]:
+    """Return ``{standing: css_class}`` resolved from the theme catalog.
+
+    Used to hand the viewer a config-driven standing->class lookup so the client
+    colors per-assertion badges without any hard-coded color logic of its own.
+    """
+    from elspais.html.theme import get_catalog
+
+    catalog = get_catalog()
+    out: dict[str, str] = {}
+    for standing in COVERAGE_STANDINGS:
+        try:
+            out[standing] = catalog.by_key(f"coverage_standing.{standing}").css_class
+        except KeyError:
+            out[standing] = ""
+    return out
+
+
+def compute_assertion_coverage_states(
+    node: GraphNode, config: dict[str, Any] | None = None
+) -> dict[str, dict[str, str]]:
+    """Project each requirement dimension's coverage down to per-*Assertion* standings.
+
+    Returns ``{label: {implemented, tested, verified, uat_coverage,
+    uat_verified: standing}}`` where ``standing`` is one of ``"full"``,
+    ``"partial"``, ``"failing"``, ``"missing"`` (a SEMANTIC token, not a color --
+    the viewer resolves the color through the theme catalog). The standings are
+    read from the SAME ``rollup_metrics`` per-label fields that drive the
+    requirement-level badges (``compute_coverage_tiers``), so the two levels can
+    never disagree (REQ-d00258-G): if every assertion is ``"full"`` the
+    requirement dimension is a full tier; if any assertion is ``"failing"`` the
+    dimension ``has_failures``.
+
+    Dimension -> RollupMetrics source:
+      - implemented  : ``implemented.indirect_pct_by_label``
+      - tested       : ``tested.indirect_pct_by_label``
+      - verified     : ``tested_and_passing(rollup)`` union per label (+ its
+                       ``has_failures``, gated on the assertion being tested)
+      - uat_coverage : ``uat_coverage.indirect_pct_by_label``
+      - uat_verified : ``uat_verified.indirect_pct_by_label`` (+ ``has_failures``,
+                       gated on the assertion being UAT-covered)
+
+    Standing rule: ``full`` at ~100%, ``partial`` at 0<f<1 with no failure,
+    ``failing`` for a failed result on a covered assertion, ``missing`` otherwise.
+    No coverage is recomputed here -- only the pre-computed per-label fractions
+    are projected. Returns ``{}`` for coverage-excluded statuses or a node with
+    no rollup / no assertions (same gate as ``compute_coverage_tiers``).
+    """
+    from elspais.config import get_status_roles
+    from elspais.graph.GraphNode import NodeKind
+    from elspais.graph.metrics import CoverageDimension, tested_and_passing
+
+    if node.status in get_status_roles(config or {}).coverage_excluded_statuses():
+        return {}
+
+    rollup = node.get_metric("rollup_metrics")
+    if not rollup or rollup.total_assertions == 0:
+        return {}
+
+    labels: list[str] = []
+    for child in node.iter_children():
+        if child.kind == NodeKind.ASSERTION:
+            label = child.get_field("label", "")
+            if label:
+                labels.append(label)
+
+    eps = 1e-9
+
+    def _frac(dim: CoverageDimension, label: str) -> float:
+        return dim.indirect_pct_by_label.get(label, 0.0)
+
+    def _simple_standing(dim: CoverageDimension, label: str) -> str:
+        f = _frac(dim, label)
+        if f >= 1.0 - eps:
+            return "full"
+        if f > eps:
+            return "partial"
+        return "missing"
+
+    def _passing_standing(passing: CoverageDimension, cover: CoverageDimension, label: str) -> str:
+        """Passing/verified standing: fold ``has_failures`` in, gated on the
+        assertion actually carrying evidence in ``cover`` (tested / UAT-covered)."""
+        f = _frac(passing, label)
+        if f >= 1.0 - eps:
+            return "full"
+        # A dimension-level failure lands on this assertion only when the
+        # assertion is covered (tested / validated) but not fully passing.
+        if passing.has_failures and _frac(cover, label) > eps:
+            return "failing"
+        if f > eps:
+            return "partial"
+        return "missing"
+
+    passing = tested_and_passing(rollup)
+    states: dict[str, dict[str, str]] = {}
+    for label in labels:
+        states[label] = {
+            "implemented": _simple_standing(rollup.implemented, label),
+            "tested": _simple_standing(rollup.tested, label),
+            "verified": _passing_standing(passing, rollup.tested, label),
+            "uat_coverage": _simple_standing(rollup.uat_coverage, label),
+            "uat_verified": _passing_standing(rollup.uat_verified, rollup.uat_coverage, label),
+        }
+    return states
+
+
 # Implements: REQ-p00006-A
 def compute_validation_color(
     node: GraphNode, config: dict[str, Any] | None = None

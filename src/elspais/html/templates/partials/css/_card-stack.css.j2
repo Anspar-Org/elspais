@@ -839,6 +839,50 @@ body.edit-mode .view-only {
     border-color: var(--assertion-btn-hover-border);
 }
 
+/* Per-assertion coverage-state fills (REQ-d00258-G). These reuse the SAME
+   val-* palette as the requirement header badges (.status-badge.active.val-*)
+   so a per-assertion badge reads identically to the requirement badge it
+   projects from. Applied server-side on render (not via a lazy prefetch). */
+.assertion-implemented-btn.val-green,
+.assertion-tested-btn.val-green,
+.assertion-verified-btn.val-green,
+.assertion-validated-btn.val-green,
+.assertion-accepted-btn.val-green {
+    background: var(--val-green-bg);
+    border-color: var(--val-green-bg);
+    color: var(--val-green-text);
+}
+
+.assertion-implemented-btn.val-yellow,
+.assertion-tested-btn.val-yellow,
+.assertion-verified-btn.val-yellow,
+.assertion-validated-btn.val-yellow,
+.assertion-accepted-btn.val-yellow {
+    background: var(--val-yellow-bg);
+    border-color: var(--val-yellow-bg);
+    color: var(--val-yellow-text);
+}
+
+.assertion-implemented-btn.val-red,
+.assertion-tested-btn.val-red,
+.assertion-verified-btn.val-red,
+.assertion-validated-btn.val-red,
+.assertion-accepted-btn.val-red {
+    background: var(--val-red-bg);
+    border-color: var(--val-red-bg);
+    color: var(--val-red-text);
+}
+
+.assertion-implemented-btn.val-grey,
+.assertion-tested-btn.val-grey,
+.assertion-verified-btn.val-grey,
+.assertion-validated-btn.val-grey,
+.assertion-accepted-btn.val-grey {
+    background: var(--val-grey-bg);
+    border-color: var(--val-grey-bg);
+    color: var(--val-grey-text);
+}
+
 /* "Yes/No" states (Implemented, Tested, UAT Covered — existence checks) */
 .implemented-yes {
     border-color: var(--impl-yes-border);

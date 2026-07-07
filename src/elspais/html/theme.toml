@@ -69,6 +69,9 @@ val-orange-bg = "#fd7e14"
 val-orange-text = "#fff"
 val-maroon-bg = "#6c0a1e"
 val-maroon-text = "#fff"
+# Neutral fill for the "missing" coverage standing (no evidence)
+val-grey-bg = "#e9ecef"
+val-grey-text = "#6c757d"
 
 # Tooltip
 tooltip-bg = "#212529"
@@ -483,6 +486,9 @@ val-orange-bg = "#b35b0e"
 val-orange-text = "#ffe5d0"
 val-maroon-bg = "#8f2436"
 val-maroon-text = "#fff"
+# Neutral fill for the "missing" coverage standing (no evidence)
+val-grey-bg = "#343a40"
+val-grey-text = "#adb5bd"
 
 # Tooltip
 tooltip-bg = "#f8f9fa"
@@ -974,3 +980,24 @@ color_key = "red"
 [severity.failing]
 css_class = "val-maroon"
 color_key = "maroon"
+
+# Per-assertion coverage standings (REQ-d00258-G). A "standing" is the semantic
+# state of one assertion on one coverage dimension; the viewer emits the standing
+# token and resolves its color HERE via the catalog, so the color association is
+# configurable (e.g. remappable for color-impaired users) and never baked into
+# the JS/Python badge logic -- the same decoupling severity uses (REQ-d00258-D).
+[coverage_standing.full]
+css_class = "val-green"
+color_key = "green"
+
+[coverage_standing.partial]
+css_class = "val-yellow"
+color_key = "yellow"
+
+[coverage_standing.failing]
+css_class = "val-red"
+color_key = "red"
+
+[coverage_standing.missing]
+css_class = "val-grey"
+color_key = "grey"

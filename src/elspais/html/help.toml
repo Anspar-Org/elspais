@@ -311,3 +311,19 @@ description = "No coverage or failures"
 [severity.failing]
 label = "Failing"
 description = "Test failures detected"
+
+[coverage_standing.full]
+label = "Full"
+description = "Assertion fully covered on this dimension (100%)"
+
+[coverage_standing.partial]
+label = "Partial"
+description = "Assertion partially covered, no failures"
+
+[coverage_standing.failing]
+label = "Failing"
+description = "A verifying result for this assertion failed"
+
+[coverage_standing.missing]
+label = "Missing"
+description = "No evidence for this assertion on this dimension"
