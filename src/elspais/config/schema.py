@@ -406,6 +406,8 @@ class StatusConfig(_StrictModel):
     """Optional per-status metadata. Keys match status names from status_roles."""
 
     color: str | None = None
+    # None = derive from role (active-role -> True). Explicit value wins.
+    expects_implementation: bool | None = None
 
     @field_validator("color")
     @classmethod

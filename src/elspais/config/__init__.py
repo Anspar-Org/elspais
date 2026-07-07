@@ -83,6 +83,35 @@ def level_expects_validation(config: dict[str, Any], level_key: str | None) -> b
     return False
 
 
+def status_expects_implementation(config: dict[str, Any], status: str | None) -> bool:
+    """Whether a requirement's STATUS expects implementation (design §3).
+
+    Explicit ``[statuses.<Name>].expects_implementation`` wins; otherwise the
+    status's ROLE decides (active-role -> True, else False). Single source of
+    truth; consumers (viewer, aggregation, health, gaps, summary, mcp) MUST call
+    this rather than reading status roles for coverage-expectation. Replaces the
+    coverage roles of ``StatusRolesConfig.is_excluded_from_coverage``.
+
+    Case-insensitive on the status name (mirrors ``level_expects_validation``).
+    Unknown statuses derive True: ``role_of`` defaults them to ACTIVE.
+    """
+    statuses = (config or {}).get("statuses")
+    if isinstance(statuses, dict) and status:
+        target = status.lower()
+        for key, spec in statuses.items():
+            if isinstance(key, str) and key.lower() == target:
+                val = (
+                    spec.get("expects_implementation")
+                    if isinstance(spec, dict)
+                    else getattr(spec, "expects_implementation", None)
+                )
+                if val is not None:
+                    return bool(val)
+    from elspais.config.status_roles import StatusRole
+
+    return get_status_roles(config or {}).role_of(status) == StatusRole.ACTIVE
+
+
 def _migrate_legacy_patterns(config: dict[str, Any]) -> dict[str, Any]:
     """Migrate legacy [patterns] config to [id-patterns] + [levels] format.
 
@@ -955,6 +984,7 @@ __all__ = [
     "config_defaults",
     "default_level_keys",
     "level_expects_validation",
+    "status_expects_implementation",
     "load_config",
     "find_config_file",
     "find_git_root",

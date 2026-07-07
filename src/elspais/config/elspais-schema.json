@@ -774,6 +774,18 @@
           ],
           "default": null,
           "title": "Color"
+        },
+        "expects_implementation": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expects Implementation"
         }
       },
       "title": "StatusConfig",
