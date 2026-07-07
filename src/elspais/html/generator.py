@@ -292,17 +292,31 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         uat_cov_cfg = uat_cov_cfg.model_copy(update={"missing": "error"})
         uat_ver_cfg = uat_ver_cfg.model_copy(update={"missing": "error"})
 
-    # Map dimension key → (CoverageDimension, CoverageSeverityConfig, output_prefix)
+    # Relative-denominator label sets (REQ-d00258, Phase-2 chain). Each chained
+    # dimension is measured over the label-set that qualified at the PRIOR link,
+    # not over every assertion: Tested over IMPLEMENTED labels, Passing over
+    # TESTED labels, UAT-Passed over UAT-COVERED labels. `Implemented` and
+    # `UAT-Covered` stay ABSOLUTE (denom = None below -> use dim.tier over all
+    # assertions). An EMPTY denominator means "nothing to measure" -> N/A, which
+    # resolves to NEUTRAL (info) severity so it renders grey and does not drag
+    # combined_bucket (fixes the DIARY-GUI "Passing: no coverage shows yellow").
+    passing = tested_and_passing(rollup)
+    impl_labels = set(rollup.implemented.indirect_pct_by_label)
+    tested_labels = set(rollup.tested.indirect_pct_by_label)
+    uatcov_labels = set(rollup.uat_coverage.indirect_pct_by_label)
+
+    # Map dimension key → (CoverageDimension, CoverageSeverityConfig, prefix,
+    # denom-label-set-or-None-for-absolute).
     # "verified" (rendered as the "Passing" badge) uses tested_and_passing(),
     # the union of result-verified and line-coverage-credited evidence
     # (REQ-d00258-B) -- NOT the raw `rollup.verified` dimension, which would
     # miss lcov-only credit and understate the badge/bucket.
     dim_map = [
-        ("implemented", rollup.implemented, cov_config.implemented, "impl"),
-        ("tested", rollup.tested, cov_config.tested, "tested"),
-        ("verified", tested_and_passing(rollup), cov_config.verified, "verified"),
-        ("uat_coverage", rollup.uat_coverage, uat_cov_cfg, "uat_cov"),
-        ("uat_verified", rollup.uat_verified, uat_ver_cfg, "uat_ver"),
+        ("implemented", rollup.implemented, cov_config.implemented, "impl", None),
+        ("tested", rollup.tested, cov_config.tested, "tested", impl_labels),
+        ("verified", passing, cov_config.verified, "verified", tested_labels),
+        ("uat_coverage", rollup.uat_coverage, uat_cov_cfg, "uat_cov", None),
+        ("uat_verified", rollup.uat_verified, uat_ver_cfg, "uat_ver", uatcov_labels),
     ]
 
     status_words = get_status_words(config)
@@ -314,9 +328,19 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
     any_failing = False
     tip_parts: list[str] = []
 
-    for dim_key, dim, sev_cfg, prefix in dim_map:
-        tier = dim.tier
-        severity = _tier_to_severity(tier, sev_cfg)
+    for dim_key, dim, sev_cfg, prefix, denom in dim_map:
+        if denom is None:
+            tier = dim.tier  # absolute: measured over all assertions
+            is_na = False
+        else:
+            # allow_indirect stays at its default here; the config knob is
+            # threaded in Phase 4 (Task 4.1).
+            tier, is_na = _relative_tier(dim, denom)
+        # A `missing` tier that is N/A (empty relative denominator) is neutral:
+        # nothing to measure, so it resolves to `info` regardless of the
+        # dimension's configured `missing` severity. A non-N/A `missing` is a
+        # real gap and uses the configured severity.
+        severity = "info" if (tier == "missing" and is_na) else _tier_to_severity(tier, sev_cfg)
         color = _severity_color(severity)
         label = status_words[dim_key]
         desc = _TIER_DESCRIPTIONS.get(tier, tier)

@@ -150,11 +150,33 @@ class TestComputeValidationColorCatalog:
         catalog = get_catalog()
         expected_entry = catalog.by_key("validation_tiers.failing")
 
+        # A/B both implemented and tested; the Passing dim FAILS on A (within the
+        # tested denominator) -> relative 'failing' tier -> red (REQ-d00258-B).
         rollup = RollupMetrics(
             total_assertions=2,
-            implemented=CoverageDimension(total=2, direct=1, indirect=1),
-            tested=CoverageDimension(total=2, direct=1, indirect=1),
-            verified=CoverageDimension(total=2, direct=1, indirect=1, has_failures=True),
+            implemented=CoverageDimension(
+                total=2,
+                direct=2,
+                indirect=2,
+                direct_pct_by_label={"A": 1.0, "B": 1.0},
+                indirect_pct_by_label={"A": 1.0, "B": 1.0},
+            ),
+            tested=CoverageDimension(
+                total=2,
+                direct=2,
+                indirect=2,
+                direct_pct_by_label={"A": 1.0, "B": 1.0},
+                indirect_pct_by_label={"A": 1.0, "B": 1.0},
+            ),
+            verified=CoverageDimension(
+                total=2,
+                direct=1,
+                indirect=1,
+                has_failures=True,
+                failing_labels={"A"},
+                direct_pct_by_label={"B": 1.0},
+                indirect_pct_by_label={"B": 1.0},
+            ),
         )
         node = self._make_active_node_with_metrics(rollup)
         tiers = compute_coverage_tiers(node)
@@ -195,11 +217,29 @@ class TestComputeValidationColorCatalog:
         catalog = get_catalog()
         green = catalog.by_key("severity.ok").color_key
 
+        # A/B fully-but-INDIRECTLY covered on every dimension: implemented over
+        # all assertions (absolute), tested over implemented labels, verified
+        # over tested labels -- each resolves to the ``full`` tier.
         rollup = RollupMetrics(
             total_assertions=2,
-            implemented=CoverageDimension(total=2, direct=0, indirect=2),
-            tested=CoverageDimension(total=2, direct=0, indirect=2),
-            verified=CoverageDimension(total=2, direct=0, indirect=2),
+            implemented=CoverageDimension(
+                total=2,
+                direct=0,
+                indirect=2,
+                indirect_pct_by_label={"A": 1.0, "B": 1.0},
+            ),
+            tested=CoverageDimension(
+                total=2,
+                direct=0,
+                indirect=2,
+                indirect_pct_by_label={"A": 1.0, "B": 1.0},
+            ),
+            verified=CoverageDimension(
+                total=2,
+                direct=0,
+                indirect=2,
+                indirect_pct_by_label={"A": 1.0, "B": 1.0},
+            ),
         )
         node = self._make_active_node_with_metrics(rollup)
         tiers = compute_coverage_tiers(node)
@@ -383,11 +423,33 @@ class TestSeverityCatalog:
         from elspais.graph.metrics import CoverageDimension, RollupMetrics
         from elspais.html.generator import compute_coverage_tiers
 
+        # A/B implemented+tested; Passing fails on A (within the tested
+        # denominator) -> relative 'failing' overlay drives combined bucket.
         rollup = RollupMetrics(
             total_assertions=2,
-            implemented=CoverageDimension(total=2, direct=2, indirect=2),
-            tested=CoverageDimension(total=2, direct=2, indirect=2),
-            verified=CoverageDimension(total=2, direct=1, indirect=1, has_failures=True),
+            implemented=CoverageDimension(
+                total=2,
+                direct=2,
+                indirect=2,
+                direct_pct_by_label={"A": 1.0, "B": 1.0},
+                indirect_pct_by_label={"A": 1.0, "B": 1.0},
+            ),
+            tested=CoverageDimension(
+                total=2,
+                direct=2,
+                indirect=2,
+                direct_pct_by_label={"A": 1.0, "B": 1.0},
+                indirect_pct_by_label={"A": 1.0, "B": 1.0},
+            ),
+            verified=CoverageDimension(
+                total=2,
+                direct=1,
+                indirect=1,
+                has_failures=True,
+                failing_labels={"A"},
+                direct_pct_by_label={"B": 1.0},
+                indirect_pct_by_label={"B": 1.0},
+            ),
         )
         node = self._make_active_node_with_metrics(rollup)
         tiers = compute_coverage_tiers(node)
@@ -409,12 +471,31 @@ class TestSeverityCatalog:
 
         rollup = RollupMetrics(
             total_assertions=2,
-            implemented=CoverageDimension(total=2, direct=2, indirect=2),
-            tested=CoverageDimension(total=2, direct=2, indirect=2),
+            implemented=CoverageDimension(
+                total=2,
+                direct=2,
+                indirect=2,
+                direct_pct_by_label={"A": 1.0, "B": 1.0},
+                indirect_pct_by_label={"A": 1.0, "B": 1.0},
+            ),
+            tested=CoverageDimension(
+                total=2,
+                direct=2,
+                indirect=2,
+                direct_pct_by_label={"A": 1.0, "B": 1.0},
+                indirect_pct_by_label={"A": 1.0, "B": 1.0},
+            ),
             # No Verifies: coverage at all on this dimension...
             verified=CoverageDimension(total=2, direct=0, indirect=0),
-            # ...but full line-coverage credit via lcov_tested.
-            lcov_tested=CoverageDimension(total=2, direct=2, indirect=2),
+            # ...but full line-coverage credit via lcov_tested (label-keyed so
+            # tested_and_passing() credits the tested denominator labels).
+            lcov_tested=CoverageDimension(
+                total=2,
+                direct=2,
+                indirect=2,
+                direct_pct_by_label={"A": 1.0, "B": 1.0},
+                indirect_pct_by_label={"A": 1.0, "B": 1.0},
+            ),
         )
         node = self._make_active_node_with_metrics(rollup)
         tiers = compute_coverage_tiers(node)
