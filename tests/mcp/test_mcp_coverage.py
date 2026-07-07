@@ -124,6 +124,33 @@ def coverage_graph():
     }
     graph._roots = [req_node, req_node2]
 
+    # Attach rollup metrics reflecting a realistic IMPLEMENTED-but-untested
+    # scenario (REQ-d00258): REQ-p00001's assertions A/B/C are all implemented,
+    # only A is tested -> B and C are genuine *testing* gaps. REQ-p00002-A is
+    # implemented but untested. The MCP testing-gap surface is scoped to
+    # implemented assertions, so without this the fixture would report no
+    # testing gaps at all (an unimplemented assertion has nothing to test yet).
+    from elspais.graph.metrics import CoverageDimension, RollupMetrics
+
+    req_node.set_metric(
+        "rollup_metrics",
+        RollupMetrics(
+            total_assertions=3,
+            implemented=CoverageDimension(
+                total=3, indirect_pct_by_label={"A": 1.0, "B": 1.0, "C": 1.0}
+            ),
+            tested=CoverageDimension(total=3, indirect_pct_by_label={"A": 1.0}),
+        ),
+    )
+    req_node2.set_metric(
+        "rollup_metrics",
+        RollupMetrics(
+            total_assertions=1,
+            implemented=CoverageDimension(total=1, indirect_pct_by_label={"A": 1.0}),
+            tested=CoverageDimension(total=1, indirect_pct_by_label={}),
+        ),
+    )
+
     # Annotate keywords for keyword-based search
     from elspais.graph.annotators import annotate_keywords
 
@@ -268,7 +295,12 @@ def refines_conduction_graph():
     not enough to be folded into "covered" (which requires ~1.0).
     """
     from elspais.graph.annotators import annotate_coverage
-    from tests.core.graph_test_helpers import build_graph, make_requirement, make_test_ref
+    from tests.core.graph_test_helpers import (
+        build_graph,
+        make_code_ref,
+        make_requirement,
+        make_test_ref,
+    )
 
     graph = build_graph(
         make_requirement(
@@ -285,6 +317,10 @@ def refines_conduction_graph():
                 {"label": "Q", "text": "Assertion Q"},
             ],
         ),
+        # REQ-200-X is IMPLEMENTED (so it stays a *testing* gap under the
+        # implemented-scoped MCP surface, REQ-d00258) but only ~50% tested via
+        # REFINES conduction from REQ-030-P -- a partially-conducted testing gap.
+        make_code_ref(implements=["REQ-200-X"], source_path="src/x.py"),
         make_test_ref(verifies=["REQ-030-P"], source_path="tests/test_p.py"),
     )
     annotate_coverage(graph)
@@ -345,6 +381,118 @@ class TestUncoveredFractionDetail:
         detail_by_label = {d["label"]: d for d in reqs["REQ-200"]["uncovered_detail"]}
         assert detail_by_label["X"]["fraction"] == 0.5
         assert detail_by_label["X"]["via"] == "refines-conduction"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# REQ-d00258: MCP get_uncovered_assertions realigns the *testing* gap to the
+# relative denominator -- a testing gap is IMPLEMENTED and not tested, so an
+# unimplemented assertion is NOT a testing gap (mirrors CLI `gaps untested` and
+# the viewer). The UAT axis stays UNRESTRICTED (an unvalidated assertion is a
+# UAT gap regardless of implementation).
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def denominator_graph():
+    """One REQ with A implemented-untested, B unimplemented-untested,
+    C unimplemented but UAT-validated.
+
+    Coverage after annotation:
+      implemented: {A}          tested: {}          uat_coverage: {C}
+
+    So the axis-by-axis gap composition is:
+      test -> {A}       (implemented AND not tested; B/C excluded, unimplemented)
+      uat  -> {A, B}    (not validated; C excluded, validated)
+      both -> {A, B}    (test {A} UNION uat {A,B}; C excluded -- validated,
+                         and not a test gap since unimplemented)
+    """
+    from elspais.graph.annotators import annotate_coverage
+    from tests.core.graph_test_helpers import (
+        build_graph,
+        make_code_ref,
+        make_journey,
+        make_requirement,
+    )
+
+    graph = build_graph(
+        make_requirement(
+            "REQ-500",
+            level="PRD",
+            assertions=[
+                {"label": "A", "text": "Assertion A"},
+                {"label": "B", "text": "Assertion B"},
+                {"label": "C", "text": "Assertion C"},
+            ],
+        ),
+        make_code_ref(implements=["REQ-500-A"], source_path="src/a.py"),
+        make_journey("UJ-1", validates=["REQ-500-C"], source_path="spec/j.md"),
+    )
+    annotate_coverage(graph)
+    return graph
+
+
+# Verifies: REQ-d00067-A, REQ-d00258-A
+class TestUncoveredTestingGapDenominator:
+    """The testing gap is scoped to implemented assertions (REQ-d00258)."""
+
+    def test_source_test_implemented_untested_is_uncovered(self, denominator_graph):
+        """(a) An IMPLEMENTED, untested assertion IS a testing gap."""
+        from elspais.mcp.server import _get_uncovered_assertions
+
+        result = _get_uncovered_assertions(denominator_graph, req_id="REQ-500", source="test")
+        assert "A" in result["uncovered_labels"]
+
+    def test_source_test_unimplemented_untested_is_not_uncovered(self, denominator_graph):
+        """(b) An UNIMPLEMENTED, untested assertion is NOT a testing gap.
+
+        This is the realignment: previously B (untested) was reported as a gap
+        regardless of implementation; now it is excluded because nothing is
+        built to test yet.
+        """
+        from elspais.mcp.server import _get_uncovered_assertions
+
+        result = _get_uncovered_assertions(denominator_graph, req_id="REQ-500", source="test")
+        assert result["uncovered_labels"] == ["A"]
+        assert "B" not in result["uncovered_labels"]
+        assert "C" not in result["uncovered_labels"]
+
+    def test_source_uat_is_unrestricted_by_implementation(self, denominator_graph):
+        """(c) The UAT axis stays unrestricted: an UNIMPLEMENTED, unvalidated
+        assertion still surfaces as a UAT gap; a validated one does not."""
+        from elspais.mcp.server import _get_uncovered_assertions
+
+        result = _get_uncovered_assertions(denominator_graph, req_id="REQ-500", source="uat")
+        assert set(result["uncovered_labels"]) == {"A", "B"}  # C is validated
+
+    def test_source_both_composes_test_and_uat_axes(self, denominator_graph):
+        """`both` = test gaps (implemented AND untested) UNION uat gaps
+        (unvalidated). An unimplemented-but-validated assertion (C) appears in
+        neither; an unimplemented-and-unvalidated one (B) still shows as a UAT
+        gap."""
+        from elspais.mcp.server import _get_uncovered_assertions
+
+        result = _get_uncovered_assertions(denominator_graph, req_id="REQ-500", source="both")
+        assert set(result["uncovered_labels"]) == {"A", "B"}
+        assert "C" not in result["uncovered_labels"]
+
+    def test_mcp_test_axis_agrees_with_cli_gaps_untested(self, denominator_graph):
+        """Cross-surface agreement: the MCP test-axis uncovered set matches the
+        CLI `gaps untested` surface on the same graph (design section 6)."""
+        from elspais.commands.gaps import collect_gaps
+        from elspais.mcp.server import _get_uncovered_assertions
+
+        mcp = _get_uncovered_assertions(denominator_graph, req_id="REQ-500", source="test")
+        mcp_labels = set(mcp["uncovered_labels"])
+
+        data = collect_gaps(denominator_graph, exclude_status=set(), config={})
+        cli_labels: set[str] = set()
+        for entry in data.untested:
+            if entry.req_id != "REQ-500":
+                continue
+            for aid, _frac in entry.assertions:
+                cli_labels.add(aid.rsplit("-", 1)[-1])
+
+        assert mcp_labels == cli_labels == {"A"}
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -3857,8 +3857,8 @@ def _get_uncovered_assertions(
         Dict with success and list of uncovered assertions with parent context.
     """
 
-    def _covered_labels_for_req(req_node: Any) -> set[str]:
-        """Return the set of assertion labels covered by at least one matching source.
+    def _axis_covered_labels(req_node: Any, kind: NodeKind, dimension: str) -> set[str]:
+        """Return labels ~fully covered on one axis (direct edges + conduction).
 
         Includes coverage conducted upward across REFINES edges (REQ-d00069-J):
         an assertion covered only through a refining requirement has no direct
@@ -3867,29 +3867,54 @@ def _get_uncovered_assertions(
         stays a gap.
         """
         covered: set[str] = set()
+        for _node, labels in _iter_assertion_coverage(req_node, kind):
+            covered.update(labels)
         rollup = req_node.get_metric("rollup_metrics")
-
-        def _fold(dimension: str) -> None:
-            # Only ~fully-covered assertions count as covered; partial coverage
-            # (0 < fraction < 1) stays a gap (REQ-d00069-J).
-            if rollup is None:
-                return
+        if rollup is not None:
             dim = getattr(rollup, dimension, None)
-            if dim is None:
-                return
-            covered.update(
-                lbl for lbl, frac in dim.indirect_pct_by_label.items() if frac >= 1.0 - 1e-9
-            )
-
-        if source in ("test", "both"):
-            for _test_node, labels in _iter_assertion_coverage(req_node, NodeKind.TEST):
-                covered.update(labels)
-            _fold("tested")
-        if source in ("uat", "both"):
-            for _jny_node, labels in _iter_assertion_coverage(req_node, NodeKind.USER_JOURNEY):
-                covered.update(labels)
-            _fold("uat_coverage")
+            if dim is not None:
+                covered.update(
+                    lbl for lbl, frac in dim.indirect_pct_by_label.items() if frac >= 1.0 - 1e-9
+                )
         return covered
+
+    def _implemented_labels(req_node: Any) -> set[str]:
+        """Return labels with any implementation evidence (fraction > 0).
+
+        Reads the existing ``implemented`` projection -- no re-derivation. The
+        RELATIVE denominator (REQ-d00258): a *testing* gap is scoped to
+        assertions that are IMPLEMENTED, mirroring gaps.py's
+        ``restrict_to_dimension="implemented"``. An unimplemented assertion has
+        nothing built to test yet and is therefore not a testing gap.
+        """
+        rollup = req_node.get_metric("rollup_metrics")
+        if rollup is None:
+            return set()
+        dim = getattr(rollup, "implemented", None)
+        if dim is None:
+            return set()
+        return {lbl for lbl, frac in dim.indirect_pct_by_label.items() if frac > 0}
+
+    def _uncovered_labels_for_req(req_node: Any, all_labels: list[str]) -> set[str]:
+        """Union of per-axis gaps for the requested ``source`` (REQ-d00258).
+
+        Test axis: a label is a testing gap iff it is IMPLEMENTED and not
+        ~fully test-covered -- so MCP agrees with the CLI ``gaps untested``
+        surface and the viewer. UAT axis: unrestricted (a label is a UAT gap
+        iff it is not ~fully UAT-covered), so an unimplemented-but-unvalidated
+        assertion still surfaces as a UAT gap under ``uat``/``both``.
+        """
+        uncovered: set[str] = set()
+        if source in ("test", "both"):
+            test_covered = _axis_covered_labels(req_node, NodeKind.TEST, "tested")
+            implemented = _implemented_labels(req_node)
+            uncovered.update(
+                lbl for lbl in all_labels if lbl in implemented and lbl not in test_covered
+            )
+        if source in ("uat", "both"):
+            uat_covered = _axis_covered_labels(req_node, NodeKind.USER_JOURNEY, "uat_coverage")
+            uncovered.update(lbl for lbl in all_labels if lbl not in uat_covered)
+        return uncovered
 
     def _fraction_for_label(req_node: Any, label: str) -> float:
         # REQ-d00069-J: the strongest conducted fraction across the dimensions
@@ -3931,19 +3956,14 @@ def _get_uncovered_assertions(
         if node.kind != NodeKind.REQUIREMENT:
             return {"success": False, "error": f"{req_id} is not a requirement"}
 
-        covered = _covered_labels_for_req(node)
-        uncovered_labels = []
-        id_by_label: dict[str, str] = {}
+        assertion_children = [c for c in node.iter_children() if c.kind == NodeKind.ASSERTION]
+        all_labels = [c.get_field("label", "") for c in assertion_children]
+        id_by_label = {c.get_field("label", ""): c.id for c in assertion_children}
+        uncovered_set = _uncovered_labels_for_req(node, all_labels)
+        # Preserve child order in the reported list.
+        uncovered_labels = [lbl for lbl in all_labels if lbl in uncovered_set]
 
-        for child in node.iter_children():
-            if child.kind != NodeKind.ASSERTION:
-                continue
-            label = child.get_field("label", "")
-            id_by_label[label] = child.id
-            if label not in covered:
-                uncovered_labels.append(label)
-
-        total = sum(1 for c in node.iter_children() if c.kind == NodeKind.ASSERTION)
+        total = len(assertion_children)
 
         return {
             "success": True,
@@ -3959,11 +3979,10 @@ def _get_uncovered_assertions(
     gaps: list[dict[str, Any]] = []
 
     for req_node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        covered = _covered_labels_for_req(req_node)
         assertions = [c for c in req_node.iter_children() if c.kind == NodeKind.ASSERTION]
-        uncovered_labels = [
-            c.get_field("label", "") for c in assertions if c.get_field("label", "") not in covered
-        ]
+        all_labels = [c.get_field("label", "") for c in assertions]
+        uncovered_set = _uncovered_labels_for_req(req_node, all_labels)
+        uncovered_labels = [lbl for lbl in all_labels if lbl in uncovered_set]
         if not uncovered_labels:
             continue
 
