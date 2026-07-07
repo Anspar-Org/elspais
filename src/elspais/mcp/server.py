@@ -1784,9 +1784,13 @@ def _build_coverage_stats(graph: FederatedGraph | None, config: dict[str, Any]) 
 
     from elspais.config import get_status_roles
 
+    # count_with_code_refs is NOT one of the three coverage-aggregation
+    # functions (aggregate_by_level/aggregate_dimension/tier_buckets); it keeps
+    # the role-based exclude set (REQ-d00258-C scope). count_by_coverage is a
+    # thin delegate to tier_buckets and now gates via config.
     exclude = get_status_roles(config).coverage_excluded_statuses()
     return {
-        "by_coverage": count_by_coverage(graph, exclude_status=exclude),
+        "by_coverage": count_by_coverage(graph, config=config),
         "by_level": count_by_level(graph, config=config),
         "code_reference_coverage": count_with_code_refs(graph, exclude_status=exclude),
     }
@@ -2126,13 +2130,12 @@ def _get_project_summary(
     # REQ-o00061-C: derive statistics from the shared coverage aggregation
     # (graph/aggregation.py) plus count_by_level; do not recompute here.
     level_counts = count_by_level(graph, config=config)
-    from elspais.config import get_status_roles
     from elspais.graph.aggregation import tier_buckets
 
-    coverage_exclude = get_status_roles(config or {}).coverage_excluded_statuses()
     # REQ-d00258-C: coverage bucket counts derive from the shared tier_buckets()
-    # aggregation so this MCP surface and the CLI summary agree exactly.
-    b = tier_buckets(graph, "implemented", exclude_status=coverage_exclude)
+    # aggregation so this MCP surface and the CLI summary agree exactly. Coverage
+    # inclusion is gated by status_expects_implementation via the config.
+    b = tier_buckets(graph, "implemented", config=config)
     coverage_stats = {
         "total": b.total,
         "full_coverage": b.full,

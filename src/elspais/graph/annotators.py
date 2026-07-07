@@ -487,14 +487,14 @@ def get_implementation_status(node: GraphNode) -> str:
 
 def count_by_coverage(
     graph: FederatedGraph,
-    exclude_status: set[str] | None = None,
+    config: dict | None = None,
 ) -> dict[str, int]:
     """Count requirements by coverage level.
 
     Args:
         graph: The TraceGraph to aggregate.
-        exclude_status: Status values to exclude from both numerator and
-            denominator (e.g. ``{"Draft"}``).
+        config: Project config; coverage inclusion is gated by
+            ``status_expects_implementation`` via ``tier_buckets`` (REQ-d00258-C).
 
     Returns:
         Dict with 'total', 'full_coverage', 'partial_coverage', 'no_coverage' counts.
@@ -508,7 +508,7 @@ def count_by_coverage(
     """
     from elspais.graph.aggregation import tier_buckets
 
-    b = tier_buckets(graph, "implemented", exclude_status=exclude_status)
+    b = tier_buckets(graph, "implemented", config=config)
     return {
         "total": b.total,
         "full_coverage": b.full,

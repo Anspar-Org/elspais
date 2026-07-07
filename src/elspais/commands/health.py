@@ -2115,9 +2115,7 @@ def check_dimension_coverage(
     # REQ-d00258-C: whole-graph per-dimension sums + per-REQ counts (incl. the
     # REQ-d00252-F INTEGRATES exception) come from the single shared
     # aggregation module -- not a second re-implementation of the walk here.
-    agg = aggregate_dimension(
-        graph, dimension, exclude_status=exclude_status, level_filter=level_filter
-    )
+    agg = aggregate_dimension(graph, dimension, config=config, level_filter=level_filter)
     req_count = agg.req_count
     req_with_any = agg.req_with_any  # REQs where dim.indirect > 0
     req_with_direct = agg.req_with_direct  # REQs where dim.direct > 0
@@ -2655,16 +2653,16 @@ def check_uat_coverage(
     # collect those reqs as findings and fail the check (REQ-d00258-F). The
     # dimension sums come from check_dimension_coverage; this only identifies
     # WHICH reqs are uncovered (no re-implementation of the sum walk).
+    from elspais.config import status_expects_implementation
     from elspais.graph import NodeKind
 
-    if exclude_status is None:
-        from elspais.config import get_status_roles
-
-        exclude_status = get_status_roles(cfg).coverage_excluded_statuses()
-
+    # REQ-d00258-C: the uncovered-findings walk gates on the SAME coverage
+    # inclusion resolver as ``aggregate_dimension`` above, so the sums and the
+    # findings list stay consistent (both count a status iff it expects
+    # implementation). Behavior-preserving for default config.
     uncovered: list[HealthFinding] = []
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if node.status in exclude_status or not level_filter(node.level):
+        if not status_expects_implementation(cfg, node.status) or not level_filter(node.level):
             continue
         rollup = node.get_metric("rollup_metrics")
         if rollup is None or rollup.uat_coverage.indirect <= 0:

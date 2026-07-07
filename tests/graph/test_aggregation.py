@@ -175,7 +175,9 @@ class TestAggregateDimension:
         )
         graph = _make_graph(active, deprecated)
 
-        agg = aggregate_dimension(graph, "implemented", exclude_status={"Deprecated"})
+        # Deprecated is a RETIRED-role status: excluded by default config via
+        # the status_expects_implementation gate (REQ-d00258-C).
+        agg = aggregate_dimension(graph, "implemented")
         assert agg.req_count == 1
         assert agg.total == 1
 
@@ -359,3 +361,85 @@ def test_relative_tier_shared_helper_measures_over_denominator():
     dim = _dim({"A"})
     assert relative_tier(dim, {"A", "B"}) == ("partial", False)
     assert relative_tier(dim, set()) == ("missing", True)
+
+
+# Verifies: REQ-d00258-C
+class TestCoverageInclusionViaExpectsImplementation:
+    """Coverage-aggregation inclusion is gated by
+    ``status_expects_implementation`` (design §3), replacing the implicit
+    ``coverage_excluded_statuses()`` gate.
+
+    SAFETY ANCHOR: for DEFAULT config (no ``[statuses.*]`` override),
+    ``not status_expects_implementation(config, status)`` is EXACTLY
+    ``status in coverage_excluded_statuses()`` -- every non-active-role status
+    is excluded. So a Draft (provisional role) is excluded by default, and an
+    explicit ``expects_implementation=true`` flag surgically includes it.
+    """
+
+    _EXPECTS_DRAFT = {"statuses": {"Draft": {"expects_implementation": True}}}
+
+    def _active_and_draft_graph(self) -> FederatedGraph:
+        active = _make_req("REQ-d00001", status="Active")
+        active.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                implemented=CoverageDimension(total=1, direct=1, indirect=1),
+            ),
+        )
+        draft = _make_req("REQ-d00002", status="Draft")
+        draft.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                implemented=CoverageDimension(total=1, direct=1, indirect=1),
+            ),
+        )
+        return _make_graph(active, draft)
+
+    def test_default_config_draft_excluded_from_aggregate_by_level(self):
+        """PRESERVED: with default config a Draft req does not count toward the
+        per-level implemented totals (Draft's provisional role -> excluded)."""
+        graph = self._active_and_draft_graph()
+        levels = {
+            lv.level: lv for lv in aggregate_by_level(graph, {"levels": {"dev": {"rank": 3}}})
+        }
+        dev = levels["DEV"]
+        assert dev.total_requirements == 1  # only the Active req
+        assert dev.implemented.covered == pytest.approx(1.0)
+
+    def test_expects_implementation_flag_includes_draft_in_aggregate_by_level(self):
+        """NEW: ``[statuses.Draft] expects_implementation=true`` surgically
+        counts the Draft req in the implemented totals -- the behavior the old
+        ``active=["Active","Draft"]`` hack gave, now per-status."""
+        graph = self._active_and_draft_graph()
+        config = {"levels": {"dev": {"rank": 3}}, **self._EXPECTS_DRAFT}
+        levels = {lv.level: lv for lv in aggregate_by_level(graph, config)}
+        dev = levels["DEV"]
+        assert dev.total_requirements == 2  # Active + Draft now counted
+        assert dev.implemented.covered == pytest.approx(2.0)
+
+    @pytest.mark.parametrize(
+        "config,expected_req_count,expected_total",
+        [
+            ({}, 1, 1),  # default: Draft excluded (role gate)
+            ({"statuses": {"Draft": {"expects_implementation": True}}}, 2, 2),
+        ],
+    )
+    def test_aggregate_dimension_gates_via_config(self, config, expected_req_count, expected_total):
+        graph = self._active_and_draft_graph()
+        agg = aggregate_dimension(graph, "implemented", config=config)
+        assert agg.req_count == expected_req_count
+        assert agg.total == expected_total
+
+    @pytest.mark.parametrize(
+        "config,expected_total",
+        [
+            ({}, 1),  # default: Draft excluded (role gate)
+            ({"statuses": {"Draft": {"expects_implementation": True}}}, 2),
+        ],
+    )
+    def test_tier_buckets_gates_via_config(self, config, expected_total):
+        graph = self._active_and_draft_graph()
+        b = tier_buckets(graph, "implemented", config=config)
+        assert b.total == expected_total

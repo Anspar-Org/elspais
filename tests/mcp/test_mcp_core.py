@@ -1139,7 +1139,7 @@ class TestGetProjectSummary:
 
         # Verify all aggregate functions are used
         expected_levels = count_by_level(sample_graph)
-        expected_coverage = count_by_coverage(sample_graph, exclude_status={"Draft"})
+        expected_coverage = count_by_coverage(sample_graph)
         expected_git = count_by_git_status(sample_graph)
 
         result = _get_project_summary(sample_graph, Path("/test/repo"))
@@ -1225,12 +1225,10 @@ class TestSummaryConsistency:
 
     def test_coverage_buckets_from_tiers(self, canonical_graph, canonical_config, tmp_path):
         pytest.importorskip("mcp")
-        from elspais.config import get_status_roles
         from elspais.graph.aggregation import tier_buckets
         from elspais.mcp.server import _get_project_summary
 
-        exclude = get_status_roles(canonical_config).coverage_excluded_statuses()
-        b = tier_buckets(canonical_graph, "implemented", exclude_status=exclude)
+        b = tier_buckets(canonical_graph, "implemented", config=canonical_config)
         mcp = _get_project_summary(canonical_graph, tmp_path, canonical_config)
         assert mcp["coverage"] == {
             "total": b.total,

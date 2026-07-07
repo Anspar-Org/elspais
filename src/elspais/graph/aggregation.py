@@ -176,17 +176,31 @@ def _accumulate(sums: DimensionSums, dim: CoverageDimension) -> None:
     sums.total += dim.total
 
 
+def _counts_for_coverage(config: dict[str, Any] | None, status: str | None) -> bool:
+    """Whether a requirement STATUS is INCLUDED in coverage aggregation.
+
+    The single coverage-inclusion gate (REQ-d00258-C): delegates to the
+    ``status_expects_implementation`` resolver so summary/health/mcp and the
+    viewer answer 'does this status count?' identically. For DEFAULT config
+    (no ``[statuses.<Name>]`` override) this is EXACTLY
+    ``status not in coverage_excluded_statuses()`` -- the role system remains
+    the default source; an explicit ``expects_implementation`` flag diverges
+    surgically. Deferred import mirrors the other config helpers here to avoid
+    an import cycle.
+    """
+    from elspais.config import status_expects_implementation
+
+    return status_expects_implementation(config or {}, status)
+
+
 def aggregate_by_level(graph: Any, config: dict[str, Any] | None = None) -> list[LevelAggregate]:
     """Per-level assertion-fraction sums on the generous footing."""
-    from elspais.config import get_status_roles
-
-    exclude_status = get_status_roles(config or {}).coverage_excluded_statuses()
     keys = _level_keys(config)
     groups: dict[str, LevelAggregate] = {k.lower(): LevelAggregate(level=k.upper()) for k in keys}
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         agg = groups.get((node.level or "").lower())
-        if agg is None or node.status in exclude_status:
+        if agg is None or not _counts_for_coverage(config, node.status):
             continue
         agg.total_requirements += 1
         rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
@@ -215,7 +229,7 @@ def aggregate_by_level(graph: Any, config: dict[str, Any] | None = None) -> list
 def aggregate_dimension(
     graph: Any,
     dimension: str,
-    exclude_status: set[str] | None = None,
+    config: dict[str, Any] | None = None,
     level_filter: Any = None,
 ) -> DimensionAggregate:
     """Whole-graph sums + per-REQ counts for one CoverageDimension.
@@ -226,6 +240,12 @@ def aggregate_dimension(
     'uat_coverage', 'uat_verified'). This is the single place health.py's
     dimension-coverage check should read counts from -- it must not
     re-implement this walk (REQ-d00258-C).
+
+    Coverage inclusion is gated by ``status_expects_implementation`` via
+    ``_counts_for_coverage(config, ...)`` -- the same resolver the viewer,
+    summary, and tier buckets use (REQ-d00258-C). Behavior-preserving for
+    default config; an explicit ``[statuses.<Name>].expects_implementation``
+    flag diverges surgically.
 
     ``level_filter`` (optional) is a predicate ``(level: str | None) -> bool``.
     When given, only requirements whose level satisfies it are counted (both
@@ -239,7 +259,7 @@ def aggregate_dimension(
     """
     agg = DimensionAggregate()
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if exclude_status and node.status in exclude_status:
+        if not _counts_for_coverage(config, node.status):
             continue
         if level_filter is not None and not level_filter(node.level):
             continue
@@ -269,7 +289,7 @@ def aggregate_dimension(
 def tier_buckets(
     graph: Any,
     dimension: str = "implemented",
-    exclude_status: set[str] | None = None,
+    config: dict[str, Any] | None = None,
 ) -> TierBuckets:
     """Requirement-level tier bucket counts for one dimension.
 
@@ -279,10 +299,14 @@ def tier_buckets(
     tested lands in ``full`` even when some assertions are unimplemented. The
     absolute dimensions (implemented/uat_coverage) bucket by their own tier. A
     node with no rollup counts as ``missing``.
+
+    Coverage inclusion is gated by ``_counts_for_coverage(config, ...)`` -- the
+    shared ``status_expects_implementation`` resolver (REQ-d00258-C).
+    Behavior-preserving for default config.
     """
     buckets = TierBuckets()
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if exclude_status and node.status in exclude_status:
+        if not _counts_for_coverage(config, node.status):
             continue
         buckets.total += 1
         rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
