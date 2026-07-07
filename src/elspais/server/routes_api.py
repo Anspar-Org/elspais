@@ -563,6 +563,9 @@ async def api_node(request: Request) -> JSONResponse:
                     "color": tiers.get(f"{prefix}_color", ""),
                     "tip": DIMENSION_TIPS.get(dim_key, ""),
                     "status_tip": tiers.get(f"{prefix}_tip", ""),
+                    # Per-dimension provenance caveat (REQ-d00069-L): "~" when the
+                    # dimension's evidence is not fully direct (indirect > direct).
+                    "marker": tiers.get(f"{prefix}_marker", ""),
                 }
                 # UAT dims carry the per-level expectation so the viewer can
                 # render a (red) UAT badge on a journey-less expects_validation

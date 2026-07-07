@@ -191,18 +191,23 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         "impl_color": "",
         "impl_tip": "",
         "impl_tier": "",
+        "impl_marker": "",
         "tested_color": "",
         "tested_tip": "",
         "tested_tier": "",
+        "tested_marker": "",
         "verified_color": "",
         "verified_tip": "",
         "verified_tier": "",
+        "verified_marker": "",
         "uat_cov_color": "",
         "uat_cov_tip": "",
         "uat_cov_tier": "",
+        "uat_cov_marker": "",
         "uat_ver_color": "",
         "uat_ver_tip": "",
         "uat_ver_tier": "",
+        "uat_ver_marker": "",
         "combined_color": "",
         "combined_tip": "",
         "combined_bucket": "",
@@ -325,11 +330,39 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         color = _severity_color(severity)
         label = status_words[dim_key]
         desc = _TIER_DESCRIPTIONS.get(tier, tier)
-        tip = f"{label}: {desc}"
+
+        # Provenance caveat (REQ-d00069-L). The badge STATE color no longer
+        # distinguishes direct from indirect coverage (Phase 1 collapsed
+        # full-direct/full-indirect into one green); the distinction is surfaced
+        # HERE instead -- in the hover tip and a per-dimension ``~`` marker. The
+        # marker is set whenever ``indirect > direct`` (evidence is not fully
+        # direct), matching the CLI headline ``~`` semantics (summary/trace).
+        eps = 1e-9
+        if dim.total > 0:
+            direct_pct = round(100 * dim.direct / dim.total)
+            indirect_pct = round(100 * dim.indirect / dim.total)
+        else:
+            direct_pct = 0
+            indirect_pct = 0
+        mixed = dim.indirect > dim.direct + eps
+        provenance = f"{direct_pct}% direct"
+        if mixed:
+            indirect_extra = indirect_pct - direct_pct
+            if cov_config.allow_indirect:
+                provenance += f", {indirect_extra}% indirect"
+            else:
+                # Indirect coverage does not credit the state under this config,
+                # so it is annotated rather than counted toward the footing.
+                provenance += f" ({indirect_extra}% indirect, not credited)"
+        marker = "~" if mixed else ""
+        tip = f"{label}: {desc} — {provenance}"
+        if marker:
+            tip += " ~"
 
         result[f"{prefix}_color"] = color
         result[f"{prefix}_tip"] = tip
         result[f"{prefix}_tier"] = tier
+        result[f"{prefix}_marker"] = marker
 
         # Track worst severity for combined
         sev_pri = SEVERITY_PRIORITY.get(severity, 999)
