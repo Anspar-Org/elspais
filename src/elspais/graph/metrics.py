@@ -106,7 +106,21 @@ class CoverageDimension:
         total: Total assertions in the requirement
         direct: Sum of per-assertion direct fractions (assertion-targeted edges)
         indirect: Sum of per-assertion fractions incl. blanket/whole-req edges
-        has_failures: True if any result is failed/error (verified dims only)
+        has_failures: True if ANY result is failed/error for this dimension.
+            This is **requirement-wide** -- it drives the requirement-level
+            badge/``tier`` (any assertion failing => the requirement dimension
+            reports a failure, REQ-d00258-G). Do NOT use it to decide a single
+            assertion's standing; use ``failing_labels`` for that.
+        failing_labels: The assertion labels that have an actual failing
+            result/verification for THIS dimension. This is **per-assertion**
+            -- it drives the per-*Assertion* standing so an assertion reads
+            "failing" only when it itself failed, not because a sibling
+            assertion (covered by a different, non-failing test/journey)
+            failed. Invariant: ``has_failures`` is true iff ``failing_labels``
+            is non-empty (for the verified/uat_verified dimensions that record
+            failures). Only meaningful on ``verified``/``uat_verified``/
+            ``lcov_tested`` (dims that carry pass/fail); other dims leave it
+            empty.
         direct_labels: Assertions with direct coverage > 0
         indirect_labels: Assertions with any coverage > 0
         direct_pct_by_label: Per-assertion direct fraction in [0,1]
@@ -123,6 +137,7 @@ class CoverageDimension:
     direct: float = 0.0
     indirect: float = 0.0
     has_failures: bool = False
+    failing_labels: set[str] = field(default_factory=set)
     direct_labels: set[str] = field(default_factory=set)
     indirect_labels: set[str] = field(default_factory=set)
     direct_pct_by_label: dict[str, float] = field(default_factory=dict)
@@ -309,6 +324,8 @@ class RollupMetrics:
         uat_verified_direct_pct: dict[str, float],
         uat_verified_indirect_pct: dict[str, float],
         uat_verified_failures: bool,
+        verified_failing_labels: set[str] | None = None,
+        uat_verified_failing_labels: set[str] | None = None,
     ) -> None:
         """Populate tested, verified, and uat_verified dimensions.
 
@@ -336,6 +353,7 @@ class RollupMetrics:
             direct=len(verified_direct_labels),
             indirect=len(verified_all),
             has_failures=verified_failures,
+            failing_labels=set(verified_failing_labels or ()),
             direct_labels=set(verified_direct_labels),
             indirect_labels=set(verified_all),
             direct_pct_by_label=dict.fromkeys(verified_direct_labels, 1.0),
@@ -359,6 +377,7 @@ class RollupMetrics:
             direct=sum(uat_verified_direct_pct.values()),
             indirect=sum(uat_indirect_pct_by_label.values()),
             has_failures=uat_verified_failures,
+            failing_labels=set(uat_verified_failing_labels or ()),
             direct_labels={lbl for lbl, f in uat_verified_direct_pct.items() if f > 0},
             indirect_labels={lbl for lbl, f in uat_indirect_pct_by_label.items() if f > 0},
             direct_pct_by_label=dict(uat_verified_direct_pct),
@@ -767,6 +786,10 @@ def tested_and_passing(metrics: RollupMetrics) -> CoverageDimension:
         direct=combined_direct,
         indirect=combined_indirect,
         has_failures=vd.has_failures or lt.has_failures,
+        # Per-assertion failure attribution is the union of both sources'
+        # failing labels, so the "passing" standing reads red only for the
+        # assertions that actually failed (REQ-d00258-G).
+        failing_labels=set(vd.failing_labels) | set(lt.failing_labels),
         direct_labels=set(direct_pct),
         indirect_labels=set(indirect_pct),
         direct_pct_by_label=direct_pct,

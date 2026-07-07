@@ -380,13 +380,16 @@ def compute_assertion_coverage_states(
       - implemented  : ``implemented.indirect_pct_by_label``
       - tested       : ``tested.indirect_pct_by_label``
       - verified     : ``tested_and_passing(rollup)`` union per label (+ its
-                       ``has_failures``, gated on the assertion being tested)
+                       ``failing_labels``, so red lands only on the assertion
+                       that itself failed)
       - uat_coverage : ``uat_coverage.indirect_pct_by_label``
-      - uat_verified : ``uat_verified.indirect_pct_by_label`` (+ ``has_failures``,
-                       gated on the assertion being UAT-covered)
+      - uat_verified : ``uat_verified.indirect_pct_by_label`` (+ its
+                       ``failing_labels``)
 
-    Standing rule: ``full`` at ~100%, ``partial`` at 0<f<1 with no failure,
-    ``failing`` for a failed result on a covered assertion, ``missing`` otherwise.
+    Standing rule: ``full`` at ~100%, ``partial`` at 0<f<1 with no own failure,
+    ``failing`` when this assertion itself failed (``label in failing_labels``),
+    ``missing`` otherwise. An assertion is NEVER reddened by a failing SIBLING
+    (REQ-d00258-G).
     No coverage is recomputed here -- only the pre-computed per-label fractions
     are projected. Returns ``{}`` for coverage-excluded statuses or a node with
     no rollup / no assertions (same gate as ``compute_coverage_tiers``).
@@ -422,15 +425,20 @@ def compute_assertion_coverage_states(
             return "partial"
         return "missing"
 
-    def _passing_standing(passing: CoverageDimension, cover: CoverageDimension, label: str) -> str:
-        """Passing/verified standing: fold ``has_failures`` in, gated on the
-        assertion actually carrying evidence in ``cover`` (tested / UAT-covered)."""
+    def _passing_standing(passing: CoverageDimension, label: str) -> str:
+        """Passing/verified standing gated on THIS assertion's own failure.
+
+        A failure lands on this assertion only when the assertion itself failed
+        (``label in passing.failing_labels``) -- NOT merely because a sibling
+        assertion, covered by a different (non-failing) test/journey, failed and
+        set the requirement-wide ``has_failures`` flag (REQ-d00258-G). The
+        requirement-level badge still goes red for any failing assertion via the
+        dimension-wide ``has_failures`` in ``compute_coverage_tiers``.
+        """
         f = _frac(passing, label)
         if f >= 1.0 - eps:
             return "full"
-        # A dimension-level failure lands on this assertion only when the
-        # assertion is covered (tested / validated) but not fully passing.
-        if passing.has_failures and _frac(cover, label) > eps:
+        if label in passing.failing_labels:
             return "failing"
         if f > eps:
             return "partial"
@@ -442,9 +450,9 @@ def compute_assertion_coverage_states(
         states[label] = {
             "implemented": _simple_standing(rollup.implemented, label),
             "tested": _simple_standing(rollup.tested, label),
-            "verified": _passing_standing(passing, rollup.tested, label),
+            "verified": _passing_standing(passing, label),
             "uat_coverage": _simple_standing(rollup.uat_coverage, label),
-            "uat_verified": _passing_standing(rollup.uat_verified, rollup.uat_coverage, label),
+            "uat_verified": _passing_standing(rollup.uat_verified, label),
         }
     return states
 

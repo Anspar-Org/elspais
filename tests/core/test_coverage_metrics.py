@@ -677,6 +677,86 @@ class TestTestSpecificMetrics:
         assert rollup.implemented.indirect == 1  # Still covered by CODE
 
 
+class TestPerAssertionFailureAttribution:
+    """REQ-d00258-G: the per-assertion 'failing' standing is attributed to the
+    assertion that actually failed, not to a non-failing sibling.
+
+    ``has_failures`` stays requirement-wide (drives the requirement badge/tier);
+    ``failing_labels`` records which assertions failed so the per-assertion
+    standing (via ``compute_assertion_coverage_states``) reddens only them.
+    """
+
+    # Verifies: REQ-d00258-G
+    def test_verified_failing_labels_only_the_failed_assertion(self):
+        """Failing test on B must not redden the passing sibling A."""
+        from elspais.html.generator import compute_assertion_coverage_states
+        from tests.core.graph_test_helpers import make_test_result
+
+        graph = build_graph(
+            make_requirement(
+                "REQ-100",
+                level="PRD",
+                assertions=[
+                    {"label": "A", "text": "Assertion A"},
+                    {"label": "B", "text": "Assertion B"},
+                ],
+            ),
+            make_test_ref(verifies=["REQ-100-A"], source_path="tests/test_a.py"),
+            make_test_ref(verifies=["REQ-100-B"], source_path="tests/test_b.py"),
+            make_test_result(
+                "result-a", status="passed", test_id="test:tests/test_a.py:1", match="source"
+            ),
+            make_test_result(
+                "result-b", status="failed", test_id="test:tests/test_b.py:1", match="source"
+            ),
+        )
+
+        annotate_coverage(graph)
+        node = graph.find_by_id("REQ-100")
+        rollup: RollupMetrics = node.get_metric("rollup_metrics")
+
+        # Failure attributed to B only -- NOT the passing sibling A.
+        assert rollup.verified.failing_labels == {"B"}
+        # Requirement-level dimension unchanged: any assertion failing -> failing.
+        assert rollup.verified.has_failures is True
+        assert rollup.verified.tier == "failing"
+
+        # Per-assertion standings: A passing (full), B failing -- B does NOT
+        # leak its red onto A.
+        states = compute_assertion_coverage_states(node)
+        assert states["A"]["verified"] == "full"
+        assert states["B"]["verified"] == "failing"
+
+    # Verifies: REQ-d00258-G
+    def test_blanket_failing_test_attributes_to_all_assertions(self):
+        """A whole-requirement failing test blames every assertion it covers."""
+        from tests.core.graph_test_helpers import make_test_result
+
+        graph = build_graph(
+            make_requirement(
+                "REQ-100",
+                level="PRD",
+                assertions=[
+                    {"label": "A", "text": "Assertion A"},
+                    {"label": "B", "text": "Assertion B"},
+                ],
+            ),
+            make_test_ref(verifies=["REQ-100"], source_path="tests/test_all.py"),
+            make_test_result(
+                "result-all",
+                status="failed",
+                test_id="test:tests/test_all.py:1",
+                match="source",
+            ),
+        )
+
+        annotate_coverage(graph)
+        rollup: RollupMetrics = graph.find_by_id("REQ-100").get_metric("rollup_metrics")
+
+        assert rollup.verified.failing_labels == {"A", "B"}
+        assert rollup.verified.has_failures is True
+
+
 class TestRefinesCoverageConduction:
     """REFINES edges conduct the refiner's own coverage up to the parent assertion.
 

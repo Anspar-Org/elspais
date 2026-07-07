@@ -633,6 +633,21 @@ def count_by_git_status(graph: FederatedGraph) -> dict[str, int]:
     return counts
 
 
+# Implements: REQ-d00258-G
+def _failing_targets(targets: list[str] | None, assertion_labels: list[str]) -> set[str]:
+    """Labels a failing verified/UAT signal is attributed to (REQ-d00258-G).
+
+    An assertion-targeted failure blames only its named labels (scoped to the
+    requirement's own assertions); a blanket/whole-requirement failure blames
+    every assertion, since it genuinely exercises them all. This mirrors the
+    scoping the ``has_failures`` bookkeeping already uses, but keeps the blame
+    per-assertion so a non-failing sibling is not reddened.
+    """
+    if targets:
+        return {t for t in targets if t in assertion_labels}
+    return set(assertion_labels)
+
+
 def _compute_coverage_from_source(
     req_node,
     assertion_labels: list,
@@ -1045,11 +1060,17 @@ def _compute_lcov_tested(
         apps = {file_app.get(rel) for rel in file_cov}
         has_failures = any(app_status.get(a) == "red" for a in apps if a)
 
+    # A red app is a whole-application failure signal, so it attributes to every
+    # lcov-credited assertion (there is no per-assertion granularity in app
+    # status); an assertion with no lcov credit stays unblamed (REQ-d00258-G).
+    failing_labels = set(indirect_pct) if has_failures else set()
+
     metrics.lcov_tested = CoverageDimension(
         total=len(labels),
         direct=sum(direct_pct.values()),
         indirect=sum(indirect_pct.values()),
         has_failures=has_failures,
+        failing_labels=failing_labels,
         direct_labels=set(direct_pct),
         indirect_labels=set(indirect_pct),
         direct_pct_by_label=dict(direct_pct),
@@ -1301,6 +1322,11 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
         tested_indirect_labels: set[str] = set()  # Assertions with whole-req TEST coverage
         validated_labels: set[str] = set()  # Assertions with passing tests
         has_failures = False
+        # REQ-d00258-G: per-assertion failure attribution. has_failures is the
+        # requirement-wide flag (drives the requirement badge); this set records
+        # WHICH assertions actually failed, so a partial sibling covered by a
+        # different (non-failing) test does not inherit the red standing.
+        verified_failing_labels: set[str] = set()
 
         # Implements: REQ-d00069-B, REQ-d00084-D
         # Compute TEST (VERIFIES) coverage contributions via shared helper.
@@ -1488,6 +1514,7 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                         verified_all_carried = False
                 elif status in ("failed", "fail", "failure", "error"):
                     has_failures = True
+                    verified_failing_labels |= _failing_targets(assertion_targets, assertion_labels)
                     verified_saw_signal = True
                     if not (result.get_field("carried") or False):
                         verified_all_carried = False
@@ -1500,6 +1527,9 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                     statuses = source_file_index[rel]
                     if any(s in ("failed", "fail", "failure", "error") for s in statuses):
                         has_failures = True
+                        verified_failing_labels |= _failing_targets(
+                            assertion_targets, assertion_labels
+                        )
                         verified_saw_signal = True
                         if not source_file_carried.get(rel, False):
                             verified_all_carried = False
@@ -1536,6 +1566,9 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                         verified_all_carried = False
                     elif st == "red":
                         has_failures = True
+                        verified_failing_labels |= _failing_targets(
+                            assertion_targets, assertion_labels
+                        )
                         verified_saw_signal = True
                         verified_all_carried = False
 
@@ -1557,12 +1590,19 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
         uat_direct_pct: dict[str, float] = {}
         uat_indirect_pct: dict[str, float] = {}
         uat_has_failures = False
+        # REQ-d00258-G: per-assertion UAT failure attribution. A failing journey
+        # legitimately blames every assertion THAT journey validates (its
+        # assertion_targets, or all labels when it validates the whole REQ); the
+        # bug being fixed is a DIFFERENT, non-failing journey's assertions
+        # inheriting this red.
+        uat_failing_labels: set[str] = set()
         for jny_node, assertion_targets in jny_nodes_for_result_lookup:
             v = jny_node.get_metric("journey_verification")
             if v is None:
                 continue
             if v.has_failures:
                 uat_has_failures = True
+                uat_failing_labels |= _failing_targets(assertion_targets, assertion_labels)
                 continue
             frac = v.fraction  # 1.0 full, verified/total for partial, 0 none
             if frac <= 0:
@@ -1589,6 +1629,8 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
             uat_verified_direct_pct=uat_direct_pct,
             uat_verified_indirect_pct=uat_indirect_pct,
             uat_verified_failures=uat_has_failures,
+            verified_failing_labels=verified_failing_labels,
+            uat_verified_failing_labels=uat_failing_labels,
         )
 
         # Compute code_tested dimension from coverage data

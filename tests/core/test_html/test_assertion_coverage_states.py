@@ -63,12 +63,14 @@ def _spread_rollup():
             direct_pct_by_label={"A": 1.0, "B": 1.0},
             indirect_pct_by_label={"A": 1.0, "B": 1.0},
         ),
-        # A passes; B failed (not in the passing set) -> has_failures on the dim.
+        # A passes; B failed (not in the passing set) -> has_failures on the dim
+        # (requirement-wide) and B in failing_labels (the assertion that failed).
         verified=CoverageDimension(
             total=5,
             direct=1,
             indirect=1,
             has_failures=True,
+            failing_labels={"B"},
             direct_pct_by_label={"A": 1.0},
             indirect_pct_by_label={"A": 1.0},
         ),
@@ -121,18 +123,18 @@ class TestAssertionCoverageStates:
         assert set(states["E"].values()) == {"missing"}
 
     @pytest.mark.parametrize(
-        "frac,has_failures,expected",
+        "frac,failing,expected",
         [
             (1.0, False, "full"),  # 100% -> green
             (0.5, False, "partial"),  # 0<f<1, no failure -> yellow
-            (0.0, True, "failing"),  # covered-but-failed result -> red
+            (0.0, True, "failing"),  # this assertion's own result failed -> red
             (0.0, False, "missing"),  # no evidence -> grey
         ],
     )
-    def test_REQ_d00258_G_passing_state_machinery(self, frac, has_failures, expected):
+    def test_REQ_d00258_G_passing_state_machinery(self, frac, failing, expected):
         """Pin the Passing/verified state->color machinery with synthetic metrics,
-        decoupled from any test/journey-crediting policy. RED requires a covered
-        assertion (tested) so a failed result lands on it."""
+        decoupled from any test/journey-crediting policy. RED requires THIS
+        assertion to be in the dimension's failing_labels."""
         rollup = RollupMetrics(
             total_assertions=1,
             tested=CoverageDimension(
@@ -140,7 +142,8 @@ class TestAssertionCoverageStates:
             ),
             verified=CoverageDimension(
                 total=1,
-                has_failures=has_failures,
+                has_failures=failing,
+                failing_labels=({"A"} if failing else set()),
                 indirect_pct_by_label=({"A": frac} if frac > 0 else {}),
             ),
         )
@@ -199,6 +202,56 @@ class TestAssertionCoverageStates:
         node = _req_with_rollup(rollup, labels=("A",))
         states = compute_assertion_coverage_states(node)
         assert states["A"]["verified"] == "full"
+
+    def test_REQ_d00258_G_failing_sibling_does_not_redden_partial(self):
+        """A failing assertion A must not push a partial (non-failing) sibling B
+        to 'failing'. B keeps its own standing; only A (in failing_labels) is red.
+        Failing-first guard for the sibling-attribution bug."""
+        rollup = RollupMetrics(
+            total_assertions=2,
+            tested=CoverageDimension(
+                total=2,
+                direct=2,
+                indirect=2,
+                indirect_pct_by_label={"A": 1.0, "B": 1.0},
+            ),
+            # A failed (in failing_labels); B is merely partial (0.5), no own
+            # failure. has_failures is requirement-wide (True), but failing_labels
+            # names A only.
+            verified=CoverageDimension(
+                total=2,
+                has_failures=True,
+                failing_labels={"A"},
+                indirect_pct_by_label={"B": 0.5},
+            ),
+        )
+        node = _req_with_rollup(rollup, labels=("A", "B"))
+        states = compute_assertion_coverage_states(node)
+        assert states["A"]["verified"] == "failing"
+        assert states["B"]["verified"] == "partial"  # NOT failing
+
+    def test_REQ_d00258_G_uat_failing_sibling_does_not_redden_full(self):
+        """uat_verified: a failing assertion A must not redden a fully-verified
+        sibling B validated by a different, non-failing journey."""
+        rollup = RollupMetrics(
+            total_assertions=2,
+            uat_coverage=CoverageDimension(
+                total=2,
+                direct=2,
+                indirect=2,
+                indirect_pct_by_label={"A": 1.0, "B": 1.0},
+            ),
+            uat_verified=CoverageDimension(
+                total=2,
+                has_failures=True,
+                failing_labels={"A"},
+                indirect_pct_by_label={"B": 1.0},
+            ),
+        )
+        node = _req_with_rollup(rollup, labels=("A", "B"))
+        states = compute_assertion_coverage_states(node)
+        assert states["A"]["uat_verified"] == "failing"
+        assert states["B"]["uat_verified"] == "full"  # NOT failing
 
     def test_REQ_d00258_G_excluded_status_returns_empty(self):
         node = _req_with_rollup(_spread_rollup(), status="Deprecated")
