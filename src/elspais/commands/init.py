@@ -291,11 +291,10 @@ _FIELD_COMMENTS: dict[str, str] = {
     "rules.coverage.verified": "Test results exist for assertions",
     "rules.coverage.uat_coverage": "User journeys validate assertions",
     "rules.coverage.uat_verified": "User journey results exist",
-    "rules.coverage.*.full_direct": "All assertions covered by direct references",
-    "rules.coverage.*.full_indirect": "Covered via parent/child rollup only",
+    "rules.coverage.*.full": "All assertions covered",
     "rules.coverage.*.partial": "Some assertions covered, some not",
-    "rules.coverage.*.none": "No coverage at all",
     "rules.coverage.*.failing": "Has coverage but test results show failures",
+    "rules.coverage.*.missing": "No coverage at all",
     "rules.references": "Severity for code/test references to non-active requirements",
     "rules.references.retired": ('"ok" | "info" | "warning" | "error" — refs to retired REQs'),
     "rules.references.provisional": (

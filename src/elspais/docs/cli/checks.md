@@ -299,10 +299,9 @@ Each dimension resolves to a **tier** that drives severity and UI color:
 
 | Tier | Meaning |
 |------|---------|
-| `none` | No coverage at all |
+| `missing` | No coverage at all |
 | `partial` | Some assertions covered, not all |
-| `full-indirect` | All assertions covered, but only via indirect links |
-| `full-direct` | All assertions covered with assertion-level specificity |
+| `full` | All assertions covered (the direct/indirect distinction is shown as a `~` marker, not a separate tier) |
 | `failing` | Coverage exists but results are failing |
 
 ### `code_tested` — line coverage

@@ -115,20 +115,20 @@ filterGroups.coverage = new FilterGroup({
     container: document.getElementById('edit-toolbar'),
     buttons: [
         {key: 'failing', label: 'Failing'},
-        {key: 'none', label: 'None'},
+        {key: 'missing', label: 'Missing'},
         {key: 'partial', label: 'Partial'},
         {key: 'full', label: 'Full'},
     ],
-    defaultOn: new Set(['failing', 'none', 'partial', 'full']),
+    defaultOn: new Set(['failing', 'missing', 'partial', 'full']),
     sensitiveEvents: new Set(['mutation-edge', 'refresh']),
     countFn: function(key, rows) {
         var count = 0;
         for (var i = 0; i < rows.length; i++) {
-            if ((rows[i].coverage || 'none') === key) count++;
+            if ((rows[i].coverage || 'missing') === key) count++;
         }
         return count;
     },
-    matchFn: function(row) { return row.coverage || 'none'; },
+    matchFn: function(row) { return row.coverage || 'missing'; },
     onChange: function() { renderNavTree(); saveState(); },
 });
 

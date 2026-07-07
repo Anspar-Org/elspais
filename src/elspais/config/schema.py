@@ -186,18 +186,18 @@ class FormatConfig(_StrictModel):
 class CoverageSeverityConfig(_StrictModel):
     """Severity mapping for a single coverage dimension's tier states.
 
-    Each tier maps to a severity: 'ok', 'info', 'warning', or 'error'.
+    Each tier maps to a severity: 'ok', 'info', 'warning', or 'error'. Tiers
+    are the unified vocabulary (REQ-d00258): full / partial / failing / missing.
     """
 
-    full_direct: str = "ok"
-    full_indirect: str = "info"
+    full: str = "ok"
     partial: str = "warning"
-    none: str = "error"
     failing: str = "error"
+    missing: str = "error"
 
 
 def _uat_severity() -> CoverageSeverityConfig:
-    return CoverageSeverityConfig(none="info")
+    return CoverageSeverityConfig(missing="info")
 
 
 class CoverageConfig(_StrictModel):
@@ -206,7 +206,7 @@ class CoverageConfig(_StrictModel):
     implemented: CoverageSeverityConfig = Field(default_factory=CoverageSeverityConfig)
     tested: CoverageSeverityConfig = Field(default_factory=CoverageSeverityConfig)
     verified: CoverageSeverityConfig = Field(
-        default_factory=lambda: CoverageSeverityConfig(none="warning")
+        default_factory=lambda: CoverageSeverityConfig(missing="warning")
     )
     uat_coverage: CoverageSeverityConfig = Field(default_factory=_uat_severity)
     uat_verified: CoverageSeverityConfig = Field(default_factory=_uat_severity)

@@ -479,6 +479,56 @@ class TestUserExample:
         assert metrics.implemented.indirect_pct == 25.0
 
 
+class TestCoverageDimensionTierVocabulary:
+    """CoverageDimension.tier uses the unified {full,partial,failing,missing}
+    vocabulary (REQ-d00258). The direct/indirect distinction is no longer a
+    tier -- both fully-covered footings collapse to ``full``; ``none`` is
+    renamed ``missing``.
+    """
+
+    # Verifies: REQ-d00258-A
+    def test_all_direct_reads_full(self):
+        """A dimension fully covered by direct evidence reads ``full``
+        (was ``full-direct``)."""
+        from elspais.graph.metrics import CoverageDimension
+
+        dim = CoverageDimension(total=2, direct=2.0, indirect=2.0)
+        assert dim.tier == "full"
+
+    # Verifies: REQ-d00258-A
+    def test_fully_covered_including_indirect_reads_full(self):
+        """A dimension fully covered only via indirect evidence still reads
+        ``full`` (was ``full-indirect``) -- the caveat moves to the ~ marker."""
+        from elspais.graph.metrics import CoverageDimension
+
+        dim = CoverageDimension(total=2, direct=0.0, indirect=2.0)
+        assert dim.tier == "full"
+
+    # Verifies: REQ-d00258-A
+    def test_some_covered_reads_partial(self):
+        """A partially-covered dimension reads ``partial``."""
+        from elspais.graph.metrics import CoverageDimension
+
+        dim = CoverageDimension(total=2, direct=0.0, indirect=1.0)
+        assert dim.tier == "partial"
+
+    # Verifies: REQ-d00258-A
+    def test_no_coverage_reads_missing(self):
+        """An uncovered dimension reads ``missing`` (was ``none``)."""
+        from elspais.graph.metrics import CoverageDimension
+
+        dim = CoverageDimension(total=2, direct=0.0, indirect=0.0)
+        assert dim.tier == "missing"
+
+    # Verifies: REQ-d00258-A
+    def test_failures_read_failing(self):
+        """A dimension with failures reads ``failing`` regardless of coverage."""
+        from elspais.graph.metrics import CoverageDimension
+
+        dim = CoverageDimension(total=2, direct=2.0, indirect=2.0, has_failures=True)
+        assert dim.tier == "failing"
+
+
 class TestNoAssertions:
     """Tests for requirements without assertions."""
 

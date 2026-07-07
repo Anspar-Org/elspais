@@ -203,9 +203,9 @@ match = "source"
         """Project with full code+test+passing-result coverage but no UAT/journey.
 
         This yields a combined validation_color of "yellow-green" (severity.info,
-        since uat_coverage/uat_verified default to "none" -> info severity when no
+        since uat_coverage/uat_verified default to "missing" -> info severity when no
         journey references the requirement). Under the OLD combined_color-based
-        bucketing (only exact "green" mapped to "full"), this landed as "none";
+        bucketing (only exact "green" mapped to "full"), this landed as "missing";
         the severity-aware tier bucket must classify it as "full".
         """
         from elspais.server.app import create_app
@@ -243,11 +243,12 @@ match = "source"
         rows = resp.json()
         req_rows = [r for r in rows if r["kind"] == "requirement"]
         assert req_rows, "expected at least one requirement row"
-        assert all(r["coverage"] in ("full", "partial", "none", "failing") for r in req_rows)
+        assert all(r["coverage"] in ("full", "partial", "missing", "failing") for r in req_rows)
 
         row = next(r for r in req_rows if r["id"] == "REQ-p00001")
         assert row["validation_color"] == "yellow-green"
-        # A full-indirect (yellow-green) requirement must bucket as "full", not "none".
+        # A fully-but-indirectly-covered (yellow-green) requirement must bucket
+        # as "full", not "missing".
         assert row["coverage"] == "full"
 
 

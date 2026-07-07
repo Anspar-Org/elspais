@@ -194,14 +194,20 @@ class TestAggregateDimension:
 class TestTierBuckets:
     def test_buckets_partition_total(self, canonical_graph):
         b = tier_buckets(canonical_graph, "implemented")
-        assert b.full + b.partial + b.none + b.failing == b.total
+        assert b.full + b.partial + b.missing + b.failing == b.total
 
-    def test_tier_to_bucket_covers_all_tiers(self):
-        assert set(TIER_TO_BUCKET) == {
-            "full-direct",
-            "full-indirect",
-            "partial",
-            "none",
-            "failing",
-        }
-        assert TIER_TO_BUCKET["full-indirect"] == "full"
+    # Verifies: REQ-d00258-A
+    def test_tier_to_bucket_is_identity_over_unified_vocab(self):
+        """TIER_TO_BUCKET maps each unified tier to the like-named bucket
+        (REQ-d00258): {full, partial, failing, missing}, no legacy split."""
+        assert set(TIER_TO_BUCKET) == {"full", "partial", "failing", "missing"}
+        assert TIER_TO_BUCKET["full"] == "full"
+        assert TIER_TO_BUCKET["missing"] == "missing"
+
+    # Verifies: REQ-d00258-A
+    def test_missing_tier_lands_in_missing_bucket(self, canonical_graph):
+        """A requirement with no coverage is counted in the ``missing`` bucket
+        (was ``none``)."""
+        b = tier_buckets(canonical_graph, "uat_verified")
+        # canonical fixture has requirements with no UAT verification -> missing
+        assert b.missing >= 1

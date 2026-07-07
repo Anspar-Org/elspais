@@ -183,14 +183,17 @@ class TestComputeValidationColorCatalog:
         assert tiers["impl_color"] == expected_entry.color_key
         assert tiers["combined_color"] == expected_entry.color_key
 
-    def test_REQ_p00006_A_yellow_green_description_from_catalog(self):
-        """Yellow-green tier: full indirect coverage on implemented dimension."""
+    def test_REQ_d00258_full_indirect_collapses_to_green(self):
+        """Under the unified vocabulary (REQ-d00258) a fully-but-indirectly
+        covered dimension collapses to the ``full`` tier -> severity ``ok`` ->
+        green, NOT the retired yellow-green ``full-indirect`` distinction (which
+        now moves to the ~ marker/hover in a later phase)."""
         from elspais.graph.metrics import CoverageDimension, RollupMetrics
         from elspais.html.generator import compute_coverage_tiers
         from elspais.html.theme import get_catalog
 
         catalog = get_catalog()
-        expected_entry = catalog.by_key("validation_tiers.full-indirect")
+        green = catalog.by_key("severity.ok").color_key
 
         rollup = RollupMetrics(
             total_assertions=2,
@@ -201,8 +204,11 @@ class TestComputeValidationColorCatalog:
         node = self._make_active_node_with_metrics(rollup)
         tiers = compute_coverage_tiers(node)
 
-        assert tiers["impl_color"] == expected_entry.color_key
-        assert tiers["combined_color"] == expected_entry.color_key
+        # The fully-but-indirectly-covered dimensions now read the ``full`` tier
+        # and resolve to green (ok), no longer the retired yellow-green split.
+        for prefix in ("impl", "tested", "verified"):
+            assert tiers[f"{prefix}_tier"] == "full"
+            assert tiers[f"{prefix}_color"] == green
 
     def test_REQ_p00006_A_orange_description_from_catalog(self):
         """Orange/anomalous tier: zero coverage maps to error/red on implemented dimension."""
@@ -211,7 +217,7 @@ class TestComputeValidationColorCatalog:
         from elspais.html.theme import get_catalog
 
         catalog = get_catalog()
-        # With the new per-dimension tiers, "none" coverage maps to "error" severity
+        # With the unified vocabulary, "missing" coverage maps to "error" severity
         # which is "red" color, not the old single-tier "orange"
         expected_entry = catalog.by_key("validation_tiers.failing")
 
@@ -249,7 +255,7 @@ class TestSeverityCatalog:
     def test_failing_severity_has_own_maroon_color_distinct_from_error(self):
         """The toolbar's "failing" coverage chip resolves through the theme
         catalog like the other severities (CUR-1568), with its own color_key
-        so it stays visually distinct from severity.error/"none"."""
+        so it stays visually distinct from severity.error/"missing"."""
         from elspais.html.theme import get_catalog
 
         cat = get_catalog()
@@ -291,7 +297,7 @@ class TestSeverityCatalog:
             if (n.status or "").upper() == "ACTIVE" and n.get_metric("rollup_metrics")
         )
         tiers = compute_coverage_tiers(node, canonical_config)
-        assert tiers["combined_bucket"] in ("full", "partial", "none", "failing")
+        assert tiers["combined_bucket"] in ("full", "partial", "missing", "failing")
         assert "verified_tier" in tiers
 
     def _make_active_node_with_metrics(self, rollup):
@@ -323,7 +329,7 @@ class TestSeverityCatalog:
         node = self._make_active_node_with_metrics(rollup)
         tiers = compute_coverage_tiers(node)
 
-        assert tiers["uat_cov_tier"] == "none"
+        assert tiers["uat_cov_tier"] == "missing"
         assert tiers["combined_bucket"] == "full"
 
     # Verifies: REQ-d00258-D, REQ-d00258-E
@@ -368,8 +374,8 @@ class TestSeverityCatalog:
         node = self._make_active_node_with_metrics(rollup)
         tiers = compute_coverage_tiers(node)
 
-        assert tiers["impl_tier"] == "none"
-        assert tiers["combined_bucket"] == "none"
+        assert tiers["impl_tier"] == "missing"
+        assert tiers["combined_bucket"] == "missing"
 
     # Verifies: REQ-d00258-D, REQ-d00258-E
     def test_bucket_failing_when_any_dim_fails(self):
@@ -413,7 +419,7 @@ class TestSeverityCatalog:
         node = self._make_active_node_with_metrics(rollup)
         tiers = compute_coverage_tiers(node)
 
-        assert tiers["verified_tier"] == "full-direct"
+        assert tiers["verified_tier"] == "full"
         assert tiers["combined_bucket"] == "full"
 
     # Verifies: REQ-d00258-F
@@ -436,11 +442,11 @@ class TestSeverityCatalog:
         config = {"levels": {"prd": {"expects_validation": True}}}
         tiers = compute_coverage_tiers(node, config)
 
-        assert tiers["uat_cov_tier"] == "none"
+        assert tiers["uat_cov_tier"] == "missing"
         assert tiers["uat_cov_color"] == "red"
         assert tiers["expects_validation"] is True
         # error severity on a UAT dim drags the combined bucket to 'none'.
-        assert tiers["combined_bucket"] == "none"
+        assert tiers["combined_bucket"] == "missing"
 
     # Verifies: REQ-d00258-F
     def test_non_expecting_level_uat_none_stays_soft(self):
@@ -462,10 +468,56 @@ class TestSeverityCatalog:
         config = {"levels": {"prd": {"expects_validation": False}}}
         tiers = compute_coverage_tiers(node, config)
 
-        assert tiers["uat_cov_tier"] == "none"
+        assert tiers["uat_cov_tier"] == "missing"
         assert tiers["expects_validation"] is False
         # soft 'none' -> info -> does not drag the bucket below 'full'.
         assert tiers["combined_bucket"] == "full"
+
+
+class TestUnifiedSeverityVocabulary:
+    """CoverageSeverityConfig and the tier->severity map use the unified
+    {full,partial,failing,missing} vocabulary (REQ-d00258). The legacy
+    full_direct/full_indirect/none keys are gone; ``missing`` replaces ``none``.
+    """
+
+    # Verifies: REQ-d00258-A
+    def test_severity_config_default_keys(self):
+        """Default severities: full->ok, partial->warning, failing/missing->error."""
+        from elspais.config.schema import CoverageSeverityConfig
+
+        cfg = CoverageSeverityConfig()
+        assert cfg.full == "ok"
+        assert cfg.partial == "warning"
+        assert cfg.failing == "error"
+        assert cfg.missing == "error"
+        assert not hasattr(cfg, "full_direct")
+        assert not hasattr(cfg, "none")
+
+    # Verifies: REQ-d00258-A
+    def test_uat_severity_softens_missing_to_info(self):
+        """UAT dimensions soften a ``missing`` tier to info (journey-less reqs
+        are not dragged down by default)."""
+        from elspais.config.schema import _uat_severity
+
+        assert _uat_severity().missing == "info"
+
+    # Verifies: REQ-d00258-A
+    def test_verified_default_softens_missing_to_warning(self):
+        """The 'verified' (Passing) dimension keeps its softening on the new
+        key: a ``missing`` tier is a warning, not an error."""
+        from elspais.config.schema import CoverageConfig
+
+        assert CoverageConfig().verified.missing == "warning"
+
+    # Verifies: REQ-d00258-A
+    def test_tier_to_severity_missing_is_error(self):
+        """_tier_to_severity resolves the unified single-word tier directly."""
+        from elspais.config.schema import CoverageSeverityConfig
+        from elspais.html.generator import _tier_to_severity
+
+        cfg = CoverageSeverityConfig()
+        assert _tier_to_severity("missing", cfg) == "error"
+        assert _tier_to_severity("full", cfg) == "ok"
 
 
 class TestStatusRoleGating:

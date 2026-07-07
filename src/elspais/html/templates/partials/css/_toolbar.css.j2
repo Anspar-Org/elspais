@@ -126,16 +126,16 @@
    token is defined per-theme in `[themes.light.tokens]` /
    `[themes.dark.tokens]`, so the chip now adapts per-theme via
    `var(--val-maroon-bg)` instead of a hardcoded hex. It stays a distinct
-   maroon (not `severity.error`'s red, which "none" below uses) because
+   maroon (not `severity.error`'s red, which "missing" below uses) because
    "failing" is a tier overlay checked ahead of the severity map
    (generator.py's `_SEVERITY_TO_BUCKET`) and must remain visually
-   distinguishable from the "none" bucket. Its none/partial/full siblings
+   distinguishable from the "missing" bucket. Its missing/partial/full siblings
    below still predate the theme catalog and remain hardcoded hex -- out of
    scope here. */
 .filter-btn[data-group="coverage"][data-key="failing"]    { border-color: var(--val-maroon-bg); color: var(--val-maroon-bg); }
 .filter-btn.on[data-group="coverage"][data-key="failing"]  { background: var(--val-maroon-bg); border-color: var(--val-maroon-bg); color: #fff; }
-.filter-btn[data-group="coverage"][data-key="none"]    { border-color: #dc3545; color: #dc3545; }
-.filter-btn.on[data-group="coverage"][data-key="none"]  { background: #dc3545; border-color: #dc3545; color: #fff; }
+.filter-btn[data-group="coverage"][data-key="missing"]    { border-color: #dc3545; color: #dc3545; }
+.filter-btn.on[data-group="coverage"][data-key="missing"]  { background: #dc3545; border-color: #dc3545; color: #fff; }
 .filter-btn[data-group="coverage"][data-key="partial"] { border-color: #ffc107; color: #ffc107; }
 .filter-btn.on[data-group="coverage"][data-key="partial"]{ background: #ffc107; border-color: #ffc107; color: #000; }
 .filter-btn[data-group="coverage"][data-key="full"]    { border-color: #198754; color: #198754; }

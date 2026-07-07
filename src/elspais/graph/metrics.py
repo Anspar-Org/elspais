@@ -156,22 +156,19 @@ class CoverageDimension:
 
     @property
     def tier(self) -> str:
-        """Classify into a tier key for color/severity mapping.
-
-        Returns one of: 'failing', 'full-direct', 'full-indirect',
-        'partial', 'none'. Float sums are compared with a small epsilon so a
-        fully-covered requirement (each assertion == 1.0) still reads as full.
+        """Classify into a unified state key: 'failing' | 'full' | 'partial' |
+        'missing'. The direct/indirect distinction is surfaced separately as a
+        caveat (~ marker + hover), not as a tier (design §2, §4). Float sums are
+        compared with a small epsilon so a fully-covered requirement reads full.
         """
         eps = 1e-9
         if self.has_failures:
             return "failing"
-        if self.total > 0 and self.direct >= self.total - eps:
-            return "full-direct"
         if self.total > 0 and self.indirect >= self.total - eps:
-            return "full-indirect"
+            return "full"
         if self.direct > eps or self.indirect > eps:
             return "partial"
-        return "none"
+        return "missing"
 
 
 def _dim(total: int = 0) -> CoverageDimension:

@@ -286,7 +286,7 @@ class TestRequirementAssertionConsistency:
         # Every assertion full on implemented ...
         assert all(states[lbl]["implemented"] == "full" for lbl in ("A", "B", "C"))
         # ... and the requirement dimension therefore reads a full tier.
-        assert tiers["impl_tier"] in ("full-direct", "full-indirect")
+        assert tiers["impl_tier"] == "full"
 
     def test_REQ_d00258_G_failing_assertion_implies_requirement_failing(self):
         rollup = _spread_rollup()

@@ -21,11 +21,10 @@ from elspais.graph.metrics import (
 )
 
 TIER_TO_BUCKET: dict[str, str] = {
-    "full-direct": "full",
-    "full-indirect": "full",
+    "full": "full",
     "partial": "partial",
-    "none": "none",
     "failing": "failing",
+    "missing": "missing",
 }
 
 
@@ -56,7 +55,7 @@ class TierBuckets:
     total: int = 0
     full: int = 0
     partial: int = 0
-    none: int = 0
+    missing: int = 0
     failing: int = 0
 
 
@@ -212,9 +211,9 @@ def tier_buckets(
         rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
         dim: CoverageDimension | None = getattr(rollup, dimension, None) if rollup else None
         if dim is None:
-            buckets.none += 1
+            buckets.missing += 1
             continue
-        bucket = TIER_TO_BUCKET.get(dim.tier, "none")
+        bucket = TIER_TO_BUCKET.get(dim.tier, "missing")
         setattr(buckets, bucket, getattr(buckets, bucket) + 1)
     return buckets
 

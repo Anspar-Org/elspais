@@ -110,9 +110,9 @@ def graph_whole_journey_pass(tmp_path):
 
 # Verifies: REQ-d00256
 def test_all_steps_pass_gives_full_direct(graph_steps_all_pass):
-    """All steps' tests pass + Validates names an assertion -> full-direct."""
+    """All steps' tests pass + Validates names an assertion -> full."""
     req = graph_steps_all_pass.find_by_id("REQ-d00001")
-    assert req.get_metric("rollup_metrics").uat_verified.tier == "full-direct"
+    assert req.get_metric("rollup_metrics").uat_verified.tier == "full"
 
 
 # Verifies: REQ-d00256
@@ -179,7 +179,7 @@ def test_all_steps_pass_credits_full_uat(graph_steps_all_pass):
     """A fully-verified journey credits FULL (1.0) uat_verified -- unchanged."""
     req = graph_steps_all_pass.find_by_id("REQ-d00001")
     uat = req.get_metric("rollup_metrics").uat_verified
-    assert uat.tier == "full-direct"
+    assert uat.tier == "full"
     assert uat.has_failures is False
     assert uat.indirect_pct_by_label["A"] == pytest.approx(1.0)
 
@@ -200,10 +200,7 @@ def test_whole_journey_pass_no_steps_full(graph_whole_journey_pass):
     jny = graph_whole_journey_pass.find_by_id("JNY-OQ-Login-01")
     assert jny.get_metric("journey_verification").fully_verified is True
     req = graph_whole_journey_pass.find_by_id("REQ-d00001")
-    assert req.get_metric("rollup_metrics").uat_verified.tier in (
-        "full-direct",
-        "full-indirect",
-    )
+    assert req.get_metric("rollup_metrics").uat_verified.tier == "full"
 
 
 # ---------------------------------------------------------------------------

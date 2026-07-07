@@ -139,10 +139,10 @@ class TestCodeTestedDeduplicatesOverlappingRanges:
 
 
 class TestCodeTestedFullCoverage:
-    """All implementation lines covered -> tier is 'full-indirect'."""
+    """All implementation lines covered -> tier is 'full'."""
 
     def test_code_tested_full_coverage(self):
-        """Full coverage yields full-indirect tier."""
+        """Full coverage yields full tier (REQ-d00258 unified vocab)."""
         line_cov = dict.fromkeys(range(10, 21), 1)
         _, req_node = _build_req_with_code(
             impl_start=10,
@@ -155,7 +155,7 @@ class TestCodeTestedFullCoverage:
         ct = rollup.code_tested
         assert ct.total == 11
         assert ct.indirect == 11
-        assert ct.tier == "full-indirect"
+        assert ct.tier == "full"
 
 
 class TestCodeTestedHasFailuresAlwaysFalse:

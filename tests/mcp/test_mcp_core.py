@@ -1236,7 +1236,7 @@ class TestSummaryConsistency:
             "total": b.total,
             "full_coverage": b.full,
             "partial_coverage": b.partial,
-            "no_coverage": b.none,
+            "no_coverage": b.missing,
             "failing": b.failing,
         }
 

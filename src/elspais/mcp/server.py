@@ -2137,7 +2137,7 @@ def _get_project_summary(
         "total": b.total,
         "full_coverage": b.full,
         "partial_coverage": b.partial,
-        "no_coverage": b.none,
+        "no_coverage": b.missing,
         "failing": b.failing,
     }
     # Annotate git state before counting (idempotent, safe to call multiple times)

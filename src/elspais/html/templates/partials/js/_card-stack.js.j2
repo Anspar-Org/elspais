@@ -709,9 +709,9 @@ function buildCardHtml(nodeId, data, collapsed) {
             }
             // UAT dims (gateOnEvidence) render with actual journey Validates
             // evidence — a journey-less requirement shows no UAT badge (its colored
-            // "none" tier is not a real gap). Exception: when the requirement's
+            // "missing" tier is not a real gap). Exception: when the requirement's
             // level expects_validation, a journey-less req DOES show the badge —
-            // in RED (its "none" tier resolves to error severity server-side), a
+            // in RED (its "missing" tier resolves to error severity server-side), a
             // real gap. Code dims still show on 0-coverage.
             var expectsValidation = dim && dim.expects_validation;
             var hasData = d.gateOnEvidence

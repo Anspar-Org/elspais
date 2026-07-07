@@ -279,16 +279,11 @@
     },
     "CoverageSeverityConfig": {
       "additionalProperties": false,
-      "description": "Severity mapping for a single coverage dimension's tier states.\n\nEach tier maps to a severity: 'ok', 'info', 'warning', or 'error'.",
+      "description": "Severity mapping for a single coverage dimension's tier states.\n\nEach tier maps to a severity: 'ok', 'info', 'warning', or 'error'. Tiers\nare the unified vocabulary (REQ-d00258): full / partial / failing / missing.",
       "properties": {
-        "full_direct": {
+        "full": {
           "default": "ok",
-          "title": "Full Direct",
-          "type": "string"
-        },
-        "full_indirect": {
-          "default": "info",
-          "title": "Full Indirect",
+          "title": "Full",
           "type": "string"
         },
         "partial": {
@@ -296,14 +291,14 @@
           "title": "Partial",
           "type": "string"
         },
-        "none": {
-          "default": "error",
-          "title": "None",
-          "type": "string"
-        },
         "failing": {
           "default": "error",
           "title": "Failing",
+          "type": "string"
+        },
+        "missing": {
+          "default": "error",
+          "title": "Missing",
           "type": "string"
         }
       },

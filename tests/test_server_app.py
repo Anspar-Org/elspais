@@ -1090,14 +1090,12 @@ def incoming_graph():
     jny_x = GraphNode(id="JNY-ASSERT-X", kind=NodeKind.USER_JOURNEY, label="Validates X")
     jny_x._content = {}
     x.link(jny_x, EdgeKind.VALIDATES)  # direct assertion -> journey, no targets
-    jny_x.set_metric(
-        "journey_verification", JourneyVerification(tier="full-direct", fully_verified=True)
-    )
+    jny_x.set_metric("journey_verification", JourneyVerification(tier="full", fully_verified=True))
     # Whole-req blanket validate (no assertion named): scope is "all assertions".
     jny_all = GraphNode(id="JNY-BLANKET", kind=NodeKind.USER_JOURNEY, label="Validates All")
     jny_all._content = {}
     req8.link(jny_all, EdgeKind.VALIDATES)  # no assertion_targets -> blanket
-    jny_all.set_metric("journey_verification", JourneyVerification(tier="none"))
+    jny_all.set_metric("journey_verification", JourneyVerification(tier="missing"))
 
     graph._roots = [req, refiner, lonely, req8]
     graph._index = {

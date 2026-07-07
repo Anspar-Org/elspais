@@ -513,7 +513,7 @@ def count_by_coverage(
         "total": b.total,
         "full_coverage": b.full,
         "partial_coverage": b.partial,
-        "no_coverage": b.none + b.failing,
+        "no_coverage": b.missing + b.failing,
     }
 
 
@@ -1088,8 +1088,8 @@ class JourneyVerification:
     steps, its own whole-journey verifying tests).
 
     Attributes:
-        tier: One of "full-direct", "full-indirect", "partial", "failing",
-            "none". Mirrors the coverage-tier vocabulary.
+        tier: One of "full", "partial", "failing", "missing". Mirrors the
+            unified coverage-tier vocabulary (REQ-d00258).
         failing_steps: Labels (e.g. "step-2") of steps with a failing test.
         fully_verified: True iff every unit is verified with no failures;
             the journey's Validates targets may be credited.
@@ -1098,7 +1098,7 @@ class JourneyVerification:
         total_steps: Count of addressable steps (0 for a whole-journey unit).
     """
 
-    tier: str = "none"
+    tier: str = "missing"
     failing_steps: list[str] = field(default_factory=list)
     fully_verified: bool = False
     has_failures: bool = False
@@ -1216,20 +1216,20 @@ def annotate_journey_verification(graph: FederatedGraph) -> None:
             if v.has_failures:
                 v.tier = "failing"
             elif verified == len(steps):
-                v.tier = "full-direct"
+                v.tier = "full"
                 v.fully_verified = True
             elif verified > 0:
                 v.tier = "partial"
             else:
-                v.tier = "none"
+                v.tier = "missing"
         else:
             # Phase 2: no addressable steps -> the journey is one unit.
             if bfail:
                 v.tier, v.has_failures = "failing", True
             elif bpass:
-                v.tier, v.fully_verified = "full-direct", True
+                v.tier, v.fully_verified = "full", True
             else:
-                v.tier = "none"
+                v.tier = "missing"
         journey.set_metric("journey_verification", v)
 
 

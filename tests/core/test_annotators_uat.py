@@ -128,9 +128,7 @@ class TestUatPerAssertionFailureAttribution:
         )
         graph.find_by_id("JNY-TST-002").set_metric(
             "journey_verification",
-            JourneyVerification(
-                tier="full-direct", fully_verified=True, verified_steps=1, total_steps=1
-            ),
+            JourneyVerification(tier="full", fully_verified=True, verified_steps=1, total_steps=1),
         )
 
         annotate_coverage(graph)

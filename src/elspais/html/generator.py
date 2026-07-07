@@ -136,11 +136,11 @@ DIMENSION_TIPS: dict[str, str] = {
 }
 
 # Worst-severity → filter bucket (design 2026-07-02 §2.3): the bucket honors
-# each dimension's configured severity, so info-severity gaps (e.g. UAT "none"
+# each dimension's configured severity, so info-severity gaps (e.g. UAT "missing"
 # under the default config) do not drag the bucket below "full". A "failing"
 # tier on any dimension is an overlay checked before the severity mapping.
 _SEVERITY_TO_BUCKET: dict[str, str] = {
-    "error": "none",
+    "error": "missing",
     "warning": "partial",
     "info": "full",
     "ok": "full",
@@ -149,10 +149,9 @@ _SEVERITY_TO_BUCKET: dict[str, str] = {
 # Tier descriptions for tooltip text
 _TIER_DESCRIPTIONS: dict[str, str] = {
     "failing": "test failures detected",
-    "full-direct": "all assertions directly covered",
-    "full-indirect": "all assertions covered (including indirect)",
+    "full": "fully covered",
     "partial": "some assertions covered",
-    "none": "no coverage",
+    "missing": "no coverage",
 }
 
 # Ordered list of dimension keys (matches CoverageDimension attrs on RollupMetrics)
@@ -160,10 +159,12 @@ DIMENSION_KEYS = ("implemented", "tested", "verified", "uat_coverage", "uat_veri
 
 
 def _tier_to_severity(tier: str, severity_config: Any) -> str:
-    """Map a CoverageDimension tier to a severity string using config."""
-    # tier keys use hyphens; config field names use underscores
-    field_name = tier.replace("-", "_")
-    return getattr(severity_config, field_name, "error")
+    """Map a CoverageDimension tier to a severity string using config.
+
+    Tiers are the unified single-word vocabulary (full/partial/failing/missing),
+    which are exactly the CoverageSeverityConfig field names (REQ-d00258).
+    """
+    return getattr(severity_config, tier, "error")
 
 
 def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -244,11 +245,11 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         elif hasattr(rules, "coverage"):
             cov_config = rules.coverage
 
-    # Per-level UAT expectation (REQ-d00258-F). By default a UAT `none` tier is
-    # soft (config `_uat_severity` sets none="info") so a journey-less
+    # Per-level UAT expectation (REQ-d00258-F). By default a UAT `missing` tier is
+    # soft (config `_uat_severity` sets missing="info") so a journey-less
     # requirement is not dragged below "full". When the requirement's level
     # `expects_validation`, that absence is a REAL gap: override the UAT
-    # severity config so `none` resolves to "error" (-> red badge + drags
+    # severity config so `missing` resolves to "error" (-> red badge + drags
     # combined_bucket). Partial stays "warning" regardless (from 1a7fc2c7).
     from elspais.config import level_expects_validation
 
@@ -256,8 +257,8 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
     uat_cov_cfg = cov_config.uat_coverage
     uat_ver_cfg = cov_config.uat_verified
     if expects_validation:
-        uat_cov_cfg = uat_cov_cfg.model_copy(update={"none": "error"})
-        uat_ver_cfg = uat_ver_cfg.model_copy(update={"none": "error"})
+        uat_cov_cfg = uat_cov_cfg.model_copy(update={"missing": "error"})
+        uat_ver_cfg = uat_ver_cfg.model_copy(update={"missing": "error"})
 
     # Map dimension key → (CoverageDimension, CoverageSeverityConfig, output_prefix)
     # "verified" (rendered as the "Passing" badge) uses tested_and_passing(),
@@ -310,7 +311,7 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
     if any_failing:
         result["combined_bucket"] = "failing"
     else:
-        result["combined_bucket"] = _SEVERITY_TO_BUCKET.get(worst_severity, "none")
+        result["combined_bucket"] = _SEVERITY_TO_BUCKET.get(worst_severity, "missing")
 
     # Surface the per-level UAT expectation so the viewer can gate the two UAT
     # header badges: a journey-less expects_validation requirement still shows a

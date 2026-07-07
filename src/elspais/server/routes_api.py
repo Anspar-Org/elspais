@@ -837,9 +837,9 @@ async def api_tree_data(request: Request) -> JSONResponse:
         tiers = compute_coverage_tiers(node, state.config)
         # REQ-d00258-E: coverage filter bucket comes from the severity-aware
         # combined_bucket (Task 6), not a naive combined_color check -- this
-        # correctly classifies e.g. "yellow-green" (full-indirect / info
-        # severity) as "full" instead of dropping it into "none".
-        coverage = tiers.get("combined_bucket") or "none"
+        # correctly classifies e.g. a fully-but-indirectly-covered requirement
+        # as "full" instead of dropping it into "missing".
+        coverage = tiers.get("combined_bucket") or "missing"
 
         _ns_entry = ns_catalog.get(_get_repo_prefix(node)) or {}
         rows.append(
@@ -926,7 +926,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
                 "assertions": [],
                 "has_children": False,
                 "is_leaf": True,
-                "coverage": "none",
+                "coverage": "missing",
                 "is_changed": False,
                 "is_uncommitted": False,
                 "is_unsaved": False,

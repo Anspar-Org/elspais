@@ -297,7 +297,7 @@ class TestHTMLGeneratorCoverage:
         # Verifies: REQ-p00006-A
 
         # Assert the unified coverage filter buttons (replaced dropdown)
-        assert 'data-group="coverage" data-key="none"' in result
+        assert 'data-group="coverage" data-key="missing"' in result
         assert 'data-group="coverage" data-key="partial"' in result
         assert 'data-group="coverage" data-key="full"' in result
 
