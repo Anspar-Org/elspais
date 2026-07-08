@@ -95,6 +95,11 @@ covered only indirectly reads `missing`/`partial` in the summary/viewer
 badge buckets and the relative-chain denominators (Tested/implemented,
 Passing/tested, etc.) instead of `full`.
 
+`allow_indirect = false` narrows only the *numerator* (which evidence
+credits a dimension) while the relative-chain *denominator* is still
+measured on the generous footing, so a blanket-only requirement reads
+`missing` (a real, visible gap) rather than `N/A` under strict mode.
+
 This setting does **not** change `elspais checks`' per-dimension coverage
 checks (`code.implemented`, `tests.tested`, `tests.verified`,
 `uat.uat_coverage`, `uat.uat_verified`). Those checks source their counts

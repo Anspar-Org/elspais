@@ -2238,8 +2238,8 @@ def check_whole_req_only_coverage(graph, config=None) -> HealthCheck:
             findings.append(
                 HealthFinding(
                     message=(
-                        f"{node.id}: {n} assertion(s) implemented only by "
-                        f"whole-requirement evidence"
+                        f"{node.id}: {n} assertion(s) rely on whole-requirement "
+                        f"evidence for Implemented coverage"
                     ),
                     node_id=node.id,
                 )
@@ -2249,7 +2249,7 @@ def check_whole_req_only_coverage(graph, config=None) -> HealthCheck:
         passed=True,
         message=(
             f"{total} assertion(s) across {len(findings)} requirement(s) rely "
-            f"only on whole-requirement evidence for Implemented coverage"
+            f"on whole-requirement evidence for Implemented coverage"
         ),
         category="code",
         severity="info",

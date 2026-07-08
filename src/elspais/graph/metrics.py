@@ -65,7 +65,7 @@ class CoverageSource(Enum):
     EXPLICIT = "explicit"  # REQ implements specific assertions (e.g., REQ-100-A-B)
     INFERRED = "inferred"  # REQ implements parent REQ (all assertions implied)
     INDIRECT = "indirect"  # transitive CODE->TEST evidence (provenance only)
-    CODE_INDIRECT = "code_indirect"  # CODE Verifies/Implements whole REQ (blanket), all assertions implied; feeds `implemented` INDIRECT footing only (REQ-d00069-B)
+    CODE_INDIRECT = "code_indirect"  # CODE Implements whole REQ (blanket), all assertions implied; feeds `implemented` INDIRECT footing only (REQ-d00069-B)
     TEST_DIRECT = "test_direct"  # TEST verifies specific assertion (Verifies: REQ-xxx-A)
     TEST_INDIRECT = "test_indirect"  # TEST verifies whole REQ (Verifies: REQ-xxx)
     UAT_EXPLICIT = "uat_explicit"  # JNY names specific assertion (Validates: REQ-xxx-A)

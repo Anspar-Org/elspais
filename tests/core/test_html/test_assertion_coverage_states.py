@@ -397,6 +397,52 @@ class TestApiNodePayload:
         assert acs["D"]["uat_verified"] == "partial"
         assert set(acs["E"].values()) == {"missing"}
 
+    def test_REQ_d00258_G_payload_includes_assertion_caveats(self):
+        """REQ-d00258-G: the /api/node payload also carries
+        assertion_coverage_caveats, keyed by assertion label with per-dimension
+        bool flags marking evidence that leans on whole-requirement (blanket)
+        credit rather than assertion-specific evidence (REQ-d00069-L)."""
+        from starlette.testclient import TestClient
+
+        from elspais.graph.federated import FederatedGraph
+        from elspais.server.app import create_app
+        from elspais.server.state import AppState
+        from tests.core.graph_test_helpers import build_graph, make_requirement
+
+        rollup = RollupMetrics(total_assertions=2)
+        rollup.implemented = CoverageDimension(
+            total=2, direct=1, indirect=2,
+            direct_labels={"A"}, indirect_labels={"A", "B"},
+            direct_pct_by_label={"A": 1.0}, indirect_pct_by_label={"A": 1.0, "B": 1.0},
+        )
+        graph = build_graph(
+            make_requirement(
+                "REQ-p00001",
+                title="Test Req",
+                status="Active",
+                assertions=[{"label": lbl, "text": f"SHALL {lbl}"} for lbl in "AB"],
+            ),
+        )
+        graph.find_by_id("REQ-p00001").set_metric("rollup_metrics", rollup)
+        fed = FederatedGraph.from_single(
+            graph, {"project": {"name": "test", "namespace": "REQ"}}, Path("/test/repo")
+        )
+        state = AppState(
+            graph=fed,
+            repo_root=Path("/test/repo"),
+            config={"project": {"name": "test", "namespace": "REQ"}},
+        )
+        client = TestClient(create_app(state, mount_mcp=False))
+
+        resp = client.get("/api/node/REQ-p00001")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "assertion_coverage_caveats" in data
+        caveats = data["assertion_coverage_caveats"]
+        assert isinstance(caveats, dict)
+        assert caveats["A"]["implemented"] is False   # has direct evidence
+        assert caveats["B"]["implemented"] is True    # blanket-only -> ~
+
 
 def test_REQ_d00069_L_caveat_true_for_blanket_only_assertion():
     """An assertion covered only on the indirect footing is flagged caveated."""
