@@ -4036,6 +4036,38 @@ class GraphBuilder:
                 )
             )
 
+    # Implements: REQ-d00254-G, REQ-d00256
+    def _step_scope_tests(self, result_node: GraphNode, source_file: str) -> list[GraphNode]:
+        """Resolve a source-matched RESULT to its step's verifying TEST(s).
+
+        A journey-step testcase name embeds the step id (``<journey>/N``,
+        e.g. ``… › JNY-ENROLL-01/1: reach …``). When exactly one distinct
+        step id is present and resolves to a STEP node, return that step's
+        VERIFIES targets (TEST nodes) whose FILE matches the result's
+        ``source_file`` — the precise binding that makes each step show only
+        its own result. Returns [] when no unambiguous step binding exists
+        (caller falls through to location/file scope).
+        """
+        from elspais.graph.parsers.patterns import JOURNEY_REF_PATTERN
+
+        text = f"{result_node.get_field('classname') or ''} {result_node.get_field('name') or ''}"
+        step_ids = {ref for ref in JOURNEY_REF_PATTERN.findall(text) if "/" in ref}
+        if len(step_ids) != 1:
+            return []
+        step = self._nodes.get(next(iter(step_ids)))
+        if step is None or step.kind is not NodeKind.STEP:
+            return []
+        tests: list[GraphNode] = []
+        for edge in step.iter_edges_by_kind(EdgeKind.VERIFIES):
+            test_node = edge.target  # target = the verifying test
+            if test_node.kind is not NodeKind.TEST:
+                continue
+            file_node = test_node.file_node()
+            rel = file_node.get_field("relative_path") if file_node else None
+            if rel == source_file:
+                tests.append(test_node)
+        return tests
+
     def build(self) -> TraceGraph:
         """Build the final TraceGraph.
 
@@ -4201,11 +4233,16 @@ class GraphBuilder:
 
         # Implements: REQ-d00254-G
         # Resolve source RESULT->TEST links. These reporters (e.g. flutter-
-        # machine) carry no test_id, so each result is wired by source path:
-        # preferring the single TEST at (source_file, line) and stamping
-        # match_scope="test" (per-test crediting), else falling back to every
-        # TEST sharing the file and stamping match_scope="file" (the file-level
-        # all-pass/any-fail crediting the annotator's source_file_index applies).
+        # machine) carry no test_id, so each result is wired by source path,
+        # most-precise scope first:
+        #   step-scope: the testcase name embeds a journey-step id
+        #     (``<journey>/N``); bind to the TEST(s) that VERIFIES that STEP
+        #     in the same source file, match_scope="step". Needs no line attr.
+        #   test-scope: the single TEST at (source_file, line),
+        #     match_scope="test" (per-test crediting).
+        #   file-scope: fall back to every TEST sharing the file,
+        #     match_scope="file" (the file-level all-pass/any-fail crediting
+        #     the annotator's source_file_index applies).
         # An unmatched file links nothing (no broken reference, unlike test_id
         # resolution). Done before orphan/root classification so RESULT nodes
         # count as YIELDS-parented, exactly like test_id-based YIELDS edges.
@@ -4232,6 +4269,14 @@ class GraphBuilder:
             ) in self._pending_source_result_links:
                 result_node = self._nodes.get(result_id)
                 if result_node is None:
+                    continue
+                # Attempt 0: step-scope match via the step id embedded in the
+                # testcase name (REQ-d00254-G / REQ-d00256).
+                step_tests = self._step_scope_tests(result_node, source_file)
+                if step_tests:
+                    for test_node in step_tests:
+                        test_node.link(result_node, EdgeKind.YIELDS)
+                    result_node.set_field("match_scope", "step")
                     continue
                 # Attempt 1: primary (source_file, line) match
                 target = tests_by_file_line.get((source_file, line)) if line is not None else None

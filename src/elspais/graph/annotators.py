@@ -1281,8 +1281,9 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
 
     # Build a per-file index of RESULT nodes with match=="source" (Task 5).
     # Maps repo-relative source_file -> list of status strings (lowercased).
-    # Exclude per-test-resolved results (match_scope=="test"): those credit
-    # inline (below) rather than via file-level all-pass/any-fail semantics.
+    # Exclude precisely-resolved results (match_scope "test" or "step"):
+    # those credit inline (below) rather than via file-level all-pass/any-fail
+    # semantics.
     #
     # source_file_carried (CUR-1557) is a parallel map recording whether
     # EVERY contributing RESULT for that source file was carried (baseline).
@@ -1293,7 +1294,10 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
     source_file_index: dict[str, list[str]] = {}
     _source_file_carried_flags: dict[str, list[bool]] = {}
     for r in graph.nodes_by_kind(NodeKind.RESULT):
-        if (r.get_field("match") or "") == "source" and r.get_field("match_scope") != "test":
+        if (r.get_field("match") or "") == "source" and r.get_field("match_scope") not in (
+            "test",
+            "step",
+        ):
             sf = r.get_field("source_file")
             if sf:
                 source_file_index.setdefault(sf, []).append((r.get_field("status") or "").lower())
@@ -1503,14 +1507,14 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                 # Implements: REQ-d00254-G
                 # Skip inline only for FILE-scope source-match results (credited
                 # via source_file_index below: all-pass credits / any-fail flags
-                # the whole file). Per-test-resolved source results
-                # (match_scope=="test") credit inline like test_id results:
-                # their pass credits their assertions; their fail flags only
-                # their own test.
+                # the whole file). Precisely-resolved source results
+                # (match_scope "test" or "step") credit inline like test_id
+                # results: their pass credits their assertions; their fail
+                # flags only their own test.
                 if (
                     (result.get_field("match") or "") == "source"
                     and not result.get_field("test_id")
-                    and result.get_field("match_scope") != "test"
+                    and result.get_field("match_scope") not in ("test", "step")
                 ):
                     continue
                 saw_result = True
