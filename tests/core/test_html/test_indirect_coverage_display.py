@@ -1,7 +1,7 @@
 # Validates REQ-d00069-B, REQ-d00069-J, REQ-d00258-G
 """End-to-end: header badge and per-assertion states/caveats AGREE for a
 whole-requirement-covered requirement (the DIARY-PRD-linking-code-lifecycle
-class of bug: blanket Implements + blanket Refines rendered '12% implemented,
+class of bug: blanket Implements + blanket Verifies rendered '12% implemented,
 no direct coverage' contradicting a 'tested full' header)."""
 
 from elspais.graph.annotators import annotate_coverage

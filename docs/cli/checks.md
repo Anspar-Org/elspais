@@ -85,15 +85,28 @@ full-credit model, that blanket evidence fully credits every assertion's
 Implemented state; this check makes how much green rests on blanket
 evidence visible per requirement, rather than leaving it silent.
 
-`[rules.coverage].allow_indirect` (default `true`) controls whether that
-indirect/blanket evidence credits a dimension's headline state at all: with
-the default, indirect evidence counts and a trailing `~` marker (and this
-check) flag where it came from; with `allow_indirect = false`, only direct
-assertion-level evidence counts, and a requirement covered only indirectly
-reads `missing`/`partial` on the per-dimension coverage checks
-(`code.implemented`, `tests.tested`, `tests.verified`, `uat.uat_coverage`,
-`uat.uat_verified`) instead of passing. See `docs/configuration.md`
-("`allow_indirect` (direct vs indirect credit)") for the full model.
+`[rules.coverage].allow_indirect` (default `true`) controls whether
+indirect/blanket evidence credits a dimension's headline *tier* in the
+viewer and `elspais summary` badges: with the default, indirect evidence
+counts toward `full`/`partial` and a trailing `~` marker (and this check)
+flag where it came from; with `allow_indirect = false`, only direct
+assertion-level evidence counts toward those tiers, and a requirement
+covered only indirectly reads `missing`/`partial` in the summary/viewer
+badge buckets and the relative-chain denominators (Tested/implemented,
+Passing/tested, etc.) instead of `full`.
+
+This setting does **not** change `elspais checks`' per-dimension coverage
+checks (`code.implemented`, `tests.tested`, `tests.verified`,
+`uat.uat_coverage`, `uat.uat_verified`). Those checks source their counts
+from `aggregate_dimension` (`src/elspais/graph/aggregation.py`), which sums
+direct and indirect evidence unconditionally -- it never calls
+`allow_indirect`-aware tiering -- and only fails a check when a result
+records an actual test failure (`has_failures`), never on a missing/partial
+tier. A requirement covered only indirectly still reports `passed=true`
+(`severity=info`) on these checks regardless of `allow_indirect`. See
+`docs/configuration.md` ("`allow_indirect` (direct vs indirect credit)")
+for the full model of what it *does* affect (viewer/summary badge tiers
+and relative-chain buckets).
 
 ## Exit codes
 
