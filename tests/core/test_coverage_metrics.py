@@ -946,10 +946,11 @@ class TestRefinesCoverageConduction:
 
         REQ-C refines REQ-P (no /A suffix == blanket), so its coverage is a
         blanket contributor: it never appears in the direct fraction. A blanket
-        Refines names no assertion, so it is worth only one assertion's share
-        (1/N) of the refiner's coverage (REQ-d00069-J), credited to every parent
-        assertion that lacks direct coverage. REQ-P has N=2 assertions and REQ-C
-        is fully tested, so each uncovered parent assertion gets (1/2)*1.0 = 0.5.
+        Refines names no assertion, so it conducts the refiner's OWN rolled-up
+        coverage at FULL weight to every parent assertion that lacks direct
+        coverage -- the old 1/N-per-assertion deflation is retired
+        (REQ-d00069-J). REQ-C is fully tested, so each uncovered parent
+        assertion gets the full 1.0, not (1/N)*1.0.
         """
         graph = build_graph(
             make_requirement(
@@ -975,10 +976,10 @@ class TestRefinesCoverageConduction:
         # Blanket refine never contributes to direct.
         assert parent.tested.direct_pct_by_label["A"] == 0.0
         assert parent.tested.direct_pct_by_label["B"] == 0.0
-        # It contributes 1/N of the refiner's coverage to each uncovered
-        # assertion: (1/2) * 1.0 == 0.5. Partial, so each remains a gap.
-        assert parent.tested.indirect_pct_by_label["A"] == 0.5
-        assert parent.tested.indirect_pct_by_label["B"] == 0.5
+        # Full credit (REQ-d00069-J): the refiner's own coverage (1.0) conducts
+        # at full weight, not (1/N)*1.0 == 0.5 under the retired rule.
+        assert parent.tested.indirect_pct_by_label["A"] == 1.0
+        assert parent.tested.indirect_pct_by_label["B"] == 1.0
 
     # Verifies: REQ-d00069-J
     def test_dimensions_propagate_independently(self):
@@ -1046,14 +1047,14 @@ class TestRefinesCoverageConduction:
 
     # Verifies: REQ-d00069-J
     def test_blanket_refine_multiple_edges_averaged(self):
-        """Multiple blanket refines are averaged, then scaled by 1/N.
+        """Multiple blanket refines are averaged, at full weight (REQ-d00069-J).
 
         PARENT has N=3 assertions (A, B, C) with no direct coverage. Three
         requirements each blanket-refine PARENT (`Refines: PARENT`); two are
         fully tested and one is untested, so the mean child coverage across the
-        blanket edges is (1 + 1 + 0) / 3 == 2/3. A blanket refine is worth only
-        one assertion's share, so each uncovered parent assertion gets
-        (1/N) * mean == (1/3) * (2/3) == 0.2222.
+        blanket edges is (1 + 1 + 0) / 3 == 2/3. Full credit (the retired 1/N
+        deflation no longer applies): each uncovered parent assertion gets the
+        mean directly == 2/3 == 0.6667, not (1/3) * (2/3) == 0.2222.
         """
         graph = build_graph(
             make_requirement(
@@ -1090,7 +1091,7 @@ class TestRefinesCoverageConduction:
         annotate_coverage(graph)
 
         parent = graph.find_by_id("PARENT").get_metric("rollup_metrics")
-        expected = (1 / 3) * (2 / 3)  # 0.2222
+        expected = 2 / 3  # full credit, no 1/N deflation (REQ-d00069-J)
         assert parent.tested.indirect_pct_by_label["A"] == pytest.approx(expected, abs=0.001)
         assert parent.tested.indirect_pct_by_label["B"] == pytest.approx(expected, abs=0.001)
         assert parent.tested.indirect_pct_by_label["C"] == pytest.approx(expected, abs=0.001)
@@ -1101,12 +1102,16 @@ class TestRefinesCoverageConduction:
 
     # Verifies: REQ-d00069-J
     def test_blanket_credit_skips_assertions_with_direct_coverage(self):
-        """Blanket credit applies only to parent assertions lacking direct cover.
+        """Blanket credit is monotone-maxed against direct, at full weight.
 
-        PARENT has N=2 assertions (A, B). A has its own direct test. One
-        requirement blanket-refines PARENT and is fully tested. A keeps its
-        direct 1.0 (blanket credit ignored for an already-covered assertion);
-        B, which has no direct coverage, gets (1/N) * 1.0 == 0.5.
+        PARENT has N=2 assertions (A, B). A has its own direct test (1.0). One
+        requirement blanket-refines PARENT and is itself only half-tested (A
+        tested, B untested -> its own mean coverage is 0.5) -- REQ-d00069-J's
+        full-credit rule conducts that 0.5 (not a 1/N-deflated fraction of a
+        full 1.0) to every uncovered parent assertion. A's own direct 1.0
+        already exceeds the 0.5 blanket candidate, so the monotone max keeps it
+        at 1.0 (blanket never LOWERS it); B, with no direct coverage, gets the
+        blanket's actual (partial) conducted value, 0.5.
         """
         graph = build_graph(
             make_requirement(
@@ -1121,7 +1126,10 @@ class TestRefinesCoverageConduction:
                 "REQ-BLANK",
                 level="OPS",
                 refines=["PARENT"],
-                assertions=[{"label": "A", "text": "Refined A"}],
+                assertions=[
+                    {"label": "A", "text": "Refined A"},
+                    {"label": "B", "text": "Refined B (untested)"},
+                ],
             ),
             make_test_ref(verifies=["PARENT-A"], source_path="tests/test_a.py"),
             make_test_ref(verifies=["REQ-BLANK-A"], source_path="tests/test_blank.py"),
@@ -1130,9 +1138,11 @@ class TestRefinesCoverageConduction:
         annotate_coverage(graph)
 
         parent = graph.find_by_id("PARENT").get_metric("rollup_metrics")
-        # A has its own direct test -> 1.0, blanket credit not applied.
+        # A has its own direct test -> 1.0, monotone max keeps it (blanket's
+        # 0.5 candidate does not lower it).
         assert parent.tested.indirect_pct_by_label["A"] == pytest.approx(1.0)
-        # B has no direct coverage -> blanket credit (1/2) * 1.0 == 0.5.
+        # B has no direct coverage -> full-credit blanket conduction of
+        # REQ-BLANK's own (partial) coverage, 0.5, not a 1/N-deflated 1.0.
         assert parent.tested.indirect_pct_by_label["B"] == pytest.approx(0.5)
 
     # Verifies: REQ-d00069-J
@@ -1173,12 +1183,15 @@ class TestRefinesCoverageConduction:
     def test_partial_conducted_coverage_is_a_gap(self):
         """Partial conducted coverage (0 < f < 1) is still reported as a gap.
 
-        PARENT has N=2 assertions (A, B), both directly implemented by code, and
-        one fully-tested blanket refiner, so each parent assertion's TESTED
-        fraction conducts to (1/2) * 1.0 == 0.5. The gaps surface treats an
-        assertion as covered only at ~1.0, so both A and B remain *testing*
-        gaps -- they are IMPLEMENTED but only partially tested (REQ-d00258's
-        relative denominator: a testing gap is implemented AND not tested).
+        PARENT has N=2 assertions (A, B), both directly implemented by code.
+        REQ-BLANK blanket-refines PARENT and is itself only half-tested (its
+        own A tested, its own B untested), so its own rolled-up TESTED coverage
+        is genuinely 0.5. Full credit (REQ-d00069-J) conducts that actual 0.5 --
+        not an arbitrary 1/N-deflated fraction of a full 1.0 -- to each parent
+        assertion. The gaps surface treats an assertion as covered only at
+        ~1.0, so both A and B remain *testing* gaps -- they are IMPLEMENTED but
+        only partially tested (REQ-d00258's relative denominator: a testing gap
+        is implemented AND not tested).
 
         Exercises the real ``collect_gaps`` entry point, which passes assertion
         nodes (IDs keyed by label) -- guarding against the regression where the
@@ -1199,13 +1212,16 @@ class TestRefinesCoverageConduction:
                 "REQ-BLANK",
                 level="OPS",
                 refines=["PARENT"],
-                assertions=[{"label": "A", "text": "Refined A"}],
+                assertions=[
+                    {"label": "A", "text": "Refined A"},
+                    {"label": "B", "text": "Refined B (untested)"},
+                ],
             ),
             make_test_ref(verifies=["REQ-BLANK-A"], source_path="tests/test_blank.py"),
             # PARENT's assertions must be IMPLEMENTED for a partial TEST gap to
             # count under the relative denominator (REQ-d00258): code implements
             # A and B directly (implemented dimension), leaving TEST coverage
-            # partial (0.5) via refines conduction.
+            # partial (0.5) via refines conduction of REQ-BLANK's own 0.5.
             make_code_ref(implements=["PARENT-A"], source_path="src/parent_a.py"),
             make_code_ref(implements=["PARENT-B"], source_path="src/parent_b.py"),
         )

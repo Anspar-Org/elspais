@@ -976,3 +976,62 @@ class TestBlanketCodeImplements:
         assert rollup.implemented.indirect == 2
         assert rollup.implemented.direct == 0
         assert rollup.implemented.indirect_pct_by_label == {"A": 1.0, "B": 1.0}
+
+
+class TestFullCreditConduction:
+    """Blanket Refines gives full credit; indirect footing is monotone.
+
+    Validates REQ-d00069-J: the 1/N deflation is retired (full credit into the
+    indirect footing), and adding assertion-targeted evidence never LOWERS the
+    generous footing (max, not override).
+    """
+
+    def _refined_by(self, child_impl):
+        """Parent REQ-P (2 assertions) blanket-refined by child REQ-C whose
+        assertion A is implemented per ``child_impl`` (list of code targets)."""
+        return build_graph(
+            make_requirement(
+                "REQ-P", level="PRD",
+                assertions=[{"label": "A", "text": "a"}, {"label": "B", "text": "b"}],
+            ),
+            make_requirement(
+                "REQ-C", level="DEV", refines=["REQ-P"],
+                assertions=[{"label": "A", "text": "a"}, {"label": "B", "text": "b"}],
+            ),
+            *[make_code_ref(implements=[t], source_path=f"src/c{i}.py")
+              for i, t in enumerate(child_impl)],
+        )
+
+    def test_REQ_d00069_J_blanket_refine_full_credit(self):
+        # Child fully implemented -> blanket refine credits parent A,B at 1.0
+        # (was 1/2 = 0.5 under the retired 1/N rule).
+        graph = self._refined_by(["REQ-C-A", "REQ-C-B"])
+        annotate_coverage(graph)
+        parent = graph.find_by_id("REQ-P").get_metric("rollup_metrics")
+        assert parent.implemented.indirect_pct_by_label["A"] == 1.0
+        assert parent.implemented.indirect_pct_by_label["B"] == 1.0
+
+    def test_REQ_d00069_J_monotone_targeted_refine_does_not_lower_indirect(self):
+        # Parent A additionally targeted-refined by a 50%-covered child:
+        # direct footing shows the targeted fraction; indirect stays 1.0 (max).
+        graph = build_graph(
+            make_requirement(
+                "REQ-P", level="PRD",
+                assertions=[{"label": "A", "text": "a"}, {"label": "B", "text": "b"}],
+            ),
+            make_requirement(  # blanket refine -> both A,B get 1.0 indirect
+                "REQ-C", level="DEV", refines=["REQ-P"],
+                assertions=[{"label": "A", "text": "a"}, {"label": "B", "text": "b"}],
+            ),
+            make_code_ref(implements=["REQ-C-A", "REQ-C-B"], source_path="src/c.py"),
+            make_requirement(  # targeted refine of A only, 50% implemented (X of X,Y)
+                "REQ-D", level="DEV", refines=["REQ-P-A"],
+                assertions=[{"label": "X", "text": "x"}, {"label": "Y", "text": "y"}],
+            ),
+            make_code_ref(implements=["REQ-D-X"], source_path="src/d.py"),
+        )
+        annotate_coverage(graph)
+        parent = graph.find_by_id("REQ-P").get_metric("rollup_metrics")
+        assert parent.implemented.indirect_pct_by_label["A"] == 1.0   # monotone max
+        assert parent.implemented.direct_pct_by_label["A"] == 0.5     # targeted only
+        assert parent.implemented.indirect_pct_by_label["B"] == 1.0

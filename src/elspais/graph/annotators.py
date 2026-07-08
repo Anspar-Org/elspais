@@ -1684,24 +1684,26 @@ def _conduct_refines_coverage(graph: FederatedGraph) -> None:
     requirement contributes its own rolled-up coverage as one equal-weight
     incoming edge to the targeted parent *Assertion* (REQ-d00069-J).
 
-    Per assertion A of requirement R (with N assertions), for each dimension and
-    each strictness ``mode`` ("direct" = assertion-targeted only, "indirect" =
-    also whole-requirement):
+    Per assertion A of requirement R, for each dimension and each strictness
+    ``mode`` ("direct" = assertion-targeted only, "indirect" = also
+    whole-requirement):
 
     - direct contributors = (1.0 if A has local direct leaf evidence) plus
       ``coverage(child)`` for every assertion-targeted REFINES edge naming A.
-      If any direct contributor exists, A's value is their mean and indirect
-      credit is ignored for A (REQ-d00069-J: only the *Assertion* with direct
-      coverage forgoes indirect credit -- its siblings still accrue it).
-    - else (A has no direct contributor), indirect mode credits A with the
-      stronger of:
+      The direct value is their mean (0.0 if there are none). Whole-requirement
+      (blanket) credit never enters the direct footing -- it stays a precise,
+      non-transitive locator (REQ-d00069-J/L).
+    - the indirect (generous) footing is MONOTONE: it is the max of the direct
+      mean and any whole-requirement credit, so adding assertion-targeted
+      (possibly partial) evidence never lowers it below what blanket evidence
+      already established. Whole-requirement credit is the stronger of:
         * 1.0, if A has local whole-requirement leaf evidence (a whole-req test
           genuinely exercises every assertion); or
-        * ``(1/N) * mean(coverage(child))`` over whole-requirement (blanket)
-          REFINES edges. A blanket Refines names no assertion, so it is worth
-          only one assertion's share (1/N) of its refining requirement's
-          coverage -- averaged across blanket edges so a requirement refined by
-          many whole-req children is not credited beyond one assertion's worth.
+        * ``mean(coverage(child))`` over whole-requirement (blanket) REFINES
+          edges, averaged across blanket edges. A blanket Refines names no
+          assertion but conducts its refining requirement's own coverage at
+          FULL weight -- the previous 1/N-per-assertion deflation is retired
+          (REQ-d00069-J).
 
     ``coverage(child)`` is the child requirement's mean assertion coverage in
     the same dimension/mode, computed recursively (memoized, with a visited
@@ -1760,27 +1762,31 @@ def _conduct_refines_coverage(graph: FederatedGraph) -> None:
             else:
                 blanket_refines_vals.append(req_coverage(edge.target, dim_name, mode, visiting))
 
+        # Direct (strict) footing: assertion-specific evidence only, equal-weight
+        # mean. Whole-requirement/blanket credit never enters the direct footing
+        # (keeps the ~ caveat a precise, non-transitive locator, REQ-d00069-J/L).
+        direct_mean = (sum(direct_vals) / len(direct_vals)) if direct_vals else 0.0
+        if mode != "indirect":
+            return direct_mean
+        # Indirect (generous) footing is MONOTONE: it is the max of the direct
+        # mean and any whole-requirement credit, so adding assertion-targeted
+        # (possibly partial) evidence never LOWERS the generous headline.
+        candidates: list[float] = []
         if direct_vals:
-            return sum(direct_vals) / len(direct_vals)
-        if mode == "indirect":
-            candidates: list[float] = []
-            local_indirect = indirect_pct_local.get(label, 0.0)
-            if local_indirect > 0:
-                # Local whole-requirement leaf evidence (a whole-req test/code/
-                # journey) exercises every assertion -> its own local fraction
-                # (1.0 for all-or-nothing dims; the journey's verified-step
-                # ratio for a partial uat_verified, REQ-d00255-C).
-                candidates.append(local_indirect)
-            if blanket_refines_vals:
-                # A whole-requirement Refines names no assertion, so it is worth
-                # only one assertion's share (1/N) of the refining requirement's
-                # coverage, averaged across all such blanket edges.
-                n_assertions = len(labels_by_req.get(req.id) or ()) or 1
-                avg = sum(blanket_refines_vals) / len(blanket_refines_vals)
-                candidates.append(avg / n_assertions)
-            if candidates:
-                return max(candidates)
-        return 0.0
+            candidates.append(direct_mean)
+        local_indirect = indirect_pct_local.get(label, 0.0)
+        if local_indirect > 0:
+            # Local whole-requirement leaf evidence (a whole-req test/code/journey)
+            # exercises every assertion -> its own local fraction (1.0, or a
+            # partial uat_verified ratio, REQ-d00255-C).
+            candidates.append(local_indirect)
+        if blanket_refines_vals:
+            # A blanket `Refines:` conducts the refining requirement's OWN rolled-up
+            # coverage at FULL weight (mean across blanket edges) -- the 1/N
+            # deflation is retired (REQ-d00069-J). The fraction reflects the child's
+            # actual coverage, not an arbitrary discount.
+            candidates.append(sum(blanket_refines_vals) / len(blanket_refines_vals))
+        return max(candidates) if candidates else 0.0
 
     def req_coverage(req: GraphNode, dim_name: str, mode: str, visiting: frozenset[str]) -> float:
         key = (dim_name, mode, req.id)

@@ -32,13 +32,13 @@ def test_uncovered_assertions_carry_fractions() -> None:
 
     The canonical hht-like fixture has no REFINES-conduction scenario, so this
     builds a minimal REFINES scenario on the ``implemented`` dimension:
-    REQ-100 has assertions A-D; REQ-010 refines REQ-100-A but has no coverage
-    of its own; REQ-020 implements REQ-100-B directly; CODE implements REQ-100-A
-    directly. (Implemented is CODE/REQ evidence only -- REQ-d00084-D -- so A's
-    local evidence comes from CODE, not a test.) Under equal-weight conduction,
-    A's implemented fraction dilutes to 0.5 (direct CODE 1.0 averaged with the
-    empty refiner's 0.0), B is fully covered (1.0, excluded from the gap list),
-    and C/D remain at 0.0.
+    REQ-100 has assertions A-D; REQ-010 assertion-targeted-refines REQ-100-A
+    and is itself only half-covered (its own X implemented via CODE, Y not);
+    REQ-020 implements REQ-100-B directly. Full-weight conduction
+    (REQ-d00069-J) credits REQ-100-A with REQ-010's own actual coverage, 0.5
+    -- genuinely partial, since REQ-100-A has no local evidence of its own to
+    floor it at 1.0 (monotone max has nothing else to max against). B is
+    fully covered (1.0, excluded from the gap list), and C/D remain at 0.0.
     """
     from elspais.commands.gaps import _uncovered_assertions
     from elspais.graph.annotators import annotate_coverage
@@ -51,9 +51,14 @@ def test_uncovered_assertions_carry_fractions() -> None:
             level="PRD",
             assertions=[{"label": lbl, "text": f"Assertion {lbl}"} for lbl in "ABCD"],
         ),
-        make_requirement("REQ-010", level="OPS", refines=["REQ-100-A"]),
+        make_requirement(
+            "REQ-010",
+            level="OPS",
+            refines=["REQ-100-A"],
+            assertions=[{"label": "X", "text": "x"}, {"label": "Y", "text": "y (untested)"}],
+        ),
         make_requirement("REQ-020", level="OPS", implements=["REQ-100-B"]),
-        make_code_ref(implements=["REQ-100-A"], source_path="src/mod_a.py"),
+        make_code_ref(implements=["REQ-010-X"], source_path="src/mod_x.py"),
     )
     annotate_coverage(graph)
 
