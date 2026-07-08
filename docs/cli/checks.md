@@ -75,6 +75,26 @@ Even without `--run-tests`, `elspais checks` warns when:
 checks are still emitted in the report and remain visible in `--format
 json`.
 
+## Coverage provenance checks
+
+Among the `code` category checks is `code.whole_req_only_coverage`, an
+always-INFO check (it never fails the build) that counts assertions whose
+Implemented coverage rests only on whole-requirement evidence -- a blanket
+`Implements:`/`Refines:` that names no specific assertion. Under the
+full-credit model, that blanket evidence fully credits every assertion's
+Implemented state; this check makes how much green rests on blanket
+evidence visible per requirement, rather than leaving it silent.
+
+`[rules.coverage].allow_indirect` (default `true`) controls whether that
+indirect/blanket evidence credits a dimension's headline state at all: with
+the default, indirect evidence counts and a trailing `~` marker (and this
+check) flag where it came from; with `allow_indirect = false`, only direct
+assertion-level evidence counts, and a requirement covered only indirectly
+reads `missing`/`partial` on the per-dimension coverage checks
+(`code.implemented`, `tests.tested`, `tests.verified`, `uat.uat_coverage`,
+`uat.uat_verified`) instead of passing. See `docs/configuration.md`
+("`allow_indirect` (direct vs indirect credit)") for the full model.
+
 ## Exit codes
 
 - `0` -- all runners (if `--run-tests`) and all checks passed.
