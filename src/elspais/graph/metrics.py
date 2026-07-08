@@ -50,6 +50,9 @@ class CoverageSource(Enum):
     - INFERRED: Review recommended - REQ implements parent REQ (claims all assertions)
     - INDIRECT: transitive CODE->TEST evidence (CODE implements, that CODE is
       verified by a TEST); provenance only — does not itself feed ``implemented``
+    - CODE_INDIRECT: CODE Implements the whole REQ (blanket, no assertion
+      suffix), all assertions implied; feeds ``implemented.indirect`` only,
+      never ``implemented.direct``
     - TEST_DIRECT: TEST verifies a specific assertion (Verifies: REQ-xxx-A);
       feeds ``tested``, NOT ``implemented``
     - TEST_INDIRECT: TEST verifies whole REQ (Verifies: REQ-xxx), all assertions
@@ -62,6 +65,7 @@ class CoverageSource(Enum):
     EXPLICIT = "explicit"  # REQ implements specific assertions (e.g., REQ-100-A-B)
     INFERRED = "inferred"  # REQ implements parent REQ (all assertions implied)
     INDIRECT = "indirect"  # transitive CODE->TEST evidence (provenance only)
+    CODE_INDIRECT = "code_indirect"  # CODE Verifies/Implements whole REQ (blanket), all assertions implied; feeds `implemented` INDIRECT footing only (REQ-d00069-B)
     TEST_DIRECT = "test_direct"  # TEST verifies specific assertion (Verifies: REQ-xxx-A)
     TEST_INDIRECT = "test_indirect"  # TEST verifies whole REQ (Verifies: REQ-xxx)
     UAT_EXPLICIT = "uat_explicit"  # JNY names specific assertion (Validates: REQ-xxx-A)
@@ -251,6 +255,7 @@ class RollupMetrics:
         direct_labels: set[str] = set()
         explicit_labels: set[str] = set()
         inferred_labels: set[str] = set()
+        code_indirect_labels: set[str] = set()
         uat_explicit_labels: set[str] = set()
         uat_inferred_labels: set[str] = set()
 
@@ -272,6 +277,8 @@ class RollupMetrics:
                     explicit_labels.add(label)
                 elif contrib.source_type == CoverageSource.INFERRED:
                     inferred_labels.add(label)
+                elif contrib.source_type == CoverageSource.CODE_INDIRECT:
+                    code_indirect_labels.add(label)
                 elif contrib.source_type == CoverageSource.UAT_EXPLICIT:
                     uat_explicit_labels.add(label)
                 elif contrib.source_type == CoverageSource.UAT_INFERRED:
@@ -282,7 +289,7 @@ class RollupMetrics:
         # Implemented: direct = assertion-targeted (DIRECT + EXPLICIT),
         #              indirect = all (DIRECT + EXPLICIT + INFERRED)
         impl_direct = direct_labels | explicit_labels
-        impl_indirect = impl_direct | inferred_labels
+        impl_indirect = impl_direct | inferred_labels | code_indirect_labels
         self.implemented = CoverageDimension(
             total=n,
             direct=len(impl_direct),

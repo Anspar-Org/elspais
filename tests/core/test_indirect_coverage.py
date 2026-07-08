@@ -35,9 +35,34 @@ class TestIndirectCoverageSource:
         """INDIRECT is distinct from other coverage sources."""
         values = {s.value for s in CoverageSource}
         assert "indirect" in values
-        # DIRECT, EXPLICIT, INFERRED, INDIRECT, TEST_DIRECT, TEST_INDIRECT,
-        # UAT_EXPLICIT, UAT_INFERRED
-        assert len(values) == 8
+        assert "code_indirect" in values  # blanket CODE Implements (REQ-d00069-B)
+        # DIRECT, EXPLICIT, INFERRED, INDIRECT, CODE_INDIRECT, TEST_DIRECT,
+        # TEST_INDIRECT, UAT_EXPLICIT, UAT_INFERRED
+        assert len(values) == 9
+
+
+class TestCodeIndirectFinalize:
+    """CODE_INDIRECT feeds implemented.indirect, never implemented.direct.
+
+    Validates REQ-d00069-B: whole-requirement CODE Implements credits all
+    assertions on the generous footing only.
+    """
+
+    def test_REQ_d00069_B_code_indirect_credits_indirect_only(self):
+        metrics = RollupMetrics(total_assertions=2)
+        for label in ("A", "B"):
+            metrics.add_contribution(
+                CoverageContribution(
+                    source_id="file.py:1",
+                    source_type=CoverageSource.CODE_INDIRECT,
+                    assertion_label=label,
+                )
+            )
+        metrics.finalize()
+        assert metrics.implemented.indirect == 2
+        assert metrics.implemented.direct == 0
+        assert metrics.implemented.indirect_pct_by_label == {"A": 1.0, "B": 1.0}
+        assert metrics.implemented.direct_pct_by_label == {}
 
 
 class TestIndirectCoverageContributions:
