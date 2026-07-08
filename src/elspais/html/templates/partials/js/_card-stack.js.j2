@@ -1273,13 +1273,17 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
                 var rs = (r.status || '').toLowerCase();
                 var rIcon = (rs === 'passed' || rs === 'pass' || rs === 'success') ? '&#x2705;'
                     : ((rs === 'failed' || rs === 'fail' || rs === 'failure' || rs === 'error') ? '&#x274C;' : '&#x2753;');
-                var rText = (r.file ? (r.file + ':' + (r.line || 0)) : (r.id || 'result')) +
+                // Link to the results ARTIFACT (junit.xml:<testcase> line)
+                // when known, not the test's source file.
+                var rFile = r.result_file || r.file;
+                var rLine = (r.result_line != null && r.result_line) || r.line || 0;
+                var rText = (rFile ? (rFile + ':' + rLine) : (r.id || 'result')) +
                     (r.duration ? ' (' + r.duration + 's)' : '');
                 html += '<div class="journey-step-result-row" style="font-size:0.75rem;display:flex;align-items:center;gap:4px;padding:1px 0;">';
                 html += '<span class="assertion-test-icon">' + rIcon + '</span>';
-                if (r.file) {
+                if (rFile) {
                     html += '<a class="journey-step-test-link" href="#" style="font-family:monospace;" onclick="event.preventDefault(); showSource(\'' +
-                        escapeJsInAttr(r.file) + '\', ' + (r.line || 0) + ', \'' + escapeAttr(r.id || '') + '\')">' + escapeHtml(rText) + '</a>';
+                        escapeJsInAttr(rFile) + '\', ' + rLine + ', \'' + escapeAttr(r.id || '') + '\')">' + escapeHtml(rText) + '</a>';
                 } else {
                     html += '<span class="journey-step-test-link" style="font-family:monospace;">' + escapeHtml(rText) + '</span>';
                 }
@@ -1728,11 +1732,15 @@ function renderAssertionResults(panel, reqId, label, data) {
             statusIcon = '&#x2753;'; statusClass = '';
         }
 
+        // Prefer the results-artifact location (result_file/result_line)
+        // over the test's source file, mirroring the journey-step panel.
+        var rFile = r.result_file || r.file;
+        var rLine = (r.result_line != null && r.result_line) || r.line || 0;
         html += '<div class="assertion-test-item ' + statusClass + '">';
         html += '<span class="assertion-test-icon">' + statusIcon + '</span>';
-        if (r.file) {
+        if (rFile) {
             html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
-                escapeJsInAttr(r.file) + '\', ' + (r.line || 0) + ', \'' + escapeAttr(resultItems[k].testId || '') + '\')">' +
+                escapeJsInAttr(rFile) + '\', ' + rLine + ', \'' + escapeAttr(resultItems[k].testId || '') + '\')">' +
                 escapeHtml(tLabel) + ' [' + escapeHtml(r.status) + ']</a>';
         } else {
             html += '<span class="assertion-test-link">' + escapeHtml(tLabel) + ' [' + escapeHtml(r.status) + ']</span>';

@@ -202,6 +202,10 @@ def _serialize_test_info(test_node: Any, graph: FederatedGraph) -> dict[str, Any
     results: list[dict[str, Any]] = []
     for child in test_node.iter_children():
         if child.kind == NodeKind.RESULT:
+            # result_file/result_line point at the results ARTIFACT (e.g.
+            # junit.xml:<testcase> line); file/line keep pointing at the
+            # test's source. Fall back to file/line so reporters without a
+            # results file (e.g. stdout streams) still render a link.
             results.append(
                 {
                     "id": child.id,
@@ -209,6 +213,11 @@ def _serialize_test_info(test_node: Any, graph: FederatedGraph) -> dict[str, Any
                     "duration": child.get_field("duration", 0.0),
                     "file": _relative_source_path(child, graph),
                     "line": child.get_field("parse_line") or 0,
+                    "result_file": child.get_field("result_file")
+                    or _relative_source_path(child, graph),
+                    "result_line": child.get_field("result_line")
+                    or child.get_field("parse_line")
+                    or 0,
                 }
             )
     return {

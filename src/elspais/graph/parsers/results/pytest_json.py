@@ -187,6 +187,10 @@ class PytestJSONParser:
             "verifies": verifies,
             "source_path": source_path,
             "test_id": test_id,
+            # Results-file provenance: for pytest JSON the results file IS the
+            # parsed file; JSON has no meaningful per-record line.
+            "result_file": source_path or None,
+            "result_line": None,
         }
 
     # Implements: REQ-d00082-L
@@ -239,6 +243,8 @@ class PytestJSONParser:
             "verifies": verifies,
             "source_path": source_path,
             "test_id": test_id,
+            "result_file": source_path or None,
+            "result_line": None,
         }
 
     # Implements: REQ-d00054-A

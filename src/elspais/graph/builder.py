@@ -3628,6 +3628,11 @@ class GraphBuilder:
             # Implements: REQ-d00254-I
             "carried": data.get("carried", False),
             "target": data.get("target"),
+            # Results-file provenance: where this result was RECORDED
+            # (e.g. junit.xml path + <testcase> line), distinct from
+            # source_path/source_file which name the test's source.
+            "result_file": data.get("result_file"),
+            "result_line": data.get("result_line"),
         }
         self._nodes[result_id] = node
 

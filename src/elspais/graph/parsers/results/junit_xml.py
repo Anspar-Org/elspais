@@ -27,6 +27,7 @@ import xml.etree.ElementTree as ET
 from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from xml.sax.saxutils import unescape
 
 from elspais.graph.parsers import ParseContext, ParsedContent
 from elspais.utilities.test_identity import build_test_id_from_result
@@ -34,15 +35,37 @@ from elspais.utilities.test_identity import build_test_id_from_result
 # Pattern to extract a named XML attribute value from a raw text line.
 _ATTR_RE: dict[str, re.Pattern[str]] = {}
 
+# Attribute values pulled from raw XML text still carry entity escapes;
+# ElementTree-parsed values do not. Unescape before comparing the two.
+_XML_ENTITIES = {"&quot;": '"', "&apos;": "'"}
+
 
 def _attr_value(text: str, attr: str) -> str | None:
     """Extract the value of *attr* from a raw XML element string."""
     pat = _ATTR_RE.get(attr)
     if pat is None:
-        pat = re.compile(rf'{attr}="([^"]*)"')
+        pat = re.compile(rf'\b{attr}="([^"]*)"')
         _ATTR_RE[attr] = pat
     m = pat.search(text)
-    return m.group(1) if m else None
+    return unescape(m.group(1), _XML_ENTITIES) if m else None
+
+
+def _testcase_line_index(content: str) -> dict[tuple[str, str], int]:
+    """Map ``(classname, name)`` to the 1-based line of its ``<testcase``.
+
+    Works when the XML is pretty-printed so each ``<testcase`` open tag sits
+    on its own line; a minified (single-line) document maps everything to
+    line 1. Only the first occurrence of a duplicate key is kept.
+    """
+    index: dict[tuple[str, str], int] = {}
+    for line_no, text in enumerate(content.splitlines(), start=1):
+        if "<testcase" not in text:
+            continue
+        cn = _attr_value(text, "classname")
+        nm = _attr_value(text, "name")
+        if cn is not None and nm is not None:
+            index.setdefault((cn, nm), line_no)
+    return index
 
 
 if TYPE_CHECKING:
@@ -129,6 +152,13 @@ class JUnitXMLParser:
         except ET.ParseError:
             return results
 
+        # Results-file provenance: each record points back at the artifact
+        # that recorded it (`result_file` = the results file itself, distinct
+        # from `source_path`, which names the TEST'S source file and is the
+        # RESULT->TEST match key). `result_line` is the `<testcase>` line
+        # within the results file (None when the XML is minified).
+        tc_lines = _testcase_line_index(content)
+
         # Handle both <testsuites> and <testsuite> as root
         testsuites = root.findall(".//testsuite")
         if not testsuites and root.tag == "testsuite":
@@ -195,6 +225,8 @@ class JUnitXMLParser:
                     "source_path": result_source,
                     "test_id": test_id,
                     "line": line_no,
+                    "result_file": source_path or None,
+                    "result_line": tc_lines.get((classname, name)),
                 }
 
                 results.append(result)
@@ -226,22 +258,15 @@ class JUnitXMLParser:
         content = "\n".join(text for _, text in lines)
         results = self.parse(content, context.file_path)
 
-        # Build a line-number index: (classname, name) -> file line number.
-        # Works when the XML is pretty-printed so each <testcase is on its
-        # own line; falls back to first-line when minified.
-        tc_lines: dict[tuple[str, str], int] = {}
+        # parse() computes result_line relative to the reassembled content
+        # (1-based); shift by the first claimed line so start_line matches
+        # the real file position.
         base_line = lines[0][0] if lines else 1
-        for line_no, text in lines:
-            if "<testcase " in text:
-                # Extract classname and name from the raw XML line
-                cn = _attr_value(text, "classname")
-                nm = _attr_value(text, "name")
-                if cn is not None and nm is not None:
-                    tc_lines[(cn, nm)] = line_no
 
         for result in results:
-            key = (result.get("classname", ""), result.get("name", ""))
-            start = tc_lines.get(key, base_line)
+            rl = result.get("result_line")
+            start = (rl + base_line - 1) if rl else base_line
+            result["result_line"] = start
             yield ParsedContent(
                 content_type="test_result",
                 start_line=start,

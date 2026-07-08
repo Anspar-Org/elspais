@@ -126,6 +126,21 @@ def _ingest_target_results(
         else:
             root_file = raw_root
 
+        # Results-file provenance (REQ-d00254): repo-relative path + line of
+        # the artifact that recorded this result, distinct from source_file
+        # (the TEST's source, which stays the RESULT->TEST match key).
+        raw_result_file = rec.get("result_file") or None
+        if raw_result_file and os.path.isabs(raw_result_file):
+            try:
+                result_file: str | None = str(
+                    Path(raw_result_file).resolve().relative_to(repo_root_resolved)
+                )
+            except ValueError:
+                result_file = raw_result_file  # outside repo root -- keep absolute
+        else:
+            result_file = raw_result_file
+        result_line = rec.get("result_line")
+
         parsed_data = {
             "id": rec["id"],
             "status": rec.get("status"),
@@ -143,11 +158,13 @@ def _ingest_target_results(
             "line": rec.get("line"),
             "root_line": rec.get("root_line"),
             "root_file": root_file,
+            "result_file": result_file,
+            "result_line": result_line,
         }
         content = ParsedContent(
             content_type="test_result",
-            start_line=1,
-            end_line=1,
+            start_line=result_line or 1,
+            end_line=result_line or 1,
             raw_text="",
             parsed_data=parsed_data,
         )
