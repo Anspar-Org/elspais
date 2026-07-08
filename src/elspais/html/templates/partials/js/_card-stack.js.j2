@@ -704,8 +704,11 @@ function buildCardHtml(nodeId, data, collapsed) {
         var aLinksAll = data.assertion_links || {};
         html += '<div class="card-section card-coverage-badges" style="padding:4px 12px 0;display:flex;gap:6px;flex-wrap:wrap;">';
         var headerDims = [
+            // No standalone REFINED badge: refinement is implementation
+            // provenance ("implemented via refinement, not directly"), folded
+            // into the IMPLEMENTED badge's drill-down below — mirroring the
+            // per-assertion IMP pill (REQ-d00069-L).
             {key: 'implemented', linkKey: 'implemented', assertLinkKey: 'implemented', label: 'IMPLEMENTED'},
-            {key: null, linkKey: 'refined', assertLinkKey: 'refined', label: 'REFINED'},
             {key: 'tested', linkKey: 'tested', assertLinkKey: 'tested', label: 'TESTED'},
             {key: 'verified', linkKey: 'verified', assertLinkKey: 'tested', label: 'VERIFIED'},
             {key: 'uat_coverage', linkKey: 'validated', assertLinkKey: 'validated', label: 'UAT COVERED', gateOnEvidence: true},
@@ -751,7 +754,7 @@ function buildCardHtml(nodeId, data, collapsed) {
         });
         html += '</div>';
         // Expandable link panels (one per header dimension, hidden by default)
-        ['implemented', 'refined', 'tested', 'verified', 'validated', 'accepted'].forEach(function(dimKey) {
+        ['implemented', 'tested', 'verified', 'validated', 'accepted'].forEach(function(dimKey) {
             html += '<div class="req-level-links-panel" id="req-links-' + nodeId + '-' + dimKey + '" style="display:none;margin:0 12px;padding:6px 10px;background:var(--assertion-code-panel-bg);border-radius:4px;border-left:3px solid var(--impl-yes-border);font-size:0.78rem;"></div>';
         });
     }
@@ -2073,42 +2076,59 @@ function toggleReqLevelLinks(badge, reqId, dimKey, assertLinkKey) {
     }
 
     var links = cardState.data.req_level_links[dimKey] || [];
-    if (links.length === 0) {
+    // The IMPLEMENTED header badge folds in refinement provenance: a
+    // requirement implemented via a Refines: (rather than directly) lists the
+    // refining requirement(s) under "Implemented via refinement", mirroring the
+    // per-assertion IMP pill. No standalone REFINED badge (REQ-d00069-L).
+    var refinedLinks = (dimKey === 'implemented')
+        ? (cardState.data.req_level_links['refined'] || [])
+        : [];
+    if (links.length === 0 && refinedLinks.length === 0) {
         return; // no REQ-level links, flash was enough
     }
 
-    var html = '';
-    for (var i = 0; i < links.length; i++) {
-        var link = links[i];
-        // Result status icon for TEST/JNY nodes
-        var statusIcon = '';
-        if (link.result_status === 'passed') statusIcon = '&#x2705; ';
-        else if (link.result_status === 'failed') statusIcon = '&#x274C; ';
-        else if (link.result_status === 'mixed') statusIcon = '&#x26A0; ';
+    function _renderReqLinkItems(items) {
+        var out = '';
+        for (var i = 0; i < items.length; i++) {
+            var link = items[i];
+            // Result status icon for TEST/JNY nodes
+            var statusIcon = '';
+            if (link.result_status === 'passed') statusIcon = '&#x2705; ';
+            else if (link.result_status === 'failed') statusIcon = '&#x274C; ';
+            else if (link.result_status === 'mixed') statusIcon = '&#x26A0; ';
 
-        var statusClass = '';
-        if (link.result_status === 'failed') statusClass = ' test-failed';
-        else if (link.result_status === 'passed') statusClass = ' test-passed';
+            var statusClass = '';
+            if (link.result_status === 'failed') statusClass = ' test-failed';
+            else if (link.result_status === 'passed') statusClass = ' test-passed';
 
-        if (link.kind === 'journey') {
-            html += '<div class="assertion-test-item' + statusClass + '">';
-            html += '<span class="assertion-test-icon">' + statusIcon + '&#x1F4D6;</span>';
-            html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
-                escapeHtml(link.id) + '\')">' + escapeHtml(link.title) + '</a>';
-            html += '</div>';
-        } else {
-            var icon = link.kind === 'requirement' ? '&#x1F4CB;' : (link.kind === 'test' ? '&#x1F9EA;' : '&#x1F4C4;');
-            html += '<div class="assertion-test-item' + statusClass + '">';
-            html += '<span class="assertion-test-icon">' + statusIcon + icon + '</span>';
-            if (link.file) {
-                html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
-                    escapeJsInAttr(link.file) + '\', ' + (link.line || 0) + ', \'' + escapeAttr(link.id || '') + '\')">' + escapeHtml(link.title) + '</a>';
-            } else {
-                html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
+            if (link.kind === 'journey') {
+                out += '<div class="assertion-test-item' + statusClass + '">';
+                out += '<span class="assertion-test-icon">' + statusIcon + '&#x1F4D6;</span>';
+                out += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
                     escapeHtml(link.id) + '\')">' + escapeHtml(link.title) + '</a>';
+                out += '</div>';
+            } else {
+                var icon = link.kind === 'requirement' ? '&#x1F4CB;' : (link.kind === 'test' ? '&#x1F9EA;' : '&#x1F4C4;');
+                out += '<div class="assertion-test-item' + statusClass + '">';
+                out += '<span class="assertion-test-icon">' + statusIcon + icon + '</span>';
+                if (link.file) {
+                    out += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
+                        escapeJsInAttr(link.file) + '\', ' + (link.line || 0) + ', \'' + escapeAttr(link.id || '') + '\')">' + escapeHtml(link.title) + '</a>';
+                } else {
+                    out += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
+                        escapeHtml(link.id) + '\')">' + escapeHtml(link.title) + '</a>';
+                }
+                out += '</div>';
             }
-            html += '</div>';
         }
+        return out;
+    }
+
+    var html = _renderReqLinkItems(links);
+    if (refinedLinks.length > 0) {
+        html += '<div style="font-style:italic;color:var(--secondary-text);font-size:0.72rem;margin-top:' +
+            (links.length ? '6px' : '0') + ';">Implemented via refinement (~)</div>';
+        html += _renderReqLinkItems(refinedLinks);
     }
     panel.innerHTML = html;
     panel.style.display = 'block';
