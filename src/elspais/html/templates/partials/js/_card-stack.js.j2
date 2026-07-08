@@ -1195,7 +1195,7 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
         html += '<div class="card-section journey-steps"><div class="card-section-label">Steps (' + steps.length + ')</div>';
         steps.forEach(function(step) {
             var sStatus = step.status || 'untested';
-            var stepNum = (step.label || '').replace(/^step-/, '');
+            var stepNum = step.label || '';
             var vTests = step.verifying_tests || [];
             var verified = vTests.length > 0;
 

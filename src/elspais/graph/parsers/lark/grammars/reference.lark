@@ -73,7 +73,7 @@ other_line.1: TEXT
 
 // Single-line reference: comment + keyword + refs (optional leading whitespace).
 // Matches lines starting with either the configured namespace (e.g. REQ-) or
-// the fixed JNY- prefix so that ``Verifies: JNY-OQ-Login-01/step-2`` is
+// the fixed JNY- prefix so that ``Verifies: JNY-OQ-Login-01/2`` is
 // recognized even when no REQ ID appears on the line.
 SINGLE_REF_LINE.5: /[ \t]*(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__):?[ \t]+(?:__NAMESPACE__[-_]|JNY-)[^\n]+/
 

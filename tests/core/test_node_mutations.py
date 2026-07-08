@@ -203,27 +203,27 @@ class TestRenameNode:
         jny.link(s2, EdgeKind.STRUCTURES)
         graph._roots.append(jny)
         graph._index["JNY-Test-01"] = jny
-        graph._index["JNY-Test-01/step-1"] = s1
-        graph._index["JNY-Test-01/step-2"] = s2
+        graph._index["JNY-Test-01/1"] = s1
+        graph._index["JNY-Test-01/2"] = s2
 
         graph.rename_node("JNY-Test-01", "JNY-Test-99")
 
         # After rename: new step IDs
-        assert graph.find_by_id("JNY-Test-99/step-1") is s1
-        assert graph.find_by_id("JNY-Test-99/step-2") is s2
-        assert graph.find_by_id("JNY-Test-01/step-1") is None
+        assert graph.find_by_id("JNY-Test-99/1") is s1
+        assert graph.find_by_id("JNY-Test-99/2") is s2
+        assert graph.find_by_id("JNY-Test-01/1") is None
 
         graph.undo_last()
 
         # After undo: original step IDs restored, renamed ones gone
-        assert graph.find_by_id("JNY-Test-01/step-1") is s1
-        assert graph.find_by_id("JNY-Test-01/step-2") is s2
-        assert graph.find_by_id("JNY-Test-99/step-1") is None
-        assert graph.find_by_id("JNY-Test-99/step-2") is None
+        assert graph.find_by_id("JNY-Test-01/1") is s1
+        assert graph.find_by_id("JNY-Test-01/2") is s2
+        assert graph.find_by_id("JNY-Test-99/1") is None
+        assert graph.find_by_id("JNY-Test-99/2") is None
 
         # Step nodes carry original IDs
-        assert s1.id == "JNY-Test-01/step-1"
-        assert s2.id == "JNY-Test-01/step-2"
+        assert s1.id == "JNY-Test-01/1"
+        assert s2.id == "JNY-Test-01/2"
 
         # Journey itself reverted
         assert graph.find_by_id("JNY-Test-01") is jny

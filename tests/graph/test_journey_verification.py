@@ -124,7 +124,7 @@ def test_one_step_fails_gives_failing(graph_one_step_fails):
     jny = graph_one_step_fails.find_by_id("JNY-OQ-Login-01")
     jv = jny.get_metric("journey_verification")
     assert jv.tier == "failing"
-    assert "step-2" in jv.failing_steps
+    assert "2" in jv.failing_steps
 
 
 # Verifies: REQ-d00256
@@ -261,14 +261,14 @@ def test_step_verifying_tests_include_file_and_line(tmp_path):
 
 @pytest.fixture()
 def journey_with_step_test_graph(tmp_path):
-    """Graph with one test that ``Verifies: JNY-OQ-Login-01/step-2``.
+    """Graph with one test that ``Verifies: JNY-OQ-Login-01/2``.
 
     Uses a file-level comment so the reference is picked up by the grammar
     (Python docstrings are not recognized as comment-style references).
     """
     return _build_trace_graph(
         tmp_path,
-        "# Verifies: JNY-OQ-Login-01/step-2\ndef test_step():\n    pass\n",
+        "# Verifies: JNY-OQ-Login-01/2\ndef test_step():\n    pass\n",
     )
 
 
@@ -283,10 +283,10 @@ def journey_with_whole_test_graph(tmp_path):
 
 @pytest.fixture()
 def journey_with_bad_step_graph(tmp_path):
-    """Graph with a test that ``Verifies: JNY-OQ-Login-01/step-9`` (non-existent)."""
+    """Graph with a test that ``Verifies: JNY-OQ-Login-01/9`` (non-existent)."""
     return _build_trace_graph(
         tmp_path,
-        "# Verifies: JNY-OQ-Login-01/step-9\ndef test_bad():\n    pass\n",
+        "# Verifies: JNY-OQ-Login-01/9\ndef test_bad():\n    pass\n",
     )
 
 
@@ -357,7 +357,7 @@ def test_journey_ref_pattern_matches_whole_journey():
 
 # Verifies: REQ-d00256
 def test_journey_ref_pattern_matches_step():
-    assert JOURNEY_REF_PATTERN.fullmatch("JNY-OQ-Login-01/step-2")
+    assert JOURNEY_REF_PATTERN.fullmatch("JNY-OQ-Login-01/2")
 
 
 def test_journey_ref_pattern_rejects_req_id():
@@ -383,9 +383,9 @@ def test_extract_ids_journey_only(extractor):
 
 # Verifies: REQ-d00256
 def test_extract_ids_journey_step(extractor):
-    """Verifies: JNY-OQ-Login-01/step-2 yields the step id with suffix."""
-    ids = extractor._extract_ids("Verifies: JNY-OQ-Login-01/step-2")
-    assert "JNY-OQ-Login-01/step-2" in ids
+    """Verifies: JNY-OQ-Login-01/2 yields the step id with suffix."""
+    ids = extractor._extract_ids("Verifies: JNY-OQ-Login-01/2")
+    assert "JNY-OQ-Login-01/2" in ids
 
 
 def test_extract_ids_req_still_works(extractor):
@@ -396,9 +396,9 @@ def test_extract_ids_req_still_works(extractor):
 
 def test_extract_ids_mixed_line(extractor):
     """Mixed line yields both REQ and JNY ids."""
-    ids = extractor._extract_ids("Verifies: REQ-p00001-A, JNY-OQ-Login-01/step-2")
+    ids = extractor._extract_ids("Verifies: REQ-p00001-A, JNY-OQ-Login-01/2")
     assert "REQ-p00001-A" in ids
-    assert "JNY-OQ-Login-01/step-2" in ids
+    assert "JNY-OQ-Login-01/2" in ids
 
 
 # ---------------------------------------------------------------------------
@@ -408,7 +408,7 @@ def test_extract_ids_mixed_line(extractor):
 
 # Verifies: REQ-d00256
 def test_step_owns_outgoing_verifies_edge(journey_with_step_test_graph):
-    """``Verifies: JNY-OQ-Login-01/step-2`` wires step -> test (outgoing from step).
+    """``Verifies: JNY-OQ-Login-01/2`` wires step -> test (outgoing from step).
 
     The covered node (STEP) is the edge source; the test is the edge target.
     This mirrors how requirements own their verifying tests as outgoing edges.
@@ -416,7 +416,7 @@ def test_step_owns_outgoing_verifies_edge(journey_with_step_test_graph):
     from elspais.graph.GraphNode import NodeKind
     from elspais.graph.relations import EdgeKind
 
-    step2 = journey_with_step_test_graph.find_by_id("JNY-OQ-Login-01/step-2")
+    step2 = journey_with_step_test_graph.find_by_id("JNY-OQ-Login-01/2")
     assert step2 is not None, "step-2 not found in graph"
     verifies = [e for e in step2.iter_outgoing_edges() if e.kind == EdgeKind.VERIFIES]
     assert len(verifies) == 1
@@ -439,7 +439,7 @@ def test_whole_journey_owns_outgoing_verifies_edge(journey_with_whole_test_graph
 def test_unknown_step_is_broken_reference(journey_with_bad_step_graph, capture_broken_refs):
     """A ``Verifies:`` targeting a non-existent step produces a BrokenReference."""
     refs = capture_broken_refs(journey_with_bad_step_graph)
-    assert any(r.target_id == "JNY-OQ-Login-01/step-9" for r in refs)
+    assert any(r.target_id == "JNY-OQ-Login-01/9" for r in refs)
 
 
 # Verifies: REQ-d00255
@@ -488,8 +488,8 @@ def test_journey_rename_cascades_step_ids():
     jny.link(s2, EdgeKind.STRUCTURES)
     graph._roots.append(jny)
     graph._index["JNY-Test-01"] = jny
-    graph._index["JNY-Test-01/step-1"] = s1
-    graph._index["JNY-Test-01/step-2"] = s2
+    graph._index["JNY-Test-01/1"] = s1
+    graph._index["JNY-Test-01/2"] = s2
 
     graph.rename_node("JNY-Test-01", "JNY-Test-99")
 
@@ -497,10 +497,10 @@ def test_journey_rename_cascades_step_ids():
     assert graph.find_by_id("JNY-Test-99") is jny
     assert graph.find_by_id("JNY-Test-01") is None
     # Step IDs updated in _index
-    assert graph.find_by_id("JNY-Test-99/step-1") is s1
-    assert graph.find_by_id("JNY-Test-99/step-2") is s2
-    assert graph.find_by_id("JNY-Test-01/step-1") is None
-    assert graph.find_by_id("JNY-Test-01/step-2") is None
+    assert graph.find_by_id("JNY-Test-99/1") is s1
+    assert graph.find_by_id("JNY-Test-99/2") is s2
+    assert graph.find_by_id("JNY-Test-01/1") is None
+    assert graph.find_by_id("JNY-Test-01/2") is None
     # Step nodes themselves reflect the new ID
-    assert s1.id == "JNY-Test-99/step-1"
-    assert s2.id == "JNY-Test-99/step-2"
+    assert s1.id == "JNY-Test-99/1"
+    assert s2.id == "JNY-Test-99/2"

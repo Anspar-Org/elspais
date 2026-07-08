@@ -428,8 +428,8 @@ class TestJourneyNodeSerialization:
         assert jny is not None, "JNY-OQ-Login-01 not found in one-step-fails fixture"
         payload = _build_journey_card_data(jny)
         assert (
-            "step-2" in payload["failing_steps"]
-        ), f"Expected 'step-2' in failing_steps; got {payload['failing_steps']}"
+            "2" in payload["failing_steps"]
+        ), f"Expected '2' in failing_steps; got {payload['failing_steps']}"
 
     # Verifies: REQ-d00255
     def test_journey_api_verdict_pass_for_all_pass(self, steps_all_pass_graph):
@@ -499,14 +499,14 @@ class TestJourneyStepSerialization:
 
     # Verifies: REQ-d00256
     def test_step_children_have_expected_labels(self, tmp_path):
-        """Step children must have labels step-1, step-2, step-3."""
+        """Step children must have bare-number labels 1, 2, 3."""
         steps = self._get_step_children(tmp_path)
         labels = {c["label"] for c in steps}
         assert labels == {
-            "step-1",
-            "step-2",
-            "step-3",
-        }, f"Expected {{step-1, step-2, step-3}}; got {labels}"
+            "1",
+            "2",
+            "3",
+        }, f"Expected {{1, 2, 3}}; got {labels}"
 
     # Verifies: REQ-d00256
     def test_step2_has_fail_status(self, tmp_path):
@@ -514,7 +514,7 @@ class TestJourneyStepSerialization:
         steps = self._get_step_children(tmp_path)
         by_label = {c["label"]: c for c in steps}
         assert (
-            by_label["step-2"]["status"] == "fail"
+            by_label["2"]["status"] == "fail"
         ), f"Expected step-2 status='fail'; got '{by_label['step-2']['status']}'"
 
     # Verifies: REQ-d00256
@@ -522,7 +522,7 @@ class TestJourneyStepSerialization:
         """step-1 and step-3 must have status='pass' in the one-step-fails fixture."""
         steps = self._get_step_children(tmp_path)
         by_label = {c["label"]: c for c in steps}
-        for label in ("step-1", "step-3"):
+        for label in ("1", "3"):
             assert (
                 by_label[label]["status"] == "pass"
             ), f"Expected {label} status='pass'; got '{by_label[label]['status']}'"
@@ -532,7 +532,7 @@ class TestJourneyStepSerialization:
         """step-2's verifying_tests must be non-empty and include a test with status='fail'."""
         steps = self._get_step_children(tmp_path)
         by_label = {c["label"]: c for c in steps}
-        vt = by_label["step-2"]["verifying_tests"]
+        vt = by_label["2"]["verifying_tests"]
         assert vt, "Expected non-empty verifying_tests for step-2"
         statuses = [t["status"] for t in vt]
         assert (

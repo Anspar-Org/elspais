@@ -1052,8 +1052,8 @@ def incoming_graph():
     req.link(jny, EdgeKind.VALIDATES, assertion_targets=["B"])
     steps = []
     for i in range(7):
-        s = GraphNode(id=f"JNY-ENROLL-01:step:{i}", kind=NodeKind.STEP, label=f"step-{i}")
-        s._content = {"label": f"step-{i}"}
+        s = GraphNode(id=f"JNY-ENROLL-01:step:{i}", kind=NodeKind.STEP, label=f"{i}")
+        s._content = {"label": f"{i}"}
         s.set_metric("step_status", "pass" if i < 5 else "untested")
         jny.link(s, EdgeKind.STRUCTURES)
         steps.append(s)

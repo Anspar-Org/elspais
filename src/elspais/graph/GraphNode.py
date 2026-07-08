@@ -106,12 +106,13 @@ def make_test_id(source_id: str, start_line: int) -> str:
 
 
 def make_step_id(journey_id: str, n: int) -> str:
-    """Canonical id for an addressable journey step: ``JNY-.../step-N``.
+    """Canonical id for an addressable journey step: ``JNY-.../N``.
 
     Steps are the journey-axis twin of assertions: they suffix the parent
-    journey id rather than using a structural prefix.
+    journey id rather than using a structural prefix, mirroring the
+    ``<requirement>/A`` assertion form.
     """
-    return f"{journey_id}/step-{n}"
+    return f"{journey_id}/{n}"
 
 
 @dataclass

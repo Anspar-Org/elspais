@@ -584,7 +584,7 @@ results  = "test-results/junit.xml"   # glob relative to cwd; empty = repo root
 match    = "aggregate"                 # "aggregate" for a whole-suite pass/fail
 ```
 
-With this in place, a test file that declares `// Verifies: JNY-OQ-Login-01/step-2`
+With this in place, a test file that declares `// Verifies: JNY-OQ-Login-01/2`
 links its results to journey step 2, and the journey verdict rolls up into the
 `uat_verified` dimension on any requirement the journey `Validates:`.
 

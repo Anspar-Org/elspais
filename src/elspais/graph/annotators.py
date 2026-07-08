@@ -1090,7 +1090,7 @@ class JourneyVerification:
     Attributes:
         tier: One of "full", "partial", "failing", "missing". Mirrors the
             unified coverage-tier vocabulary (REQ-d00258).
-        failing_steps: Labels (e.g. "step-2") of steps with a failing test.
+        failing_steps: Labels (e.g. "2") of steps with a failing test.
         fully_verified: True iff every unit is verified with no failures;
             the journey's Validates targets may be credited.
         has_failures: True iff any verifying test failed.
@@ -1200,7 +1200,7 @@ def annotate_journey_verification(graph: FederatedGraph) -> None:
         if steps:
             verified = 0
             for step in steps:
-                label = step.get_field("label")  # "step-N"
+                label = step.get_field("label")  # the step number, "N"
                 spass, sfail = _node_verifying_status(step)
                 passed, failed = (spass or bpass), (sfail or bfail)
                 status = "fail" if (sfail or bfail) else "pass" if (spass or bpass) else "untested"

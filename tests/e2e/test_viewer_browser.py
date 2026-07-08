@@ -444,9 +444,9 @@ class TestJourneyVerdictBrowser:
     def test_d00256_D_journey_fail_verdict_badge(self, page_journey, failing_journey_viewer_url):
         # Verifies: REQ-d00256-D
         """Open a FAILING journey card in the viewer; assert that:
-        - The API pre-check confirms verdict == 'fail' and failing_steps == ['step-2']
+        - The API pre-check confirms verdict == 'fail' and failing_steps == ['2']
         - The rendered card shows the 'UAT: FAIL' badge
-        - The rendered card lists 'step-2' as a failing step
+        - The rendered card lists step 2 as a failing step
         - No JS errors occur
         """
         js_errors: list[str] = []
@@ -462,9 +462,9 @@ class TestJourneyVerdictBrowser:
         assert props.get("verdict") == "fail", (
             f"Expected verdict='fail' in API, got {props.get('verdict')!r}. " f"Properties: {props}"
         )
-        assert "step-2" in props.get(
+        assert "2" in props.get(
             "failing_steps", []
-        ), f"Expected 'step-2' in failing_steps, got {props.get('failing_steps')!r}"
+        ), f"Expected '2' in failing_steps, got {props.get('failing_steps')!r}"
 
         # Load the viewer page
         page_journey.goto(failing_journey_viewer_url, wait_until="networkidle")
@@ -484,10 +484,11 @@ class TestJourneyVerdictBrowser:
             "UAT: FAIL" in card_text
         ), f"Expected 'UAT: FAIL' in journey card, got card text:\n{card_text!r}"
 
-        # Assert the failing step label is shown
+        # Assert the failing step label is shown (bare step number, "Failing
+        # steps: 2" — a substring check on "2" alone would be trivially true)
         assert (
-            "step-2" in card_text
-        ), f"Expected 'step-2' in journey card, got card text:\n{card_text!r}"
+            "Failing steps: 2" in card_text
+        ), f"Expected 'Failing steps: 2' in journey card, got card text:\n{card_text!r}"
 
         # No JS errors during the interaction
         assert not js_errors, f"JS errors during journey card render: {js_errors}"
