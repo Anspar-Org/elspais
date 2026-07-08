@@ -159,7 +159,7 @@ The coverage annotation system SHALL support an INDIRECT coverage source for who
 
 A. `CoverageSource` enum SHALL include distinct test-evidence values -- `TEST_DIRECT` for an assertion-targeted `Verifies:` and `TEST_INDIRECT` for a whole-requirement `Verifies:` -- kept separate from implementation-evidence sources (`DIRECT`/`EXPLICIT`/`INFERRED`) so that a test that verifies an *Assertion* credits the Tested dimension only and never the Implemented dimension (REQ-d00084-D). (`INDIRECT` remains for the transitive CODE->TEST provenance path.)
 
-B. `RollupMetrics` SHALL track `indirect_referenced_pct` as a separate percentage alongside strict `referenced_pct`.
+B. A whole-requirement (assertion-less) reference SHALL credit ALL of the target requirement's assertions at full value on the generous footing. This SHALL hold symmetrically for `Verifies:` (source `TEST_INDIRECT` -> Tested), `Implements:` on CODE (source `CODE_INDIRECT` -> Implemented), `Implements:`/`Refines:` from a child requirement (source `INFERRED` -> Implemented), and `Validates:` from a journey (source `UAT_INFERRED` -> UAT Covered). No whole-requirement reference SHALL credit the strict (direct) footing.
 
 C. `RollupMetrics` SHALL track `validated_with_indirect` count for assertions validated when including INDIRECT sources.
 
@@ -175,11 +175,11 @@ H. When a requirement declares `Satisfies: X`, the graph builder SHALL clone the
 
 I. 100% coverage of a template instance SHALL be achieved when every leaf *Assertion* in the cloned template subtree (excluding N/A assertions) has at least one inbound coverage edge (`Implements:`, `Verifies:`, or `Validates:`) on its template original, consistent with the inherited-coverage rule (REQ-p00014-K).
 
-J. A `Refines:` relationship SHALL NOT contribute coverage by itself, but it SHALL conduct the refining requirement's own rolled-up coverage upward to the *Assertion* it targets. A requirement's coverage SHALL be the mean of its assertions' coverage (assertions are unweighted), computed independently per coverage dimension. An *Assertion*'s coverage SHALL be determined as follows: if the *Assertion* has direct coverage (local evidence on it, or any assertion-targeted `Refines:`/`Implements:` edge naming it), its coverage SHALL be the equal-weight mean of those direct contributions (each contributor -- direct evidence at full value, each assertion-targeted refining requirement at its own rolled-up coverage -- carrying equal weight regardless of how many target the *Assertion*), and whole-requirement (blanket) credit SHALL be ignored for it. Otherwise (the *Assertion* has no direct coverage), it SHALL receive whole-requirement credit: full value if the requirement has local whole-requirement evidence (a whole-requirement test/code/journey), else `1/N` times the mean coverage of the requirement's whole-requirement (blanket) `Refines:` edges, where `N` is the requirement's assertion count -- so a blanket `Refines:` names no *Assertion* and is therefore worth at most one *Assertion*'s share, and a requirement refined by many whole-requirement children is not credited beyond that share. Only the *Assertion* with direct coverage forgoes blanket credit; its sibling *Assertions* without direct coverage still accrue it.
+J. A `Refines:` relationship SHALL NOT contribute coverage by itself, but it SHALL conduct the refining requirement's own rolled-up coverage upward to the *Assertion* it targets. A requirement's coverage SHALL be the mean of its assertions' coverage (assertions are unweighted), computed independently per coverage dimension. Coverage SHALL be tracked on two footings (REQ-d00069-L). An *Assertion*'s **strict (direct)** coverage SHALL be the equal-weight mean of its assertion-specific contributions (local direct evidence at full value; each assertion-targeted refining requirement at its own rolled-up coverage), and SHALL be `0` when it has none; whole-requirement (blanket) credit SHALL NOT enter the strict footing. An *Assertion*'s **generous (indirect)** coverage SHALL be the maximum of (a) its strict coverage, (b) full value when the requirement has local whole-requirement evidence (a whole-requirement test/code/journey), and (c) the mean coverage of the requirement's whole-requirement (blanket) `Refines:` edges at FULL weight. The generous footing SHALL be monotone: adding assertion-specific evidence SHALL NOT lower it. The prior `1/N` blanket deflation is retired.
 
 K. The system SHALL report coverage gaps on template instance nodes through the standard coverage mechanisms. Instance nodes are normal graph nodes and participate in existing health checks.
 
-L. Coverage SHALL be tracked on two footings per dimension: strict (direct, assertion-targeted evidence only) and generous (indirect, additionally counting whole-requirement, inferred, conducted, and inherited evidence). Reporting surfaces SHALL headline the generous footing and SHALL express precision as a tier (full-direct, full-indirect, partial, none, failing), rendering an indirect-evidence marker rather than a second count.
+L. Coverage SHALL be tracked on two footings per dimension: strict (direct, assertion-targeted evidence only) and generous (indirect, additionally counting whole-requirement, inferred, conducted, and inherited evidence). Reporting surfaces SHALL headline the generous footing and SHALL express precision as a tier (full, partial, failing, missing), rendering a single unified indirect-evidence caveat (a `~` marker meaning "some coverage comes from whole-requirement references") rather than a second count. The caveat SHALL be derived from `indirect > direct` per dimension and per *Assertion*, and SHALL be applied consistently at BOTH the requirement badge and the per-*Assertion* level so the two never disagree.
 
 ### Rationale
 
@@ -187,6 +187,7 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* 
 
 ### Changelog
 
+- 2026-07-07 | 2d89da53 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-07-03 | ddbc50c8 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-07-02 | 738d94e4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-06-20 | 2d05ad7b | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
@@ -194,7 +195,7 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* 
 - 2026-05-11 | e9b5c3f1 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | e9b5c3f1 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
-*End* *Indirect Coverage Source* | **Hash**: ddbc50c8
+*End* *Indirect Coverage Source* | **Hash**: 2d89da53
 ---
 
 ## REQ-d00070: Indirect Coverage Toggle Display
@@ -484,7 +485,7 @@ E. Viewer coverage filters SHALL bucket requirements by tier semantics using the
 
 F. A per-level `expects_validation` flag (default false) SHALL declare that requirements at that level are expected to have UAT validation (a USER_JOURNEY that `Validates:` them). When a level expects validation, a requirement of that level with no UAT coverage SHALL be a reported gap: flagged by the health `uat.coverage` check and listed under `gaps unvalidated`, and its viewer UAT badge SHALL render at error severity (red). When a level does not expect validation (the default), absent UAT SHALL be neither flagged by health, listed as a gap, nor badged in the viewer, and SHALL NOT drag the requirement's combined coverage bucket. The `uat.coverage` check SHALL count only requirements at expects_validation levels; when no level expects validation it SHALL pass trivially. All surfaces SHALL resolve this flag through a single shared helper rather than reading the level config independently.
 
-G. The viewer SHALL assign each *Assertion* a semantic coverage *standing* (full, partial, failing, or missing) per coverage dimension, projected from the requirement's rollup metrics, so that if every *Assertion* is full on a dimension the requirement badge for that dimension reads full, and if any *Assertion* is failing the requirement dimension reports a failure. An *Assertion*'s standing SHALL read failing only when that *Assertion* itself has a failing result or verification for the dimension, not because a sibling *Assertion* covered by a different, non-failing test or journey failed; a failing test or journey attributes the failure to exactly the assertions it covers (its named targets, or every assertion when it covers the whole requirement). The standing SHALL be computed server-side and applied on initial render, without depending on a lazy client prefetch. Standing colors SHALL be resolved through the theme catalog by standing name (never hard-coded in the badge logic), the same decoupling severity colors use per D, so the standing-to-color association is configurable, and the standings SHALL appear in the viewer Legend. The direct-versus-indirect distinction need not be surfaced at the *Assertion* badge level.
+G. The viewer SHALL assign each *Assertion* a semantic coverage *standing* (full, partial, failing, or missing) per coverage dimension, projected from the requirement's rollup metrics, so that if every *Assertion* is full on a dimension the requirement badge for that dimension reads full, and if any *Assertion* is failing the requirement dimension reports a failure. An *Assertion*'s standing SHALL read failing only when that *Assertion* itself has a failing result or verification for the dimension, not because a sibling *Assertion* covered by a different, non-failing test or journey failed; a failing test or journey attributes the failure to exactly the assertions it covers (its named targets, or every assertion when it covers the whole requirement). The standing SHALL be computed server-side and applied on initial render, without depending on a lazy client prefetch. Standing colors SHALL be resolved through the theme catalog by standing name (never hard-coded in the badge logic), the same decoupling severity colors use per D, so the standing-to-color association is configurable, and the standings SHALL appear in the viewer Legend. Per-*Assertion* pills SHALL honor `allow_indirect` when computing standing and SHALL render the unified `~` caveat (REQ-d00069-L) when applicable, though the direct-versus-indirect distinction SHALL NOT introduce a separate *Assertion* badge tier color.
 
 H. The requirement-level coverage tier, the per-*Assertion* coverage standing, and the viewer filter bucket SHALL be drawn from one shared set of coverage state names — full, partial, failing, and missing — so that a given coverage condition maps to the same state word on every surface. The prior split of the full state into separate direct and indirect states SHALL NOT reappear as distinct tier states.
 
@@ -498,6 +499,7 @@ L. A per-status `expects_implementation` flag SHALL declare whether a requiremen
 
 ### Changelog
 
+- 2026-07-07 | 90053f29 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-07-07 | 4767b41c | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-07-07 | 172301f4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-07-06 | 06550baf | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
@@ -506,4 +508,4 @@ L. A per-status `expects_implementation` flag SHALL declare whether a requiremen
 - 2026-07-03 | c843c727 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-07-02 | be97c170 | - | Michael Lewis (michael@anspar.org) | Auto-fix: add missing changelog section
 
-*End* *Reporting Surface Consistency* | **Hash**: 4767b41c
+*End* *Reporting Surface Consistency* | **Hash**: 90053f29

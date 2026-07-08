@@ -61,7 +61,7 @@
 | REQ-d00066 | Test Coverage Tool Implementation                             | dev-mcp-tools.md        | 6ac6b51f |
 | REQ-d00067 | Uncovered Assertions Tool Implementation                      | dev-mcp-tools.md        | 4884d7cb |
 | REQ-d00068 | Assertion Keyword Search Tool Implementation                  | dev-mcp-tools.md        | a9b8dff2 |
-| REQ-d00069 | Indirect Coverage Source                                      | dev-graph-core.md       | ddbc50c8 |
+| REQ-d00069 | Indirect Coverage Source                                      | dev-graph-core.md       | 2d89da53 |
 | REQ-d00070 | Indirect Coverage Toggle Display                              | dev-graph-core.md       | 3e5b1766 |
 | REQ-d00071 | Unified Root vs Orphan Classification                         | dev-graph-core.md       | 4bd239f1 |
 | REQ-d00072 | Link Suggestion Core Engine                                   | dev-graph-core.md       | 95f09aea |
@@ -147,7 +147,7 @@
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | bdad84a0 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | 44671fc1 |
 | REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 45bb196f |
-| REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | 4767b41c |
+| REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | 90053f29 |
 | REQ-d00259 | Requirement Format Reference Command                          | dev-cli.md              | 8e05d02e |
 
 ## User Journeys
