@@ -389,9 +389,9 @@ D. When an `// Implements:` marker has no function range (i.e., `impl_start_line
 
 E. A reporter registry SHALL map each `reporter` format name to a parser and an input channel (`stdout` or `file`). The registry SHALL include a native `flutter test --machine` reporter that parses the machine JSON event stream into result records carrying each test's real source-file path (from the suite path), pass/fail/skip status, and line -- without an external JUnit converter.
 
-F. For each configured target, the system SHALL obtain the reporter's output (captured from the command's stdout for stdout-channel reporters, or read from the `results` glob for file-channel reporters), build RESULT nodes carrying the real test-file path (`source_file`, repo-relative) and the target's `match` mode, and ingest the target's `coverage` file. Coverage crediting SHALL be derived from the targets' `credit_coverage`/`min_coverage_fraction`.
+F. For each configured target, the system SHALL obtain the reporter's output (captured from the command's stdout for stdout-channel reporters, or read from the `results` glob for file-channel reporters), build RESULT nodes carrying the real test-file path (`source_file`, repo-relative) and the target's `match` mode, and ingest the target's `coverage` file. Coverage crediting SHALL be derived from the targets' `credit_coverage`/`min_coverage_fraction`. File-channel results SHALL additionally record where each result was recorded — the results artifact's repo-relative path and, when derivable from the artifact (e.g. one JUnit `<testcase>` per line), the per-result line — as provenance distinct from the test's source path, and result links in reporting surfaces SHALL point at that artifact location.
 
-G. Each target SHALL select its result-to-test matching via `match`: `source` SHALL credit verification per test by resolving a result's real source-file path and `test()` source line to the specific test node at that `(path, line)`; when no test node matches that line (e.g. shared-helper or generated tests), it SHALL fall back to file granularity (all passing credits the file's `Verifies:` assertions; any failure flags them). `aggregate` SHALL use the per-app green/red engine.
+G. Each target SHALL select its result-to-test matching via `match`: `source` SHALL bind each result at the most precise scope available — first step scope, when the result's recorded test name embeds exactly one journey-step id (`JNY-.../N`) that resolves to a step whose verifying test(s) live in the result's source file; then test scope, resolving the result's real source-file path and `test()` source line to the specific test node at that `(path, line)`; and only then file granularity (all passing credits the file's `Verifies:` assertions; any failure flags them). Step- and test-scoped results SHALL credit per test, never via the file-level all-pass/any-fail rule. `aggregate` SHALL use the per-app green/red engine.
 
 H. `elspais checks --run-tests` SHALL accept a `--targets` selector naming a subset of `[[scanning.test.targets]]` to execute; an unknown target name SHALL be an error, and an absent selector SHALL execute all targets. The same `--targets` flag on `summary`/`trace` SHALL mark provenance without executing anything.
 
@@ -401,6 +401,7 @@ J. In a selective run (a `--targets` set is present), a requirement with test re
 
 ### Changelog
 
+- 2026-07-08 | 0f7323ff | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-07-01 | 4975d47a | - | Michael Lewis (michael@anspar.org) | Auto-fix: sync changelog hash
 - 2026-06-26 | 0b87cbd4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-06-26 | abc6e487 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
@@ -409,7 +410,7 @@ J. In a selective run (a `--targets` set is present), a requirement with test re
 - 2026-06-20 | 98120740 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (michael@anspar.org) | CUR-1533: initial
 
-*End* *Coverage-Based and Aggregate Test Verification* | **Hash**: 4975d47a
+*End* *Coverage-Based and Aggregate Test Verification* | **Hash**: 0f7323ff
 
 ---
 
@@ -437,15 +438,17 @@ D. The test-to-journey-to-requirement *Traceability* chain SHALL be visible in `
 
 ### Assertions
 
-A. A journey's `## Steps` numbered list SHALL be parsed into addressable `STEP` nodes with ids of the form `JNY-.../step-N`, linked under the journey via `STRUCTURES` edges.
+A. A journey's `## Steps` numbered list SHALL be parsed into addressable `STEP` nodes with ids of the form `JNY-.../N` (the step number suffixing the journey id, mirroring `<requirement>/A` assertion addressing), linked under the journey via `STRUCTURES` edges.
 
-B. A STEP node id (`JNY-.../step-N`) SHALL be a legal `Verifies:` target in test and code files, creating a VERIFIES edge scoped to that step on the parent journey node.
+B. A STEP node id (`JNY-.../N`) SHALL be a legal `Verifies:` target in test and code files, creating a VERIFIES edge scoped to that step on the parent journey node.
 
 C. Steps SHALL roll up to the journey's verification metric: a step SHALL be considered verified if it has at least one passing and zero failing verifying tests; an untested step SHALL leave the journey in a partial verification tier rather than fully verified.
 
-D. When a journey's verification tier is failing, the system SHALL identify the specific failing step(s) by id in the journey's verification output and API payload.
+D. When a journey's verification tier is failing, the system SHALL identify the specific failing step(s) by step number in the journey's verification output and API payload.
 
-*End* *Step-Level UAT Verification* | **Hash**: 44671fc1
+E. Test results SHALL be attributed per step: a step's verification status and its surfaced result entries SHALL reflect only results bound to that step's own verifying tests (plus whole-journey verifying tests), never results belonging to a sibling step.
+
+*End* *Step-Level UAT Verification* | **Hash**: cde21cfc
 
 ---
 
