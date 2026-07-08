@@ -396,3 +396,36 @@ class TestApiNodePayload:
         assert acs["C"]["uat_coverage"] == "full"
         assert acs["D"]["uat_verified"] == "partial"
         assert set(acs["E"].values()) == {"missing"}
+
+
+def test_REQ_d00069_L_caveat_true_for_blanket_only_assertion():
+    """An assertion covered only on the indirect footing is flagged caveated."""
+    from elspais.html.generator import compute_assertion_coverage_caveats
+    rollup = RollupMetrics(total_assertions=2)
+    rollup.implemented = CoverageDimension(
+        total=2, direct=1, indirect=2,
+        direct_labels={"A"}, indirect_labels={"A", "B"},
+        direct_pct_by_label={"A": 1.0}, indirect_pct_by_label={"A": 1.0, "B": 1.0},
+    )
+    node = _req_with_rollup(rollup, labels=("A", "B"))
+    caveats = compute_assertion_coverage_caveats(node)
+    assert caveats["A"]["implemented"] is False   # has direct evidence
+    assert caveats["B"]["implemented"] is True    # blanket-only -> ~
+
+
+def test_REQ_d00258_G_states_honor_allow_indirect_strict():
+    """Under allow_indirect=false, a blanket-only assertion reads 'missing'
+    (strict footing), matching the header badge (no header/pill split)."""
+    rollup = RollupMetrics(total_assertions=2)
+    rollup.implemented = CoverageDimension(
+        total=2, direct=1, indirect=2,
+        direct_labels={"A"}, indirect_labels={"A", "B"},
+        direct_pct_by_label={"A": 1.0}, indirect_pct_by_label={"A": 1.0, "B": 1.0},
+    )
+    node = _req_with_rollup(rollup, labels=("A", "B"))
+    strict = {"rules": {"coverage": {"allow_indirect": False}}}
+    states = compute_assertion_coverage_states(node, strict)
+    assert states["A"]["implemented"] == "full"
+    assert states["B"]["implemented"] == "missing"   # blanket-only, strict
+    generous = compute_assertion_coverage_states(node, None)
+    assert generous["B"]["implemented"] == "full"    # generous default

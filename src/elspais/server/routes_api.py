@@ -533,6 +533,7 @@ async def api_node(request: Request) -> JSONResponse:
     from elspais.html.generator import (
         DIMENSION_KEYS,
         DIMENSION_TIPS,
+        compute_assertion_coverage_caveats,
         compute_assertion_coverage_states,
         compute_coverage_tiers,
     )
@@ -585,6 +586,9 @@ async def api_node(request: Request) -> JSONResponse:
             result["assertion_coverage_states"] = compute_assertion_coverage_states(
                 node, state.config
             )
+            # Per-assertion "leans on whole-requirement evidence" caveat (~),
+            # unified with the header ~ marker (REQ-d00069-L).
+            result["assertion_coverage_caveats"] = compute_assertion_coverage_caveats(node)
 
             # Reverse-traceability: what points AT this requirement (REQ-p00006-A)
             result["incoming_links"] = _compute_incoming_links(node)

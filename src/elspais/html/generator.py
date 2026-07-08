@@ -515,10 +515,14 @@ def compute_assertion_coverage_states(
             if label:
                 labels.append(label)
 
+    from elspais.graph.aggregation import _allow_indirect_from_config
+
     eps = 1e-9
+    allow_indirect = _allow_indirect_from_config(config)
 
     def _frac(dim: CoverageDimension, label: str) -> float:
-        return dim.indirect_pct_by_label.get(label, 0.0)
+        pct = dim.indirect_pct_by_label if allow_indirect else dim.direct_pct_by_label
+        return pct.get(label, 0.0)
 
     def _simple_standing(dim: CoverageDimension, label: str) -> str:
         f = _frac(dim, label)
@@ -558,6 +562,47 @@ def compute_assertion_coverage_states(
             "uat_verified": _passing_standing(rollup.uat_verified, label),
         }
     return states
+
+
+def compute_assertion_coverage_caveats(node: GraphNode) -> dict[str, dict[str, bool]]:
+    """Per-assertion, per-dimension "leans on whole-requirement evidence" flag.
+
+    The one unified indirect caveat (REQ-d00069-L, REQ-d00258): for each label
+    and dimension, True when the assertion's coverage is not fully direct
+    (``indirect_pct_by_label > direct_pct_by_label``). Derived from the same
+    floats that drive the header ``~`` marker -- NOT stored on the dimension --
+    so header and per-assertion caveats can never disagree. Independent of
+    ``allow_indirect`` (that governs crediting; this is provenance).
+    """
+    from elspais.graph.GraphNode import NodeKind
+    from elspais.graph.metrics import tested_and_passing
+
+    rollup = node.get_metric("rollup_metrics")
+    if not rollup or rollup.total_assertions == 0:
+        return {}
+    labels = [
+        c.get_field("label", "")
+        for c in node.iter_children()
+        if c.kind == NodeKind.ASSERTION and c.get_field("label", "")
+    ]
+    eps = 1e-9
+    passing = tested_and_passing(rollup)
+
+    def _cav(dim: CoverageDimension, label: str) -> bool:
+        ind = dim.indirect_pct_by_label.get(label, 0.0)
+        dir_ = dim.direct_pct_by_label.get(label, 0.0)
+        return ind > dir_ + eps
+
+    return {
+        label: {
+            "implemented": _cav(rollup.implemented, label),
+            "tested": _cav(rollup.tested, label),
+            "verified": _cav(passing, label),
+            "uat_coverage": _cav(rollup.uat_coverage, label),
+            "uat_verified": _cav(rollup.uat_verified, label),
+        }
+        for label in labels
+    }
 
 
 # Implements: REQ-p00006-A
