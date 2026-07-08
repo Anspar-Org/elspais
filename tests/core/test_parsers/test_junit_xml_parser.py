@@ -456,3 +456,68 @@ class TestJUnitXMLParserSourceBinding:
         assert results[0]["test_id"] is None
         assert results[0]["source_path"] == "e2e/link.spec.ts"
         assert results[0]["line"] == 12
+
+
+class TestResultsFileProvenance:
+    """Per-record result_file / result_line provenance (REQ-d00254-F)."""
+
+    # Verifies: REQ-d00254-F
+    def test_pretty_printed_xml_yields_per_testcase_result_lines(self):
+        """Pretty-printed XML maps each record to its <testcase> line.
+
+        Names deliberately carry `›`, `:`, `/` and an XML entity (&quot;) to
+        pin the escaping-aware raw-line attribute matching.
+        """
+        xml = """<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="uat" tests="3">
+  <testcase classname="login.spec" name="Login › JNY-OQ-Login-01/1: open &quot;home&quot; page" time="0.1"/>
+  <testcase classname="login.spec" name="Login › JNY-OQ-Login-01/2: enter credentials" time="0.1"/>
+  <testcase classname="login.spec" name="plain_test" time="0.1"/>
+</testsuite>"""
+        parser = JUnitXMLParser()
+
+        results = parser.parse(xml, "results/junit.xml")
+
+        assert len(results) == 3
+        by_name = {r["name"]: r for r in results}
+        # ElementTree unescapes &quot; -- the record's name carries real quotes.
+        assert by_name['Login › JNY-OQ-Login-01/1: open "home" page']["result_line"] == 3
+        assert by_name["Login › JNY-OQ-Login-01/2: enter credentials"]["result_line"] == 4
+        assert by_name["plain_test"]["result_line"] == 5
+        for r in results:
+            assert r["result_file"] == "results/junit.xml"
+
+    # Verifies: REQ-d00254-F
+    def test_minified_xml_does_not_crash_and_degrades_result_line(self):
+        """A single-line document yields result_line of 1 or None per record."""
+        xml = (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<testsuite name="uat" tests="2">'
+            '<testcase classname="login.spec" name="one" time="0.1"/>'
+            '<testcase classname="login.spec" name="two" time="0.1"/>'
+            "</testsuite>"
+        )
+        parser = JUnitXMLParser()
+
+        results = parser.parse(xml, "results/junit.xml")
+
+        assert len(results) == 2
+        for r in results:
+            assert r["result_line"] in (1, None)
+            assert r["result_file"] == "results/junit.xml"
+
+    # Verifies: REQ-d00254-F
+    def test_file_attr_keeps_source_path_distinct_from_result_file(self):
+        """file= sets source_path (match key); result_file stays the artifact."""
+        xml = """<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="uat" tests="1">
+  <testcase classname="login.spec" name="redeems" file="e2e/link.spec.ts" time="0.5"/>
+</testsuite>"""
+        parser = JUnitXMLParser()
+
+        results = parser.parse(xml, "test-results/junit.xml")
+
+        assert len(results) == 1
+        assert results[0]["source_path"] == "e2e/link.spec.ts"
+        assert results[0]["result_file"] == "test-results/junit.xml"
+        assert results[0]["result_line"] == 3

@@ -741,3 +741,169 @@ class TestJourneyVerdictBrowser:
         )
 
         assert not js_errors, f"JS errors during step-test link render: {js_errors}"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Step-scope RESULT binding + results-file provenance in the viewer
+# (junit-step-binding fixture: testcases with file= but NO line=)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_STEP_BINDING_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "journey-uat" / "junit-step-binding"
+_STEP_BINDING_JOURNEY_ID = "JNY-OQ-Login-01"
+
+
+@pytest.fixture(scope="module")
+def step_binding_viewer_url():
+    """Start a viewer server against the journey-uat/junit-step-binding fixture.
+
+    Mirrors ``failing_journey_viewer_url`` (worktree src via PYTHONPATH) but
+    serves the fixture whose junit results bind at STEP scope: one test
+    source file with per-step Verifies tests, and results.xml testcases that
+    carry ``file=`` but no ``line=`` and embed ``<journey>/N`` step ids.
+    """
+    if not _STEP_BINDING_FIXTURE.exists():
+        pytest.skip(f"junit-step-binding fixture not present at {_STEP_BINDING_FIXTURE}")
+
+    port = _find_free_port()
+    base_url = f"http://127.0.0.1:{port}"
+
+    worktree_src = str(REPO_ROOT / "src")
+    env = dict(os.environ)
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = f"{worktree_src}:{existing}" if existing else worktree_src
+
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "elspais",
+            "viewer",
+            "--server",
+            "--port",
+            str(port),
+            "--path",
+            str(_STEP_BINDING_FIXTURE),
+        ],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+
+    try:
+        _wait_for_server(base_url)
+        yield base_url
+    finally:
+        try:
+            import urllib.request
+
+            req = urllib.request.Request(f"{base_url}/api/shutdown", method="POST")
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            pass
+
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                proc.wait(timeout=5)
+
+
+@pytest.fixture()
+def page_step_binding(step_binding_viewer_url):
+    """Launch headless Chromium against the junit-step-binding viewer."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context()
+        pg = context.new_page()
+        pg.set_default_timeout(10_000)
+        yield pg
+        browser.close()
+
+
+class TestJunitStepBindingBrowser:
+    """Step-scoped result binding and results-artifact links in the viewer."""
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_step_result_panel_not_conflated_and_links_artifact(
+        self, page_step_binding, step_binding_viewer_url
+    ):
+        # Verifies: REQ-d00256-E
+        # Verifies: REQ-d00254-F
+        """Open the journey card, toggle step-1's Result panel and assert:
+
+        1. No conflation (end-to-end): step-1's panel holds exactly one
+           STEP-scoped result row -- its own (``results.xml:3``) -- and NOT
+           the sibling step's uniquely-lined result (``results.xml:4``).
+           The two no-step-id/ambiguous testcases legitimately fan out to
+           both tests at file scope, so the panel's expected total is 3
+           rows (1 step-scoped + 2 file-scoped).
+        2. Provenance: every result row's link text points at the results
+           ARTIFACT (``results.xml:<line>``), never the test source file.
+        """
+        js_errors: list[str] = []
+        page_step_binding.on("pageerror", lambda err: js_errors.append(str(err)))
+
+        page_step_binding.goto(step_binding_viewer_url, wait_until="networkidle")
+        page_step_binding.evaluate(f"() => window.openCard('{_STEP_BINDING_JOURNEY_ID}')")
+
+        card_locator = page_step_binding.locator(f"#card-{_STEP_BINDING_JOURNEY_ID}")
+        card_locator.wait_for(state="visible", timeout=10_000)
+
+        step_rows = card_locator.locator(".journey-step-row").all()
+        assert len(step_rows) == 2, f"Expected 2 step rows, got {len(step_rows)}"
+
+        # The Result badge is the LAST .journey-step-badge in the row (VER
+        # first, then Result); it toggles the RESULTS panel.
+        panel = card_locator.locator(
+            f"#journey-step-results-{_STEP_BINDING_JOURNEY_ID}-1"
+        )
+        assert panel.count() == 1, "Expected a step-1 results panel in the DOM"
+        assert not panel.is_visible(), "Step-1 results panel should be hidden by default"
+
+        result_badge = step_rows[0].locator(".journey-step-badge").last
+        result_badge.click()
+        panel.wait_for(state="visible", timeout=5_000)
+
+        rows = panel.locator(".journey-step-result-row")
+        # 1 step-scoped result + 2 file-scope fanout results (no-step-id and
+        # ambiguous testcases) = 3. Before the step-scope fix, step 2's
+        # per-step result also fanned out here, making it 4.
+        assert rows.count() == 3, (
+            f"Expected 3 result rows (1 step-scoped + 2 file-scope), got "
+            f"{rows.count()}: {panel.inner_text()!r}"
+        )
+
+        panel_text = panel.inner_text()
+        assert "results.xml:3" in panel_text, (
+            f"Step-1 panel must show its own step-scoped result "
+            f"(results.xml:3), got: {panel_text!r}"
+        )
+        assert "results.xml:4" not in panel_text, (
+            f"Step-1 panel must NOT show step-2's result (results.xml:4, "
+            f"the conflation regression), got: {panel_text!r}"
+        )
+
+        # Every row links to the results ARTIFACT, not the test source.
+        assert "test_steps.py" not in panel_text, (
+            f"Result rows must link the results artifact, not the test "
+            f"source file, got: {panel_text!r}"
+        )
+        for i in range(rows.count()):
+            link = rows.nth(i).locator("a")
+            assert link.count() == 1, (
+                f"Result row {i} should have exactly one link: "
+                f"{rows.nth(i).inner_html()!r}"
+            )
+            link_text = link.inner_text().strip()
+            assert link_text.startswith("results.xml:"), (
+                f"Result row {i} link must be 'results.xml:<line>', got "
+                f"{link_text!r}"
+            )
+
+        assert not js_errors, f"JS errors during step-results render: {js_errors}"

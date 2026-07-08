@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="uat-suite" tests="4">
+  <testcase name="Login Flow › JNY-OQ-Login-01/1: open login page" classname="login.spec" file="tests/test_steps.py" time="0.1"/>
+  <testcase name="Login Flow › JNY-OQ-Login-01/2: enter credentials" classname="login.spec" file="tests/test_steps.py" time="0.1"/>
+  <testcase name="Login Flow › smoke check without a step id" classname="login.spec" file="tests/test_steps.py" time="0.1"/>
+  <testcase name="Login Flow › JNY-OQ-Login-01/1 and JNY-OQ-Login-01/2 combined" classname="login.spec" file="tests/test_steps.py" time="0.1"/>
+</testsuite>
