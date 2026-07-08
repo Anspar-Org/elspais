@@ -2210,6 +2210,53 @@ def check_dimension_coverage(
     )
 
 
+def check_whole_req_only_coverage(graph, config=None) -> HealthCheck:
+    """INFO: assertions whose IMPLEMENTED coverage is whole-requirement-only.
+
+    Under REQ-d00069-B/J a blanket `Implements:`/`Refines:` fully credits every
+    assertion on the generous footing. That is intended, but it must be VISIBLE:
+    this reports how load-bearing the blanket references are so a team can see
+    how much green rests on whole-requirement evidence. INFO severity -- never
+    fails the build. (REQ-d00258.)
+    """
+    from elspais.graph import NodeKind
+
+    findings: list[HealthFinding] = []
+    total = 0
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        rollup = node.get_metric("rollup_metrics")
+        if rollup is None:
+            continue
+        dim = rollup.implemented
+        n = sum(
+            1
+            for lbl, ind in dim.indirect_pct_by_label.items()
+            if ind > dim.direct_pct_by_label.get(lbl, 0.0) + 1e-9
+        )
+        if n:
+            total += n
+            findings.append(
+                HealthFinding(
+                    message=(
+                        f"{node.id}: {n} assertion(s) implemented only by "
+                        f"whole-requirement evidence"
+                    ),
+                    node_id=node.id,
+                )
+            )
+    return HealthCheck(
+        name="code.whole_req_only_coverage",
+        passed=True,
+        message=(
+            f"{total} assertion(s) across {len(findings)} requirement(s) rely "
+            f"only on whole-requirement evidence for Implemented coverage"
+        ),
+        category="code",
+        severity="info",
+        findings=findings,
+    )
+
+
 def check_code_coverage(
     graph: FederatedGraph,
     exclude_status: set[str] | None = None,
@@ -2419,6 +2466,7 @@ def run_code_checks(
         _check_status_references(
             graph, NodeKind.CODE, StatusRole.ASPIRATIONAL, ref_sev.aspirational, exclude_status
         ),
+        check_whole_req_only_coverage(graph, config),
     ]
 
     # Add code_tested dimension only when line coverage data is present

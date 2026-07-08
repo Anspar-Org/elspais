@@ -763,3 +763,49 @@ class TestCheckCoverageIntegrates:
         # REQ; it must be counted among requirements with coverage.
         assert check.details["reqs_with_any_coverage"] >= 1
         assert check.details["reqs_with_direct_coverage"] >= 1
+
+
+class TestWholeReqOnlyCoverageCheck:
+    """Info-level check quantifying reliance on whole-requirement evidence.
+
+    Validates REQ-d00258: over-crediting on the generous footing must be
+    visible, not silent. INFO severity -> never fails the build.
+    """
+
+    def test_reports_blanket_only_assertions_info(self):
+        from elspais.commands.health import check_whole_req_only_coverage
+        from elspais.graph.annotators import annotate_coverage
+        from tests.core.graph_test_helpers import (
+            build_graph, make_requirement, make_code_ref,
+        )
+        graph = build_graph(
+            make_requirement(
+                "REQ-100", level="PRD",
+                assertions=[{"label": "A", "text": "a"}, {"label": "B", "text": "b"}],
+            ),
+            make_code_ref(implements=["REQ-100"], source_path="src/impl.py"),  # blanket
+        )
+        annotate_coverage(graph)
+        check = check_whole_req_only_coverage(graph)
+        assert check.severity == "info"
+        assert check.passed is True
+        assert len(check.findings) == 1
+        assert "REQ-100" in check.findings[0].message
+        assert "2" in check.findings[0].message  # both A,B whole-req-only
+
+    def test_no_findings_when_all_direct(self):
+        from elspais.commands.health import check_whole_req_only_coverage
+        from elspais.graph.annotators import annotate_coverage
+        from tests.core.graph_test_helpers import (
+            build_graph, make_requirement, make_code_ref,
+        )
+        graph = build_graph(
+            make_requirement(
+                "REQ-100", level="PRD",
+                assertions=[{"label": "A", "text": "a"}],
+            ),
+            make_code_ref(implements=["REQ-100-A"], source_path="src/impl.py"),  # targeted
+        )
+        annotate_coverage(graph)
+        check = check_whole_req_only_coverage(graph)
+        assert check.findings == []
