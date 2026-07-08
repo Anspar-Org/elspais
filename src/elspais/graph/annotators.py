@@ -1388,6 +1388,20 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                                     assertion_label=label,
                                 )
                             )
+                else:
+                    # Blanket `Implements: REQ` (no assertion suffix) on CODE:
+                    # a whole-requirement implementation reference credits ALL
+                    # assertions at full value into the INDIRECT footing, mirroring
+                    # TEST_INDIRECT (whole-req Verifies) and INFERRED (child REQ).
+                    # REQ-d00069-B closes the prior asymmetry (this had no else).
+                    for label in assertion_labels:
+                        metrics.add_contribution(
+                            CoverageContribution(
+                                source_id=target_node.id,
+                                source_type=CoverageSource.CODE_INDIRECT,
+                                assertion_label=label,
+                            )
+                        )
 
                 # Transitive: CODE → TEST → RESULT (indirect test coverage)
                 # Check if this CODE node has TEST children via VERIFIES edges

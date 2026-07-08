@@ -19,6 +19,7 @@ from elspais.graph.metrics import CoverageContribution, CoverageSource, RollupMe
 from elspais.graph.relations import EdgeKind
 from tests.core.graph_test_helpers import (
     build_graph,
+    make_code_ref,
     make_requirement,
     make_test_ref,
     make_test_result,
@@ -733,14 +734,18 @@ class TestTransitiveCoverageThroughCode:
 
     # Verifies: REQ-d00069-B
     def test_transitive_strict_coverage_excludes_indirect(self):
-        """Transitive CODE->TEST only provides INDIRECT contributions, not implemented."""
+        """Blanket CODE Implements credits `implemented.indirect` (REQ-d00069-B);
+        the CODE->TEST transitive chain itself adds no further `implemented`
+        contribution beyond that (it only feeds `verified`/assertion_coverage)."""
         graph, req, code, test, result = self._build_chain()
         annotate_coverage(graph)
 
         metrics = req.get_metric("rollup_metrics")
-        # Implemented coverage should be 0 (transitive INDIRECT excluded)
-        assert metrics.implemented.indirect_pct == 0.0
-        assert metrics.implemented.indirect == 0
+        # `_build_chain()` links req->code with a blanket Implements (no
+        # assertion_targets), which now credits ALL assertions into
+        # implemented.indirect via CODE_INDIRECT (REQ-d00069-B).
+        assert metrics.implemented.indirect_pct == 100.0
+        assert metrics.implemented.indirect == 2
         # But INDIRECT contributions exist in assertion_coverage for all assertions
         for label in ["A", "B"]:
             contribs = metrics.assertion_coverage.get(label, [])
@@ -947,3 +952,27 @@ class TestFactoryIntegration:
         # No CODE nodes should exist
         code_nodes = list(graph.nodes_by_kind(NodeKind.CODE))
         assert len(code_nodes) == 0
+
+
+class TestBlanketCodeImplements:
+    """A blanket `Implements: REQ` on CODE credits ALL assertions (indirect).
+
+    Validates REQ-d00069-B: whole-req CODE Implements is symmetric with the
+    whole-req TEST (TEST_INDIRECT) and child-REQ (INFERRED) paths, closing the
+    asymmetry that credited it nothing (annotators.py:1381 had no else branch).
+    """
+
+    def test_REQ_d00069_B_blanket_code_implements_credits_all(self):
+        graph = build_graph(
+            make_requirement(
+                "REQ-100",
+                level="PRD",
+                assertions=[{"label": "A", "text": "SHALL a"}, {"label": "B", "text": "SHALL b"}],
+            ),
+            make_code_ref(implements=["REQ-100"], source_path="src/impl.py"),
+        )
+        annotate_coverage(graph)
+        rollup = graph.find_by_id("REQ-100").get_metric("rollup_metrics")
+        assert rollup.implemented.indirect == 2
+        assert rollup.implemented.direct == 0
+        assert rollup.implemented.indirect_pct_by_label == {"A": 1.0, "B": 1.0}
