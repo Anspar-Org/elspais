@@ -1205,61 +1205,86 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
             html += '<span class="card-assertion-text journey-step-text">' + escapeHtml(step.text || '') + '</span>';
             html += '<span class="assertion-badges-area">';
 
-            // Verified badge — yes/no existence check (a test Verifies this step)
-            var verLabel = stepBadgeMode === 'full' ? 'Verified' : (stepBadgeMode === 'dots' ? 'V' : 'VER');
-            var verCls = verified ? 'implemented-yes' : 'implemented-no';
-            var verTip = verified
-                ? (vTests.length + (vTests.length === 1 ? ' test verifies' : ' tests verify') + ' this step')
-                : 'No test verifies this step';
-            html += '<button class="journey-step-badge ' + verCls + '" title="' + escapeAttr(verTip) + '"' +
-                ' onclick="event.stopPropagation(); toggleJourneyStepTests(this, \'' + nodeId + '\', \'' + escapeAttr(stepNum) + '\')">' + verLabel + '</button>';
+            // Result entries come from the verifying tests (a result implies a
+            // verifier), so VER and Result are independent affordances shown
+            // ONLY when their own evidence exists — suppressed otherwise, like
+            // the assertion pills. A VERIFIES edge without a result -> VER only.
+            var stepResults = [];
+            vTests.forEach(function(t) { (t.results || []).forEach(function(r) { stepResults.push(r); }); });
+            var hasResult = stepResults.length > 0 || sStatus === 'pass' || sStatus === 'fail';
 
-            // Result badge — pass/fail/untested (mirrors the "Verified" result tier)
-            var resTerm, resCls, resTip;
-            if (sStatus === 'pass') {
-                resTerm = {full: 'Passed', abbr: 'PASS', dot: 'P'};
-                resCls = 'validation-pass';
-                resTip = 'Verifying test results passed';
-            } else if (sStatus === 'fail') {
-                resTerm = {full: 'Failed', abbr: 'FAIL', dot: 'F'};
-                resCls = 'validation-fail';
-                resTip = 'A verifying test result failed';
-            } else {
-                resTerm = {full: 'Passed', abbr: 'PASS', dot: 'P'};
-                resCls = 'validation-unknown';
-                resTip = 'No test result for this step yet';
+            // VER badge — only when a test verifies this step. Toggles the
+            // verifying-TESTS panel.
+            if (verified) {
+                var verLabel = stepBadgeMode === 'full' ? 'Verified' : (stepBadgeMode === 'dots' ? 'V' : 'VER');
+                var verTip = vTests.length + (vTests.length === 1 ? ' test verifies' : ' tests verify') + ' this step';
+                html += '<button class="journey-step-badge implemented-yes" title="' + escapeAttr(verTip) + '"' +
+                    ' onclick="event.stopPropagation(); toggleJourneyStepPanel(this, \'journey-step-tests-' + nodeId + '-' + escapeAttr(stepNum) + '\')">' + verLabel + '</button>';
             }
-            var resLabel = stepBadgeMode === 'full' ? resTerm.full : (stepBadgeMode === 'dots' ? resTerm.dot : resTerm.abbr);
-            html += '<button class="journey-step-badge ' + resCls + '" title="' + escapeAttr(resTip) + '"' +
-                ' onclick="event.stopPropagation(); toggleJourneyStepTests(this, \'' + nodeId + '\', \'' + escapeAttr(stepNum) + '\')">' + resLabel + '</button>';
+
+            // Result badge — only when a result exists. Neutral "Result" label;
+            // COLOR carries the outcome (green pass / red fail / grey
+            // indeterminate), so a red badge reads as a failure without the label
+            // contradicting it. Toggles the RESULTS panel (not the tests).
+            if (hasResult) {
+                var resCls = sStatus === 'pass' ? 'validation-pass' : (sStatus === 'fail' ? 'validation-fail' : 'validation-unknown');
+                var resLabel = stepBadgeMode === 'full' ? 'Result' : (stepBadgeMode === 'dots' ? 'R' : 'RES');
+                var resTip = sStatus === 'pass' ? 'Verifying test results passed'
+                    : (sStatus === 'fail' ? 'A verifying test result failed' : 'Test results present (indeterminate)');
+                html += '<button class="journey-step-badge ' + resCls + '" title="' + escapeAttr(resTip) + '"' +
+                    ' onclick="event.stopPropagation(); toggleJourneyStepPanel(this, \'journey-step-results-' + nodeId + '-' + escapeAttr(stepNum) + '\')">' + resLabel + '</button>';
+            }
+
+            // No verifier at all -> a muted hint, mirroring the assertion "no
+            // coverage" placeholder (a result can't exist without a verifier).
+            if (!verified) {
+                html += '<span class="assertion-no-coverage" title="No test verifies this step" style="font-size:0.6rem;color:var(--secondary-text);opacity:0.5;">no tests</span>';
+            }
 
             html += '</span>'; // .assertion-badges-area
             html += '</div>'; // .journey-step-row
 
+            // Verifying-TESTS panel (VER badge) — which tests verify this step.
             html += '<div class="journey-step-tests" id="journey-step-tests-' + nodeId + '-' + escapeAttr(stepNum) + '"' +
                 ' style="display:none;margin-left:34px;margin-bottom:4px;">';
-            if (vTests.length === 0) {
-                html += '<div class="assertion-tests-empty">No test verifies this step</div>';
-            } else {
-                vTests.forEach(function(t) {
-                    var tStatus = t.status || '';
-                    var tCls = tStatus === 'pass' ? 'validation-pass' : (tStatus === 'fail' ? 'validation-fail' : 'validation-unknown');
-                    // Clean, non-duplicated display text: prefer the test name,
-                    // then repo-relative file:line, then the label/id fallback.
-                    var displayText = t.name
-                        ? t.name
-                        : (t.file ? (t.file + ':' + (t.line || 0)) : (t.label || t.id || ''));
-                    html += '<div class="journey-step-test-row" style="font-size:0.75rem;display:flex;align-items:center;gap:4px;padding:1px 0;">';
-                    html += '<span class="' + tCls + ' active" style="font-size:0.55rem;padding:1px 4px;border-radius:2px;">' + escapeHtml((tStatus || '?').toUpperCase()) + '</span>';
-                    if (t.file) {
-                        html += '<a class="journey-step-test-link" href="#" style="font-family:monospace;" onclick="event.preventDefault(); showSource(\'' +
-                            escapeJsInAttr(t.file) + '\', ' + (t.line || 0) + ', \'' + escapeAttr(t.id || '') + '\')">' + escapeHtml(displayText) + '</a>';
-                    } else {
-                        html += '<span class="journey-step-test-link" style="font-family:monospace;">' + escapeHtml(displayText) + '</span>';
-                    }
-                    html += '</div>';
-                });
-            }
+            vTests.forEach(function(t) {
+                // Clean, non-duplicated display text: prefer the test name,
+                // then repo-relative file:line, then the label/id fallback.
+                var displayText = t.name
+                    ? t.name
+                    : (t.file ? (t.file + ':' + (t.line || 0)) : (t.label || t.id || ''));
+                html += '<div class="journey-step-test-row" style="font-size:0.75rem;display:flex;align-items:center;gap:4px;padding:1px 0;">';
+                html += '<span class="assertion-test-icon">&#x1F9EA;</span>';
+                if (t.file) {
+                    html += '<a class="journey-step-test-link" href="#" style="font-family:monospace;" onclick="event.preventDefault(); showSource(\'' +
+                        escapeJsInAttr(t.file) + '\', ' + (t.line || 0) + ', \'' + escapeAttr(t.id || '') + '\')">' + escapeHtml(displayText) + '</a>';
+                } else {
+                    html += '<span class="journey-step-test-link" style="font-family:monospace;">' + escapeHtml(displayText) + '</span>';
+                }
+                html += '</div>';
+            });
+            html += '</div>';
+
+            // RESULTS panel (Result badge) — the actual pass/fail result entries
+            // produced by the verifying tests (distinct from the tests above).
+            html += '<div class="journey-step-results" id="journey-step-results-' + nodeId + '-' + escapeAttr(stepNum) + '"' +
+                ' style="display:none;margin-left:34px;margin-bottom:4px;">';
+            stepResults.forEach(function(r) {
+                var rs = (r.status || '').toLowerCase();
+                var rIcon = (rs === 'passed' || rs === 'pass' || rs === 'success') ? '&#x2705;'
+                    : ((rs === 'failed' || rs === 'fail' || rs === 'failure' || rs === 'error') ? '&#x274C;' : '&#x2753;');
+                var rText = (r.file ? (r.file + ':' + (r.line || 0)) : (r.id || 'result')) +
+                    (r.duration ? ' (' + r.duration + 's)' : '');
+                html += '<div class="journey-step-result-row" style="font-size:0.75rem;display:flex;align-items:center;gap:4px;padding:1px 0;">';
+                html += '<span class="assertion-test-icon">' + rIcon + '</span>';
+                if (r.file) {
+                    html += '<a class="journey-step-test-link" href="#" style="font-family:monospace;" onclick="event.preventDefault(); showSource(\'' +
+                        escapeJsInAttr(r.file) + '\', ' + (r.line || 0) + ', \'' + escapeAttr(r.id || '') + '\')">' + escapeHtml(rText) + '</a>';
+                } else {
+                    html += '<span class="journey-step-test-link" style="font-family:monospace;">' + escapeHtml(rText) + '</span>';
+                }
+                html += '</div>';
+            });
             html += '</div>';
         });
         html += '</div>';
@@ -1536,21 +1561,20 @@ function toggleBodySection(nodeId, idx) {
 
 var assertionTestsCache = {};
 
-// Journey step "Verified"/result badges toggle a per-step test panel.
-// Unlike toggleAssertionTests, the verifying-test data is already embedded
-// in the journey card payload (step.verifying_tests) — no fetch needed.
-function toggleJourneyStepTests(btn, nodeId, stepNum) {
-    var panel = document.getElementById('journey-step-tests-' + nodeId + '-' + stepNum);
+// Journey step badges each toggle their OWN pre-rendered panel: VER -> the
+// verifying-tests panel, Result -> the results panel. (Data is embedded in the
+// journey card payload — step.verifying_tests[].results — so no fetch needed.)
+// Each badge owns exactly one panel; they are no longer a coupled pair.
+function toggleJourneyStepPanel(btn, panelId) {
+    var panel = document.getElementById(panelId);
     if (!panel) return;
-    var row = btn.closest('.journey-step-row');
-    var buttons = row ? row.querySelectorAll('.journey-step-badge') : [btn];
     if (panel.style.display !== 'none') {
         panel.style.display = 'none';
-        buttons.forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.remove('active');
         return;
     }
     panel.style.display = 'block';
-    buttons.forEach(function(b) { b.classList.add('active'); });
+    btn.classList.add('active');
 }
 
 async function toggleAssertionTests(btn, reqId, label) {
