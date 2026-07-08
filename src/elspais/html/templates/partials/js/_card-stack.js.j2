@@ -1758,6 +1758,23 @@ async function toggleAssertionCode(btn, reqId, label, edgeKind) {
     renderAssertionCode(panel, reqId, label, assertionCodeCache[cacheKey]);
 }
 
+function renderCodeRefItem(c) {
+    // Extract short filename from full path
+    var fileName = c.file ? c.file.split('/').pop() : c.id;
+
+    var html = '<div class="assertion-test-item">';
+    html += '<span class="assertion-test-icon">&#x1F4C4;</span>';
+    if (c.file) {
+        html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
+            escapeJsInAttr(c.file) + '\', ' + (c.line || 0) + ', \'' + escapeAttr(c.id || '') + '\')">' +
+            escapeHtml(fileName) + ':' + (c.line || 1) + '</a>';
+    } else {
+        html += '<span class="assertion-test-link">' + escapeHtml(c.label || c.id) + '</span>';
+    }
+    html += '</div>';
+    return html;
+}
+
 function renderAssertionCode(panel, reqId, label, data) {
     var assertionData = data.assertion_code[label];
     if (!assertionData) {
@@ -1765,29 +1782,40 @@ function renderAssertionCode(panel, reqId, label, data) {
         return;
     }
 
-    var codeRefs = assertionData.code_refs;
-    if (codeRefs.length === 0) {
+    var codeRefs = assertionData.code_refs || [];
+    var wholeReqRefs = assertionData.whole_req_code_refs || [];
+    var refinesRefs = assertionData.refines_refs || [];
+
+    if (codeRefs.length === 0 && wholeReqRefs.length === 0 && refinesRefs.length === 0) {
         panel.innerHTML = '<div class="assertion-tests-empty">No references for this assertion</div>';
         return;
     }
 
     var html = '';
     for (var i = 0; i < codeRefs.length; i++) {
-        var c = codeRefs[i];
-        // Extract short filename from full path
-        var fileName = c.file ? c.file.split('/').pop() : c.id;
-
-        html += '<div class="assertion-test-item">';
-        html += '<span class="assertion-test-icon">&#x1F4C4;</span>';
-        if (c.file) {
-            html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
-                escapeJsInAttr(c.file) + '\', ' + (c.line || 0) + ', \'' + escapeAttr(c.id || '') + '\')">' +
-                escapeHtml(fileName) + ':' + (c.line || 1) + '</a>';
-        } else {
-            html += '<span class="assertion-test-link">' + escapeHtml(c.label || c.id) + '</span>';
-        }
-        html += '</div>';
+        html += renderCodeRefItem(codeRefs[i]);
     }
+
+    if (wholeReqRefs.length > 0) {
+        html += '<div class="assertion-test-subheader">Whole-requirement references (~)</div>';
+        for (var j = 0; j < wholeReqRefs.length; j++) {
+            html += renderCodeRefItem(wholeReqRefs[j]);
+        }
+    }
+
+    if (refinesRefs.length > 0) {
+        html += '<div class="assertion-test-subheader">Implemented via refinement (~)</div>';
+        for (var k = 0; k < refinesRefs.length; k++) {
+            var r = refinesRefs[k];
+            html += '<div class="assertion-test-item">';
+            html += '<span class="assertion-test-icon">&#x1F517;</span>';
+            html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
+                escapeAttr(r.id) + '\')">' + escapeHtml(r.id) +
+                (r.title ? ' — ' + escapeHtml(r.title) : '') + '</a>';
+            html += '</div>';
+        }
+    }
+
     panel.innerHTML = html;
 }
 

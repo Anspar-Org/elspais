@@ -3747,6 +3747,45 @@ def _get_assertion_code_map(
             seen_per_assertion[label].add(code_node.id)
             assertion_code[label]["code_refs"].append(info)
 
+    # IMP drill-down provenance for INDIRECT coverage (REQ-d00064, REQ-d00069-L):
+    # when the IMP badge is lit via whole-requirement evidence, the direct
+    # code_refs above are empty. Surface the blanket Implements: CODE refs and
+    # the conducting Refines: requirements so the panel explains the `~` instead
+    # of reading "No references". Additive — code_refs / stats are unchanged.
+    if edge_kind == "implements":
+        all_labels = [label for _, label in assertions]
+        wq_seen: dict[str, set[str]] = {label: set() for _, label in assertions}
+        rf_seen: dict[str, set[str]] = {label: set() for _, label in assertions}
+        for label in all_labels:
+            assertion_code[label]["whole_req_code_refs"] = []
+            assertion_code[label]["refines_refs"] = []
+        for edge in node.iter_outgoing_edges():
+            tgt = edge.target
+            if (
+                edge.kind == EdgeKind.IMPLEMENTS
+                and tgt.kind == NodeKind.CODE
+                and not edge.assertion_targets
+            ):
+                info = _serialize_code_info(tgt, graph)
+                for label in all_labels:
+                    if tgt.id in wq_seen[label]:
+                        continue
+                    wq_seen[label].add(tgt.id)
+                    assertion_code[label]["whole_req_code_refs"].append(info)
+            elif edge.kind == EdgeKind.REFINES and tgt.kind == NodeKind.REQUIREMENT:
+                scope = "direct" if edge.assertion_targets else "whole_req"
+                targeted = list(edge.assertion_targets) if edge.assertion_targets else all_labels
+                rinfo = {
+                    "id": tgt.id,
+                    "title": tgt.get_field("title", "") or tgt.get_label() or tgt.id,
+                    "scope": scope,
+                }
+                for label in targeted:
+                    if label not in rf_seen or tgt.id in rf_seen[label]:
+                        continue
+                    rf_seen[label].add(tgt.id)
+                    assertion_code[label]["refines_refs"].append(dict(rinfo))
+
     total = len(assertions)
     covered_count = sum(1 for label in assertion_code if assertion_code[label]["code_refs"])
     referenced_pct = (covered_count / total * 100) if total > 0 else 0.0
