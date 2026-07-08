@@ -547,7 +547,8 @@ function buildAssertionHtml(nodeId, a, data) {
         'data-field="assertion" data-original="' + escapeAttr(text) + '" ' +
         'onblur="onAssertionBlur(this)" onkeydown="onEditableKeydown(event)">' +
         initialBody + '</span>';
-    // 6 dimension badges — only shown when direct assertion-level links exist
+    // 6 dimension badges — shown when a direct assertion-level link exists OR
+    // the assertion has a non-missing coverage state (REQ-d00258-G)
     h += '<span class="assertion-badges-area">';
     var badgeMode = editState.assertionBadgeMode || 'abbrev';
     var aLinks = data.assertion_links ? data.assertion_links[label] : null;
@@ -555,6 +556,7 @@ function buildAssertionHtml(nodeId, a, data) {
     // as the requirement header badges (REQ-d00258-G). Color is applied on render
     // (no lazy prefetch): state -> the val-* class the requirement badge uses.
     var aStates = data.assertion_coverage_states ? data.assertion_coverage_states[label] : null;
+    var aCaveats = data.assertion_coverage_caveats ? data.assertion_coverage_caveats[label] : null;
     var dimDefs = [
         {cls: 'assertion-implemented-btn', full: 'Implemented', abbr: 'IMP', dot: 'I', toggle: 'toggleAssertionCode', tip: 'Code implementation', linkKey: 'implemented', stateKey: 'implemented', edgeKind: 'implements'},
         {cls: 'assertion-refined-btn', full: 'Refined', abbr: 'REF', dot: 'R', toggle: 'toggleAssertionRefines', tip: 'Refines references', linkKey: 'refined'},
@@ -565,9 +567,19 @@ function buildAssertionHtml(nodeId, a, data) {
     ];
     var anyBadge = false;
     dimDefs.forEach(function(dim) {
-        if (aLinks && !aLinks[dim.linkKey]) return;
+        var st = (dim.stateKey && aStates) ? aStates[dim.stateKey] : null;
+        var hasState = st === 'full' || st === 'partial' || st === 'failing';
+        // Render when there's a direct assertion-level link OR a non-missing
+        // coverage state (whole-req evidence now shows as a pill, not "no
+        // coverage"). State-less pills (REF: linkKey but no stateKey) keep the
+        // strict link-gate -- they have no state to fall back on.
+        if (aLinks && !aLinks[dim.linkKey] && !(dim.stateKey && hasState)) return;
         anyBadge = true;
         var btnLabel = badgeMode === 'full' ? dim.full : (badgeMode === 'dots' ? dim.dot : dim.abbr);
+        // Non-transitive ~ caveat: whole-requirement evidence involved.
+        if (dim.stateKey && aCaveats && aCaveats[dim.stateKey] && hasState) {
+            btnLabel += ' ~';
+        }
         var btnStyle = badgeMode === 'dots' ? ' style="min-width:0;padding:2px 4px;font-size:0.55rem;"' : '';
         var extraArg = dim.edgeKind ? ", '" + dim.edgeKind + "'" : '';
         var stateCls = '';
@@ -576,14 +588,14 @@ function buildAssertionHtml(nodeId, a, data) {
         }
         h += '<button class="' + dim.cls + (stateCls ? ' ' + stateCls : '') + '" ' +
             'data-req-id="' + nodeId + '" data-label="' + escapeAttr(label) + '" ' +
-            'title="' + dim.tip + '" ' +
+            'title="' + dim.tip + ' (~ = some coverage comes from whole-requirement references)" ' +
             'onclick="event.stopPropagation(); ' + dim.toggle + '(this, \'' + nodeId + '\', \'' + escapeAttr(label) + '\'' + extraArg + ')"' +
             btnStyle + '>' +
             btnLabel + '</button>';
     });
     if (!anyBadge) {
         // INSTANCE assertions inherit coverage from the template original
-        // (see REQ-p00014-K). Show that instead of the bare "no direct coverage"
+        // (see REQ-p00014-K). Show that instead of the bare "no coverage"
         // hint so the viewer reflects the satisfier-rollup invariant.
         var aTplId = a.template_id || '';
         var aTplRepo = a.template_repo || '';
@@ -597,7 +609,7 @@ function buildAssertionHtml(nodeId, a, data) {
                 'style="font-size:0.6rem;color:var(--secondary-text);font-style:italic;">' +
                 escapeHtml(inheritedText) + '</span>';
         } else {
-            h += '<span class="assertion-no-coverage" title="No direct assertion-level coverage" style="font-size:0.6rem;color:var(--secondary-text);opacity:0.5;">no direct coverage</span>';
+            h += '<span class="assertion-no-coverage" title="No coverage on either footing" style="font-size:0.6rem;color:var(--secondary-text);opacity:0.5;">no coverage</span>';
         }
     }
     h += '</span>'; // close .assertion-badges-area
