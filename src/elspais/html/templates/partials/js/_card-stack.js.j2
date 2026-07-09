@@ -683,6 +683,11 @@ function buildCardHtml(nodeId, data, collapsed) {
     html += '<div class="req-card-header" onclick="toggleCardCollapse(\'' + nodeId + '\')">';
     html += '<span class="req-card-expand">&#9660;</span>';
     html += '<span class="req-card-id">' + shortId + '</span>';
+    // Explicit **Template** marker (Stereotype.TEMPLATE) — authors/reviewers
+    // must see template-ness at a glance; instances show provenance instead.
+    if ((props.stereotype || '').toLowerCase() === 'template') {
+        html += '<span class="template-badge" title="Template requirement: Satisfies: references clone its assertions as instances">TEMPLATE</span>';
+    }
     html += '<span class="req-card-title-display view-only">' + title + '</span>';
     html += '<input type="text" class="edit-only req-card-title-edit" value="' + escapeAttr(data.title || '') + '"' +
         ' onclick="event.stopPropagation()" onblur="onTitleBlur(this)" data-node-id="' + nodeId + '"' +
