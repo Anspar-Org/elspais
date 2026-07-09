@@ -1224,6 +1224,7 @@ class HTMLGenerator:
                         is_leaf=True,
                         is_changed=False,
                         is_uncommitted=False,
+                        is_unsaved=False,
                         is_roadmap=False,
                         is_code=False,
                         is_test=False,
