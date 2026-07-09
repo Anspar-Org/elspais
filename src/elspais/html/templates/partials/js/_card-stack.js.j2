@@ -901,38 +901,53 @@ function buildCardHtml(nodeId, data, collapsed) {
 
     html += '</div></div>';
 
-    // Parents section (relationship editor in edit mode)
+    // Parents section (relationship editor in edit mode). Collapsible like
+    // Incoming Links: one toggle per edge kind, panels closed by default.
     html += '<div class="card-section"><div class="card-section-label">Outgoing Links</div>';
     html += '<div class="card-parents">';
     if (data.parents && data.parents.length > 0) {
+        var parentGroups = {};
+        var parentKindOrder = [];
         data.parents.forEach(function(p) {
-            const edgeKind = (p.edge_kind || 'implements').toLowerCase();
-            const edgeKindDisplay = edgeKind.charAt(0).toUpperCase() + edgeKind.slice(1);
-            html += '<div class="card-parent-row" data-anchor="' + nodeId + '#edge:' + p.id + '">';
-            // View-only kind badge
-            html += '<span class="card-parent-kind view-only">' + edgeKindDisplay.toUpperCase() + '</span>';
-            // Edit-only kind toggle
-            html += '<button class="card-parent-kind-toggle edit-only" ' +
-                'data-source="' + nodeId + '" data-target="' + p.id + '" data-kind="' + edgeKind + '" ' +
-                'onclick="event.preventDefault(); onToggleEdgeKind(this)" ' +
-                'title="Click to cycle edge kind">' + edgeKindDisplay + '</button>';
-            var pTargetsJson = (p.assertion_targets && p.assertion_targets.length > 0)
-                ? escapeAttr(JSON.stringify(p.assertion_targets)) : '';
-            html += '<a class="card-parent-link" href="#" onclick="event.preventDefault(); openCardAndFlash(\'' + p.id + '\', ' +
-                (pTargetsJson ? 'JSON.parse(this.dataset.targets)' : '[]') + ')"' +
-                (pTargetsJson ? ' data-targets="' + pTargetsJson + '"' : '') + '>';
-            html += (p.ref_id || p.id) + ' - ' + escapeHtml(p.title || '');
-            if (p.assertion_targets && p.assertion_targets.length > 0) {
-                html += ' <span class="card-parent-targets">[' + p.assertion_targets.join(', ') + ']</span>';
-            }
-            html += '</a>';
-            // Assertion targets picker button (edit mode)
-            html += '<button class="card-parent-targets-btn edit-only" ' +
-                'onclick="event.preventDefault(); editEdgeTargets(\'' + nodeId + '\', \'' + p.id + '\', this)" ' +
-                'title="Edit assertion targets">&#9998;</button>';
-            html += '<button class="card-parent-delete edit-only" ' +
-                'onclick="event.preventDefault(); onDeleteEdge(\'' + nodeId + '\', \'' + p.id + '\')" ' +
-                'title="Remove relationship">&times;</button>';
+            var k = (p.edge_kind || 'implements').toLowerCase();
+            if (!parentGroups[k]) { parentGroups[k] = []; parentKindOrder.push(k); }
+            parentGroups[k].push(p);
+        });
+        parentKindOrder.forEach(function(kind, gi) {
+            var panelId = 'outgoing-' + nodeId + '-' + gi;
+            var kindDisplay = kind.charAt(0).toUpperCase() + kind.slice(1);
+            html += '<button class="incoming-link-toggle outgoing-link-toggle" ' +
+                'onclick="event.stopPropagation(); toggleIncomingLinks(\'' + panelId + '\')">' +
+                escapeHtml(kindDisplay) + ' (' + parentGroups[kind].length + ')</button>';
+            html += '<div class="req-level-links-panel outgoing-link-panel" id="' + panelId + '" style="display:none;">';
+            parentGroups[kind].forEach(function(p) {
+                const edgeKind = (p.edge_kind || 'implements').toLowerCase();
+                const edgeKindDisplay = edgeKind.charAt(0).toUpperCase() + edgeKind.slice(1);
+                html += '<div class="card-parent-row" data-anchor="' + nodeId + '#edge:' + p.id + '">';
+                // Edit-only kind toggle (view mode reads the kind off the group header)
+                html += '<button class="card-parent-kind-toggle edit-only" ' +
+                    'data-source="' + nodeId + '" data-target="' + p.id + '" data-kind="' + edgeKind + '" ' +
+                    'onclick="event.preventDefault(); onToggleEdgeKind(this)" ' +
+                    'title="Click to cycle edge kind">' + edgeKindDisplay + '</button>';
+                var pTargetsJson = (p.assertion_targets && p.assertion_targets.length > 0)
+                    ? escapeAttr(JSON.stringify(p.assertion_targets)) : '';
+                html += '<a class="card-parent-link" href="#" onclick="event.preventDefault(); openCardAndFlash(\'' + p.id + '\', ' +
+                    (pTargetsJson ? 'JSON.parse(this.dataset.targets)' : '[]') + ')"' +
+                    (pTargetsJson ? ' data-targets="' + pTargetsJson + '"' : '') + '>';
+                html += (p.ref_id || p.id) + ' - ' + escapeHtml(p.title || '');
+                if (p.assertion_targets && p.assertion_targets.length > 0) {
+                    html += ' <span class="card-parent-targets">[' + p.assertion_targets.join(', ') + ']</span>';
+                }
+                html += '</a>';
+                // Assertion targets picker button (edit mode)
+                html += '<button class="card-parent-targets-btn edit-only" ' +
+                    'onclick="event.preventDefault(); editEdgeTargets(\'' + nodeId + '\', \'' + p.id + '\', this)" ' +
+                    'title="Edit assertion targets">&#9998;</button>';
+                html += '<button class="card-parent-delete edit-only" ' +
+                    'onclick="event.preventDefault(); onDeleteEdge(\'' + nodeId + '\', \'' + p.id + '\')" ' +
+                    'title="Remove relationship">&times;</button>';
+                html += '</div>';
+            });
             html += '</div>';
         });
     } else {
@@ -1182,10 +1197,17 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
         html += '</div>';
     }
 
-    // Validates — with assertion targets and edit controls (same pattern as REQ parents)
+    // Validates — with assertion targets and edit controls (same pattern as
+    // REQ parents). Collapsible like Incoming Links: one toggle, closed by
+    // default (enrollment journeys can validate many assertions).
     var refs = (data.links || []).filter(function(l) { return l.edge_kind === 'validates'; });
-    html += '<div class="card-section journey-refs"><div class="card-section-label">Validates (' + refs.length + ')</div>';
+    html += '<div class="card-section journey-refs"><div class="card-section-label">Validates</div>';
     html += '<div class="card-parents">';
+    var validatesPanelId = 'jny-validates-' + nodeId;
+    html += '<button class="incoming-link-toggle jny-validates-toggle" ' +
+        'onclick="event.stopPropagation(); toggleIncomingLinks(\'' + validatesPanelId + '\')">' +
+        refs.length + ' link(s)</button>';
+    html += '<div class="req-level-links-panel jny-validates-panel" id="' + validatesPanelId + '" style="display:none;">';
     refs.forEach(function(link) {
         html += '<div class="card-parent-row">';
         var lTargetsJson = (link.assertion_targets && link.assertion_targets.length > 0)
@@ -1207,7 +1229,8 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
             'title="Remove relationship">&times;</button>';
         html += '</div>';
     });
-    html += '</div>';
+    html += '</div>'; // .jny-validates-panel
+    html += '</div>'; // .card-parents
     html += '<button class="card-add-rel-btn edit-only" ' +
         'onclick="onAddJourneyRef(\'' + nodeId + '\', this)">+ Add Relationship</button>';
     html += '</div>';
