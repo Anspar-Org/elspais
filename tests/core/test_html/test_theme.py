@@ -285,20 +285,24 @@ class TestSeverityCatalog:
 
     # Verifies: REQ-d00258-D
     def test_severity_entries_in_catalog(self):
+        """Every severity resolves in the catalog with its own distinct color.
+
+        The behavioral contract is structural (each severity exists, carries a
+        color, and no two severities share one) — not the specific hues, which
+        belong to theme.toml alone.
+        """
         from elspais.html.theme import get_catalog
 
         cat = get_catalog()
-        for sev, color in (
-            ("ok", "green"),
-            ("info", "yellow-green"),
-            ("warning", "yellow"),
-            ("error", "red"),
-        ):
+        colors = {}
+        for sev in ("ok", "info", "warning", "error"):
             entry = cat.by_key(f"severity.{sev}")
-            assert entry.color_key == color
+            assert entry.color_key, f"severity.{sev} has no color_key"
+            colors[sev] = entry.color_key
+        assert len(set(colors.values())) == len(colors), f"severity colors collide: {colors}"
 
     # Verifies: REQ-d00258-D
-    def test_failing_severity_has_own_maroon_color_distinct_from_error(self):
+    def test_failing_severity_has_own_color_distinct_from_error(self):
         """The toolbar's "failing" coverage chip resolves through the theme
         catalog like the other severities (CUR-1568), with its own color_key
         so it stays visually distinct from severity.error/"missing"."""
@@ -307,24 +311,26 @@ class TestSeverityCatalog:
         cat = get_catalog()
         failing = cat.by_key("severity.failing")
         error = cat.by_key("severity.error")
-        assert failing.color_key == "maroon"
+        assert failing.color_key
         assert failing.color_key != error.color_key
-        assert failing.css_class == "val-maroon"
+        assert failing.css_class == f"val-{failing.color_key}"
         assert failing.label == "Failing"
 
     # Verifies: REQ-d00258-D
     def test_failing_color_tokens_defined_for_both_themes(self):
-        """`--val-maroon-bg` must exist in both themes.light.tokens and
-        themes.dark.tokens so the toolbar chip stays legible when switching
-        themes (not just hardcoded for one)."""
+        """The failing color's `--val-<color>-bg` token must exist in both
+        themes.light.tokens and themes.dark.tokens so the toolbar chip stays
+        legible when switching themes (not just hardcoded for one)."""
         from elspais.html.theme import get_catalog
 
         cat = get_catalog()
+        failing_color = cat.by_key("severity.failing").color_key
         theme_names = {t.name for t in cat.themes}
         assert {"light", "dark"} <= theme_names
         for theme in cat.themes:
-            assert "val-maroon-bg" in theme.tokens
-            assert theme.tokens["val-maroon-bg"].startswith("#")
+            token = f"val-{failing_color}-bg"
+            assert token in theme.tokens
+            assert theme.tokens[token].startswith("#")
 
     # Verifies: REQ-d00258-D
     def test_no_hardcoded_severity_dict(self):

@@ -17,6 +17,8 @@ from elspais.graph.metrics import (
     CoverageDimension,
     RollupMetrics,
     has_integration,
+    integrates_by_associate,
+    integrates_total,
     tested_and_passing,
 )
 
@@ -101,7 +103,7 @@ def absolute_tier(dim: CoverageDimension, *, allow_indirect: bool = True) -> str
     return "missing"
 
 
-def _allow_indirect_from_config(config: Any | None) -> bool:
+def allow_indirect_from_config(config: Any | None) -> bool:
     """Extract ``[rules.coverage] allow_indirect`` from a config dict/model.
 
     Defaults to True (generous footing) when absent. Accepts both the plain
@@ -359,7 +361,7 @@ def tier_buckets(
     shared ``status_expects_implementation`` resolver (REQ-d00258-C).
     Behavior-preserving for default config.
     """
-    allow_indirect = _allow_indirect_from_config(config)
+    allow_indirect = allow_indirect_from_config(config)
     buckets = TierBuckets()
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         if not _counts_for_coverage(config, node.status):
@@ -375,6 +377,107 @@ def tier_buckets(
     return buckets
 
 
+# Implements: REQ-d00086-A, REQ-d00258-C
+def collect_coverage(graph: Any, config: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Full coverage-summary payload shared by CLI summary and MCP.
+
+    Per-level rows come from :func:`aggregate_by_level`; excluded-status
+    counts, the per-associate Integrates rollup, and (for selective runs)
+    carry-forward provenance are assembled here so every consumer renders
+    from one payload. Level membership uses :func:`_level_keys` -- the SAME
+    derivation ``aggregate_by_level`` uses (rank-less ``[levels]`` keys
+    included), so ``excluded`` counts exactly the requirements that land in a
+    rendered level bucket.
+    """
+    from elspais.config import get_status_roles
+
+    roles = get_status_roles(config or {})
+    exclude_status = roles.coverage_excluded_statuses()
+    known_levels = {k.lower() for k in _level_keys(config)}
+
+    # excluded counts are computed locally (aggregate_by_level excludes these
+    # statuses from its sums but doesn't report per-status counts).
+    excluded_counts: dict[str, int] = {}
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if (node.level or "").lower() in known_levels and node.status in exclude_status:
+            excluded_counts[node.status] = excluded_counts.get(node.status, 0) + 1
+
+    levels = []
+    for agg in aggregate_by_level(graph, config):
+        levels.append(
+            {
+                "level": agg.level,
+                "total": agg.total_requirements,
+                "with_code_refs": agg.with_code_refs,
+                "with_test_refs": agg.with_test_refs,
+                "with_passing": agg.with_passing,
+                "total_assertions": agg.total_assertions,
+                "implemented_assertions": round(agg.implemented.covered, 3),
+                "implemented_direct": round(agg.implemented.direct, 3),
+                "tested_assertions": round(agg.tested.covered, 3),
+                "tested_direct": round(agg.tested.direct, 3),
+                "passing_assertions": round(agg.passing.covered, 3),
+                "passing_direct": round(agg.passing.direct, 3),
+            }
+        )
+
+    # REQ-d00252-F: per-associate Integrates rollup + federation total.
+    integration_rows = integrates_by_associate(graph)
+    integrations: list[dict[str, Any]] = [
+        {
+            "associate": row.associate,
+            "requirement_count": row.requirement_count,
+            "implemented_covered": row.implemented_covered,
+            "implemented_total": row.implemented_total,
+            "verified_covered": row.verified_covered,
+            "verified_total": row.verified_total,
+            "has_failures": row.has_failures,
+        }
+        for row in integration_rows
+    ]
+    integration_total: dict[str, Any] | None = None
+    if integration_rows:
+        tot = integrates_total(integration_rows)
+        integration_total = {
+            "associate": tot.associate,
+            "requirement_count": tot.requirement_count,
+            "implemented_covered": tot.implemented_covered,
+            "implemented_total": tot.implemented_total,
+            "verified_covered": tot.verified_covered,
+            "verified_total": tot.verified_total,
+            "has_failures": tot.has_failures,
+        }
+
+    result: dict[str, Any] = {
+        "levels": levels,
+        "excluded": excluded_counts,
+        "integrations": integrations,
+        "integration_total": integration_total,
+    }
+
+    # Implements: REQ-d00254-I
+    # Carry-forward provenance (distinct RESULT target names + how many are
+    # carried baselines) is meaningful only for a selective `--targets` run, so
+    # a selective run isn't a silent no-op on rendered output. Omit it entirely
+    # otherwise, so a full run stays byte-identical to the pre-selectivity
+    # output in every format (JSON keys and the CSV row included).
+    if getattr(graph, "render_fresh_targets", None) is not None:
+        all_result_targets: set[str] = set()
+        carried_result_targets_set: set[str] = set()
+        for result_node in graph.iter_by_kind(NodeKind.RESULT):
+            tgt = result_node.get_field("target")
+            if not tgt:
+                continue
+            all_result_targets.add(tgt)
+            if result_node.get_field("carried"):
+                carried_result_targets_set.add(tgt)
+        result["total_result_targets"] = len(all_result_targets)
+        result["carried_result_targets"] = len(carried_result_targets_set)
+
+    return result
+
+
+
 __all__ = [
     "DENOMINATOR_DIMENSION",
     "TIER_TO_BUCKET",
@@ -384,6 +487,8 @@ __all__ = [
     "TierBuckets",
     "absolute_tier",
     "aggregate_by_level",
+    "allow_indirect_from_config",
+    "collect_coverage",
     "aggregate_dimension",
     "relative_tier",
     "relative_tier_for",

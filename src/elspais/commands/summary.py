@@ -23,12 +23,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
 
-from elspais.graph import NodeKind
-from elspais.graph.metrics import (
-    fmt_assertion_count,
-    integrates_by_associate,
-    integrates_total,
-)
+from elspais.graph.aggregation import collect_coverage
+from elspais.graph.metrics import fmt_assertion_count
 
 
 # Implements: REQ-d00085-A
@@ -42,14 +38,14 @@ def render_section(
     Returns (formatted_output, exit_code).
     """
     fmt = getattr(args, "format", "text") or "text"
-    data = _collect_coverage(graph, config=config)
+    data = collect_coverage(graph, config=config)
     content = _render(data, fmt)
     return content.rstrip("\n"), 0
 
 
 def compute_summary(graph: FederatedGraph, config: dict, params: dict[str, str]) -> dict:
-    """Engine-compatible wrapper around _collect_coverage."""
-    return _collect_coverage(graph, config=config)
+    """Engine-compatible wrapper around the shared coverage collector."""
+    return collect_coverage(graph, config=config)
 
 
 def run(args: argparse.Namespace) -> int:
@@ -93,118 +89,6 @@ def run(args: argparse.Namespace) -> int:
     sys.stdout.write(content)
 
     return 0
-
-
-def _collect_coverage(graph: FederatedGraph, config: dict | None = None) -> dict:
-    """Collect coverage data from the graph.
-
-    Delegates per-level aggregation to the shared `aggregate_by_level()`
-    (REQ-d00258-C) so the CLI summary, MCP project summary, and viewer derive
-    identical statistics from identical data.
-    """
-    from elspais.config import default_level_keys, get_status_roles
-    from elspais.graph.aggregation import aggregate_by_level
-
-    roles = get_status_roles(config or {})
-    exclude_status = roles.coverage_excluded_statuses()
-
-    # Known level keys (case-insensitive), mirroring aggregate_by_level's own
-    # level-key derivation, so excluded_counts only reflects requirements that
-    # actually land in a rendered level bucket.
-    levels_cfg = (config or {}).get("levels") or {}
-    if isinstance(levels_cfg, dict) and levels_cfg:
-        ordered = sorted(
-            (
-                (k, (v or {}).get("rank") if isinstance(v, dict) else None)
-                for k, v in levels_cfg.items()
-            ),
-            key=lambda kv: kv[1] if kv[1] is not None else 9999,
-        )
-        level_keys = [k for k, rank in ordered if rank is not None] or default_level_keys()
-    else:
-        level_keys = default_level_keys()
-    known_levels = {k.lower() for k in level_keys}
-
-    # excluded_counts is still computed locally (aggregate_by_level excludes
-    # these statuses from its sums but doesn't report per-status counts).
-    excluded_counts: dict[str, int] = {}
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if (node.level or "").lower() in known_levels and node.status in exclude_status:
-            excluded_counts[node.status] = excluded_counts.get(node.status, 0) + 1
-
-    levels = []
-    for agg in aggregate_by_level(graph, config):
-        levels.append(
-            {
-                "level": agg.level,
-                "total": agg.total_requirements,
-                "with_code_refs": agg.with_code_refs,
-                "with_test_refs": agg.with_test_refs,
-                "with_passing": agg.with_passing,
-                "total_assertions": agg.total_assertions,
-                "implemented_assertions": round(agg.implemented.covered, 3),
-                "implemented_direct": round(agg.implemented.direct, 3),
-                "tested_assertions": round(agg.tested.covered, 3),
-                "tested_direct": round(agg.tested.direct, 3),
-                "passing_assertions": round(agg.passing.covered, 3),
-                "passing_direct": round(agg.passing.direct, 3),
-            }
-        )
-
-    # REQ-d00252-F: per-associate Integrates rollup + federation total.
-    integration_rows = integrates_by_associate(graph)
-    integrations: list[dict] = [
-        {
-            "associate": row.associate,
-            "requirement_count": row.requirement_count,
-            "implemented_covered": row.implemented_covered,
-            "implemented_total": row.implemented_total,
-            "verified_covered": row.verified_covered,
-            "verified_total": row.verified_total,
-            "has_failures": row.has_failures,
-        }
-        for row in integration_rows
-    ]
-    integration_total: dict | None = None
-    if integration_rows:
-        tot = integrates_total(integration_rows)
-        integration_total = {
-            "associate": tot.associate,
-            "requirement_count": tot.requirement_count,
-            "implemented_covered": tot.implemented_covered,
-            "implemented_total": tot.implemented_total,
-            "verified_covered": tot.verified_covered,
-            "verified_total": tot.verified_total,
-            "has_failures": tot.has_failures,
-        }
-
-    result = {
-        "levels": levels,
-        "excluded": excluded_counts,
-        "integrations": integrations,
-        "integration_total": integration_total,
-    }
-
-    # Implements: REQ-d00254-I
-    # Carry-forward provenance (distinct RESULT target names + how many are
-    # carried baselines) is meaningful only for a selective `--targets` run, so
-    # a selective run isn't a silent no-op on rendered output. Omit it entirely
-    # otherwise, so a full run stays byte-identical to the pre-selectivity
-    # output in every format (JSON keys and the CSV row included).
-    if getattr(graph, "render_fresh_targets", None) is not None:
-        all_result_targets: set[str] = set()
-        carried_result_targets_set: set[str] = set()
-        for result_node in graph.iter_by_kind(NodeKind.RESULT):
-            tgt = result_node.get_field("target")
-            if not tgt:
-                continue
-            all_result_targets.add(tgt)
-            if result_node.get_field("carried"):
-                carried_result_targets_set.add(tgt)
-        result["total_result_targets"] = len(all_result_targets)
-        result["carried_result_targets"] = len(carried_result_targets_set)
-
-    return result
 
 
 def _pct(num: int, denom: int) -> float:

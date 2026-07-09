@@ -2732,7 +2732,9 @@ def check_uat_coverage(
             details={"dimension": "uat_coverage", "expects_validation_levels": 0},
         )
 
-    level_filter = lambda level: level_expects_validation(cfg, level)  # noqa: E731
+    def level_filter(level: str | None) -> bool:
+        return level_expects_validation(cfg, level)
+
     check = check_dimension_coverage(
         graph,
         "uat_coverage",

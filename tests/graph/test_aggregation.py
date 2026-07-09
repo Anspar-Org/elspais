@@ -14,7 +14,6 @@ from elspais.graph.aggregation import (
     relative_tier_for,
     tier_buckets,
 )
-from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.metrics import CoverageDimension, RollupMetrics
@@ -28,11 +27,41 @@ def _make_req(req_id: str, level: str = "dev", status: str = "Active") -> GraphN
 
 
 def _make_graph(*nodes: GraphNode) -> FederatedGraph:
-    tg = TraceGraph()
-    for node in nodes:
-        tg._index[node.id] = node
-        if node.kind == NodeKind.REQUIREMENT:
-            tg._roots.append(node)
+    """Build a graph through GraphBuilder (respecting graph encapsulation).
+
+    Callers prepare bare REQUIREMENT nodes carrying level/status fields and a
+    ``rollup_metrics`` metric; the real graph is built from equivalent
+    ParsedContent and the prepared rollup is re-attached to the built node.
+    """
+    # ParsedContent built directly (not via make_requirement, whose level
+    # validation is PRD/OPS/DEV-only — these tests exercise custom levels).
+    from elspais.graph.builder import GraphBuilder
+    from elspais.graph.parsers import ParsedContent
+
+    builder = GraphBuilder()
+    for n in nodes:
+        builder.add_parsed_content(
+            ParsedContent(
+                content_type="requirement",
+                start_line=1,
+                end_line=2,
+                raw_text="",
+                parsed_data={
+                    "id": n.id,
+                    "title": n.id,
+                    "level": n.get_field("level") or "dev",
+                    "status": n.get_field("status") or "Active",
+                    "assertions": [],
+                },
+            )
+        )
+    tg = builder.build()
+    for n in nodes:
+        built = tg.find_by_id(n.id)
+        assert built is not None, f"builder did not produce {n.id}"
+        rollup = n.get_metric("rollup_metrics")
+        if rollup is not None:
+            built.set_metric("rollup_metrics", rollup)
     return FederatedGraph.from_single(
         tg, config={"project": {"name": "test", "namespace": "REQ"}}, repo_root=Path(".")
     )

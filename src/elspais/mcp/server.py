@@ -2220,11 +2220,11 @@ def _get_project_summary(
     }
 
     # REQ-d00258-C: per-level coverage stats reuse the CLI summary's collector
-    # (elspais.commands.summary._collect_coverage) as the single source of
+    # (elspais.graph.aggregation.collect_coverage) as the single source of
     # truth for the dict shape, so MCP and CLI can never diverge.
-    from elspais.commands.summary import _collect_coverage
+    from elspais.graph.aggregation import collect_coverage
 
-    result["coverage_by_level"] = _collect_coverage(graph, config)["levels"]
+    result["coverage_by_level"] = collect_coverage(graph, config)["levels"]
 
     code_cov = count_code_coverage(graph)
     if code_cov["total_executable_lines"] > 0:

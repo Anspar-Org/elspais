@@ -518,10 +518,10 @@ def compute_assertion_coverage_states(
             if label:
                 labels.append(label)
 
-    from elspais.graph.aggregation import _allow_indirect_from_config
+    from elspais.graph.aggregation import allow_indirect_from_config
 
     eps = 1e-9
-    allow_indirect = _allow_indirect_from_config(config)
+    allow_indirect = allow_indirect_from_config(config)
 
     def _frac(dim: CoverageDimension, label: str) -> float:
         pct = dim.indirect_pct_by_label if allow_indirect else dim.direct_pct_by_label

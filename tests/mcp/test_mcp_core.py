@@ -1216,10 +1216,10 @@ class TestSummaryConsistency:
 
     def test_mcp_and_cli_summaries_agree(self, canonical_graph, canonical_config, tmp_path):
         pytest.importorskip("mcp")
-        from elspais.commands.summary import _collect_coverage
+        from elspais.graph.aggregation import collect_coverage
         from elspais.mcp.server import _get_project_summary
 
-        cli = _collect_coverage(canonical_graph, canonical_config)
+        cli = collect_coverage(canonical_graph, canonical_config)
         mcp = _get_project_summary(canonical_graph, tmp_path, canonical_config)
         assert mcp["coverage_by_level"] == cli["levels"]
 
