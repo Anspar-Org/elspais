@@ -776,7 +776,9 @@ class TestWholeReqOnlyCoverageCheck:
         from elspais.commands.health import check_whole_req_only_coverage
         from elspais.graph.annotators import annotate_coverage
         from tests.core.graph_test_helpers import (
-            build_graph, make_requirement, make_code_ref,
+            build_graph,
+            make_code_ref,
+            make_requirement,
         )
         graph = build_graph(
             make_requirement(
@@ -797,7 +799,9 @@ class TestWholeReqOnlyCoverageCheck:
         from elspais.commands.health import check_whole_req_only_coverage
         from elspais.graph.annotators import annotate_coverage
         from tests.core.graph_test_helpers import (
-            build_graph, make_requirement, make_code_ref,
+            build_graph,
+            make_code_ref,
+            make_requirement,
         )
         graph = build_graph(
             make_requirement(

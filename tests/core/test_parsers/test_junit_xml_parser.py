@@ -470,7 +470,7 @@ class TestResultsFileProvenance:
         """
         xml = """<?xml version="1.0" encoding="UTF-8"?>
 <testsuite name="uat" tests="3">
-  <testcase classname="login.spec" name="Login › JNY-OQ-Login-01/1: open &quot;home&quot; page" time="0.1"/>
+  <testcase classname="login.spec" name="Login › JNY-OQ-Login-01/1: &quot;home&quot;" time="0.1"/>
   <testcase classname="login.spec" name="Login › JNY-OQ-Login-01/2: enter credentials" time="0.1"/>
   <testcase classname="login.spec" name="plain_test" time="0.1"/>
 </testsuite>"""
@@ -481,7 +481,7 @@ class TestResultsFileProvenance:
         assert len(results) == 3
         by_name = {r["name"]: r for r in results}
         # ElementTree unescapes &quot; -- the record's name carries real quotes.
-        assert by_name['Login › JNY-OQ-Login-01/1: open "home" page']["result_line"] == 3
+        assert by_name['Login › JNY-OQ-Login-01/1: "home"']["result_line"] == 3
         assert by_name["Login › JNY-OQ-Login-01/2: enter credentials"]["result_line"] == 4
         assert by_name["plain_test"]["result_line"] == 5
         for r in results:
