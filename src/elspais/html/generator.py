@@ -145,7 +145,10 @@ _SEVERITY_TO_BUCKET: dict[str, str] = {
 _TIER_DESCRIPTIONS: dict[str, str] = {
     "failing": "test failures detected",
     "full": "fully covered",
-    "partial": "some assertions covered",
+    # "partially covered", NOT "some assertions covered": partial can also
+    # mean ALL assertions credited at fractional strength (e.g. a validating
+    # journey with 5/7 steps verified), where "some assertions" misleads.
+    "partial": "partially covered",
     "missing": "no coverage",
 }
 

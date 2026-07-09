@@ -202,24 +202,7 @@ def _serialize_test_info(test_node: Any, graph: FederatedGraph) -> dict[str, Any
     results: list[dict[str, Any]] = []
     for child in test_node.iter_children():
         if child.kind == NodeKind.RESULT:
-            # result_file/result_line point at the results ARTIFACT (e.g.
-            # junit.xml:<testcase> line); file/line keep pointing at the
-            # test's source. Fall back to file/line so reporters without a
-            # results file (e.g. stdout streams) still render a link.
-            results.append(
-                {
-                    "id": child.id,
-                    "status": child.get_field("status", "unknown"),
-                    "duration": child.get_field("duration", 0.0),
-                    "file": _relative_source_path(child, graph),
-                    "line": child.get_field("parse_line") or 0,
-                    "result_file": child.get_field("result_file")
-                    or _relative_source_path(child, graph),
-                    "result_line": child.get_field("result_line")
-                    or child.get_field("parse_line")
-                    or 0,
-                }
-            )
+            results.append(_serialize_result_entry(child, graph))
     return {
         "id": test_node.id,
         "label": test_node.get_label(),
@@ -228,6 +211,77 @@ def _serialize_test_info(test_node: Any, graph: FederatedGraph) -> dict[str, Any
         "name": test_node.get_field("name", ""),
         "results": results,
     }
+
+
+def _serialize_result_entry(result_node: Any, graph: FederatedGraph) -> dict[str, Any]:
+    """Serialize one RESULT node for a results list.
+
+    result_file/result_line point at the results ARTIFACT (e.g.
+    junit.xml:<testcase> line); file/line keep pointing at the test's
+    source. Fall back to file/line so reporters without a results file
+    (e.g. stdout streams) still render a link.
+    """
+    return {
+        "id": result_node.id,
+        "status": result_node.get_field("status", "unknown"),
+        "duration": result_node.get_field("duration", 0.0),
+        "file": _relative_source_path(result_node, graph),
+        "line": result_node.get_field("parse_line") or 0,
+        "result_file": result_node.get_field("result_file")
+        or _relative_source_path(result_node, graph),
+        "result_line": result_node.get_field("result_line")
+        or result_node.get_field("parse_line")
+        or 0,
+    }
+
+
+# Implements: REQ-d00255-D, REQ-d00256-E
+def _serialize_journey_info(jny_node: Any, graph: FederatedGraph) -> dict[str, Any]:
+    """USER_JOURNEY serializer for the per-assertion UAT panels.
+
+    Same shape as ``_serialize_test_info``, but a journey's results are NOT
+    its direct children — they live on the TESTs verifying the journey and
+    its steps (``JNY/STEP --VERIFIES--> TEST --YIELDS--> RESULT``). Collect
+    them across that chain (step results carry a ``step`` label for
+    provenance) and expose the journey_verification rollup so the panel can
+    headline the 5/7-steps-verified verdict.
+    """
+    from elspais.graph.relations import EdgeKind as EK
+
+    results: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def _collect(node: Any, step_label: str | None) -> None:
+        for edge in node.iter_edges_by_kind(EK.VERIFIES):
+            test_node = edge.target  # target = the verifying test
+            for child in test_node.iter_children():
+                if child.kind != NodeKind.RESULT or child.id in seen:
+                    continue
+                seen.add(child.id)
+                entry = _serialize_result_entry(child, graph)
+                if step_label:
+                    entry["step"] = step_label
+                results.append(entry)
+
+    _collect(jny_node, None)
+    for step in jny_node.iter_children(edge_kinds={EK.STRUCTURES}):
+        if step.kind == NodeKind.STEP:
+            _collect(step, step.get_field("label"))
+
+    info = {
+        "id": jny_node.id,
+        "label": jny_node.get_label(),
+        "file": _relative_source_path(jny_node, graph),
+        "line": jny_node.get_field("parse_line") or 0,
+        "name": jny_node.get_field("name", ""),
+        "results": results,
+    }
+    jv = jny_node.get_metric("journey_verification")
+    if jv is not None:
+        info["verified_steps"] = jv.verified_steps
+        info["total_steps"] = jv.total_steps
+        info["tier"] = jv.tier
+    return info
 
 
 def _serialize_code_info(code_node: Any, graph: FederatedGraph) -> dict[str, Any]:
@@ -3684,8 +3738,8 @@ def _get_assertion_uat_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]
     and their results, enabling the UI to show UAT Covered/UAT Passed buttons.
 
     Uses ``_iter_assertion_coverage`` for the shared two-phase traversal
-    and ``_serialize_test_info`` for the unified serializer (JNY nodes have
-    similar structure to TEST nodes with RESULT children).
+    and ``_serialize_journey_info`` for the serializer (a journey's results
+    hang off its step-verifying TESTs, not the JNY node itself).
 
     Args:
         graph: The TraceGraph to query.
@@ -3715,7 +3769,7 @@ def _get_assertion_uat_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]
     seen_per_assertion: dict[str, set[str]] = {label: set() for _, label in assertions}
 
     for jny_node, labels in _iter_assertion_coverage(node, NodeKind.USER_JOURNEY):
-        info = _serialize_test_info(jny_node, graph)
+        info = _serialize_journey_info(jny_node, graph)
         for label in labels:
             if label not in assertion_journeys:
                 continue

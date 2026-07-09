@@ -586,9 +586,25 @@ function buildAssertionHtml(nodeId, a, data) {
         if (dim.stateKey && aStates && aStates[dim.stateKey]) {
             stateCls = assertionStateColorClass(aStates[dim.stateKey]);
         }
+        // Data-driven tooltip: coverage standing + direct-link count, with
+        // the "~" legend only when the caveat marker is actually shown.
+        var tipParts = [dim.tip];
+        if (dim.stateKey && aStates && aStates[dim.stateKey]) {
+            tipParts.push('standing: ' + aStates[dim.stateKey]);
+        }
+        var dimLinks = aLinks ? aLinks[dim.linkKey] : null;
+        if (dimLinks && dimLinks.length) {
+            tipParts.push(dimLinks.length + ' direct link(s) — click to view');
+        } else {
+            tipParts.push('click to view');
+        }
+        var pillTip = tipParts.join(' — ');
+        if (dim.stateKey && aCaveats && aCaveats[dim.stateKey] && hasState) {
+            pillTip += ' (~ = some coverage comes from whole-requirement references)';
+        }
         h += '<button class="' + dim.cls + (stateCls ? ' ' + stateCls : '') + '" ' +
             'data-req-id="' + nodeId + '" data-label="' + escapeAttr(label) + '" ' +
-            'title="' + dim.tip + ' (~ = some coverage comes from whole-requirement references)" ' +
+            'title="' + escapeAttr(pillTip) + '" ' +
             'onclick="event.stopPropagation(); ' + dim.toggle + '(this, \'' + nodeId + '\', \'' + escapeAttr(label) + '\'' + extraArg + ')"' +
             btnStyle + '>' +
             btnLabel + '</button>';
@@ -715,7 +731,7 @@ function buildCardHtml(nodeId, data, collapsed) {
             // per-assertion IMP pill (REQ-d00069-L).
             {key: 'implemented', linkKey: 'implemented', assertLinkKey: 'implemented', label: 'IMPLEMENTED'},
             {key: 'tested', linkKey: 'tested', assertLinkKey: 'tested', label: 'TESTED'},
-            {key: 'verified', linkKey: 'verified', assertLinkKey: 'tested', label: 'VERIFIED'},
+            {key: 'verified', linkKey: 'verified', assertLinkKey: 'tested', label: 'PASSING'},
             {key: 'uat_coverage', linkKey: 'validated', assertLinkKey: 'validated', label: 'UAT COVERED', gateOnEvidence: true},
             {key: 'uat_verified', linkKey: 'accepted', assertLinkKey: 'validated', label: 'UAT PASSED', gateOnEvidence: true}
         ];
@@ -2046,9 +2062,16 @@ function renderAssertionUatResults(panel, reqId, label, data) {
     }
 
     var resultItems = [];
+    var verdictLines = [];
     var journeys = assertionData.journeys;
     for (var i = 0; i < journeys.length; i++) {
         var j = journeys[i];
+        // Journey verdict headline (e.g. "5/7 steps verified") — shown above
+        // the result rows so a partial pill is explained even at a glance.
+        if (j.total_steps) {
+            verdictLines.push({ id: j.id, label: j.label || j.id,
+                text: j.verified_steps + '/' + j.total_steps + ' steps verified (' + (j.tier || '') + ')' });
+        }
         if (j.results && j.results.length > 0) {
             for (var k = 0; k < j.results.length; k++) {
                 resultItems.push({ result: j.results[k], jnyLabel: j.label || j.id, jnyId: j.id });
@@ -2056,12 +2079,18 @@ function renderAssertionUatResults(panel, reqId, label, data) {
         }
     }
 
-    if (resultItems.length === 0) {
+    if (resultItems.length === 0 && verdictLines.length === 0) {
         panel.innerHTML = '<div class="assertion-tests-empty">No journey results for this assertion</div>';
         return;
     }
 
     var html = '';
+    for (var v = 0; v < verdictLines.length; v++) {
+        html += '<div class="assertion-test-item uat-journey-verdict">' +
+            '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
+            escapeAttr(verdictLines[v].id) + '\')">' + escapeHtml(verdictLines[v].label) + '</a> — ' +
+            escapeHtml(verdictLines[v].text) + '</div>';
+    }
     for (var r = 0; r < resultItems.length; r++) {
         var res = resultItems[r].result;
         var jLabel = resultItems[r].jnyLabel;
@@ -2074,17 +2103,22 @@ function renderAssertionUatResults(panel, reqId, label, data) {
         } else {
             statusIcon = '&#x2753;';
         }
+        // Link to the results ARTIFACT when known (result_file/result_line),
+        // mirroring the journey-step and test result panels.
+        var rFile = res.result_file || res.file;
+        var rLine = (res.result_line != null && res.result_line) || res.line || 0;
+        var rowLabel = jLabel + (res.step ? ' step ' + res.step : '');
 
         html += '<div class="assertion-test-item ' + statusClass + '">';
         html += '<span class="assertion-test-icon">' + statusIcon + '</span>';
-        if (res.file) {
+        if (rFile) {
             html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
-                escapeJsInAttr(res.file) + '\', ' + (res.line || 0) + ', \'' + escapeAttr(resultItems[r].jnyId || '') + '\')">' +
-                escapeHtml(jLabel) + ' [' + escapeHtml(res.status) + ']</a>';
+                escapeJsInAttr(rFile) + '\', ' + rLine + ', \'' + escapeAttr(resultItems[r].jnyId || '') + '\')">' +
+                escapeHtml(rowLabel) + ' [' + escapeHtml(res.status) + ']</a>';
         } else {
             html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
                 escapeHtml(resultItems[r].jnyId) + '\')">' +
-                escapeHtml(jLabel) + ' [' + escapeHtml(res.status) + ']</a>';
+                escapeHtml(rowLabel) + ' [' + escapeHtml(res.status) + ']</a>';
         }
         html += '</div>';
     }
