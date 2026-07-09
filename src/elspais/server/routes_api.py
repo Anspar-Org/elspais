@@ -52,6 +52,7 @@ from elspais.mcp.server import (
     _mutate_journey_section,
     _mutate_move_node_to_file,
     _mutate_rename_file,
+    _mutate_set_stereotype,
     _mutate_update_assertion,
     _mutate_update_journey_field,
     _mutate_update_remainder,
@@ -1228,6 +1229,30 @@ async def api_mutate_status(request: Request) -> JSONResponse:
         )
     result = _mutate_change_status(state.graph, node_id, new_status)
     status_code = 200 if result.get("success") else 400
+    return JSONResponse(result, status_code=status_code)
+
+
+async def api_mutate_template(request: Request) -> JSONResponse:
+    """POST /api/mutate/template - Set/clear a requirement's Template marker.
+
+    Body: {node_id, is_template, force?}. Un-templating a requirement with
+    live instances returns a soft-block payload ({blocked: true,
+    instance_count}) unless force is set; the client confirms and re-POSTs.
+    """
+    state = _st(request)
+    data = await request.json()
+    node_id = data.get("node_id", "")
+    is_template = data.get("is_template")
+    if not node_id or not isinstance(is_template, bool):
+        return JSONResponse(
+            {"success": False, "error": "node_id and boolean is_template required"},
+            status_code=400,
+        )
+    result = _mutate_set_stereotype(
+        state.graph, node_id, is_template, force=bool(data.get("force"))
+    )
+    # A guard soft-block is a well-formed 200 conversation, not an error.
+    status_code = 200 if result.get("success") or result.get("blocked") else 400
     return JSONResponse(result, status_code=status_code)
 
 

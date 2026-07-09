@@ -2636,6 +2636,50 @@ def _mutate_change_status(graph: FederatedGraph, node_id: str, new_status: str) 
         return {"success": False, "error": str(e)}
 
 
+# Implements: REQ-p00014-E
+def _mutate_set_stereotype(
+    graph: FederatedGraph, node_id: str, is_template: bool, force: bool = False
+) -> dict[str, Any]:
+    """Set or clear a requirement's ``**Template**`` marker.
+
+    Guard: un-templating a requirement that has INSTANCE clones would break
+    every ``Satisfies:`` reference that produced them, so toggle-OFF with
+    live instances is soft-blocked (``blocked: True`` + the count) unless
+    ``force`` is set. Toggle-ON is always safe.
+    """
+    node = graph.find_by_id(node_id)
+    if node is None:
+        return {"success": False, "error": f"Requirement {node_id} not found"}
+
+    if not is_template and not force:
+        instance_count = sum(1 for _ in node.iter_parents(edge_kinds={EdgeKind.INSTANCE}))
+        if instance_count > 0:
+            return {
+                "success": False,
+                "blocked": True,
+                "instance_count": instance_count,
+                "error": (
+                    f"{instance_count} instance(s) satisfy this requirement — "
+                    "removing Template will break their Satisfies references. "
+                    "Re-submit with force=true to proceed."
+                ),
+            }
+
+    try:
+        entry = graph.set_stereotype(node_id, is_template)
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": (
+                f"Marked {node_id} as a template"
+                if is_template
+                else f"Removed the template marker from {node_id}"
+            ),
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
 def _mutate_add_requirement(
     graph: FederatedGraph,
     req_id: str,
