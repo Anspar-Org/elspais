@@ -524,6 +524,106 @@ class TestMutateStatus:
         assert data["success"] is False
 
 
+class TestMutateTemplate:
+    """Verifies REQ-p00014-E: POST /api/mutate/template (Template toggle)."""
+
+    def test_REQ_p00014_E_toggle_template_on_then_off(self, client):
+        """POST /api/mutate/template sets then clears the Template marker."""
+        resp = client.post(
+            "/api/mutate/template",
+            json={"node_id": "REQ-p00001", "is_template": True},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        assert data["mutation"]["operation"] == "set_stereotype"
+
+        # Toggle back off — no instances exist, so no soft-block.
+        resp = client.post(
+            "/api/mutate/template",
+            json={"node_id": "REQ-p00001", "is_template": False},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        assert "blocked" not in data
+
+    def test_REQ_p00014_E_missing_node_id_returns_400(self, client):
+        """Missing node_id returns 400."""
+        resp = client.post(
+            "/api/mutate/template",
+            json={"is_template": True},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["success"] is False
+
+    def test_REQ_p00014_E_missing_is_template_returns_400(self, client):
+        """Missing is_template returns 400."""
+        resp = client.post(
+            "/api/mutate/template",
+            json={"node_id": "REQ-p00001"},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["success"] is False
+
+    def test_REQ_p00014_E_non_boolean_is_template_returns_400(self, client):
+        """Truthy-but-non-boolean is_template is rejected with 400."""
+        resp = client.post(
+            "/api/mutate/template",
+            json={"node_id": "REQ-p00001", "is_template": "yes"},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["success"] is False
+
+    def test_REQ_p00014_E_unknown_node_returns_400(self, client):
+        """Non-existent node returns a 400 error payload (not a soft-block)."""
+        resp = client.post(
+            "/api/mutate/template",
+            json={"node_id": "REQ-NOPE", "is_template": True},
+        )
+        assert resp.status_code == 400
+        data = resp.json()
+        assert data["success"] is False
+        assert "blocked" not in data
+
+    def test_REQ_p00014_E_guard_soft_block_is_http_200(self):
+        """Un-templating a template with live instances soft-blocks as 200."""
+        from tests.core.graph_test_helpers import build_graph, make_requirement
+
+        template = make_requirement(
+            "REQ-p80001",
+            title="Signature Standard",
+            template=True,
+            assertions=[{"label": "A", "text": "an obligation"}],
+        )
+        declaring = make_requirement("REQ-p00044", satisfies=["REQ-p80001"])
+        graph = build_graph(template, declaring)
+        state = AppState(
+            graph=_wrap(graph, Path("/test/repo")),
+            repo_root=Path("/test/repo"),
+            config={"project": {"name": "test", "namespace": "REQ"}},
+        )
+        blocked_client = TestClient(create_app(state, mount_mcp=False))
+
+        resp = blocked_client.post(
+            "/api/mutate/template",
+            json={"node_id": "REQ-p80001", "is_template": False},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is False
+        assert data["blocked"] is True
+        assert data["instance_count"] == 1
+
+        # force=True completes the confirm-and-re-POST conversation.
+        resp = blocked_client.post(
+            "/api/mutate/template",
+            json={"node_id": "REQ-p80001", "is_template": False, "force": True},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
+
+
 class TestMutateTitle:
     """Validates REQ-d00010-A: POST /api/mutate/title."""
 
