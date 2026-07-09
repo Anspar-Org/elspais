@@ -1,7 +1,5 @@
-"""Tests for the [federation] config table.
-
-Implements: REQ-d00253-A
-"""
+# Verifies: REQ-d00253-A
+"""Tests for the [federation] config table."""
 
 from elspais.config.schema import ElspaisConfig, FederationConfig
 

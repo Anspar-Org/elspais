@@ -17,11 +17,17 @@ from elspais.graph.relations import EdgeKind
 
 @dataclass
 class GapEntry:
-    """A single gap: a REQ with optionally listed uncovered assertions."""
+    """A single gap: a REQ with optionally listed uncovered assertions.
+
+    ``assertions`` holds ``(assertion_id, fraction)`` pairs, where ``fraction``
+    is the assertion's conducted coverage fraction in ``[0.0, 1.0)`` (REQ-d00069-J).
+    A fraction of ``0.0`` means no coverage at all; ``0 < fraction < 1`` means
+    the assertion is partially covered via REFINES conduction.
+    """
 
     req_id: str
     title: str
-    assertions: list[str] = field(default_factory=list)  # empty = whole REQ uncovered
+    assertions: list[tuple[str, float]] = field(default_factory=list)  # empty = whole REQ uncovered
 
 
 @dataclass
@@ -80,16 +86,26 @@ def _integrates_associates(graph: FederatedGraph, node: Any) -> list[str]:
     return sorted(owners)
 
 
-def collect_gaps(graph: FederatedGraph, exclude_status: set[str]) -> GapData:
+def collect_gaps(
+    graph: FederatedGraph,
+    exclude_status: set[str],
+    config: dict[str, Any] | None = None,
+) -> GapData:
     """Single-pass collection of coverage gaps from the graph.
 
     Args:
         graph: The federated traceability graph.
         exclude_status: Set of status values to skip (e.g. {"Retired"}).
+        config: Project config dict. Used to resolve per-level
+            ``expects_validation`` so only levels that expect UAT validation
+            produce ``unvalidated`` gaps (REQ-d00258-F).
 
     Returns:
         GapData with all gap lists populated.
     """
+    from elspais.config import level_expects_validation
+
+    cfg = config or {}
     data = GapData()
 
     excluded_ids: set[str] = set()
@@ -131,21 +147,40 @@ def collect_gaps(graph: FederatedGraph, exclude_status: set[str]) -> GapData:
             if uncov:
                 data.uncovered.append(GapEntry(req_id, title, uncov))
 
-        # Untested: no direct test coverage
-        if metrics is None or metrics.tested.indirect <= 0:
-            data.untested.append(GapEntry(req_id, title))
-        elif metrics.tested.indirect < metrics.tested.total:
-            uncov = _uncovered_assertions(metrics, assertion_nodes, "tested")
+        # Testing gap (untested): an assertion is a testing gap iff it is
+        # IMPLEMENTED but not tested to ~100% (relative denominator,
+        # REQ-d00258, REQ-d00069-J). A wholly-UNIMPLEMENTED assertion is NOT a
+        # testing gap -- there is nothing built to test yet. Such a REQ still
+        # surfaces as an implementation gap in the ``uncovered`` section above,
+        # so narrowing here never silently drops an unbuilt requirement.
+        if metrics is not None and metrics.implemented.indirect > 0:
+            uncov = _uncovered_assertions(
+                metrics, assertion_nodes, "tested", restrict_to_dimension="implemented"
+            )
             if uncov:
-                data.untested.append(GapEntry(req_id, title, uncov))
+                # Whole-REQ formatting (empty assertion list = "all") only when
+                # the REQ has NO test coverage at all AND every assertion is
+                # implemented, so "all" is accurate. When any test coverage
+                # exists (partial conduction, 0 < fraction < 1) or an
+                # unimplemented sibling is present, list the specific
+                # implemented-untested assertions so per-assertion fractions
+                # survive (REQ-d00069-J) and no unimplemented sibling is implied.
+                whole_req = metrics.tested.indirect <= 0 and len(uncov) == len(assertion_nodes)
+                if whole_req:
+                    data.untested.append(GapEntry(req_id, title))
+                else:
+                    data.untested.append(GapEntry(req_id, title, uncov))
 
-        # Unvalidated: no UAT coverage
-        if metrics is None or metrics.uat_coverage.indirect <= 0:
-            data.unvalidated.append(GapEntry(req_id, title))
-        elif metrics.uat_coverage.indirect < metrics.uat_coverage.total:
-            uncov = _uncovered_assertions(metrics, assertion_nodes, "uat_coverage")
-            if uncov:
-                data.unvalidated.append(GapEntry(req_id, title, uncov))
+        # Unvalidated: no UAT coverage. Only levels that expect_validation can
+        # be "unvalidated" -- an internal level that never gets a journey is not
+        # a gap (REQ-d00258-F).
+        if level_expects_validation(cfg, node.level):
+            if metrics is None or metrics.uat_coverage.indirect <= 0:
+                data.unvalidated.append(GapEntry(req_id, title))
+            elif metrics.uat_coverage.indirect < metrics.uat_coverage.total:
+                uncov = _uncovered_assertions(metrics, assertion_nodes, "uat_coverage")
+                if uncov:
+                    data.unvalidated.append(GapEntry(req_id, title, uncov))
 
         # No assertions: not testable
         if not assertion_nodes:
@@ -165,24 +200,46 @@ def _uncovered_assertions(
     metrics: Any,
     assertion_nodes: list[Any],
     dimension: str,
-) -> list[str]:
-    """Return the IDs of assertions that are not ~fully covered for a dimension.
+    restrict_to_dimension: str | None = None,
+) -> list[tuple[str, float]]:
+    """Return (id, fraction) pairs for assertions not ~fully covered for a dimension.
 
     Reads the dimension's per-assertion fraction map so that coverage conducted
     upward across REFINES edges (REQ-d00069-J) is honored. The fraction map is
     keyed by assertion *label* (e.g. ``A``), so each node is looked up by its
-    label while the returned list reports assertion *IDs* (e.g. ``REQ-100-A``),
+    label while the returned pairs report assertion *IDs* (e.g. ``REQ-100-A``),
     which is what gap entries and their renderers expect. An assertion counts as
     covered only when its fraction reaches ~1.0; a partially covered assertion
     (0 < fraction < 1, e.g. a parent assertion refined by a not-fully-covered
-    child) is still reported as a gap.
+    child) is still reported as a gap, with its fraction carried along so
+    renderers can distinguish "no coverage at all" (0.0) from "partially
+    conducted" (0 < fraction < 1).
+
+    ``restrict_to_dimension`` implements the RELATIVE denominator (REQ-d00258):
+    when given, the candidate set is intersected with assertions that HAVE
+    coverage in that dimension (fraction > 0). A *testing* gap passes
+    ``restrict_to_dimension="implemented"`` so an unimplemented assertion --
+    which has nothing built to test yet -- is not reported as a testing gap.
     """
     dim = getattr(metrics, dimension, None)
-    if dim is None:
-        return [a.id for a in assertion_nodes]
-    fractions = dim.indirect_pct_by_label
+    fractions = dim.indirect_pct_by_label if dim is not None else {}
+
+    restrict_labels: set[str] | None = None
+    if restrict_to_dimension is not None:
+        rdim = getattr(metrics, restrict_to_dimension, None)
+        rfractions = rdim.indirect_pct_by_label if rdim is not None else {}
+        restrict_labels = {lbl for lbl, frac in rfractions.items() if frac > 0}
+
     covered = 1.0 - 1e-9
-    return [a.id for a in assertion_nodes if fractions.get(a.get_field("label", ""), 0.0) < covered]
+    result: list[tuple[str, float]] = []
+    for a in assertion_nodes:
+        label = a.get_field("label", "")
+        if restrict_labels is not None and label not in restrict_labels:
+            continue
+        frac = fractions.get(label, 0.0)
+        if frac < covered:
+            result.append((a.id, frac))
+    return result
 
 
 # =============================================================================
@@ -191,7 +248,7 @@ def _uncovered_assertions(
 
 _LABELS = {
     "uncovered": "UNCOVERED (no code refs)",
-    "untested": "UNTESTED (no test coverage)",
+    "untested": "UNTESTED (implemented, not tested)",
     "unvalidated": "UNVALIDATED (no UAT coverage)",
     "failing": "FAILING",
     "no_assertions": "NOT TESTABLE (no assertions)",
@@ -211,10 +268,18 @@ def render_gap_text(gap_type: str, data: GapData) -> str:
     else:
         for entry in sorted(gaps, key=lambda e: e.req_id):
             if entry.assertions:
-                # Partial gap: show REQ with uncovered assertions
-                labels = ", ".join(
-                    a.rsplit("-", 1)[-1] if "-" in a else a for a in entry.assertions
-                )
+                # Partial gap: show REQ with uncovered assertions. A partially
+                # conducted assertion (0 < fraction < 1, REQ-d00069-J) is
+                # annotated with its percentage so it reads differently from
+                # an assertion with no coverage at all (fraction 0.0).
+                parts = []
+                for aid, frac in entry.assertions:
+                    label = aid.rsplit("-", 1)[-1] if "-" in aid else aid
+                    if frac > 0:
+                        parts.append(f"{label} — {round(frac * 100)}% via refines-conduction")
+                    else:
+                        parts.append(label)
+                labels = ", ".join(parts)
                 lines.append(f"  {entry.req_id:20s} {entry.title}  [{labels}]")
             else:
                 lines.append(f"  {entry.req_id:20s} {entry.title}")
@@ -265,7 +330,14 @@ def render_gap_markdown(gap_type: str, data: GapData) -> str:
         lines.append("| Requirement | Title | Uncovered Assertions |")
         lines.append("|-------------|-------|---------------------|")
         for entry in sorted(gaps, key=lambda e: e.req_id):
-            assertions = ", ".join(entry.assertions) if entry.assertions else "(all)"
+            if entry.assertions:
+                parts = [
+                    f"{aid} ({round(frac * 100)}% via refines-conduction)" if frac > 0 else aid
+                    for aid, frac in entry.assertions
+                ]
+                assertions = ", ".join(parts)
+            else:
+                assertions = "(all)"
             lines.append(f"| {entry.req_id} | {entry.title} | {assertions} |")
     return "\n".join(lines)
 
@@ -295,7 +367,7 @@ def render_section(
         gap_types = _ALL_GAP_TYPES
 
     exclude_status = _resolve_exclude_status(args, config=config or {})
-    data = collect_gaps(graph, exclude_status)
+    data = collect_gaps(graph, exclude_status, config=config)
 
     fmt = getattr(args, "format", "text")
 
@@ -344,10 +416,17 @@ _GAP_TYPE_MAP: dict[str, str | None] = {
 
 
 def _gap_entry_to_list(entry: GapEntry) -> list:
-    """Serialize GapEntry for JSON."""
+    """Serialize GapEntry for JSON.
+
+    Uncovered assertions are serialized as ``{"id": ..., "fraction": ...}``
+    dicts so a partially-conducted assertion (0 < fraction < 1, REQ-d00069-J)
+    is distinguishable from one with no coverage at all. ``fraction`` is
+    rounded to 4 places, matching the MCP surface (server.py), so the two
+    JSON surfaces agree on precision rather than one emitting raw floats.
+    """
     result: list = [entry.req_id, entry.title]
     if entry.assertions:
-        result.append(entry.assertions)
+        result.append([{"id": aid, "fraction": round(frac, 4)} for aid, frac in entry.assertions])
     return result
 
 
@@ -356,7 +435,8 @@ def _gap_data_from_dict(data: dict[str, Any]) -> GapData:
     gd = GapData()
     for gt in ("uncovered", "untested", "unvalidated", "no_assertions"):
         for item in data.get(gt, []):
-            assertions = item[2] if len(item) > 2 else []
+            raw_assertions = item[2] if len(item) > 2 else []
+            assertions = [(a["id"], a.get("fraction", 0.0)) for a in raw_assertions]
             getattr(gd, gt).append(GapEntry(item[0], item[1], assertions))
     for item in data.get("failing", []):
         gd.failing.append(tuple(item))  # type: ignore[arg-type]
@@ -382,7 +462,7 @@ def compute_gaps(graph: FederatedGraph, config: dict, params: dict[str, str]) ->
     fake_args.status = status_str.split(",") if status_str else None
 
     exclude_status = _resolve_exclude_status(fake_args, config=config)
-    data = collect_gaps(graph, exclude_status)
+    data = collect_gaps(graph, exclude_status, config=config)
 
     def _serialize_gap_list(gt: str) -> list:
         items = getattr(data, gt)

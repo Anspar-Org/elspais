@@ -162,10 +162,20 @@ Get summary statistics for the project.
 
   Returns:
     requirements_by_level   Count by config type key (e.g., prd/ops/dev)
-    coverage                Coverage statistics:
-      - full              Requirements with full coverage
-      - partial           Requirements with partial coverage
-      - none              Requirements with no coverage
+    coverage                Coverage tier counts (requirement-level,
+                             "implemented" dimension):
+      - total             Requirements counted (excluded statuses omitted)
+      - full_coverage     Requirements with full coverage
+      - partial_coverage  Requirements with partial coverage
+      - no_coverage       Requirements with no coverage
+      - failing           Requirements with failing coverage
+    coverage_by_level       Per-level assertion coverage stats, identical in
+                             shape to the `elspais summary` CLI's `levels`
+                             list (level, total, with_code_refs,
+                             with_test_refs, with_passing, total_assertions,
+                             implemented_assertions, implemented_direct,
+                             tested_assertions, tested_direct,
+                             passing_assertions, passing_direct)
     changes                 Git change metrics:
       - uncommitted       Modified spec files
       - branch_changed    Changed vs main branch

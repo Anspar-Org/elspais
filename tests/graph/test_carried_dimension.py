@@ -172,10 +172,10 @@ def test_verified_dimension_carried_flag(tmp_path):
     metrics_a = req_a.get_metric("rollup_metrics")
     metrics_b = req_b.get_metric("rollup_metrics")
 
-    assert metrics_a.verified.tier == "full-direct"
+    assert metrics_a.verified.tier == "full"
     assert metrics_a.verified.carried is False
 
-    assert metrics_b.verified.tier == "full-direct"
+    assert metrics_b.verified.tier == "full"
     assert metrics_b.verified.carried is True
 
 

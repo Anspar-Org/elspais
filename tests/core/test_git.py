@@ -81,7 +81,7 @@ def _clean_git_env(monkeypatch):
 class TestGitChangeInfo:
     """Tests for GitChangeInfo dataclass."""
 
-    # Implements: REQ-p00004-B
+    # Verifies: REQ-p00004-B
     def test_create_empty(self):
         """Empty GitChangeInfo has empty sets."""
         info = GitChangeInfo()
@@ -91,7 +91,7 @@ class TestGitChangeInfo:
         assert info.branch_changed_files == set()
         assert info.committed_req_locations == {}
 
-    # Implements: REQ-p00004-B
+    # Verifies: REQ-p00004-B
     def test_all_changed_files(self):
         """all_changed_files returns union of all file sets."""
         info = GitChangeInfo(
@@ -102,7 +102,7 @@ class TestGitChangeInfo:
 
         assert info.all_changed_files == {"a.md", "b.md", "c.md"}
 
-    # Implements: REQ-p00004-B
+    # Verifies: REQ-p00004-B
     def test_uncommitted_files(self):
         """uncommitted_files returns modified and untracked."""
         info = GitChangeInfo(
@@ -117,7 +117,7 @@ class TestGitChangeInfo:
 class TestMovedRequirement:
     """Tests for MovedRequirement dataclass."""
 
-    # Implements: REQ-p00004-B
+    # Verifies: REQ-p00004-B
     def test_create(self):
         """Create MovedRequirement with all fields."""
         moved = MovedRequirement(
@@ -320,7 +320,7 @@ class TestGetGitChanges:
 class TestTemporaryWorktree:
     """Tests for temporary_worktree context manager."""
 
-    # Implements: REQ-p00004-B
+    # Verifies: REQ-p00004-B
     def test_creates_and_cleans_up_worktree(self):
         """Creates worktree, yields path, cleans up on exit."""
         repo_root = get_repo_root()
@@ -339,7 +339,7 @@ class TestTemporaryWorktree:
         assert worktree_path is not None
         assert not worktree_path.exists()
 
-    # Implements: REQ-p00004-B
+    # Verifies: REQ-p00004-B
     def test_raises_on_invalid_ref(self):
         """Raises CalledProcessError for invalid git ref."""
         repo_root = get_repo_root()
@@ -354,7 +354,7 @@ class TestTemporaryWorktree:
 class TestGetReqLocationsFromGraph:
     """Tests for get_req_locations_from_graph function."""
 
-    # Implements: REQ-p00004-B
+    # Verifies: REQ-p00004-B
     def test_returns_dict(self):
         """Returns dict mapping REQ IDs to paths."""
         repo_root = get_repo_root()
@@ -369,7 +369,7 @@ class TestGetReqLocationsFromGraph:
             assert isinstance(req_id, str)
             assert isinstance(path, str)
 
-    # Implements: REQ-p00004-B
+    # Verifies: REQ-p00004-B
     def test_uses_full_canonical_id(self):
         """Uses the full canonical ID (e.g., 'REQ-d00001') as keys."""
         repo_root = get_repo_root()
@@ -1002,7 +1002,7 @@ class TestCommitAndPushWithRemote:
 class TestAnsiStripping:
     """Tests for ANSI escape code stripping in commit error messages."""
 
-    # Implements: REQ-p00004-E
+    # Verifies: REQ-p00004-E
     def test_ansi_codes_stripped_from_commit_error(self, tmp_path):
         """ANSI escape codes are removed from commit failure error messages."""
         _init_git_repo(tmp_path)
@@ -1147,7 +1147,7 @@ class TestFullGitSyncWorkflowWithRemote:
     REQ-p00004-C through REQ-p00004-F together.
     """
 
-    # Implements: REQ-p00004-E
+    # Verifies: REQ-p00004-E
     def test_full_workflow_branch_commit_push_sync(self, tmp_path):
         """Complete workflow: create branch, edit, commit, push, sync."""
         _bare, clone_a, clone_b = _init_bare_with_spec(tmp_path)
@@ -1209,7 +1209,7 @@ class TestFullGitSyncWorkflowWithRemote:
         assert result["success"] is True
         assert (clone_a / "spec" / "prd.md").read_text() == "# REQ-p00001 Updated by B\n"
 
-    # Implements: REQ-p00004-F
+    # Verifies: REQ-p00004-F
     def test_sync_conflict_from_concurrent_edits(self, tmp_path):
         """Two clones edit same file on same branch → sync detects conflict."""
         _bare, clone_a, clone_b = _init_bare_with_spec(tmp_path)
@@ -1497,7 +1497,7 @@ class TestListCommits:
     Validates: checkpoint and history feature — list commits in reverse order.
     """
 
-    # Implements: REQ-p00004-E
+    # Verifies: REQ-p00004-E
     def test_returns_commits_in_reverse_order(self, tmp_path):
         """Returns commits newest-first."""
         _init_git_repo_with_commit(tmp_path)
@@ -1517,7 +1517,7 @@ class TestListCommits:
         assert commits[0]["message"] == "second commit"
         assert commits[1]["message"] == "init"
 
-    # Implements: REQ-p00004-E
+    # Verifies: REQ-p00004-E
     def test_respects_limit(self, tmp_path):
         """Returns at most 'limit' commits."""
         _init_git_repo_with_commit(tmp_path)
@@ -1535,7 +1535,7 @@ class TestListCommits:
 
         assert len(commits) == 3
 
-    # Implements: REQ-p00004-E
+    # Verifies: REQ-p00004-E
     def test_empty_repo_returns_empty_list(self, tmp_path):
         """Returns [] on a repo with no commits."""
         _git_run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
@@ -1544,7 +1544,7 @@ class TestListCommits:
 
         assert commits == []
 
-    # Implements: REQ-p00004-E
+    # Verifies: REQ-p00004-E
     def test_commit_dict_has_required_keys(self, tmp_path):
         """Each commit dict has hash, message, date, author."""
         _init_git_repo_with_commit(tmp_path)
@@ -1565,7 +1565,7 @@ class TestCheckoutCommit:
     Validates: checkpoint and history feature — detach HEAD at a specific commit.
     """
 
-    # Implements: REQ-p00004-E
+    # Verifies: REQ-p00004-E
     def test_detaches_head_at_commit(self, tmp_path):
         """Checking out a valid hash enters detached HEAD state."""
         _init_git_repo_with_commit(tmp_path)
@@ -1594,7 +1594,7 @@ class TestCheckoutCommit:
         )
         assert abbrev.stdout.strip() == "HEAD", "Expected detached HEAD state"
 
-    # Implements: REQ-p00004-E
+    # Verifies: REQ-p00004-E
     def test_invalid_hash_returns_error(self, tmp_path):
         """An invalid commit hash returns success=False with an error."""
         _init_git_repo_with_commit(tmp_path)
@@ -1611,7 +1611,7 @@ class TestCommitSpecFiles:
     Validates: checkpoint feature — local commit without push; refuses on main.
     """
 
-    # Implements: REQ-p00004-E
+    # Verifies: REQ-p00004-E
     def test_commits_dirty_spec_files(self, tmp_path):
         """Commits modified spec files on a feature branch."""
         _init_git_repo_with_commit(tmp_path)
@@ -1632,7 +1632,7 @@ class TestCommitSpecFiles:
         log = list_commits(tmp_path, limit=1)
         assert log[0]["message"] == "checkpoint: update spec"
 
-    # Implements: REQ-p00004-E
+    # Verifies: REQ-p00004-E
     def test_refuses_on_main_branch(self, tmp_path):
         """Refuses to commit on the main branch."""
         _init_git_repo_with_commit(tmp_path)
@@ -1644,7 +1644,7 @@ class TestCommitSpecFiles:
         assert result["success"] is False
         assert "protected" in result["error"].lower()
 
-    # Implements: REQ-p00004-E
+    # Verifies: REQ-p00004-E
     def test_refuses_on_master_branch(self, tmp_path):
         """Refuses to commit on the master branch."""
         _git_run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
@@ -1673,7 +1673,7 @@ class TestCommitSpecFiles:
         assert result["success"] is False
         assert "protected" in result["error"].lower()
 
-    # Implements: REQ-p00004-E
+    # Verifies: REQ-p00004-E
     def test_nothing_to_commit_returns_error(self, tmp_path):
         """Returns error when no dirty spec files exist."""
         _init_git_repo_with_commit(tmp_path)
@@ -1690,7 +1690,7 @@ class TestCommitSpecFiles:
         assert result["success"] is False
         assert "nothing" in result["error"].lower()
 
-    # Implements: REQ-p00004-E
+    # Verifies: REQ-p00004-E
     def test_commits_untracked_spec_files(self, tmp_path):
         """Commits untracked (new) spec files on a feature branch."""
         _init_git_repo_with_commit(tmp_path)
@@ -1715,7 +1715,7 @@ class TestSuggestBranchName:
     Validates: checkpoint feature — non-colliding branch name suggestion.
     """
 
-    # Implements: REQ-p00004-D
+    # Verifies: REQ-p00004-D
     def test_returns_base_when_no_collision(self, tmp_path):
         """Returns the base name when it doesn't exist as a local branch."""
         _init_git_repo_with_commit(tmp_path)
@@ -1724,7 +1724,7 @@ class TestSuggestBranchName:
 
         assert name == "__test_feature/new-thing"
 
-    # Implements: REQ-p00004-D
+    # Verifies: REQ-p00004-D
     def test_appends_v2_when_base_exists(self, tmp_path):
         """Appends -v2 when the base name already exists."""
         _init_git_repo_with_commit(tmp_path)
@@ -1740,7 +1740,7 @@ class TestSuggestBranchName:
 
         assert name == "__test_feature/my-branch-v2"
 
-    # Implements: REQ-p00004-D
+    # Verifies: REQ-p00004-D
     def test_increments_past_existing_versioned_branches(self, tmp_path):
         """Increments to -v3 when both base and -v2 exist."""
         _init_git_repo_with_commit(tmp_path)
@@ -1764,7 +1764,7 @@ class TestGenerateCheckpointMessage:
     Validates: checkpoint feature — generate commit message from dirty spec files.
     """
 
-    # Implements: REQ-p00004-E
+    # Verifies: REQ-p00004-E
     def test_generates_message_from_dirty_files(self, tmp_path):
         """Extracts requirement headers from dirty spec files."""
         _init_git_repo_with_commit(tmp_path)
@@ -1784,7 +1784,7 @@ class TestGenerateCheckpointMessage:
         assert "REQ-p00001" in msg
         assert "My First Requirement" in msg
 
-    # Implements: REQ-p00004-E
+    # Verifies: REQ-p00004-E
     def test_returns_empty_when_no_changes(self, tmp_path):
         """Returns empty string when no dirty spec files exist."""
         _init_git_repo_with_commit(tmp_path)
@@ -1793,7 +1793,7 @@ class TestGenerateCheckpointMessage:
 
         assert msg == ""
 
-    # Implements: REQ-p00004-E
+    # Verifies: REQ-p00004-E
     def test_includes_multiple_requirements(self, tmp_path):
         """Includes all requirement headers found across dirty files."""
         _init_git_repo_with_commit(tmp_path)
@@ -1813,7 +1813,7 @@ class TestGenerateCheckpointMessage:
         assert any("REQ-p00001" in ln for ln in lines)
         assert any("REQ-p00002" in ln for ln in lines)
 
-    # Implements: REQ-p00004-E
+    # Verifies: REQ-p00004-E
     def test_ignores_non_spec_files(self, tmp_path):
         """Only scans files under spec_dir."""
         _init_git_repo_with_commit(tmp_path)
@@ -1875,7 +1875,7 @@ def _make_repo(tmp_path: Path, name: str, branch: str, n_commits: int = 1) -> Pa
 class TestMonorepoEligible:
     """REQ-d00201-B: check_monorepo_eligible validates multi-repo sync conditions."""
 
-    # Implements: REQ-d00201-B
+    # Verifies: REQ-d00201-B
     def test_eligible_same_branch_same_commits(self, tmp_path):
         """Two repos on same branch with same commit count are eligible."""
         from elspais.utilities.git import check_monorepo_eligible, invalidate_ancestor_cache
@@ -1889,7 +1889,7 @@ class TestMonorepoEligible:
         assert eligible is True
         assert reasons == []
 
-    # Implements: REQ-d00201-B
+    # Verifies: REQ-d00201-B
     def test_ineligible_different_branch_names(self, tmp_path):
         """Repos on different branch names are ineligible."""
         from elspais.utilities.git import check_monorepo_eligible, invalidate_ancestor_cache
@@ -1903,7 +1903,7 @@ class TestMonorepoEligible:
         assert eligible is False
         assert any("branch" in r.lower() for r in reasons)
 
-    # Implements: REQ-d00201-B
+    # Verifies: REQ-d00201-B
     def test_ineligible_different_commit_counts(self, tmp_path):
         """Repos with different commit counts on same branch are ineligible."""
         from elspais.utilities.git import check_monorepo_eligible, invalidate_ancestor_cache
@@ -1917,7 +1917,7 @@ class TestMonorepoEligible:
         assert eligible is False
         assert any("commit" in r.lower() for r in reasons)
 
-    # Implements: REQ-d00201-B
+    # Verifies: REQ-d00201-B
     def test_eligible_on_main(self, tmp_path):
         """Two repos both on main branch are eligible."""
         from elspais.utilities.git import check_monorepo_eligible, invalidate_ancestor_cache
@@ -1931,7 +1931,7 @@ class TestMonorepoEligible:
         assert eligible is True
         assert reasons == []
 
-    # Implements: REQ-d00201-B
+    # Verifies: REQ-d00201-B
     def test_single_repo_always_eligible(self, tmp_path):
         """Single-repo list is trivially eligible."""
         from elspais.utilities.git import check_monorepo_eligible, invalidate_ancestor_cache
@@ -1964,7 +1964,7 @@ def _clean_git_env():
 class TestSyncCommit:
     """REQ-p00004-I: Sync commits keep repos aligned."""
 
-    # Implements: REQ-p00004-I
+    # Verifies: REQ-p00004-I
     def test_create_sync_commit(self, tmp_path):
         from elspais.utilities.git import create_sync_commit
 
@@ -1987,7 +1987,7 @@ class TestSyncCommit:
         content = sync_file.read_text()
         assert "aligned with root" in content
 
-    # Implements: REQ-p00004-I
+    # Verifies: REQ-p00004-I
     def test_remove_sync_file_before_real_commit(self, tmp_path):
         from elspais.utilities.git import remove_sync_file
 
@@ -1998,7 +1998,7 @@ class TestSyncCommit:
         remove_sync_file(tmp_path, spec_dir="spec")
         assert not sync_file.exists()
 
-    # Implements: REQ-p00004-I
+    # Verifies: REQ-p00004-I
     def test_remove_sync_file_noop_if_missing(self, tmp_path):
         from elspais.utilities.git import remove_sync_file
 
@@ -2010,7 +2010,7 @@ class TestSyncCommit:
 class TestCheckDirtyRepos:
     """REQ-p00004-I: Dirty working tree detection across repos."""
 
-    # Implements: REQ-p00004-I
+    # Verifies: REQ-p00004-I
     def test_clean_repos(self, tmp_path):
         """Clean repos return empty list."""
         from elspais.utilities.git import check_dirty_repos
@@ -2026,7 +2026,7 @@ class TestCheckDirtyRepos:
         dirty = check_dirty_repos([("root", repo)])
         assert dirty == []
 
-    # Implements: REQ-p00004-I
+    # Verifies: REQ-p00004-I
     def test_dirty_repo_detected(self, tmp_path):
         """Dirty repo is reported."""
         from elspais.utilities.git import check_dirty_repos

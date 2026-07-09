@@ -24,12 +24,14 @@ Usage:
 
 from __future__ import annotations
 
+import functools
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from elspais.config.schema import ElspaisConfig
+from elspais.utilities.test_identity import build_test_id_from_nodeid
 
 _SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
     ElspaisConfig.model_fields.keys()
@@ -485,43 +487,34 @@ def get_implementation_status(node: GraphNode) -> str:
 
 def count_by_coverage(
     graph: FederatedGraph,
-    exclude_status: set[str] | None = None,
+    config: dict | None = None,
 ) -> dict[str, int]:
     """Count requirements by coverage level.
 
     Args:
         graph: The TraceGraph to aggregate.
-        exclude_status: Status values to exclude from both numerator and
-            denominator (e.g. ``{"Draft"}``).
+        config: Project config; coverage inclusion is gated by
+            ``status_expects_implementation`` via ``tier_buckets`` (REQ-d00258-C).
 
     Returns:
         Dict with 'total', 'full_coverage', 'partial_coverage', 'no_coverage' counts.
+
+    Note:
+        Thin delegate to `graph.aggregation.tier_buckets()` (REQ-d00258-C),
+        kept here for API compatibility. `failing` folds into `no_coverage`
+        below only because the legacy dict has three buckets and the
+        "implemented" dimension never sets `has_failures`, so `b.failing`
+        is always 0 for this dimension -- the fold is a no-op guard.
     """
-    from elspais.graph import NodeKind
+    from elspais.graph.aggregation import tier_buckets
 
-    counts: dict[str, int] = {
-        "total": 0,
-        "full_coverage": 0,
-        "partial_coverage": 0,
-        "no_coverage": 0,
+    b = tier_buckets(graph, "implemented", config=config)
+    return {
+        "total": b.total,
+        "full_coverage": b.full,
+        "partial_coverage": b.partial,
+        "no_coverage": b.missing + b.failing,
     }
-
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if exclude_status and node.status in exclude_status:
-            continue
-
-        counts["total"] += 1
-        rollup = node.get_metric("rollup_metrics")
-        pct = rollup.implemented.indirect_pct if rollup else 0
-
-        if pct >= 100:
-            counts["full_coverage"] += 1
-        elif pct > 0:
-            counts["partial_coverage"] += 1
-        else:
-            counts["no_coverage"] += 1
-
-    return counts
 
 
 def count_with_code_refs(
@@ -638,6 +631,21 @@ def count_by_git_status(graph: FederatedGraph) -> dict[str, int]:
             counts["branch_changed"] += 1
 
     return counts
+
+
+# Implements: REQ-d00258-G
+def _failing_targets(targets: list[str] | None, assertion_labels: list[str]) -> set[str]:
+    """Labels a failing verified/UAT signal is attributed to (REQ-d00258-G).
+
+    An assertion-targeted failure blames only its named labels (scoped to the
+    requirement's own assertions); a blanket/whole-requirement failure blames
+    every assertion, since it genuinely exercises them all. This mirrors the
+    scoping the ``has_failures`` bookkeeping already uses, but keeps the blame
+    per-assertion so a non-failing sibling is not reddened.
+    """
+    if targets:
+        return {t for t in targets if t in assertion_labels}
+    return set(assertion_labels)
 
 
 def _compute_coverage_from_source(
@@ -805,12 +813,104 @@ def _compute_code_tested(
                 if lc.get(line_no, 0) > 0:
                     indirect_count += 1
 
+    # Implements: REQ-d00254-G
+    # Per-test attribution (coverage.py dynamic contexts, CUR-1568): a line
+    # counts as DIRECT when one of its recorded contexts belongs to a test
+    # that VERIFIES this requirement. Context string format (pytest-cov
+    # `--cov-context=test`): "path::Class::func|run" or "path::func|run"
+    # (also "|setup"/"|teardown" for fixture-phase execution). Only "|run"
+    # contexts credit direct attribution -- setup/teardown fixture execution
+    # is not evidence the *test itself* exercised the line, so those phases
+    # are deliberately excluded rather than treated as equivalent to "|run".
+    direct_count = _direct_context_count(node, lines_by_file)
+
     metrics.code_tested = CoverageDimension(
         total=len(impl_lines),
-        direct=0,  # Direct requires per-test attribution (RESULT.covered_lines)
+        direct=direct_count,
         indirect=indirect_count,
         has_failures=False,
     )
+
+
+@functools.lru_cache(maxsize=4096)
+def _normalize_run_context(ctx: str) -> str | None:
+    """Return the canonical TEST node id for a coverage.py context string.
+
+    Returns None when the context should not credit direct attribution:
+    the empty/global context (code executed outside any test), or a
+    "|setup"/"|teardown" fixture-phase context (see CUR-1568 decision above
+    -- only "|run" contexts count). Reuses ``build_test_id_from_nodeid`` (the
+    canonical pytest-nodeid normalizer) rather than re-parsing nodeids here.
+
+    Pure str -> str|None mapping over a small alphabet of context strings
+    (one per test x phase) reused across many lines/requirements in a single
+    annotation pass, so it is memoized with ``lru_cache`` (CUR-1568).
+    """
+    nodeid, sep, phase = ctx.rpartition("|")
+    if not sep or phase != "run" or not nodeid:
+        return None
+    return build_test_id_from_nodeid(nodeid)
+
+
+def _direct_context_count(node: GraphNode, lines_by_file: dict[str, set[int]]) -> int:
+    """Count implementation lines directly attributed to a verifying test.
+
+    Collects the TEST node ids reachable via this requirement's outgoing
+    VERIFIES edges, then checks each implementation line's recorded
+    ``line_contexts`` (set on the FILE node by coverage.json ingestion) for a
+    context that normalizes to one of those TEST ids.
+    """
+    from elspais.graph import NodeKind
+    from elspais.graph.relations import EdgeKind
+
+    verifying_test_ids: set[str] = set()
+    for edge in node.iter_outgoing_edges():
+        if edge.kind != EdgeKind.VERIFIES:
+            continue
+        target = edge.target
+        if target.kind != NodeKind.TEST:
+            continue
+        verifying_test_ids.add(target.id)
+
+    if not verifying_test_ids:
+        return 0
+
+    # Collect line_contexts per file from this requirement's IMPLEMENTS edges
+    # (same traversal shape as the line_coverage lookup above).
+    file_contexts: dict[str, dict[int, list[str]]] = {}
+    for edge in node.iter_outgoing_edges():
+        if edge.kind != EdgeKind.IMPLEMENTS:
+            continue
+        target = edge.target
+        if target.kind != NodeKind.CODE:
+            continue
+        fn = target.file_node()
+        if fn is None:
+            continue
+        rel_path = fn.get_field("relative_path")
+        if not rel_path or rel_path in file_contexts:
+            continue
+        ctxs = fn.get_field("line_contexts")
+        if ctxs:
+            file_contexts[rel_path] = ctxs
+
+    if not file_contexts:
+        return 0
+
+    direct_count = 0
+    for rel_path, lines in lines_by_file.items():
+        ctxs = file_contexts.get(rel_path)
+        if not ctxs:
+            continue
+        for line_no in lines:
+            line_ctx_ids = {
+                _normalize_run_context(c) for c in ctxs.get(line_no, []) if isinstance(c, str)
+            }
+            line_ctx_ids.discard(None)
+            if line_ctx_ids & verifying_test_ids:
+                direct_count += 1
+
+    return direct_count
 
 
 def _under_dirs(rel_path: str, dirs: tuple[str, ...]) -> bool:
@@ -960,11 +1060,17 @@ def _compute_lcov_tested(
         apps = {file_app.get(rel) for rel in file_cov}
         has_failures = any(app_status.get(a) == "red" for a in apps if a)
 
+    # A red app is a whole-application failure signal, so it attributes to every
+    # lcov-credited assertion (there is no per-assertion granularity in app
+    # status); an assertion with no lcov credit stays unblamed (REQ-d00258-G).
+    failing_labels = set(indirect_pct) if has_failures else set()
+
     metrics.lcov_tested = CoverageDimension(
         total=len(labels),
         direct=sum(direct_pct.values()),
         indirect=sum(indirect_pct.values()),
         has_failures=has_failures,
+        failing_labels=failing_labels,
         direct_labels=set(direct_pct),
         indirect_labels=set(indirect_pct),
         direct_pct_by_label=dict(direct_pct),
@@ -982,18 +1088,41 @@ class JourneyVerification:
     steps, its own whole-journey verifying tests).
 
     Attributes:
-        tier: One of "full-direct", "full-indirect", "partial", "failing",
-            "none". Mirrors the coverage-tier vocabulary.
-        failing_steps: Labels (e.g. "step-2") of steps with a failing test.
+        tier: One of "full", "partial", "failing", "missing". Mirrors the
+            unified coverage-tier vocabulary (REQ-d00258).
+        failing_steps: Labels (e.g. "2") of steps with a failing test.
         fully_verified: True iff every unit is verified with no failures;
             the journey's Validates targets may be credited.
         has_failures: True iff any verifying test failed.
+        verified_steps: Count of steps verified (>=1 pass, 0 fail).
+        total_steps: Count of addressable steps (0 for a whole-journey unit).
     """
 
-    tier: str = "none"
+    tier: str = "missing"
     failing_steps: list[str] = field(default_factory=list)
     fully_verified: bool = False
     has_failures: bool = False
+    verified_steps: int = 0
+    total_steps: int = 0
+
+    @property
+    def fraction(self) -> float:
+        """Verified-step ratio in [0, 1] used to credit ``uat_verified``.
+
+        A fully-verified journey credits full (1.0); a partial journey (some
+        steps verified, none failing) credits its verified/total step ratio
+        (e.g. 5 of 7 -> ~0.71 -> a partial standing / yellow); an unverified
+        journey credits none (0.0). This proportional crediting is what lets a
+        partially-verified journey read as "partial" rather than "missing"
+        (REQ-d00255-C). Whole-journey (stepless) units have no ratio, so they
+        credit full only when ``fully_verified`` (else 0.0).
+        """
+        # Implements: REQ-d00255-C
+        if self.fully_verified:
+            return 1.0
+        if self.total_steps > 0:
+            return self.verified_steps / self.total_steps
+        return 0.0
 
     @property
     def verdict(self) -> str:
@@ -1071,7 +1200,7 @@ def annotate_journey_verification(graph: FederatedGraph) -> None:
         if steps:
             verified = 0
             for step in steps:
-                label = step.get_field("label")  # "step-N"
+                label = step.get_field("label")  # the step number, "N"
                 spass, sfail = _node_verifying_status(step)
                 passed, failed = (spass or bpass), (sfail or bfail)
                 status = "fail" if (sfail or bfail) else "pass" if (spass or bpass) else "untested"
@@ -1082,23 +1211,25 @@ def annotate_journey_verification(graph: FederatedGraph) -> None:
                 elif passed:
                     verified += 1
                 # else: untested step -> contributes to partial
+            v.verified_steps = verified
+            v.total_steps = len(steps)
             if v.has_failures:
                 v.tier = "failing"
             elif verified == len(steps):
-                v.tier = "full-direct"
+                v.tier = "full"
                 v.fully_verified = True
             elif verified > 0:
                 v.tier = "partial"
             else:
-                v.tier = "none"
+                v.tier = "missing"
         else:
             # Phase 2: no addressable steps -> the journey is one unit.
             if bfail:
                 v.tier, v.has_failures = "failing", True
             elif bpass:
-                v.tier, v.fully_verified = "full-direct", True
+                v.tier, v.fully_verified = "full", True
             else:
-                v.tier = "none"
+                v.tier = "missing"
         journey.set_metric("journey_verification", v)
 
 
@@ -1114,8 +1245,11 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
     Coverage is determined by outgoing edges from REQUIREMENT nodes:
     - The builder links TEST/CODE/REQ as children of the parent REQ
     - Edges have assertion_targets when they target specific assertions
-    - VERIFIES to TEST with assertion_targets → DIRECT coverage
-    - IMPLEMENTS to CODE with assertion_targets → DIRECT coverage
+    - VERIFIES to TEST with assertion_targets → TEST_DIRECT (feeds `tested`)
+    - VERIFIES to TEST without assertion_targets → TEST_INDIRECT (feeds `tested`)
+      NOTE: test Verifies evidence feeds `tested`, NOT `implemented`
+      (REQ-d00084-D).
+    - IMPLEMENTS to CODE with assertion_targets → DIRECT coverage (implemented)
     - IMPLEMENTS to CODE → VERIFIES to TEST → INDIRECT coverage (transitive)
     - IMPLEMENTS to REQ with assertion_targets → EXPLICIT coverage
     - IMPLEMENTS to REQ without assertion_targets → INFERRED coverage
@@ -1147,8 +1281,9 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
 
     # Build a per-file index of RESULT nodes with match=="source" (Task 5).
     # Maps repo-relative source_file -> list of status strings (lowercased).
-    # Exclude per-test-resolved results (match_scope=="test"): those credit
-    # inline (below) rather than via file-level all-pass/any-fail semantics.
+    # Exclude precisely-resolved results (match_scope "test" or "step"):
+    # those credit inline (below) rather than via file-level all-pass/any-fail
+    # semantics.
     #
     # source_file_carried (CUR-1557) is a parallel map recording whether
     # EVERY contributing RESULT for that source file was carried (baseline).
@@ -1159,7 +1294,10 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
     source_file_index: dict[str, list[str]] = {}
     _source_file_carried_flags: dict[str, list[bool]] = {}
     for r in graph.nodes_by_kind(NodeKind.RESULT):
-        if (r.get_field("match") or "") == "source" and r.get_field("match_scope") != "test":
+        if (r.get_field("match") or "") == "source" and r.get_field("match_scope") not in (
+            "test",
+            "step",
+        ):
             sf = r.get_field("source_file")
             if sf:
                 source_file_index.setdefault(sf, []).append((r.get_field("status") or "").lower())
@@ -1188,21 +1326,30 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
         tested_indirect_labels: set[str] = set()  # Assertions with whole-req TEST coverage
         validated_labels: set[str] = set()  # Assertions with passing tests
         has_failures = False
+        # REQ-d00258-G: per-assertion failure attribution. has_failures is the
+        # requirement-wide flag (drives the requirement badge); this set records
+        # WHICH assertions actually failed, so a partial sibling covered by a
+        # different (non-failing) test does not inherit the red standing.
+        verified_failing_labels: set[str] = set()
 
-        # Implements: REQ-d00069-B
-        # Compute TEST (VERIFIES) coverage contributions via shared helper
+        # Implements: REQ-d00069-B, REQ-d00084-D
+        # Compute TEST (VERIFIES) coverage contributions via shared helper.
+        # These use dedicated TEST_* sources so they feed only the `tested`
+        # dimension -- a test that Verifies an assertion is NOT evidence the
+        # assertion is *implemented* (REQ-d00084-D). Using CoverageSource.DIRECT
+        # here previously leaked test coverage into `implemented`.
         test_contribs, test_nodes_for_result_lookup = _compute_coverage_from_source(
             node,
             assertion_labels,
             EdgeKind.VERIFIES,
-            CoverageSource.DIRECT,
-            CoverageSource.INDIRECT,
+            CoverageSource.TEST_DIRECT,
+            CoverageSource.TEST_INDIRECT,
         )
         for c in test_contribs:
             metrics.add_contribution(c)
-            if c.source_type == CoverageSource.DIRECT:
+            if c.source_type == CoverageSource.TEST_DIRECT:
                 tested_labels.add(c.assertion_label)
-            elif c.source_type == CoverageSource.INDIRECT:
+            elif c.source_type == CoverageSource.TEST_INDIRECT:
                 tested_indirect_labels.add(c.assertion_label)
 
         # Implements: REQ-d00069-A
@@ -1245,6 +1392,20 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                                     assertion_label=label,
                                 )
                             )
+                else:
+                    # Blanket `Implements: REQ` (no assertion suffix) on CODE:
+                    # a whole-requirement implementation reference credits ALL
+                    # assertions at full value into the INDIRECT footing, mirroring
+                    # TEST_INDIRECT (whole-req Verifies) and INFERRED (child REQ).
+                    # REQ-d00069-B closes the prior asymmetry (this had no else).
+                    for label in assertion_labels:
+                        metrics.add_contribution(
+                            CoverageContribution(
+                                source_id=target_node.id,
+                                source_type=CoverageSource.CODE_INDIRECT,
+                                assertion_label=label,
+                            )
+                        )
 
                 # Transitive: CODE → TEST → RESULT (indirect test coverage)
                 # Check if this CODE node has TEST children via VERIFIES edges
@@ -1346,14 +1507,14 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                 # Implements: REQ-d00254-G
                 # Skip inline only for FILE-scope source-match results (credited
                 # via source_file_index below: all-pass credits / any-fail flags
-                # the whole file). Per-test-resolved source results
-                # (match_scope=="test") credit inline like test_id results:
-                # their pass credits their assertions; their fail flags only
-                # their own test.
+                # the whole file). Precisely-resolved source results
+                # (match_scope "test" or "step") credit inline like test_id
+                # results: their pass credits their assertions; their fail
+                # flags only their own test.
                 if (
                     (result.get_field("match") or "") == "source"
                     and not result.get_field("test_id")
-                    and result.get_field("match_scope") != "test"
+                    and result.get_field("match_scope") not in ("test", "step")
                 ):
                     continue
                 saw_result = True
@@ -1371,6 +1532,7 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                         verified_all_carried = False
                 elif status in ("failed", "fail", "failure", "error"):
                     has_failures = True
+                    verified_failing_labels |= _failing_targets(assertion_targets, assertion_labels)
                     verified_saw_signal = True
                     if not (result.get_field("carried") or False):
                         verified_all_carried = False
@@ -1383,6 +1545,9 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                     statuses = source_file_index[rel]
                     if any(s in ("failed", "fail", "failure", "error") for s in statuses):
                         has_failures = True
+                        verified_failing_labels |= _failing_targets(
+                            assertion_targets, assertion_labels
+                        )
                         verified_saw_signal = True
                         if not source_file_carried.get(rel, False):
                             verified_all_carried = False
@@ -1419,34 +1584,54 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                         verified_all_carried = False
                     elif st == "red":
                         has_failures = True
+                        verified_failing_labels |= _failing_targets(
+                            assertion_targets, assertion_labels
+                        )
                         verified_saw_signal = True
                         verified_all_carried = False
 
-        # Implements: REQ-d00069-A, REQ-d00255, REQ-d00256
+        # Implements: REQ-d00069-A, REQ-d00255-C, REQ-d00256
         # UAT roll-up: source each validating journey's verdict from its
         # journey_verification metric (computed by annotate_journey_verification,
         # which rolls each journey's STEP/whole-journey verifying tests up). The
         # direct/indirect split still depends on whether Validates: named
-        # assertions; only the source of the pass/fail verdict has changed.
-        uat_validated_direct_labels: set[str] = set()
-        uat_validated_indirect_labels: set[str] = set()
+        # assertions. Crediting is PROPORTIONAL to the journey's verification
+        # (REQ-d00255-C): a fully-verified journey credits full (1.0); a
+        # partially-verified journey with no failing step credits its
+        # verified-step ratio (e.g. 5 of 7 -> ~0.71), which makes the named
+        # assertions read "partial" (yellow) rather than "missing"; a journey
+        # with any failing step contributes only a failure signal (-> red); an
+        # unverified journey credits none (-> missing). Per-label fractions are
+        # combined across journeys by max (a failure by any journey still flags
+        # has_failures), mirroring how uat_coverage distinguishes blanket vs
+        # assertion-targeted Validates.
+        uat_direct_pct: dict[str, float] = {}
+        uat_indirect_pct: dict[str, float] = {}
         uat_has_failures = False
+        # REQ-d00258-G: per-assertion UAT failure attribution. A failing journey
+        # legitimately blames every assertion THAT journey validates (its
+        # assertion_targets, or all labels when it validates the whole REQ); the
+        # bug being fixed is a DIFFERENT, non-failing journey's assertions
+        # inheriting this red.
+        uat_failing_labels: set[str] = set()
         for jny_node, assertion_targets in jny_nodes_for_result_lookup:
             v = jny_node.get_metric("journey_verification")
             if v is None:
                 continue
             if v.has_failures:
                 uat_has_failures = True
+                uat_failing_labels |= _failing_targets(assertion_targets, assertion_labels)
                 continue
-            if not v.fully_verified:
-                continue  # partial / untested journey credits nothing
+            frac = v.fraction  # 1.0 full, verified/total for partial, 0 none
+            if frac <= 0:
+                continue  # unverified journey credits nothing
             if assertion_targets:
                 for label in assertion_targets:
                     if label in assertion_labels:
-                        uat_validated_direct_labels.add(label)
+                        uat_direct_pct[label] = max(uat_direct_pct.get(label, 0.0), frac)
             else:
                 for label in assertion_labels:
-                    uat_validated_indirect_labels.add(label)
+                    uat_indirect_pct[label] = max(uat_indirect_pct.get(label, 0.0), frac)
 
         # Finalize metrics (computes aggregate coverage counts + implemented/uat_coverage dims)
         metrics.finalize()
@@ -1459,9 +1644,11 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
             verified_indirect_labels=validated_indirect_labels,
             verified_failures=has_failures,
             verified_carried=(verified_saw_signal and verified_all_carried),
-            uat_verified_direct_labels=uat_validated_direct_labels,
-            uat_verified_indirect_labels=uat_validated_indirect_labels,
+            uat_verified_direct_pct=uat_direct_pct,
+            uat_verified_indirect_pct=uat_indirect_pct,
             uat_verified_failures=uat_has_failures,
+            verified_failing_labels=verified_failing_labels,
+            uat_verified_failing_labels=uat_failing_labels,
         )
 
         # Compute code_tested dimension from coverage data
@@ -1501,24 +1688,26 @@ def _conduct_refines_coverage(graph: FederatedGraph) -> None:
     requirement contributes its own rolled-up coverage as one equal-weight
     incoming edge to the targeted parent *Assertion* (REQ-d00069-J).
 
-    Per assertion A of requirement R (with N assertions), for each dimension and
-    each strictness ``mode`` ("direct" = assertion-targeted only, "indirect" =
-    also whole-requirement):
+    Per assertion A of requirement R, for each dimension and each strictness
+    ``mode`` ("direct" = assertion-targeted only, "indirect" = also
+    whole-requirement):
 
     - direct contributors = (1.0 if A has local direct leaf evidence) plus
       ``coverage(child)`` for every assertion-targeted REFINES edge naming A.
-      If any direct contributor exists, A's value is their mean and indirect
-      credit is ignored for A (REQ-d00069-J: only the *Assertion* with direct
-      coverage forgoes indirect credit -- its siblings still accrue it).
-    - else (A has no direct contributor), indirect mode credits A with the
-      stronger of:
+      The direct value is their mean (0.0 if there are none). Whole-requirement
+      (blanket) credit never enters the direct footing -- it stays a precise,
+      non-transitive locator (REQ-d00069-J/L).
+    - the indirect (generous) footing is MONOTONE: it is the max of the direct
+      mean and any whole-requirement credit, so adding assertion-targeted
+      (possibly partial) evidence never lowers it below what blanket evidence
+      already established. Whole-requirement credit is the stronger of:
         * 1.0, if A has local whole-requirement leaf evidence (a whole-req test
           genuinely exercises every assertion); or
-        * ``(1/N) * mean(coverage(child))`` over whole-requirement (blanket)
-          REFINES edges. A blanket Refines names no assertion, so it is worth
-          only one assertion's share (1/N) of its refining requirement's
-          coverage -- averaged across blanket edges so a requirement refined by
-          many whole-req children is not credited beyond one assertion's worth.
+        * ``mean(coverage(child))`` over whole-requirement (blanket) REFINES
+          edges, averaged across blanket edges. A blanket Refines names no
+          assertion but conducts its refining requirement's own coverage at
+          FULL weight -- the previous 1/N-per-assertion deflation is retired
+          (REQ-d00069-J).
 
     ``coverage(child)`` is the child requirement's mean assertion coverage in
     the same dimension/mode, computed recursively (memoized, with a visited
@@ -1531,7 +1720,12 @@ def _conduct_refines_coverage(graph: FederatedGraph) -> None:
     # Snapshot per-requirement assertion labels and local (pre-conduction) leaf
     # evidence so the recursion reads immutable input while we overwrite dims.
     labels_by_req: dict[str, list[str]] = {}
-    local_evidence: dict[str, dict[str, tuple[set[str], set[str]]]] = {}
+    # Snapshot the local per-label FRACTIONS (not just label membership) so
+    # conduction preserves fractional local evidence. Most dimensions have
+    # all-or-nothing local evidence (1.0), but uat_verified is fractional
+    # (a partially-verified journey credits its verified-step ratio,
+    # REQ-d00255-C); snapping it back to 1.0 here would discard that partial.
+    local_evidence: dict[str, dict[str, tuple[dict[str, float], dict[str, float]]]] = {}
     for req in reqs:
         metrics = req.get_metric("rollup_metrics")
         if metrics is None:
@@ -1542,10 +1736,10 @@ def _conduct_refines_coverage(graph: FederatedGraph) -> None:
             if child.kind == NodeKind.ASSERTION and child.get_field("label", "")
         ]
         labels_by_req[req.id] = labels
-        ev: dict[str, tuple[set[str], set[str]]] = {}
+        ev: dict[str, tuple[dict[str, float], dict[str, float]]] = {}
         for dim_name in _PROPAGATING_DIMENSIONS:
             dim = getattr(metrics, dim_name)
-            ev[dim_name] = (set(dim.direct_labels), set(dim.indirect_labels))
+            ev[dim_name] = (dict(dim.direct_pct_by_label), dict(dim.indirect_pct_by_label))
         local_evidence[req.id] = ev
 
     memo: dict[tuple[str, str, str], float] = {}
@@ -1557,10 +1751,11 @@ def _conduct_refines_coverage(graph: FederatedGraph) -> None:
         mode: str,
         visiting: frozenset[str],
     ) -> float:
-        direct_labels, indirect_labels = local_evidence[req.id][dim_name]
+        direct_pct_local, indirect_pct_local = local_evidence[req.id][dim_name]
         direct_vals: list[float] = []
-        if label in direct_labels:
-            direct_vals.append(1.0)
+        local_direct = direct_pct_local.get(label, 0.0)
+        if local_direct > 0:
+            direct_vals.append(local_direct)
         blanket_refines_vals: list[float] = []
         for edge in req.iter_outgoing_edges():
             if not edge.kind.conducts_coverage():
@@ -1571,24 +1766,31 @@ def _conduct_refines_coverage(graph: FederatedGraph) -> None:
             else:
                 blanket_refines_vals.append(req_coverage(edge.target, dim_name, mode, visiting))
 
+        # Direct (strict) footing: assertion-specific evidence only, equal-weight
+        # mean. Whole-requirement/blanket credit never enters the direct footing
+        # (keeps the ~ caveat a precise, non-transitive locator, REQ-d00069-J/L).
+        direct_mean = (sum(direct_vals) / len(direct_vals)) if direct_vals else 0.0
+        if mode != "indirect":
+            return direct_mean
+        # Indirect (generous) footing is MONOTONE: it is the max of the direct
+        # mean and any whole-requirement credit, so adding assertion-targeted
+        # (possibly partial) evidence never LOWERS the generous headline.
+        candidates: list[float] = []
         if direct_vals:
-            return sum(direct_vals) / len(direct_vals)
-        if mode == "indirect":
-            candidates: list[float] = []
-            if label in indirect_labels:
-                # Local whole-requirement leaf evidence (a whole-req test/code/
-                # journey) genuinely exercises every assertion -> full credit.
-                candidates.append(1.0)
-            if blanket_refines_vals:
-                # A whole-requirement Refines names no assertion, so it is worth
-                # only one assertion's share (1/N) of the refining requirement's
-                # coverage, averaged across all such blanket edges.
-                n_assertions = len(labels_by_req.get(req.id) or ()) or 1
-                avg = sum(blanket_refines_vals) / len(blanket_refines_vals)
-                candidates.append(avg / n_assertions)
-            if candidates:
-                return max(candidates)
-        return 0.0
+            candidates.append(direct_mean)
+        local_indirect = indirect_pct_local.get(label, 0.0)
+        if local_indirect > 0:
+            # Local whole-requirement leaf evidence (a whole-req test/code/journey)
+            # exercises every assertion -> its own local fraction (1.0, or a
+            # partial uat_verified ratio, REQ-d00255-C).
+            candidates.append(local_indirect)
+        if blanket_refines_vals:
+            # A blanket `Refines:` conducts the refining requirement's OWN rolled-up
+            # coverage at FULL weight (mean across blanket edges) -- the 1/N
+            # deflation is retired (REQ-d00069-J). The fraction reflects the child's
+            # actual coverage, not an arbitrary discount.
+            candidates.append(sum(blanket_refines_vals) / len(blanket_refines_vals))
+        return max(candidates) if candidates else 0.0
 
     def req_coverage(req: GraphNode, dim_name: str, mode: str, visiting: frozenset[str]) -> float:
         key = (dim_name, mode, req.id)

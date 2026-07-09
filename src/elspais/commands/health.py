@@ -2026,43 +2026,88 @@ def run_spec_checks(
 # =============================================================================
 
 
+def _status_flags(args: argparse.Namespace) -> set[str]:
+    """Title-cased set of statuses named via ``--status`` (empty when unset)."""
+    raw: list[str] | None = getattr(args, "status", None)
+    return {s.title() for s in raw} if raw else set()
+
+
+def _config_with_status_overlay(
+    config: dict[str, Any] | None,
+    status_flags: set[str],
+) -> dict[str, Any] | None:
+    """Config overlay forcing ``expects_implementation=True`` for --status names.
+
+    ``--status Draft`` makes Draft count toward coverage (the documented
+    capability, ``docs/cli/checks.md``). Rather than a second coverage-inclusion
+    predicate, ``--status`` is expressed as a per-call CONFIG overlay so the ONE
+    resolver (``status_expects_implementation``) drives both the dimension
+    COUNTS (``aggregate_dimension``) and the excluded-NOTE from the same source
+    -- they can no longer disagree (REQ-d00258-C).
+
+    Empty ``status_flags`` returns ``config`` unchanged (byte-identical default
+    behaviour). Otherwise a shallow copy whose ``statuses`` table gains
+    ``expects_implementation=True`` for each named status, preserving any other
+    per-status fields (and composing with an existing
+    ``[statuses.<S>].expects_implementation``). The input config is never
+    mutated.
+    """
+    if not status_flags:
+        return config
+    overlaid = dict(config or {})
+    statuses = dict(overlaid.get("statuses") or {})
+    # Merge into an existing entry (case-insensitively) rather than shadowing it
+    # with a second, differently-cased key that the resolver might reach first.
+    existing_by_lower = {k.lower(): k for k in statuses if isinstance(k, str)}
+    for flag in status_flags:
+        key = existing_by_lower.get(flag.lower(), flag)
+        entry = dict(statuses.get(key) or {})
+        entry["expects_implementation"] = True
+        statuses[key] = entry
+    overlaid["statuses"] = statuses
+    return overlaid
+
+
 def _resolve_exclude_status(
     args: argparse.Namespace,
     config: dict[str, Any] | None = None,
 ) -> set[str]:
-    """Compute the set of statuses to exclude from coverage.
+    """Statuses treated as coverage-EXCLUDED for the reference-status checks.
 
-    If --status is provided, add those statuses to the normally-included set
-    (e.g. --status Draft includes both Active and Draft). Without --status,
-    use status_roles config to determine exclusions.
+    This drives ``_check_status_references`` (retired/provisional/aspirational
+    reference flagging): ``--status Draft`` promotes Draft to active-like, so it
+    is removed from this set and Draft references stop being flagged. Coverage
+    COUNTS and the excluded-note no longer read this set -- they route through
+    ``_config_with_status_overlay`` + ``status_expects_implementation`` so a
+    single resolver keeps them consistent (REQ-d00258-C). Without ``--status``,
+    the role system supplies the default exclusion set.
     """
     from elspais.config import get_status_roles
 
     roles = get_status_roles(config or {})
-    include_raw: list[str] | None = getattr(args, "status", None)
-    if not include_raw:
-        return roles.coverage_excluded_statuses()
-    # --status flag: add these statuses to the normally-included set
-    extra = {s.title() for s in include_raw}
     default_excluded = roles.coverage_excluded_statuses()
-    return default_excluded - extra
+    return default_excluded - _status_flags(args)
 
 
 def _excluded_note(
     graph: FederatedGraph,
-    exclude_status: set[str] | None = None,
     config: dict[str, Any] | None = None,
 ) -> str:
-    """Build a note about excluded requirements."""
+    """Note listing requirements EXCLUDED from coverage counts.
+
+    A status is 'excluded' iff it does NOT expect implementation under the given
+    config -- the SAME resolver (``status_expects_implementation``) that gates
+    ``aggregate_dimension``'s counts (REQ-d00258-C). Passing the ``--status``
+    overlay here keeps the note and the counts in agreement: a status promoted
+    by ``--status`` (or by ``[statuses.<S>].expects_implementation``) is counted
+    and therefore NOT listed as excluded.
+    """
+    from elspais.config import status_expects_implementation
     from elspais.graph import NodeKind
 
-    if exclude_status is None:
-        from elspais.config import get_status_roles
-
-        exclude_status = get_status_roles(config or {}).coverage_excluded_statuses()
     counts: dict[str, int] = {}
     for n in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if n.status in exclude_status:
+        if n.status and not status_expects_implementation(config or {}, n.status):
             counts[n.status] = counts.get(n.status, 0) + 1
     if not counts:
         return ""
@@ -2075,6 +2120,8 @@ def check_dimension_coverage(
     dimension: str,
     exclude_status: set[str] | None = None,
     config: dict[str, Any] | None = None,
+    level_filter: Any = None,
+    message_suffix: str = "",
 ) -> HealthCheck:
     """Check coverage for one of the 5 CoverageDimension dimensions.
 
@@ -2085,67 +2132,47 @@ def check_dimension_coverage(
         graph: The graph to check.
         dimension: One of 'implemented', 'tested', 'verified',
                    'uat_coverage', 'uat_verified'.
-        exclude_status: Statuses to exclude from counts.
-        config: Project config dict.
+        exclude_status: Vestigial; coverage inclusion is now gated entirely by
+            ``config`` (the ``--status`` overlay) via
+            ``status_expects_implementation`` (REQ-d00258-C). Retained only for
+            call-site signature stability.
+        config: Project config dict (the ``--status`` overlay when applicable).
+        level_filter: Optional predicate ``(level) -> bool`` limiting which
+            requirement levels are counted (see ``aggregate_dimension``).
+        message_suffix: Optional clarifying text appended to the message.
     """
-    from elspais.graph import NodeKind
-    from elspais.graph.metrics import fmt_assertion_count, has_integration
-
-    if exclude_status is None:
-        from elspais.config import get_status_roles
-
-        exclude_status = get_status_roles(config or {}).coverage_excluded_statuses()
+    from elspais.graph.aggregation import aggregate_dimension
+    from elspais.graph.metrics import fmt_assertion_count
 
     dim_labels = {
         "implemented": ("Implemented", "code"),
         "tested": ("Tested", "tests"),
-        "verified": ("Verified", "tests"),
-        "uat_coverage": ("Validated", "uat"),
-        "uat_verified": ("Accepted", "uat"),
+        "verified": ("Passing", "tests"),
+        "uat_coverage": ("UAT Covered", "uat"),
+        "uat_verified": ("UAT Passed", "uat"),
         "code_tested": ("Code Tested (line coverage)", "code"),
         "lcov_tested": ("Coverage-Verified (lcov)", "tests"),
     }
     label, category = dim_labels.get(dimension, (dimension, "code"))
 
-    req_count = 0
-    req_with_any = 0  # REQs where dim.indirect > 0
-    req_with_direct = 0  # REQs where dim.direct > 0
-    total_assertions = 0
-    direct_assertions = 0
-    indirect_assertions = 0
-    has_any_failures = False
-
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if node.status in exclude_status:
-            continue
-        req_count += 1
-        # An integrating consumer requirement inherits implemented status from
-        # its library node via INTEGRATES (REQ-d00252-D/F); count it as covered
-        # so it is not reported as a coverage gap.
-        integrates = dimension == "implemented" and has_integration(node)
-        metrics = node.get_metric("rollup_metrics")
-        if metrics is None:
-            if integrates:
-                req_with_any += 1
-                req_with_direct += 1
-            continue
-        dim = getattr(metrics, dimension, None)
-        if dim is None:
-            continue
-        total_assertions += dim.total
-        direct_assertions += dim.direct
-        indirect_assertions += dim.indirect
-        if dim.indirect > 0 or integrates:
-            req_with_any += 1
-        if dim.direct > 0 or integrates:
-            req_with_direct += 1
-        if dim.has_failures:
-            has_any_failures = True
+    # REQ-d00258-C: whole-graph per-dimension sums + per-REQ counts (incl. the
+    # REQ-d00252-F INTEGRATES exception) come from the single shared
+    # aggregation module -- not a second re-implementation of the walk here.
+    agg = aggregate_dimension(graph, dimension, config=config, level_filter=level_filter)
+    req_count = agg.req_count
+    req_with_any = agg.req_with_any  # REQs where dim.indirect > 0
+    req_with_direct = agg.req_with_direct  # REQs where dim.direct > 0
+    total_assertions = agg.total
+    direct_assertions = agg.direct
+    indirect_assertions = agg.covered
+    has_any_failures = agg.has_failures
 
     req_pct = (req_with_any / req_count * 100) if req_count > 0 else 0
     direct_pct = (direct_assertions / total_assertions * 100) if total_assertions > 0 else 0
     indirect_pct = (indirect_assertions / total_assertions * 100) if total_assertions > 0 else 0
-    note = _excluded_note(graph, exclude_status)
+    # REQ-d00258-C: note and counts read the SAME config (the --status overlay),
+    # so a promoted status is counted AND absent from the excluded-note.
+    note = _excluded_note(graph, config=config)
 
     # Build message showing both levels
     msg_parts = [
@@ -2159,7 +2186,7 @@ def check_dimension_coverage(
         )
     if has_any_failures:
         msg_parts.append("FAILURES DETECTED")
-    message = ", ".join(msg_parts) + note
+    message = ", ".join(msg_parts) + note + message_suffix
 
     return HealthCheck(
         name=f"{category}.{dimension}",
@@ -2180,6 +2207,53 @@ def check_dimension_coverage(
             "indirect_pct": round(indirect_pct, 1),
             "has_failures": has_any_failures,
         },
+    )
+
+
+def check_whole_req_only_coverage(graph, config=None) -> HealthCheck:
+    """INFO: assertions whose IMPLEMENTED coverage is whole-requirement-only.
+
+    Under REQ-d00069-B/J a blanket `Implements:`/`Refines:` fully credits every
+    assertion on the generous footing. That is intended, but it must be VISIBLE:
+    this reports how load-bearing the blanket references are so a team can see
+    how much green rests on whole-requirement evidence. INFO severity -- never
+    fails the build. (REQ-d00258.)
+    """
+    from elspais.graph import NodeKind
+
+    findings: list[HealthFinding] = []
+    total = 0
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        rollup = node.get_metric("rollup_metrics")
+        if rollup is None:
+            continue
+        dim = rollup.implemented
+        n = sum(
+            1
+            for lbl, ind in dim.indirect_pct_by_label.items()
+            if ind > dim.direct_pct_by_label.get(lbl, 0.0) + 1e-9
+        )
+        if n:
+            total += n
+            findings.append(
+                HealthFinding(
+                    message=(
+                        f"{node.id}: {n} assertion(s) rely on whole-requirement "
+                        f"evidence for Implemented coverage"
+                    ),
+                    node_id=node.id,
+                )
+            )
+    return HealthCheck(
+        name="code.whole_req_only_coverage",
+        passed=True,
+        message=(
+            f"{total} assertion(s) across {len(findings)} requirement(s) rely "
+            f"on whole-requirement evidence for Implemented coverage"
+        ),
+        category="code",
+        severity="info",
+        findings=findings,
     )
 
 
@@ -2328,7 +2402,12 @@ def check_no_traceability(
     unlinked_files: list[str],
     severity: str = "warning",
 ) -> HealthCheck:
-    """Check for code/test files with no traceability markers."""
+    """Check for code files with no traceability markers.
+
+    Test files are deliberately excluded -- ``tests.unlinked``
+    (``check_unlinked_tests``) already reports marker-less test files;
+    including them here too would double-report the same file.
+    """
     if severity == "off":
         return HealthCheck(
             name="code.no_traceability",
@@ -2342,7 +2421,7 @@ def check_no_traceability(
         return HealthCheck(
             name="code.no_traceability",
             passed=True,
-            message="All code/test files have traceability markers",
+            message="All code files have traceability markers",
             category="code",
             severity=severity,
         )
@@ -2376,7 +2455,7 @@ def run_code_checks(
     ref_sev = typed_config.rules.references
 
     checks = [
-        check_code_coverage(graph, exclude_status=exclude_status),
+        check_code_coverage(graph, exclude_status=exclude_status, config=config),
         check_unlinked_code(graph),
         _check_status_references(
             graph, NodeKind.CODE, StatusRole.RETIRED, ref_sev.retired, exclude_status
@@ -2387,6 +2466,7 @@ def run_code_checks(
         _check_status_references(
             graph, NodeKind.CODE, StatusRole.ASPIRATIONAL, ref_sev.aspirational, exclude_status
         ),
+        check_whole_req_only_coverage(graph, config),
     ]
 
     # Add code_tested dimension only when line coverage data is present
@@ -2404,13 +2484,12 @@ def run_code_checks(
     # Implements: REQ-d00241-B, REQ-d00241-C
     no_trace_sev = typed_config.rules.format.no_traceability_severity
     unlinked_files = []
-    for kind in (NodeKind.CODE, NodeKind.TEST):
-        for node in graph.iter_unlinked(kind):
-            file_n = node.file_node()
-            if file_n:
-                rel = file_n.get_field("relative_path")
-                if rel:
-                    unlinked_files.append(rel)
+    for node in graph.iter_unlinked(NodeKind.CODE):
+        file_n = node.file_node()
+        if file_n:
+            rel = file_n.get_field("relative_path")
+            if rel:
+                unlinked_files.append(rel)
     checks.append(check_no_traceability(unlinked_files, severity=no_trace_sev))
 
     return checks
@@ -2623,22 +2702,91 @@ def check_test_coverage(
     return check_dimension_coverage(graph, "tested", exclude_status=exclude_status, config=config)
 
 
+# Implements: REQ-d00258-F
 def check_uat_coverage(
     graph: FederatedGraph,
     exclude_status: set[str] | None = None,
     config: dict[str, Any] | None = None,
 ) -> HealthCheck:
-    """Check UAT coverage — delegates to dimension check for 'uat_coverage'."""
-    return check_dimension_coverage(
-        graph, "uat_coverage", exclude_status=exclude_status, config=config
+    """Check UAT coverage — delegates to dimension check for 'uat_coverage'.
+
+    Only requirements whose level ``expects_validation`` are considered:
+    non-expecting levels (the default) contribute to neither numerator nor
+    denominator. When no level expects validation the check passes trivially
+    (nothing to validate).
+    """
+    from elspais.config import level_expects_validation
+
+    cfg = config or {}
+    levels = cfg.get("levels") if isinstance(cfg, dict) else None
+    any_expects = isinstance(levels, dict) and any(
+        level_expects_validation(cfg, key) for key in levels
+    )
+    if not any_expects:
+        return HealthCheck(
+            name="uat.uat_coverage",
+            passed=True,
+            message="UAT Covered: no levels expect validation (expects_validation)",
+            category="uat",
+            severity="info",
+            details={"dimension": "uat_coverage", "expects_validation_levels": 0},
+        )
+
+    def level_filter(level: str | None) -> bool:
+        return level_expects_validation(cfg, level)
+
+    check = check_dimension_coverage(
+        graph,
+        "uat_coverage",
+        exclude_status=exclude_status,
+        config=config,
+        level_filter=level_filter,
+        message_suffix=" (expects_validation levels only)",
     )
 
+    # An expects_validation requirement lacking UAT coverage is a real gap:
+    # collect those reqs as findings and fail the check (REQ-d00258-F). The
+    # dimension sums come from check_dimension_coverage; this only identifies
+    # WHICH reqs are uncovered (no re-implementation of the sum walk).
+    from elspais.config import status_expects_implementation
+    from elspais.graph import NodeKind
 
+    # REQ-d00258-C: the uncovered-findings walk gates on the SAME coverage
+    # inclusion resolver as ``aggregate_dimension`` above, so the sums and the
+    # findings list stay consistent (both count a status iff it expects
+    # implementation). Behavior-preserving for default config.
+    uncovered: list[HealthFinding] = []
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if not status_expects_implementation(cfg, node.status) or not level_filter(node.level):
+            continue
+        rollup = node.get_metric("rollup_metrics")
+        if rollup is None or rollup.uat_coverage.indirect <= 0:
+            uncovered.append(
+                HealthFinding(
+                    message=f"{node.id}: no UAT validation (level expects_validation)",
+                    node_id=node.id,
+                )
+            )
+
+    if uncovered:
+        check.passed = False
+        check.severity = "warning"
+        check.findings = uncovered
+        check.details["uncovered_expects_validation"] = [f.node_id for f in uncovered]
+    return check
+
+
+# Implements: REQ-d00241-D
 def check_unlinked_tests(graph: FederatedGraph) -> HealthCheck:
     """Check for test files with no traceability markers.
 
-    Finds FILE nodes of type TEST that were scanned but contain no
-    TEST child nodes (i.e. no REQ-xxx patterns or Verifies: comments found).
+    Flags FILE nodes of type TEST that either contain no TEST child
+    nodes at all, or contain TEST children none of which link to any
+    requirement. The second condition is essential: the parser emits a
+    TEST node for every discovered test function whether or not it
+    carries a Verifies: marker, so a fully marker-less test file still
+    has TEST children. Files with at least one linked test are not
+    flagged (partial marking is not "unlinked").
     """
     from elspais.graph import NodeKind
     from elspais.graph.GraphNode import FileType
@@ -2648,11 +2796,12 @@ def check_unlinked_tests(graph: FederatedGraph) -> HealthCheck:
     for file_node in graph.iter_roots(NodeKind.FILE):
         if file_node.get_field("file_type") != FileType.TEST:
             continue
-        has_test_child = any(
-            child.kind == NodeKind.TEST
+        has_linked_test = any(
+            graph.is_reachable_to_requirement(child)
             for child in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
+            if child.kind == NodeKind.TEST
         )
-        if not has_test_child:
+        if not has_linked_test:
             unlinked_files.append(file_node.get_field("relative_path") or file_node.id)
 
     if unlinked_files:
@@ -2859,11 +3008,14 @@ def render_section(
     if graph:
         raw_config = config if config else {}
         exclude_status = _resolve_exclude_status(args, config=raw_config)
-        for check in run_code_checks(graph, exclude_status=exclude_status, config=raw_config):
+        # REQ-d00258-C: --status becomes a coverage-config overlay so dimension
+        # counts AND the excluded-note agree (both read this one overlay).
+        cov_config = _config_with_status_overlay(raw_config, _status_flags(args))
+        for check in run_code_checks(graph, exclude_status=exclude_status, config=cov_config):
             report.add(check)
-        for check in run_test_checks(graph, exclude_status=exclude_status, config=raw_config):
+        for check in run_test_checks(graph, exclude_status=exclude_status, config=cov_config):
             report.add(check)
-        for check in run_uat_checks(graph, exclude_status=exclude_status, config=raw_config):
+        for check in run_uat_checks(graph, exclude_status=exclude_status, config=cov_config):
             report.add(check)
         for check in run_term_checks(graph, config=raw_config):
             report.add(check)
@@ -2902,6 +3054,8 @@ def compute_checks(
     fake_args.status = status_str.split(",") if status_str else None
 
     exclude_status = _resolve_exclude_status(fake_args, config=config)
+    # REQ-d00258-C: --status overlay drives coverage counts + note consistently.
+    cov_config = _config_with_status_overlay(config, _status_flags(fake_args))
 
     # Config checks
     if run_all:
@@ -2930,17 +3084,17 @@ def compute_checks(
 
     # Code checks
     if run_all or code_only:
-        for check in run_code_checks(graph, exclude_status=exclude_status, config=config):
+        for check in run_code_checks(graph, exclude_status=exclude_status, config=cov_config):
             report.add(check)
 
     # Test checks
     if run_all or tests_only:
-        for check in run_test_checks(graph, exclude_status=exclude_status, config=config):
+        for check in run_test_checks(graph, exclude_status=exclude_status, config=cov_config):
             report.add(check)
 
     # UAT checks
     if run_all or tests_only:
-        for check in run_uat_checks(graph, exclude_status=exclude_status, config=config):
+        for check in run_uat_checks(graph, exclude_status=exclude_status, config=cov_config):
             report.add(check)
 
     # Term checks

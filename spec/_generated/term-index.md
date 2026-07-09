@@ -13,6 +13,7 @@
 
 **REQ:**
 
+- REQ-d00259:section:1
 - rem:spec/requirements-spec.md:1
 - rem:spec/requirements-spec.md:7
 - rem:spec/requirements-spec.md:34
@@ -30,6 +31,7 @@
 - REQ-d00255-D
 - REQ-d00204-G
 - REQ-d00252-B
+- REQ-d00252-G
 - REQ-d00128-I
 - REQ-d00133-B
 - REQ-o00066-C
@@ -39,6 +41,7 @@
 - REQ-p00003-B
 - REQ-d00241-A
 - REQ-d00241-C
+- REQ-d00241-D
 - REQ-p00005-B
 - rem:spec/AI-AGENT.md:20
 - REQ-d00084:section:0

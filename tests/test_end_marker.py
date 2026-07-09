@@ -1,4 +1,4 @@
-# Implements: REQ-d00131-B, REQ-d00131-E
+# Verifies: REQ-d00131-B, REQ-d00131-E
 """Behavior tests for the unified *End* marker render/parse helpers.
 
 Phase 3 of the DRY cleanup introduces a single render/parse pair for the

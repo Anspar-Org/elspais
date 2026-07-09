@@ -89,6 +89,7 @@ def detect_installed_extras() -> list[str]:
         "mcp": ["mcp"],
         "trace-view": ["jinja2", "pygments"],
         "trace-review": ["jinja2", "pygments", "flask", "flask_cors"],
+        "coverage": ["coverage"],
     }
 
     installed = []

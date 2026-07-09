@@ -14,7 +14,7 @@ Validates: REQ-p00001, REQ-p00003
 ## Steps
 
 1. Rita receives the release candidate branch along with the JUnit XML test results file.
-2. She runs `elspais analyze coverage` with the test results loaded to generate a coverage report.
+2. She runs `elspais summary` with the test results loaded to generate a coverage report.
 3. The report shows 96% assertion coverage, with two assertions in REQ-d00015 uncovered.
 4. She identifies the uncovered assertions: REQ-d00015-D (error handling) and REQ-d00015-E (logging).
 5. She sends the coverage gap report back to the development team with a request for additional tests.

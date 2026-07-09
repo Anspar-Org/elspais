@@ -135,8 +135,9 @@ function renderCardStack() {
     // Re-add empty element (hidden) for later
     body.appendChild(empty);
 
-    // Re-apply cached coverage colors after DOM rebuild
-    recolorCachedButtons();
+    // Per-assertion badge colors are baked into the rendered HTML from the
+    // server-computed assertion_coverage_states (REQ-d00258-G), so a DOM
+    // rebuild already carries the correct colors — no re-color pass needed.
 
     // Re-apply edit mode state after DOM rebuild. In edit mode each
     // assertion's body must show raw source (so textContent roundtrips
@@ -507,6 +508,24 @@ async function submitNewComment(btn, anchor) {
     }
 }
 
+// Per-assertion coverage STANDING -> CSS class, resolved from the theme catalog
+// ([coverage_standing.*]) — NOT hard-coded here (REQ-d00258-G). The server emits
+// a semantic standing token (full/partial/failing/missing); this map is rendered
+// from the catalog so the standing->color association stays configurable (e.g.
+// remappable for color-impaired users), exactly like the severity colors. The
+// classes are the SAME val-* classes the requirement header badges use, so a
+// per-assertion badge reads identically to the requirement badge it projects from.
+var COVERAGE_STANDING_CLASS = {
+{%- if catalog is defined %}
+{%- for e in catalog.by_category('coverage_standing') %}
+    '{{ e.key.split('.')[-1] }}': '{{ e.css_class }}'{{ "," if not loop.last }}
+{%- endfor %}
+{%- endif %}
+};
+function assertionStateColorClass(standing) {
+    return COVERAGE_STANDING_CLASS[standing] || '';
+}
+
 function buildAssertionHtml(nodeId, a, data) {
     var assertionId = a.id || '';
     var label = a.label || '';
@@ -528,35 +547,71 @@ function buildAssertionHtml(nodeId, a, data) {
         'data-field="assertion" data-original="' + escapeAttr(text) + '" ' +
         'onblur="onAssertionBlur(this)" onkeydown="onEditableKeydown(event)">' +
         initialBody + '</span>';
-    // 6 dimension badges — only shown when direct assertion-level links exist
+    // 6 dimension badges — shown when a direct assertion-level link exists OR
+    // the assertion has a non-missing coverage state (REQ-d00258-G)
     h += '<span class="assertion-badges-area">';
     var badgeMode = editState.assertionBadgeMode || 'abbrev';
     var aLinks = data.assertion_links ? data.assertion_links[label] : null;
+    // Per-assertion coverage states, server-computed from the SAME rollup metrics
+    // as the requirement header badges (REQ-d00258-G). Color is applied on render
+    // (no lazy prefetch): state -> the val-* class the requirement badge uses.
+    var aStates = data.assertion_coverage_states ? data.assertion_coverage_states[label] : null;
+    var aCaveats = data.assertion_coverage_caveats ? data.assertion_coverage_caveats[label] : null;
     var dimDefs = [
-        {cls: 'assertion-implemented-btn', full: 'Implemented', abbr: 'IMP', dot: 'I', toggle: 'toggleAssertionCode', tip: 'Code implementation', linkKey: 'implemented', edgeKind: 'implements'},
+        {cls: 'assertion-implemented-btn', full: 'Implemented', abbr: 'IMP', dot: 'I', toggle: 'toggleAssertionCode', tip: 'Code implementation', linkKey: 'implemented', stateKey: 'implemented', edgeKind: 'implements'},
         {cls: 'assertion-refined-btn', full: 'Refined', abbr: 'REF', dot: 'R', toggle: 'toggleAssertionRefines', tip: 'Refines references', linkKey: 'refined'},
-        {cls: 'assertion-tested-btn', full: 'Tested', abbr: 'TST', dot: 'T', toggle: 'toggleAssertionTests', tip: 'Test coverage', linkKey: 'tested'},
-        {cls: 'assertion-verified-btn', full: 'Verified', abbr: 'VER', dot: 'V', toggle: 'toggleAssertionResults', tip: 'Test results', linkKey: 'tested'},
-        {cls: 'assertion-validated-btn', full: 'Validated', abbr: 'VAL', dot: 'U', toggle: 'toggleAssertionUat', tip: 'Journey coverage', linkKey: 'validated'},
-        {cls: 'assertion-accepted-btn', full: 'Accepted', abbr: 'ACC', dot: 'A', toggle: 'toggleAssertionUatResults', tip: 'Journey results', linkKey: 'validated'}
+        {cls: 'assertion-tested-btn', full: 'Tested', abbr: 'TST', dot: 'T', toggle: 'toggleAssertionTests', tip: 'Test coverage', linkKey: 'tested', stateKey: 'tested'},
+        {cls: 'assertion-verified-btn', full: 'Passing', abbr: 'VER', dot: 'V', toggle: 'toggleAssertionResults', tip: 'Test results', linkKey: 'tested', stateKey: 'verified'},
+        {cls: 'assertion-validated-btn', full: 'UAT Covered', abbr: 'VAL', dot: 'U', toggle: 'toggleAssertionUat', tip: 'Journey coverage', linkKey: 'validated', stateKey: 'uat_coverage'},
+        {cls: 'assertion-accepted-btn', full: 'UAT Passed', abbr: 'ACC', dot: 'A', toggle: 'toggleAssertionUatResults', tip: 'Journey results', linkKey: 'validated', stateKey: 'uat_verified'}
     ];
     var anyBadge = false;
     dimDefs.forEach(function(dim) {
-        if (aLinks && !aLinks[dim.linkKey]) return;
+        var st = (dim.stateKey && aStates) ? aStates[dim.stateKey] : null;
+        var hasState = st === 'full' || st === 'partial' || st === 'failing';
+        // Render when there's a direct assertion-level link OR a non-missing
+        // coverage state (whole-req evidence now shows as a pill, not "no
+        // coverage"). State-less pills (REF: linkKey but no stateKey) keep the
+        // strict link-gate -- they have no state to fall back on.
+        if (aLinks && !aLinks[dim.linkKey] && !(dim.stateKey && hasState)) return;
         anyBadge = true;
         var btnLabel = badgeMode === 'full' ? dim.full : (badgeMode === 'dots' ? dim.dot : dim.abbr);
+        // Non-transitive ~ caveat: whole-requirement evidence involved.
+        if (dim.stateKey && aCaveats && aCaveats[dim.stateKey] && hasState) {
+            btnLabel += ' ~';
+        }
         var btnStyle = badgeMode === 'dots' ? ' style="min-width:0;padding:2px 4px;font-size:0.55rem;"' : '';
         var extraArg = dim.edgeKind ? ", '" + dim.edgeKind + "'" : '';
-        h += '<button class="' + dim.cls + '" ' +
+        var stateCls = '';
+        if (dim.stateKey && aStates && aStates[dim.stateKey]) {
+            stateCls = assertionStateColorClass(aStates[dim.stateKey]);
+        }
+        // Data-driven tooltip: coverage standing + direct-link count, with
+        // the "~" legend only when the caveat marker is actually shown.
+        var tipParts = [dim.tip];
+        if (dim.stateKey && aStates && aStates[dim.stateKey]) {
+            tipParts.push('standing: ' + aStates[dim.stateKey]);
+        }
+        var dimLinks = aLinks ? aLinks[dim.linkKey] : null;
+        if (dimLinks && dimLinks.length) {
+            tipParts.push(dimLinks.length + ' direct link(s) — click to view');
+        } else {
+            tipParts.push('click to view');
+        }
+        var pillTip = tipParts.join(' — ');
+        if (dim.stateKey && aCaveats && aCaveats[dim.stateKey] && hasState) {
+            pillTip += ' (~ = some coverage comes from whole-requirement references)';
+        }
+        h += '<button class="' + dim.cls + (stateCls ? ' ' + stateCls : '') + '" ' +
             'data-req-id="' + nodeId + '" data-label="' + escapeAttr(label) + '" ' +
-            'title="' + dim.tip + '" ' +
+            'title="' + escapeAttr(pillTip) + '" ' +
             'onclick="event.stopPropagation(); ' + dim.toggle + '(this, \'' + nodeId + '\', \'' + escapeAttr(label) + '\'' + extraArg + ')"' +
             btnStyle + '>' +
             btnLabel + '</button>';
     });
     if (!anyBadge) {
         // INSTANCE assertions inherit coverage from the template original
-        // (see REQ-p00014-K). Show that instead of the bare "no direct coverage"
+        // (see REQ-p00014-K). Show that instead of the bare "no coverage"
         // hint so the viewer reflects the satisfier-rollup invariant.
         var aTplId = a.template_id || '';
         var aTplRepo = a.template_repo || '';
@@ -570,7 +625,7 @@ function buildAssertionHtml(nodeId, a, data) {
                 'style="font-size:0.6rem;color:var(--secondary-text);font-style:italic;">' +
                 escapeHtml(inheritedText) + '</span>';
         } else {
-            h += '<span class="assertion-no-coverage" title="No direct assertion-level coverage" style="font-size:0.6rem;color:var(--secondary-text);opacity:0.5;">no direct coverage</span>';
+            h += '<span class="assertion-no-coverage" title="No coverage on either footing" style="font-size:0.6rem;color:var(--secondary-text);opacity:0.5;">no coverage</span>';
         }
     }
     h += '</span>'; // close .assertion-badges-area
@@ -644,6 +699,11 @@ function buildCardHtml(nodeId, data, collapsed) {
     html += '<div class="req-card-header" onclick="toggleCardCollapse(\'' + nodeId + '\')">';
     html += '<span class="req-card-expand">&#9660;</span>';
     html += '<span class="req-card-id">' + shortId + '</span>';
+    // Explicit **Template** marker (Stereotype.TEMPLATE) — authors/reviewers
+    // must see template-ness at a glance; instances show provenance instead.
+    if ((props.stereotype || '').toLowerCase() === 'template') {
+        html += '<span class="template-badge" title="Template requirement: Satisfies: references clone its assertions as instances">TEMPLATE</span>';
+    }
     html += '<span class="req-card-title-display view-only">' + title + '</span>';
     html += '<input type="text" class="edit-only req-card-title-edit" value="' + escapeAttr(data.title || '') + '"' +
         ' onclick="event.stopPropagation()" onblur="onTitleBlur(this)" data-node-id="' + nodeId + '"' +
@@ -665,12 +725,15 @@ function buildCardHtml(nodeId, data, collapsed) {
         var aLinksAll = data.assertion_links || {};
         html += '<div class="card-section card-coverage-badges" style="padding:4px 12px 0;display:flex;gap:6px;flex-wrap:wrap;">';
         var headerDims = [
+            // No standalone REFINED badge: refinement is implementation
+            // provenance ("implemented via refinement, not directly"), folded
+            // into the IMPLEMENTED badge's drill-down below — mirroring the
+            // per-assertion IMP pill (REQ-d00069-L).
             {key: 'implemented', linkKey: 'implemented', assertLinkKey: 'implemented', label: 'IMPLEMENTED'},
-            {key: null, linkKey: 'refined', assertLinkKey: 'refined', label: 'REFINED'},
             {key: 'tested', linkKey: 'tested', assertLinkKey: 'tested', label: 'TESTED'},
-            {key: 'verified', linkKey: 'verified', assertLinkKey: 'tested', label: 'VERIFIED'},
-            {key: 'uat_coverage', linkKey: 'validated', assertLinkKey: 'validated', label: 'VALIDATED'},
-            {key: 'uat_verified', linkKey: 'accepted', assertLinkKey: 'validated', label: 'ACCEPTED'}
+            {key: 'verified', linkKey: 'verified', assertLinkKey: 'tested', label: 'PASSING'},
+            {key: 'uat_coverage', linkKey: 'validated', assertLinkKey: 'validated', label: 'UAT COVERED', gateOnEvidence: true},
+            {key: 'uat_verified', linkKey: 'accepted', assertLinkKey: 'validated', label: 'UAT PASSED', gateOnEvidence: true}
         ];
         headerDims.forEach(function(d) {
             var dim = d.key ? data.coverage_dimensions[d.key] : null;
@@ -680,7 +743,16 @@ function buildCardHtml(nodeId, data, collapsed) {
             for (var lbl in aLinksAll) {
                 if (aLinksAll[lbl][d.assertLinkKey]) { hasAssertionLinks = true; break; }
             }
-            var hasData = (dim && dim.color) || hasReqLinks || hasAssertionLinks;
+            // UAT dims (gateOnEvidence) render with actual journey Validates
+            // evidence — a journey-less requirement shows no UAT badge (its colored
+            // "missing" tier is not a real gap). Exception: when the requirement's
+            // level expects_validation, a journey-less req DOES show the badge —
+            // in RED (its "missing" tier resolves to error severity server-side), a
+            // real gap. Code dims still show on 0-coverage.
+            var expectsValidation = dim && dim.expects_validation;
+            var hasData = d.gateOnEvidence
+                ? (hasReqLinks || hasAssertionLinks || expectsValidation)
+                : ((dim && dim.color) || hasReqLinks || hasAssertionLinks);
             if (!hasData) return; // hide badge if no data
             var colorClass = dim && dim.color ? ' active val-' + dim.color : '';
             var tipParts = [];
@@ -688,14 +760,22 @@ function buildCardHtml(nodeId, data, collapsed) {
             if (hasReqLinks) tipParts.push(rLinks[d.linkKey].length + ' REQ-level link(s)');
             if (hasAssertionLinks) tipParts.push('Click to highlight assertions');
             var tip = tipParts.length > 0 ? tipParts.join(' \u2014 ') : d.label;
+            // Per-dimension provenance caveat (REQ-d00069-L): a "~" beside the
+            // badge glyph flags coverage whose evidence is not fully direct
+            // (indirect > direct). The enriched status_tip (above) already spells
+            // out the "Nn% direct, Mm% indirect" provenance on hover.
+            var marker = dim && dim.marker ? dim.marker : '';
+            var markerGlyph = marker
+                ? '<sup class="dim-caveat" style="font-weight:700;opacity:0.85;">' + escapeHtml(marker) + '</sup>'
+                : '';
             html += '<span class="status-badge' + colorClass + ' card-dim-badge" ' +
                 'title="' + escapeHtml(tip) + '" style="font-size:0.6rem;padding:1px 5px;" ' +
                 'onclick="event.stopPropagation(); toggleReqLevelLinks(this, \'' + nodeId + '\', \'' + d.linkKey + '\', \'' + d.assertLinkKey + '\')">' +
-                d.label + '</span>';
+                d.label + markerGlyph + '</span>';
         });
         html += '</div>';
         // Expandable link panels (one per header dimension, hidden by default)
-        ['implemented', 'refined', 'tested', 'verified', 'validated', 'accepted'].forEach(function(dimKey) {
+        ['implemented', 'tested', 'verified', 'validated', 'accepted'].forEach(function(dimKey) {
             html += '<div class="req-level-links-panel" id="req-links-' + nodeId + '-' + dimKey + '" style="display:none;margin:0 12px;padding:6px 10px;background:var(--assertion-code-panel-bg);border-radius:4px;border-left:3px solid var(--impl-yes-border);font-size:0.78rem;"></div>';
         });
     }
@@ -735,6 +815,17 @@ function buildCardHtml(nodeId, data, collapsed) {
     html += '</select></span>';
     html += '</div>';
 
+    // Template marker toggle (edit mode only; view mode shows the header
+    // badge). INSTANCE nodes are read-only synthetic content — no toggle.
+    if ((props.stereotype || '').toLowerCase() !== 'instance') {
+        html += '<div class="card-meta-item edit-only template-toggle-item">';
+        html += '<span class="card-meta-key">Template:</span>';
+        html += '<input type="checkbox" class="template-toggle" data-node-id="' + nodeId + '"' +
+            ((props.stereotype || '').toLowerCase() === 'template' ? ' checked' : '') +
+            ' onchange="onTemplateChange(this)" title="Mark this requirement as a Template (Satisfies: target)">';
+        html += '</div>';
+    }
+
     // Hash
     html += '<div class="card-meta-item">';
     html += '<span class="card-meta-key">Hash:</span>';
@@ -759,20 +850,30 @@ function buildCardHtml(nodeId, data, collapsed) {
     }
 
     // Integrated coverage rollup (consumer REQs declaring `Integrates:` only):
-    // implemented/verified coverage inherited from the external associate
+    // implemented/passing coverage inherited from the external associate
     // (library) node this requirement integrates, across the INTEGRATES edge.
     // Surfaced by _serialize_node_generic when the REQ has integrations.
     // See CUR-1419 / REQ-d00252-D. Fields differ from satisfier_rollup:
     // implemented_covered/total + verified_covered/total (no covered_fraction).
+    // NOTE (REQ-d00258-B): despite the `verified_*` field names (kept for
+    // wire compatibility), the value is the tested_and_passing() union
+    // (result-verified OR line-coverage-credited), so it is labeled
+    // "passing" here rather than "verified". `has_failures` flags a red
+    // library suite whose covered count can still read full via the union's
+    // per-assertion max() -- render a FAILING badge (same validation-fail
+    // styling as the UAT verdict badge) so it is never displayed clean.
     if (props.integrates_rollup && props.integrates_rollup.implemented_total > 0) {
         var ir = props.integrates_rollup;
         var ipct = Math.round((ir.implemented_covered / ir.implemented_total) * 100);
         var vpct = ir.verified_total ? Math.round((ir.verified_covered / ir.verified_total) * 100) : 0;
+        var irFail = ir.has_failures ?
+            ' <span class="validation-fail active" style="font-size:0.65rem;padding:1px 6px;border-radius:3px;display:inline-block;"' +
+            ' title="A verifying test result in the integrated library failed">FAILING</span>' : '';
         html += '<div class="card-meta-item integrates-rollup" ' +
             'title="Coverage inherited from the external associate library this requirement integrates">';
         html += '<span class="card-meta-key">Integrated coverage:</span>';
         html += '<span class="card-meta-value">implemented ' + ir.implemented_covered + '/' + ir.implemented_total +
-            ' (' + ipct + '%), verified ' + ir.verified_covered + '/' + ir.verified_total + ' (' + vpct + '%)' +
+            ' (' + ipct + '%), passing ' + ir.verified_covered + '/' + ir.verified_total + ' (' + vpct + '%)' + irFail +
             ' <span style="font-size:0.7rem;color:var(--secondary-text);">— inherited from an external associate</span></span>';
         html += '</div>';
     }
@@ -800,38 +901,53 @@ function buildCardHtml(nodeId, data, collapsed) {
 
     html += '</div></div>';
 
-    // Parents section (relationship editor in edit mode)
+    // Parents section (relationship editor in edit mode). Collapsible like
+    // Incoming Links: one toggle per edge kind, panels closed by default.
     html += '<div class="card-section"><div class="card-section-label">Outgoing Links</div>';
     html += '<div class="card-parents">';
     if (data.parents && data.parents.length > 0) {
+        var parentGroups = {};
+        var parentKindOrder = [];
         data.parents.forEach(function(p) {
-            const edgeKind = (p.edge_kind || 'implements').toLowerCase();
-            const edgeKindDisplay = edgeKind.charAt(0).toUpperCase() + edgeKind.slice(1);
-            html += '<div class="card-parent-row" data-anchor="' + nodeId + '#edge:' + p.id + '">';
-            // View-only kind badge
-            html += '<span class="card-parent-kind view-only">' + edgeKindDisplay.toUpperCase() + '</span>';
-            // Edit-only kind toggle
-            html += '<button class="card-parent-kind-toggle edit-only" ' +
-                'data-source="' + nodeId + '" data-target="' + p.id + '" data-kind="' + edgeKind + '" ' +
-                'onclick="event.preventDefault(); onToggleEdgeKind(this)" ' +
-                'title="Click to cycle edge kind">' + edgeKindDisplay + '</button>';
-            var pTargetsJson = (p.assertion_targets && p.assertion_targets.length > 0)
-                ? escapeAttr(JSON.stringify(p.assertion_targets)) : '';
-            html += '<a class="card-parent-link" href="#" onclick="event.preventDefault(); openCardAndFlash(\'' + p.id + '\', ' +
-                (pTargetsJson ? 'JSON.parse(this.dataset.targets)' : '[]') + ')"' +
-                (pTargetsJson ? ' data-targets="' + pTargetsJson + '"' : '') + '>';
-            html += (p.ref_id || p.id) + ' - ' + escapeHtml(p.title || '');
-            if (p.assertion_targets && p.assertion_targets.length > 0) {
-                html += ' <span class="card-parent-targets">[' + p.assertion_targets.join(', ') + ']</span>';
-            }
-            html += '</a>';
-            // Assertion targets picker button (edit mode)
-            html += '<button class="card-parent-targets-btn edit-only" ' +
-                'onclick="event.preventDefault(); editEdgeTargets(\'' + nodeId + '\', \'' + p.id + '\', this)" ' +
-                'title="Edit assertion targets">&#9998;</button>';
-            html += '<button class="card-parent-delete edit-only" ' +
-                'onclick="event.preventDefault(); onDeleteEdge(\'' + nodeId + '\', \'' + p.id + '\')" ' +
-                'title="Remove relationship">&times;</button>';
+            var k = (p.edge_kind || 'implements').toLowerCase();
+            if (!parentGroups[k]) { parentGroups[k] = []; parentKindOrder.push(k); }
+            parentGroups[k].push(p);
+        });
+        parentKindOrder.forEach(function(kind, gi) {
+            var panelId = 'outgoing-' + nodeId + '-' + gi;
+            var kindDisplay = kind.charAt(0).toUpperCase() + kind.slice(1);
+            html += '<button class="incoming-link-toggle outgoing-link-toggle" ' +
+                'onclick="event.stopPropagation(); toggleIncomingLinks(\'' + panelId + '\')">' +
+                escapeHtml(kindDisplay) + ' (' + parentGroups[kind].length + ')</button>';
+            html += '<div class="req-level-links-panel outgoing-link-panel" id="' + panelId + '" style="display:none;">';
+            parentGroups[kind].forEach(function(p) {
+                const edgeKind = (p.edge_kind || 'implements').toLowerCase();
+                const edgeKindDisplay = edgeKind.charAt(0).toUpperCase() + edgeKind.slice(1);
+                html += '<div class="card-parent-row" data-anchor="' + nodeId + '#edge:' + p.id + '">';
+                // Edit-only kind toggle (view mode reads the kind off the group header)
+                html += '<button class="card-parent-kind-toggle edit-only" ' +
+                    'data-source="' + nodeId + '" data-target="' + p.id + '" data-kind="' + edgeKind + '" ' +
+                    'onclick="event.preventDefault(); onToggleEdgeKind(this)" ' +
+                    'title="Click to cycle edge kind">' + edgeKindDisplay + '</button>';
+                var pTargetsJson = (p.assertion_targets && p.assertion_targets.length > 0)
+                    ? escapeAttr(JSON.stringify(p.assertion_targets)) : '';
+                html += '<a class="card-parent-link" href="#" onclick="event.preventDefault(); openCardAndFlash(\'' + p.id + '\', ' +
+                    (pTargetsJson ? 'JSON.parse(this.dataset.targets)' : '[]') + ')"' +
+                    (pTargetsJson ? ' data-targets="' + pTargetsJson + '"' : '') + '>';
+                html += (p.ref_id || p.id) + ' - ' + escapeHtml(p.title || '');
+                if (p.assertion_targets && p.assertion_targets.length > 0) {
+                    html += ' <span class="card-parent-targets">[' + p.assertion_targets.join(', ') + ']</span>';
+                }
+                html += '</a>';
+                // Assertion targets picker button (edit mode)
+                html += '<button class="card-parent-targets-btn edit-only" ' +
+                    'onclick="event.preventDefault(); editEdgeTargets(\'' + nodeId + '\', \'' + p.id + '\', this)" ' +
+                    'title="Edit assertion targets">&#9998;</button>';
+                html += '<button class="card-parent-delete edit-only" ' +
+                    'onclick="event.preventDefault(); onDeleteEdge(\'' + nodeId + '\', \'' + p.id + '\')" ' +
+                    'title="Remove relationship">&times;</button>';
+                html += '</div>';
+            });
             html += '</div>';
         });
     } else {
@@ -842,6 +958,40 @@ function buildCardHtml(nodeId, data, collapsed) {
     html += '<button class="card-add-rel-btn edit-only" ' +
         'onclick="onAddRelationship(\'' + nodeId + '\', this)">+ Add Relationship</button>';
     html += '</div>';
+
+    // Incoming Links section — reverse traceability (things pointing AT this req).
+    // One collapsible toggle per present kind; each link shows a state badge +
+    // an informative hover tooltip. (REQ-p00006-A)
+    var incoming = data.incoming_links || [];
+    if (incoming.length > 0) {
+        html += '<div class="card-section"><div class="card-section-label">Incoming Links</div>';
+        html += '<div class="card-incoming-links">';
+        incoming.forEach(function(section, si) {
+            var panelId = 'incoming-' + nodeId + '-' + si;
+            html += '<button class="incoming-link-toggle" ' +
+                'onclick="event.stopPropagation(); toggleIncomingLinks(\'' + panelId + '\')">' +
+                escapeHtml(section.kind) + ' (' + section.links.length + ')</button>';
+            html += '<div class="req-level-links-panel incoming-link-panel" id="' + panelId + '" style="display:none;">';
+            section.links.forEach(function(link) {
+                var st = link.state || {};
+                var badge = '';
+                if (st.label) {
+                    var colorClass = st.color ? ' active val-' + st.color : '';
+                    badge = '<span class="status-badge incoming-state-badge' + colorClass + '">' +
+                        escapeHtml(st.label) + '</span>';
+                }
+                html += '<div class="assertion-test-item incoming-link-row" title="' +
+                    escapeAttr(link.tooltip || '') + '">';
+                html += badge;
+                html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
+                    escapeAttr(link.id) + '\')">' +
+                    escapeHtml(link.ref_id || link.id) + ' - ' + escapeHtml(link.title || '') + '</a>';
+                html += '</div>';
+            });
+            html += '</div>';
+        });
+        html += '</div></div>';
+    }
 
     // Structure section — assertions and body sections
     var allChildren = data.children || [];
@@ -1047,10 +1197,17 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
         html += '</div>';
     }
 
-    // Validates — with assertion targets and edit controls (same pattern as REQ parents)
+    // Validates — with assertion targets and edit controls (same pattern as
+    // REQ parents). Collapsible like Incoming Links: one toggle, closed by
+    // default (enrollment journeys can validate many assertions).
     var refs = (data.links || []).filter(function(l) { return l.edge_kind === 'validates'; });
-    html += '<div class="card-section journey-refs"><div class="card-section-label">Validates (' + refs.length + ')</div>';
+    html += '<div class="card-section journey-refs"><div class="card-section-label">Validates</div>';
     html += '<div class="card-parents">';
+    var validatesPanelId = 'jny-validates-' + nodeId;
+    html += '<button class="incoming-link-toggle jny-validates-toggle" ' +
+        'onclick="event.stopPropagation(); toggleIncomingLinks(\'' + validatesPanelId + '\')">' +
+        refs.length + ' link(s)</button>';
+    html += '<div class="req-level-links-panel jny-validates-panel" id="' + validatesPanelId + '" style="display:none;">';
     refs.forEach(function(link) {
         html += '<div class="card-parent-row">';
         var lTargetsJson = (link.assertion_targets && link.assertion_targets.length > 0)
@@ -1072,17 +1229,16 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
             'title="Remove relationship">&times;</button>';
         html += '</div>';
     });
-    html += '</div>';
+    html += '</div>'; // .jny-validates-panel
+    html += '</div>'; // .card-parents
     html += '<button class="card-add-rel-btn edit-only" ' +
         'onclick="onAddJourneyRef(\'' + nodeId + '\', this)">+ Add Relationship</button>';
     html += '</div>';
 
-    // Steps — per-step verification status with verifying tests
-    var stepStatusClass = {
-        'pass': 'validation-pass',
-        'fail': 'validation-fail',
-        'untested': 'validation-unknown'
-    };
+    // Steps — rendered like REQ assertions: the step text plainly, with
+    // right-aligned "Verified" (a test verifies the step) and result
+    // ("Passed"/"Failed") badges that follow the shared assertion badge
+    // full/abbrev/dot toggle (editState.assertionBadgeMode).
     var steps = (data.children || []).filter(function(c) { return c.kind === 'step'; });
     steps.sort(function(a, b) {
         var ao = a.render_order != null ? a.render_order : (a.line || 0);
@@ -1090,32 +1246,105 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
         return ao - bo;
     });
     if (steps.length > 0) {
+        var stepBadgeMode = editState.assertionBadgeMode || 'abbrev';
         html += '<div class="card-section journey-steps"><div class="card-section-label">Steps (' + steps.length + ')</div>';
         steps.forEach(function(step) {
             var sStatus = step.status || 'untested';
-            var sCls = stepStatusClass[sStatus] || 'validation-unknown';
-            var stepNum = (step.label || '').replace(/^step-/, '');
-            html += '<div class="journey-step-row" style="display:flex;align-items:baseline;gap:6px;padding:2px 0;">';
-            html += '<span class="' + sCls + ' active" style="font-size:0.6rem;padding:1px 5px;border-radius:3px;min-width:44px;display:inline-block;text-align:center;" title="Step status">' + escapeHtml(sStatus.toUpperCase()) + '</span>';
-            html += '<span class="journey-step-num" style="font-size:0.8rem;font-weight:600;min-width:18px;">' + escapeHtml(stepNum) + '.</span>';
-            html += '<span class="journey-step-text" style="font-size:0.8rem;">' + escapeHtml(step.text || '') + '</span>';
-            html += '</div>';
+            var stepNum = step.label || '';
             var vTests = step.verifying_tests || [];
-            if (vTests.length > 0) {
-                html += '<div class="journey-step-tests" style="margin-left:58px;margin-bottom:4px;">';
-                vTests.forEach(function(t) {
-                    var tStatus = t.status || '';
-                    var tCls = tStatus === 'pass' ? 'validation-pass' : (tStatus === 'fail' ? 'validation-fail' : 'validation-unknown');
-                    html += '<div class="journey-step-test-row" style="font-size:0.75rem;display:flex;align-items:center;gap:4px;padding:1px 0;">';
-                    html += '<span class="' + tCls + ' active" style="font-size:0.55rem;padding:1px 4px;border-radius:2px;">' + escapeHtml((tStatus || '?').toUpperCase()) + '</span>';
-                    html += '<span class="journey-step-test-id" style="font-family:monospace;">' + escapeHtml(t.id || '') + '</span>';
-                    if (t.title && t.title !== t.id) {
-                        html += '<span class="journey-step-test-title" style="color:var(--secondary-text);">' + escapeHtml(t.title) + '</span>';
-                    }
-                    html += '</div>';
-                });
-                html += '</div>';
+            var verified = vTests.length > 0;
+
+            // Row mirrors .card-assertion: number pill, plain text, badges right
+            html += '<div class="journey-step-row card-assertion" data-step-status="' + sStatus + '">';
+            html += '<span class="card-assertion-label journey-step-num">' + escapeHtml(stepNum) + '</span>';
+            html += '<span class="card-assertion-text journey-step-text">' + escapeHtml(step.text || '') + '</span>';
+            html += '<span class="assertion-badges-area">';
+
+            // Result entries come from the verifying tests (a result implies a
+            // verifier), so VER and Result are independent affordances shown
+            // ONLY when their own evidence exists — suppressed otherwise, like
+            // the assertion pills. A VERIFIES edge without a result -> VER only.
+            var stepResults = [];
+            vTests.forEach(function(t) { (t.results || []).forEach(function(r) { stepResults.push(r); }); });
+            var hasResult = stepResults.length > 0 || sStatus === 'pass' || sStatus === 'fail';
+
+            // VER badge — only when a test verifies this step. Toggles the
+            // verifying-TESTS panel.
+            if (verified) {
+                var verLabel = stepBadgeMode === 'full' ? 'Verified' : (stepBadgeMode === 'dots' ? 'V' : 'VER');
+                var verTip = vTests.length + (vTests.length === 1 ? ' test verifies' : ' tests verify') + ' this step';
+                html += '<button class="journey-step-badge implemented-yes" title="' + escapeAttr(verTip) + '"' +
+                    ' onclick="event.stopPropagation(); toggleJourneyStepPanel(this, \'journey-step-tests-' + nodeId + '-' + escapeAttr(stepNum) + '\')">' + verLabel + '</button>';
             }
+
+            // Result badge — only when a result exists. Neutral "Result" label;
+            // COLOR carries the outcome (green pass / red fail / grey
+            // indeterminate), so a red badge reads as a failure without the label
+            // contradicting it. Toggles the RESULTS panel (not the tests).
+            if (hasResult) {
+                var resCls = sStatus === 'pass' ? 'validation-pass' : (sStatus === 'fail' ? 'validation-fail' : 'validation-unknown');
+                var resLabel = stepBadgeMode === 'full' ? 'Result' : (stepBadgeMode === 'dots' ? 'R' : 'RES');
+                var resTip = sStatus === 'pass' ? 'Verifying test results passed'
+                    : (sStatus === 'fail' ? 'A verifying test result failed' : 'Test results present (indeterminate)');
+                html += '<button class="journey-step-badge ' + resCls + '" title="' + escapeAttr(resTip) + '"' +
+                    ' onclick="event.stopPropagation(); toggleJourneyStepPanel(this, \'journey-step-results-' + nodeId + '-' + escapeAttr(stepNum) + '\')">' + resLabel + '</button>';
+            }
+
+            // No verifier at all -> a muted hint, mirroring the assertion "no
+            // coverage" placeholder (a result can't exist without a verifier).
+            if (!verified) {
+                html += '<span class="assertion-no-coverage" title="No test verifies this step" style="font-size:0.6rem;color:var(--secondary-text);opacity:0.5;">no tests</span>';
+            }
+
+            html += '</span>'; // .assertion-badges-area
+            html += '</div>'; // .journey-step-row
+
+            // Verifying-TESTS panel (VER badge) — which tests verify this step.
+            html += '<div class="journey-step-tests" id="journey-step-tests-' + nodeId + '-' + escapeAttr(stepNum) + '"' +
+                ' style="display:none;margin-left:34px;margin-bottom:4px;">';
+            vTests.forEach(function(t) {
+                // Clean, non-duplicated display text: prefer the test name,
+                // then repo-relative file:line, then the label/id fallback.
+                var displayText = t.name
+                    ? t.name
+                    : (t.file ? (t.file + ':' + (t.line || 0)) : (t.label || t.id || ''));
+                html += '<div class="journey-step-test-row" style="font-size:0.75rem;display:flex;align-items:center;gap:4px;padding:1px 0;">';
+                html += '<span class="assertion-test-icon">&#x1F9EA;</span>';
+                if (t.file) {
+                    html += '<a class="journey-step-test-link" href="#" style="font-family:monospace;" onclick="event.preventDefault(); showSource(\'' +
+                        escapeJsInAttr(t.file) + '\', ' + (t.line || 0) + ', \'' + escapeAttr(t.id || '') + '\')">' + escapeHtml(displayText) + '</a>';
+                } else {
+                    html += '<span class="journey-step-test-link" style="font-family:monospace;">' + escapeHtml(displayText) + '</span>';
+                }
+                html += '</div>';
+            });
+            html += '</div>';
+
+            // RESULTS panel (Result badge) — the actual pass/fail result entries
+            // produced by the verifying tests (distinct from the tests above).
+            html += '<div class="journey-step-results" id="journey-step-results-' + nodeId + '-' + escapeAttr(stepNum) + '"' +
+                ' style="display:none;margin-left:34px;margin-bottom:4px;">';
+            stepResults.forEach(function(r) {
+                var rs = (r.status || '').toLowerCase();
+                var rIcon = (rs === 'passed' || rs === 'pass' || rs === 'success') ? '&#x2705;'
+                    : ((rs === 'failed' || rs === 'fail' || rs === 'failure' || rs === 'error') ? '&#x274C;' : '&#x2753;');
+                // Link to the results ARTIFACT (junit.xml:<testcase> line)
+                // when known, not the test's source file.
+                var rFile = r.result_file || r.file;
+                var rLine = (r.result_line != null && r.result_line) || r.line || 0;
+                var rText = (rFile ? (rFile + ':' + rLine) : (r.id || 'result')) +
+                    (r.duration ? ' (' + r.duration + 's)' : '');
+                html += '<div class="journey-step-result-row" style="font-size:0.75rem;display:flex;align-items:center;gap:4px;padding:1px 0;">';
+                html += '<span class="assertion-test-icon">' + rIcon + '</span>';
+                if (rFile) {
+                    html += '<a class="journey-step-test-link" href="#" style="font-family:monospace;" onclick="event.preventDefault(); showSource(\'' +
+                        escapeJsInAttr(rFile) + '\', ' + rLine + ', \'' + escapeAttr(r.id || '') + '\')">' + escapeHtml(rText) + '</a>';
+                } else {
+                    html += '<span class="journey-step-test-link" style="font-family:monospace;">' + escapeHtml(rText) + '</span>';
+                }
+                html += '</div>';
+            });
+            html += '</div>';
         });
         html += '</div>';
     }
@@ -1317,8 +1546,13 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // =====================================================================
-// Coverage Prefetch — color buttons on card open
+// Coverage Prefetch — warm the per-assertion panel caches on card open
 // =====================================================================
+//
+// Badge COLORS no longer depend on this prefetch: they are baked into the
+// rendered HTML from the server-computed assertion_coverage_states
+// (REQ-d00258-G). This prefetch now only warms the caches the expand-panels
+// reuse, so opening a Tests/Code/UAT panel is instant.
 
 async function prefetchCoverage(nodeId) {
     var testData = assertionTestsCache[nodeId]
@@ -1342,27 +1576,11 @@ async function prefetchCoverage(nodeId) {
     if (results[2] && results[2].success) {
         assertionUatCache[nodeId] = results[2];
     }
-    recolorCachedButtons();
-}
-
-function recolorCachedButtons() {
-    for (var reqId in assertionTestsCache) {
-        updateAllTestedButtons(reqId, assertionTestsCache[reqId]);
-        updateAllVerifiedButtons(reqId, assertionTestsCache[reqId]);
-    }
-    for (var reqId in assertionCodeCache) {
-        updateAllImplementedButtons(reqId, assertionCodeCache[reqId]);
-    }
-    for (var reqId in assertionUatCache) {
-        updateAllValidatedButtons(reqId, assertionUatCache[reqId]);
-        updateAllAcceptedButtons(reqId, assertionUatCache[reqId]);
-    }
 }
 
 function setAssertionBadgeMode(mode) {
     editState.assertionBadgeMode = mode;
     renderCardStack();
-    recolorCachedButtons();
 }
 
 var _linkStyleCycle = ['full', 'abbrev', 'dots'];
@@ -1376,7 +1594,6 @@ function cycleLinkStyle() {
     var btn = document.getElementById('assertion-badge-mode-btn');
     if (btn) btn.textContent = _linkStyleLabels[next];
     renderCardStack();
-    recolorCachedButtons();
     saveState();
 }
 
@@ -1385,7 +1602,6 @@ function toggleCardViewMode() {
     var btn = document.getElementById('card-view-mode');
     if (btn) btn.textContent = (editState.cardViewMode === 'compact' ? 'Compact' : 'Complete') + ' Card View';
     renderCardStack();
-    recolorCachedButtons();
     saveState();
 }
 
@@ -1403,6 +1619,22 @@ function toggleBodySection(nodeId, idx) {
 // =====================================================================
 
 var assertionTestsCache = {};
+
+// Journey step badges each toggle their OWN pre-rendered panel: VER -> the
+// verifying-tests panel, Result -> the results panel. (Data is embedded in the
+// journey card payload — step.verifying_tests[].results — so no fetch needed.)
+// Each badge owns exactly one panel; they are no longer a coupled pair.
+function toggleJourneyStepPanel(btn, panelId) {
+    var panel = document.getElementById(panelId);
+    if (!panel) return;
+    if (panel.style.display !== 'none') {
+        panel.style.display = 'none';
+        btn.classList.remove('active');
+        return;
+    }
+    panel.style.display = 'block';
+    btn.classList.add('active');
+}
 
 async function toggleAssertionTests(btn, reqId, label) {
     var panelId = 'assertion-tests-' + reqId + '-' + label;
@@ -1428,9 +1660,6 @@ async function toggleAssertionTests(btn, reqId, label) {
             return;
         }
         assertionTestsCache[reqId] = data;
-        // Update ALL tested/verified buttons for this requirement
-        updateAllTestedButtons(reqId, data);
-        updateAllVerifiedButtons(reqId, data);
     }
 
     renderAssertionTests(panel, reqId, label, assertionTestsCache[reqId]);
@@ -1514,8 +1743,6 @@ async function toggleAssertionResults(btn, reqId, label) {
             return;
         }
         assertionTestsCache[reqId] = data;
-        updateAllTestedButtons(reqId, data);
-        updateAllVerifiedButtons(reqId, data);
     }
 
     renderAssertionResults(panel, reqId, label, assertionTestsCache[reqId]);
@@ -1560,11 +1787,15 @@ function renderAssertionResults(panel, reqId, label, data) {
             statusIcon = '&#x2753;'; statusClass = '';
         }
 
+        // Prefer the results-artifact location (result_file/result_line)
+        // over the test's source file, mirroring the journey-step panel.
+        var rFile = r.result_file || r.file;
+        var rLine = (r.result_line != null && r.result_line) || r.line || 0;
         html += '<div class="assertion-test-item ' + statusClass + '">';
         html += '<span class="assertion-test-icon">' + statusIcon + '</span>';
-        if (r.file) {
+        if (rFile) {
             html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
-                escapeJsInAttr(r.file) + '\', ' + (r.line || 0) + ', \'' + escapeAttr(resultItems[k].testId || '') + '\')">' +
+                escapeJsInAttr(rFile) + '\', ' + rLine + ', \'' + escapeAttr(resultItems[k].testId || '') + '\')">' +
                 escapeHtml(tLabel) + ' [' + escapeHtml(r.status) + ']</a>';
         } else {
             html += '<span class="assertion-test-link">' + escapeHtml(tLabel) + ' [' + escapeHtml(r.status) + ']</span>';
@@ -1574,52 +1805,9 @@ function renderAssertionResults(panel, reqId, label, data) {
     panel.innerHTML = html;
 }
 
-// Shared helper: classify test/journey coverage into a state class
-function _classifyTestState(items) {
-    // items = array of test/journey objects with .results arrays
-    // Returns: 'validation-pass', 'validation-partial', 'validation-fail', or 'validation-unknown'
-    if (items.length === 0) return 'validation-fail';
-    var allResults = [];
-    for (var j = 0; j < items.length; j++) {
-        if (items[j].results) {
-            for (var k = 0; k < items[j].results.length; k++) {
-                allResults.push(items[j].results[k].status);
-            }
-        }
-    }
-    if (allResults.length === 0) return 'validation-unknown'; // exists but no results = unknown
-    var allPassed = allResults.every(function(s) { return s === 'passed'; });
-    var anyFailed = allResults.some(function(s) { return s === 'failed' || s === 'failure' || s === 'error'; });
-    if (allPassed) return 'validation-pass';
-    if (anyFailed) return 'validation-partial';
-    return 'validation-pass'; // unknown statuses (skipped) = covered
-}
-
-function updateAllTestedButtons(reqId, data) {
-    // TESTED: do tests exist for this assertion? (yes/no, same CSS as implemented)
-    var buttons = document.querySelectorAll('.assertion-tested-btn[data-req-id="' + reqId + '"]');
-    for (var i = 0; i < buttons.length; i++) {
-        var btn = buttons[i];
-        var label = btn.dataset.label;
-        var assertionData = data.assertion_tests[label];
-        if (!assertionData) continue;
-        btn.classList.remove('implemented-yes', 'implemented-no');
-        btn.classList.add(assertionData.tests.length > 0 ? 'implemented-yes' : 'implemented-no');
-    }
-}
-
-function updateAllVerifiedButtons(reqId, data) {
-    // VERIFIED: do test results pass? (pass/partial/fail)
-    var buttons = document.querySelectorAll('.assertion-verified-btn[data-req-id="' + reqId + '"]');
-    for (var i = 0; i < buttons.length; i++) {
-        var btn = buttons[i];
-        var label = btn.dataset.label;
-        var assertionData = data.assertion_tests[label];
-        if (!assertionData) continue;
-        btn.classList.remove('validation-pass', 'validation-partial', 'validation-fail', 'validation-unknown');
-        btn.classList.add(_classifyTestState(assertionData.tests));
-    }
-}
+// Per-assertion Tested / Passing badge colors are server-computed
+// (assertion_coverage_states) and baked in at render time (REQ-d00258-G); no
+// client-side recolor pass is needed here anymore.
 
 // =====================================================================
 // Assertion Implementation — Code Coverage Buttons
@@ -1655,12 +1843,26 @@ async function toggleAssertionCode(btn, reqId, label, edgeKind) {
             return;
         }
         assertionCodeCache[cacheKey] = data;
-        if (edgeKind === 'implements' || !edgeKind) {
-            updateAllImplementedButtons(reqId, data);
-        }
     }
 
     renderAssertionCode(panel, reqId, label, assertionCodeCache[cacheKey]);
+}
+
+function renderCodeRefItem(c) {
+    // Extract short filename from full path
+    var fileName = c.file ? c.file.split('/').pop() : c.id;
+
+    var html = '<div class="assertion-test-item">';
+    html += '<span class="assertion-test-icon">&#x1F4C4;</span>';
+    if (c.file) {
+        html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
+            escapeJsInAttr(c.file) + '\', ' + (c.line || 0) + ', \'' + escapeAttr(c.id || '') + '\')">' +
+            escapeHtml(fileName) + ':' + (c.line || 1) + '</a>';
+    } else {
+        html += '<span class="assertion-test-link">' + escapeHtml(c.label || c.id) + '</span>';
+    }
+    html += '</div>';
+    return html;
 }
 
 function renderAssertionCode(panel, reqId, label, data) {
@@ -1670,50 +1872,41 @@ function renderAssertionCode(panel, reqId, label, data) {
         return;
     }
 
-    var codeRefs = assertionData.code_refs;
-    if (codeRefs.length === 0) {
+    var codeRefs = assertionData.code_refs || [];
+    var wholeReqRefs = assertionData.whole_req_code_refs || [];
+    var refinesRefs = assertionData.refines_refs || [];
+
+    if (codeRefs.length === 0 && wholeReqRefs.length === 0 && refinesRefs.length === 0) {
         panel.innerHTML = '<div class="assertion-tests-empty">No references for this assertion</div>';
         return;
     }
 
     var html = '';
     for (var i = 0; i < codeRefs.length; i++) {
-        var c = codeRefs[i];
-        // Extract short filename from full path
-        var fileName = c.file ? c.file.split('/').pop() : c.id;
-
-        html += '<div class="assertion-test-item">';
-        html += '<span class="assertion-test-icon">&#x1F4C4;</span>';
-        if (c.file) {
-            html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
-                escapeJsInAttr(c.file) + '\', ' + (c.line || 0) + ', \'' + escapeAttr(c.id || '') + '\')">' +
-                escapeHtml(fileName) + ':' + (c.line || 1) + '</a>';
-        } else {
-            html += '<span class="assertion-test-link">' + escapeHtml(c.label || c.id) + '</span>';
-        }
-        html += '</div>';
+        html += renderCodeRefItem(codeRefs[i]);
     }
+
+    if (wholeReqRefs.length > 0) {
+        html += '<div class="assertion-test-subheader">Whole-requirement references (~)</div>';
+        for (var j = 0; j < wholeReqRefs.length; j++) {
+            html += renderCodeRefItem(wholeReqRefs[j]);
+        }
+    }
+
+    if (refinesRefs.length > 0) {
+        html += '<div class="assertion-test-subheader">Implemented via refinement (~)</div>';
+        for (var k = 0; k < refinesRefs.length; k++) {
+            var r = refinesRefs[k];
+            html += '<div class="assertion-test-item">';
+            html += '<span class="assertion-test-icon">&#x1F517;</span>';
+            html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
+                escapeAttr(r.id) + '\')">' + escapeHtml(r.id) +
+                (r.title ? ' — ' + escapeHtml(r.title) : '') + '</a>';
+            html += '</div>';
+        }
+    }
+
     panel.innerHTML = html;
-}
-
-function updateAllImplementedButtons(reqId, data) {
-    var buttons = document.querySelectorAll('.assertion-implemented-btn[data-req-id="' + reqId + '"]');
-    for (var i = 0; i < buttons.length; i++) {
-        var btn = buttons[i];
-        var label = btn.dataset.label;
-        var assertionData = data.assertion_code[label];
-        if (!assertionData) continue;
-
-        // Remove previous state classes
-        btn.classList.remove('implemented-yes', 'implemented-no');
-
-        var codeRefs = assertionData.code_refs;
-        if (codeRefs.length > 0) {
-            btn.classList.add('implemented-yes');
-        } else {
-            btn.classList.add('implemented-no');
-        }
-    }
 }
 
 // =====================================================================
@@ -1776,7 +1969,9 @@ function renderAssertionRefines(panel, reqId, label, data) {
 }
 
 // =====================================================================
-// Assertion UAT — Journey Coverage Buttons (Validated + Accepted)
+// Assertion UAT — Journey Coverage Buttons (UAT Covered + UAT Passed).
+// Badge colors come from the server (assertion_coverage_states); these
+// toggles only open the per-assertion journey/result panels.
 // =====================================================================
 
 var assertionUatCache = {};
@@ -1805,8 +2000,6 @@ async function toggleAssertionUat(btn, reqId, label) {
             return;
         }
         assertionUatCache[reqId] = data;
-        updateAllValidatedButtons(reqId, data);
-        updateAllAcceptedButtons(reqId, data);
     }
 
     renderAssertionUat(panel, reqId, label, assertionUatCache[reqId]);
@@ -1853,32 +2046,6 @@ function renderAssertionUat(panel, reqId, label, data) {
     panel.innerHTML = html;
 }
 
-function updateAllValidatedButtons(reqId, data) {
-    // VALIDATED: do journeys exist for this assertion? (yes/no)
-    var buttons = document.querySelectorAll('.assertion-validated-btn[data-req-id="' + reqId + '"]');
-    for (var i = 0; i < buttons.length; i++) {
-        var btn = buttons[i];
-        var label = btn.dataset.label;
-        var assertionData = data.assertion_journeys[label];
-        if (!assertionData) continue;
-        btn.classList.remove('implemented-yes', 'implemented-no');
-        btn.classList.add(assertionData.journeys.length > 0 ? 'implemented-yes' : 'implemented-no');
-    }
-}
-
-function updateAllAcceptedButtons(reqId, data) {
-    // ACCEPTED: do journey results pass? (pass/partial/fail)
-    var buttons = document.querySelectorAll('.assertion-accepted-btn[data-req-id="' + reqId + '"]');
-    for (var i = 0; i < buttons.length; i++) {
-        var btn = buttons[i];
-        var label = btn.dataset.label;
-        var assertionData = data.assertion_journeys[label];
-        if (!assertionData) continue;
-        btn.classList.remove('validation-pass', 'validation-partial', 'validation-fail', 'validation-unknown');
-        btn.classList.add(_classifyTestState(assertionData.journeys));
-    }
-}
-
 // =====================================================================
 // Assertion UAT Results — Journey Result Files (ACC badge)
 // =====================================================================
@@ -1905,8 +2072,6 @@ async function toggleAssertionUatResults(btn, reqId, label) {
             return;
         }
         assertionUatCache[reqId] = data;
-        updateAllValidatedButtons(reqId, data);
-        updateAllAcceptedButtons(reqId, data);
     }
 
     renderAssertionUatResults(panel, reqId, label, assertionUatCache[reqId]);
@@ -1920,9 +2085,16 @@ function renderAssertionUatResults(panel, reqId, label, data) {
     }
 
     var resultItems = [];
+    var verdictLines = [];
     var journeys = assertionData.journeys;
     for (var i = 0; i < journeys.length; i++) {
         var j = journeys[i];
+        // Journey verdict headline (e.g. "5/7 steps verified") — shown above
+        // the result rows so a partial pill is explained even at a glance.
+        if (j.total_steps) {
+            verdictLines.push({ id: j.id, label: j.label || j.id,
+                text: j.verified_steps + '/' + j.total_steps + ' steps verified (' + (j.tier || '') + ')' });
+        }
         if (j.results && j.results.length > 0) {
             for (var k = 0; k < j.results.length; k++) {
                 resultItems.push({ result: j.results[k], jnyLabel: j.label || j.id, jnyId: j.id });
@@ -1930,12 +2102,18 @@ function renderAssertionUatResults(panel, reqId, label, data) {
         }
     }
 
-    if (resultItems.length === 0) {
+    if (resultItems.length === 0 && verdictLines.length === 0) {
         panel.innerHTML = '<div class="assertion-tests-empty">No journey results for this assertion</div>';
         return;
     }
 
     var html = '';
+    for (var v = 0; v < verdictLines.length; v++) {
+        html += '<div class="assertion-test-item uat-journey-verdict">' +
+            '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
+            escapeAttr(verdictLines[v].id) + '\')">' + escapeHtml(verdictLines[v].label) + '</a> — ' +
+            escapeHtml(verdictLines[v].text) + '</div>';
+    }
     for (var r = 0; r < resultItems.length; r++) {
         var res = resultItems[r].result;
         var jLabel = resultItems[r].jnyLabel;
@@ -1948,17 +2126,22 @@ function renderAssertionUatResults(panel, reqId, label, data) {
         } else {
             statusIcon = '&#x2753;';
         }
+        // Link to the results ARTIFACT when known (result_file/result_line),
+        // mirroring the journey-step and test result panels.
+        var rFile = res.result_file || res.file;
+        var rLine = (res.result_line != null && res.result_line) || res.line || 0;
+        var rowLabel = jLabel + (res.step ? ' step ' + res.step : '');
 
         html += '<div class="assertion-test-item ' + statusClass + '">';
         html += '<span class="assertion-test-icon">' + statusIcon + '</span>';
-        if (res.file) {
+        if (rFile) {
             html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
-                escapeJsInAttr(res.file) + '\', ' + (res.line || 0) + ', \'' + escapeAttr(resultItems[r].jnyId || '') + '\')">' +
-                escapeHtml(jLabel) + ' [' + escapeHtml(res.status) + ']</a>';
+                escapeJsInAttr(rFile) + '\', ' + rLine + ', \'' + escapeAttr(resultItems[r].jnyId || '') + '\')">' +
+                escapeHtml(rowLabel) + ' [' + escapeHtml(res.status) + ']</a>';
         } else {
             html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
                 escapeHtml(resultItems[r].jnyId) + '\')">' +
-                escapeHtml(jLabel) + ' [' + escapeHtml(res.status) + ']</a>';
+                escapeHtml(rowLabel) + ' [' + escapeHtml(res.status) + ']</a>';
         }
         html += '</div>';
     }
@@ -1968,6 +2151,13 @@ function renderAssertionUatResults(panel, reqId, label, data) {
 // =====================================================================
 // REQ-Level Link Expansion (header badge click)
 // =====================================================================
+
+function toggleIncomingLinks(panelId) {
+    // Show/hide a single Incoming Links kind panel (collapsed by default).
+    var panel = document.getElementById(panelId);
+    if (!panel) return;
+    panel.style.display = (panel.style.display === 'none') ? 'block' : 'none';
+}
 
 function toggleReqLevelLinks(badge, reqId, dimKey, assertLinkKey) {
     var panelId = 'req-links-' + reqId + '-' + dimKey;
@@ -1991,42 +2181,59 @@ function toggleReqLevelLinks(badge, reqId, dimKey, assertLinkKey) {
     }
 
     var links = cardState.data.req_level_links[dimKey] || [];
-    if (links.length === 0) {
+    // The IMPLEMENTED header badge folds in refinement provenance: a
+    // requirement implemented via a Refines: (rather than directly) lists the
+    // refining requirement(s) under "Implemented via refinement", mirroring the
+    // per-assertion IMP pill. No standalone REFINED badge (REQ-d00069-L).
+    var refinedLinks = (dimKey === 'implemented')
+        ? (cardState.data.req_level_links['refined'] || [])
+        : [];
+    if (links.length === 0 && refinedLinks.length === 0) {
         return; // no REQ-level links, flash was enough
     }
 
-    var html = '';
-    for (var i = 0; i < links.length; i++) {
-        var link = links[i];
-        // Result status icon for TEST/JNY nodes
-        var statusIcon = '';
-        if (link.result_status === 'passed') statusIcon = '&#x2705; ';
-        else if (link.result_status === 'failed') statusIcon = '&#x274C; ';
-        else if (link.result_status === 'mixed') statusIcon = '&#x26A0; ';
+    function _renderReqLinkItems(items) {
+        var out = '';
+        for (var i = 0; i < items.length; i++) {
+            var link = items[i];
+            // Result status icon for TEST/JNY nodes
+            var statusIcon = '';
+            if (link.result_status === 'passed') statusIcon = '&#x2705; ';
+            else if (link.result_status === 'failed') statusIcon = '&#x274C; ';
+            else if (link.result_status === 'mixed') statusIcon = '&#x26A0; ';
 
-        var statusClass = '';
-        if (link.result_status === 'failed') statusClass = ' test-failed';
-        else if (link.result_status === 'passed') statusClass = ' test-passed';
+            var statusClass = '';
+            if (link.result_status === 'failed') statusClass = ' test-failed';
+            else if (link.result_status === 'passed') statusClass = ' test-passed';
 
-        if (link.kind === 'journey') {
-            html += '<div class="assertion-test-item' + statusClass + '">';
-            html += '<span class="assertion-test-icon">' + statusIcon + '&#x1F4D6;</span>';
-            html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
-                escapeHtml(link.id) + '\')">' + escapeHtml(link.title) + '</a>';
-            html += '</div>';
-        } else {
-            var icon = link.kind === 'requirement' ? '&#x1F4CB;' : (link.kind === 'test' ? '&#x1F9EA;' : '&#x1F4C4;');
-            html += '<div class="assertion-test-item' + statusClass + '">';
-            html += '<span class="assertion-test-icon">' + statusIcon + icon + '</span>';
-            if (link.file) {
-                html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
-                    escapeJsInAttr(link.file) + '\', ' + (link.line || 0) + ', \'' + escapeAttr(link.id || '') + '\')">' + escapeHtml(link.title) + '</a>';
-            } else {
-                html += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
+            if (link.kind === 'journey') {
+                out += '<div class="assertion-test-item' + statusClass + '">';
+                out += '<span class="assertion-test-icon">' + statusIcon + '&#x1F4D6;</span>';
+                out += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
                     escapeHtml(link.id) + '\')">' + escapeHtml(link.title) + '</a>';
+                out += '</div>';
+            } else {
+                var icon = link.kind === 'requirement' ? '&#x1F4CB;' : (link.kind === 'test' ? '&#x1F9EA;' : '&#x1F4C4;');
+                out += '<div class="assertion-test-item' + statusClass + '">';
+                out += '<span class="assertion-test-icon">' + statusIcon + icon + '</span>';
+                if (link.file) {
+                    out += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); showSource(\'' +
+                        escapeJsInAttr(link.file) + '\', ' + (link.line || 0) + ', \'' + escapeAttr(link.id || '') + '\')">' + escapeHtml(link.title) + '</a>';
+                } else {
+                    out += '<a class="assertion-test-link" href="#" onclick="event.preventDefault(); openCard(\'' +
+                        escapeHtml(link.id) + '\')">' + escapeHtml(link.title) + '</a>';
+                }
+                out += '</div>';
             }
-            html += '</div>';
         }
+        return out;
+    }
+
+    var html = _renderReqLinkItems(links);
+    if (refinedLinks.length > 0) {
+        html += '<div style="font-style:italic;color:var(--secondary-text);font-size:0.72rem;margin-top:' +
+            (links.length ? '6px' : '0') + ';">Implemented via refinement (~)</div>';
+        html += _renderReqLinkItems(refinedLinks);
     }
     panel.innerHTML = html;
     panel.style.display = 'block';

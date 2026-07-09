@@ -38,19 +38,38 @@ if TYPE_CHECKING:
 class CoverageSource(Enum):
     """Source type for coverage contributions.
 
-    Different sources have different confidence levels:
-    - DIRECT: High confidence - TEST verifies or CODE implements assertion
+    Different sources have different confidence levels. Note the split between
+    *implementation* evidence (CODE/REQ — feeds the ``implemented`` dimension in
+    :meth:`RollupMetrics.finalize`) and *test* evidence (TEST via ``Verifies:``
+    — feeds only the ``tested``/``verified`` dimensions, NEVER ``implemented``,
+    per REQ-d00084-D). A test that verifies an assertion is not evidence that
+    the assertion is implemented, so the two must not be conflated.
+
+    - DIRECT: High confidence - CODE implements a specific assertion
     - EXPLICIT: High confidence - REQ implements specific assertion(s) via syntax
     - INFERRED: Review recommended - REQ implements parent REQ (claims all assertions)
-    - INDIRECT: TEST verifies whole REQ (all assertions implied)
+    - INDIRECT: transitive CODE->TEST evidence (CODE implements, that CODE is
+      verified by a TEST); provenance only — does not itself feed ``implemented``
+    - CODE_INDIRECT: CODE Implements the whole REQ (blanket, no assertion
+      suffix), all assertions implied; feeds ``implemented.indirect`` only,
+      never ``implemented.direct``
+    - TEST_DIRECT: TEST verifies a specific assertion (Verifies: REQ-xxx-A);
+      feeds ``tested``, NOT ``implemented``
+    - TEST_INDIRECT: TEST verifies whole REQ (Verifies: REQ-xxx), all assertions
+      implied; feeds ``tested``, NOT ``implemented``
     - UAT_EXPLICIT: JNY names specific assertion (Validates: REQ-xxx-A)
     - UAT_INFERRED: JNY names whole REQ (Validates: REQ-xxx), all assertions implied
     """
 
-    DIRECT = "direct"  # TEST/CODE verifies/implements assertion
+    DIRECT = "direct"  # CODE implements assertion (implementation evidence)
     EXPLICIT = "explicit"  # REQ implements specific assertions (e.g., REQ-100-A-B)
     INFERRED = "inferred"  # REQ implements parent REQ (all assertions implied)
-    INDIRECT = "indirect"  # TEST verifies whole REQ (all assertions implied)
+    INDIRECT = "indirect"  # transitive CODE->TEST evidence (provenance only)
+    # CODE Implements whole REQ (blanket), all assertions implied; feeds
+    # `implemented` INDIRECT footing only (REQ-d00069-B)
+    CODE_INDIRECT = "code_indirect"
+    TEST_DIRECT = "test_direct"  # TEST verifies specific assertion (Verifies: REQ-xxx-A)
+    TEST_INDIRECT = "test_indirect"  # TEST verifies whole REQ (Verifies: REQ-xxx)
     UAT_EXPLICIT = "uat_explicit"  # JNY names specific assertion (Validates: REQ-xxx-A)
     UAT_INFERRED = (
         "uat_inferred"  # JNY names whole REQ (Validates: REQ-xxx), all assertions implied
@@ -93,7 +112,21 @@ class CoverageDimension:
         total: Total assertions in the requirement
         direct: Sum of per-assertion direct fractions (assertion-targeted edges)
         indirect: Sum of per-assertion fractions incl. blanket/whole-req edges
-        has_failures: True if any result is failed/error (verified dims only)
+        has_failures: True if ANY result is failed/error for this dimension.
+            This is **requirement-wide** -- it drives the requirement-level
+            badge/``tier`` (any assertion failing => the requirement dimension
+            reports a failure, REQ-d00258-G). Do NOT use it to decide a single
+            assertion's standing; use ``failing_labels`` for that.
+        failing_labels: The assertion labels that have an actual failing
+            result/verification for THIS dimension. This is **per-assertion**
+            -- it drives the per-*Assertion* standing so an assertion reads
+            "failing" only when it itself failed, not because a sibling
+            assertion (covered by a different, non-failing test/journey)
+            failed. Invariant: ``has_failures`` is true iff ``failing_labels``
+            is non-empty (for the verified/uat_verified dimensions that record
+            failures). Only meaningful on ``verified``/``uat_verified``/
+            ``lcov_tested`` (dims that carry pass/fail); other dims leave it
+            empty.
         direct_labels: Assertions with direct coverage > 0
         indirect_labels: Assertions with any coverage > 0
         direct_pct_by_label: Per-assertion direct fraction in [0,1]
@@ -110,6 +143,7 @@ class CoverageDimension:
     direct: float = 0.0
     indirect: float = 0.0
     has_failures: bool = False
+    failing_labels: set[str] = field(default_factory=set)
     direct_labels: set[str] = field(default_factory=set)
     indirect_labels: set[str] = field(default_factory=set)
     direct_pct_by_label: dict[str, float] = field(default_factory=dict)
@@ -128,22 +162,19 @@ class CoverageDimension:
 
     @property
     def tier(self) -> str:
-        """Classify into a tier key for color/severity mapping.
-
-        Returns one of: 'failing', 'full-direct', 'full-indirect',
-        'partial', 'none'. Float sums are compared with a small epsilon so a
-        fully-covered requirement (each assertion == 1.0) still reads as full.
+        """Classify into a unified state key: 'failing' | 'full' | 'partial' |
+        'missing'. The direct/indirect distinction is surfaced separately as a
+        caveat (~ marker + hover), not as a tier (design §2, §4). Float sums are
+        compared with a small epsilon so a fully-covered requirement reads full.
         """
         eps = 1e-9
         if self.has_failures:
             return "failing"
-        if self.total > 0 and self.direct >= self.total - eps:
-            return "full-direct"
         if self.total > 0 and self.indirect >= self.total - eps:
-            return "full-indirect"
+            return "full"
         if self.direct > eps or self.indirect > eps:
             return "partial"
-        return "none"
+        return "missing"
 
 
 def _dim(total: int = 0) -> CoverageDimension:
@@ -220,24 +251,36 @@ class RollupMetrics:
 
         n = self.total_assertions
 
-        # Track unique assertions by coverage source type
+        # Track unique assertions by coverage source type. Only
+        # implementation-evidence sources (DIRECT/EXPLICIT/INFERRED) are
+        # collected here; they build the `implemented` dimension below.
         direct_labels: set[str] = set()
         explicit_labels: set[str] = set()
         inferred_labels: set[str] = set()
-        indirect_labels: set[str] = set()
+        code_indirect_labels: set[str] = set()
         uat_explicit_labels: set[str] = set()
         uat_inferred_labels: set[str] = set()
 
         for label, contributions in self.assertion_coverage.items():
             for contrib in contributions:
+                # NOTE (REQ-d00084-D): the following sources are deliberately
+                # NOT bucketed into `implemented`, and fall through:
+                #   - TEST_DIRECT / TEST_INDIRECT: a test `Verifies:` an
+                #     assertion -- test evidence, feeds `tested`/`verified`
+                #     (via populate_test_dimensions), never `implemented`.
+                #   - INDIRECT: the transitive CODE->TEST provenance edge. A
+                #     tested CODE node's implemented credit already comes from
+                #     its own DIRECT `Implements:` edge, and the verifying test
+                #     is registered separately for result lookup (`verified`);
+                #     this source adds no `implemented` credit of its own.
                 if contrib.source_type == CoverageSource.DIRECT:
                     direct_labels.add(label)
                 elif contrib.source_type == CoverageSource.EXPLICIT:
                     explicit_labels.add(label)
                 elif contrib.source_type == CoverageSource.INFERRED:
                     inferred_labels.add(label)
-                elif contrib.source_type == CoverageSource.INDIRECT:
-                    indirect_labels.add(label)
+                elif contrib.source_type == CoverageSource.CODE_INDIRECT:
+                    code_indirect_labels.add(label)
                 elif contrib.source_type == CoverageSource.UAT_EXPLICIT:
                     uat_explicit_labels.add(label)
                 elif contrib.source_type == CoverageSource.UAT_INFERRED:
@@ -248,7 +291,7 @@ class RollupMetrics:
         # Implemented: direct = assertion-targeted (DIRECT + EXPLICIT),
         #              indirect = all (DIRECT + EXPLICIT + INFERRED)
         impl_direct = direct_labels | explicit_labels
-        impl_indirect = impl_direct | inferred_labels
+        impl_indirect = impl_direct | inferred_labels | code_indirect_labels
         self.implemented = CoverageDimension(
             total=n,
             direct=len(impl_direct),
@@ -284,14 +327,20 @@ class RollupMetrics:
         verified_indirect_labels: set[str],
         verified_failures: bool,
         verified_carried: bool = False,
-        uat_verified_direct_labels: set[str],
-        uat_verified_indirect_labels: set[str],
+        uat_verified_direct_pct: dict[str, float],
+        uat_verified_indirect_pct: dict[str, float],
         uat_verified_failures: bool,
+        verified_failing_labels: set[str] | None = None,
+        uat_verified_failing_labels: set[str] | None = None,
     ) -> None:
         """Populate tested, verified, and uat_verified dimensions.
 
         Called by annotate_coverage() after finalize() with the label sets
-        from the annotator's tracking variables.
+        from the annotator's tracking variables. ``uat_verified`` credit is
+        FRACTIONAL per assertion (REQ-d00255-C): a partially-verified journey
+        credits its verified-step ratio, so the annotator passes per-label
+        fraction maps rather than plain label sets. tested/verified remain
+        all-or-nothing (1.0) label sets.
         """
         n = self.total_assertions
         tested_all = tested_direct_labels | tested_indirect_labels
@@ -310,22 +359,35 @@ class RollupMetrics:
             direct=len(verified_direct_labels),
             indirect=len(verified_all),
             has_failures=verified_failures,
+            failing_labels=set(verified_failing_labels or ()),
             direct_labels=set(verified_direct_labels),
             indirect_labels=set(verified_all),
             direct_pct_by_label=dict.fromkeys(verified_direct_labels, 1.0),
             indirect_pct_by_label=dict.fromkeys(verified_all, 1.0),
         )
         self.verified.carried = verified_carried
-        uat_all = uat_verified_direct_labels | uat_verified_indirect_labels
+        # uat_verified is fractional (REQ-d00255-C): indirect (generous) footing
+        # is the per-label max of the direct and blanket fractions. direct /
+        # indirect are the sums of those fractions, so a partial journey yields
+        # a sub-total sum -> a "partial" tier and per-assertion standing.
+        uat_labels = set(uat_verified_direct_pct) | set(uat_verified_indirect_pct)
+        uat_indirect_pct_by_label = {
+            label: max(
+                uat_verified_direct_pct.get(label, 0.0),
+                uat_verified_indirect_pct.get(label, 0.0),
+            )
+            for label in uat_labels
+        }
         self.uat_verified = CoverageDimension(
             total=n,
-            direct=len(uat_verified_direct_labels),
-            indirect=len(uat_all),
+            direct=sum(uat_verified_direct_pct.values()),
+            indirect=sum(uat_indirect_pct_by_label.values()),
             has_failures=uat_verified_failures,
-            direct_labels=set(uat_verified_direct_labels),
-            indirect_labels=set(uat_all),
-            direct_pct_by_label=dict.fromkeys(uat_verified_direct_labels, 1.0),
-            indirect_pct_by_label=dict.fromkeys(uat_all, 1.0),
+            failing_labels=set(uat_verified_failing_labels or ()),
+            direct_labels={lbl for lbl, f in uat_verified_direct_pct.items() if f > 0},
+            indirect_labels={lbl for lbl, f in uat_indirect_pct_by_label.items() if f > 0},
+            direct_pct_by_label=dict(uat_verified_direct_pct),
+            indirect_pct_by_label=uat_indirect_pct_by_label,
         )
 
 
@@ -489,7 +551,7 @@ def satisfier_rollup(node: GraphNode) -> SatisfierRollup:
 
 @dataclass(frozen=True)
 class IntegratesRollup:
-    """Coverage/verification a consumer REQ inherits across INTEGRATES edges.
+    """Coverage/passing status a consumer REQ inherits across INTEGRATES edges.
 
     Derived live by reading each library child's own persisted RollupMetrics.
     Nothing is persisted on the consumer node -- the INTEGRATES edge is the
@@ -501,8 +563,21 @@ class IntegratesRollup:
     # non-integer. Totals are assertion counts and stay int.
     implemented_covered: float
     implemented_total: int
+    # NOTE (REQ-d00258-B): despite the field name (kept for MCP/GUI wire
+    # compatibility -- see `integrates_rollup()`), these are NOT the raw
+    # `verified` dimension. They are the "passing" union of result-verified
+    # and line-coverage-credited evidence (`tested_and_passing()`), so a
+    # library requirement whose only evidence is lcov credit still propagates
+    # to integrating consumers.
     verified_covered: float
     verified_total: int
+    # True if any integrated library node's passing union reports a failure.
+    # The union's covered count uses max() per assertion, so an assertion with
+    # a FAILING Verifies-result but full lcov credit still reads as covered --
+    # this flag is the only signal that the library suite is red, and every
+    # surface showing the covered/total figures must surface it too
+    # (REQ-d00258-B).
+    has_failures: bool = False
 
     @property
     def has_integrations(self) -> bool:
@@ -526,16 +601,22 @@ def has_integration(node: GraphNode) -> bool:
 
 # Implements: REQ-d00252
 def integrates_rollup(node: GraphNode) -> IntegratesRollup:
-    """Inherit implemented/verified status from library nodes via INTEGRATES.
+    """Inherit implemented/passing status from library nodes via INTEGRATES.
 
     For each outgoing INTEGRATES edge (consumer REQ -> library node), read the
     library node's finalized ``rollup_metrics`` (computed in its own repo) and
-    fold its implemented and verified dimensions in. A consumer REQ with no
+    fold its implemented dimension and its *passing* union in. "Passing" is
+    the result-verified-or-line-coverage-credited union computed by
+    :func:`tested_and_passing` (REQ-d00258-B) -- not the raw ``verified``
+    dimension -- so a library requirement whose only evidence is lcov credit
+    (e.g. an aggregate-tooling repo with no `Verifies:`-based results) still
+    propagates as passing coverage to the consumer. A consumer REQ with no
     INTEGRATES edges yields all zeros.
     """
     from elspais.graph.relations import EdgeKind
 
     impl_c = impl_t = ver_c = ver_t = 0
+    fails = False
     for edge in node.iter_outgoing_edges():
         if edge.kind != EdgeKind.INTEGRATES:
             continue
@@ -544,13 +625,16 @@ def integrates_rollup(node: GraphNode) -> IntegratesRollup:
             continue
         impl_c += metrics.implemented.indirect
         impl_t += metrics.implemented.total
-        ver_c += metrics.verified.indirect
-        ver_t += metrics.verified.total
+        passing = tested_and_passing(metrics)
+        ver_c += passing.indirect
+        ver_t += passing.total
+        fails = fails or passing.has_failures
     return IntegratesRollup(
         implemented_covered=impl_c,
         implemented_total=impl_t,
         verified_covered=ver_c,
         verified_total=ver_t,
+        has_failures=fails,
     )
 
 
@@ -564,8 +648,15 @@ class AssociateIntegration:
     # REQ-d00069-J); totals are assertion counts and stay int.
     implemented_covered: float
     implemented_total: int
+    # NOTE (REQ-d00258-B): the "verified" field name is kept for MCP/summary
+    # wire compatibility, but the value is the "passing" union (result-verified
+    # or line-coverage-credited, `tested_and_passing()`), not raw `verified`.
     verified_covered: float
     verified_total: int
+    # True if any integrated library node under this associate reports a
+    # failing result in the passing union -- the covered figures alone can
+    # read full even when the library suite is red (see IntegratesRollup).
+    has_failures: bool = False
 
 
 # Implements: REQ-d00252
@@ -574,10 +665,11 @@ def integrates_by_associate(graph) -> list[AssociateIntegration]:
 
     Scans every INTEGRATES edge in the federation (consumer REQ -> library REQ),
     groups by the owning associate repo of the target library node, and sums the
-    inherited implemented/verified coverage (read live from each target's
-    ``rollup_metrics``). Returns one entry per associate, sorted by associate
-    name. A federation total is the caller's concern (see
-    :func:`integrates_total`). ``graph`` is a FederatedGraph.
+    inherited implemented coverage plus the *passing* union (REQ-d00258-B
+    `tested_and_passing()`: result-verified or line-coverage-credited), read
+    live from each target's ``rollup_metrics``. Returns one entry per
+    associate, sorted by associate name. A federation total is the caller's
+    concern (see :func:`integrates_total`). ``graph`` is a FederatedGraph.
     """
     from elspais.graph.GraphNode import NodeKind
     from elspais.graph.relations import EdgeKind
@@ -588,6 +680,7 @@ def integrates_by_associate(graph) -> list[AssociateIntegration]:
     impl_t: dict[str, int] = {}
     ver_c: dict[str, int] = {}
     ver_t: dict[str, int] = {}
+    fails: dict[str, bool] = {}
 
     for req in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         for edge in req.iter_outgoing_edges():
@@ -611,14 +704,17 @@ def integrates_by_associate(graph) -> list[AssociateIntegration]:
             impl_t.setdefault(owner, 0)
             ver_c.setdefault(owner, 0)
             ver_t.setdefault(owner, 0)
+            fails.setdefault(owner, False)
 
             metrics = target.get_metric("rollup_metrics")
             if metrics is None:
                 continue
             impl_c[owner] += metrics.implemented.indirect
             impl_t[owner] += metrics.implemented.total
-            ver_c[owner] += metrics.verified.indirect
-            ver_t[owner] += metrics.verified.total
+            passing = tested_and_passing(metrics)
+            ver_c[owner] += passing.indirect
+            ver_t[owner] += passing.total
+            fails[owner] = fails[owner] or passing.has_failures
 
     return [
         AssociateIntegration(
@@ -628,6 +724,7 @@ def integrates_by_associate(graph) -> list[AssociateIntegration]:
             implemented_total=impl_t[name],
             verified_covered=ver_c[name],
             verified_total=ver_t[name],
+            has_failures=fails[name],
         )
         for name in sorted(consumers)
     ]
@@ -649,6 +746,7 @@ def integrates_total(items: list[AssociateIntegration]) -> AssociateIntegration:
         implemented_total=sum(i.implemented_total for i in items),
         verified_covered=sum(i.verified_covered for i in items),
         verified_total=sum(i.verified_total for i in items),
+        has_failures=any(i.has_failures for i in items),
     )
 
 
@@ -694,6 +792,10 @@ def tested_and_passing(metrics: RollupMetrics) -> CoverageDimension:
         direct=combined_direct,
         indirect=combined_indirect,
         has_failures=vd.has_failures or lt.has_failures,
+        # Per-assertion failure attribution is the union of both sources'
+        # failing labels, so the "passing" standing reads red only for the
+        # assertions that actually failed (REQ-d00258-G).
+        failing_labels=set(vd.failing_labels) | set(lt.failing_labels),
         direct_labels=set(direct_pct),
         indirect_labels=set(indirect_pct),
         direct_pct_by_label=direct_pct,

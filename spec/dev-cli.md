@@ -114,11 +114,11 @@ The `trace` command SHALL generate *Traceability* output from the requirement gr
 
 A. The command SHALL support structured JSON graph output via `--graph-json`, including git change annotations when available.
 
-B. The command SHALL support column presets (`--preset minimal|standard|full`) controlling which columns appear in tabular output: minimal (ID, Title, Level, Status), standard (+ Implemented, Validated), full (+ Passing).
+B. The command SHALL support column presets (`--preset minimal|standard|full`) controlling which columns appear in tabular output: minimal (ID, Title, Level, Status), standard and full (+ Implemented, Tested, Passing per *Assertion* D).
 
 C. The command SHALL support independent detail flags (`--body`, `--assertions`, `--tests`) that control whether expanded rows appear beneath each requirement, orthogonal to column presets.
 
-D. Coverage columns SHALL show per-requirement *Assertion*-level coverage: Implemented (assertions with code refs, direct or transitive), Validated (assertions with test refs), Passing (validated assertions whose tests pass), each displayed as N/M (%).
+D. The standard and full presets SHALL include per-requirement coverage columns Implemented (assertions with code evidence: Implements references, conducted, or inherited via INSTANCE/INTEGRATES), Tested (assertions with test references), and Passing (tested assertions whose evidence passes, including line-coverage credit), each displayed as N/M (%) on the generous footing with the indirect-evidence marker per REQ-d00258-A.
 
 ### Rationale
 
@@ -126,10 +126,12 @@ A JSON graph output mode enables programmatic consumption of the full *Traceabil
 
 ### Changelog
 
+- 2026-07-02 | 64954432 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
+- 2026-07-02 | f4e1d611 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-05-11 | f8f0e0f2 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | f8f0e0f2 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
-*End* *Trace Command* | **Hash**: f8f0e0f2
+*End* *Trace Command* | **Hash**: 64954432
 ---
 
 ## REQ-d00085: Unified Report Composition
@@ -176,13 +178,13 @@ Report-producing commands (`health`, `trace`, `coverage`, `changed`) currently e
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00003
 
-The `coverage` section SHALL produce a coverage report showing implementation, validation, and test-passing status at the requirement and *Assertion* level.
+The `coverage` section SHALL produce a coverage report showing implemented, tested, and passing status at the requirement and *Assertion* level.
 
 ### Assertions
 
 A. The report SHALL group requirements by level (PRD, OPS, DEV) and show counts and percentages of requirements with code references, test references, and passing tests.
 
-B. The report SHALL compute per-requirement *Assertion* coverage: implemented (assertions with `Implements:` code refs, direct or transitive), validated (assertions with test refs), and passing (validated assertions whose tests pass).
+B. The report SHALL compute per-requirement *Assertion* coverage: Implemented (assertions with code evidence: Implements references, conducted, or inherited via INSTANCE/INTEGRATES), Tested (assertions with test references), and Passing (tested assertions whose evidence passes, including line-coverage credit), each on the generous footing with the indirect-evidence marker per REQ-d00258-A.
 
 C. The report SHALL support `text`, `markdown`, `json`, and `csv` output formats.
 
@@ -194,10 +196,11 @@ Coverage data is already computed during graph construction but is only surfaced
 
 ### Changelog
 
+- 2026-07-02 | a17871db | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-05-11 | 2fd4ab13 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 2fd4ab13 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
-*End* *Coverage Report Section* | **Hash**: 2fd4ab13
+*End* *Coverage Report Section* | **Hash**: a17871db
 ---
 
 ## REQ-d00073: Link Suggestion CLI Command
@@ -419,3 +422,33 @@ and the checks pass warns when results are out of date even without
 running tests.
 
 *End* *Configured test runner execution* | **Hash**: 8a579eb1
+
+## REQ-d00259: Requirement Format Reference Command
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+The `example` command SHALL display requirement format reference material to help authors discover and follow the correct structure, without requiring a spec directory or a built graph.
+
+### Assertions
+
+A. Invoking `elspais example` with no subcommand SHALL print a quick-reference summary covering the basic requirement structure and the available `example` subcommands.
+
+B. `elspais example requirement` SHALL print example requirement templates for each configured level (PRD, OPS, DEV), each including an `## Assertions` section and an `*End*` footer with a hash placeholder.
+
+C. `elspais example journey` SHALL print an example user journey template covering Actor, Goal, Steps, and Requirements sections.
+
+D. `elspais example assertion` SHALL print assertion format rules covering label styles, SHALL/SHOULD/MAY keywords, placeholder values for removed assertions, and the assertion-related configuration syntax.
+
+E. `elspais example ids` SHALL print the ID pattern configuration for the current project (namespace, canonical ID template, and level types), loaded from the active config file when present and falling back to schema defaults otherwise.
+
+F. `elspais example --full` SHALL display the full contents of the project's `requirements-spec.md` (or `requirements-format.md`) file when found, and SHALL return a non-zero exit code with the searched paths listed when neither file exists.
+
+### Rationale
+
+Authors writing their first requirement, or reviewers checking format conventions, need a fast, offline reference without opening the full *Specification*. `example` fills this role independently of `elspais init` (which scaffolds a new project's configuration) by surfacing format templates and rules on demand.
+
+### Changelog
+
+- 2026-07-03 | 8e05d02e | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms, update hash, add missing changelog section
+
+*End* *Requirement Format Reference Command* | **Hash**: 8e05d02e

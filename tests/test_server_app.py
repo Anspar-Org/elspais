@@ -524,6 +524,106 @@ class TestMutateStatus:
         assert data["success"] is False
 
 
+class TestMutateTemplate:
+    """Verifies REQ-p00014-E: POST /api/mutate/template (Template toggle)."""
+
+    def test_REQ_p00014_E_toggle_template_on_then_off(self, client):
+        """POST /api/mutate/template sets then clears the Template marker."""
+        resp = client.post(
+            "/api/mutate/template",
+            json={"node_id": "REQ-p00001", "is_template": True},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        assert data["mutation"]["operation"] == "set_stereotype"
+
+        # Toggle back off — no instances exist, so no soft-block.
+        resp = client.post(
+            "/api/mutate/template",
+            json={"node_id": "REQ-p00001", "is_template": False},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        assert "blocked" not in data
+
+    def test_REQ_p00014_E_missing_node_id_returns_400(self, client):
+        """Missing node_id returns 400."""
+        resp = client.post(
+            "/api/mutate/template",
+            json={"is_template": True},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["success"] is False
+
+    def test_REQ_p00014_E_missing_is_template_returns_400(self, client):
+        """Missing is_template returns 400."""
+        resp = client.post(
+            "/api/mutate/template",
+            json={"node_id": "REQ-p00001"},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["success"] is False
+
+    def test_REQ_p00014_E_non_boolean_is_template_returns_400(self, client):
+        """Truthy-but-non-boolean is_template is rejected with 400."""
+        resp = client.post(
+            "/api/mutate/template",
+            json={"node_id": "REQ-p00001", "is_template": "yes"},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["success"] is False
+
+    def test_REQ_p00014_E_unknown_node_returns_400(self, client):
+        """Non-existent node returns a 400 error payload (not a soft-block)."""
+        resp = client.post(
+            "/api/mutate/template",
+            json={"node_id": "REQ-NOPE", "is_template": True},
+        )
+        assert resp.status_code == 400
+        data = resp.json()
+        assert data["success"] is False
+        assert "blocked" not in data
+
+    def test_REQ_p00014_E_guard_soft_block_is_http_200(self):
+        """Un-templating a template with live instances soft-blocks as 200."""
+        from tests.core.graph_test_helpers import build_graph, make_requirement
+
+        template = make_requirement(
+            "REQ-p80001",
+            title="Signature Standard",
+            template=True,
+            assertions=[{"label": "A", "text": "an obligation"}],
+        )
+        declaring = make_requirement("REQ-p00044", satisfies=["REQ-p80001"])
+        graph = build_graph(template, declaring)
+        state = AppState(
+            graph=_wrap(graph, Path("/test/repo")),
+            repo_root=Path("/test/repo"),
+            config={"project": {"name": "test", "namespace": "REQ"}},
+        )
+        blocked_client = TestClient(create_app(state, mount_mcp=False))
+
+        resp = blocked_client.post(
+            "/api/mutate/template",
+            json={"node_id": "REQ-p80001", "is_template": False},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is False
+        assert data["blocked"] is True
+        assert data["instance_count"] == 1
+
+        # force=True completes the confirm-and-re-POST conversation.
+        resp = blocked_client.post(
+            "/api/mutate/template",
+            json={"node_id": "REQ-p80001", "is_template": False, "force": True},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
+
+
 class TestMutateTitle:
     """Validates REQ-d00010-A: POST /api/mutate/title."""
 
@@ -1025,6 +1125,235 @@ class TestGetNode:
         assert data["kind"] == "journey"
         assert data["properties"]["actor"] == "End User"
         assert data["properties"]["goal"] == "Log into the system"
+
+
+@pytest.fixture
+def incoming_graph():
+    """Graph exercising reverse-traceability: a partially-verified journey
+    validating a requirement, plus a refining requirement, plus a requirement
+    with NO incoming traceability edges."""
+    from elspais.graph.annotators import JourneyVerification
+
+    graph = TraceGraph(repo_root=Path("/test/repo"))
+
+    req = GraphNode(id="REQ-p00006", kind=NodeKind.REQUIREMENT, label="Traceability Viewer")
+    req._content = {"level": "PRD", "status": "Active", "hash": "aaa11111"}
+    a = GraphNode(id="REQ-p00006-A", kind=NodeKind.ASSERTION, label="SHALL show cards")
+    a._content = {"label": "A"}
+    req.link(a, EdgeKind.STRUCTURES)
+    b = GraphNode(id="REQ-p00006-B", kind=NodeKind.ASSERTION, label="SHALL show reverse links")
+    b._content = {"label": "B"}
+    req.link(b, EdgeKind.STRUCTURES)
+
+    # Journey validates the requirement's A and B assertions; 5/7 steps verified.
+    jny = GraphNode(id="JNY-ENROLL-01", kind=NodeKind.USER_JOURNEY, label="Joining the Study")
+    jny._content = {}
+    req.link(jny, EdgeKind.VALIDATES, assertion_targets=["A"])
+    req.link(jny, EdgeKind.VALIDATES, assertion_targets=["B"])
+    steps = []
+    for i in range(7):
+        s = GraphNode(id=f"JNY-ENROLL-01:step:{i}", kind=NodeKind.STEP, label=f"{i}")
+        s._content = {"label": f"{i}"}
+        s.set_metric("step_status", "pass" if i < 5 else "untested")
+        jny.link(s, EdgeKind.STRUCTURES)
+        steps.append(s)
+    jny.set_metric("journey_verification", JourneyVerification(tier="partial"))
+
+    # A refining requirement REQ-o00009 refines req (REQ-p00006). The builder
+    # stores REFINES as refined->refiner (abstract target -> concrete refiner):
+    # ``Refines: REQ-p00006`` on REQ-o00009 wires ``target.link(source)`` i.e.
+    # ``req.link(refiner)`` -> edge source=req(refined), target=refiner. So the
+    # refiner is reached via req's OUTGOING REFINES edge, and req is what the
+    # refiner names in its ``Refines:`` line (render.py._derive_refines_refs).
+    refiner = GraphNode(id="REQ-o00009", kind=NodeKind.REQUIREMENT, label="Linking Error Detail")
+    refiner._content = {"level": "OPS", "status": "Active", "hash": "bbb22222"}
+    req.link(refiner, EdgeKind.REFINES)
+
+    # A requirement with NO incoming traceability edges.
+    lonely = GraphNode(id="REQ-p00007", kind=NodeKind.REQUIREMENT, label="Lonely Req")
+    lonely._content = {"level": "PRD", "status": "Active", "hash": "ccc33333"}
+
+    # A requirement whose single assertion is validated by an assertion-level
+    # (direct assertion -> journey) VALIDATES edge that carries NO
+    # assertion_targets. The scope must resolve to that one assertion, not to a
+    # blanket "all assertions". A separate journey uses a genuine whole-req
+    # blanket validate (no assertion named) to exercise the "all" scope.
+    req8 = GraphNode(id="REQ-p00008", kind=NodeKind.REQUIREMENT, label="Assertion Scope Req")
+    req8._content = {"level": "PRD", "status": "Active", "hash": "ddd44444"}
+    x = GraphNode(id="REQ-p00008-X", kind=NodeKind.ASSERTION, label="SHALL do X")
+    x._content = {"label": "X"}
+    req8.link(x, EdgeKind.STRUCTURES)
+    y = GraphNode(id="REQ-p00008-Y", kind=NodeKind.ASSERTION, label="SHALL do Y")
+    y._content = {"label": "Y"}
+    req8.link(y, EdgeKind.STRUCTURES)
+    # Assertion-level direct validate (no targets): attribute to label "X".
+    jny_x = GraphNode(id="JNY-ASSERT-X", kind=NodeKind.USER_JOURNEY, label="Validates X")
+    jny_x._content = {}
+    x.link(jny_x, EdgeKind.VALIDATES)  # direct assertion -> journey, no targets
+    jny_x.set_metric("journey_verification", JourneyVerification(tier="full", fully_verified=True))
+    # Whole-req blanket validate (no assertion named): scope is "all assertions".
+    jny_all = GraphNode(id="JNY-BLANKET", kind=NodeKind.USER_JOURNEY, label="Validates All")
+    jny_all._content = {}
+    req8.link(jny_all, EdgeKind.VALIDATES)  # no assertion_targets -> blanket
+    jny_all.set_metric("journey_verification", JourneyVerification(tier="missing"))
+
+    graph._roots = [req, refiner, lonely, req8]
+    graph._index = {
+        "REQ-p00006": req,
+        "REQ-p00006-A": a,
+        "REQ-p00006-B": b,
+        "JNY-ENROLL-01": jny,
+        "REQ-o00009": refiner,
+        "REQ-p00007": lonely,
+        "REQ-p00008": req8,
+        "REQ-p00008-X": x,
+        "REQ-p00008-Y": y,
+        "JNY-ASSERT-X": jny_x,
+        "JNY-BLANKET": jny_all,
+    }
+    for i in range(7):
+        graph._index[f"JNY-ENROLL-01:step:{i}"] = steps[i]
+    return _wrap(graph, Path("/test/repo"))
+
+
+@pytest.fixture
+def incoming_client(incoming_graph):
+    state = AppState(
+        graph=incoming_graph,
+        repo_root=Path("/test/repo"),
+        config={"project": {"name": "test", "namespace": "REQ"}},
+    )
+    return TestClient(create_app(state, mount_mcp=False))
+
+
+class TestIncomingLinks:
+    """Validates REQ-p00006-A: reverse-traceability 'Incoming Links' payload."""
+
+    def test_REQ_p00006_A_validated_by_journey_partial(self, incoming_client):
+        """A requirement validated by a partially-verified journey exposes a
+        'Validated by' section naming the journey with a yellow partial state
+        and an informative step-count tooltip."""
+        resp = incoming_client.get("/api/node/REQ-p00006")
+        assert resp.status_code == 200
+        data = resp.json()
+        sections = data["incoming_links"]
+        by_kind = {s["kind"]: s for s in sections}
+        assert "Validated by" in by_kind
+        links = by_kind["Validated by"]["links"]
+        assert len(links) == 1
+        link = links[0]
+        assert link["id"] == "JNY-ENROLL-01"
+        assert link["source_kind"] == "journey"
+        assert link["state"]["label"] == "partial"
+        assert link["state"]["color"] == "yellow"
+        assert "5/7 steps verified" in link["tooltip"]
+        assert "JNY-ENROLL-01" in link["tooltip"]
+        # Journey validates assertions A and B -> accurate count, not "all".
+        assert "validates 2 assertion(s)" in link["tooltip"]
+
+    def test_REQ_p00006_A_assertion_level_validate_scope(self, incoming_client):
+        """An assertion-level (direct assertion -> journey) VALIDATES edge with
+        no assertion_targets is attributed to that one assertion, so the tooltip
+        reads 'validates 1 assertion(s)' — not the blanket 'all assertions'."""
+        data = incoming_client.get("/api/node/REQ-p00008").json()
+        by_kind = {s["kind"]: s for s in data["incoming_links"]}
+        assert "Validated by" in by_kind
+        by_journey = {link["id"]: link for link in by_kind["Validated by"]["links"]}
+        # Assertion-level direct validate -> scoped to its single assertion.
+        assert "validates 1 assertion(s)" in by_journey["JNY-ASSERT-X"]["tooltip"]
+        assert "all assertions" not in by_journey["JNY-ASSERT-X"]["tooltip"]
+        # Whole-req blanket validate (no assertion named) -> "all assertions".
+        assert "validates all assertions" in by_journey["JNY-BLANKET"]["tooltip"]
+
+    def test_REQ_p00006_A_refined_by_names_the_refiner(self, incoming_client):
+        """The REFINED target's 'Refined by' section names the requirement that
+        refines it. REQ-o00009 refines REQ-p00006, so REQ-p00006's card lists
+        REQ-o00009 under 'Refined by' (reached via req's OUTGOING REFINES edge —
+        REFINES is stored refined->refiner)."""
+        data = incoming_client.get("/api/node/REQ-p00006").json()
+        by_kind = {s["kind"]: s for s in data["incoming_links"]}
+        assert "Refined by" in by_kind
+        links = by_kind["Refined by"]["links"]
+        assert [link["id"] for link in links] == ["REQ-o00009"]
+        assert links[0]["source_kind"] == "requirement"
+        assert "refines this requirement" in links[0]["tooltip"]
+
+    def test_REQ_p00006_A_refiner_has_no_phantom_refined_by(self, incoming_client):
+        """The refiner's own card must NOT show a phantom 'Refined by' naming
+        the requirement it refines. REQ-o00009 refines REQ-p00006 (it is not
+        refined BY it), so REQ-o00009 exposes no 'Refined by' section. Under the
+        pre-fix incoming-edge reading this section wrongly listed REQ-p00006."""
+        data = incoming_client.get("/api/node/REQ-o00009").json()
+        by_kind = {s["kind"]: s for s in data["incoming_links"]}
+        assert "Refined by" not in by_kind
+
+    def test_REQ_p00006_A_no_incoming_edges_empty(self, incoming_client):
+        """A requirement with no reverse-traceability edges has an empty
+        incoming_links list, so the card section does not render."""
+        data = incoming_client.get("/api/node/REQ-p00007").json()
+        assert data["incoming_links"] == []
+
+
+@pytest.fixture(scope="module")
+def self_spec_graph():
+    """Build elspais's own spec as a real builder-wired fixture.
+
+    The self-spec is a clean source of a genuine REFINES relationship:
+    REQ-p00005 declares ``Refines: REQ-p00001``. Built without code/test
+    scanning or associates (spec-level REFINES edges are unaffected) for speed.
+    """
+    from elspais.graph.factory import build_graph
+
+    repo_root = Path(__file__).parent.parent
+    return build_graph(
+        repo_root=repo_root,
+        scan_code=False,
+        scan_tests=False,
+        _build_associates=False,
+    )
+
+
+class TestRefinedByDirection:
+    """Validates REQ-p00006-A: the viewer 'Refined by' reverse-traceability
+    section reflects requirements that refine this one (its REFINES-refiners),
+    agreeing with the canonical ``render.py._derive_refines_refs`` direction.
+
+    Ground truth: for a declaration ``D Refines T``, ``_derive_refines_refs(D)``
+    lists T (what D refines). Therefore T's 'Refined by' lists D, and D's
+    'Refined by' does NOT list T. REQ-p00005 refines REQ-p00001 in the self-spec.
+    """
+
+    def _refined_by(self, graph, node_id):
+        from elspais.server.routes_api import _compute_incoming_links
+
+        node = graph.find_by_id(node_id)
+        sections = _compute_incoming_links(node)
+        for section in sections:
+            if section["kind"] == "Refined by":
+                return [link["id"] for link in section["links"]]
+        return []
+
+    def test_REQ_p00006_A_refiner_omits_phantom_refined_by(self, self_spec_graph):
+        """The refiner REQ-p00005 (which declares Refines: REQ-p00001) has no
+        'Refined by' entry for REQ-p00001 — that would be the inverted phantom."""
+        refined_by = self._refined_by(self_spec_graph, "REQ-p00005")
+        assert "REQ-p00001" not in refined_by
+
+    def test_REQ_p00006_A_refined_target_lists_real_refiner(self, self_spec_graph):
+        """The refined target REQ-p00001 lists its real refiner REQ-p00005 under
+        'Refined by' — the entry omitted by the pre-fix incoming-edge reading."""
+        refined_by = self._refined_by(self_spec_graph, "REQ-p00001")
+        assert "REQ-p00005" in refined_by
+
+    def test_REQ_p00006_A_agrees_with_render_derive_refines(self, self_spec_graph):
+        """The viewer and render.py agree on direction: the declarer's Refines
+        list (render ground truth) names REQ-p00001, while the declarer's
+        'Refined by' does not — the two renderers are no longer inverted."""
+        from elspais.graph.render import _derive_refines_refs
+
+        declarer = self_spec_graph.find_by_id("REQ-p00005")
+        assert "REQ-p00001" in _derive_refines_refs(declarer)
+        assert "REQ-p00001" not in self._refined_by(self_spec_graph, "REQ-p00005")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1552,7 +1881,7 @@ def disk_client(disk_app):
 class TestMutateSaveRoundTrip:
     """End-to-end: mutate via API -> save -> verify file on disk."""
 
-    # Implements: REQ-d00132-F
+    # Verifies: REQ-d00132-F
     def test_add_refines_edge_and_save(self, disk_app_with_graph):
         """POST /api/mutate/edge (add REFINES) -> POST /api/save -> file has Refines."""
         app, graph, spec_file = disk_app_with_graph
@@ -1593,7 +1922,7 @@ class TestMutateSaveRoundTrip:
         assert "**Refines**: REQ-p00002" in content
         assert "**Implements**: REQ-p00001" in content
 
-    # Implements: REQ-d00132-A
+    # Verifies: REQ-d00132-A
     def test_change_status_and_save(self, disk_app):
         """POST /api/mutate/status -> POST /api/save -> file has new status."""
         app, spec_file = disk_app
@@ -1612,7 +1941,7 @@ class TestMutateSaveRoundTrip:
         content = spec_file.read_text(encoding="utf-8")
         assert "**Status**: Deprecated" in content
 
-    # Implements: REQ-d00132-A
+    # Verifies: REQ-d00132-A
     def test_update_title_and_save(self, disk_app):
         """POST /api/mutate/title -> POST /api/save -> file has new title."""
         app, spec_file = disk_app
@@ -1631,7 +1960,7 @@ class TestMutateSaveRoundTrip:
         content = spec_file.read_text(encoding="utf-8")
         assert "## REQ-t00001: Updated Title" in content
 
-    # Implements: REQ-d00132-A
+    # Verifies: REQ-d00132-A
     def test_update_assertion_and_save(self, disk_app):
         """POST /api/mutate/assertion -> POST /api/save -> file has new text."""
         app, spec_file = disk_app
@@ -1654,7 +1983,7 @@ class TestMutateSaveRoundTrip:
         assert "A. The system SHALL do something NEW." in content
         assert "B. The system SHALL do another thing." in content
 
-    # Implements: REQ-d00132-A
+    # Verifies: REQ-d00132-A
     def test_add_assertion_and_save(self, disk_app):
         """POST /api/mutate/assertion/add -> POST /api/save -> file has new assertion."""
         app, spec_file = disk_app
@@ -1677,7 +2006,7 @@ class TestMutateSaveRoundTrip:
         content = spec_file.read_text(encoding="utf-8")
         assert "C. The system SHALL do a third thing." in content
 
-    # Implements: REQ-d00132-F
+    # Verifies: REQ-d00132-F
     def test_add_implements_edge_and_save(self, disk_app_with_graph):
         """POST /api/mutate/edge (add IMPLEMENTS) -> POST /api/save -> file updated."""
         app, graph, spec_file = disk_app_with_graph
@@ -1715,7 +2044,7 @@ class TestMutateSaveRoundTrip:
         assert "REQ-p00001" in content
         assert "REQ-p00002" in content
 
-    # Implements: REQ-d00132-F
+    # Verifies: REQ-d00132-F
     def test_delete_edge_and_save(self, disk_app):
         """POST /api/mutate/edge (delete) -> POST /api/save -> reference removed."""
         app, spec_file = disk_app
@@ -1739,7 +2068,7 @@ class TestMutateSaveRoundTrip:
         # After deleting the only implements target, the field value should be empty
         assert "REQ-p00001" not in content or "**Implements**: -" in content
 
-    # Implements: REQ-d00132-F
+    # Verifies: REQ-d00132-F
     def test_change_edge_kind_and_save(self, disk_app):
         """POST /api/mutate/edge (change_kind) -> POST /api/save -> Implements->Refines."""
         app, spec_file = disk_app
@@ -1764,7 +2093,7 @@ class TestMutateSaveRoundTrip:
         assert "**Refines**: REQ-p00001" in content
         assert "**Implements**: REQ-p00001" not in content
 
-    # Implements: REQ-d00132-A
+    # Verifies: REQ-d00132-A
     def test_delete_assertion_and_save(self, disk_app):
         """POST /api/mutate/assertion/delete -> POST /api/save -> assertion removed."""
         app, spec_file = disk_app
@@ -1785,7 +2114,7 @@ class TestMutateSaveRoundTrip:
         assert "A. The system SHALL do something." in content
         assert "do another thing" not in content
 
-    # Implements: REQ-d00132-A
+    # Verifies: REQ-d00132-A
     def test_delete_requirement_and_save(self, disk_app_two_reqs):
         """POST /api/mutate/requirement/delete -> POST /api/save -> req removed from file."""
         app, graph, spec_file = disk_app_two_reqs
@@ -1808,7 +2137,7 @@ class TestMutateSaveRoundTrip:
         assert "REQ-t00002" not in content
         assert "Second Requirement" not in content
 
-    # Implements: REQ-d00134-A
+    # Verifies: REQ-d00134-A
     def test_multiple_mutations_then_save(self, disk_app):
         """Multiple mutations followed by a single save all persist correctly."""
         app, spec_file = disk_app
@@ -1852,7 +2181,7 @@ class TestMutateSaveRoundTrip:
         # Assertion A should be untouched
         assert "A. The system SHALL do something." in content
 
-    # Implements: REQ-d00134-F
+    # Verifies: REQ-d00134-F
     def test_undo_then_save_persists_remaining(self, disk_app):
         """Mutate twice, undo one, save -> only first mutation persists."""
         app, spec_file = disk_app
@@ -1887,7 +2216,7 @@ class TestMutateSaveRoundTrip:
         assert "## REQ-t00001: Test Requirement" in content  # title unchanged
         assert "Should Be Undone" not in content
 
-    # Implements: REQ-d00132-A
+    # Verifies: REQ-d00132-A
     def test_save_with_no_mutations_succeeds(self, disk_app):
         """POST /api/save with no pending mutations succeeds with count 0."""
         app, spec_file = disk_app
@@ -1903,7 +2232,7 @@ class TestMutateSaveRoundTrip:
         # File should be unchanged
         assert spec_file.read_text(encoding="utf-8") == original_content
 
-    # Implements: REQ-d00132-E
+    # Verifies: REQ-d00132-E
     def test_dirty_reflects_mutation_state(self, disk_app):
         """GET /api/dirty tracks pending mutation count."""
         app, _ = disk_app
@@ -1928,7 +2257,7 @@ class TestMutateSaveRoundTrip:
         data = resp.json()
         assert data["dirty"] is False, "Save should clear the dirty flag"
 
-    # Implements: REQ-d00134-F
+    # Verifies: REQ-d00134-F
     def test_add_assertion_then_delete_it_then_save(self, disk_app):
         """Add assertion, then delete it, then save -> file unchanged."""
         app, spec_file = disk_app
@@ -1962,7 +2291,7 @@ class TestMutateSaveRoundTrip:
         assert "A. The system SHALL do something." in content
         assert "B. The system SHALL do another thing." in content
 
-    # Implements: REQ-d00132-F
+    # Verifies: REQ-d00132-F
     def test_change_edge_kind_then_add_edge_then_save(self, disk_app_with_graph):
         """Change IMPLEMENTS->REFINES, add new IMPLEMENTS, save -> both persisted."""
         app, graph, spec_file = disk_app_with_graph
@@ -2013,7 +2342,7 @@ class TestMutateSaveRoundTrip:
         assert "**Refines**: REQ-p00001" in content
         assert "**Implements**: REQ-p00002" in content
 
-    # Implements: REQ-d00134-A
+    # Verifies: REQ-d00134-A
     def test_mutations_across_two_reqs_then_save(self, disk_app_two_reqs):
         """Mutate two different requirements, save once -> both persisted."""
         app, graph, spec_file = disk_app_two_reqs
@@ -2060,7 +2389,7 @@ class TestMutateSaveRoundTrip:
                         break
                 break
 
-    # Implements: REQ-d00134-A
+    # Verifies: REQ-d00134-A
     def test_add_assertion_to_two_reqs_then_save(self, disk_app_two_reqs):
         """Add assertions to different reqs, save once -> both persisted."""
         app, graph, spec_file = disk_app_two_reqs
@@ -2098,12 +2427,12 @@ class TestMutateSaveRoundTrip:
 class TestMutateValidation:
     """Validate error handling for mutation API endpoints."""
 
-    # Implements: REQ-d00010-A
+    # Verifies: REQ-d00010-A
     def test_mutate_status_missing_fields(self, disk_client):
         resp = disk_client.post("/api/mutate/status", json={"node_id": "REQ-t00001"})
         assert resp.status_code == 400
 
-    # Implements: REQ-d00010-A
+    # Verifies: REQ-d00010-A
     def test_mutate_status_unknown_node(self, disk_client):
         resp = disk_client.post(
             "/api/mutate/status",
@@ -2111,17 +2440,17 @@ class TestMutateValidation:
         )
         assert resp.status_code == 400
 
-    # Implements: REQ-d00010-A
+    # Verifies: REQ-d00010-A
     def test_mutate_title_missing_fields(self, disk_client):
         resp = disk_client.post("/api/mutate/title", json={"node_id": "REQ-t00001"})
         assert resp.status_code == 400
 
-    # Implements: REQ-d00010-A
+    # Verifies: REQ-d00010-A
     def test_mutate_assertion_missing_fields(self, disk_client):
         resp = disk_client.post("/api/mutate/assertion", json={"assertion_id": "REQ-t00001-A"})
         assert resp.status_code == 400
 
-    # Implements: REQ-d00010-A
+    # Verifies: REQ-d00010-A
     def test_mutate_assertion_add_missing_fields(self, disk_client):
         resp = disk_client.post(
             "/api/mutate/assertion/add",
@@ -2129,7 +2458,7 @@ class TestMutateValidation:
         )
         assert resp.status_code == 400
 
-    # Implements: REQ-d00010-A
+    # Verifies: REQ-d00010-A
     def test_mutate_assertion_delete_no_confirm(self, disk_client):
         resp = disk_client.post(
             "/api/mutate/assertion/delete",
@@ -2137,7 +2466,7 @@ class TestMutateValidation:
         )
         assert resp.status_code == 400
 
-    # Implements: REQ-d00010-A
+    # Verifies: REQ-d00010-A
     def test_mutate_requirement_delete_no_confirm(self, disk_client):
         resp = disk_client.post(
             "/api/mutate/requirement/delete",
@@ -2145,7 +2474,7 @@ class TestMutateValidation:
         )
         assert resp.status_code == 400
 
-    # Implements: REQ-d00010-A
+    # Verifies: REQ-d00010-A
     def test_mutate_edge_missing_action(self, disk_client):
         resp = disk_client.post(
             "/api/mutate/edge",
@@ -2153,7 +2482,7 @@ class TestMutateValidation:
         )
         assert resp.status_code == 400
 
-    # Implements: REQ-d00010-A
+    # Verifies: REQ-d00010-A
     def test_mutate_edge_unknown_action(self, disk_client):
         resp = disk_client.post(
             "/api/mutate/edge",
@@ -2165,7 +2494,7 @@ class TestMutateValidation:
         )
         assert resp.status_code == 400
 
-    # Implements: REQ-d00010-A
+    # Verifies: REQ-d00010-A
     def test_mutate_edge_add_missing_kind(self, disk_client):
         resp = disk_client.post(
             "/api/mutate/edge",
@@ -2177,7 +2506,7 @@ class TestMutateValidation:
         )
         assert resp.status_code == 400
 
-    # Implements: REQ-d00010-A
+    # Verifies: REQ-d00010-A
     def test_mutate_edge_change_kind_missing_new_kind(self, disk_client):
         resp = disk_client.post(
             "/api/mutate/edge",
@@ -2189,7 +2518,7 @@ class TestMutateValidation:
         )
         assert resp.status_code == 400
 
-    # Implements: REQ-d00010-A
+    # Verifies: REQ-d00010-A
     def test_undo_with_no_mutations(self, disk_client):
         """Undo with no pending mutations returns error."""
         resp = disk_client.post("/api/mutate/undo")
@@ -2622,7 +2951,7 @@ class TestGitSuggestBranchName:
 class TestSpecFiles:
     """Validates GET /api/spec-files endpoint."""
 
-    # Implements: REQ-d00010
+    # Verifies: REQ-d00010
 
     @pytest.fixture
     def spec_files_graph(self):
@@ -2702,7 +3031,7 @@ class TestSpecFiles:
         return TestClient(app)
 
     def test_spec_files_returns_spec_file_list(self, spec_files_client):
-        # Implements: REQ-d00010
+        # Verifies: REQ-d00010
         """Endpoint returns only SPEC files, not CODE or TEST."""
         resp = spec_files_client.get("/api/spec-files")
         assert resp.status_code == 200
@@ -2722,7 +3051,7 @@ class TestSpecFiles:
         assert "file:tests/test_main.py" not in ids
 
     def test_spec_files_sorted_by_path(self, spec_files_client):
-        # Implements: REQ-d00010
+        # Verifies: REQ-d00010
         """Results are sorted alphabetically by relative_path."""
         resp = spec_files_client.get("/api/spec-files")
         assert resp.status_code == 200
@@ -2734,7 +3063,7 @@ class TestSpecFiles:
         assert paths[1] == "spec/requirements.md"
 
     def test_spec_files_empty_when_no_spec_files(self):
-        # Implements: REQ-d00010
+        # Verifies: REQ-d00010
         """Returns empty list when no SPEC files exist."""
         graph = TraceGraph(repo_root=Path("/test/repo"))
         code_file = GraphNode(
@@ -2830,7 +3159,7 @@ def full_disk_app(tmp_path):
 class TestMoveToNewFile:
     """Tests for moving a node to a newly-created file via the API."""
 
-    # Implements: REQ-d00010
+    # Verifies: REQ-d00010
     def test_move_to_new_file_creates_and_moves(self, full_disk_app):
         """POST /api/mutate/move-to-file with non-existent target creates file and moves."""
         app, state, _spec_file = full_disk_app
@@ -2858,7 +3187,7 @@ class TestMoveToNewFile:
         new_file_node = state.graph.find_by_id("file:spec/new-reqs.md")
         assert new_file_node is not None
 
-    # Implements: REQ-d00010
+    # Verifies: REQ-d00010
     def test_move_to_new_file_rejects_invalid_path(self, full_disk_app):
         """POST /api/mutate/move-to-file rejects target outside configured spec dirs."""
         app, state, _spec_file = full_disk_app
@@ -2879,7 +3208,7 @@ class TestMoveToNewFile:
         # File should NOT have been created
         assert not (state.repo_root / "random" / "not-a-spec.md").exists()
 
-    # Implements: REQ-d00010
+    # Verifies: REQ-d00010
     def test_move_to_new_file_rejects_path_traversal(self, full_disk_app):
         """Path traversal attempts are rejected."""
         app, state, _spec_file = full_disk_app
@@ -2896,7 +3225,7 @@ class TestMoveToNewFile:
         data = resp.json()
         assert "Invalid path" in data["error"] or "escapes" in data["error"]
 
-    # Implements: REQ-d00010
+    # Verifies: REQ-d00010
     def test_move_to_existing_file_still_works(self, full_disk_app):
         """POST /api/mutate/move-to-file with existing target file works as before."""
         app, state, _spec_file = full_disk_app

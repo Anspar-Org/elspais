@@ -1,8 +1,9 @@
-# Verifies: REQ-d00085
+# Verifies: REQ-d00085, REQ-d00241
 """Tests for traceability-focused health checks.
 
 Tests check_structural_orphans(), check_unlinked_tests(), check_unlinked_code(),
-check_broken_references(), and config backward compatibility for allow_orphans.
+check_broken_references(), config backward compatibility for allow_orphans, and
+the code.no_traceability wiring in run_code_checks() (REQ-d00241).
 """
 from __future__ import annotations
 
@@ -15,11 +16,12 @@ from elspais.commands.health import (
     check_structural_orphans,
     check_unlinked_code,
     check_unlinked_tests,
+    run_code_checks,
     run_spec_checks,
 )
 from elspais.config import _merge_configs, config_defaults, get_config
 from elspais.graph.builder import TraceGraph
-from elspais.graph.federated import FederatedGraph
+from elspais.graph.federated import FederatedGraph, RepoEntry
 from elspais.graph.GraphNode import FileType, GraphNode, NodeKind
 from elspais.graph.relations import EdgeKind
 
@@ -106,8 +108,12 @@ class TestCheckStructuralOrphans:
 class TestCheckUnlinkedTests:
     """Tests for check_unlinked_tests() — file-level semantics.
 
-    Unlinked means a TEST-type FILE was scanned but contains no TEST
-    child nodes (no traceability markers found).
+    Unlinked means a TEST-type FILE was scanned and either contains no
+    TEST child nodes at all, or contains TEST children none of which
+    link to any requirement (REQ-d00241-D). The second condition matters
+    because the parser emits a TEST node for every discovered test
+    function whether or not it carries a ``Verifies:`` marker, so a
+    fully marker-less file still has TEST children.
     """
 
     def test_REQ_d00085_all_test_files_have_markers_passes(self) -> None:
@@ -169,6 +175,65 @@ class TestCheckUnlinkedTests:
         finding = check.findings[0]
         assert isinstance(finding, HealthFinding)
         assert finding.file_path is not None
+
+    # Verifies: REQ-d00241-D
+    def test_REQ_d00241_D_marker_less_file_with_test_children_flagged(self) -> None:
+        """A test FILE whose TEST children all lack requirement links is flagged.
+
+        The parser's third pass emits a TEST node for every discovered
+        test function even when it has no ``Verifies:`` marker, so a
+        marker-less file is NOT the zero-TEST-children case -- it has
+        children, just none linked. Before REQ-d00241-D this file was
+        reported by neither tests.unlinked (which only looked for zero
+        children) nor code.no_traceability (now code-only): a silent
+        detection gap.
+        """
+        graph = build_graph(
+            make_test_ref(
+                verifies=[],
+                source_path="tests/test_unmarked.py",
+                function_name="test_no_marker",
+                start_line=1,
+                end_line=5,
+            ),
+        )
+        # Sanity: the file really has a TEST child (not the empty-file case).
+        file_node = graph._index["file:tests/test_unmarked.py"]
+        assert any(
+            c.kind == NodeKind.TEST for c in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
+        )
+
+        check = check_unlinked_tests(graph)
+        assert not check.passed
+        assert any(f.file_path == "tests/test_unmarked.py" for f in check.findings)
+
+    # Verifies: REQ-d00241-D
+    def test_REQ_d00241_D_partially_marked_file_not_flagged(self) -> None:
+        """A test FILE with at least one linked TEST child is NOT flagged.
+
+        Partial marking isn't "unlinked" -- one linked test is enough to
+        establish file-level traceability.
+        """
+        graph = build_graph(
+            make_requirement("REQ-p00001", title="Feature", level="PRD"),
+            make_test_ref(
+                verifies=["REQ-p00001"],
+                source_path="tests/test_partial.py",
+                function_name="test_marked",
+                start_line=1,
+                end_line=5,
+            ),
+            make_test_ref(
+                verifies=[],
+                source_path="tests/test_partial.py",
+                function_name="test_unmarked",
+                start_line=10,
+                end_line=15,
+            ),
+        )
+        check = check_unlinked_tests(graph)
+        assert check.passed
+        assert not any(f.file_path == "tests/test_partial.py" for f in check.findings)
 
 
 # =============================================================================
@@ -241,6 +306,109 @@ class TestCheckUnlinkedCode:
 
 
 # =============================================================================
+# code.no_traceability wiring — REQ-d00241 (code-only; tests owned by
+# tests.unlinked)
+# =============================================================================
+
+
+class TestRunCodeChecksNoTraceabilityWiring:
+    """Tests for the code.no_traceability wiring in run_code_checks().
+
+    REQ-d00241-A/B previously described ``check_no_traceability`` as
+    covering "code and test files" / "CODE/TEST nodes", and
+    ``run_code_checks()`` fed it unlinked nodes of *both*
+    ``NodeKind.CODE`` and ``NodeKind.TEST``. Because the test-file parser
+    unconditionally creates a TEST node for every test function found
+    (marked or not -- see ``GraphBuilder._add_test_ref``), a test file
+    with unmarked functions produced marker-less TEST nodes that were
+    *also* separately reported by ``tests.unlinked``
+    (``check_unlinked_tests``), double-reporting the same file once
+    under each category. REQ-d00241 was reworded to scope
+    ``code.no_traceability`` to CODE nodes only; test files are now
+    exclusively the responsibility of ``tests.unlinked``.
+    """
+
+    # Verifies: REQ-d00241-B
+    def test_REQ_d00241_B_unlinked_code_node_still_appears(self) -> None:
+        """An unlinked CODE node is still reported by code.no_traceability.
+
+        Uses a dangling ``implements`` target (rather than an empty list)
+        because ``GraphBuilder._add_code_ref`` only creates a CODE node
+        per referenced id -- unlike TEST, there's no unconditional
+        per-function pass, so a target that fails to resolve is what
+        makes the node exist-but-unreachable.
+        """
+        graph = build_graph(
+            make_code_ref(
+                implements=["REQ-p09999"], source_path="src/orphan.py", start_line=1, end_line=5
+            ),
+        )
+        checks = run_code_checks(_wrap(graph))
+        check = next(c for c in checks if c.name == "code.no_traceability")
+        assert not check.passed
+        assert any("orphan.py" in f.message for f in check.findings)
+
+    # Verifies: REQ-d00241-A, REQ-d00241-B, REQ-d00241-D
+    def test_REQ_d00241_A_marker_less_test_function_excluded(self) -> None:
+        """A marker-less test file moves from code.no_traceability to tests.unlinked.
+
+        Regression guard for the double-report defect AND its inverse (the
+        detection gap): a test function with no ``Verifies:`` marker still
+        produces an unreachable TEST node (per the parser's unconditional
+        per-function emission). code.no_traceability must not surface it
+        -- that's tests.unlinked's job -- and tests.unlinked MUST surface
+        it, otherwise the file silently escapes both checks.
+        """
+        graph = build_graph(
+            make_test_ref(
+                verifies=[],
+                source_path="tests/test_unmarked.py",
+                function_name="test_something",
+                start_line=1,
+                end_line=5,
+            ),
+        )
+        # Sanity: the TEST node really is unlinked (has a FILE parent,
+        # unreachable to any requirement) -- otherwise this test would
+        # pass vacuously regardless of the wiring fix.
+        assert list(graph.iter_unlinked(NodeKind.TEST))
+
+        checks = run_code_checks(_wrap(graph))
+        check = next(c for c in checks if c.name == "code.no_traceability")
+        assert check.passed
+        assert not any("test_unmarked.py" in f.message for f in check.findings)
+
+        # The file MUST be owned by tests.unlinked instead (REQ-d00241-D).
+        tests_check = check_unlinked_tests(_wrap(graph))
+        assert not tests_check.passed
+        assert any(f.file_path == "tests/test_unmarked.py" for f in tests_check.findings)
+
+    # Verifies: REQ-d00241-A
+    def test_REQ_d00241_A_mixed_code_and_test_only_code_reported(self) -> None:
+        """With both an unlinked CODE node and a marker-less TEST node,
+        only the CODE file is reported by code.no_traceability.
+        """
+        graph = build_graph(
+            make_code_ref(
+                implements=["REQ-p09999"], source_path="src/orphan.py", start_line=1, end_line=5
+            ),
+            make_test_ref(
+                verifies=[],
+                source_path="tests/test_unmarked.py",
+                function_name="test_something",
+                start_line=1,
+                end_line=5,
+            ),
+        )
+        checks = run_code_checks(_wrap(graph))
+        check = next(c for c in checks if c.name == "code.no_traceability")
+        assert not check.passed
+        messages = [f.message for f in check.findings]
+        assert any("orphan.py" in m for m in messages)
+        assert not any("test_unmarked.py" in m for m in messages)
+
+
+# =============================================================================
 # Broken References
 # =============================================================================
 
@@ -306,12 +474,20 @@ class TestCheckBrokenReferences:
         assert finding.node_id == "REQ-d00001"
         assert "REQ-p99999" in finding.message
 
-    def test_REQ_d00085_allow_unresolved_cross_repo_suppresses_foreign_namespace(self) -> None:
-        """Foreign-namespace refs are suppressed when allow_unresolved_cross_repo=True."""
+    # Verifies: REQ-d00252-G
+    def test_REQ_d00085_no_associates_never_suppresses_foreign_looking_ref(self) -> None:
+        """Guard 1 (REQ-d00252-G): a federation-of-one has no configured
+        associates, so a foreign-*looking* (unparseable) broken ref can
+        never be presumed foreign, even with
+        allow_unresolved_cross_repo=True -- there is no other repo it
+        could belong to. This reproduces the field bug where an empty
+        ``[associates]`` table combined with a mis-styled reference
+        suffix caused genuinely-local broken references to be silently
+        suppressed as "cross-repo".
+        """
         from elspais.graph.mutations import BrokenReference
 
         graph = TraceGraph()
-        # Foreign namespace (HHT-*) — cross-repo; config gives IdResolver the local namespace
         graph._broken_references = [
             BrokenReference(source_id="REQ-d00001", target_id="HHT-p00001", edge_kind="implements"),
         ]
@@ -321,6 +497,43 @@ class TestCheckBrokenReferences:
         # Pass config to _wrap so FederatedGraph annotates presumed_foreign during init
         fed = _wrap(graph, config)
         check = check_broken_references(fed, config)
+        assert not check.passed
+        assert "suppressed" not in check.message
+
+    # Verifies: REQ-d00252-G
+    def test_REQ_d00085_allow_unresolved_cross_repo_suppresses_with_real_associate(
+        self,
+    ) -> None:
+        """Regression: suppression still applies to a genuinely foreign
+        reference once a real associate of a different namespace is
+        configured -- only the associate-less blanket case (guard 1) is
+        gated.
+        """
+        from elspais.graph.mutations import BrokenReference
+
+        host_graph = TraceGraph()
+        host_graph._broken_references = [
+            BrokenReference(source_id="REQ-d00001", target_id="HHT-p00001", edge_kind="implements"),
+        ]
+        lib_graph = TraceGraph()
+        override = {"validation": {"allow_unresolved_cross_repo": True}}
+        host_config = _merge_configs(config_defaults(), override)
+        host_config["project"] = {"name": "host", "namespace": "REQ"}
+        lib_config = config_defaults()
+        lib_config["project"] = {"name": "lib", "namespace": "HHT"}
+
+        fed = FederatedGraph(
+            [
+                RepoEntry(
+                    name="host", graph=host_graph, config=host_config, repo_root=Path("/repo/host")
+                ),
+                RepoEntry(
+                    name="lib", graph=lib_graph, config=lib_config, repo_root=Path("/repo/lib")
+                ),
+            ],
+            root_repo="host",
+        )
+        check = check_broken_references(fed, host_config)
         assert check.passed
         assert "suppressed" in check.message
 
@@ -360,7 +573,7 @@ class TestCheckBrokenReferences:
 class TestCheckNoCycles:
     """Tests for check_no_cycles() — REQ-d00204-G."""
 
-    # Implements: REQ-d00204-G
+    # Verifies: REQ-d00204-G
     def test_REQ_d00204_G_acyclic_graph_passes(self) -> None:
         """A normal acyclic requirement graph reports no cycles."""
         graph = build_graph(
@@ -371,7 +584,7 @@ class TestCheckNoCycles:
         assert check.passed is True
         assert check.name == "spec.no_cycles"
 
-    # Implements: REQ-d00204-G
+    # Verifies: REQ-d00204-G
     def test_REQ_d00204_G_injected_cycle_fails_and_names_both_ids(self) -> None:
         """A 2-node requirement cycle is detected; the finding names both ids."""
         graph = build_graph(

@@ -52,6 +52,13 @@ name = "my-project"
 # Defines requirement levels with rank, letter, display name, and implements rules.
 # Lower rank = higher in hierarchy (PRD=1 is parent of DEV=3).
 # The `implements` list declares which levels this level may implement.
+#
+# expects_validation (bool, default false): set true for levels that should have
+# a user-journey validating them (a USER_JOURNEY that `Validates:` the requirement).
+# When true, a requirement of that level with no UAT coverage is a reported gap
+# (health `uat.coverage` + `gaps unvalidated`) and its viewer UAT badge renders red.
+# When false (the default), absent UAT is neither flagged nor badged, and does not
+# drag the requirement's combined coverage bucket.
 #──────────────────────────────────────────────────────────────────────────────
 
 [levels.prd]
@@ -59,6 +66,7 @@ rank = 1
 letter = "p"
 display_name = "Product"
 implements = ["prd"]            # PRD can implement other PRD (sub-requirements)
+# expects_validation = true     # user-facing PRD reqs should have a validating journey
 
 [levels.ops]
 rank = 2
@@ -71,6 +79,7 @@ rank = 3
 letter = "d"
 display_name = "Development"
 implements = ["dev", "ops", "prd"]  # DEV can implement DEV, OPS, or PRD
+# expects_validation = false    # internal DEV reqs are not expected to have journeys
 
 #──────────────────────────────────────────────────────────────────────────────
 # ID PATTERNS - Requirement ID Format
@@ -286,9 +295,14 @@ index_associates = false
 
 #──────────────────────────────────────────────────────────────────────────────
 # STATUSES - Optional Per-Status Metadata
-# Attach color (and future metadata) to status names referenced by
-# [rules.format.status_roles]. Unspecified statuses fall back to a
-# deterministic hash-derived color.
+# Attach metadata to status names referenced by [rules.format.status_roles].
+#   color:                  badge color; unspecified statuses fall back to a
+#                           deterministic hash-derived color.
+#   expects_implementation: whether this status expects code implementation.
+#                           Unset = derive from role (active-role -> true, else
+#                           false). true  -> absent implementation is a red gap,
+#                           counted in the project %-implemented denominator;
+#                           false -> neutral grey, excluded from the aggregate.
 #──────────────────────────────────────────────────────────────────────────────
 
 [statuses.Active]
@@ -296,6 +310,21 @@ color = "#198754"
 
 [statuses.Legacy]
 color = "#6c757d"
+
+# expects_implementation is the surgical alternative to reassigning a status
+# into the `active` role. The blunt approach also changes color, sort order,
+# analysis inclusion, and default visibility:
+#
+#   [rules.format.status_roles]
+#   active = ["Active", "Draft"]        # Draft becomes active for EVERYTHING
+#
+# The surgical approach keeps Draft in its provisional role and flips only the
+# implementation expectation:
+#
+#   [rules.format.status_roles]
+#   active = ["Active"]
+#   [statuses.Draft]
+#   expects_implementation = true       # only impl-expectation flips
 
 #──────────────────────────────────────────────────────────────────────────────
 # VALIDATION RULES
@@ -555,9 +584,140 @@ results  = "test-results/junit.xml"   # glob relative to cwd; empty = repo root
 match    = "aggregate"                 # "aggregate" for a whole-suite pass/fail
 ```
 
-With this in place, a test file that declares `// Verifies: JNY-OQ-Login-01/step-2`
+With this in place, a test file that declares `// Verifies: JNY-OQ-Login-01/2`
 links its results to journey step 2, and the journey verdict rolls up into the
 `uat_verified` dimension on any requirement the journey `Validates:`.
 
+For **per-spec** binding instead of a whole-suite verdict, use
+`match = "source"` -- but the JUnit XML must carry a per-`<testcase>` `file`
+attribute naming each test's real source path, and the specs must be scanned as
+TEST nodes (via `[scanning.test].prescan_command`). Playwright's reporter omits
+`file`, so the runner injects it before elspais ingests the XML. See
+`elspais docs test-targets` (the *Playwright / TypeScript* recipe) for the full
+setup.
+
 See `elspais docs graph-model` for the full STEP/JOURNEY model and roll-up rules.
 See `elspais docs test-targets` for all `[[scanning.test.targets]]` fields.
+
+### Coverage-Only Target with Per-Test Attribution (dogfood pattern)
+
+elspais's own suite (this repo's `.elspais.toml`) demonstrates a
+coverage-only target that still gets per-test line attribution
+(`code_tested.direct`) without a machine-readable results file, by pointing
+`coverage` directly at coverage.py's native `.coverage` SQLite data file:
+
+```toml
+[scanning.test]
+# ...
+
+[[scanning.test.targets]]
+name     = "elspais-unit"
+coverage = ".coverage"
+```
+
+Reading contexts from `.coverage` requires the `coverage` package (the
+`elspais[coverage]` extra) to be importable in elspais's own interpreter --
+if it isn't, ingestion degrades gracefully: `code_tested.direct` stays `0`
+and `Code Tested` renders the honest `n/a`, with a single warning naming the
+extra to install. No other config is required; format detection sniffs the
+SQLite file header, so no `reporter` field is needed for this target. A
+stale `.coverage` misattributes contexts to old line numbers after source
+edits -- regenerate it (rerun the suite) after editing sources.
+
+The `.githooks/pre-commit` hook runs pytest with `--cov-context=test`
+(pytest-cov's per-test dynamic context, keyed by nodeid + `|run`/`|setup`/
+`|teardown`), which is what populates those contexts in the `.coverage` file
+that pytest-cov already writes to the repo root. No `reporter`/`results`
+fields are set because there's no `--json-report`/`--junit-xml` step --
+`Verifies:` wiring comes entirely from source-scanned `# Verifies:` comments
+in test files, independent of this target. See `elspais docs test-targets`
+(*Python/pytest Recipe*, *Coverage-only target with per-test direct
+attribution*) for the full recipe, including the JSON `show_contexts`
+alternative for suites too small to worry about the JSON-report size cost.
+
+### Coverage Severity & Theme Colors
+
+`[rules.coverage]` maps each coverage dimension's tier to a severity
+(`"ok"`, `"info"`, `"warning"`, or `"error"`), which in turn drives both
+health-check exit behavior and the viewer's badge/legend colors. Tiers use
+the unified state vocabulary -- `full` / `partial` / `failing` / `missing`
+(the legacy `full_direct` / `full_indirect` / `none` keys are retired;
+`missing` replaces `none`, and the direct-vs-indirect quality is now a caveat,
+not a tier):
+
+```toml
+[rules.coverage.implemented]
+full    = "ok"       # default: 100% of the dimension's denominator
+partial = "warning"  # default: 0 < fraction < 1
+failing = "error"    # default: a failed result on an in-denominator label
+missing = "error"    # default: no coverage
+
+# uat_coverage/uat_verified default missing to "info" (UAT gaps are
+# lower-priority than code gaps); verified (Passing) defaults missing to
+# "warning".
+```
+
+Severity strings are not colors themselves -- the viewer resolves each
+severity to a color via a fixed catalog in the packaged `theme.toml`
+(`severity.ok`, `severity.info`, `severity.warning`, `severity.error`, each
+with a `color_key` such as `green`/`yellow-green`/`yellow`/`red` that maps to
+themed CSS custom properties, e.g. `--val-green-bg`, with separate light/dark
+values). This catalog is internal (not user-configurable in
+`.elspais.toml`); the `[rules.coverage]` severity strings above are the only
+per-project lever. A `failing` tier (coverage exists but results are
+failing) is a separate overlay checked ahead of the severity map -- it does
+not reuse the `error` severity color in the viewer toolbar's coverage filter,
+which uses its own hardcoded color for that state. See `elspais docs checks`
+(*Dimension tiers*) for the tier model and `graph/aggregation.py` for the
+single shared aggregation these severities feed.
+
+#### Relative denominators (the coverage chain)
+
+Each downstream dimension is measured against its *own* denominator, not the
+whole spec, so an upstream gap is not double-counted downstream:
+
+```text
+Implemented   built     / ALL assertions        (absolute)
+Tested        tested    / IMPLEMENTED assertions (relative)
+Passing       passing   / TESTED assertions      (relative)
+```
+
+An **empty denominator** (nothing implemented -> Tested; nothing tested ->
+Passing) renders `missing` at neutral severity (grey), never a red gap -- you
+cannot test what is not built. A **failing** in-denominator label renders
+`failing` (red) regardless of the fraction.
+
+#### `allow_indirect` (direct vs indirect credit)
+
+```toml
+[rules.coverage]
+allow_indirect = true   # default
+```
+
+Indirect coverage is evidence that named the whole requirement rather than the
+specific assertion (`Implements: REQ-xxx`), or that reached an assertion via
+`Refines:` conduction. When `allow_indirect = true` (default), indirect
+evidence credits a dimension's headline state, and a trailing `~` marker flags
+any state whose evidence is not fully direct (`indirect > direct`); hover text
+always states the direct/indirect split. When `false`, only **direct**
+assertion-level evidence lifts the state -- a requirement covered only
+indirectly reads `missing`/`partial`, and the indirect evidence is shown in
+hover as "not credited" so the fallback stays visible.
+
+#### `status_words` (per-relationship dimension labels)
+
+The coverage dimension labels shown on badges, buttons, hover, and reports are
+defined per relationship, and can be overridden:
+
+```toml
+[rules.coverage.status_words]
+implements = "Implemented"   # default
+verifies   = "Tested"        # default
+yields     = "Passing"       # default
+validates  = "UAT Covered"   # default
+validated  = "UAT Passed"    # default
+```
+
+The display vocabulary is exactly **Implemented / Tested / Passing / UAT
+Covered / UAT Passed**. "Validated" is deliberately not a test-coverage label
+(it collides with the `Validates:` journey keyword).

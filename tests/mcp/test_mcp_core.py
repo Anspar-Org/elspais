@@ -409,7 +409,7 @@ class TestGetHierarchy:
 class TestRefreshGraph:
     """Tests for refresh_graph() tool."""
 
-    # Implements: REQ-o00060-B
+    # Verifies: REQ-o00060-B
     def test_refresh_rebuilds_graph(self, sample_graph):
         """Refresh should rebuild the graph from spec files."""
         pytest.importorskip("mcp")
@@ -424,7 +424,7 @@ class TestRefreshGraph:
             mock_build.assert_called_once()
             assert result["success"] is True
 
-    # Implements: REQ-o00060-B
+    # Verifies: REQ-o00060-B
     def test_refresh_full_clears_caches(self, sample_graph):
         """Refresh with full=True should clear all caches."""
         pytest.importorskip("mcp")
@@ -1127,7 +1127,8 @@ class TestGetProjectSummary:
         assert "branch_changed" in changes
 
     def test_REQ_o00061_C_uses_aggregate_functions(self, sample_graph):
-        """REQ-o00061-C: Uses aggregate functions from annotators module."""
+        """REQ-o00061-C: Derives statistics from shared aggregate functions
+        (graph/aggregation.py tier_buckets + annotators count_by_* helpers)."""
         pytest.importorskip("mcp")
         from elspais.graph.annotators import (
             count_by_coverage,
@@ -1138,16 +1139,23 @@ class TestGetProjectSummary:
 
         # Verify all aggregate functions are used
         expected_levels = count_by_level(sample_graph)
-        expected_coverage = count_by_coverage(sample_graph, exclude_status={"Draft"})
+        expected_coverage = count_by_coverage(sample_graph)
         expected_git = count_by_git_status(sample_graph)
 
         result = _get_project_summary(sample_graph, Path("/test/repo"))
 
         assert result["requirements_by_level"] == expected_levels
-        assert result["coverage"] == expected_coverage
+        # REQ-d00258-C: "coverage" now sources from the shared tier_buckets()
+        # aggregation (still an aggregate function, just relocated out of
+        # annotators) and gains an additive "failing" key; the three legacy
+        # buckets must still agree with count_by_coverage()'s delegate.
+        assert result["coverage"]["total"] == expected_coverage["total"]
+        assert result["coverage"]["full_coverage"] == expected_coverage["full_coverage"]
+        assert result["coverage"]["partial_coverage"] == expected_coverage["partial_coverage"]
+        assert result["coverage"]["no_coverage"] == expected_coverage["no_coverage"]
         assert result["changes"] == expected_git
 
-    # Implements: REQ-o00060-A
+    # Verifies: REQ-o00060-A
     def test_returns_orphan_and_broken_counts(self, sample_graph):
         """Returns orphan and broken reference counts."""
         pytest.importorskip("mcp")
@@ -1159,7 +1167,7 @@ class TestGetProjectSummary:
         assert "broken_reference_count" in result
         assert "total_nodes" in result
 
-    # Implements: REQ-o00061-B
+    # Verifies: REQ-o00061-B
     def test_coverage_with_annotated_nodes(self, sample_graph):
         """Coverage stats work with annotated coverage metrics."""
         pytest.importorskip("mcp")
@@ -1195,6 +1203,40 @@ class TestGetProjectSummary:
         assert coverage["full_coverage"] == 1  # PRD at 100%
         assert coverage["partial_coverage"] == 1  # OPS at 50%
         assert coverage["no_coverage"] == 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test: get_project_summary() consistency with CLI summary - REQ-d00258-C
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# Verifies: REQ-d00258-C
+class TestSummaryConsistency:
+    """MCP project summary and CLI summary derive identical statistics."""
+
+    def test_mcp_and_cli_summaries_agree(self, canonical_graph, canonical_config, tmp_path):
+        pytest.importorskip("mcp")
+        from elspais.graph.aggregation import collect_coverage
+        from elspais.mcp.server import _get_project_summary
+
+        cli = collect_coverage(canonical_graph, canonical_config)
+        mcp = _get_project_summary(canonical_graph, tmp_path, canonical_config)
+        assert mcp["coverage_by_level"] == cli["levels"]
+
+    def test_coverage_buckets_from_tiers(self, canonical_graph, canonical_config, tmp_path):
+        pytest.importorskip("mcp")
+        from elspais.graph.aggregation import tier_buckets
+        from elspais.mcp.server import _get_project_summary
+
+        b = tier_buckets(canonical_graph, "implemented", config=canonical_config)
+        mcp = _get_project_summary(canonical_graph, tmp_path, canonical_config)
+        assert mcp["coverage"] == {
+            "total": b.total,
+            "full_coverage": b.full,
+            "partial_coverage": b.partial,
+            "no_coverage": b.missing,
+            "failing": b.failing,
+        }
 
 
 class TestRoundTripFidelity:
@@ -1307,7 +1349,7 @@ class TestRoundTripFidelity:
 
         return graph
 
-    # Implements: REQ-d00062-C
+    # Verifies: REQ-d00062-C
     def test_assertions_separate_list(self, rich_graph):
         """Assertions should be in a dedicated 'assertions' list."""
         pytest.importorskip("mcp")
@@ -1320,7 +1362,7 @@ class TestRoundTripFidelity:
         labels = {a["label"] for a in result["assertions"]}
         assert labels == {"A", "B"}
 
-    # Implements: REQ-d00062-D
+    # Verifies: REQ-d00062-D
     def test_children_are_requirements_only(self, rich_graph):
         """Children list should contain only requirement children."""
         pytest.importorskip("mcp")
@@ -1334,7 +1376,7 @@ class TestRoundTripFidelity:
         for c in result["children"]:
             assert "level" in c  # requirement children have level
 
-    # Implements: REQ-d00062-B
+    # Verifies: REQ-d00062-B
     def test_parents_include_edge_kind(self, rich_graph):
         """Parent entries should include edge_kind (IMPLEMENTS or REFINES)."""
         pytest.importorskip("mcp")
@@ -1347,7 +1389,7 @@ class TestRoundTripFidelity:
         assert parent["id"] == "REQ-p00001"
         assert parent["edge_kind"] == "implements"
 
-    # Implements: REQ-d00062-B
+    # Verifies: REQ-d00062-B
     def test_parents_edge_kind_refines(self, rich_graph):
         """REFINES edge kind should be exposed on parent."""
         pytest.importorskip("mcp")
@@ -1369,7 +1411,7 @@ class TestRoundTripFidelity:
 class TestGetProjectSummaryChanges:
     """Tests for get_project_summary() change metrics (CUR-879)."""
 
-    # Implements: REQ-o00061-B
+    # Verifies: REQ-o00061-B
     def test_REQ_CUR879_D_project_summary_includes_change_metrics(self, sample_graph):
         """REQ-CUR879-D: get_project_summary returns non-zero change metrics."""
         pytest.importorskip("mcp")
@@ -1416,7 +1458,7 @@ class TestGetProjectSummaryChanges:
 class TestGetChangedRequirements:
     """Tests for get_changed_requirements() tool (CUR-879)."""
 
-    # Implements: REQ-o00061-B
+    # Verifies: REQ-o00061-B
     def test_REQ_CUR879_E_get_changed_requirements_returns_changed(self, sample_graph):
         """REQ-CUR879-E: get_changed_requirements returns changed requirements."""
         pytest.importorskip("mcp")
@@ -1466,7 +1508,7 @@ class TestGetChangedRequirements:
         assert "summary" in result
         assert result["summary"]["uncommitted"] >= 1
 
-    # Implements: REQ-o00061-B
+    # Verifies: REQ-o00061-B
     def test_REQ_CUR879_F_get_changed_requirements_empty_when_clean(self, sample_graph):
         """REQ-CUR879-F: get_changed_requirements returns empty when no changes."""
         pytest.importorskip("mcp")
@@ -1494,7 +1536,7 @@ class TestGetChangedRequirements:
 class TestAgentInstructions:
     """Tests for agent_instructions() tool."""
 
-    # Implements: REQ-o00061-A
+    # Verifies: REQ-o00061-A
     def test_agent_instructions_empty_when_no_rules(self, tmp_path):
         """agent_instructions returns empty list when no rules configured."""
         pytest.importorskip("mcp")
@@ -1506,7 +1548,7 @@ class TestAgentInstructions:
         assert result["instructions"] == []
         assert result["count"] == 0
 
-    # Implements: REQ-o00061-A
+    # Verifies: REQ-o00061-A
     def test_agent_instructions_returns_configured_rules(self, tmp_path):
         """agent_instructions returns rules with correct metadata and content."""
         pytest.importorskip("mcp")

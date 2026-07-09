@@ -93,6 +93,10 @@ class FlutterMachineParser:
                         "root_line": meta["root_line"],
                         "root_path": meta["root_path"],
                         "test_id": None,
+                        # stdout-stream reporter: there is no results file to
+                        # point provenance at.
+                        "result_file": None,
+                        "result_line": None,
                     }
                 )
         return results

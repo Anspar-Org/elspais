@@ -102,13 +102,14 @@ def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _relative_source_path(node: Any, graph: FederatedGraph) -> str:
+def _relative_source_path(node: Any, graph: FederatedGraph | None) -> str:
     """Return the node's source file path, relative to repo root.
 
     Implements: REQ-d00129-D
     Navigates to the FILE parent node to get the repo-relative path.
     Some parsers (notably CodeRefParser) may store absolute paths;
-    this helper normalises the value.
+    this helper normalises the value. Tolerates ``graph is None``
+    (degrades to the raw stored path rather than crashing).
     """
     fn = node.file_node()
     if not fn:
@@ -118,6 +119,8 @@ def _relative_source_path(node: Any, graph: FederatedGraph) -> str:
         return ""
     p = Path(raw)
     if p.is_absolute():
+        if graph is None:
+            return raw  # no repo root to relativise against
         try:
             return str(p.relative_to(graph.repo_root))
         except ValueError:
@@ -199,15 +202,7 @@ def _serialize_test_info(test_node: Any, graph: FederatedGraph) -> dict[str, Any
     results: list[dict[str, Any]] = []
     for child in test_node.iter_children():
         if child.kind == NodeKind.RESULT:
-            results.append(
-                {
-                    "id": child.id,
-                    "status": child.get_field("status", "unknown"),
-                    "duration": child.get_field("duration", 0.0),
-                    "file": _relative_source_path(child, graph),
-                    "line": child.get_field("parse_line") or 0,
-                }
-            )
+            results.append(_serialize_result_entry(child, graph))
     return {
         "id": test_node.id,
         "label": test_node.get_label(),
@@ -216,6 +211,77 @@ def _serialize_test_info(test_node: Any, graph: FederatedGraph) -> dict[str, Any
         "name": test_node.get_field("name", ""),
         "results": results,
     }
+
+
+def _serialize_result_entry(result_node: Any, graph: FederatedGraph) -> dict[str, Any]:
+    """Serialize one RESULT node for a results list.
+
+    result_file/result_line point at the results ARTIFACT (e.g.
+    junit.xml:<testcase> line); file/line keep pointing at the test's
+    source. Fall back to file/line so reporters without a results file
+    (e.g. stdout streams) still render a link.
+    """
+    return {
+        "id": result_node.id,
+        "status": result_node.get_field("status", "unknown"),
+        "duration": result_node.get_field("duration", 0.0),
+        "file": _relative_source_path(result_node, graph),
+        "line": result_node.get_field("parse_line") or 0,
+        "result_file": result_node.get_field("result_file")
+        or _relative_source_path(result_node, graph),
+        "result_line": result_node.get_field("result_line")
+        or result_node.get_field("parse_line")
+        or 0,
+    }
+
+
+# Implements: REQ-d00255-D, REQ-d00256-E
+def _serialize_journey_info(jny_node: Any, graph: FederatedGraph) -> dict[str, Any]:
+    """USER_JOURNEY serializer for the per-assertion UAT panels.
+
+    Same shape as ``_serialize_test_info``, but a journey's results are NOT
+    its direct children — they live on the TESTs verifying the journey and
+    its steps (``JNY/STEP --VERIFIES--> TEST --YIELDS--> RESULT``). Collect
+    them across that chain (step results carry a ``step`` label for
+    provenance) and expose the journey_verification rollup so the panel can
+    headline the 5/7-steps-verified verdict.
+    """
+    from elspais.graph.relations import EdgeKind as EK
+
+    results: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def _collect(node: Any, step_label: str | None) -> None:
+        for edge in node.iter_edges_by_kind(EK.VERIFIES):
+            test_node = edge.target  # target = the verifying test
+            for child in test_node.iter_children():
+                if child.kind != NodeKind.RESULT or child.id in seen:
+                    continue
+                seen.add(child.id)
+                entry = _serialize_result_entry(child, graph)
+                if step_label:
+                    entry["step"] = step_label
+                results.append(entry)
+
+    _collect(jny_node, None)
+    for step in jny_node.iter_children(edge_kinds={EK.STRUCTURES}):
+        if step.kind == NodeKind.STEP:
+            _collect(step, step.get_field("label"))
+
+    info = {
+        "id": jny_node.id,
+        "label": jny_node.get_label(),
+        "file": _relative_source_path(jny_node, graph),
+        "line": jny_node.get_field("parse_line") or 0,
+        "name": jny_node.get_field("name", ""),
+        "results": results,
+    }
+    jv = jny_node.get_metric("journey_verification")
+    if jv is not None:
+        info["verified_steps"] = jv.verified_steps
+        info["total_steps"] = jv.total_steps
+        info["tier"] = jv.tier
+    return info
 
 
 def _serialize_code_info(code_node: Any, graph: FederatedGraph) -> dict[str, Any]:
@@ -318,13 +384,13 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
                         break
                     elif s in ("passed", "pass", "success"):
                         result_status = "pass"
-                verifying_tests.append(
-                    {
-                        "id": test.id,
-                        "title": test.get_label(),
-                        "status": result_status,
-                    }
-                )
+                # Reuse the unified TEST serializer so each entry carries
+                # file/line/label/name/results (viewer renders one clickable
+                # source link). Merge in the aggregated pass/fail status
+                # already computed above. REQ-d00256.
+                test_info = _serialize_test_info(test, graph)
+                test_info["status"] = result_status
+                verifying_tests.append(test_info)
             entry = {
                 "kind": "step",
                 "id": child.id,
@@ -454,9 +520,14 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
                     "covered_fraction": rollup.covered_fraction,
                 }
         # CUR-1419: consumer REQs declaring `Integrates:` inherit the
-        # library node's implemented/verified coverage across INTEGRATES
+        # library node's implemented/passing coverage (result-verified or
+        # line-coverage-credited union, REQ-d00258-B) across INTEGRATES
         # edges. Surface the live overlay so viewers can show inherited
         # status. Skip when there are no integrations to avoid noise.
+        # `verified_*` key names are the wire contract (semantics: the
+        # passing union); `has_failures` flags a red library suite whose
+        # covered count can still read full via the union's per-assertion
+        # max().
         from elspais.graph.metrics import integrates_rollup
 
         irollup = integrates_rollup(node)
@@ -466,6 +537,7 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
                 "implemented_total": irollup.implemented_total,
                 "verified_covered": irollup.verified_covered,
                 "verified_total": irollup.verified_total,
+                "has_failures": irollup.has_failures,
             }
     elif kind == NodeKind.USER_JOURNEY:
         descriptor = None
@@ -1775,9 +1847,13 @@ def _build_coverage_stats(graph: FederatedGraph | None, config: dict[str, Any]) 
 
     from elspais.config import get_status_roles
 
+    # count_with_code_refs is NOT one of the three coverage-aggregation
+    # functions (aggregate_by_level/aggregate_dimension/tier_buckets); it keeps
+    # the role-based exclude set (REQ-d00258-C scope). count_by_coverage is a
+    # thin delegate to tier_buckets and now gates via config.
     exclude = get_status_roles(config).coverage_excluded_statuses()
     return {
-        "by_coverage": count_by_coverage(graph, exclude_status=exclude),
+        "by_coverage": count_by_coverage(graph, config=config),
         "by_level": count_by_level(graph, config=config),
         "code_reference_coverage": count_with_code_refs(graph, exclude_status=exclude),
     }
@@ -2103,7 +2179,8 @@ def _get_project_summary(
     """Get project summary statistics.
 
     REQ-o00061-B: Returns requirement counts by level, coverage statistics, and change metrics.
-    REQ-o00061-C: Uses graph aggregate functions from annotators module.
+    REQ-o00061-C: Derives statistics from the shared coverage aggregation
+    (graph/aggregation.py), not recomputed here.
 
     Args:
         graph: The TraceGraph to analyze.
@@ -2113,12 +2190,22 @@ def _get_project_summary(
     Returns:
         Project summary dict.
     """
-    # Use aggregate functions from annotators (REQ-o00061-C)
+    # REQ-o00061-C: derive statistics from the shared coverage aggregation
+    # (graph/aggregation.py) plus count_by_level; do not recompute here.
     level_counts = count_by_level(graph, config=config)
-    from elspais.config import get_status_roles
+    from elspais.graph.aggregation import tier_buckets
 
-    coverage_exclude = get_status_roles(config or {}).coverage_excluded_statuses()
-    coverage_stats = count_by_coverage(graph, exclude_status=coverage_exclude)
+    # REQ-d00258-C: coverage bucket counts derive from the shared tier_buckets()
+    # aggregation so this MCP surface and the CLI summary agree exactly. Coverage
+    # inclusion is gated by status_expects_implementation via the config.
+    b = tier_buckets(graph, "implemented", config=config)
+    coverage_stats = {
+        "total": b.total,
+        "full_coverage": b.full,
+        "partial_coverage": b.partial,
+        "no_coverage": b.missing,
+        "failing": b.failing,
+    }
     # Annotate git state before counting (idempotent, safe to call multiple times)
     annotate_graph_git_state(graph)
     change_metrics = count_by_git_status(graph)
@@ -2131,6 +2218,13 @@ def _get_project_summary(
         "orphan_count": graph.orphan_count(),
         "broken_reference_count": len(graph.broken_references()),
     }
+
+    # REQ-d00258-C: per-level coverage stats reuse the CLI summary's collector
+    # (elspais.graph.aggregation.collect_coverage) as the single source of
+    # truth for the dict shape, so MCP and CLI can never diverge.
+    from elspais.graph.aggregation import collect_coverage
+
+    result["coverage_by_level"] = collect_coverage(graph, config)["levels"]
 
     code_cov = count_code_coverage(graph)
     if code_cov["total_executable_lines"] > 0:
@@ -2591,6 +2685,50 @@ def _mutate_change_status(graph: FederatedGraph, node_id: str, new_status: str) 
             "success": True,
             "mutation": _serialize_mutation_entry(entry),
             "message": f"Changed status of {node_id} to {new_status}",
+        }
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+# Implements: REQ-p00014-E
+def _mutate_set_stereotype(
+    graph: FederatedGraph, node_id: str, is_template: bool, force: bool = False
+) -> dict[str, Any]:
+    """Set or clear a requirement's ``**Template**`` marker.
+
+    Guard: un-templating a requirement that has INSTANCE clones would break
+    every ``Satisfies:`` reference that produced them, so toggle-OFF with
+    live instances is soft-blocked (``blocked: True`` + the count) unless
+    ``force`` is set. Toggle-ON is always safe.
+    """
+    node = graph.find_by_id(node_id)
+    if node is None:
+        return {"success": False, "error": f"Requirement {node_id} not found"}
+
+    if not is_template and not force:
+        instance_count = sum(1 for _ in node.iter_parents(edge_kinds={EdgeKind.INSTANCE}))
+        if instance_count > 0:
+            return {
+                "success": False,
+                "blocked": True,
+                "instance_count": instance_count,
+                "error": (
+                    f"{instance_count} instance(s) satisfy this requirement — "
+                    "removing Template will break their Satisfies references. "
+                    "Re-submit with force=true to proceed."
+                ),
+            }
+
+    try:
+        entry = graph.set_stereotype(node_id, is_template)
+        return {
+            "success": True,
+            "mutation": _serialize_mutation_entry(entry),
+            "message": (
+                f"Marked {node_id} as a template"
+                if is_template
+                else f"Removed the template marker from {node_id}"
+            ),
         }
     except (ValueError, KeyError) as e:
         return {"success": False, "error": str(e)}
@@ -3377,6 +3515,19 @@ def _query_nodes(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-d00069-J
+def _via_provenance(fraction: float) -> str | None:
+    """Provenance tag for an uncovered assertion's coverage fraction.
+
+    Returns ``"refines-conduction"`` when the fraction is partial
+    (0 < fraction < ~1.0, i.e. coverage conducted up a REFINES edge from a
+    not-fully-covered refiner), else ``None`` (no coverage at all, or ~fully
+    covered). Shared by every uncovered-detail assembly so the wording and
+    the covered threshold (1.0 - 1e-9) cannot drift between surfaces.
+    """
+    return "refines-conduction" if 0 < fraction < 1.0 - 1e-9 else None
+
+
 def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     """Get test coverage information for a requirement.
 
@@ -3451,6 +3602,20 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     covered_assertions = sorted(covered_assertion_ids)
     uncovered_assertions = sorted(set(assertion_ids) - covered_assertion_ids)
 
+    # REQ-d00069-J: annotate each uncovered assertion with its conducted
+    # fraction so a partially-conducted assertion (0 < fraction < 1) is
+    # distinguishable from one with no coverage at all (fraction 0.0). This
+    # is additive alongside ``uncovered_assertions`` -- that field keeps its
+    # existing flat id-list shape for backward compatibility.
+    id_to_label = dict(assertions)
+    tested_fractions = rollup.tested.indirect_pct_by_label if rollup is not None else {}
+    uncovered_detail = []
+    for aid in uncovered_assertions:
+        frac = tested_fractions.get(id_to_label.get(aid, ""), 0.0)
+        uncovered_detail.append(
+            {"id": aid, "fraction": round(frac, 4), "via": _via_provenance(frac)}
+        )
+
     total = len(assertion_ids)
     covered_count = len(covered_assertions)
     referenced_pct = (covered_count / total * 100) if total > 0 else 0.0
@@ -3492,6 +3657,7 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
         "test_nodes": test_nodes,
         "covered_assertions": covered_assertions,
         "uncovered_assertions": uncovered_assertions,
+        "uncovered_detail": uncovered_detail,
         "total_assertions": total,
         "covered_count": covered_count,
         "referenced_pct": round(referenced_pct, 1),
@@ -3569,11 +3735,11 @@ def _get_assertion_uat_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]
     """Build per-assertion UAT (journey) coverage map for a requirement.
 
     Returns a structure mapping each assertion label to its USER_JOURNEY nodes
-    and their results, enabling the UI to show Validated/Accepted buttons.
+    and their results, enabling the UI to show UAT Covered/UAT Passed buttons.
 
     Uses ``_iter_assertion_coverage`` for the shared two-phase traversal
-    and ``_serialize_test_info`` for the unified serializer (JNY nodes have
-    similar structure to TEST nodes with RESULT children).
+    and ``_serialize_journey_info`` for the serializer (a journey's results
+    hang off its step-verifying TESTs, not the JNY node itself).
 
     Args:
         graph: The TraceGraph to query.
@@ -3603,7 +3769,7 @@ def _get_assertion_uat_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]
     seen_per_assertion: dict[str, set[str]] = {label: set() for _, label in assertions}
 
     for jny_node, labels in _iter_assertion_coverage(node, NodeKind.USER_JOURNEY):
-        info = _serialize_test_info(jny_node, graph)
+        info = _serialize_journey_info(jny_node, graph)
         for label in labels:
             if label not in assertion_journeys:
                 continue
@@ -3687,6 +3853,45 @@ def _get_assertion_code_map(
                 continue
             seen_per_assertion[label].add(code_node.id)
             assertion_code[label]["code_refs"].append(info)
+
+    # IMP drill-down provenance for INDIRECT coverage (REQ-d00064, REQ-d00069-L):
+    # when the IMP badge is lit via whole-requirement evidence, the direct
+    # code_refs above are empty. Surface the blanket Implements: CODE refs and
+    # the conducting Refines: requirements so the panel explains the `~` instead
+    # of reading "No references". Additive — code_refs / stats are unchanged.
+    if edge_kind == "implements":
+        all_labels = [label for _, label in assertions]
+        wq_seen: dict[str, set[str]] = {label: set() for _, label in assertions}
+        rf_seen: dict[str, set[str]] = {label: set() for _, label in assertions}
+        for label in all_labels:
+            assertion_code[label]["whole_req_code_refs"] = []
+            assertion_code[label]["refines_refs"] = []
+        for edge in node.iter_outgoing_edges():
+            tgt = edge.target
+            if (
+                edge.kind == EdgeKind.IMPLEMENTS
+                and tgt.kind == NodeKind.CODE
+                and not edge.assertion_targets
+            ):
+                info = _serialize_code_info(tgt, graph)
+                for label in all_labels:
+                    if tgt.id in wq_seen[label]:
+                        continue
+                    wq_seen[label].add(tgt.id)
+                    assertion_code[label]["whole_req_code_refs"].append(info)
+            elif edge.kind == EdgeKind.REFINES and tgt.kind == NodeKind.REQUIREMENT:
+                scope = "direct" if edge.assertion_targets else "whole_req"
+                targeted = list(edge.assertion_targets) if edge.assertion_targets else all_labels
+                rinfo = {
+                    "id": tgt.id,
+                    "title": tgt.get_field("title", "") or tgt.get_label() or tgt.id,
+                    "scope": scope,
+                }
+                for label in targeted:
+                    if label not in rf_seen or tgt.id in rf_seen[label]:
+                        continue
+                    rf_seen[label].add(tgt.id)
+                    assertion_code[label]["refines_refs"].append(dict(rinfo))
 
     total = len(assertions)
     covered_count = sum(1 for label in assertion_code if assertion_code[label]["code_refs"])
@@ -3798,8 +4003,8 @@ def _get_uncovered_assertions(
         Dict with success and list of uncovered assertions with parent context.
     """
 
-    def _covered_labels_for_req(req_node: Any) -> set[str]:
-        """Return the set of assertion labels covered by at least one matching source.
+    def _axis_covered_labels(req_node: Any, kind: NodeKind, dimension: str) -> set[str]:
+        """Return labels ~fully covered on one axis (direct edges + conduction).
 
         Includes coverage conducted upward across REFINES edges (REQ-d00069-J):
         an assertion covered only through a refining requirement has no direct
@@ -3808,29 +4013,86 @@ def _get_uncovered_assertions(
         stays a gap.
         """
         covered: set[str] = set()
+        for _node, labels in _iter_assertion_coverage(req_node, kind):
+            covered.update(labels)
         rollup = req_node.get_metric("rollup_metrics")
-
-        def _fold(dimension: str) -> None:
-            # Only ~fully-covered assertions count as covered; partial coverage
-            # (0 < fraction < 1) stays a gap (REQ-d00069-J).
-            if rollup is None:
-                return
+        if rollup is not None:
             dim = getattr(rollup, dimension, None)
-            if dim is None:
-                return
-            covered.update(
-                lbl for lbl, frac in dim.indirect_pct_by_label.items() if frac >= 1.0 - 1e-9
-            )
-
-        if source in ("test", "both"):
-            for _test_node, labels in _iter_assertion_coverage(req_node, NodeKind.TEST):
-                covered.update(labels)
-            _fold("tested")
-        if source in ("uat", "both"):
-            for _jny_node, labels in _iter_assertion_coverage(req_node, NodeKind.USER_JOURNEY):
-                covered.update(labels)
-            _fold("uat_coverage")
+            if dim is not None:
+                covered.update(
+                    lbl for lbl, frac in dim.indirect_pct_by_label.items() if frac >= 1.0 - 1e-9
+                )
         return covered
+
+    def _implemented_labels(req_node: Any) -> set[str]:
+        """Return labels with any implementation evidence (fraction > 0).
+
+        Reads the existing ``implemented`` projection -- no re-derivation. The
+        RELATIVE denominator (REQ-d00258): a *testing* gap is scoped to
+        assertions that are IMPLEMENTED, mirroring gaps.py's
+        ``restrict_to_dimension="implemented"``. An unimplemented assertion has
+        nothing built to test yet and is therefore not a testing gap.
+        """
+        rollup = req_node.get_metric("rollup_metrics")
+        if rollup is None:
+            return set()
+        dim = getattr(rollup, "implemented", None)
+        if dim is None:
+            return set()
+        return {lbl for lbl, frac in dim.indirect_pct_by_label.items() if frac > 0}
+
+    def _uncovered_labels_for_req(req_node: Any, all_labels: list[str]) -> set[str]:
+        """Union of per-axis gaps for the requested ``source`` (REQ-d00258).
+
+        Test axis: a label is a testing gap iff it is IMPLEMENTED and not
+        ~fully test-covered -- so MCP agrees with the CLI ``gaps untested``
+        surface and the viewer. UAT axis: unrestricted (a label is a UAT gap
+        iff it is not ~fully UAT-covered), so an unimplemented-but-unvalidated
+        assertion still surfaces as a UAT gap under ``uat``/``both``.
+        """
+        uncovered: set[str] = set()
+        if source in ("test", "both"):
+            test_covered = _axis_covered_labels(req_node, NodeKind.TEST, "tested")
+            implemented = _implemented_labels(req_node)
+            uncovered.update(
+                lbl for lbl in all_labels if lbl in implemented and lbl not in test_covered
+            )
+        if source in ("uat", "both"):
+            uat_covered = _axis_covered_labels(req_node, NodeKind.USER_JOURNEY, "uat_coverage")
+            uncovered.update(lbl for lbl in all_labels if lbl not in uat_covered)
+        return uncovered
+
+    def _fraction_for_label(req_node: Any, label: str) -> float:
+        # REQ-d00069-J: the strongest conducted fraction across the dimensions
+        # this call considers (per ``source``), for annotating an uncovered
+        # label with its "how close to covered" progress.
+        rollup = req_node.get_metric("rollup_metrics")
+        if rollup is None:
+            return 0.0
+        fractions = []
+        if source in ("test", "both"):
+            dim = getattr(rollup, "tested", None)
+            if dim is not None:
+                fractions.append(dim.indirect_pct_by_label.get(label, 0.0))
+        if source in ("uat", "both"):
+            dim = getattr(rollup, "uat_coverage", None)
+            if dim is not None:
+                fractions.append(dim.indirect_pct_by_label.get(label, 0.0))
+        return max(fractions) if fractions else 0.0
+
+    def _uncovered_detail(req_node: Any, labels: list[str], id_by_label: dict[str, str]) -> list:
+        detail = []
+        for label in labels:
+            frac = _fraction_for_label(req_node, label)
+            detail.append(
+                {
+                    "id": id_by_label.get(label),
+                    "label": label,
+                    "fraction": round(frac, 4),
+                    "via": _via_provenance(frac),
+                }
+            )
+        return detail
 
     if req_id is not None:
         node = graph.find_by_id(req_id)
@@ -3840,16 +4102,14 @@ def _get_uncovered_assertions(
         if node.kind != NodeKind.REQUIREMENT:
             return {"success": False, "error": f"{req_id} is not a requirement"}
 
-        covered = _covered_labels_for_req(node)
-        uncovered_labels = []
+        assertion_children = [c for c in node.iter_children() if c.kind == NodeKind.ASSERTION]
+        all_labels = [c.get_field("label", "") for c in assertion_children]
+        id_by_label = {c.get_field("label", ""): c.id for c in assertion_children}
+        uncovered_set = _uncovered_labels_for_req(node, all_labels)
+        # Preserve child order in the reported list.
+        uncovered_labels = [lbl for lbl in all_labels if lbl in uncovered_set]
 
-        for child in node.iter_children():
-            if child.kind != NodeKind.ASSERTION:
-                continue
-            if child.get_field("label", "") not in covered:
-                uncovered_labels.append(child.get_field("label", ""))
-
-        total = sum(1 for c in node.iter_children() if c.kind == NodeKind.ASSERTION)
+        total = len(assertion_children)
 
         return {
             "success": True,
@@ -3858,19 +4118,21 @@ def _get_uncovered_assertions(
             "total_assertions": total,
             "uncovered_count": len(uncovered_labels),
             "uncovered_labels": uncovered_labels,
+            "uncovered_detail": _uncovered_detail(node, uncovered_labels, id_by_label),
         }
 
     # REQ-d00067-A: Scan all requirements, return requirement-level summary
     gaps: list[dict[str, Any]] = []
 
     for req_node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        covered = _covered_labels_for_req(req_node)
         assertions = [c for c in req_node.iter_children() if c.kind == NodeKind.ASSERTION]
-        uncovered_labels = [
-            c.get_field("label", "") for c in assertions if c.get_field("label", "") not in covered
-        ]
+        all_labels = [c.get_field("label", "") for c in assertions]
+        uncovered_set = _uncovered_labels_for_req(req_node, all_labels)
+        uncovered_labels = [lbl for lbl in all_labels if lbl in uncovered_set]
         if not uncovered_labels:
             continue
+
+        id_by_label = {c.get_field("label", ""): c.id for c in assertions}
 
         gaps.append(
             {
@@ -3879,6 +4141,7 @@ def _get_uncovered_assertions(
                 "total_assertions": len(assertions),
                 "uncovered_count": len(uncovered_labels),
                 "uncovered_labels": uncovered_labels,
+                "uncovered_detail": _uncovered_detail(req_node, uncovered_labels, id_by_label),
             }
         )
 

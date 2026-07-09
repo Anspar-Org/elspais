@@ -80,7 +80,7 @@ D. Generators SHALL NOT create Dict[str, TraceViewRequirement] or similar interm
 
 E. Generators SHALL read node.metrics for display information, not recompute it.
 
-F. Generators SHALL use aggregate functions from annotators module for statistics.
+F. Generators SHALL derive statistics from shared aggregate functions (the graph aggregation module and annotator count helpers), not recompute them.
 
 G. All file write operations in output commands SHALL specify explicit `encoding="utf-8"` for cross-platform portability.
 
@@ -90,10 +90,11 @@ Direct graph consumption eliminates data structure conversion overhead and ensur
 
 ### Changelog
 
+- 2026-07-03 | c5dd0546 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-05-11 | a3575fcc | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | a3575fcc | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
 
-*End* *Output Generators Consume Graph Directly* | **Hash**: a3575fcc
+*End* *Output Generators Consume Graph Directly* | **Hash**: c5dd0546
 ---
 
 ## REQ-d00054: Annotation Pipeline Pattern
@@ -156,15 +157,15 @@ The coverage annotation system SHALL support an INDIRECT coverage source for who
 
 ### Assertions
 
-A. `CoverageSource` enum SHALL include an `INDIRECT` value representing whole-requirement test coverage.
+A. `CoverageSource` enum SHALL include distinct test-evidence values -- `TEST_DIRECT` for an assertion-targeted `Verifies:` and `TEST_INDIRECT` for a whole-requirement `Verifies:` -- kept separate from implementation-evidence sources (`DIRECT`/`EXPLICIT`/`INFERRED`) so that a test that verifies an *Assertion* credits the Tested dimension only and never the Implemented dimension (REQ-d00084-D). (`INDIRECT` remains for the transitive CODE->TEST provenance path.)
 
-B. `RollupMetrics` SHALL track `indirect_referenced_pct` as a separate percentage alongside strict `referenced_pct`.
+B. A whole-requirement (assertion-less) reference SHALL credit ALL of the target requirement's assertions at full value on the generous footing. This SHALL hold symmetrically for `Verifies:` (source `TEST_INDIRECT` -> Tested), `Implements:` on CODE (source `CODE_INDIRECT` -> Implemented), `Implements:`/`Refines:` from a child requirement (source `INFERRED` -> Implemented), and `Validates:` from a journey (source `UAT_INFERRED` -> UAT Covered). No whole-requirement reference SHALL credit the strict (direct) footing.
 
 C. `RollupMetrics` SHALL track `validated_with_indirect` count for assertions validated when including INDIRECT sources.
 
-D. `RollupMetrics.finalize()` SHALL compute `indirect_referenced_pct` by including INDIRECT contributions alongside DIRECT, EXPLICIT, and INFERRED sources.
+D. `RollupMetrics.finalize()` SHALL compute the Implemented dimension from implementation-evidence sources only (`DIRECT`/`EXPLICIT`/`INFERRED`); test-evidence sources (`TEST_DIRECT`/`TEST_INDIRECT`) SHALL populate the Tested dimension via `populate_test_dimensions()` and SHALL NOT be counted toward Implemented (REQ-d00084-D).
 
-E. The coverage annotator SHALL emit INDIRECT contributions for all *Assertion* labels when a TEST edge has empty `assertion_targets`.
+E. The coverage annotator SHALL emit `TEST_INDIRECT` contributions for all *Assertion* labels when a TEST (`Verifies:`) edge has empty `assertion_targets`, and `TEST_DIRECT` contributions for the named labels of an assertion-targeted TEST edge; both feed the Tested dimension, not Implemented (REQ-d00084-D).
 
 F. When a whole-requirement test has passing results, the annotator SHALL count all assertions as validated for indirect mode.
 
@@ -172,11 +173,13 @@ G. A leaf *Assertion* SHALL be defined as any *Assertion* that has no `Refines:`
 
 H. When a requirement declares `Satisfies: X`, the graph builder SHALL clone the template's REQ subtree with composite IDs (`declaring_id::original_id`), creating INSTANCE nodes linked to the declaring requirement via a SATISFIES edge. Coverage SHALL be computed through the standard coverage mechanism operating on the cloned nodes.
 
-I. 100% coverage of a template instance SHALL be achieved when every leaf *Assertion* in the cloned template subtree (excluding N/A assertions) has at least one `Implements:` reference.
+I. 100% coverage of a template instance SHALL be achieved when every leaf *Assertion* in the cloned template subtree (excluding N/A assertions) has at least one inbound coverage edge (`Implements:`, `Verifies:`, or `Validates:`) on its template original, consistent with the inherited-coverage rule (REQ-p00014-K).
 
-J. A `Refines:` relationship SHALL NOT contribute coverage by itself, but it SHALL conduct the refining requirement's own rolled-up coverage upward to the *Assertion* it targets. A requirement's coverage SHALL be the mean of its assertions' coverage (assertions are unweighted), computed independently per coverage dimension. An *Assertion*'s coverage SHALL be determined as follows: if the *Assertion* has direct coverage (local evidence on it, or any assertion-targeted `Refines:`/`Implements:` edge naming it), its coverage SHALL be the equal-weight mean of those direct contributions (each contributor -- direct evidence at full value, each assertion-targeted refining requirement at its own rolled-up coverage -- carrying equal weight regardless of how many target the *Assertion*), and whole-requirement (blanket) credit SHALL be ignored for it. Otherwise (the *Assertion* has no direct coverage), it SHALL receive whole-requirement credit: full value if the requirement has local whole-requirement evidence (a whole-requirement test/code/journey), else `1/N` times the mean coverage of the requirement's whole-requirement (blanket) `Refines:` edges, where `N` is the requirement's assertion count -- so a blanket `Refines:` names no *Assertion* and is therefore worth at most one *Assertion*'s share, and a requirement refined by many whole-requirement children is not credited beyond that share. Only the *Assertion* with direct coverage forgoes blanket credit; its sibling *Assertions* without direct coverage still accrue it.
+J. A `Refines:` relationship SHALL NOT contribute coverage by itself, but it SHALL conduct the refining requirement's own rolled-up coverage upward to the *Assertion* it targets. A requirement's coverage SHALL be the mean of its assertions' coverage (assertions are unweighted), computed independently per coverage dimension. Coverage SHALL be tracked on two footings (REQ-d00069-L). An *Assertion*'s **strict (direct)** coverage SHALL be the equal-weight mean of its assertion-specific contributions (local direct evidence at full value; each assertion-targeted refining requirement at its own rolled-up coverage), and SHALL be `0` when it has none; whole-requirement (blanket) credit SHALL NOT enter the strict footing. An *Assertion*'s **generous (indirect)** coverage SHALL be the maximum of (a) its strict coverage, (b) full value when the requirement has local whole-requirement evidence (a whole-requirement test/code/journey), and (c) the mean coverage of the requirement's whole-requirement (blanket) `Refines:` edges at FULL weight. The generous footing SHALL be monotone: adding assertion-specific evidence SHALL NOT lower it. The prior `1/N` blanket deflation is retired.
 
 K. The system SHALL report coverage gaps on template instance nodes through the standard coverage mechanisms. Instance nodes are normal graph nodes and participate in existing health checks.
+
+L. Coverage SHALL be tracked on two footings per dimension: strict (direct, assertion-targeted evidence only) and generous (indirect, additionally counting whole-requirement, inferred, conducted, and inherited evidence). Reporting surfaces SHALL headline the generous footing and SHALL express precision as a tier (full, partial, failing, missing), rendering a single unified indirect-evidence caveat (a `~` marker meaning "some coverage comes from whole-requirement references") rather than a second count. The caveat SHALL be derived from `indirect > direct` per dimension and per *Assertion*, and SHALL be applied consistently at BOTH the requirement badge and the per-*Assertion* level so the two never disagree.
 
 ### Rationale
 
@@ -184,12 +187,15 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* 
 
 ### Changelog
 
+- 2026-07-07 | 2d89da53 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
+- 2026-07-03 | ddbc50c8 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
+- 2026-07-02 | 738d94e4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-06-20 | 2d05ad7b | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-06-19 | acbdf3da | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-05-11 | e9b5c3f1 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | e9b5c3f1 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
 
-*End* *Indirect Coverage Source* | **Hash**: 2d05ad7b
+*End* *Indirect Coverage Source* | **Hash**: 2d89da53
 ---
 
 ## REQ-d00070: Indirect Coverage Toggle Display
@@ -383,9 +389,9 @@ D. When an `// Implements:` marker has no function range (i.e., `impl_start_line
 
 E. A reporter registry SHALL map each `reporter` format name to a parser and an input channel (`stdout` or `file`). The registry SHALL include a native `flutter test --machine` reporter that parses the machine JSON event stream into result records carrying each test's real source-file path (from the suite path), pass/fail/skip status, and line -- without an external JUnit converter.
 
-F. For each configured target, the system SHALL obtain the reporter's output (captured from the command's stdout for stdout-channel reporters, or read from the `results` glob for file-channel reporters), build RESULT nodes carrying the real test-file path (`source_file`, repo-relative) and the target's `match` mode, and ingest the target's `coverage` file. Coverage crediting SHALL be derived from the targets' `credit_coverage`/`min_coverage_fraction`.
+F. For each configured target, the system SHALL obtain the reporter's output (captured from the command's stdout for stdout-channel reporters, or read from the `results` glob for file-channel reporters), build RESULT nodes carrying the real test-file path (`source_file`, repo-relative) and the target's `match` mode, and ingest the target's `coverage` file. Coverage crediting SHALL be derived from the targets' `credit_coverage`/`min_coverage_fraction`. File-channel results SHALL additionally record where each result was recorded — the results artifact's repo-relative path and, when derivable from the artifact (e.g. one JUnit `<testcase>` per line), the per-result line — as provenance distinct from the test's source path, and result links in reporting surfaces SHALL point at that artifact location.
 
-G. Each target SHALL select its result-to-test matching via `match`: `source` SHALL credit verification per test by resolving a result's real source-file path and `test()` source line to the specific test node at that `(path, line)`; when no test node matches that line (e.g. shared-helper or generated tests), it SHALL fall back to file granularity (all passing credits the file's `Verifies:` assertions; any failure flags them). `aggregate` SHALL use the per-app green/red engine.
+G. Each target SHALL select its result-to-test matching via `match`: `source` SHALL bind each result at the most precise scope available — first step scope, when the result's recorded test name embeds exactly one journey-step id (`JNY-.../N`) that resolves to a step whose verifying test(s) live in the result's source file; then test scope, resolving the result's real source-file path and `test()` source line to the specific test node at that `(path, line)`; and only then file granularity (all passing credits the file's `Verifies:` assertions; any failure flags them). Step- and test-scoped results SHALL credit per test, never via the file-level all-pass/any-fail rule. `aggregate` SHALL use the per-app green/red engine.
 
 H. `elspais checks --run-tests` SHALL accept a `--targets` selector naming a subset of `[[scanning.test.targets]]` to execute; an unknown target name SHALL be an error, and an absent selector SHALL execute all targets. The same `--targets` flag on `summary`/`trace` SHALL mark provenance without executing anything.
 
@@ -395,6 +401,7 @@ J. In a selective run (a `--targets` set is present), a requirement with test re
 
 ### Changelog
 
+- 2026-07-08 | 0f7323ff | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-07-01 | 4975d47a | - | Michael Lewis (michael@anspar.org) | Auto-fix: sync changelog hash
 - 2026-06-26 | 0b87cbd4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-06-26 | abc6e487 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
@@ -403,7 +410,7 @@ J. In a selective run (a `--targets` set is present), a requirement with test re
 - 2026-06-20 | 98120740 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (michael@anspar.org) | CUR-1533: initial
 
-*End* *Coverage-Based and Aggregate Test Verification* | **Hash**: 4975d47a
+*End* *Coverage-Based and Aggregate Test Verification* | **Hash**: 0f7323ff
 
 ---
 
@@ -417,11 +424,11 @@ A. elspais SHALL accept a `USER_JOURNEY` id as a `Verifies:` target in code and 
 
 B. The annotation pipeline SHALL roll up verifying test results to the journey via the standard coverage convention, computing a per-journey verification metric from the pass/fail status of all tests that `Verifies:` the journey.
 
-C. A fully-verified journey SHALL feed `uat_verified` credit on each requirement that the journey's `Validates:` edges name, using the same `uat_verified` dimension populated by the existing UAT annotation pass.
+C. A journey SHALL feed `uat_verified` credit on each requirement its `Validates:` edges name in proportion to its verification, using the same `uat_verified` dimension populated by the existing UAT annotation pass: a fully-verified journey SHALL credit full; a partially-verified journey with no failing step SHALL credit partial (its verified-step ratio); a journey with any failing step SHALL contribute a failure signal (`has_failures`) to the named assertions rather than positive credit; an unverified journey SHALL credit none. This aligns with the partial verification tier of REQ-d00256-C.
 
 D. The test-to-journey-to-requirement *Traceability* chain SHALL be visible in `elspais trace` output and the viewer, showing which journeys verify which requirements and their verification status.
 
-*End* *Test-to-Journey UAT Verification* | **Hash**: 9381f1e5
+*End* *Test-to-Journey UAT Verification* | **Hash**: bdad84a0
 
 ---
 
@@ -431,15 +438,17 @@ D. The test-to-journey-to-requirement *Traceability* chain SHALL be visible in `
 
 ### Assertions
 
-A. A journey's `## Steps` numbered list SHALL be parsed into addressable `STEP` nodes with ids of the form `JNY-.../step-N`, linked under the journey via `STRUCTURES` edges.
+A. A journey's `## Steps` numbered list SHALL be parsed into addressable `STEP` nodes with ids of the form `JNY-.../N` (the step number suffixing the journey id, mirroring `<requirement>/A` assertion addressing), linked under the journey via `STRUCTURES` edges.
 
-B. A STEP node id (`JNY-.../step-N`) SHALL be a legal `Verifies:` target in test and code files, creating a VERIFIES edge scoped to that step on the parent journey node.
+B. A STEP node id (`JNY-.../N`) SHALL be a legal `Verifies:` target in test and code files, creating a VERIFIES edge scoped to that step on the parent journey node.
 
 C. Steps SHALL roll up to the journey's verification metric: a step SHALL be considered verified if it has at least one passing and zero failing verifying tests; an untested step SHALL leave the journey in a partial verification tier rather than fully verified.
 
-D. When a journey's verification tier is failing, the system SHALL identify the specific failing step(s) by id in the journey's verification output and API payload.
+D. When a journey's verification tier is failing, the system SHALL identify the specific failing step(s) by step number in the journey's verification output and API payload.
 
-*End* *Step-Level UAT Verification* | **Hash**: 44671fc1
+E. Test results SHALL be attributed per step: a step's verification status and its surfaced result entries SHALL reflect only results bound to that step's own verifying tests (plus whole-journey verifying tests), never results belonging to a sibling step.
+
+*End* *Step-Level UAT Verification* | **Hash**: cde21cfc
 
 ---
 
@@ -456,3 +465,50 @@ B. The UAT report SHALL include only requirements that have at least one incomin
 C. The UAT report SHALL exclude code implementation and test verification columns (`implemented`, `tested`, `verified`, `code_tested`, `lcov_tested`).
 
 *End* *UAT-Scoped Traceability Report* | **Hash**: 45bb196f
+
+---
+
+## REQ-d00258: Reporting Surface Consistency
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-d00069
+
+Reporting surfaces (trace, summary, MCP project summary, HTML viewer) SHALL present coverage using a single consistent vocabulary, aggregation, and tier-derived color scheme so that identical underlying data yields identical answers across surfaces.
+
+### Assertions
+
+A. All reporting surfaces (trace, summary, MCP project summary, HTML viewer) SHALL headline coverage counts on the generous footing per REQ-d00069-L, and text surfaces SHALL append a `~` marker, per coverage dimension, to any count whose evidence is not fully direct.
+
+B. Reporting surfaces SHALL use exactly five coverage display terms: Implemented, Tested, Passing, UAT Covered, UAT Passed. The term "Validated" SHALL NOT denote test coverage. Passing SHALL be the union of result-verified and line-coverage-credited evidence.
+
+C. The CLI summary, the MCP project summary, and the viewer SHALL derive their coverage statistics from a single shared aggregation so identical questions receive identical answers.
+
+D. Viewer coverage badge colors SHALL resolve from the coverage standing through the theme catalog by standing name — the same resolution for requirement dimension badges and per-*Assertion* badges — so a given standing is one color on every surface (full green, partial yellow, failing red), never through hard-coded color values and never recolored by the dimension's configured severity. A missing standing SHALL render red only when it is a required gap (its resolved severity is error) and grey otherwise. Severity SHALL govern combined-bucket dragging and the checks gate, not the badge color for the full, partial, and failing standings. The coverage standings SHALL appear in the viewer Legend.
+
+E. Viewer coverage filters SHALL bucket requirements by tier semantics using the unified state names (full, partial, failing, missing), never by color string. The requirement-level line coverage cell SHALL NOT render a direct-attribution count for targets whose tooling provides only aggregate coverage.
+
+F. A per-level `expects_validation` flag (default false) SHALL declare that requirements at that level are expected to have UAT validation (a USER_JOURNEY that `Validates:` them). When a level expects validation, a requirement of that level with no UAT coverage SHALL be a reported gap: flagged by the health `uat.coverage` check and listed under `gaps unvalidated`, and its viewer UAT badge SHALL render at error severity (red). When a level does not expect validation (the default), absent UAT SHALL be neither flagged by health, listed as a gap, nor badged in the viewer, and SHALL NOT drag the requirement's combined coverage bucket. The `uat.coverage` check SHALL count only requirements at expects_validation levels; when no level expects validation it SHALL pass trivially. All surfaces SHALL resolve this flag through a single shared helper rather than reading the level config independently.
+
+G. The viewer SHALL assign each *Assertion* a semantic coverage *standing* (full, partial, failing, or missing) per coverage dimension, projected from the requirement's rollup metrics, so that if every *Assertion* is full on a dimension the requirement badge for that dimension reads full, and if any *Assertion* is failing the requirement dimension reports a failure. An *Assertion*'s standing SHALL read failing only when that *Assertion* itself has a failing result or verification for the dimension, not because a sibling *Assertion* covered by a different, non-failing test or journey failed; a failing test or journey attributes the failure to exactly the assertions it covers (its named targets, or every assertion when it covers the whole requirement). The standing SHALL be computed server-side and applied on initial render, without depending on a lazy client prefetch. Standing colors SHALL be resolved through the theme catalog by standing name (never hard-coded in the badge logic), the same decoupling severity colors use per D, so the standing-to-color association is configurable, and the standings SHALL appear in the viewer Legend. Per-*Assertion* pills SHALL honor `allow_indirect` when computing standing and SHALL render the unified `~` caveat (REQ-d00069-L) when applicable, though the direct-versus-indirect distinction SHALL NOT introduce a separate *Assertion* badge tier color.
+
+H. The requirement-level coverage tier, the per-*Assertion* coverage standing, and the viewer filter bucket SHALL be drawn from one shared set of coverage state names — full, partial, failing, and missing — so that a given coverage condition maps to the same state word on every surface. The prior split of the full state into separate direct and indirect states SHALL NOT reappear as distinct tier states.
+
+I. Tested SHALL be measured as the coverage of the implemented assertions, Passing as the coverage of the tested assertions, and UAT Passed as the coverage of the UAT-covered assertions. A chained dimension whose relative denominator is empty SHALL read missing at neutral severity — neither a reported gap nor error-colored — and SHALL NOT drag the requirement's combined coverage bucket. A failing result on any assertion within a dimension's denominator SHALL render that dimension failing regardless of the covered fraction.
+
+J. The distinction between direct and indirect coverage (for example, coverage conducted through a refinement relationship) SHALL be surfaced as a caveat — a `~` marker accompanied by hover provenance — rather than as a distinct tier color. A configurable `allow_indirect` setting (default enabled) SHALL govern whether indirect coverage credits a dimension's state: when disabled, only direct coverage credits the state and indirect coverage SHALL be reported as present but not credited.
+
+K. The coverage dimension labels SHALL be derived from a single configurable mapping from each coverage-conferring relationship to its display word, and every surface SHALL render dimension labels through that one mapping.
+
+L. A per-status `expects_implementation` flag SHALL declare whether a requirement in that status is expected to have implementation; its default SHALL be derived from the status's role, so that active-role statuses expect implementation and others do not. When a status does not expect implementation, absent implementation SHALL be neither flagged as a gap, nor error-colored, nor counted against aggregate implemented coverage. All surfaces SHALL resolve this flag through a single shared helper, and it SHALL supersede the coverage-exclusion role when determining coverage inclusion.
+
+### Changelog
+
+- 2026-07-07 | 90053f29 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
+- 2026-07-07 | 4767b41c | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
+- 2026-07-07 | 172301f4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
+- 2026-07-06 | 06550baf | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
+- 2026-07-06 | dd54712c | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
+- 2026-07-06 | 489752cd | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
+- 2026-07-03 | c843c727 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
+- 2026-07-02 | be97c170 | - | Michael Lewis (michael@anspar.org) | Auto-fix: add missing changelog section
+
+*End* *Reporting Surface Consistency* | **Hash**: 90053f29

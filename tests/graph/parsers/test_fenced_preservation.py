@@ -122,7 +122,7 @@ _BASIC_FENCED_SPEC = (
 class TestBasicFencePreservation:
     """Validates REQ-d00247-A: triple-backtick fence content is preserved verbatim."""
 
-    # Implements: REQ-d00247-A
+    # Verifies: REQ-d00247-A
     def test_REQ_d00247_A_python_fence_content_preserved(self, resolver: IdResolver) -> None:
         """Fenced Python source must round-trip through REMAINDER unchanged."""
         results = _parse(_BASIC_FENCED_SPEC, resolver)
@@ -140,7 +140,7 @@ class TestBasicFencePreservation:
             f"REMAINDER blocks: {_remainder_texts(results)!r}"
         )
 
-    # Implements: REQ-d00247-A
+    # Verifies: REQ-d00247-A
     def test_REQ_d00247_A_neutralization_placeholder_not_in_remainder(
         self, resolver: IdResolver
     ) -> None:
@@ -169,7 +169,7 @@ class TestMultipleFenceMarkers:
     -- regardless of marker style -- is preserved verbatim in REMAINDER.
     """
 
-    # Implements: REQ-d00247-A
+    # Verifies: REQ-d00247-A
     def test_REQ_d00247_A_backtick_fence_preserves_content(self, resolver: IdResolver) -> None:
         spec = (
             "# REQ-p00001: Backtick Fence\n"
@@ -198,7 +198,7 @@ class TestMultipleFenceMarkers:
             "<!-- fenced -->" not in all_text
         ), f"Neutralization placeholder leaked. REMAINDERs: {_remainder_texts(results)!r}"
 
-    # Implements: REQ-d00247-A
+    # Verifies: REQ-d00247-A
     def test_REQ_d00247_A_tilde_fence_preserves_content(self, resolver: IdResolver) -> None:
         spec = (
             "# REQ-p00001: Tilde Fence\n"
@@ -270,7 +270,7 @@ class TestFenceWithRequirementExample:
           the original content, not the neutralized buffer.
     """
 
-    # Implements: REQ-d00247-A
+    # Verifies: REQ-d00247-A
     def test_REQ_d00247_A_fenced_example_req_not_parsed_as_requirement(
         self, resolver: IdResolver
     ) -> None:
@@ -290,7 +290,7 @@ class TestFenceWithRequirementExample:
             "REQ-p00001" in req_ids
         ), f"Real requirement 'REQ-p00001' was not parsed. Found IDs: {req_ids!r}"
 
-    # Implements: REQ-d00247-A
+    # Verifies: REQ-d00247-A
     def test_REQ_d00247_A_fenced_example_req_text_preserved_in_remainder(
         self, resolver: IdResolver
     ) -> None:
@@ -318,7 +318,7 @@ class TestFenceWithRequirementExample:
 class TestBlankLinesInFence:
     """Validates REQ-d00247-A: blank lines inside a fence pass through verbatim."""
 
-    # Implements: REQ-d00247-A
+    # Verifies: REQ-d00247-A
     def test_REQ_d00247_A_blank_lines_in_fence_preserved(self, resolver: IdResolver) -> None:
         # Construct a fence with a deliberate blank line in the middle.
         spec = (
@@ -373,7 +373,7 @@ class TestCrlfLineEndings:
     retain those `\\r` characters in REMAINDER raw_text.
     """
 
-    # Implements: REQ-d00247-A
+    # Verifies: REQ-d00247-A
     def test_REQ_d00247_A_crlf_fence_content_preserved(self, resolver: IdResolver) -> None:
         # Mixed-line-ending input: LF for the requirement portion (so the
         # grammar parses cleanly), CRLF for the fence content. This isolates
@@ -419,7 +419,7 @@ class TestCrlfLineEndings:
 class TestUnclosedFence:
     """Validates REQ-d00247-A: an unclosed fence still preserves its content."""
 
-    # Implements: REQ-d00247-A
+    # Verifies: REQ-d00247-A
     def test_REQ_d00247_A_unclosed_fence_content_preserved(self, resolver: IdResolver) -> None:
         spec = (
             "# REQ-p00001: Unclosed Fence\n"
@@ -463,7 +463,7 @@ class TestNoFenceBaseline:
     content correctly when there are no fences anywhere in the file.
     """
 
-    # Implements: REQ-d00247-A
+    # Verifies: REQ-d00247-A
     def test_REQ_d00247_A_no_fence_remainder_preserved(self, resolver: IdResolver) -> None:
         spec = (
             "# REQ-p00001: Plain Spec\n"
@@ -512,7 +512,7 @@ class TestProjectSpecRegression:
     contains no fenced REMAINDER content -- the bug is dormant in this repo.
     """
 
-    # Implements: REQ-d00247-A
+    # Verifies: REQ-d00247-A
     def test_REQ_d00247_A_no_neutralization_placeholder_in_spec_files(self) -> None:
         assert _SPEC_DIR.is_dir(), f"spec/ directory not found at {_SPEC_DIR}"
         offenders: list[tuple[Path, list[int]]] = []

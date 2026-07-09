@@ -426,6 +426,8 @@ class TraceGraph:
             self._undo_update_title(entry)
         elif op == "change_status":
             self._undo_change_status(entry)
+        elif op == "set_stereotype":
+            self._undo_set_stereotype(entry)
         elif op == "add_requirement":
             self._undo_add_requirement(entry)
         elif op == "delete_requirement":
@@ -505,6 +507,17 @@ class TraceGraph:
         old_status = entry.before_state.get("status")
         if node_id in self._index and old_status is not None:
             self._index[node_id].set_field("status", old_status)
+
+    def _undo_set_stereotype(self, entry: MutationEntry) -> None:
+        """Undo a set_stereotype operation (node + assertion children)."""
+        node = self._index.get(entry.target_id)
+        old = entry.before_state.get("stereotype")
+        if node is not None and old is not None:
+            node.set_field("stereotype", Stereotype(old))
+        for child_id, child_old in entry.before_state.get("assertion_stereotypes", {}).items():
+            child = self._index.get(child_id)
+            if child is not None:
+                child.set_field("stereotype", Stereotype(child_old))
 
     def _undo_add_requirement(self, entry: MutationEntry) -> None:
         """Undo an add requirement operation (delete the added node)."""
@@ -993,7 +1006,7 @@ class TraceGraph:
                             child_ids_renamed.append((old_assertion_id, new_assertion_id))
 
         # If this is a journey, cascade the rename to all STEP children.
-        # Step IDs are "<journey_id>/step-N"; renaming the journey requires
+        # Step IDs are "<journey_id>/N"; renaming the journey requires
         # updating both the _index keys and the node .id fields so that
         # find_by_id() and graph queries return the correct nodes.
         # Verifies: REQ-d00256
@@ -1002,7 +1015,7 @@ class TraceGraph:
                 if child.kind == NodeKind.STEP:
                     old_step_id = child.id
                     if old_step_id.startswith(old_id + "/"):
-                        step_suffix = old_step_id[len(old_id) :]  # "/step-N"
+                        step_suffix = old_step_id[len(old_id) :]  # "/N"
                         new_step_id = new_id + step_suffix
                         if old_step_id in self._index:
                             self._index.pop(old_step_id)
@@ -1076,6 +1089,67 @@ class TraceGraph:
         )
 
         node.set_field("status", new_status)
+        self._mutation_log.append(entry)
+        return entry
+
+    # Implements: REQ-p00014-E
+    def set_stereotype(self, node_id: str, is_template: bool) -> MutationEntry:
+        """Set or clear a requirement's ``**Template**`` marker.
+
+        Mirrors the author-declaration path (see ``_add_requirement``): the
+        node AND its assertion children are stamped TEMPLATE together (or
+        restored to CONCRETE), so a toggled template renders identically to
+        a parsed one. INSTANCE nodes are read-only synthetic content and
+        cannot be (un)templated.
+
+        Args:
+            node_id: The requirement node ID to update.
+            is_template: True stamps TEMPLATE; False restores CONCRETE.
+
+        Returns:
+            MutationEntry recording the operation (per-assertion prior
+            stereotypes are captured in before_state for undo).
+
+        Raises:
+            KeyError: If node_id is not found.
+            ValueError: If the node is not a requirement, or is an INSTANCE.
+        """
+        if node_id not in self._index:
+            raise KeyError(f"Node '{node_id}' not found")
+
+        node = self._index[node_id]
+        if node.kind != NodeKind.REQUIREMENT:
+            raise ValueError(f"'{node_id}' is not a requirement")
+
+        old = node.get_field("stereotype") or Stereotype.CONCRETE
+        if old == Stereotype.INSTANCE:
+            raise ValueError(
+                f"'{node_id}' is an instance (read-only synthetic content); "
+                "it cannot be marked or unmarked as a template"
+            )
+        new = Stereotype.TEMPLATE if is_template else Stereotype.CONCRETE
+
+        assertion_before: dict[str, str] = {}
+        for child in node.iter_children():
+            if child.kind == NodeKind.ASSERTION:
+                cs = child.get_field("stereotype") or Stereotype.CONCRETE
+                assertion_before[child.id] = cs.value if isinstance(cs, Stereotype) else str(cs)
+
+        entry = MutationEntry(
+            operation="set_stereotype",
+            target_id=node_id,
+            before_state={
+                "stereotype": old.value if isinstance(old, Stereotype) else str(old),
+                "assertion_stereotypes": assertion_before,
+            },
+            after_state={"stereotype": new.value},
+        )
+
+        node.set_field("stereotype", new)
+        for child in node.iter_children():
+            if child.kind == NodeKind.ASSERTION:
+                child.set_field("stereotype", new)
+
         self._mutation_log.append(entry)
         return entry
 
@@ -3458,7 +3532,7 @@ class GraphBuilder:
             )
             step_node._content = {
                 "n": step["n"],
-                "label": f"step-{step['n']}",
+                "label": str(step["n"]),
                 "parse_line": step["line"],
                 "parse_end_line": None,
             }
@@ -3628,6 +3702,11 @@ class GraphBuilder:
             # Implements: REQ-d00254-I
             "carried": data.get("carried", False),
             "target": data.get("target"),
+            # Results-file provenance: where this result was RECORDED
+            # (e.g. junit.xml path + <testcase> line), distinct from
+            # source_path/source_file which name the test's source.
+            "result_file": data.get("result_file"),
+            "result_line": data.get("result_line"),
         }
         self._nodes[result_id] = node
 
@@ -4031,6 +4110,38 @@ class GraphBuilder:
                 )
             )
 
+    # Implements: REQ-d00254-G, REQ-d00256
+    def _step_scope_tests(self, result_node: GraphNode, source_file: str) -> list[GraphNode]:
+        """Resolve a source-matched RESULT to its step's verifying TEST(s).
+
+        A journey-step testcase name embeds the step id (``<journey>/N``,
+        e.g. ``… › JNY-ENROLL-01/1: reach …``). When exactly one distinct
+        step id is present and resolves to a STEP node, return that step's
+        VERIFIES targets (TEST nodes) whose FILE matches the result's
+        ``source_file`` — the precise binding that makes each step show only
+        its own result. Returns [] when no unambiguous step binding exists
+        (caller falls through to location/file scope).
+        """
+        from elspais.graph.parsers.patterns import JOURNEY_REF_PATTERN
+
+        text = f"{result_node.get_field('classname') or ''} {result_node.get_field('name') or ''}"
+        step_ids = {ref for ref in JOURNEY_REF_PATTERN.findall(text) if "/" in ref}
+        if len(step_ids) != 1:
+            return []
+        step = self._nodes.get(next(iter(step_ids)))
+        if step is None or step.kind is not NodeKind.STEP:
+            return []
+        tests: list[GraphNode] = []
+        for edge in step.iter_edges_by_kind(EdgeKind.VERIFIES):
+            test_node = edge.target  # target = the verifying test
+            if test_node.kind is not NodeKind.TEST:
+                continue
+            file_node = test_node.file_node()
+            rel = file_node.get_field("relative_path") if file_node else None
+            if rel == source_file:
+                tests.append(test_node)
+        return tests
+
     def build(self) -> TraceGraph:
         """Build the final TraceGraph.
 
@@ -4196,11 +4307,16 @@ class GraphBuilder:
 
         # Implements: REQ-d00254-G
         # Resolve source RESULT->TEST links. These reporters (e.g. flutter-
-        # machine) carry no test_id, so each result is wired by source path:
-        # preferring the single TEST at (source_file, line) and stamping
-        # match_scope="test" (per-test crediting), else falling back to every
-        # TEST sharing the file and stamping match_scope="file" (the file-level
-        # all-pass/any-fail crediting the annotator's source_file_index applies).
+        # machine) carry no test_id, so each result is wired by source path,
+        # most-precise scope first:
+        #   step-scope: the testcase name embeds a journey-step id
+        #     (``<journey>/N``); bind to the TEST(s) that VERIFIES that STEP
+        #     in the same source file, match_scope="step". Needs no line attr.
+        #   test-scope: the single TEST at (source_file, line),
+        #     match_scope="test" (per-test crediting).
+        #   file-scope: fall back to every TEST sharing the file,
+        #     match_scope="file" (the file-level all-pass/any-fail crediting
+        #     the annotator's source_file_index applies).
         # An unmatched file links nothing (no broken reference, unlike test_id
         # resolution). Done before orphan/root classification so RESULT nodes
         # count as YIELDS-parented, exactly like test_id-based YIELDS edges.
@@ -4227,6 +4343,14 @@ class GraphBuilder:
             ) in self._pending_source_result_links:
                 result_node = self._nodes.get(result_id)
                 if result_node is None:
+                    continue
+                # Attempt 0: step-scope match via the step id embedded in the
+                # testcase name (REQ-d00254-G / REQ-d00256).
+                step_tests = self._step_scope_tests(result_node, source_file)
+                if step_tests:
+                    for test_node in step_tests:
+                        test_node.link(result_node, EdgeKind.YIELDS)
+                    result_node.set_field("match_scope", "step")
                     continue
                 # Attempt 1: primary (source_file, line) match
                 target = tests_by_file_line.get((source_file, line)) if line is not None else None

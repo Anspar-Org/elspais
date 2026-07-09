@@ -6,7 +6,7 @@ from elspais.graph.parsers.results.junit_xml import JUnitXMLParser
 class TestJUnitXMLParserBasic:
     """Basic tests for JUnitXMLParser."""
 
-    # Implements: REQ-d00082-K
+    # Verifies: REQ-d00082-K
     def test_parse_passing_test(self):
         """Parses a passing test case."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -22,7 +22,7 @@ class TestJUnitXMLParserBasic:
         assert results[0]["name"] == "test_login_REQ_p00001"
         assert "REQ-p00001" in results[0]["verifies"]
 
-    # Implements: REQ-d00082-K
+    # Verifies: REQ-d00082-K
     def test_parse_failing_test(self):
         """Parses a failing test case."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -39,7 +39,7 @@ class TestJUnitXMLParserBasic:
         assert results[0]["status"] == "failed"
         assert "AssertionError" in results[0]["message"]
 
-    # Implements: REQ-d00082-K
+    # Verifies: REQ-d00082-K
     def test_parse_skipped_test(self):
         """Parses a skipped test case."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -55,7 +55,7 @@ class TestJUnitXMLParserBasic:
         assert len(results) == 1
         assert results[0]["status"] == "skipped"
 
-    # Implements: REQ-d00082-K
+    # Verifies: REQ-d00082-K
     def test_parse_error_test(self):
         """Parses a test with error."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -71,7 +71,7 @@ class TestJUnitXMLParserBasic:
         assert len(results) == 1
         assert results[0]["status"] == "error"
 
-    # Implements: REQ-d00082-K
+    # Verifies: REQ-d00082-K
     def test_parse_multiple_tests(self):
         """Parses multiple test cases."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -90,7 +90,7 @@ class TestJUnitXMLParserBasic:
 class TestJUnitXMLParserReqExtraction:
     """Tests for requirement ID extraction."""
 
-    # Implements: REQ-d00082-G
+    # Verifies: REQ-d00082-G
     def test_extracts_req_from_name(self):
         """Extracts REQ ID from test name."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -103,7 +103,7 @@ class TestJUnitXMLParserReqExtraction:
 
         assert "REQ-p00001" in results[0]["verifies"]
 
-    # Implements: REQ-d00082-G
+    # Verifies: REQ-d00082-G
     def test_extracts_multiple_reqs(self):
         """Extracts multiple REQ IDs from test name."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -117,7 +117,7 @@ class TestJUnitXMLParserReqExtraction:
         assert "REQ-p00001" in results[0]["verifies"]
         assert "REQ-o00002" in results[0]["verifies"]
 
-    # Implements: REQ-d00082-G
+    # Verifies: REQ-d00082-G
     def test_extracts_assertion_refs(self):
         """Extracts assertion references like REQ-p00001-A."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -130,7 +130,7 @@ class TestJUnitXMLParserReqExtraction:
 
         assert "REQ-p00001-A" in results[0]["verifies"]
 
-    # Implements: REQ-d00082-K
+    # Verifies: REQ-d00082-K
     def test_generates_test_id(self):
         """Generates stable test_id from classname and name."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -143,7 +143,7 @@ class TestJUnitXMLParserReqExtraction:
 
         assert results[0]["test_id"] == "test:tests/test_auth.py::TestLogin::test_user_can_login"
 
-    # Implements: REQ-d00082-K
+    # Verifies: REQ-d00082-K
     def test_generates_test_id_without_classname(self):
         """Generates test_id even without classname."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -161,7 +161,7 @@ class TestJUnitXMLParserReqExtraction:
 class TestJUnitXMLParserEdgeCases:
     """Edge case tests for JUnitXMLParser."""
 
-    # Implements: REQ-d00082-K
+    # Verifies: REQ-d00082-K
     def test_invalid_xml_returns_empty(self):
         """Returns empty list for invalid XML."""
         parser = JUnitXMLParser()
@@ -170,7 +170,7 @@ class TestJUnitXMLParserEdgeCases:
 
         assert results == []
 
-    # Implements: REQ-d00082-K
+    # Verifies: REQ-d00082-K
     def test_empty_testsuite(self):
         """Handles empty testsuite."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -182,7 +182,7 @@ class TestJUnitXMLParserEdgeCases:
 
         assert results == []
 
-    # Implements: REQ-d00082-K
+    # Verifies: REQ-d00082-K
     def test_testsuites_wrapper(self):
         """Handles testsuites wrapper element."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -204,7 +204,7 @@ class TestJUnitXMLParserEdgeCases:
 class TestJUnitXMLParserCanParse:
     """Tests for can_parse method."""
 
-    # Implements: REQ-d00082-K
+    # Verifies: REQ-d00082-K
     def test_can_parse_junit_xml(self):
         """Returns True for JUnit XML files."""
         from pathlib import Path
@@ -215,7 +215,7 @@ class TestJUnitXMLParserCanParse:
         assert parser.can_parse(Path("test-results.xml")) is True
         assert parser.can_parse(Path("results.xml")) is True
 
-    # Implements: REQ-d00082-K
+    # Verifies: REQ-d00082-K
     def test_cannot_parse_non_xml(self):
         """Returns False for non-XML files."""
         from pathlib import Path
@@ -334,3 +334,190 @@ class TestJUnitXMLParserCustomConfig:
 
         assert len(results) == 1
         assert "TASK-d00102" in results[0]["verifies"]
+
+
+class TestJUnitXMLParserSourceBinding:
+    """Tests for per-testcase file=/line= source binding (non-Python producers).
+
+    REQ-d00254-F: RESULT nodes carry the real test-file path (source_file).
+    REQ-d00254-G: match="source" binds a result to the test node at (path, line).
+    """
+
+    # Verifies: REQ-d00254-G
+    def test_file_attr_sets_source_path_and_drops_test_id(self):
+        """A per-testcase file= names the real source and drops the classname test_id."""
+        xml = """<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="link-redeem" tests="1">
+  <testcase classname="link.spec.ts" name="redeems"
+            file="e2e/link.spec.ts" line="12" time="0.5"/>
+</testsuite>"""
+        parser = JUnitXMLParser()
+
+        results = parser.parse(xml, "test-results/junit.xml")
+
+        assert len(results) == 1
+        assert results[0]["source_path"] == "e2e/link.spec.ts"
+        assert results[0]["test_id"] is None
+        assert results[0]["line"] == 12
+        assert results[0]["id"].startswith("e2e/link.spec.ts:")
+
+    # Verifies: REQ-d00254-G
+    def test_file_attr_without_line(self):
+        """file= present but no line= yields line None while still dropping test_id."""
+        xml = """<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="link-redeem" tests="1">
+  <testcase classname="link.spec.ts" name="redeems"
+            file="e2e/link.spec.ts" time="0.5"/>
+</testsuite>"""
+        parser = JUnitXMLParser()
+
+        results = parser.parse(xml, "test-results/junit.xml")
+
+        assert len(results) == 1
+        assert results[0]["source_path"] == "e2e/link.spec.ts"
+        assert results[0]["test_id"] is None
+        assert results[0]["line"] is None
+
+    # Verifies: REQ-d00254-G
+    def test_file_attr_with_non_integer_line(self):
+        """A non-integer line= degrades to None without raising."""
+        xml = """<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="link-redeem" tests="1">
+  <testcase classname="link.spec.ts" name="redeems"
+            file="e2e/link.spec.ts" line="not-a-number" time="0.5"/>
+</testsuite>"""
+        parser = JUnitXMLParser()
+
+        results = parser.parse(xml, "test-results/junit.xml")
+
+        assert len(results) == 1
+        assert results[0]["line"] is None
+        assert results[0]["test_id"] is None
+        assert results[0]["source_path"] == "e2e/link.spec.ts"
+
+    # Verifies: REQ-d00254-F
+    def test_backward_compat_no_file_attr(self):
+        """Without file=, the classname-derived test_id and passed source_path are unchanged."""
+        xml = """<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="TestAuth" tests="1">
+  <testcase classname="tests.test_auth" name="test_login" time="0.1"/>
+</testsuite>"""
+        parser = JUnitXMLParser()
+
+        results = parser.parse(xml, "test_results.xml")
+
+        assert len(results) == 1
+        assert results[0]["source_path"] == "test_results.xml"
+        assert results[0]["test_id"] == "test:tests/test_auth.py::test_login"
+        assert results[0]["line"] is None
+        assert results[0]["id"].startswith("test_results.xml:")
+
+    # Verifies: REQ-d00254-G
+    def test_mixed_testcases_in_one_suite(self):
+        """The file=/test_id decision is per-testcase, not per-file."""
+        xml = """<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="Mixed" tests="2">
+  <testcase classname="link.spec.ts" name="redeems"
+            file="e2e/link.spec.ts" line="12" time="0.5"/>
+  <testcase classname="tests.test_auth" name="test_login" time="0.1"/>
+</testsuite>"""
+        parser = JUnitXMLParser()
+
+        results = parser.parse(xml, "test-results/junit.xml")
+
+        assert len(results) == 2
+
+        spec_result = next(r for r in results if r["name"] == "redeems")
+        assert spec_result["source_path"] == "e2e/link.spec.ts"
+        assert spec_result["test_id"] is None
+        assert spec_result["line"] == 12
+
+        py_result = next(r for r in results if r["name"] == "test_login")
+        assert py_result["source_path"] == "test-results/junit.xml"
+        assert py_result["test_id"] == "test:tests/test_auth.py::test_login"
+        assert py_result["line"] is None
+
+    # Verifies: REQ-d00254-G
+    def test_file_attr_on_failing_testcase(self):
+        """A failing testcase with file= still drops test_id and keeps failed status."""
+        xml = """<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="link-redeem" tests="1">
+  <testcase classname="link.spec.ts" name="redeems"
+            file="e2e/link.spec.ts" line="12" time="0.5">
+    <failure message="Timeout waiting for redeem button"/>
+  </testcase>
+</testsuite>"""
+        parser = JUnitXMLParser()
+
+        results = parser.parse(xml, "test-results/junit.xml")
+
+        assert len(results) == 1
+        assert results[0]["status"] == "failed"
+        assert results[0]["test_id"] is None
+        assert results[0]["source_path"] == "e2e/link.spec.ts"
+        assert results[0]["line"] == 12
+
+
+class TestResultsFileProvenance:
+    """Per-record result_file / result_line provenance (REQ-d00254-F)."""
+
+    # Verifies: REQ-d00254-F
+    def test_pretty_printed_xml_yields_per_testcase_result_lines(self):
+        """Pretty-printed XML maps each record to its <testcase> line.
+
+        Names deliberately carry `›`, `:`, `/` and an XML entity (&quot;) to
+        pin the escaping-aware raw-line attribute matching.
+        """
+        xml = """<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="uat" tests="3">
+  <testcase classname="login.spec" name="Login › JNY-OQ-Login-01/1: &quot;home&quot;" time="0.1"/>
+  <testcase classname="login.spec" name="Login › JNY-OQ-Login-01/2: enter credentials" time="0.1"/>
+  <testcase classname="login.spec" name="plain_test" time="0.1"/>
+</testsuite>"""
+        parser = JUnitXMLParser()
+
+        results = parser.parse(xml, "results/junit.xml")
+
+        assert len(results) == 3
+        by_name = {r["name"]: r for r in results}
+        # ElementTree unescapes &quot; -- the record's name carries real quotes.
+        assert by_name['Login › JNY-OQ-Login-01/1: "home"']["result_line"] == 3
+        assert by_name["Login › JNY-OQ-Login-01/2: enter credentials"]["result_line"] == 4
+        assert by_name["plain_test"]["result_line"] == 5
+        for r in results:
+            assert r["result_file"] == "results/junit.xml"
+
+    # Verifies: REQ-d00254-F
+    def test_minified_xml_does_not_crash_and_degrades_result_line(self):
+        """A single-line document yields result_line of 1 or None per record."""
+        xml = (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<testsuite name="uat" tests="2">'
+            '<testcase classname="login.spec" name="one" time="0.1"/>'
+            '<testcase classname="login.spec" name="two" time="0.1"/>'
+            "</testsuite>"
+        )
+        parser = JUnitXMLParser()
+
+        results = parser.parse(xml, "results/junit.xml")
+
+        assert len(results) == 2
+        for r in results:
+            assert r["result_line"] in (1, None)
+            assert r["result_file"] == "results/junit.xml"
+
+    # Verifies: REQ-d00254-F
+    def test_file_attr_keeps_source_path_distinct_from_result_file(self):
+        """file= sets source_path (match key); result_file stays the artifact."""
+        xml = """<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="uat" tests="1">
+  <testcase classname="login.spec" name="redeems" file="e2e/link.spec.ts" time="0.5"/>
+</testsuite>"""
+        parser = JUnitXMLParser()
+
+        results = parser.parse(xml, "test-results/junit.xml")
+
+        assert len(results) == 1
+        assert results[0]["source_path"] == "e2e/link.spec.ts"
+        assert results[0]["result_file"] == "test-results/junit.xml"
+        assert results[0]["result_line"] == 3

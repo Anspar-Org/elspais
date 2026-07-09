@@ -13,11 +13,15 @@ test_name_ref, control_marker, or other_line.  This transformer:
 Keyword semantics per file type:
 
 - **test files**: Only ``Verifies`` is valid.  ``Implements`` and ``Refines``
-  produce a warning and are treated as ``Verifies`` for backward compatibility.
+  are silently skipped (no edge, no warning) -- the reference is dropped as
+  if it were never written, leaving the TEST node unlinked. This is
+  deliberate: test fixtures legitimately contain cross-type keywords in
+  string literals that the grammar also matches, so a warning would be
+  too noisy to be useful.
 - **code files**: ``Implements`` creates IMPLEMENTS edges.  ``Verifies`` creates
   VERIFIES edges (for code that produces pass/fail results).  ``Refines`` is
-  invalid (requirement-to-requirement only) and produces a warning; the
-  reference is skipped.
+  invalid (requirement-to-requirement only) and is silently skipped the same
+  way.
 """
 
 from __future__ import annotations
@@ -415,6 +419,7 @@ class ReferenceTransformer:
         pattern = build_multi_assertion_pattern(
             self.resolver.config.namespace,
             self.resolver.config.assertions.multi_separator,
+            self.resolver.config.assertions.separator,
         )
         refs = []
         for m in pattern.finditer(text):

@@ -1,4 +1,4 @@
-# Validates: REQ-p00002-A
+# Verifies: REQ-p00002-A
 """Tests for the ``elspais errors`` command.
 
 Validates REQ-p00002-A: error listing for spec format violations and missing

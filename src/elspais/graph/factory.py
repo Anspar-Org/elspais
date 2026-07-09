@@ -126,6 +126,21 @@ def _ingest_target_results(
         else:
             root_file = raw_root
 
+        # Results-file provenance (REQ-d00254): repo-relative path + line of
+        # the artifact that recorded this result, distinct from source_file
+        # (the TEST's source, which stays the RESULT->TEST match key).
+        raw_result_file = rec.get("result_file") or None
+        if raw_result_file and os.path.isabs(raw_result_file):
+            try:
+                result_file: str | None = str(
+                    Path(raw_result_file).resolve().relative_to(repo_root_resolved)
+                )
+            except ValueError:
+                result_file = raw_result_file  # outside repo root -- keep absolute
+        else:
+            result_file = raw_result_file
+        result_line = rec.get("result_line")
+
         parsed_data = {
             "id": rec["id"],
             "status": rec.get("status"),
@@ -143,11 +158,13 @@ def _ingest_target_results(
             "line": rec.get("line"),
             "root_line": rec.get("root_line"),
             "root_file": root_file,
+            "result_file": result_file,
+            "result_line": result_line,
         }
         content = ParsedContent(
             content_type="test_result",
-            start_line=1,
-            end_line=1,
+            start_line=result_line or 1,
+            end_line=result_line or 1,
             raw_text="",
             parsed_data=parsed_data,
         )
@@ -789,10 +806,12 @@ def build_graph(
     # When targets is empty (the default), this loop is a no-op.
     if typed_config.scanning.test.targets:
         from elspais.graph.parsers.results.coverage_json import CoverageJsonParser
+        from elspais.graph.parsers.results.coverage_sqlite import CoverageSqliteParser
         from elspais.graph.parsers.results.lcov import LcovParser
 
         lcov_parser = LcovParser()
         cov_json_parser = CoverageJsonParser()
+        cov_sqlite_parser = CoverageSqliteParser()
         _resolved_root = repo_root.resolve()
         for target in typed_config.scanning.test.targets:
             if not target.coverage:
@@ -816,17 +835,41 @@ def build_graph(
                 cov_parser = lcov_parser
             elif cov_json_parser.can_parse(cov_path):
                 cov_parser = cov_json_parser
+            elif cov_sqlite_parser.can_parse(cov_path):
+                cov_parser = cov_sqlite_parser
             else:
                 _log.debug("target %r: unrecognised coverage format: %s", target.name, cov_path)
                 continue
-            cov_content = cov_path.read_text(encoding="utf-8")
-            parsed_cov = cov_parser.parse(cov_content, str(cov_path))
+            # Binary formats (e.g. the .coverage SQLite DB) can't be
+            # text-decoded -- their parser ignores `content` and reopens
+            # `source_path` directly (see CoverageSqliteParser.binary).
+            if getattr(cov_parser, "binary", False):
+                cov_content = ""
+            else:
+                cov_content = cov_path.read_text(encoding="utf-8")
+            if cov_parser is cov_sqlite_parser:
+                # Contexts are the suite-scaled part of the data (every test
+                # context string per executed line). Only materialize them
+                # for measured files that actually resolve to a FILE node --
+                # unresolvable ones (test files, out-of-tree sources) are
+                # discarded by the annotation loop below anyway.
+                def _wanted(source_file: str, _cov_path: Path = cov_path) -> bool:
+                    return (
+                        _resolve_coverage_file_node(graph, source_file, _cov_path, repo_root)
+                        is not None
+                    )
+
+                parsed_cov = cov_parser.parse(cov_content, str(cov_path), wanted_files=_wanted)
+            else:
+                parsed_cov = cov_parser.parse(cov_content, str(cov_path))
             for source_file, data in parsed_cov.items():
                 cov_node = _resolve_coverage_file_node(graph, source_file, cov_path, repo_root)
                 if cov_node is None:
                     continue
                 cov_node.set_field("line_coverage", data["line_coverage"])
                 cov_node.set_field("executable_lines", data["executable_lines"])
+                if data.get("contexts"):
+                    cov_node.set_field("line_contexts", data["contexts"])
 
     # Link TEST nodes to CODE nodes via import analysis.
     # This creates TEST→CODE edges that enable transitive coverage:

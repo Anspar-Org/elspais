@@ -67,6 +67,31 @@ Separating iteration from annotation enables:
 *End* *Composable Annotation Design* | **Hash**: c73a6e32
 ---
 
+## REQ-o00072: Domain Deserialization Layer
+
+**Level**: ops | **Status**: Active | **Implements**: REQ-p00050
+
+Domain deserializers SHALL convert a source domain (file, stdin, or CLI input) into a stream of parsed content that carries accurate provenance and line location, through one uniform contract regardless of source domain.
+
+### Assertions
+
+A. Every domain deserializer SHALL pair each unit of parsed content with a `DomainContext` identifying the source domain kind (file, stdin, CLI) and a source identifier, so the origin of any node built from that content is always recoverable.
+
+B. Every domain deserializer SHALL partition its source text into contiguous, 1-indexed line ranges that accurately reflect the original text, so every node built from that content carries a correct source location.
+
+C. All domain deserializers (file, stdin, CLI) SHALL conform to one uniform `DomainDeserializer` contract (`iterate_sources` plus `deserialize`), so the graph builder can consume any source domain interchangeably.
+
+### Rationale
+
+The deserialization layer is the abstract controller that turns raw text into the `ParsedContent` stream the graph builder consumes; it does not construct graph nodes itself, so it must guarantee only the properties the builder depends on: knowing where each unit came from (A), knowing exactly which lines it spans (B), and treating every source domain the same way (C). Completeness -- that every line of a text-based source is eventually claimed by some node -- is a build-pipeline guarantee owned by REQ-d00128-G (RemainderParser is mandatory for SPEC/JOURNEY/CODE/TEST file types); this requirement does not duplicate it.
+
+### Changelog
+
+- 2026-07-03 | e568082e | - | Michael Lewis (michael@anspar.org) | Auto-fix: add missing changelog section
+
+*End* *Domain Deserialization Layer* | **Hash**: e568082e
+---
+
 # REQ-o00066: CI/CD Pipeline Enforcement
 
 **Level**: ops | **Status**: Active | **Implements**: REQ-p00004

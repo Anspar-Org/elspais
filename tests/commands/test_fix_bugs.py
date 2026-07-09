@@ -1,4 +1,4 @@
-# Validates: REQ-p00004-A, REQ-p00002-C
+# Verifies: REQ-p00004-A, REQ-p00002-C
 """Tests for fix command bugs with changelog enforcement.
 
 Bug 1: Active REQ error message should explain why a changelog message

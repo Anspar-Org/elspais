@@ -48,6 +48,7 @@ def _build_repro(spec_body: str) -> Path:
     return repo
 
 
+# Verifies: REQ-p00014-B
 def test_in_repo_satisfies_marked_template_produces_clones():
     """Scenario A: target marked **Template** + bold **Satisfies** form."""
     repo = _build_repro(
@@ -86,6 +87,7 @@ def test_in_repo_satisfies_marked_template_produces_clones():
         shutil.rmtree(repo)
 
 
+# Verifies: REQ-p00014-G
 def test_in_repo_satisfies_unmarked_target_emits_broken_ref():
     """Scenario B: target NOT marked **Template** — Phase 2 emits typed diagnostic."""
     repo = _build_repro(
@@ -126,6 +128,9 @@ def test_in_repo_satisfies_unmarked_target_emits_broken_ref():
         shutil.rmtree(repo)
 
 
+# Verifies: REQ-p00014-A
+# (A, not E: p00014-E's "markdown decoration optional" covers the **Template**
+# flag; the bare-vs-bold Satisfies: form is the field-support contract in A.)
 def test_in_repo_satisfies_bare_form_also_works():
     """Scenario C: parser tolerates bare Satisfies: form (without bold)."""
     repo = _build_repro(

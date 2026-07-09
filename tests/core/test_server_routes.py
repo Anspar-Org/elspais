@@ -162,6 +162,102 @@ class TestTreeData:
         assert isinstance(data, list)
 
 
+class TestTreeCoverageBucket:
+    """REQ-d00258-E: /api/tree-data coverage field uses severity-aware tier bucket."""
+
+    _SPEC_WITH_ASSERTIONS_HEADING = (
+        "# REQ-p00001: Test Requirement\n"
+        "\n"
+        "**Level**: PRD | **Status**: Active\n"
+        "\n"
+        "Body text.\n"
+        "\n"
+        "## Assertions\n"
+        "\n"
+        "A. First assertion\n"
+        "\n"
+        "*End* *REQ-p00001*\n"
+    )
+
+    _CONFIG = (
+        _MINIMAL_CONFIG
+        + """
+[scanning.code]
+directories = ["src"]
+
+[scanning.test]
+enabled = true
+directories = ["tests"]
+file_patterns = ["test_*.py"]
+
+[[scanning.test.targets]]
+name = "junit"
+reporter = "junit"
+results = "results.xml"
+match = "source"
+"""
+    )
+
+    @pytest.fixture
+    def full_indirect_client(self, tmp_path: Path) -> TestClient:
+        """Project with full code+test+passing-result coverage but no UAT/journey.
+
+        The worst-severity dimension is the journey-less UAT (uat_coverage/
+        uat_verified default to a "missing" tier at info severity). Its badge
+        color now resolves from the STANDING (missing -> grey, REQ-d00258-D),
+        NOT the retired yellow-green info-severity color, so combined
+        validation_color is "grey". The severity-aware tier bucket must STILL
+        classify the requirement as "full": info severity is non-dragging, so the
+        coverage bucket is drawn from tier semantics (combined_bucket), never from
+        the color string (REQ-d00258-E).
+        """
+        from elspais.server.app import create_app
+        from elspais.server.state import AppState
+
+        (tmp_path / ".elspais.toml").write_text(self._CONFIG)
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        (spec_dir / "test.md").write_text(self._SPEC_WITH_ASSERTIONS_HEADING)
+
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "impl.py").write_text("# Implements: REQ-p00001-A\ndef do_thing():\n    pass\n")
+
+        tests_dir = tmp_path / "tests"
+        tests_dir.mkdir()
+        (tests_dir / "test_a.py").write_text("# Verifies: REQ-p00001-A\ndef test_a():\n    pass\n")
+
+        (tmp_path / "results.xml").write_text(
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<testsuite name="suite" tests="1">\n'
+            '  <testcase name="test_a" classname="tests.test_a" time="0.1"/>\n'
+            "</testsuite>\n"
+        )
+
+        state = AppState.from_config(repo_root=tmp_path)
+        app = create_app(state=state, mount_mcp=False)
+        return TestClient(app)
+
+    # Verifies: REQ-d00258-E
+    def test_tree_coverage_field_uses_tier_bucket(self, full_indirect_client: TestClient):
+        """coverage field is drawn from combined_bucket, not a naive color check."""
+        resp = full_indirect_client.get("/api/tree-data")
+        assert resp.status_code == 200
+        rows = resp.json()
+        req_rows = [r for r in rows if r["kind"] == "requirement"]
+        assert req_rows, "expected at least one requirement row"
+        assert all(r["coverage"] in ("full", "partial", "missing", "failing") for r in req_rows)
+
+        row = next(r for r in req_rows if r["id"] == "REQ-p00001")
+        # Color decoupled from severity (REQ-d00258-D): the journey-less UAT
+        # missing standing is grey, not the retired yellow-green.
+        assert row["validation_color"] == "grey"
+        assert row["validation_color"] != "yellow-green"
+        # ...yet the info-severity UAT gap is non-dragging, so the bucket derives
+        # from tier semantics and stays "full", not "missing".
+        assert row["coverage"] == "full"
+
+
 class TestTreeDataGitMetrics:
     """REQ-d00010-A: /api/tree-data reads git state from node metrics."""
 

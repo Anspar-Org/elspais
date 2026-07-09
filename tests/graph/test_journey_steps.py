@@ -5,14 +5,14 @@ from elspais.graph.relations import EdgeKind
 
 # Verifies: REQ-d00256
 def test_make_step_id_form():
-    assert make_step_id("JNY-OQ-Login-01", 3) == "JNY-OQ-Login-01/step-3"
+    assert make_step_id("JNY-OQ-Login-01", 3) == "JNY-OQ-Login-01/3"
 
 
 # Verifies: REQ-d00256
 def test_direct_coverage_for_step_counts_outgoing_verifies():
     # A STEP is a coverage target like a requirement: it owns its verifying
     # tests as OUTGOING edges (step -> test).
-    step = GraphNode(id="JNY-OQ-Login-01/step-1", kind=NodeKind.STEP, label="open page")
+    step = GraphNode(id="JNY-OQ-Login-01/1", kind=NodeKind.STEP, label="open page")
     test_node = GraphNode(id="test:t.py:1", kind=NodeKind.TEST, label="t")
     step.link(test_node, EdgeKind.VERIFIES)  # edge step -> test (outgoing from step)
     assert direct_coverage_for(step) == 1
@@ -34,8 +34,8 @@ def test_steps_become_structures_children(canonical_graph):
     ]
 
     assert [s.id for s in steps] == [
-        "JNY-001/step-1",
-        "JNY-001/step-2",
-        "JNY-001/step-3",
+        "JNY-001/1",
+        "JNY-001/2",
+        "JNY-001/3",
     ]
     assert steps[1].get_label().startswith("System verifies")

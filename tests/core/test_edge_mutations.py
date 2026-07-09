@@ -99,7 +99,7 @@ class TestAddEdge:
         assert parent.has_child(child)
         assert child.has_parent(parent)
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_add_edge_with_assertion_targets(self):
         """Add edge with assertion targets."""
         graph = build_graph_with_assertions()
@@ -120,7 +120,7 @@ class TestAddEdge:
         assert "A" in impl_edges[0].assertion_targets
         assert "B" in impl_edges[0].assertion_targets
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_add_edge_source_not_found(self):
         """Adding edge with non-existent source raises KeyError."""
         graph = build_disconnected_graph()
@@ -128,7 +128,7 @@ class TestAddEdge:
         with pytest.raises(KeyError, match="not found"):
             graph.add_edge("REQ-nonexistent", "REQ-p00001", EdgeKind.IMPLEMENTS)
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_add_edge_target_not_found_creates_broken_ref(self):
         """Adding edge with non-existent target creates broken reference."""
         graph = build_disconnected_graph()
@@ -145,7 +145,7 @@ class TestAddEdge:
         assert broken.target_id == "REQ-nonexistent"
         assert broken.edge_kind == "implements"
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_add_edge_removes_orphan_status(self):
         """Adding edge removes source from orphans."""
         graph = build_disconnected_graph()
@@ -157,7 +157,7 @@ class TestAddEdge:
 
         assert "REQ-p00002" not in graph._orphaned_ids
 
-    # Implements: REQ-o00062-E
+    # Verifies: REQ-o00062-E
     def test_add_edge_logs_mutation(self):
         """Add edge is logged."""
         graph = build_disconnected_graph()
@@ -169,7 +169,7 @@ class TestAddEdge:
         entry = graph.mutation_log.last()
         assert entry.operation == "add_edge"
 
-    # Implements: REQ-o00062-G
+    # Verifies: REQ-o00062-G
     def test_add_edge_undo(self):
         """Undo removes the edge."""
         graph = build_disconnected_graph()
@@ -184,7 +184,7 @@ class TestAddEdge:
 
         assert not parent.has_child(child)
 
-    # Implements: REQ-o00062-G
+    # Verifies: REQ-o00062-G
     def test_add_edge_undo_restores_orphan_status(self):
         """Undo restores orphan status if node was orphan before."""
         graph = build_disconnected_graph()
@@ -197,7 +197,7 @@ class TestAddEdge:
 
         assert "REQ-p00002" in graph._orphaned_ids
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_add_edge_duplicate_returns_error(self):
         """Adding the same edge twice returns no-op with duplicate flag."""
         graph = build_disconnected_graph()
@@ -215,7 +215,7 @@ class TestAddEdge:
         ]
         assert len(edges) == 1
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_add_edge_assertion_alongside_whole_req_allowed(self):
         """Adding assertion-targeted edge when whole-req edge exists is allowed."""
         graph = build_graph_with_assertions()
@@ -238,7 +238,7 @@ class TestAddEdge:
         ]
         assert len(edges) == 2
 
-    # Implements: REQ-o00062-G
+    # Verifies: REQ-o00062-G
     def test_add_edge_duplicate_undo_preserves_original(self):
         """Undoing a duplicate add_edge does not remove the original edge."""
         graph = build_disconnected_graph()
@@ -257,7 +257,7 @@ class TestAddEdge:
         child = graph.find_by_id("REQ-p00002")
         assert parent.has_child(child)
 
-    # Implements: REQ-o00062-G
+    # Verifies: REQ-o00062-G
     def test_add_edge_undo_removes_broken_ref(self):
         """Undo removes broken reference if target didn't exist."""
         graph = build_disconnected_graph()
@@ -294,7 +294,7 @@ class TestChangeEdgeKind:
         edges = list(child.iter_incoming_edges())
         assert edges[0].kind == EdgeKind.REFINES
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_change_edge_kind_source_not_found(self):
         """Changing edge kind with non-existent source raises KeyError."""
         graph = build_hierarchy_graph()
@@ -302,7 +302,7 @@ class TestChangeEdgeKind:
         with pytest.raises(KeyError, match="not found"):
             graph.change_edge_kind("REQ-nonexistent", "REQ-p00001", EdgeKind.REFINES)
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_change_edge_kind_target_not_found(self):
         """Changing edge kind with non-existent target raises KeyError."""
         graph = build_hierarchy_graph()
@@ -310,7 +310,7 @@ class TestChangeEdgeKind:
         with pytest.raises(KeyError, match="not found"):
             graph.change_edge_kind("REQ-p00002", "REQ-nonexistent", EdgeKind.REFINES)
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_change_edge_kind_no_edge(self):
         """Changing edge kind when no edge exists raises ValueError."""
         graph = build_disconnected_graph()
@@ -318,7 +318,7 @@ class TestChangeEdgeKind:
         with pytest.raises(ValueError, match="No edge exists"):
             graph.change_edge_kind("REQ-p00002", "REQ-p00001", EdgeKind.REFINES)
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_change_edge_kind_preserves_assertion_targets(self):
         """Changing edge kind preserves assertion targets."""
         graph = build_graph_with_assertions()
@@ -335,7 +335,7 @@ class TestChangeEdgeKind:
         assert len(refines_edges) == 1
         assert "A" in refines_edges[0].assertion_targets
 
-    # Implements: REQ-o00062-E
+    # Verifies: REQ-o00062-E
     def test_change_edge_kind_logs_mutation(self):
         """Change edge kind is logged."""
         graph = build_hierarchy_graph()
@@ -346,7 +346,7 @@ class TestChangeEdgeKind:
         entry = graph.mutation_log.last()
         assert entry.operation == "change_edge_kind"
 
-    # Implements: REQ-o00062-G
+    # Verifies: REQ-o00062-G
     def test_change_edge_kind_undo(self):
         """Undo restores original edge kind."""
         graph = build_hierarchy_graph()
@@ -449,7 +449,7 @@ class TestChangeEdgeTargets:
         ]
         assert edges[0].assertion_targets == ["A"]
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_change_edge_targets_no_edge_raises(self):
         """ValueError if no edge exists between the two nodes."""
         graph = build_disconnected_graph()
@@ -457,7 +457,7 @@ class TestChangeEdgeTargets:
         with pytest.raises(ValueError, match="No IMPLEMENTS/REFINES/VALIDATES edge exists"):
             graph.change_edge_targets("REQ-p00002", "REQ-p00001", ["A"])
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_change_edge_targets_source_not_found(self):
         """KeyError if source_id not found."""
         graph = build_disconnected_graph()
@@ -465,7 +465,7 @@ class TestChangeEdgeTargets:
         with pytest.raises(KeyError, match="not found"):
             graph.change_edge_targets("REQ-nonexistent", "REQ-p00001", ["A"])
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_change_edge_targets_target_not_found(self):
         """KeyError if target_id not found."""
         graph = build_disconnected_graph()
@@ -473,7 +473,7 @@ class TestChangeEdgeTargets:
         with pytest.raises(KeyError, match="not found"):
             graph.change_edge_targets("REQ-p00002", "REQ-nonexistent", ["A"])
 
-    # Implements: REQ-o00062-E
+    # Verifies: REQ-o00062-E
     def test_change_edge_targets_logs_mutation(self):
         """Mutation log contains the change_edge_targets entry."""
         graph = build_graph_with_assertions()
@@ -506,7 +506,7 @@ class TestDeleteEdge:
         assert not parent.has_child(child)
         assert not child.has_parent(parent)
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_delete_edge_source_not_found(self):
         """Deleting edge with non-existent source raises KeyError."""
         graph = build_hierarchy_graph()
@@ -514,7 +514,7 @@ class TestDeleteEdge:
         with pytest.raises(KeyError, match="not found"):
             graph.delete_edge("REQ-nonexistent", "REQ-p00001")
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_delete_edge_target_not_found(self):
         """Deleting edge with non-existent target raises KeyError."""
         graph = build_hierarchy_graph()
@@ -522,7 +522,7 @@ class TestDeleteEdge:
         with pytest.raises(KeyError, match="not found"):
             graph.delete_edge("REQ-p00002", "REQ-nonexistent")
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_delete_edge_no_edge(self):
         """Deleting edge when no edge exists raises ValueError."""
         graph = build_disconnected_graph()
@@ -530,7 +530,7 @@ class TestDeleteEdge:
         with pytest.raises(ValueError, match="No edge exists"):
             graph.delete_edge("REQ-p00002", "REQ-p00001")
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_delete_edge_source_becomes_orphan(self):
         """Deleting last parent edge makes source orphan."""
         graph = build_hierarchy_graph()
@@ -545,7 +545,7 @@ class TestDeleteEdge:
         assert entry.after_state.get("became_orphan") is True
         assert "REQ-p00002" in graph._orphaned_ids
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_delete_edge_root_not_orphaned(self):
         """Deleting edge from root node doesn't mark as orphan."""
         # Create a graph where a root has an edge to another root
@@ -567,7 +567,7 @@ class TestDeleteEdge:
         assert graph.has_root("REQ-p00001")
         assert "REQ-p00001" not in graph._orphaned_ids
 
-    # Implements: REQ-o00062-E
+    # Verifies: REQ-o00062-E
     def test_delete_edge_records_assertion_targets(self):
         """Delete edge records assertion targets for undo."""
         graph = build_graph_with_assertions()
@@ -577,7 +577,7 @@ class TestDeleteEdge:
 
         assert entry.before_state["assertion_targets"] == ["A", "B"]
 
-    # Implements: REQ-o00062-E
+    # Verifies: REQ-o00062-E
     def test_delete_edge_logs_mutation(self):
         """Delete edge is logged."""
         graph = build_hierarchy_graph()
@@ -588,7 +588,7 @@ class TestDeleteEdge:
         entry = graph.mutation_log.last()
         assert entry.operation == "delete_edge"
 
-    # Implements: REQ-o00062-G
+    # Verifies: REQ-o00062-G
     def test_delete_edge_undo(self):
         """Undo restores the edge."""
         graph = build_hierarchy_graph()
@@ -603,7 +603,7 @@ class TestDeleteEdge:
 
         assert parent.has_child(child)
 
-    # Implements: REQ-o00062-G
+    # Verifies: REQ-o00062-G
     def test_delete_edge_undo_restores_assertion_targets(self):
         """Undo restores assertion targets."""
         graph = build_graph_with_assertions()
@@ -617,7 +617,7 @@ class TestDeleteEdge:
         assert len(impl_edges) == 1
         assert "A" in impl_edges[0].assertion_targets
 
-    # Implements: REQ-o00062-G
+    # Verifies: REQ-o00062-G
     def test_delete_edge_undo_removes_orphan_status(self):
         """Undo removes orphan status if node became orphan after delete."""
         graph = build_hierarchy_graph()
@@ -629,7 +629,7 @@ class TestDeleteEdge:
 
         assert "REQ-p00002" not in graph._orphaned_ids
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_delete_edge_preserves_other_edges_to_same_parent(self):
         """Deleting one edge must not delete other edges to the same parent.
 
@@ -668,7 +668,7 @@ class TestDeleteEdge:
         assert parent.has_child(child)
         assert child.has_parent(parent)
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_delete_edge_removes_parent_child_when_last_edge(self):
         """When the last edge between two nodes is deleted, parent/child link is cleaned up."""
         graph = build_graph_with_assertions()
@@ -713,7 +713,7 @@ class TestFixBrokenReference:
         child = graph.find_by_id("REQ-p00002")
         assert parent.has_child(child)
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_fix_broken_reference_source_not_found(self):
         """Fixing with non-existent source raises KeyError."""
         graph = build_graph_with_broken_reference()
@@ -721,7 +721,7 @@ class TestFixBrokenReference:
         with pytest.raises(KeyError, match="not found"):
             graph.fix_broken_reference("REQ-nonexistent", "REQ-foo", "REQ-p00001")
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_fix_broken_reference_no_broken_ref(self):
         """Fixing non-existent broken reference raises ValueError."""
         graph = build_disconnected_graph()
@@ -729,7 +729,7 @@ class TestFixBrokenReference:
         with pytest.raises(ValueError, match="No broken reference"):
             graph.fix_broken_reference("REQ-p00002", "REQ-nonexistent", "REQ-p00001")
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_fix_broken_reference_new_target_not_found(self):
         """Fixing to non-existent target keeps reference broken."""
         graph = build_graph_with_broken_reference()
@@ -744,7 +744,7 @@ class TestFixBrokenReference:
         assert broken[0].source_id == "REQ-p00002"
         assert broken[0].target_id == "REQ-also-nonexistent"
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_fix_broken_reference_removes_orphan_status(self):
         """Fixing broken reference removes orphan status."""
         graph = build_graph_with_broken_reference()
@@ -754,7 +754,7 @@ class TestFixBrokenReference:
 
         assert "REQ-p00002" not in graph._orphaned_ids
 
-    # Implements: REQ-o00062-E
+    # Verifies: REQ-o00062-E
     def test_fix_broken_reference_logs_mutation(self):
         """Fix broken reference is logged."""
         graph = build_graph_with_broken_reference()
@@ -764,7 +764,7 @@ class TestFixBrokenReference:
         entry = graph.mutation_log.last()
         assert entry.operation == "fix_broken_reference"
 
-    # Implements: REQ-o00062-G
+    # Verifies: REQ-o00062-G
     def test_fix_broken_reference_undo(self):
         """Undo restores original broken reference."""
         graph = build_graph_with_broken_reference()
@@ -786,7 +786,7 @@ class TestFixBrokenReference:
         assert broken[0].source_id == "REQ-p00002"
         assert broken[0].target_id == "REQ-nonexistent"
 
-    # Implements: REQ-o00062-G
+    # Verifies: REQ-o00062-G
     def test_fix_broken_reference_undo_restores_orphan_status(self):
         """Undo restores orphan status if node was orphan before fix."""
         graph = build_graph_with_broken_reference()
@@ -799,7 +799,7 @@ class TestFixBrokenReference:
 
         assert "REQ-p00002" in graph._orphaned_ids
 
-    # Implements: REQ-o00062-G
+    # Verifies: REQ-o00062-G
     def test_fix_broken_reference_undo_still_broken(self):
         """Undo restores original broken reference when fix kept it broken."""
         graph = build_graph_with_broken_reference()
@@ -820,7 +820,7 @@ class TestFixBrokenReference:
 class TestMultipleEdgeMutations:
     """Tests for sequences of edge mutations."""
 
-    # Implements: REQ-o00062-E
+    # Verifies: REQ-o00062-E
     def test_multiple_mutations_logged(self):
         """Multiple edge mutations are all logged in order."""
         graph = build_disconnected_graph()
@@ -835,7 +835,7 @@ class TestMultipleEdgeMutations:
         assert entries[1].operation == "change_edge_kind"
         assert entries[2].operation == "delete_edge"
 
-    # Implements: REQ-o00062-G
+    # Verifies: REQ-o00062-G
     def test_undo_multiple_in_reverse(self):
         """Multiple undos reverse operations correctly."""
         graph = build_disconnected_graph()
@@ -873,7 +873,7 @@ class TestEdgeMutationChain:
     completes, ensuring the canonical graph is fully restored.
     """
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_step_1_add_edge(self, mutable_graph):
         """Add an IMPLEMENTS edge from REQ-d00003 to REQ-p00002."""
         parent = mutable_graph.find_by_id("REQ-p00002")
@@ -889,7 +889,7 @@ class TestEdgeMutationChain:
         assert child.has_parent(parent)
         assert len(mutable_graph.mutation_log) == 1
 
-    # Implements: REQ-o00062-C
+    # Verifies: REQ-o00062-C
     def test_step_2_change_edge_kind(self, mutable_graph):
         """Change the edge kind from IMPLEMENTS to REFINES."""
         entry = mutable_graph.change_edge_kind("REQ-d00003", "REQ-p00002", EdgeKind.REFINES)
@@ -904,7 +904,7 @@ class TestEdgeMutationChain:
         assert edges[0].kind == EdgeKind.REFINES
         assert len(mutable_graph.mutation_log) == 2
 
-    # Implements: REQ-o00062-G
+    # Verifies: REQ-o00062-G
     def test_step_3_undo_change_kind(self, mutable_graph):
         """Undo the kind change — edge reverts to IMPLEMENTS."""
         mutable_graph.undo_last()
@@ -915,7 +915,7 @@ class TestEdgeMutationChain:
         assert edges[0].kind == EdgeKind.IMPLEMENTS
         assert len(mutable_graph.mutation_log) == 1
 
-    # Implements: REQ-o00062-G
+    # Verifies: REQ-o00062-G
     def test_step_4_undo_add_edge(self, mutable_graph):
         """Undo the add_edge — REQ-d00003 is disconnected from REQ-p00002 again."""
         mutable_graph.undo_last()

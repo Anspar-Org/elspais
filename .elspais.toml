@@ -140,7 +140,17 @@ reference_keyword = "Validates"
 # Additional regex patterns for reference detection
 reference_patterns = []
 # Test targets drive result + coverage ingestion ([[scanning.test.targets]]).
-# elspais's own target choice is finalized in a later task.
+# elspais's own suite (.githooks/pre-commit) runs pytest with
+# `--cov-context=test` (pytest-cov's per-test dynamic context), which writes
+# coverage.py's native `.coverage` SQLite data file to the repo root. Per-test
+# line attribution (code_tested.direct, CUR-1568) is read directly from that
+# database via coverage.py's public API (elspais[coverage] extra) -- no
+# machine-readable results file, so `reporter`/`results` are left unset
+# (coverage-only ingestion). `Verifies:` wiring for Python tests comes from
+# source-scanned `# Verifies:` comments, independent of this target.
+[[scanning.test.targets]]
+name = "elspais-unit"
+coverage = ".coverage"
 
 # User journey file scanning
 [scanning.journey]
@@ -211,48 +221,42 @@ retired = ["Deprecated", "Superseded"]
 # Coverage severity tiers per dimension (ok | info | warning | error)
 # Code implements assertions
 [rules.coverage.implemented]
-# All assertions covered by direct references
-full_direct = "ok"
-# Covered via parent/child rollup only
-full_indirect = "info"
+# All assertions covered
+full = "ok"
 # Some assertions covered, some not
 partial = "warning"
-# No coverage at all
-none = "error"
 # Has coverage but test results show failures
 failing = "error"
+# No coverage at all
+missing = "error"
 
 # Tests reference assertions
 [rules.coverage.tested]
-full_direct = "ok"
-full_indirect = "info"
+full = "ok"
 partial = "warning"
-none = "error"
 failing = "error"
+missing = "error"
 
 # Test results exist for assertions
 [rules.coverage.verified]
-full_direct = "ok"
-full_indirect = "info"
+full = "ok"
 partial = "warning"
-none = "warning"
 failing = "error"
+missing = "warning"
 
 # User journeys validate assertions
 [rules.coverage.uat_coverage]
-full_direct = "ok"
-full_indirect = "info"
+full = "ok"
 partial = "info"
-none = "info"
 failing = "error"
+missing = "info"
 
 # User journey results exist
 [rules.coverage.uat_verified]
-full_direct = "ok"
-full_indirect = "info"
+full = "ok"
 partial = "info"
-none = "info"
 failing = "error"
+missing = "info"
 
 # Severity for code/test references to non-active requirements
 [rules.references]

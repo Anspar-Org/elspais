@@ -462,8 +462,8 @@ if >=1 failing result; unverified if no results.
 | No verifying tests recorded | `unverified` |
 
 The journey verdict feeds `uat_verified` on each requirement named in the
-journey's `Validates:` line, using the same `full-direct`, `partial`,
-`failing`, `none` tier machinery as code/test coverage.
+journey's `Validates:` line, using the same `full`, `partial`, `failing`,
+`missing` tier machinery as code/test coverage.
 
 Run `elspais trace --dimension uat` for the UAT-scoped traceability report.
 Run `elspais trace --help` for all trace options.

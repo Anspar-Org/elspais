@@ -1,4 +1,4 @@
-# Implements: REQ-p00014-E
+# Verifies: REQ-p00014-E
 """Tests for the author-declared ``**Template**`` metadata-line marker.
 
 Phase 1 of CUR-1353 (cross-repo template support): authors mark a
@@ -66,7 +66,7 @@ def _parse_requirement(md: str):
 class TestTemplateFlagParsing:
     """Parser detects the ``**Template**`` flag on the metadata line."""
 
-    # Implements: REQ-p00014-E
+    # Verifies: REQ-p00014-E
     def test_template_flag_sets_field_true(self) -> None:
         """A metadata line containing ``**Template**`` sets parsed_data['template']."""
         md = (
@@ -82,7 +82,7 @@ class TestTemplateFlagParsing:
         assert result.parsed_data["level"] == "prd"
         assert result.parsed_data["status"] == "Active"
 
-    # Implements: REQ-p00014-E
+    # Verifies: REQ-p00014-E
     def test_template_flag_absent_defaults_false(self) -> None:
         """A requirement without ``**Template**`` has template=False in parsed_data."""
         md = (
@@ -95,7 +95,7 @@ class TestTemplateFlagParsing:
         result = _parse_requirement(md)
         assert result.parsed_data["template"] is False
 
-    # Implements: REQ-p00014-E
+    # Verifies: REQ-p00014-E
     @pytest.mark.parametrize(
         "decoration",
         [
@@ -117,7 +117,7 @@ class TestTemplateFlagParsing:
         result = _parse_requirement(md)
         assert result.parsed_data["template"] is True
 
-    # Implements: REQ-p00014-E
+    # Verifies: REQ-p00014-E
     @pytest.mark.parametrize(
         "metadata_line",
         [
@@ -149,7 +149,7 @@ class TestTemplateFlagParsing:
 class TestTemplateStereotypeSeat:
     """Builder applies ``Stereotype.TEMPLATE`` to TEMPLATE-flagged REQs and assertions."""
 
-    # Implements: REQ-p00014-E
+    # Verifies: REQ-p00014-E
     def test_template_flag_sets_requirement_stereotype(self) -> None:
         """When parsed_data['template'] is True, the REQUIREMENT node is TEMPLATE."""
         template = make_requirement(
@@ -165,7 +165,7 @@ class TestTemplateStereotypeSeat:
         assert node.kind == NodeKind.REQUIREMENT
         assert node.get_field("stereotype") == Stereotype.TEMPLATE
 
-    # Implements: REQ-p00014-E
+    # Verifies: REQ-p00014-E
     def test_template_flag_propagates_to_assertions(self) -> None:
         """Assertions on a TEMPLATE requirement inherit the TEMPLATE stereotype."""
         template = make_requirement(
@@ -197,7 +197,7 @@ class TestTemplateStereotypeSeat:
 class TestTemplateRoundTripRender:
     """``render_node`` round-trips ``**Template**`` based on the node's stereotype."""
 
-    # Implements: REQ-p00014-E
+    # Verifies: REQ-p00014-E
     def test_render_emits_template_marker(self) -> None:
         """A REQ with Stereotype.TEMPLATE renders ``**Template**`` on the metadata line."""
         from elspais.graph.render import render_node
@@ -222,7 +222,7 @@ class TestTemplateRoundTripRender:
             "**Template**" in meta_line
         ), f"Expected '**Template**' on metadata line, got: {meta_line!r}"
 
-    # Implements: REQ-p00014-E
+    # Verifies: REQ-p00014-E
     def test_render_omits_template_marker_for_concrete(self) -> None:
         """A CONCRETE REQ must NOT have ``**Template**`` on its rendered metadata line."""
         from elspais.graph.render import render_node
@@ -259,7 +259,7 @@ class TestSatisfiesAcceptedInBothForms:
     continues to accept either input form.
     """
 
-    # Implements: REQ-p00014-E
+    # Verifies: REQ-p00014-E
     @pytest.mark.parametrize(
         "satisfies_line",
         [
@@ -281,7 +281,7 @@ class TestSatisfiesAcceptedInBothForms:
         result = _parse_requirement(md)
         assert result.parsed_data["satisfies"] == ["REQ-p80001"]
 
-    # Implements: REQ-p00014-E
+    # Verifies: REQ-p00014-E
     def test_render_emits_bold_satisfies(self) -> None:
         """Rendering a REQ with Satisfies produces the canonical ``**Satisfies**:`` form."""
         from elspais.graph.render import render_node

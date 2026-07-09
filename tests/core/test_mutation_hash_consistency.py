@@ -60,7 +60,7 @@ def build_graph_for_hash() -> TraceGraph:
 class TestAddAssertionHashConsistency:
     """Tests verifying hash consistency after add_assertion."""
 
-    # Implements: REQ-o00062-B
+    # Verifies: REQ-o00062-B
     def test_add_assertion_updates_hash(self):
         """After add_assertion, hash matches reconstruct_body_text().
 
@@ -82,7 +82,7 @@ class TestAddAssertionHashConsistency:
         # Verify hash actually changed
         assert new_hash != old_hash
 
-    # Implements: REQ-o00062-B
+    # Verifies: REQ-o00062-B
     def test_add_assertion_reconstructed_body_has_new_assertion(self):
         """After add_assertion, reconstruct_body_text() includes the new assertion."""
         graph = build_graph_for_hash()
@@ -99,7 +99,7 @@ class TestAddAssertionHashConsistency:
 class TestUpdateAssertionHashConsistency:
     """Tests verifying hash consistency after update_assertion."""
 
-    # Implements: REQ-o00062-B
+    # Verifies: REQ-o00062-B
     def test_update_assertion_updates_hash(self):
         """After update_assertion, hash matches reconstruct_body_text().
 
@@ -121,7 +121,7 @@ class TestUpdateAssertionHashConsistency:
         # Verify hash actually changed
         assert new_hash != old_hash
 
-    # Implements: REQ-o00062-B
+    # Verifies: REQ-o00062-B
     def test_update_assertion_preserves_other_assertions(self):
         """After update_assertion, other assertions remain in reconstructed body."""
         graph = build_graph_for_hash()
@@ -137,7 +137,7 @@ class TestUpdateAssertionHashConsistency:
 class TestDeleteAssertionHashConsistency:
     """Tests verifying hash consistency after delete_assertion."""
 
-    # Implements: REQ-o00062-B
+    # Verifies: REQ-o00062-B
     def test_delete_assertion_updates_hash(self):
         """After delete_assertion, hash matches reconstruct_body_text().
 
@@ -159,7 +159,7 @@ class TestDeleteAssertionHashConsistency:
         # Verify hash actually changed
         assert new_hash != old_hash
 
-    # Implements: REQ-o00062-B
+    # Verifies: REQ-o00062-B
     def test_delete_assertion_with_compact_updates_hash(self):
         """After delete_assertion with compact, hash matches reconstruct_body_text().
 
@@ -180,7 +180,7 @@ class TestDeleteAssertionHashConsistency:
         body = reconstruct_body_text(parent)
         assert "A. The system SHALL log errors." in body
 
-    # Implements: REQ-o00062-B
+    # Verifies: REQ-o00062-B
     def test_delete_assertion_preserves_other_content(self):
         """After delete_assertion, remaining assertions are in reconstructed body."""
         graph = build_graph_for_hash()
@@ -195,7 +195,7 @@ class TestDeleteAssertionHashConsistency:
 class TestRenameAssertionHashConsistency:
     """Tests verifying hash consistency after rename_assertion."""
 
-    # Implements: REQ-o00062-B
+    # Verifies: REQ-o00062-B
     def test_rename_assertion_updates_hash(self):
         """After rename_assertion, hash matches reconstruct_body_text().
 
@@ -217,7 +217,7 @@ class TestRenameAssertionHashConsistency:
         # Verify hash actually changed
         assert new_hash != old_hash
 
-    # Implements: REQ-o00062-B
+    # Verifies: REQ-o00062-B
     def test_rename_assertion_preserves_other_assertions(self):
         """After rename_assertion, other assertions remain in reconstructed body."""
         graph = build_graph_for_hash()
@@ -233,7 +233,7 @@ class TestRenameAssertionHashConsistency:
 class TestHashConsistencyAfterMultipleMutations:
     """Tests verifying hash consistency after sequences of mutations."""
 
-    # Implements: REQ-o00062-B
+    # Verifies: REQ-o00062-B
     def test_multiple_add_assertions_maintain_hash_consistency(self):
         """After multiple add_assertion calls, hash still matches reconstruct_body_text()."""
         graph = build_graph_for_hash()
@@ -253,7 +253,7 @@ class TestHashConsistencyAfterMultipleMutations:
         assert "C. Third assertion." in body
         assert "D. Fourth assertion." in body
 
-    # Implements: REQ-o00062-B
+    # Verifies: REQ-o00062-B
     def test_mixed_mutations_maintain_hash_consistency(self):
         """After mixed mutation types, hash still matches reconstruct_body_text()."""
         graph = build_graph_for_hash()
@@ -269,7 +269,7 @@ class TestHashConsistencyAfterMultipleMutations:
         expected_hash = calculate_hash(reconstruct_body_text(parent))
         assert stored_hash == expected_hash
 
-    # Implements: REQ-o00062-B
+    # Verifies: REQ-o00062-B
     def test_delete_then_add_maintains_hash_consistency(self):
         """After delete then add, hash still matches reconstruct_body_text()."""
         graph = build_graph_for_hash()
@@ -285,7 +285,7 @@ class TestHashConsistencyAfterMultipleMutations:
         expected_hash = calculate_hash(reconstruct_body_text(parent))
         assert stored_hash == expected_hash
 
-    # Implements: REQ-o00062-B
+    # Verifies: REQ-o00062-B
     def test_update_all_assertions_maintains_hash_consistency(self):
         """After updating all assertions, hash still matches reconstruct_body_text()."""
         graph = build_graph_for_hash()

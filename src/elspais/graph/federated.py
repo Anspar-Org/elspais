@@ -843,6 +843,17 @@ class FederatedGraph:
         self._record_mutation(repo_name, result)
         return result
 
+    # Implements: REQ-p00014-E
+    def set_stereotype(self, node_id: str, is_template: bool) -> MutationEntry:
+        """Set or clear a requirement's ``**Template**`` marker.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[node_id]
+        result = self._graph_for(node_id).set_stereotype(node_id, is_template)
+        self._record_mutation(repo_name, result)
+        return result
+
     def add_changelog_entry(self, node_id: str, changelog_entry: dict[str, str]) -> MutationEntry:
         """Add a changelog entry to a requirement.
 
@@ -1763,6 +1774,27 @@ class FederatedGraph:
                     )
                     return  # one cycle per build to keep output sane
 
+    def _namespace_claimed_by_other_repo(self, source_entry: RepoEntry, namespace: str) -> bool:
+        """Return True if some other *live* repo's own namespace equals ``namespace``.
+
+        Associate namespaces are validated for shape (see ``validate_namespace``)
+        but NOT for uniqueness against each other or the primary repo's
+        namespace (``config/schema.py`` has no cross-repo check) -- two repos
+        MAY legitimately share a namespace. When they do, we can't
+        conclusively say a same-namespace-looking broken ref is a malformed
+        LOCAL reference rather than one intended for that other repo, so the
+        namespace-collision guard in ``_annotate_presumed_foreign_refs`` must
+        stand down and fall back to the prior blanket determination.
+        """
+        for entry in self._repos.values():
+            if entry is source_entry or entry.graph is None:
+                continue
+            resolver = self._resolver_for(entry)
+            if resolver is not None and resolver.config.namespace == namespace:
+                return True
+        return False
+
+    # Implements: REQ-d00252-G
     def _annotate_presumed_foreign_refs(self) -> None:
         """Mark remaining broken references whose target doesn't match the source repo's ID pattern.
 
@@ -1777,24 +1809,90 @@ class FederatedGraph:
         federation pass (e.g. cross-repo Satisfies, or Integrates resolution in
         ``_wire_integrates_edges``) made a deliberate hard/soft determination
         that this generic pattern check must not silently override.
+
+        Two guards prevent over-eager "presumed foreign" classification,
+        which otherwise causes genuinely-local broken references to be
+        silently suppressed by ``validation.allow_unresolved_cross_repo``:
+
+        1. No configured associates at all (``self._repos`` holds only the
+           primary repo, whether live or error-state entries) means there is
+           no foreign repository any reference could belong to -- nothing is
+           ever marked foreign, though a target matching the repo's own
+           namespace still gets the diagnostic from guard 2 below. This is
+           the common case a bare ``[associates]`` table (empty or absent)
+           produces, since ``build_graph()`` takes the
+           ``FederatedGraph.from_single()`` path whenever
+           ``get_associates_config()`` returns nothing.
+        2. Even with associates configured, a target whose leading token
+           matches the *source* repo's own namespace is a malformed LOCAL
+           reference (e.g. a mis-styled assertion suffix), not a cross-repo
+           one -- unless another configured repo shares that same namespace
+           (see ``_namespace_claimed_by_other_repo``), in which case we can't
+           rule out the other repo and fall back to the prior behavior. The
+           malformed-local case is left a hard broken reference with a
+           diagnostic pointing at the likely cause.
         """
+        # Deliberate: count ALL RepoEntry objects, including error-state
+        # associates (graph=None, e.g. a configured path that doesn't exist
+        # on this machine). A configured-but-unreachable associate is a real
+        # signal that a foreign repository exists which could own the ref --
+        # the soft presumed-foreign classification is exactly for that
+        # "associate not present here" situation. Precedent: REQ-d00200-A/H
+        # -- error-state repos remain represented in the federation
+        # (iter_repos() yields them) even though aggregation skips them.
+        has_associates = len(self._repos) > 1
+
         for source_entry in self._repos.values():
             if source_entry.graph is None:
                 continue
             resolver = self._resolver_for(source_entry)
             if resolver is None:
                 continue
+            own_namespace = resolver.config.namespace
             refs = source_entry.graph._broken_references
             for i, br in enumerate(refs):
                 if br.diagnostic:
                     continue
-                if not br.presumed_foreign and not resolver.is_local_id(br.target_id):
+                if br.presumed_foreign or resolver.is_local_id(br.target_id):
+                    continue
+                target_id = br.target_id
+                # Prefix match here vs. exact equality in
+                # _namespace_claimed_by_other_repo: this asymmetry means a
+                # nested-namespace pair (host "REQ" vs associate "REQ-EXTRA")
+                # would prefix-match the host and not be exact-claimed by the
+                # associate, mis-classifying a malformed "REQ-EXTRA-..." ref
+                # as local-to-host. Accepted as out of scope: namespaces are
+                # shape-validated identifiers (validate_namespace) and the
+                # `elspais associate` workflow makes one namespace being a
+                # dash-prefix of another improbable in practice.
+                matches_own_namespace = target_id == own_namespace or target_id.startswith(
+                    f"{own_namespace}-"
+                )
+                if matches_own_namespace and not self._namespace_claimed_by_other_repo(
+                    source_entry, own_namespace
+                ):
                     refs[i] = BrokenReference(
                         source_id=br.source_id,
                         target_id=br.target_id,
                         edge_kind=br.edge_kind,
-                        presumed_foreign=True,
+                        diagnostic=(
+                            f"{target_id} matches this repo's namespace ({own_namespace}) but "
+                            "does not parse under the configured ID pattern (check "
+                            "[id-patterns.assertions] separator/multi_separator)."
+                        ),
                     )
+                    continue
+                if not has_associates:
+                    # Guard 1: no foreign repo exists to presume the ref
+                    # belongs to. Leave it a plain (non-diagnostic,
+                    # non-foreign) hard broken reference.
+                    continue
+                refs[i] = BrokenReference(
+                    source_id=br.source_id,
+                    target_id=br.target_id,
+                    edge_kind=br.edge_kind,
+                    presumed_foreign=True,
+                )
 
     # ─────────────────────────────────────────────────────────────────────────
     # Undo Operations

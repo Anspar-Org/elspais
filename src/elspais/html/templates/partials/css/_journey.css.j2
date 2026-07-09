@@ -407,3 +407,20 @@ body.edit-mode .journey-section-content-view { display: none; }
 /* Journey refs section — always visible (show Validates even when empty in edit mode) */
 .journey-refs { margin-bottom: 8px; }
 .journey-sections { margin-top: 8px; }
+
+/* Journey steps rendered like REQ assertions: number pill + plain text +
+   right-aligned Verified/Passed badges (see buildJourneyCardHtml). */
+.journey-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.journey-step-num {
+    min-width: 1.6em;
+    text-align: center;
+}
+.journey-step-tests {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}

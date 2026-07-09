@@ -53,6 +53,66 @@ def default_level_keys() -> list[str]:
     return [k for k, _r in ranked]
 
 
+def level_expects_validation(config: dict[str, Any], level_key: str | None) -> bool:
+    """Return whether a level is expected to have UAT validation.
+
+    Single source of truth for "does this level expect a USER_JOURNEY to
+    Validate its requirements". When true, absence of UAT coverage for a
+    requirement at that level is a real gap (health `uat.coverage` + `gaps
+    unvalidated`) and renders red in the viewer. Default false so existing
+    projects are unaffected until they opt in.
+
+    The lookup is case-insensitive on the level key: `[levels]` sections are
+    typically keyed lowercase (`prd`) while ``node.level`` is often upper
+    (`PRD`) -- mirrors how summary.py / aggregation.py normalize level case.
+    Consumers (viewer, health, gaps) MUST call this helper rather than reading
+    ``config["levels"]`` directly.
+    """
+    if not level_key:
+        return False
+    levels = (config or {}).get("levels")
+    if not isinstance(levels, dict):
+        return False
+    target = level_key.lower()
+    for key, spec in levels.items():
+        if not isinstance(key, str) or key.lower() != target:
+            continue
+        if isinstance(spec, dict):
+            return bool(spec.get("expects_validation", False))
+        return bool(getattr(spec, "expects_validation", False))
+    return False
+
+
+# Implements: REQ-d00258-L
+def status_expects_implementation(config: dict[str, Any], status: str | None) -> bool:
+    """Whether a requirement's STATUS expects implementation (design §3).
+
+    Explicit ``[statuses.<Name>].expects_implementation`` wins; otherwise the
+    status's ROLE decides (active-role -> True, else False). Single source of
+    truth; consumers (viewer, aggregation, health, gaps, summary, mcp) MUST call
+    this rather than reading status roles for coverage-expectation. Replaces the
+    coverage roles of ``StatusRolesConfig.is_excluded_from_coverage``.
+
+    Case-insensitive on the status name (mirrors ``level_expects_validation``).
+    Unknown statuses derive True: ``role_of`` defaults them to ACTIVE.
+    """
+    statuses = (config or {}).get("statuses")
+    if isinstance(statuses, dict) and status:
+        target = status.lower()
+        for key, spec in statuses.items():
+            if isinstance(key, str) and key.lower() == target:
+                val = (
+                    spec.get("expects_implementation")
+                    if isinstance(spec, dict)
+                    else getattr(spec, "expects_implementation", None)
+                )
+                if val is not None:
+                    return bool(val)
+    from elspais.config.status_roles import StatusRole
+
+    return get_status_roles(config or {}).role_of(status) == StatusRole.ACTIVE
+
+
 def _migrate_legacy_patterns(config: dict[str, Any]) -> dict[str, Any]:
     """Migrate legacy [patterns] config to [id-patterns] + [levels] format.
 
@@ -776,23 +836,6 @@ class IgnoreConfig:
     code_patterns: list[str]
     test_patterns: list[str]
 
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> IgnoreConfig:
-        """Create IgnoreConfig from configuration dictionary.
-
-        Args:
-            data: Dictionary from [ignore] config section
-
-        Returns:
-            IgnoreConfig instance
-        """
-        return cls(
-            global_patterns=data.get("global", []),
-            spec_patterns=data.get("spec", []),
-            code_patterns=data.get("code", []),
-            test_patterns=data.get("test", []),
-        )
-
     def should_ignore(self, path: str | Path, scope: str = "global") -> bool:
         """Check if a path should be ignored based on patterns.
 
@@ -941,6 +984,8 @@ __all__ = [
     "IgnoreConfig",
     "config_defaults",
     "default_level_keys",
+    "level_expects_validation",
+    "status_expects_implementation",
     "load_config",
     "find_config_file",
     "find_git_root",

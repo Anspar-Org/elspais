@@ -7,7 +7,7 @@ from elspais.graph.parsers.comments import CommentsParser
 class TestCommentsParserPriority:
     """Tests for CommentsParser priority."""
 
-    # Implements: REQ-d00128-G
+    # Verifies: REQ-d00128-G
     def test_priority_is_zero(self):
         parser = CommentsParser()
         assert parser.priority == 0
@@ -16,7 +16,7 @@ class TestCommentsParserPriority:
 class TestCommentsParserSingleLine:
     """Tests for single-line HTML comments."""
 
-    # Implements: REQ-d00128-G
+    # Verifies: REQ-d00128-G
     def test_claims_single_line_comment(self):
         parser = CommentsParser()
         lines = [
@@ -33,7 +33,7 @@ class TestCommentsParserSingleLine:
         assert results[0].start_line == 2
         assert results[0].end_line == 2
 
-    # Implements: REQ-d00128-G
+    # Verifies: REQ-d00128-G
     def test_claims_multiple_single_line_comments(self):
         parser = CommentsParser()
         lines = [
@@ -53,7 +53,7 @@ class TestCommentsParserSingleLine:
 class TestCommentsParserMultiLine:
     """Tests for multi-line HTML comment blocks."""
 
-    # Implements: REQ-d00128-G
+    # Verifies: REQ-d00128-G
     def test_claims_multiline_comment(self, comment_block_lines):
         parser = CommentsParser()
         ctx = ParseContext(file_path="test.md")
@@ -74,7 +74,7 @@ class TestCommentsParserMultiLine:
         assert multi[0].start_line == 4
         assert multi[0].end_line == 8
 
-    # Implements: REQ-d00128-G
+    # Verifies: REQ-d00128-G
     def test_multiline_comment_raw_text(self):
         parser = CommentsParser()
         lines = [
@@ -95,7 +95,7 @@ class TestCommentsParserMultiLine:
 class TestCommentsParserEdgeCases:
     """Edge cases for comment parsing."""
 
-    # Implements: REQ-d00128-G
+    # Verifies: REQ-d00128-G
     def test_no_comments_returns_empty(self):
         parser = CommentsParser()
         lines = [
@@ -108,7 +108,7 @@ class TestCommentsParserEdgeCases:
 
         assert len(results) == 0
 
-    # Implements: REQ-d00128-G
+    # Verifies: REQ-d00128-G
     def test_unclosed_comment_not_claimed(self):
         parser = CommentsParser()
         lines = [
@@ -123,7 +123,7 @@ class TestCommentsParserEdgeCases:
         # Unclosed comments should not be claimed (would break parsing)
         assert len(results) == 0
 
-    # Implements: REQ-d00128-G
+    # Verifies: REQ-d00128-G
     def test_inline_comment_markers_not_confused(self):
         parser = CommentsParser()
         lines = [

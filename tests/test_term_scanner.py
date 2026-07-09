@@ -211,7 +211,7 @@ def test_REQ_d00236_G_empty_extension_returns_empty():
 # =============================================================================
 # scan_text_for_terms() tests
 #
-# Implements: REQ-d00237
+# Verifies: REQ-d00237
 #
 # Validates REQ-d00237-A+B+C+D+E: term scanning with marked, wrong-marking,
 # and unmarked detection.
@@ -430,7 +430,7 @@ def test_REQ_d00237_E_non_indexed_still_detects_marked():
 # =============================================================================
 # scan_graph() tests
 #
-# Implements: REQ-d00238
+# Verifies: REQ-d00238
 #
 # Validates REQ-d00238-A+B+C+D: graph-level term scanning populates
 # TermEntry.references by walking graph nodes.
@@ -667,7 +667,7 @@ def test_REQ_d00238_D_non_excluded_file_not_skipped():
 # =============================================================================
 # FederatedGraph._scan_terms() tests
 #
-# Implements: REQ-d00239
+# Verifies: REQ-d00239
 #
 # Validates REQ-d00239-A+B: federated term scanning runs across all repos
 # using merged TermDictionary with per-repo config isolation.

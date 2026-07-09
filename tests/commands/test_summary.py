@@ -14,7 +14,10 @@ import json
 import shutil
 from pathlib import Path
 
-from elspais.commands.summary import _collect_coverage, _pct, _render
+import pytest
+
+from elspais.commands.summary import _pct, _render
+from elspais.graph.aggregation import collect_coverage
 from elspais.graph.builder import TraceGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.metrics import RollupMetrics
@@ -143,7 +146,7 @@ def _build_mixed_graph() -> TraceGraph:
 
 
 # ===========================================================================
-# Verifies: _collect_coverage data structure
+# Verifies: collect_coverage data structure
 # ===========================================================================
 
 
@@ -151,9 +154,9 @@ class TestCollectCoverage:
     """Validates REQ-d00086-D: Uses existing graph aggregate functions."""
 
     def test_REQ_d00086_D_returns_levels_and_excluded_keys(self):
-        """_collect_coverage returns dict with 'levels' list and 'excluded' dict."""
+        """collect_coverage returns dict with 'levels' list and 'excluded' dict."""
         graph = _make_graph()
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
 
         assert "levels" in data
         assert "excluded" in data
@@ -167,7 +170,7 @@ class TestCollectCoverage:
     def test_REQ_d00086_D_levels_always_three(self):
         """There are always exactly 3 level entries (PRD, OPS, DEV)."""
         graph = _make_graph()
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
 
         assert len(data["levels"]) == 3
         level_names = [lv["level"] for lv in data["levels"]]
@@ -177,7 +180,7 @@ class TestCollectCoverage:
         """Coverage data no longer includes per-requirement rows."""
         graph = _make_graph()
         _add_requirement(graph, "REQ-p00001", "Test", level="prd")
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
         assert "requirements" not in data
 
 
@@ -192,7 +195,7 @@ class TestLevelGrouping:
     def test_REQ_d00086_A_groups_by_level(self):
         """Requirements are grouped into correct level buckets."""
         graph = _build_mixed_graph()
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
 
         prd, ops, dev = data["levels"]
 
@@ -209,32 +212,32 @@ class TestLevelGrouping:
     def test_REQ_d00086_A_level_assertion_counts(self):
         """Level summaries aggregate assertion counts from child requirements."""
         graph = _build_mixed_graph()
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
 
         prd, ops, dev = data["levels"]
 
         # PRD: p00001(3) + p00002(2) = 5 total assertions
         assert prd["total_assertions"] == 5
         assert prd["implemented_assertions"] == 4  # 2 + 2
-        assert prd["validated_assertions"] == 3  # 1 + 2
+        assert prd["tested_assertions"] == 3  # 1 + 2
         assert prd["passing_assertions"] == 1  # 1 + 0
 
         # OPS: o00001 only
         assert ops["total_assertions"] == 4
         assert ops["implemented_assertions"] == 3
-        assert ops["validated_assertions"] == 2
+        assert ops["tested_assertions"] == 2
         assert ops["passing_assertions"] == 2
 
         # DEV: d00001 only (d00002 Draft excluded, d00003 Deprecated excluded)
         assert dev["total_assertions"] == 1
         assert dev["implemented_assertions"] == 1
-        assert dev["validated_assertions"] == 1
+        assert dev["tested_assertions"] == 1
         assert dev["passing_assertions"] == 1
 
     def test_REQ_d00086_A_with_code_refs_count(self):
         """with_code_refs counts reqs that have at least one implemented assertion."""
         graph = _build_mixed_graph()
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
 
         prd, ops, dev = data["levels"]
 
@@ -245,7 +248,7 @@ class TestLevelGrouping:
     def test_REQ_d00086_A_with_test_refs_count(self):
         """with_test_refs counts reqs that have at least one validated assertion."""
         graph = _build_mixed_graph()
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
 
         prd, ops, dev = data["levels"]
 
@@ -256,7 +259,7 @@ class TestLevelGrouping:
     def test_REQ_d00086_A_with_passing_count(self):
         """with_passing counts reqs that have at least one passing assertion."""
         graph = _build_mixed_graph()
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
 
         prd, ops, dev = data["levels"]
 
@@ -269,7 +272,7 @@ class TestLevelGrouping:
         graph = _make_graph()
         _add_requirement(graph, "REQ-p00001", "Solo", level="prd")
 
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
         prd, ops, dev = data["levels"]
 
         assert prd["total"] == 1
@@ -293,7 +296,7 @@ class TestStatusExclusion:
         draft = _add_requirement(graph, "REQ-d00002", "Draft", level="dev", status="Draft")
         _set_rollup(draft, total=5, covered=5, tested=5, validated=5)
 
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
         dev = data["levels"][2]
 
         assert dev["total"] == 1
@@ -306,7 +309,7 @@ class TestStatusExclusion:
         dep = _add_requirement(graph, "REQ-d00003", "Deprecated", level="dev", status="Deprecated")
         _set_rollup(dep, total=3, covered=3, tested=3, validated=3)
 
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
         dev = data["levels"][2]
 
         assert dev["total"] == 1
@@ -324,7 +327,7 @@ class TestTextFormat:
     def test_REQ_d00086_C_text_has_header(self):
         """Text output starts with 'Coverage Summary' header."""
         graph = _make_graph()
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
         output = _render(data, "text")
 
         assert output.startswith("Coverage Summary\n")
@@ -335,13 +338,13 @@ class TestTextFormat:
         node = _add_requirement(graph, "REQ-p00001", "Test", level="prd")
         _set_rollup(node, total=2, covered=1, tested=1, validated=1)
 
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
         output = _render(data, "text")
 
         assert "Summary by Level" in output
         assert "PRD:" in output
         assert "Implemented:" in output
-        assert "Validated:" in output
+        assert "Tested:" in output
         assert "Passing:" in output
 
     def test_REQ_d00086_C_text_no_per_requirement_section(self):
@@ -350,7 +353,7 @@ class TestTextFormat:
         node = _add_requirement(graph, "REQ-p00001", "My Requirement", level="prd")
         _set_rollup(node, total=2, covered=1, tested=1, validated=0)
 
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
         output = _render(data, "text")
 
         assert "Per-Requirement Coverage" not in output
@@ -360,7 +363,7 @@ class TestTextFormat:
         graph = _make_graph()
         _add_requirement(graph, "REQ-p00001", "Only PRD", level="prd")
 
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
         output = _render(data, "text")
 
         assert "PRD:" in output
@@ -379,7 +382,7 @@ class TestMarkdownFormat:
     def test_REQ_d00086_C_markdown_has_heading(self):
         """Markdown output starts with '# Coverage Summary'."""
         graph = _make_graph()
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
         output = _render(data, "markdown")
 
         assert "# Coverage Summary" in output
@@ -390,11 +393,11 @@ class TestMarkdownFormat:
         node = _add_requirement(graph, "REQ-p00001", "Test", level="prd")
         _set_rollup(node, total=2, covered=1, tested=1, validated=1)
 
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
         output = _render(data, "markdown")
 
         assert "## Summary by Level" in output
-        assert "| Level | Requirements | Assertions | Implemented | Validated | Passing |" in output
+        assert "| Level | Requirements | Assertions | Implemented | Tested | Passing |" in output
         assert "|-------|" in output
 
     def test_REQ_d00086_C_markdown_no_per_requirement_table(self):
@@ -403,7 +406,7 @@ class TestMarkdownFormat:
         node = _add_requirement(graph, "REQ-p00001", "Test", level="prd")
         _set_rollup(node, total=2, covered=1, tested=1, validated=1)
 
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
         output = _render(data, "markdown")
 
         assert "## Per-Requirement Coverage" not in output
@@ -414,7 +417,7 @@ class TestMarkdownFormat:
         node = _add_requirement(graph, "REQ-p00001", "Test", level="prd")
         _set_rollup(node, total=2, covered=2, tested=1, validated=1)
 
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
         output = _render(data, "markdown")
 
         lines = output.split("\n")
@@ -435,7 +438,7 @@ class TestJsonFormat:
     def test_REQ_d00086_C_json_has_levels_and_excluded(self):
         """JSON output contains 'levels' and 'excluded' keys."""
         graph = _build_mixed_graph()
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
         output = _render(data, "json")
 
         parsed = json.loads(output)
@@ -448,7 +451,7 @@ class TestJsonFormat:
         node = _add_requirement(graph, "REQ-p00001", "Test", level="prd")
         _set_rollup(node, total=3, covered=2, tested=1, validated=1)
 
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
         output = _render(data, "json")
         parsed = json.loads(output)
 
@@ -457,13 +460,13 @@ class TestJsonFormat:
         assert prd["total"] == 1
         assert prd["total_assertions"] == 3
         assert prd["implemented_assertions"] == 2
-        assert prd["validated_assertions"] == 1
+        assert prd["tested_assertions"] == 1
         assert prd["passing_assertions"] == 1
 
     def test_REQ_d00086_C_json_excluded_counts(self):
         """JSON output includes excluded status counts."""
         graph = _build_mixed_graph()
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
         output = _render(data, "json")
         parsed = json.loads(output)
 
@@ -482,7 +485,7 @@ class TestCsvFormat:
     def test_REQ_d00086_C_csv_has_correct_headers(self):
         """CSV output has the expected column headers."""
         graph = _make_graph()
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
         output = _render(data, "csv")
 
         reader = csv.reader(io.StringIO(output))
@@ -494,8 +497,8 @@ class TestCsvFormat:
             "Assertions",
             "Implemented",
             "Implemented %",
-            "Validated",
-            "Validated %",
+            "Tested",
+            "Tested %",
             "Passing",
             "Passing %",
         ]
@@ -504,7 +507,7 @@ class TestCsvFormat:
     def test_REQ_d00086_C_csv_row_count(self):
         """CSV has one header row plus one row per level."""
         graph = _build_mixed_graph()
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
         output = _render(data, "csv")
 
         reader = csv.reader(io.StringIO(output))
@@ -519,27 +522,32 @@ class TestCsvFormat:
         node = _add_requirement(graph, "REQ-p00001", "CSV Req", level="prd")
         _set_rollup(node, total=4, covered=3, tested=2, validated=1)
 
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
         output = _render(data, "csv")
 
         reader = csv.reader(io.StringIO(output))
         _header = next(reader)
         row = next(reader)  # PRD row
 
+        # Coverage counts are sums of per-assertion fractions (REQ-d00069-J)
+        # sourced from DimensionSums (a float accumulator), so whole-number
+        # counts render with a trailing ".0" in the raw machine formats
+        # (CSV/JSON); only the text renderer uses fmt_assertion_count() to
+        # strip it for human display.
         assert row[0] == "PRD"  # Level
         assert row[1] == "1"  # Requirements
         assert row[2] == "4"  # Assertions
-        assert row[3] == "3"  # Implemented
+        assert row[3] == "3.0"  # Implemented
         assert row[4] == "75.0"  # Implemented %
-        assert row[5] == "2"  # Validated
-        assert row[6] == "50.0"  # Validated %
-        assert row[7] == "1"  # Passing
+        assert row[5] == "2.0"  # Tested
+        assert row[6] == "50.0"  # Tested %
+        assert row[7] == "1.0"  # Passing
         assert row[8] == "25.0"  # Passing %
 
     def test_REQ_d00086_C_csv_parseable(self):
         """CSV output is parseable by Python csv module without errors."""
         graph = _build_mixed_graph()
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
         output = _render(data, "csv")
 
         reader = csv.DictReader(io.StringIO(output))
@@ -549,11 +557,13 @@ class TestCsvFormat:
         for row in rows:
             int(row["Requirements"])
             int(row["Assertions"])
-            int(row["Implemented"])
+            # Coverage counts are fractional sums (REQ-d00069-J) rendered as
+            # floats in machine formats; parse as float, not int.
+            float(row["Implemented"])
             float(row["Implemented %"])
-            int(row["Validated"])
-            float(row["Validated %"])
-            int(row["Passing"])
+            float(row["Tested"])
+            float(row["Tested %"])
+            float(row["Passing"])
             float(row["Passing %"])
 
 
@@ -568,7 +578,7 @@ class TestRenderDispatch:
     def test_REQ_d00086_C_render_text_default(self):
         """Unknown format falls back to text."""
         graph = _make_graph()
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
         output = _render(data, "unknown")
 
         assert "Coverage Summary" in output
@@ -616,7 +626,7 @@ class TestSummaryIntegrations:
         """Text summary contains an External integrations section with a
         per-associate 'library' row and a 'total' row."""
         fed = _federate_integrates(tmp_path)
-        data = _collect_coverage(fed, config=None)
+        data = collect_coverage(fed, config=None)
         text = _render(data, "text")
 
         assert "External integrations" in text
@@ -632,12 +642,122 @@ class TestSummaryIntegrations:
         """The integrating consumer requirement (APP-d00001) is credited as
         implemented in the main coverage classification, not a phantom gap."""
         fed = _federate_integrates(tmp_path)
-        data = _collect_coverage(fed, config=None)
+        data = collect_coverage(fed, config=None)
         dev_levels = [lv for lv in data["levels"] if lv["level"] == "DEV"]
         assert dev_levels, "expected a DEV level row"
         # APP-d00001 has no local code refs but integrates a library REQ, so it
         # must count toward with_code_refs (implemented requirements).
         assert dev_levels[0]["with_code_refs"] >= 1
+
+    # Verifies: REQ-d00252-F, REQ-d00258-B
+    def test_REQ_d00258_B_integrations_header_is_passing(self, tmp_path):
+        """The External integrations column header reads 'Passing', not the
+        old 'verified (no lcov)' -- the figures are now the tested_and_passing()
+        union (REQ-d00258-B), so the vocabulary matches the rest of the report."""
+        fed = _federate_integrates(tmp_path)
+        data = collect_coverage(fed, config=None)
+        text = _render(data, "text")
+        md = _render(data, "markdown")
+
+        assert "no lcov" not in text
+        assert "no lcov" not in md
+        assert "passing" in text.lower()
+        assert "Passing" in md
+
+    # Verifies: REQ-d00252-D, REQ-d00252-F, REQ-d00258-B
+    def test_REQ_d00252_F_lcov_only_library_propagates_in_summary(self, tmp_path):
+        """A library requirement whose only evidence is lcov_tested credit (no
+        Verifies:-based result) still shows up as passing in the summary's
+        per-associate integrations table -- the union propagates through
+        federation, not just the raw verified dimension."""
+        from elspais.graph.metrics import CoverageDimension
+
+        dest = tmp_path / "proj"
+        shutil.copytree(_INTEGRATES_FIX, dest)
+        from elspais.config import get_config
+        from elspais.graph.factory import build_graph
+
+        fed = build_graph(
+            config=get_config(None, dest / "app"),
+            repo_root=dest / "app",
+            scan_code=False,
+            scan_tests=False,
+        )
+        lib_req = fed._repos["library"].graph._index["LIB-d00007"]
+        lib_req.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                lcov_tested=CoverageDimension(
+                    total=1,
+                    direct=1.0,
+                    indirect=1.0,
+                    direct_labels={"A"},
+                    indirect_labels={"A"},
+                    direct_pct_by_label={"A": 1.0},
+                    indirect_pct_by_label={"A": 1.0},
+                ),
+            ),
+        )
+
+        data = collect_coverage(fed, config=None)
+        by_name = {row["associate"]: row for row in data["integrations"]}
+        assert by_name["library"]["verified_covered"] >= 1
+        assert by_name["library"]["verified_total"] >= 1
+        assert by_name["library"]["has_failures"] is False
+
+    # Verifies: REQ-d00252-F, REQ-d00258-B
+    def test_REQ_d00258_B_library_failures_flagged_in_summary(self, tmp_path):
+        """A library assertion with a FAILING Verifies-result but full lcov
+        credit reads as covered in the union, so the covered/total figures
+        alone would show 100% passing. The summary must carry has_failures
+        through to the integrations row/total and mark the rendered table so
+        a red library suite is never displayed as clean."""
+        from elspais.graph.metrics import CoverageDimension
+
+        dest = tmp_path / "proj"
+        shutil.copytree(_INTEGRATES_FIX, dest)
+        from elspais.config import get_config
+        from elspais.graph.factory import build_graph
+
+        fed = build_graph(
+            config=get_config(None, dest / "app"),
+            repo_root=dest / "app",
+            scan_code=False,
+            scan_tests=False,
+        )
+        lib_req = fed._repos["library"].graph._index["LIB-d00007"]
+        lib_req.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                verified=CoverageDimension(total=1, has_failures=True),
+                lcov_tested=CoverageDimension(
+                    total=1,
+                    direct=1.0,
+                    indirect=1.0,
+                    direct_labels={"A"},
+                    indirect_labels={"A"},
+                    direct_pct_by_label={"A": 1.0},
+                    indirect_pct_by_label={"A": 1.0},
+                ),
+            ),
+        )
+
+        data = collect_coverage(fed, config=None)
+        by_name = {row["associate"]: row for row in data["integrations"]}
+        assert by_name["library"]["verified_covered"] >= 1  # union covered
+        assert by_name["library"]["has_failures"] is True
+        assert data["integration_total"]["has_failures"] is True
+
+        # Rendered surfaces mark the failing row (text `!` marker + footnote,
+        # markdown `!` marker + footnote).
+        text = _render(dict(data), "text")
+        assert "!" in text
+        assert "failing test result" in text
+        md = _render(dict(data), "markdown")
+        assert "!" in md
+        assert "failing test result" in md
 
 
 class TestTestedAndPassingUnion:
@@ -666,7 +786,7 @@ class TestTestedAndPassingUnion:
         )
         req.set_metric("rollup_metrics", rm)
 
-        data = _collect_coverage(graph)
+        data = collect_coverage(graph)
         dev = next(lv for lv in data["levels"] if lv["level"] == "DEV")
         assert (
             dev["passing_assertions"] > 0
@@ -905,7 +1025,7 @@ class TestSummaryCarriedFootnote:
         project = self._make_two_target_project(tmp_path)
         graph, config = self._build(project, targets=["a"])
 
-        data = _collect_coverage(graph, config=config)
+        data = collect_coverage(graph, config=config)
 
         assert data["total_result_targets"] == 2
         assert data["carried_result_targets"] == 1
@@ -917,7 +1037,7 @@ class TestSummaryCarriedFootnote:
         project = self._make_two_target_project(tmp_path)
         graph, config = self._build(project, targets=None)
 
-        data = _collect_coverage(graph, config=config)
+        data = collect_coverage(graph, config=config)
 
         assert "total_result_targets" not in data
         assert "carried_result_targets" not in data
@@ -926,7 +1046,7 @@ class TestSummaryCarriedFootnote:
     def test_render_text_selective_run_has_asterisk_and_footnote(self, tmp_path):
         project = self._make_two_target_project(tmp_path)
         graph, config = self._build(project, targets=["a"])
-        data = _collect_coverage(graph, config=config)
+        data = collect_coverage(graph, config=config)
 
         text = _render(data, "text")
 
@@ -941,7 +1061,7 @@ class TestSummaryCarriedFootnote:
     def test_render_text_full_run_has_no_asterisk_or_footnote(self, tmp_path):
         project = self._make_two_target_project(tmp_path)
         graph, config = self._build(project, targets=None)
-        data = _collect_coverage(graph, config=config)
+        data = collect_coverage(graph, config=config)
 
         text = _render(data, "text")
 
@@ -952,7 +1072,7 @@ class TestSummaryCarriedFootnote:
     def test_render_markdown_selective_run_has_asterisk_and_footnote(self, tmp_path):
         project = self._make_two_target_project(tmp_path)
         graph, config = self._build(project, targets=["a"])
-        data = _collect_coverage(graph, config=config)
+        data = collect_coverage(graph, config=config)
 
         md = _render(data, "markdown")
 
@@ -962,7 +1082,7 @@ class TestSummaryCarriedFootnote:
     def test_render_markdown_full_run_has_no_footnote(self, tmp_path):
         project = self._make_two_target_project(tmp_path)
         graph, config = self._build(project, targets=None)
-        data = _collect_coverage(graph, config=config)
+        data = collect_coverage(graph, config=config)
 
         md = _render(data, "markdown")
 
@@ -972,7 +1092,7 @@ class TestSummaryCarriedFootnote:
     def test_render_json_exposes_structured_counts_no_asterisk(self, tmp_path):
         project = self._make_two_target_project(tmp_path)
         graph, config = self._build(project, targets=["a"])
-        data = _collect_coverage(graph, config=config)
+        data = collect_coverage(graph, config=config)
 
         rendered = _render(data, "json")
         parsed = json.loads(rendered)
@@ -985,7 +1105,7 @@ class TestSummaryCarriedFootnote:
     def test_render_csv_selective_run_has_carried_row(self, tmp_path):
         project = self._make_two_target_project(tmp_path)
         graph, config = self._build(project, targets=["a"])
-        data = _collect_coverage(graph, config=config)
+        data = collect_coverage(graph, config=config)
 
         rendered = _render(data, "csv")
 
@@ -1003,9 +1123,43 @@ class TestSummaryCarriedFootnote:
         # pre-selectivity CSV.
         project = self._make_two_target_project(tmp_path)
         graph, config = self._build(project, targets=None)
-        data = _collect_coverage(graph, config=config)
+        data = collect_coverage(graph, config=config)
 
         rendered = _render(data, "csv")
 
         assert "Carried Result Targets" not in rendered
         assert "*" not in rendered
+
+
+# ===========================================================================
+# Verifies: REQ-d00258-A, REQ-d00258-B, REQ-d00258-C
+# ===========================================================================
+
+
+class TestSummaryFooting:
+    """Verifies REQ-d00258-A/B/C: shared aggregation, generous footing, and
+    the Implemented/Tested/Passing vocabulary (no "Validated")."""
+
+    def test_tested_and_passing_use_generous_footing(self, canonical_graph, canonical_config):
+        from elspais.graph.aggregation import collect_coverage
+
+        data = collect_coverage(canonical_graph, canonical_config)
+        from elspais.graph.aggregation import aggregate_by_level
+
+        agg = {lv.level: lv for lv in aggregate_by_level(canonical_graph, canonical_config)}
+        for lv in data["levels"]:
+            assert lv["tested_assertions"] == pytest.approx(
+                round(agg[lv["level"]].tested.covered, 3)
+            )
+            assert lv["passing_assertions"] == pytest.approx(
+                round(agg[lv["level"]].passing.covered, 3)
+            )
+            assert "validated_assertions" not in lv
+
+    def test_text_render_uses_tested_label_and_marker(self, canonical_graph, canonical_config):
+        from elspais.commands.summary import _render_text
+        from elspais.graph.aggregation import collect_coverage
+
+        text = _render_text(collect_coverage(canonical_graph, canonical_config))
+        assert "Validated" not in text
+        assert "Tested:" in text

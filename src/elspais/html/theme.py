@@ -31,7 +31,7 @@ class CatalogEntry:
     label: str = ""
     description: str = ""
     long_description: str = ""
-    color_key: str = ""  # for validation_tiers: suffix used in CSS class
+    color_key: str = ""  # for coverage_standing/severity: suffix used in CSS class
 
 
 # Category display names for legend grouping
@@ -44,8 +44,10 @@ _CATEGORY_LABELS: dict[str, str] = {
     "badges.assertion": "Assertion Badges",
     "badges.result": "Test Results",
     "buttons.implemented": "Implementation Status",
-    "buttons.validation": "Validation Status",
-    "validation_tiers": "Active Badge Quality",
+    "buttons.validation": "Result Status",
+    "severity": "Coverage Severity",
+    "coverage_standing": "Assertion Coverage Standing",
+    "coverage_caveat": "Coverage Caveats",
 }
 
 

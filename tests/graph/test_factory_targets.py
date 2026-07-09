@@ -1,4 +1,4 @@
-# Implements: REQ-d00254-I
+# Verifies: REQ-d00254-I
 """Tests for fresh-target threading in build_graph() and RESULT.carried tagging.
 
 Verifies that build_graph(fresh_targets=...) tags each RESULT node with

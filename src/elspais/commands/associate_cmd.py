@@ -100,8 +100,14 @@ def cmd_link(args: argparse.Namespace) -> int:
 def cmd_all(args: argparse.Namespace) -> int:
     """Auto-discover and link all associate repos in sibling directories.
 
-    Scans git_root.parent (or config_dir.parent) for directories
-    containing .elspais.toml with project.type = 'associated'.
+    Scans git_root.parent (or config_dir.parent) for sibling directories
+    containing a `.elspais.toml` that loads successfully under the
+    standard config schema (see `discover_associate_from_path()`). There
+    is no `project.type` marker to opt a repo in or out of discovery --
+    that key does not exist in the schema, and a config containing it
+    would fail `load_config()` validation (`extra="forbid"`). Any
+    directory whose config loads, other than the current repo itself,
+    is treated as a candidate associate.
 
     Args:
         args: Parsed arguments.

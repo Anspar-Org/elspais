@@ -5,9 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from elspais.commands.health import (
+    _config_with_status_overlay,
+    _excluded_note,
+    check_code_coverage,
+    check_dimension_coverage,
     check_test_coverage,
     check_uat_coverage,
     check_uat_results,
+    run_code_checks,
     run_uat_checks,
 )
 from elspais.graph.builder import TraceGraph
@@ -40,6 +45,11 @@ def _make_graph(*nodes: GraphNode) -> FederatedGraph:
     )
 
 
+# A config whose `dev` level expects UAT validation, so the (dev-level) test
+# requirements exercise the expects_validation gap path (REQ-d00258-F).
+_DEV_EXPECTS_CONFIG: dict = {"levels": {"dev": {"rank": 3, "expects_validation": True}}}
+
+
 # =============================================================================
 # REQ-d00218: check_test_coverage
 # =============================================================================
@@ -48,7 +58,7 @@ def _make_graph(*nodes: GraphNode) -> FederatedGraph:
 class TestCheckTestCoverage:
     """Tests for check_test_coverage health check."""
 
-    # Implements: REQ-d00218-A
+    # Verifies: REQ-d00218-A
     def test_returns_info_severity(self):
         """check_test_coverage always returns severity=info (informational)."""
         graph = _make_graph()
@@ -56,7 +66,7 @@ class TestCheckTestCoverage:
         assert result.severity == "info"
         assert result.passed is True
 
-    # Implements: REQ-d00218-A
+    # Verifies: REQ-d00218-A
     def test_no_requirements_zero_coverage(self):
         """Empty graph reports 0/0 test coverage."""
         graph = _make_graph()
@@ -66,7 +76,7 @@ class TestCheckTestCoverage:
         assert result.details["total_requirements"] == 0
         assert result.details["reqs_with_any_coverage"] == 0
 
-    # Implements: REQ-d00218-A
+    # Verifies: REQ-d00218-A
     def test_req_with_direct_tested_counted(self):
         """Requirement with direct_tested > 0 is counted as test-covered."""
         req = _make_req("REQ-d00001")
@@ -83,7 +93,7 @@ class TestCheckTestCoverage:
         assert result.details["total_requirements"] == 1
         assert result.details["req_coverage_percent"] == 100.0
 
-    # Implements: REQ-d00218-A
+    # Verifies: REQ-d00218-A
     def test_req_without_direct_tested_not_counted(self):
         """Requirement with tested.direct == 0 is not test-covered."""
         req = _make_req("REQ-d00001")
@@ -98,7 +108,7 @@ class TestCheckTestCoverage:
 
         assert result.details["reqs_with_any_coverage"] == 0
 
-    # Implements: REQ-d00218-B
+    # Verifies: REQ-d00218-B
     def test_test_coverage_separate_from_code_coverage(self):
         """Test coverage uses tested.direct, not implemented.direct (which includes CODE)."""
         req = _make_req("REQ-d00001")
@@ -116,7 +126,7 @@ class TestCheckTestCoverage:
         # Test coverage should be 0 even though implemented.direct is 2
         assert result.details["reqs_with_any_coverage"] == 0
 
-    # Implements: REQ-d00218-C
+    # Verifies: REQ-d00218-C
     def test_excluded_statuses_filter_requirements(self):
         """Requirements with excluded status are not counted."""
         active_req = _make_req("REQ-d00001", status="Active")
@@ -139,7 +149,7 @@ class TestCheckTestCoverage:
         assert result.details["total_requirements"] == 1
         assert result.details["reqs_with_any_coverage"] == 1
 
-    # Implements: REQ-d00218-C
+    # Verifies: REQ-d00218-C
     def test_parent_credit_from_child_test_coverage(self):
         """Parent REQ with rolled-up direct_tested > 0 counts as test-covered.
 
@@ -168,7 +178,7 @@ class TestCheckTestCoverage:
         assert result.details["reqs_with_any_coverage"] == 2
         assert result.details["total_requirements"] == 2
 
-    # Implements: REQ-d00218-A
+    # Verifies: REQ-d00218-A
     def test_no_rollup_metrics_not_counted(self):
         """Requirement with no rollup_metrics at all is not test-covered."""
         req = _make_req("REQ-d00001")
@@ -180,7 +190,7 @@ class TestCheckTestCoverage:
         assert result.details["reqs_with_any_coverage"] == 0
         assert result.details["total_requirements"] == 1
 
-    # Implements: REQ-d00218-A
+    # Verifies: REQ-d00218-A
     def test_multiple_reqs_mixed_coverage(self):
         """Mix of covered and uncovered requirements reports correctly."""
         req1 = _make_req("REQ-d00001")
@@ -217,6 +227,40 @@ class TestCheckTestCoverage:
         assert result.details["reqs_with_any_coverage"] == 2
         assert result.details["req_coverage_percent"] == round(2 / 3 * 100, 1)
 
+    # Verifies: REQ-d00258
+    def test_counts_only_expects_implementation_statuses(self):
+        """(d) The tests.tested COUNT denominator includes only requirements
+        whose status expects implementation (preserved from Task 3.3). An
+        unknown status defaults to expects_implementation=True and is counted;
+        marking it ``expects_implementation=False`` in config drops it."""
+        covered = _make_req("REQ-d00001", status="Active")
+        covered.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                tested=CoverageDimension(total=1, direct=1, indirect=1),
+            ),
+        )
+        other = _make_req("REQ-d00002", status="Wibble")
+        other.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                tested=CoverageDimension(total=1, direct=0, indirect=0),
+            ),
+        )
+        graph = _make_graph(covered, other)
+
+        # Unknown status defaults to expects_implementation=True -> counted.
+        baseline = check_test_coverage(graph, config={})
+        assert baseline.details["total_requirements"] == 2
+
+        # Config marking it False drops it from the count denominator.
+        cfg = {"statuses": {"Wibble": {"expects_implementation": False}}}
+        result = check_test_coverage(graph, config=cfg)
+        assert result.details["total_requirements"] == 1
+        assert result.details["reqs_with_any_coverage"] == 1
+
 
 # =============================================================================
 # REQ-d00219: check_uat_coverage
@@ -226,27 +270,27 @@ class TestCheckTestCoverage:
 class TestCheckUatCoverage:
     """Tests for check_uat_coverage health check."""
 
-    # Implements: REQ-d00219-A
+    # Verifies: REQ-d00219-A, REQ-d00258-F
     def test_returns_info_severity(self):
-        """check_uat_coverage always returns severity=info."""
+        """Empty graph (no uncovered reqs) returns severity=info, passed."""
         graph = _make_graph()
-        result = check_uat_coverage(graph, exclude_status=set())
+        result = check_uat_coverage(graph, exclude_status=set(), config=_DEV_EXPECTS_CONFIG)
         assert result.severity == "info"
         assert result.passed is True
         assert result.category == "uat"
 
-    # Implements: REQ-d00219-A
+    # Verifies: REQ-d00219-A, REQ-d00258-F
     def test_no_requirements_zero_uat(self):
         """Empty graph reports 0/0 UAT coverage."""
         graph = _make_graph()
-        result = check_uat_coverage(graph, exclude_status=set())
+        result = check_uat_coverage(graph, exclude_status=set(), config=_DEV_EXPECTS_CONFIG)
         assert result.name == "uat.uat_coverage"
         assert result.details["total_requirements"] == 0
         assert result.details["reqs_with_any_coverage"] == 0
 
-    # Implements: REQ-d00219-A
+    # Verifies: REQ-d00219-A, REQ-d00258-F
     def test_req_with_uat_covered_counted(self):
-        """Requirement with uat_covered > 0 is counted."""
+        """Requirement with uat_covered > 0 is counted and check passes."""
         req = _make_req("REQ-d00001")
         metrics = RollupMetrics(
             total_assertions=2,
@@ -255,14 +299,16 @@ class TestCheckUatCoverage:
         req.set_metric("rollup_metrics", metrics)
 
         graph = _make_graph(req)
-        result = check_uat_coverage(graph, exclude_status=set())
+        result = check_uat_coverage(graph, exclude_status=set(), config=_DEV_EXPECTS_CONFIG)
 
         assert result.details["reqs_with_any_coverage"] == 1
         assert result.details["req_coverage_percent"] == 100.0
+        assert result.passed is True
 
-    # Implements: REQ-d00219-A
-    def test_req_without_uat_covered_not_counted(self):
-        """Requirement with uat_coverage.indirect == 0 is not counted."""
+    # Verifies: REQ-d00258-F
+    def test_expects_validation_req_without_uat_is_gap(self):
+        """An expects_validation req with no UAT coverage fails the check with
+        a finding for that req (REQ-d00258-F)."""
         req = _make_req("REQ-d00001")
         metrics = RollupMetrics(
             total_assertions=2,
@@ -271,11 +317,57 @@ class TestCheckUatCoverage:
         req.set_metric("rollup_metrics", metrics)
 
         graph = _make_graph(req)
-        result = check_uat_coverage(graph, exclude_status=set())
+        result = check_uat_coverage(graph, exclude_status=set(), config=_DEV_EXPECTS_CONFIG)
 
         assert result.details["reqs_with_any_coverage"] == 0
+        assert result.passed is False
+        assert any(f.node_id == "REQ-d00001" for f in result.findings)
 
-    # Implements: REQ-d00219-A
+    # Verifies: REQ-d00258-F
+    def test_non_expecting_level_req_not_a_gap(self):
+        """A req at a level that does NOT expect_validation is neither counted
+        nor flagged, even with zero UAT coverage (REQ-d00258-F)."""
+        # Config: prd expects validation, dev does not. Requirement is dev-level.
+        config = {
+            "levels": {
+                "prd": {"rank": 1, "expects_validation": True},
+                "dev": {"rank": 3, "expects_validation": False},
+            }
+        }
+        req = _make_req("REQ-d00001", level="dev")
+        req.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=2,
+                uat_coverage=CoverageDimension(total=2, direct=0, indirect=0),
+            ),
+        )
+        graph = _make_graph(req)
+        result = check_uat_coverage(graph, exclude_status=set(), config=config)
+
+        # dev req excluded from the count entirely; nothing to validate -> passes.
+        assert result.details["total_requirements"] == 0
+        assert result.passed is True
+
+    # Verifies: REQ-d00258-F
+    def test_no_level_expects_trivial_pass(self):
+        """When no level expects validation, the check passes trivially."""
+        req = _make_req("REQ-d00001")
+        req.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=2,
+                uat_coverage=CoverageDimension(total=2, direct=0, indirect=0),
+            ),
+        )
+        graph = _make_graph(req)
+        result = check_uat_coverage(graph, exclude_status=set(), config={})
+
+        assert result.passed is True
+        assert result.severity == "info"
+        assert "expects_validation" in result.message
+
+    # Verifies: REQ-d00219-A, REQ-d00258-F
     def test_excluded_statuses_filter(self):
         """UAT coverage excludes requirements with excluded status."""
         active = _make_req("REQ-d00001", status="Active")
@@ -295,20 +387,21 @@ class TestCheckUatCoverage:
         )
 
         graph = _make_graph(active, rejected)
-        result = check_uat_coverage(graph, exclude_status={"Rejected"})
+        result = check_uat_coverage(graph, exclude_status={"Rejected"}, config=_DEV_EXPECTS_CONFIG)
 
         assert result.details["total_requirements"] == 1
         assert result.details["reqs_with_any_coverage"] == 1
 
-    # Implements: REQ-d00219-A
+    # Verifies: REQ-d00219-A, REQ-d00258-F
     def test_no_rollup_metrics_not_counted(self):
-        """Requirement with no metrics is not UAT-covered."""
+        """Requirement with no metrics is not UAT-covered (and is a gap)."""
         req = _make_req("REQ-d00001")
         graph = _make_graph(req)
-        result = check_uat_coverage(graph, exclude_status=set())
+        result = check_uat_coverage(graph, exclude_status=set(), config=_DEV_EXPECTS_CONFIG)
 
         assert result.details["reqs_with_any_coverage"] == 0
         assert result.details["total_requirements"] == 1
+        assert result.passed is False
 
 
 # =============================================================================
@@ -319,7 +412,7 @@ class TestCheckUatCoverage:
 class TestCheckUatResults:
     """Tests for check_uat_results parsing UAT CSV files."""
 
-    # Implements: REQ-d00219-B
+    # Verifies: REQ-d00219-B
     def test_missing_csv_reports_skipped(self, tmp_path):
         """Missing CSV file produces info-severity passed check."""
         config = {
@@ -334,7 +427,7 @@ class TestCheckUatResults:
         assert result.name == "uat.results"
         assert "nonexistent.csv" in result.message
 
-    # Implements: REQ-d00219-C
+    # Verifies: REQ-d00219-C
     def test_all_passing_csv(self, tmp_path):
         """CSV with all pass results produces passing check."""
         csv_file = tmp_path / "uat-results.csv"
@@ -352,7 +445,7 @@ class TestCheckUatResults:
         assert result.details["failed"] == 0
         assert result.details["skipped"] == 0
 
-    # Implements: REQ-d00219-D
+    # Verifies: REQ-d00219-D
     def test_failures_flagged(self, tmp_path):
         """CSV with failures produces failing check with findings."""
         csv_file = tmp_path / "uat-results.csv"
@@ -375,7 +468,7 @@ class TestCheckUatResults:
         assert "JNY-002" in finding_ids
         assert "JNY-003" in finding_ids
 
-    # Implements: REQ-d00219-C
+    # Verifies: REQ-d00219-C
     def test_pass_fail_skip_counts(self, tmp_path):
         """CSV with all status types reports correct counts."""
         csv_file = tmp_path / "uat-results.csv"
@@ -399,7 +492,7 @@ class TestCheckUatResults:
         assert result.details["skipped"] == 2
         assert result.details["pass_rate"] == round(2 / 5 * 100, 1)
 
-    # Implements: REQ-d00219-B
+    # Verifies: REQ-d00219-B
     def test_default_results_file(self, tmp_path):
         """Defaults to uat-results.csv when no config provided."""
         # No config at all — should try uat-results.csv in cwd
@@ -410,7 +503,7 @@ class TestCheckUatResults:
         assert result.passed is True
         assert result.severity == "info"
 
-    # Implements: REQ-d00219-B
+    # Verifies: REQ-d00219-B
     def test_empty_csv_reports_info(self, tmp_path):
         """Empty CSV file (headers only) is reported as info."""
         csv_file = tmp_path / "uat-results.csv"
@@ -425,7 +518,7 @@ class TestCheckUatResults:
         assert result.passed is True
         assert result.severity == "info"
 
-    # Implements: REQ-d00219-C
+    # Verifies: REQ-d00219-C
     def test_uat_results_category_is_uat(self, tmp_path):
         """check_uat_results returns category='uat'."""
         csv_file = tmp_path / "uat-results.csv"
@@ -439,7 +532,7 @@ class TestCheckUatResults:
 
         assert result.category == "uat"
 
-    # Implements: REQ-d00219-C
+    # Verifies: REQ-d00219-C
     def test_pass_rate_calculation(self, tmp_path):
         """Pass rate is correctly calculated."""
         csv_file = tmp_path / "uat-results.csv"
@@ -459,7 +552,7 @@ class TestCheckUatResults:
 
         assert result.details["pass_rate"] == 75.0
 
-    # Implements: REQ-d00219-B
+    # Verifies: REQ-d00219-B
     def test_git_root_path_resolution(self, tmp_path):
         """Relative results_file path resolves via _git_root config."""
         subdir = tmp_path / "subdir"
@@ -486,7 +579,7 @@ class TestCheckUatResults:
 class TestRunUatChecks:
     """Tests for the run_uat_checks aggregation function."""
 
-    # Implements: REQ-d00219-A
+    # Verifies: REQ-d00219-A
     def test_returns_coverage_verified_and_results(self):
         """run_uat_checks returns uat.uat_coverage, uat.uat_verified, and uat.results checks."""
         graph = _make_graph()
@@ -498,7 +591,7 @@ class TestRunUatChecks:
         assert "uat.uat_verified" in names
         assert "uat.results" in names
 
-    # Implements: REQ-d00219-A
+    # Verifies: REQ-d00219-A
     def test_passes_exclude_status_to_coverage(self):
         """run_uat_checks forwards exclude_status to check_uat_coverage."""
         req_active = _make_req("REQ-d00001", status="Active")
@@ -518,7 +611,7 @@ class TestRunUatChecks:
         )
 
         graph = _make_graph(req_active, req_deprecated)
-        checks = run_uat_checks(graph, exclude_status={"Deprecated"}, config={})
+        checks = run_uat_checks(graph, exclude_status={"Deprecated"}, config=_DEV_EXPECTS_CONFIG)
 
         coverage_check = next(c for c in checks if c.name == "uat.uat_coverage")
         assert coverage_check.details["total_requirements"] == 1
@@ -549,6 +642,111 @@ def _federate_integrates(tmp_path):
     )
 
 
+class TestStatusOverlayCoverageConsistency:
+    """REQ-d00258-C: ``--status <S>`` is a per-call config overlay forcing
+    ``expects_implementation=True`` for S, so the dimension-coverage COUNTS and
+    the trailing ``[... excluded]`` NOTE always read the SAME source and can no
+    longer contradict each other.
+
+    Regression guard for the finding where ``--status Draft`` moved the note
+    (Draft dropped from 'excluded') but NOT the counts (Draft still uncounted),
+    so the message implied Draft was included while the numbers excluded it.
+    """
+
+    @staticmethod
+    def _active_plus_draft() -> FederatedGraph:
+        active = _make_req("REQ-d00001", status="Active")
+        active.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                implemented=CoverageDimension(total=1, direct=1, indirect=1),
+            ),
+        )
+        draft = _make_req("REQ-d00002", status="Draft")
+        draft.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                implemented=CoverageDimension(total=1, direct=0, indirect=0),
+            ),
+        )
+        return _make_graph(active, draft)
+
+    # Verifies: REQ-d00258-C
+    def test_overlay_is_noop_when_no_flags(self):
+        """Empty flag set returns the input config object unchanged (default is
+        byte-identical)."""
+        cfg = {"statuses": {"Draft": {"color": "#abc"}}}
+        assert _config_with_status_overlay(cfg, set()) is cfg
+
+    # Verifies: REQ-d00258-C
+    def test_overlay_forces_expects_implementation_preserving_fields(self):
+        """The overlay only forces ``expects_implementation=True``; other
+        per-status fields survive and the input config is not mutated."""
+        cfg = {"statuses": {"Draft": {"color": "#abc"}}}
+        overlay = _config_with_status_overlay(cfg, {"Draft"})
+        assert overlay["statuses"]["Draft"]["expects_implementation"] is True
+        assert overlay["statuses"]["Draft"]["color"] == "#abc"
+        # input untouched
+        assert "expects_implementation" not in cfg["statuses"]["Draft"]
+
+    # Verifies: REQ-d00258-C
+    def test_default_excludes_draft_and_notes_it(self):
+        """Baseline (no --status): Draft is NOT counted and the note lists it as
+        excluded -- proving the flag has real work to do."""
+        graph = self._active_plus_draft()
+        check = check_dimension_coverage(graph, "implemented", config={})
+        assert check.details["total_requirements"] == 1  # Active only
+        assert "draft" in check.message.lower()
+        assert "excluded" in check.message.lower()
+
+    # Verifies: REQ-d00258-C
+    def test_status_overlay_counts_draft_and_note_omits_it(self):
+        """--status Draft (as an overlay) counts Draft in numerator+denominator
+        AND drops Draft from the excluded-note -- counts and note AGREE."""
+        graph = self._active_plus_draft()
+        overlay = _config_with_status_overlay({}, {"Draft"})
+        check = check_dimension_coverage(graph, "implemented", config=overlay)
+        # Draft now counted (denominator = both reqs).
+        assert check.details["total_requirements"] == 2
+        # ... and NOT listed as excluded (note agrees with the counts).
+        assert "draft" not in check.message.lower()
+
+    # Verifies: REQ-d00258-C
+    def test_run_code_checks_status_overlay_consistent(self):
+        """End-to-end at the run_code_checks seam: with the overlay config the
+        code.implemented check counts Draft and omits it from the note. Guards
+        the caller that previously dropped ``config`` (counts excluded Draft
+        while the note implied inclusion)."""
+        graph = self._active_plus_draft()
+        overlay = _config_with_status_overlay({}, {"Draft"})
+        checks = run_code_checks(graph, exclude_status=set(), config=overlay)
+        implemented = next(c for c in checks if c.name == "code.implemented")
+        assert implemented.details["total_requirements"] == 2
+        assert "draft" not in implemented.message.lower()
+
+    # Verifies: REQ-d00258-C
+    def test_config_expects_implementation_composes_with_overlay(self):
+        """Task 3.3's config mechanism (no flag) still works: a status marked
+        ``expects_implementation=true`` in config is counted and not noted, and
+        the overlay composes on top rather than clobbering it."""
+        graph = self._active_plus_draft()
+        cfg = {"statuses": {"Draft": {"expects_implementation": True}}}
+        check = check_code_coverage(graph, config=cfg)
+        assert check.details["total_requirements"] == 2
+        assert "draft" not in check.message.lower()
+
+    # Verifies: REQ-d00258-C
+    def test_excluded_note_reads_overlay_resolver(self):
+        """``_excluded_note`` derives 'excluded' from the same resolver the
+        counts use, so a promoted status is absent from the note."""
+        graph = self._active_plus_draft()
+        assert "draft" in _excluded_note(graph, config={}).lower()
+        overlay = _config_with_status_overlay({}, {"Draft"})
+        assert _excluded_note(graph, config=overlay) == ""
+
+
 class TestCheckCoverageIntegrates:
     """Validates REQ-d00252-D, REQ-d00252-F: a requirement that delegates
     implementation via INTEGRATES counts as implemented in the coverage health
@@ -565,3 +763,53 @@ class TestCheckCoverageIntegrates:
         # REQ; it must be counted among requirements with coverage.
         assert check.details["reqs_with_any_coverage"] >= 1
         assert check.details["reqs_with_direct_coverage"] >= 1
+
+
+class TestWholeReqOnlyCoverageCheck:
+    """Info-level check quantifying reliance on whole-requirement evidence.
+
+    Validates REQ-d00258: over-crediting on the generous footing must be
+    visible, not silent. INFO severity -> never fails the build.
+    """
+
+    def test_reports_blanket_only_assertions_info(self):
+        from elspais.commands.health import check_whole_req_only_coverage
+        from elspais.graph.annotators import annotate_coverage
+        from tests.core.graph_test_helpers import (
+            build_graph,
+            make_code_ref,
+            make_requirement,
+        )
+        graph = build_graph(
+            make_requirement(
+                "REQ-100", level="PRD",
+                assertions=[{"label": "A", "text": "a"}, {"label": "B", "text": "b"}],
+            ),
+            make_code_ref(implements=["REQ-100"], source_path="src/impl.py"),  # blanket
+        )
+        annotate_coverage(graph)
+        check = check_whole_req_only_coverage(graph)
+        assert check.severity == "info"
+        assert check.passed is True
+        assert len(check.findings) == 1
+        assert "REQ-100" in check.findings[0].message
+        assert "2" in check.findings[0].message  # both A,B whole-req-only
+
+    def test_no_findings_when_all_direct(self):
+        from elspais.commands.health import check_whole_req_only_coverage
+        from elspais.graph.annotators import annotate_coverage
+        from tests.core.graph_test_helpers import (
+            build_graph,
+            make_code_ref,
+            make_requirement,
+        )
+        graph = build_graph(
+            make_requirement(
+                "REQ-100", level="PRD",
+                assertions=[{"label": "A", "text": "a"}],
+            ),
+            make_code_ref(implements=["REQ-100-A"], source_path="src/impl.py"),  # targeted
+        )
+        annotate_coverage(graph)
+        check = check_whole_req_only_coverage(graph)
+        assert check.findings == []

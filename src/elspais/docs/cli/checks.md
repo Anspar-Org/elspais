@@ -137,7 +137,7 @@ that changes to cross-cutting requirements are propagated to their consumers.
 |-------|-------------|
 | `code.coverage` | Code coverage statistics (informational) |
 | `code.unlinked` | Code files with no traceability markers (no `# Implements:` or `# Verifies:` comments); severity: info |
-| `code.no_traceability` | Code/test files with no traceability markers at all; default severity: info |
+| `code.no_traceability` | Code files with no traceability markers at all (test files are covered separately by `tests.unlinked`); default severity: info |
 | `code.retired_references` | Code referencing requirements with retired status (Deprecated, Superseded, Rejected); default severity: warning |
 | `code.provisional_references` | Code referencing requirements with provisional status (Draft, Proposed); default severity: info |
 | `code.aspirational_references` | Code referencing requirements with aspirational status (Roadmap, Future, Idea); default severity: info |
@@ -147,7 +147,7 @@ that changes to cross-cutting requirements are propagated to their consumers.
 | Check | Description |
 |-------|-------------|
 | `tests.coverage` | Test coverage statistics with rollup (informational) |
-| `tests.unlinked` | Test files with no traceability markers (no REQ-xxx patterns or `Verifies` comments); severity: info |
+| `tests.unlinked` | Test files with no traceability markers -- either no test functions found, or no test in the file links to any requirement (a file with at least one linked test is not flagged); severity: info |
 | `tests.results` | Test pass/fail status from JUnit XML or pytest JSON results |
 | `tests.retired_references` | Tests referencing requirements with retired status (Deprecated, Superseded, Rejected); default severity: warning |
 | `tests.provisional_references` | Tests referencing requirements with provisional status (Draft, Proposed); default severity: info |
@@ -188,7 +188,7 @@ coverage and results from user journey validation.
 
 | Check | Description |
 |-------|-------------|
-| `uat.coverage` | Requirements validated by USER_JOURNEY nodes (informational) |
+| `uat.coverage` | UAT coverage for requirements at levels that set `expects_validation = true`. Such a requirement with no validating USER_JOURNEY is flagged as a gap. Levels without `expects_validation` are not counted; when no level expects validation the check passes trivially. |
 | `uat.results` | Journey pass/fail status from a CSV results file |
 
 ### Terms Checks (`--terms`)
@@ -299,19 +299,53 @@ Each dimension resolves to a **tier** that drives severity and UI color:
 
 | Tier | Meaning |
 |------|---------|
-| `none` | No coverage at all |
+| `missing` | No coverage at all (grey/neutral when the denominator is empty; a red gap only when in-scope) |
 | `partial` | Some assertions covered, not all |
-| `full-indirect` | All assertions covered, but only via indirect links |
-| `full-direct` | All assertions covered with assertion-level specificity |
+| `full` | All assertions covered (the direct/indirect distinction is shown as a `~` marker, not a separate tier) |
 | `failing` | Coverage exists but results are failing |
+
+Tier, per-assertion standing, and bucket share this one vocabulary
+(`full` / `partial` / `failing` / `missing`).
+
+**Relative denominators.** `Tested` and `Passing` are measured against their
+*own* denominator, not the whole spec: `Tested` counts tested / **implemented**
+assertions, and `Passing` counts passing / **tested** assertions. An empty
+denominator (nothing implemented, or nothing tested) resolves to `missing` at
+neutral severity (grey) rather than a red gap -- you cannot test what is not
+built. A failing in-denominator label is always `failing` (red), regardless of
+the fraction.
+
+**Direct vs indirect credit.** By default (`[rules.coverage] allow_indirect =
+true`) indirect evidence (a whole-requirement link, or `Refines:` conduction)
+credits the tier, and a trailing `~` flags any tier whose evidence is not fully
+direct. Set `allow_indirect = false` to require direct assertion-level evidence;
+indirect-only coverage then reads `missing`/`partial` and is shown as
+"not credited" in the viewer hover.
 
 ### `code_tested` — line coverage
 
 Unlike the other five dimensions, `code_tested` counts **source lines** rather
 than assertions. It cross-references implementation line ranges (from
 `Implements:` edges to CODE nodes) against file-level line-coverage data
-(LCOV or coverage.json). `code_tested.direct` is always 0 because per-test
-line attribution is not yet implemented.
+(LCOV or coverage.json). `code_tested.indirect` counts any covered
+implementation line, regardless of which test covered it.
+
+`code_tested.direct` additionally counts implementation lines whose recorded
+test **context** names a test that `Verifies:` the requirement (Python only,
+via coverage.py's per-test dynamic contexts). A `coverage.json` produced with
+pytest-cov's `--cov-context=test` *and* `show_contexts = true` under
+`[tool.coverage.json]` carries a per-line `contexts` array of strings like
+`"tests/test_x.py::TestClass::test_method|run"` (or `"...::test_func|run"`
+with no class). Only the `|run` phase credits direct attribution --
+`|setup`/`|teardown` fixture-phase execution is not evidence the test itself
+exercised the line. Coverage formats without a `contexts` map (LCOV, or
+coverage.json exported without `show_contexts`) always report
+`code_tested.direct == 0`.
+
+Do not set `[tool.coverage.run] dynamic_context = "test_function"` alongside
+`--cov-context=test`: that is coverage.py's own (incompatible) context
+switcher and silently overrides pytest-cov's nodeid-shaped contexts. See
+`elspais docs test-targets` for the full recipe and gotcha.
 
 ## Output Formats
 
@@ -557,6 +591,14 @@ elspais checks untested           # Checklist + untested gaps
 
 Gap commands support `--format text` (default), `--format markdown`, and `--format json`.
 
+An assertion listed in a gap can carry a `— N% via refines-conduction`
+annotation (text/markdown) or a `fraction` field (json): a whole-requirement
+(blanket) `Refines:` conducts only a fraction of its refiner's own coverage
+up to the targeted parent assertion (REQ-d00069-J -- see `elspais docs
+graph-model` for the conduction model). A fraction of `0` (no annotation) is
+uncovered outright; `0 < fraction < 1` is partially conducted and still a
+gap, but distinguishable from zero coverage.
+
 ## Prospective Reports (What-If Analysis)
 
 By default, `checks` and `gaps` only include requirements with **Active** status
@@ -581,8 +623,17 @@ This is useful for planning: before promoting a batch of Draft requirements,
 run a prospective report to see which ones still need code references, tests,
 or UAT validation.
 
-The `--status` flag accepts any configured status name (case-sensitive).
-See `elspais docs config` for how status roles are configured.
+A promoted status is **counted in the coverage numerator and denominator** and
+is correspondingly **absent from the trailing `[... excluded]` note** — the
+counts and the note always agree. Under the hood `--status <S>` is an overlay
+that forces `expects_implementation = true` for `<S>`, so it is exactly
+equivalent to setting `[statuses.<S>] expects_implementation = true` in
+`.elspais.toml` for the duration of the run (and composes with any such config
+already present).
+
+The `--status` flag accepts any configured status name (case-insensitive; the
+name is title-cased before matching). See `elspais docs config` for how status
+roles are configured.
 
 ## Exit Codes
 

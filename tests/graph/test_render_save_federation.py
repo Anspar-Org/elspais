@@ -1,7 +1,5 @@
-"""render_save must not write associate files unless write_associates=True.
-
-Implements: REQ-d00253-B
-"""
+# Verifies: REQ-d00253-B
+"""render_save must not write associate files unless write_associates=True."""
 
 import pathlib
 
@@ -132,6 +130,7 @@ def test_render_save_associate_file_filter(monkeypatch, write_associates, expect
         (True, True),
     ],
 )
+# Verifies: REQ-d00253-B
 def test_render_save_ownership_map_path(monkeypatch, write_associates, expect_associate_written):
     """Gate uses repo_for() ownership map as primary signal, not the repo field.
 
@@ -139,8 +138,6 @@ def test_render_save_ownership_map_path(monkeypatch, write_associates, expect_as
     cannot distinguish primary from associate, so if the gate ever reverts to
     using the repo field this test will fail (the associate would not be filtered
     and would be written even with write_associates=False).
-
-    Implements: REQ-d00253-B
     """
     from elspais.graph import render
 

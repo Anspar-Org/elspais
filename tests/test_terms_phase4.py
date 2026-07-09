@@ -1,4 +1,4 @@
-# Implements: REQ-d00220
+# Verifies: REQ-d00220
 """Tests for defined terms phase 4: reference types, synonyms, change tracking."""
 
 from pathlib import Path

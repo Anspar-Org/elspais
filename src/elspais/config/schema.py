@@ -186,18 +186,18 @@ class FormatConfig(_StrictModel):
 class CoverageSeverityConfig(_StrictModel):
     """Severity mapping for a single coverage dimension's tier states.
 
-    Each tier maps to a severity: 'ok', 'info', 'warning', or 'error'.
+    Each tier maps to a severity: 'ok', 'info', 'warning', or 'error'. Tiers
+    are the unified vocabulary (REQ-d00258): full / partial / failing / missing.
     """
 
-    full_direct: str = "ok"
-    full_indirect: str = "info"
+    full: str = "ok"
     partial: str = "warning"
-    none: str = "error"
     failing: str = "error"
+    missing: str = "error"
 
 
 def _uat_severity() -> CoverageSeverityConfig:
-    return CoverageSeverityConfig(none="info", partial="info")
+    return CoverageSeverityConfig(missing="info")
 
 
 class CoverageConfig(_StrictModel):
@@ -206,10 +206,19 @@ class CoverageConfig(_StrictModel):
     implemented: CoverageSeverityConfig = Field(default_factory=CoverageSeverityConfig)
     tested: CoverageSeverityConfig = Field(default_factory=CoverageSeverityConfig)
     verified: CoverageSeverityConfig = Field(
-        default_factory=lambda: CoverageSeverityConfig(none="warning")
+        default_factory=lambda: CoverageSeverityConfig(missing="warning")
     )
     uat_coverage: CoverageSeverityConfig = Field(default_factory=_uat_severity)
     uat_verified: CoverageSeverityConfig = Field(default_factory=_uat_severity)
+    # When True (default), indirect coverage (REFINES-conducted, blanket, and
+    # other transitive evidence) credits a dimension's badge/tier state -- the
+    # generous footing (REQ-d00069-L). When False, ONLY direct coverage lifts a
+    # state; indirect-only coverage reads `missing` (REQ-d00258, Phase 4).
+    allow_indirect: bool = True
+    # Per-relationship label overrides (REQ-d00258). Keyed by relationship name
+    # (implements/verifies/yields/validates/validated); resolved to dimension
+    # labels via elspais.config.status_words.get_status_words().
+    status_words: dict[str, str] = Field(default_factory=dict)
 
 
 class ReferenceSeverityConfig(_StrictModel):
@@ -248,6 +257,11 @@ class LevelConfig(_StrictModel):
     display_name: str = ""
     implements: list[str]
     color: str | None = None
+    # When true, requirements at this level are expected to have UAT validation
+    # (a USER_JOURNEY that Validates them). Absence is then a real gap: reported
+    # by health `uat.coverage` + `gaps unvalidated` and rendered red in the
+    # viewer. Default false -- absent UAT is neither flagged nor badged.
+    expects_validation: bool = False
 
     @field_validator("color")
     @classmethod
@@ -397,6 +411,8 @@ class StatusConfig(_StrictModel):
     """Optional per-status metadata. Keys match status names from status_roles."""
 
     color: str | None = None
+    # None = derive from role (active-role -> True). Explicit value wins.
+    expects_implementation: bool | None = None
 
     @field_validator("color")
     @classmethod

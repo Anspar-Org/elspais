@@ -37,7 +37,7 @@ def _wrap(graph: TraceGraph, config: dict | None = None) -> FederatedGraph:
 class TestCheckSpecNoAssertions:
     """Tests for check_spec_no_assertions()."""
 
-    # Implements: REQ-d00204
+    # Verifies: REQ-d00204
     def test_check_spec_no_assertions_flags_empty_reqs(self) -> None:
         """A requirement with no assertions produces a warning finding."""
         graph = build_graph(
@@ -52,7 +52,7 @@ class TestCheckSpecNoAssertions:
         assert "REQ-p00001" in check.findings[0].message
         assert check.findings[0].node_id == "REQ-p00001"
 
-    # Implements: REQ-d00204
+    # Verifies: REQ-d00204
     def test_check_spec_no_assertions_passes_when_all_have_assertions(self) -> None:
         """When every requirement has at least one assertion, the check passes."""
         graph = build_graph(
@@ -69,7 +69,7 @@ class TestCheckSpecNoAssertions:
         assert check.name == "spec.no_assertions"
         assert "All requirements" in check.message
 
-    # Implements: REQ-d00204
+    # Verifies: REQ-d00204
     def test_check_spec_no_assertions_severity_configurable(self) -> None:
         """Severity can be set to 'info' via config [rules.format].no_assertions_severity."""
         graph = build_graph(

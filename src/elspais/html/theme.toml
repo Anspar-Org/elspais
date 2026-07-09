@@ -67,6 +67,11 @@ val-red-bg = "#dc3545"
 val-red-text = "#fff"
 val-orange-bg = "#fd7e14"
 val-orange-text = "#fff"
+val-maroon-bg = "#6c0a1e"
+val-maroon-text = "#fff"
+# Neutral fill for the "missing" coverage standing (no evidence)
+val-grey-bg = "#e9ecef"
+val-grey-text = "#6c757d"
 
 # Tooltip
 tooltip-bg = "#212529"
@@ -479,6 +484,11 @@ val-red-bg = "#a52834"
 val-red-text = "#f8d7da"
 val-orange-bg = "#b35b0e"
 val-orange-text = "#ffe5d0"
+val-maroon-bg = "#8f2436"
+val-maroon-text = "#fff"
+# Neutral fill for the "missing" coverage standing (no evidence)
+val-grey-bg = "#343a40"
+val-grey-text = "#adb5bd"
 
 # Tooltip
 tooltip-bg = "#f8f9fa"
@@ -931,22 +941,69 @@ css_class = "assertion-validation-btn validation-fail"
 [buttons.validation.unknown]
 css_class = "assertion-validation-btn validation-unknown"
 
-[validation_tiers.full-direct]
+# NOTE: the legacy `validation_tiers` catalog (full-direct / full-indirect /
+# anomalous) is retired (REQ-d00258). Requirement tier, per-assertion standing,
+# and bucket now share ONE vocabulary -- see `coverage_standing` below
+# (full / partial / failing / missing). The direct-vs-indirect quality is a
+# caveat (the `~` marker + hover), not a separate tier color.
+
+[severity.ok]
 css_class = "val-green"
 color_key = "green"
 
-[validation_tiers.full-indirect]
+[severity.info]
 css_class = "val-yellow-green"
 color_key = "yellow-green"
 
-[validation_tiers.partial]
+[severity.warning]
 css_class = "val-yellow"
 color_key = "yellow"
 
-[validation_tiers.failing]
+[severity.error]
 css_class = "val-red"
 color_key = "red"
 
-[validation_tiers.anomalous]
-css_class = "val-orange"
-color_key = "orange"
+[severity.failing]
+css_class = "val-maroon"
+color_key = "maroon"
+
+# Neutral / not-applicable severity (REQ-d00258-H). Used ONLY by the forced
+# NEUTRAL override in the badge projection (an N/A relative dimension, or a
+# `missing` Implemented tier on a status that does not expect implementation).
+# It mirrors [coverage_standing.missing] GREY so the requirement-level "N/A"
+# badge matches the per-assertion `missing` standing -- the canonical
+# "missing / no-coverage / not-applicable is grey" semantic. It is NOT a
+# per-dimension configurable tier severity; no dimension's configured severity
+# defaults to it. Distinct from `info` (yellow-green), which is a real
+# "fully-covered-including-indirect" state that must not read grey.
+[severity.neutral]
+css_class = "val-grey"
+color_key = "grey"
+
+# Per-assertion coverage standings (REQ-d00258-G). A "standing" is the semantic
+# state of one assertion on one coverage dimension; the viewer emits the standing
+# token and resolves its color HERE via the catalog, so the color association is
+# configurable (e.g. remappable for color-impaired users) and never baked into
+# the JS/Python badge logic -- the same decoupling severity uses (REQ-d00258-D).
+[coverage_standing.full]
+css_class = "val-green"
+color_key = "green"
+
+[coverage_standing.partial]
+css_class = "val-yellow"
+color_key = "yellow"
+
+[coverage_standing.failing]
+css_class = "val-red"
+color_key = "red"
+
+[coverage_standing.missing]
+css_class = "val-grey"
+color_key = "grey"
+
+# Direct/indirect caveat marker (REQ-d00258). The `~` appended to a coverage
+# badge/cell means the credit is not fully direct (indirect > direct) -- the
+# state color is unchanged; only the caveat is flagged. See `[rules.coverage]
+# allow_indirect` to control whether indirect evidence credits the state.
+[coverage_caveat.indirect]
+symbol = "~"

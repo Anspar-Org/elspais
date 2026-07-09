@@ -2,6 +2,22 @@
 
 This parser extracts test results from JUnit XML format files.
 Uses IdResolver.search_regex() for finding requirement IDs in test output.
+
+Source-file binding
+-------------------
+Standard pytest/JUnit XML has no per-test source path, so the classname is
+used to synthesize a Python ``test:...::...`` ``test_id`` that a scanned
+``.py`` test node can match (the YIELDS branch in the builder).
+
+For non-Python producers (e.g. Playwright ``.spec.ts``), a per-``<testcase>``
+``file`` attribute names the real source file.  When present, it is preferred
+as the result's ``source_path`` (so ``match = "source"`` binds the result to
+the scanned test node by path) and the classname-derived ``test_id`` is
+dropped (set to ``None``) -- a ``.py`` module id could never match a
+``.spec.ts`` node, and a non-None ``test_id`` would route the result to the
+doomed YIELDS branch instead of source matching.  An optional ``line``
+attribute is exposed as the result's ``line`` field.  Producers whose JUnit
+reporter omits ``file`` behave exactly as before (fully backward-compatible).
 """
 
 from __future__ import annotations
@@ -11,6 +27,7 @@ import xml.etree.ElementTree as ET
 from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from xml.sax.saxutils import unescape
 
 from elspais.graph.parsers import ParseContext, ParsedContent
 from elspais.utilities.test_identity import build_test_id_from_result
@@ -18,15 +35,37 @@ from elspais.utilities.test_identity import build_test_id_from_result
 # Pattern to extract a named XML attribute value from a raw text line.
 _ATTR_RE: dict[str, re.Pattern[str]] = {}
 
+# Attribute values pulled from raw XML text still carry entity escapes;
+# ElementTree-parsed values do not. Unescape before comparing the two.
+_XML_ENTITIES = {"&quot;": '"', "&apos;": "'"}
+
 
 def _attr_value(text: str, attr: str) -> str | None:
     """Extract the value of *attr* from a raw XML element string."""
     pat = _ATTR_RE.get(attr)
     if pat is None:
-        pat = re.compile(rf'{attr}="([^"]*)"')
+        pat = re.compile(rf'\b{attr}="([^"]*)"')
         _ATTR_RE[attr] = pat
     m = pat.search(text)
-    return m.group(1) if m else None
+    return unescape(m.group(1), _XML_ENTITIES) if m else None
+
+
+def _testcase_line_index(content: str) -> dict[tuple[str, str], int]:
+    """Map ``(classname, name)`` to the 1-based line of its ``<testcase``.
+
+    Works when the XML is pretty-printed so each ``<testcase`` open tag sits
+    on its own line; a minified (single-line) document maps everything to
+    line 1. Only the first occurrence of a duplicate key is kept.
+    """
+    index: dict[tuple[str, str], int] = {}
+    for line_no, text in enumerate(content.splitlines(), start=1):
+        if "<testcase" not in text:
+            continue
+        cn = _attr_value(text, "classname")
+        nm = _attr_value(text, "name")
+        if cn is not None and nm is not None:
+            index.setdefault((cn, nm), line_no)
+    return index
 
 
 if TYPE_CHECKING:
@@ -113,6 +152,13 @@ class JUnitXMLParser:
         except ET.ParseError:
             return results
 
+        # Results-file provenance: each record points back at the artifact
+        # that recorded it (`result_file` = the results file itself, distinct
+        # from `source_path`, which names the TEST'S source file and is the
+        # RESULT->TEST match key). `result_line` is the `<testcase>` line
+        # within the results file (None when the XML is minified).
+        tc_lines = _testcase_line_index(content)
+
         # Handle both <testsuites> and <testsuite> as root
         testsuites = root.findall(".//testsuite")
         if not testsuites and root.tag == "testsuite":
@@ -147,22 +193,40 @@ class JUnitXMLParser:
                     status = "skipped"
                     message = skipped.get("message") or skipped.text
 
+                # A per-testcase `file` attribute (e.g. Playwright JUnit) names
+                # the real source file. Prefer it as the result's source path so
+                # `match="source"` can bind the result to the scanned test node,
+                # and DROP the classname-derived test_id (which assumes a Python
+                # `.py` module path and can never match a `.spec.ts`) so the
+                # builder takes its source-location matching path instead of a
+                # doomed test_id YIELDS.
+                file_attr = testcase.get("file")
+                result_source = file_attr or source_path
+                line_attr = testcase.get("line")
+                try:
+                    line_no = int(line_attr) if line_attr else None
+                except (TypeError, ValueError):
+                    line_no = None
+
                 # Extract requirement references from test name or classname
                 verifies = self._extract_req_ids(f"{classname} {name}", source_path)
 
                 # Generate canonical TEST node ID using test_identity utility
-                test_id = build_test_id_from_result(classname, name)
+                test_id = None if file_attr else build_test_id_from_result(classname, name)
 
                 result = {
-                    "id": f"{source_path}:{classname}::{name}",
+                    "id": f"{result_source}:{classname}::{name}",
                     "name": name,
                     "classname": classname,
                     "status": status,
                     "duration": duration,
                     "message": message[:200] if message else None,
                     "verifies": verifies,
-                    "source_path": source_path,
+                    "source_path": result_source,
                     "test_id": test_id,
+                    "line": line_no,
+                    "result_file": source_path or None,
+                    "result_line": tc_lines.get((classname, name)),
                 }
 
                 results.append(result)
@@ -194,22 +258,15 @@ class JUnitXMLParser:
         content = "\n".join(text for _, text in lines)
         results = self.parse(content, context.file_path)
 
-        # Build a line-number index: (classname, name) -> file line number.
-        # Works when the XML is pretty-printed so each <testcase is on its
-        # own line; falls back to first-line when minified.
-        tc_lines: dict[tuple[str, str], int] = {}
+        # parse() computes result_line relative to the reassembled content
+        # (1-based); shift by the first claimed line so start_line matches
+        # the real file position.
         base_line = lines[0][0] if lines else 1
-        for line_no, text in lines:
-            if "<testcase " in text:
-                # Extract classname and name from the raw XML line
-                cn = _attr_value(text, "classname")
-                nm = _attr_value(text, "name")
-                if cn is not None and nm is not None:
-                    tc_lines[(cn, nm)] = line_no
 
         for result in results:
-            key = (result.get("classname", ""), result.get("name", ""))
-            start = tc_lines.get(key, base_line)
+            rl = result.get("result_line")
+            start = (rl + base_line - 1) if rl else base_line
+            result["result_line"] = start
             yield ParsedContent(
                 content_type="test_result",
                 start_line=start,

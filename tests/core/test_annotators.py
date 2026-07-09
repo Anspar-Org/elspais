@@ -58,7 +58,7 @@ class TestAnnotateGitState:
         assert first_modified == second_modified
         assert first_branch_changed == second_branch_changed
 
-    # Implements: REQ-d00050-A
+    # Verifies: REQ-d00050-A
     def test_annotates_uncommitted(self):
         """Marks node as uncommitted when file is modified."""
         node = GraphNode(
@@ -76,7 +76,7 @@ class TestAnnotateGitState:
         assert node.get_metric("is_modified") is True
         assert node.get_metric("is_untracked") is False
 
-    # Implements: REQ-d00050-A
+    # Verifies: REQ-d00050-A
     def test_annotates_untracked(self):
         """Marks node as untracked when file is new."""
         node = GraphNode(
@@ -94,7 +94,7 @@ class TestAnnotateGitState:
         assert node.get_metric("is_untracked") is True
         assert node.get_metric("is_new") is True
 
-    # Implements: REQ-d00050-A
+    # Verifies: REQ-d00050-A
     def test_annotates_branch_changed(self):
         """Marks node when file differs from main branch."""
         node = GraphNode(
@@ -110,7 +110,7 @@ class TestAnnotateGitState:
 
         assert node.get_metric("is_branch_changed") is True
 
-    # Implements: REQ-d00050-A
+    # Verifies: REQ-d00050-A
     def test_annotates_moved(self):
         """Marks node as moved when file location changed."""
         node = GraphNode(
@@ -126,7 +126,7 @@ class TestAnnotateGitState:
 
         assert node.get_metric("is_moved") is True
 
-    # Implements: REQ-d00050-A
+    # Verifies: REQ-d00050-A
     def test_defaults_to_false(self):
         """All git states default to False when no git info."""
         node = GraphNode(
@@ -143,7 +143,7 @@ class TestAnnotateGitState:
         assert node.get_metric("is_moved") is False
         assert node.get_metric("is_new") is False
 
-    # Implements: REQ-d00050-D
+    # Verifies: REQ-d00050-D
     def test_skips_non_requirement_nodes(self):
         """Does not annotate non-requirement nodes."""
         node = GraphNode(
@@ -156,7 +156,7 @@ class TestAnnotateGitState:
 
         assert node.get_metric("is_uncommitted") is None
 
-    # Implements: REQ-d00050-D
+    # Verifies: REQ-d00050-D
     def test_handles_assertion_id_format(self):
         """Handles requirement ID with assertion suffix for move detection."""
         # Assertion nodes (REQ-xxx-A) should be skipped
@@ -201,7 +201,7 @@ class TestAnnotateDisplayInfo:
         assert first_prefix == second_prefix
         assert first_filename == second_filename
 
-    # Implements: REQ-d00050-B
+    # Verifies: REQ-d00050-B
     def test_annotates_roadmap(self):
         """Marks node as roadmap when in roadmap directory."""
         node = GraphNode(
@@ -214,7 +214,7 @@ class TestAnnotateDisplayInfo:
 
         assert node.get_metric("is_roadmap") is True
 
-    # Implements: REQ-d00050-B
+    # Verifies: REQ-d00050-B
     def test_annotates_not_roadmap(self):
         """Marks node as not roadmap when not in roadmap directory."""
         node = GraphNode(
@@ -226,7 +226,7 @@ class TestAnnotateDisplayInfo:
 
         assert node.get_metric("is_roadmap") is False
 
-    # Implements: REQ-d00055-E
+    # Verifies: REQ-d00055-E
     def test_annotates_conflict(self):
         """Marks node as conflict when is_conflict is True."""
         node = GraphNode(
@@ -241,7 +241,7 @@ class TestAnnotateDisplayInfo:
         assert node.get_metric("is_conflict") is True
         assert node.get_metric("conflict_with") == "REQ-p00001__conflict"
 
-    # Implements: REQ-d00050-B
+    # Verifies: REQ-d00050-B
     def test_annotates_display_filename(self):
         """Stores display-friendly filename info."""
         node = GraphNode(
@@ -255,7 +255,7 @@ class TestAnnotateDisplayInfo:
         assert node.get_metric("display_filename") == "prd-authentication"
         assert node.get_metric("file_name") == "prd-authentication.md"
 
-    # Implements: REQ-d00050-B
+    # Verifies: REQ-d00050-B
     def test_annotates_repo_prefix(self):
         """Stores repo prefix from content."""
         node = GraphNode(
@@ -268,7 +268,7 @@ class TestAnnotateDisplayInfo:
 
         assert node.get_metric("repo_prefix") == "CAL"
 
-    # Implements: REQ-d00050-B
+    # Verifies: REQ-d00050-B
     def test_defaults_to_core_prefix(self):
         """Defaults to CORE when no repo prefix."""
         node = GraphNode(
@@ -284,7 +284,7 @@ class TestAnnotateDisplayInfo:
 class TestAnnotateImplementationFiles:
     """Tests for annotate_implementation_files function."""
 
-    # Implements: REQ-d00050-C
+    # Verifies: REQ-d00050-C
     def test_adds_implementation_files(self):
         """Stores implementation file references."""
         node = GraphNode(
@@ -297,7 +297,7 @@ class TestAnnotateImplementationFiles:
 
         assert node.get_metric("implementation_files") == impl_files
 
-    # Implements: REQ-d00050-C
+    # Verifies: REQ-d00050-C
     def test_appends_to_existing(self):
         """Appends to existing implementation files."""
         node = GraphNode(
@@ -318,7 +318,7 @@ class TestAnnotateImplementationFiles:
 class TestCountByLevel:
     """Tests for count_by_level function."""
 
-    # Implements: REQ-d00051-A
+    # Verifies: REQ-d00051-A
     def test_counts_by_level(self):
         """Counts requirements by level."""
         graph = build_graph(
@@ -338,7 +338,7 @@ class TestCountByLevel:
 class TestCountByRepo:
     """Tests for count_by_repo function."""
 
-    # Implements: REQ-d00051-B
+    # Verifies: REQ-d00051-B
     def test_counts_by_repo(self):
         """Counts requirements by repo prefix."""
         graph = build_graph(
@@ -360,7 +360,7 @@ class TestCountByRepo:
 class TestCountImplementationFiles:
     """Tests for count_implementation_files function."""
 
-    # Implements: REQ-d00051-C
+    # Verifies: REQ-d00051-C
     def test_counts_total_files(self):
         """Counts total implementation files."""
         graph = build_graph(
@@ -381,7 +381,7 @@ class TestCountImplementationFiles:
 class TestCollectTopics:
     """Tests for collect_topics function."""
 
-    # Implements: REQ-d00051-D
+    # Verifies: REQ-d00051-D
     def test_collects_topics_from_filenames(self):
         """Extracts topics from file stems."""
         graph = build_graph(
@@ -398,7 +398,7 @@ class TestCollectTopics:
 class TestGetImplementationStatus:
     """Tests for get_implementation_status function."""
 
-    # Implements: REQ-d00051-E
+    # Verifies: REQ-d00051-E
     def test_full_coverage(self):
         """Returns Full when coverage is 100%."""
         from elspais.graph.metrics import CoverageDimension, RollupMetrics
@@ -416,7 +416,7 @@ class TestGetImplementationStatus:
 
         assert status == "Full"
 
-    # Implements: REQ-d00051-E
+    # Verifies: REQ-d00051-E
     def test_partial_coverage(self):
         """Returns Partial when coverage is between 0 and 100."""
         from elspais.graph.metrics import CoverageDimension, RollupMetrics
@@ -434,7 +434,7 @@ class TestGetImplementationStatus:
 
         assert status == "Partial"
 
-    # Implements: REQ-d00051-E
+    # Verifies: REQ-d00051-E
     def test_unimplemented(self):
         """Returns Unimplemented when coverage is 0."""
         node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
@@ -443,7 +443,7 @@ class TestGetImplementationStatus:
 
         assert status == "Unimplemented"
 
-    # Implements: REQ-d00051-E
+    # Verifies: REQ-d00051-E
     def test_defaults_to_unimplemented(self):
         """Defaults to Unimplemented when no coverage metric."""
         node = GraphNode(
@@ -455,7 +455,7 @@ class TestGetImplementationStatus:
 
         assert status == "Unimplemented"
 
-    # Implements: REQ-d00051-E
+    # Verifies: REQ-d00051-E
     def test_boundary_99_is_partial(self):
         """Coverage of 99% is still Partial, not Full."""
         from elspais.graph.metrics import CoverageDimension, RollupMetrics
@@ -473,7 +473,7 @@ class TestGetImplementationStatus:
 
         assert status == "Partial"
 
-    # Implements: REQ-d00051-E
+    # Verifies: REQ-d00051-E
     def test_boundary_1_is_partial(self):
         """Coverage of 1% is Partial, not Unimplemented."""
         from elspais.graph.metrics import CoverageDimension, RollupMetrics
@@ -546,7 +546,7 @@ class TestAggregateIterationBehavior:
 class TestAnnotateGraphGitState:
     """Tests for annotate_graph_git_state function."""
 
-    # Implements: REQ-d00050-A
+    # Verifies: REQ-d00050-A
     def test_REQ_CUR879_A_annotate_graph_git_state_annotates_all_nodes(self):
         """REQ-CUR879-A: annotate_graph_git_state annotates all requirement nodes."""
         from pathlib import Path
@@ -576,7 +576,7 @@ class TestAnnotateGraphGitState:
         # REQ-o00001 is in branch_changed_files
         assert node_o.get_metric("is_branch_changed") is True
 
-    # Implements: REQ-d00050-A
+    # Verifies: REQ-d00050-A
     def test_REQ_CUR879_B_annotate_graph_git_state_fails_silently(self):
         """REQ-CUR879-B: annotate_graph_git_state fails silently when git unavailable."""
         from pathlib import Path
@@ -595,7 +595,7 @@ class TestAnnotateGraphGitState:
         node = graph.find_by_id("REQ-p00001")
         assert node.get_metric("is_uncommitted") is None
 
-    # Implements: REQ-d00050-A
+    # Verifies: REQ-d00050-A
     def test_annotate_graph_git_state_skips_when_no_repo_root(self):
         """Returns silently when graph has no repo_root."""
         from unittest.mock import patch

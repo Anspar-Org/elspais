@@ -1,7 +1,5 @@
-"""MCP mutations targeting associate nodes are rejected when writes disabled.
-
-Implements: REQ-d00253-D
-"""
+# Verifies: REQ-d00253-D
+"""MCP mutations targeting associate nodes are rejected when writes disabled."""
 
 from elspais.mcp.server import _guard_associate_write
 

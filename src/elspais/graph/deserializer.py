@@ -1,3 +1,4 @@
+# Implements: REQ-o00072-C
 """DomainDeserializer - Abstract controller for text domain deserialization.
 
 This module provides the infrastructure for deserializing text from
@@ -133,7 +134,7 @@ class DomainFile:
 
         return False
 
-    # Implements: REQ-o00050-A
+    # Implements: REQ-o00072-A
     def iterate_sources(self) -> Iterator[tuple[DomainContext, str]]:
         """Iterate over file sources.
 
@@ -171,7 +172,7 @@ class DomainFile:
         )
         return ctx, content
 
-    # Implements: REQ-o00050-A
+    # Implements: REQ-o00072-A+B
     def deserialize(self, registry: ParserRegistry) -> Iterator[ParsedContentWithContext]:
         """Deserialize files using parser registry.
 
@@ -242,7 +243,7 @@ class DomainStdio:
         self.content = content
         self.source_id = source_id
 
-    # Implements: REQ-o00050-A
+    # Implements: REQ-o00072-A
     def iterate_sources(self) -> Iterator[tuple[DomainContext, str]]:
         """Yield the stdin content.
 
@@ -255,7 +256,7 @@ class DomainStdio:
         )
         yield ctx, self.content
 
-    # Implements: REQ-o00050-A
+    # Implements: REQ-o00072-A+B
     def deserialize(self, registry: ParserRegistry) -> Iterator[ParsedContentWithContext]:
         """Deserialize stdin using parser registry.
 

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from elspais import __version__
+from elspais.graph.aggregation import absolute_tier, relative_tier
 from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.html.theme import get_catalog
 from elspais.utilities.patterns import INSTANCE_SEPARATOR
@@ -22,6 +23,7 @@ from elspais.utilities.patterns import INSTANCE_SEPARATOR
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
     from elspais.graph.GraphNode import GraphNode
+    from elspais.graph.metrics import CoverageDimension
 
 
 @dataclass
@@ -91,56 +93,63 @@ class ViewStats:
     test_failed_count: int = 0  # Number of failed RESULT nodes
     associated_count: int = 0
     journey_count: int = 0
-    # Assertion-level metrics
     assertion_count: int = 0  # Total unique assertions
-    assertions_implemented: int = 0  # Assertions with CODE coverage
-    assertions_tested: int = 0  # Assertions with TEST coverage
-    assertions_validated: int = 0  # Assertions with passing RESULTs
-
-
-def _val_tier(key: str) -> tuple[str, str]:
-    """Look up a validation tier from the catalog, returning (color_key, description)."""
-    from elspais.html.theme import get_catalog
-
-    entry = get_catalog().by_key(key)
-    return (entry.color_key, entry.description)
 
 
 # ── Severity-driven coverage tiers ──
 
-SEVERITY_PRIORITY: dict[str, int] = {"error": 0, "warning": 1, "info": 2, "ok": 3}
-SEVERITY_TO_COLOR: dict[str, str] = {
-    "error": "red",
-    "warning": "yellow",
-    "info": "yellow-green",
-    "ok": "green",
-}
+# `neutral` (the forced N/A override, REQ-d00258-H) sits at the same low
+# priority as `info` so it never out-ranks a real gap (error/warning) for the
+# combined worst-severity — a genuine gap still wins the combined badge/bucket.
+SEVERITY_PRIORITY: dict[str, int] = {"error": 0, "warning": 1, "info": 2, "neutral": 2, "ok": 3}
 
-# Human-readable descriptions for each dimension
-_DIMENSION_LABELS: dict[str, str] = {
-    "implemented": "Implemented",
-    "tested": "Tested",
-    "verified": "Verified",
-    "uat_coverage": "Validated",
-    "uat_verified": "Accepted",
-}
+
+def _severity_color(severity: str) -> str:
+    """Resolve a severity name to its theme-catalog color_key (REQ-d00258-D)."""
+    from elspais.html.theme import get_catalog
+
+    try:
+        return get_catalog().by_key(f"severity.{severity}").color_key
+    except KeyError:
+        return ""
+
+
+# Dimension labels (the "Implemented/Tested/Passing/UAT Covered/UAT Passed"
+# vocabulary, REQ-d00258-B) now live in a single per-relationship source:
+# elspais.config.status_words.get_status_words(config).
 
 # Tooltip definitions for card-view badges
 DIMENSION_TIPS: dict[str, str] = {
     "implemented": "Assertions with Implements references in CODE",
     "tested": "Assertions referenced by TEST nodes",
-    "verified": "Assertions with passing test results",
-    "uat_coverage": "Assertions referenced by Journey Validates",
-    "uat_verified": "Assertions with passing Journey results",
+    "verified": "Assertions with passing test results or line-coverage credit",
+    "uat_coverage": "Assertions covered by journey Validates references",
+    "uat_verified": "Assertions with passing journey verification",
+}
+
+# Worst-severity → filter bucket (design 2026-07-02 §2.3): the bucket honors
+# each dimension's configured severity, so info-severity gaps (e.g. UAT "missing"
+# under the default config) do not drag the bucket below "full". A "failing"
+# tier on any dimension is an overlay checked before the severity mapping.
+_SEVERITY_TO_BUCKET: dict[str, str] = {
+    "error": "missing",
+    "warning": "partial",
+    "info": "full",
+    # `neutral` (N/A override, REQ-d00258-H) is non-dragging exactly like `info`:
+    # a not-applicable dimension must never pull the combined bucket below "full".
+    "neutral": "full",
+    "ok": "full",
 }
 
 # Tier descriptions for tooltip text
 _TIER_DESCRIPTIONS: dict[str, str] = {
     "failing": "test failures detected",
-    "full-direct": "all assertions directly covered",
-    "full-indirect": "all assertions covered (including indirect)",
-    "partial": "some assertions covered",
-    "none": "no coverage",
+    "full": "fully covered",
+    # "partially covered", NOT "some assertions covered": partial can also
+    # mean ALL assertions credited at fractional strength (e.g. a validating
+    # journey with 5/7 steps verified), where "some assertions" misleads.
+    "partial": "partially covered",
+    "missing": "no coverage",
 }
 
 # Ordered list of dimension keys (matches CoverageDimension attrs on RollupMetrics)
@@ -148,13 +157,15 @@ DIMENSION_KEYS = ("implemented", "tested", "verified", "uat_coverage", "uat_veri
 
 
 def _tier_to_severity(tier: str, severity_config: Any) -> str:
-    """Map a CoverageDimension tier to a severity string using config."""
-    # tier keys use hyphens; config field names use underscores
-    field_name = tier.replace("-", "_")
-    return getattr(severity_config, field_name, "error")
+    """Map a CoverageDimension tier to a severity string using config.
+
+    Tiers are the unified single-word vocabulary (full/partial/failing/missing),
+    which are exactly the CoverageSeverityConfig field names (REQ-d00258).
+    """
+    return getattr(severity_config, tier, "error")
 
 
-def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None) -> dict[str, str]:
+def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None) -> dict[str, Any]:
     """Compute per-dimension severity colors and combined worst-of-all.
 
     Uses each CoverageDimension's tier property, maps through config
@@ -165,33 +176,52 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         config: Project config dict (from load_config()). If None, uses defaults.
 
     Returns:
-        Dict with keys: impl_color, impl_tip, tested_color, tested_tip,
-        verified_color, verified_tip, uat_cov_color, uat_cov_tip,
-        uat_ver_color, uat_ver_tip, combined_color, combined_tip.
-        All empty strings if node is not ACTIVE or has no assertions.
+        Dict with keys: impl_color, impl_tip, impl_tier, tested_color, tested_tip,
+        tested_tier, verified_color, verified_tip, verified_tier, uat_cov_color,
+        uat_cov_tip, uat_cov_tier, uat_ver_color, uat_ver_tip, uat_ver_tier,
+        combined_color, combined_tip, combined_bucket.
+        All empty strings only if the node has no rollup / no assertions.
+        Badges render for EVERY status (REQ-d00258, Phase 3); the status only
+        gates whether a `missing` Implemented tier is a red gap (status expects
+        implementation) or a neutral grey one (it does not).
     """
     from elspais.config.schema import CoverageConfig, CoverageSeverityConfig
+    from elspais.config.status_words import get_status_words
 
-    empty: dict[str, str] = {
+    empty: dict[str, Any] = {
         "impl_color": "",
         "impl_tip": "",
+        "impl_tier": "",
+        "impl_marker": "",
         "tested_color": "",
         "tested_tip": "",
+        "tested_tier": "",
+        "tested_marker": "",
         "verified_color": "",
         "verified_tip": "",
+        "verified_tier": "",
+        "verified_marker": "",
         "uat_cov_color": "",
         "uat_cov_tip": "",
+        "uat_cov_tier": "",
+        "uat_cov_marker": "",
         "uat_ver_color": "",
         "uat_ver_tip": "",
+        "uat_ver_tier": "",
+        "uat_ver_marker": "",
         "combined_color": "",
         "combined_tip": "",
+        "combined_bucket": "",
+        "expects_validation": False,
     }
 
-    status = (node.status or "").upper()
-    if status != "ACTIVE":
-        return empty
-
-    from elspais.graph.metrics import RollupMetrics
+    # Coverage badges ALWAYS render, regardless of status (REQ-d00258, Phase 3).
+    # Suppressing badges for coverage-excluded statuses is retired: a Draft or
+    # Deprecated requirement now shows its coverage. The only status-sensitive
+    # projection is the ``Implemented`` dimension's gap severity, gated below on
+    # ``status_expects_implementation``.
+    from elspais.config import status_expects_implementation
+    from elspais.graph.metrics import RollupMetrics, tested_and_passing
 
     rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
     if not rollup or rollup.total_assertions == 0:
@@ -206,7 +236,14 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
             if isinstance(cov_raw, dict):
                 cov_config = CoverageConfig(
                     **{
-                        k: CoverageSeverityConfig(**v) if isinstance(v, dict) else v
+                        # ``status_words`` is a flat dict[str, str] label-override
+                        # map (REQ-d00258), not a per-dimension severity block --
+                        # pass it through un-wrapped so it validates.
+                        k: (
+                            v
+                            if k == "status_words" or not isinstance(v, dict)
+                            else CoverageSeverityConfig(**v)
+                        )
                         for k, v in cov_raw.items()
                     }
                 )
@@ -215,43 +252,360 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         elif hasattr(rules, "coverage"):
             cov_config = rules.coverage
 
-    # Map dimension key → (CoverageDimension, CoverageSeverityConfig, output_prefix)
+    # Per-level UAT expectation (REQ-d00258-F). By default a UAT `missing` tier is
+    # soft (config `_uat_severity` sets missing="info") so a journey-less
+    # requirement is not dragged below "full". When the requirement's level
+    # `expects_validation`, that absence is a REAL gap: override the UAT
+    # severity config so `missing` resolves to "error" (-> red badge + drags
+    # combined_bucket). Partial stays "warning" regardless (from 1a7fc2c7).
+    from elspais.config import level_expects_validation
+
+    expects_validation = level_expects_validation(config or {}, node.level)
+    uat_cov_cfg = cov_config.uat_coverage
+    uat_ver_cfg = cov_config.uat_verified
+    if expects_validation:
+        uat_cov_cfg = uat_cov_cfg.model_copy(update={"missing": "error"})
+        uat_ver_cfg = uat_ver_cfg.model_copy(update={"missing": "error"})
+
+    # Relative-denominator label sets (REQ-d00258, Phase-2 chain). Each chained
+    # dimension is measured over the label-set that qualified at the PRIOR link,
+    # not over every assertion: Tested over IMPLEMENTED labels, Passing over
+    # TESTED labels, UAT-Passed over UAT-COVERED labels. `Implemented` and
+    # `UAT-Covered` stay ABSOLUTE (denom = None below -> use dim.tier over all
+    # assertions). An EMPTY denominator means "nothing to measure" -> N/A, which
+    # resolves to NEUTRAL (info) severity so it renders grey and does not drag
+    # combined_bucket (fixes the DIARY-GUI "Passing: no coverage shows yellow").
+    # Each relative denominator is the set of labels ACTUALLY covered in the
+    # prior dimension (fraction > 0), NOT every label present in the per-label
+    # map: ``_conduct_refines_coverage`` seeds a 0.0 entry for every assertion
+    # label (incl. unimplemented ones), so building the set from the dict keys
+    # would silently make the "relative" chain absolute and disagree with the
+    # gaps/MCP surfaces (which filter frac > 0) and the aggregation buckets.
+    # REQ-d00258-I.
+    passing = tested_and_passing(rollup)
+    impl_labels = {lbl for lbl, f in rollup.implemented.indirect_pct_by_label.items() if f > 0}
+    tested_labels = {lbl for lbl, f in rollup.tested.indirect_pct_by_label.items() if f > 0}
+    uatcov_labels = {lbl for lbl, f in rollup.uat_coverage.indirect_pct_by_label.items() if f > 0}
+
+    # Map dimension key → (CoverageDimension, CoverageSeverityConfig, prefix,
+    # denom-label-set-or-None-for-absolute).
+    # "verified" (rendered as the "Passing" badge) uses tested_and_passing(),
+    # the union of result-verified and line-coverage-credited evidence
+    # (REQ-d00258-B) -- NOT the raw `rollup.verified` dimension, which would
+    # miss lcov-only credit and understate the badge/bucket.
     dim_map = [
-        ("implemented", rollup.implemented, cov_config.implemented, "impl"),
-        ("tested", rollup.tested, cov_config.tested, "tested"),
-        ("verified", rollup.verified, cov_config.verified, "verified"),
-        ("uat_coverage", rollup.uat_coverage, cov_config.uat_coverage, "uat_cov"),
-        ("uat_verified", rollup.uat_verified, cov_config.uat_verified, "uat_ver"),
+        ("implemented", rollup.implemented, cov_config.implemented, "impl", None),
+        ("tested", rollup.tested, cov_config.tested, "tested", impl_labels),
+        ("verified", passing, cov_config.verified, "verified", tested_labels),
+        ("uat_coverage", rollup.uat_coverage, uat_cov_cfg, "uat_cov", None),
+        ("uat_verified", rollup.uat_verified, uat_ver_cfg, "uat_ver", uatcov_labels),
     ]
 
-    result: dict[str, str] = {}
+    status_words = get_status_words(config)
+
+    result: dict[str, Any] = {}
     worst_severity_priority = 999
+    worst_severity = ""
     worst_color = ""
+    any_failing = False
     tip_parts: list[str] = []
 
-    for dim_key, dim, sev_cfg, prefix in dim_map:
-        tier = dim.tier
-        severity = _tier_to_severity(tier, sev_cfg)
-        color = SEVERITY_TO_COLOR.get(severity, "")
-        label = _DIMENSION_LABELS[dim_key]
+    for dim_key, dim, sev_cfg, prefix, denom in dim_map:
+        if denom is None:
+            # absolute: measured over all assertions. When allow_indirect is
+            # False, only direct coverage credits the state (REQ-d00258, Phase 4).
+            tier = absolute_tier(dim, allow_indirect=cov_config.allow_indirect)
+            is_na = False
+        else:
+            tier, is_na = relative_tier(dim, denom, allow_indirect=cov_config.allow_indirect)
+        # A `missing` tier that is N/A (empty relative denominator) is neutral:
+        # nothing to measure, so it resolves to the `neutral` severity (GREY,
+        # REQ-d00258-H) regardless of the dimension's configured `missing`
+        # severity. A non-N/A `missing` is a real gap and uses the configured
+        # severity.
+        neutral = tier == "missing" and is_na
+        # The `Implemented` gap is only a REAL (red) gap when the requirement's
+        # status expects implementation (REQ-d00258, Phase 3). For a status that
+        # does not (e.g. Draft/Deprecated by default), a missing implemented tier
+        # renders NEUTRAL grey -- badges still show, but the absence is not
+        # flagged as a defect.
+        if (
+            dim_key == "implemented"
+            and tier == "missing"
+            and not status_expects_implementation(config or {}, node.status)
+        ):
+            neutral = True
+        # The forced-neutral override renders GREY (`neutral` severity), matching
+        # the per-assertion `missing` standing and the user's green/yellow/red/grey
+        # palette -- NOT the yellow-green `info` severity, which is a real
+        # "fully-covered-including-indirect" state (REQ-d00258-H). This is a color
+        # change only: the tier stays `missing` and the dimension stays
+        # non-dragging for combined-bucket purposes (neutral maps to "full").
+        #
+        # SEVERITY drives the combined bucket (`_SEVERITY_TO_BUCKET`) and the
+        # `elspais checks` gate; it is computed exactly as before so those two
+        # jobs are unchanged.
+        severity = "neutral" if neutral else _tier_to_severity(tier, sev_cfg)
+        # COLOR is decoupled from severity (REQ-d00258-D): it resolves from the
+        # coverage STANDING through the theme catalog -- the SAME source the
+        # per-*Assertion* badges use -- so a given standing is one color
+        # everywhere (full->green, partial->yellow, failing->red), regardless of
+        # the dimension's configured severity. This kills the
+        # `uat partial=info -> yellow-green` bug: a partial badge is always
+        # yellow. The ONE deliberate exception: a `missing` standing renders RED
+        # only when it is a hard REQUIRED gap (resolved severity == "error");
+        # every other missing (soft info/warning, or N/A neutral) renders GREY.
+        # Severity therefore no longer recolors full/partial/failing.
+        if tier == "missing":
+            color = _severity_color("error") if severity == "error" else _standing_color("missing")
+        else:
+            color = _standing_color(tier)
+        label = status_words[dim_key]
         desc = _TIER_DESCRIPTIONS.get(tier, tier)
-        tip = f"{label}: {desc}"
+
+        # Implements: REQ-d00258-J
+        # Provenance caveat (REQ-d00069-L). The badge STATE color no longer
+        # distinguishes direct from indirect coverage (Phase 1 collapsed
+        # full-direct/full-indirect into one green); the distinction is surfaced
+        # HERE instead -- in the hover tip and a per-dimension ``~`` marker. The
+        # marker is set whenever ``indirect > direct`` (evidence is not fully
+        # direct), matching the CLI headline ``~`` semantics (summary/trace).
+        eps = 1e-9
+        if dim.total > 0:
+            direct_pct = round(100 * dim.direct / dim.total)
+            indirect_pct = round(100 * dim.indirect / dim.total)
+        else:
+            direct_pct = 0
+            indirect_pct = 0
+        mixed = dim.indirect > dim.direct + eps
+        provenance = f"{direct_pct}% direct"
+        if mixed:
+            indirect_extra = indirect_pct - direct_pct
+            if cov_config.allow_indirect:
+                provenance += f", {indirect_extra}% indirect"
+            else:
+                # Indirect coverage does not credit the state under this config,
+                # so it is annotated rather than counted toward the footing.
+                provenance += f" ({indirect_extra}% indirect, not credited)"
+        marker = "~" if mixed else ""
+        tip = f"{label}: {desc} — {provenance}"
+        if marker:
+            tip += " ~"
 
         result[f"{prefix}_color"] = color
         result[f"{prefix}_tip"] = tip
+        result[f"{prefix}_tier"] = tier
+        result[f"{prefix}_marker"] = marker
 
         # Track worst severity for combined
         sev_pri = SEVERITY_PRIORITY.get(severity, 999)
         if sev_pri < worst_severity_priority:
             worst_severity_priority = sev_pri
+            worst_severity = severity
             worst_color = color
+
+        if tier == "failing":
+            any_failing = True
 
         tip_parts.append(tip)
 
     result["combined_color"] = worst_color
     result["combined_tip"] = " | ".join(tip_parts)
+    # Failing overlay first, else severity-aware bucket (design §2.3):
+    # info/ok gaps (e.g. UAT dims by default) still bucket "full".
+    if any_failing:
+        result["combined_bucket"] = "failing"
+    else:
+        result["combined_bucket"] = _SEVERITY_TO_BUCKET.get(worst_severity, "missing")
+
+    # Surface the per-level UAT expectation so the viewer can gate the two UAT
+    # header badges: a journey-less expects_validation requirement still shows a
+    # (red) UAT badge; a non-expecting one shows none (REQ-d00258-F).
+    result["expects_validation"] = expects_validation
 
     return result
+
+
+# The semantic per-assertion coverage "standings" (REQ-d00258-G). These are the
+# tokens the server emits per assertion per dimension; their COLORS are NOT
+# defined here -- they live in the theme catalog ([coverage_standing.*] in
+# theme.toml) and are resolved through it, exactly as severity colors are
+# (REQ-d00258-D). This keeps the standing->color association configurable and
+# out of the badge logic.
+COVERAGE_STANDINGS = ("full", "partial", "failing", "missing")
+
+
+def _standing_color(standing: str) -> str:
+    """Resolve a coverage standing to its theme-catalog color_key (REQ-d00258-G).
+
+    Mirrors ``_severity_color``: the association lives in the catalog
+    (``[coverage_standing.*]``), never hard-coded here.
+    """
+    from elspais.html.theme import get_catalog
+
+    try:
+        return get_catalog().by_key(f"coverage_standing.{standing}").color_key
+    except KeyError:
+        return ""
+
+
+def standing_class_map() -> dict[str, str]:
+    """Return ``{standing: css_class}`` resolved from the theme catalog.
+
+    Used to hand the viewer a config-driven standing->class lookup so the client
+    colors per-assertion badges without any hard-coded color logic of its own.
+    """
+    from elspais.html.theme import get_catalog
+
+    catalog = get_catalog()
+    out: dict[str, str] = {}
+    for standing in COVERAGE_STANDINGS:
+        try:
+            out[standing] = catalog.by_key(f"coverage_standing.{standing}").css_class
+        except KeyError:
+            out[standing] = ""
+    return out
+
+
+def compute_assertion_coverage_states(
+    node: GraphNode, config: dict[str, Any] | None = None
+) -> dict[str, dict[str, str]]:
+    """Project each requirement dimension's coverage down to per-*Assertion* standings.
+
+    Returns ``{label: {implemented, tested, verified, uat_coverage,
+    uat_verified: standing}}`` where ``standing`` is one of ``"full"``,
+    ``"partial"``, ``"failing"``, ``"missing"`` (a SEMANTIC token, not a color --
+    the viewer resolves the color through the theme catalog). The standings are
+    read from the SAME ``rollup_metrics`` per-label fields that drive the
+    requirement-level badges (``compute_coverage_tiers``), so the two levels can
+    never disagree (REQ-d00258-G): if every assertion is ``"full"`` the
+    requirement dimension is a full tier; if any assertion is ``"failing"`` the
+    dimension ``has_failures``.
+
+    Dimension -> RollupMetrics source:
+      - implemented  : ``implemented.indirect_pct_by_label``
+      - tested       : ``tested.indirect_pct_by_label``
+      - verified     : ``tested_and_passing(rollup)`` union per label (+ its
+                       ``failing_labels``, so red lands only on the assertion
+                       that itself failed)
+      - uat_coverage : ``uat_coverage.indirect_pct_by_label``
+      - uat_verified : ``uat_verified.indirect_pct_by_label`` (+ its
+                       ``failing_labels``)
+
+    Standing rule: ``full`` at ~100%, ``partial`` at 0<f<1 with no own failure,
+    ``failing`` when this assertion itself failed (``label in failing_labels``),
+    ``missing`` otherwise. An assertion is NEVER reddened by a failing SIBLING
+    (REQ-d00258-G).
+    No coverage is recomputed here -- only the pre-computed per-label fractions
+    are projected. Returns ``{}`` only for a node with no rollup / no assertions
+    (same gate as ``compute_coverage_tiers``); standings compute for EVERY
+    status (REQ-d00258, Phase 3).
+    """
+    from elspais.graph.GraphNode import NodeKind
+    from elspais.graph.metrics import tested_and_passing
+
+    # Per-assertion standings ALWAYS compute, regardless of status (REQ-d00258,
+    # Phase 3). The coverage-excluded suppression is retired to match
+    # ``compute_coverage_tiers``.
+    rollup = node.get_metric("rollup_metrics")
+    if not rollup or rollup.total_assertions == 0:
+        return {}
+
+    labels: list[str] = []
+    for child in node.iter_children():
+        if child.kind == NodeKind.ASSERTION:
+            label = child.get_field("label", "")
+            if label:
+                labels.append(label)
+
+    from elspais.graph.aggregation import allow_indirect_from_config
+
+    eps = 1e-9
+    allow_indirect = allow_indirect_from_config(config)
+
+    def _frac(dim: CoverageDimension, label: str) -> float:
+        pct = dim.indirect_pct_by_label if allow_indirect else dim.direct_pct_by_label
+        return pct.get(label, 0.0)
+
+    def _simple_standing(dim: CoverageDimension, label: str) -> str:
+        f = _frac(dim, label)
+        if f >= 1.0 - eps:
+            return "full"
+        if f > eps:
+            return "partial"
+        return "missing"
+
+    def _passing_standing(passing: CoverageDimension, label: str) -> str:
+        """Passing/verified standing gated on THIS assertion's own failure.
+
+        A failure lands on this assertion only when the assertion itself failed
+        (``label in passing.failing_labels``) -- NOT merely because a sibling
+        assertion, covered by a different (non-failing) test/journey, failed and
+        set the requirement-wide ``has_failures`` flag (REQ-d00258-G). The
+        requirement-level badge still goes red for any failing assertion via the
+        dimension-wide ``has_failures`` in ``compute_coverage_tiers``.
+        """
+        f = _frac(passing, label)
+        if f >= 1.0 - eps:
+            return "full"
+        if label in passing.failing_labels:
+            return "failing"
+        if f > eps:
+            return "partial"
+        return "missing"
+
+    passing = tested_and_passing(rollup)
+    states: dict[str, dict[str, str]] = {}
+    for label in labels:
+        states[label] = {
+            "implemented": _simple_standing(rollup.implemented, label),
+            "tested": _simple_standing(rollup.tested, label),
+            "verified": _passing_standing(passing, label),
+            "uat_coverage": _simple_standing(rollup.uat_coverage, label),
+            "uat_verified": _passing_standing(rollup.uat_verified, label),
+        }
+    return states
+
+
+def compute_assertion_coverage_caveats(node: GraphNode) -> dict[str, dict[str, bool]]:
+    """Per-assertion, per-dimension "leans on whole-requirement evidence" flag.
+
+    The one unified indirect caveat (REQ-d00069-L, REQ-d00258): for each label
+    and dimension, True when the assertion's coverage is not fully direct
+    (``indirect_pct_by_label > direct_pct_by_label``). Derived from the same
+    floats that drive the header ``~`` marker -- NOT stored on the dimension --
+    so header and per-assertion caveats can never disagree. Independent of
+    ``allow_indirect`` (that governs crediting; this is provenance).
+    """
+    from elspais.graph.GraphNode import NodeKind
+    from elspais.graph.metrics import tested_and_passing
+
+    rollup = node.get_metric("rollup_metrics")
+    if not rollup or rollup.total_assertions == 0:
+        return {}
+    labels = [
+        c.get_field("label", "")
+        for c in node.iter_children()
+        if c.kind == NodeKind.ASSERTION and c.get_field("label", "")
+    ]
+    eps = 1e-9
+    passing = tested_and_passing(rollup)
+
+    def _cav(dim: CoverageDimension, label: str) -> bool:
+        ind = dim.indirect_pct_by_label.get(label, 0.0)
+        dir_ = dim.direct_pct_by_label.get(label, 0.0)
+        return ind > dir_ + eps
+
+    return {
+        label: {
+            "implemented": _cav(rollup.implemented, label),
+            "tested": _cav(rollup.tested, label),
+            "verified": _cav(passing, label),
+            "uat_coverage": _cav(rollup.uat_coverage, label),
+            "uat_verified": _cav(rollup.uat_verified, label),
+        }
+        for label in labels
+    }
 
 
 # Implements: REQ-p00006-A
@@ -469,36 +823,34 @@ class HTMLGenerator:
     def _compute_stats(self) -> ViewStats:
         """Compute statistics for the header.
 
-        Uses pre-computed RollupMetrics from annotate_coverage() for all
-        assertion-level coverage stats. No ad-hoc calculation.
+        REQ-d00258-C: level counts and assertion counts derive from the
+        shared aggregation module (graph/aggregation.py) on the generous
+        footing, so the viewer header agrees with CLI summary and MCP
+        get_project_summary. Node-kind tallies (CODE/TEST/RESULT) and the
+        viewer-specific associated-repo count are simple index counts, not
+        coverage rollups, and stay local.
         """
         from elspais.graph import NodeKind
-        from elspais.graph.metrics import RollupMetrics
+        from elspais.graph.aggregation import aggregate_by_level
 
         stats = ViewStats()
 
-        for node in self.graph.nodes_by_kind(NodeKind.REQUIREMENT):
-            stats.total_count += 1
-
-            level = (node.level or "").upper()
+        for agg in aggregate_by_level(self.graph, self.config):
+            level = agg.level.upper()
             if level == "PRD":
-                stats.prd_count += 1
+                stats.prd_count = agg.total_requirements
             elif level == "OPS":
-                stats.ops_count += 1
+                stats.ops_count = agg.total_requirements
             elif level == "DEV":
-                stats.dev_count += 1
+                stats.dev_count = agg.total_requirements
+            stats.total_count += agg.total_requirements
+            stats.assertion_count += agg.total_assertions
 
-            # Count associated requirements
+        # Viewer-specific: associated-repo requirement count (repo
+        # attribution, not a coverage rollup — stays a local index count).
+        for node in self.graph.nodes_by_kind(NodeKind.REQUIREMENT):
             if self._is_associated(node):
                 stats.associated_count += 1
-
-            # Aggregate all assertion metrics from pre-computed RollupMetrics
-            rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
-            if rollup:
-                stats.assertion_count += rollup.total_assertions
-                stats.assertions_implemented += rollup.implemented.indirect
-                stats.assertions_tested += rollup.tested.direct
-                stats.assertions_validated += rollup.verified.direct
 
         # Count CODE nodes
         for _ in self.graph.nodes_by_kind(NodeKind.CODE):

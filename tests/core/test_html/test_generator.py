@@ -6,7 +6,13 @@
 import pytest
 
 from elspais.html.generator import HTMLGenerator
-from tests.core.graph_test_helpers import build_graph, make_journey, make_requirement
+from tests.core.graph_test_helpers import (
+    build_graph,
+    make_code_ref,
+    make_journey,
+    make_requirement,
+    make_test_ref,
+)
 
 
 @pytest.fixture
@@ -43,7 +49,7 @@ def sample_graph():
 class TestHTMLGeneratorBasic:
     """Basic tests for HTMLGenerator."""
 
-    # Implements: REQ-p00006-A
+    # Verifies: REQ-p00006-A
     def test_generate_returns_html(self, sample_graph):
         """Generates valid HTML document structure."""
         generator = HTMLGenerator(sample_graph)
@@ -55,7 +61,7 @@ class TestHTMLGeneratorBasic:
         assert "<head" in result.lower()
         assert "<body" in result.lower()
 
-    # Implements: REQ-p00006-A
+    # Verifies: REQ-p00006-A
     def test_generate_includes_title(self, sample_graph):
         """Includes title in HTML."""
         generator = HTMLGenerator(sample_graph)
@@ -71,13 +77,13 @@ class TestHTMLGeneratorBasic:
         result = generator.generate(embed_content=True)
 
         # Requirement IDs are in the embedded node-index JSON, not in table rows
-        # Implements: REQ-d00052-A
+        # Verifies: REQ-d00052-A
         assert '"REQ-p00001"' in result
         assert '"REQ-o00001"' in result
         assert '"REQ-d00001"' in result
         assert 'id="node-index"' in result
 
-    # Implements: REQ-p00006-A
+    # Verifies: REQ-p00006-A
     def test_generate_includes_styles(self, sample_graph):
         """Includes CSS styles with application-specific classes."""
         generator = HTMLGenerator(sample_graph)
@@ -87,7 +93,7 @@ class TestHTMLGeneratorBasic:
         assert "<style>" in result
         assert "nav-tree-container" in result
 
-    # Implements: REQ-p00006-A
+    # Verifies: REQ-p00006-A
     def test_generate_includes_package_version(self, sample_graph):
         """Includes actual elspais package version, not hardcoded 'v1'."""
         from elspais import __version__
@@ -101,9 +107,9 @@ class TestHTMLGeneratorBasic:
         # Verify it's not the old hardcoded value
         assert 'class="version-badge">v1<' not in result
 
-    # Implements: REQ-p00006-A
+    # Verifies: REQ-p00006-A
 
-    # Implements: REQ-p00006-A
+    # Verifies: REQ-p00006-A
     def test_version_can_be_overridden(self, sample_graph):
         """Custom version can be passed to generator."""
         generator = HTMLGenerator(sample_graph, version="99.99.99")
@@ -116,12 +122,12 @@ class TestHTMLGeneratorBasic:
 class TestHTMLGeneratorEmbedContent:
     """Tests for embedded content mode."""
 
-    # Implements: REQ-p00006-A
+    # Verifies: REQ-p00006-A
     def test_embed_content_includes_json(self, sample_graph):
         """Embedded mode includes node-index JSON data element."""
         generator = HTMLGenerator(sample_graph)
 
-        # Implements: REQ-p00006-A
+        # Verifies: REQ-p00006-A
         result = generator.generate(embed_content=True)
 
         assert 'id="node-index"' in result
@@ -131,7 +137,7 @@ class TestHTMLGeneratorEmbedContent:
 class TestHTMLGeneratorHierarchy:
     """Tests for hierarchy display."""
 
-    # Implements: REQ-d00052-B
+    # Verifies: REQ-d00052-B
     def test_shows_hierarchy_structure(self, sample_graph):
         """Shows requirement hierarchy with tree structure and level counts."""
         generator = HTMLGenerator(sample_graph)
@@ -140,14 +146,14 @@ class TestHTMLGeneratorHierarchy:
 
         # Tree structural elements proving hierarchy rendering
         assert "tree-toggle" in result
-        # Implements: REQ-d00052-E
+        # Verifies: REQ-d00052-E
         assert "data-parent" in result
         # Level counts in the stats header prove all hierarchy levels are present
         assert "PRD:" in result
         assert "OPS:" in result
         assert "DEV:" in result
 
-    # Implements: REQ-p00006-A
+    # Verifies: REQ-p00006-A
     def test_shows_requirement_titles(self, sample_graph):
         """Shows requirement titles."""
         generator = HTMLGenerator(sample_graph)
@@ -161,7 +167,7 @@ class TestHTMLGeneratorHierarchy:
 class TestHTMLGeneratorStats:
     """Tests for statistics computation."""
 
-    # Implements: REQ-d00052-F
+    # Verifies: REQ-d00052-F
     def test_counts_levels(self, sample_graph):
         """Counts requirements by level."""
         generator = HTMLGenerator(sample_graph)
@@ -173,10 +179,59 @@ class TestHTMLGeneratorStats:
         assert "OPS:" in result
         assert "DEV:" in result
 
-    # Implements: REQ-d00052-F
+    # Verifies: REQ-d00258-C
+    def test_REQ_d00258_C_stats_derive_from_shared_aggregation(self):
+        """Header stats (level counts, total count, assertion count) source
+        from graph/aggregation.py, so the viewer agrees with CLI summary and
+        MCP project summary on identical underlying data (REQ-d00258-C).
+
+        The fixture's TEST/CODE refs target the whole requirement (no
+        assertion labels), so all coverage is indirect: the strict footing
+        (dim.direct) is 0 while the generous footing (dim.covered) is 2. A
+        _compute_stats that reimplements the rollup on the strict footing
+        would report a different requirement/assertion count than
+        aggregate_by_level and fail here.
+
+        ViewStats has no implemented/tested/passing fields of its own --
+        those numbers have no template consumer (the header stats bar is
+        populated client-side from the embedded node/coverage index, not
+        from this dataclass); the assertion-level generous-footing figures
+        are covered directly on aggregate_by_level in test_aggregation.py.
+        """
+        from elspais.graph.aggregation import aggregate_by_level
+        from elspais.graph.annotators import annotate_coverage
+
+        graph = build_graph(
+            make_requirement(
+                "REQ-p00001",
+                level="PRD",
+                title="Product Requirement",
+                assertions=[
+                    {"label": "A", "text": "First assertion"},
+                    {"label": "B", "text": "Second assertion"},
+                ],
+                hash_value="abc12345",
+                source_path="spec/prd.md",
+            ),
+            make_code_ref(implements=["REQ-p00001"]),
+            make_test_ref(verifies=["REQ-p00001"]),
+        )
+        annotate_coverage(graph)
+        generator = HTMLGenerator(graph)
+
+        stats = generator._compute_stats()
+        aggs = aggregate_by_level(graph, generator.config)
+        by_level = {a.level: a for a in aggs}
+
+        assert stats.prd_count == by_level["PRD"].total_requirements
+        assert stats.total_count == sum(a.total_requirements for a in aggs)
+        assert stats.assertion_count == sum(a.total_assertions for a in aggs)
+        assert stats.assertion_count == 2
+
+    # Verifies: REQ-d00052-F
     def test_shows_total_count(self, sample_graph):
         """Shows total requirement count."""
-        # Implements: REQ-d00052-A
+        # Verifies: REQ-d00052-A
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate()
@@ -190,7 +245,7 @@ class TestHTMLGeneratorStats:
 class TestHTMLGeneratorTreeStructure:
     """Tests for hierarchical tree structure."""
 
-    # Implements: REQ-p00006-A
+    # Verifies: REQ-p00006-A
     def test_includes_tree_toggles(self, sample_graph):
         """Includes expand/collapse toggles."""
         generator = HTMLGenerator(sample_graph)
@@ -210,10 +265,10 @@ class TestHTMLGeneratorTreeStructure:
         assert '"level": "PRD"' in result  # Root level
         assert '"level": "OPS"' in result  # First level children
 
-    # Implements: REQ-d00052-B
+    # Verifies: REQ-d00052-B
     def test_includes_parent_id(self, sample_graph):
         """Includes parent ID for hierarchy."""
-        # Implements: REQ-d00052-A
+        # Verifies: REQ-d00052-A
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate()
@@ -233,16 +288,16 @@ class TestHTMLGeneratorCoverage:
         # Coverage data is now in the embedded coverage-index JSON
         assert 'id="coverage-index"' in result
 
-    # Implements: REQ-p00006-B
+    # Verifies: REQ-p00006-B
     def test_coverage_values(self, sample_graph):
         """Coverage filter buttons have None/Partial/Full options."""
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate()
-        # Implements: REQ-p00006-A
+        # Verifies: REQ-p00006-A
 
         # Assert the unified coverage filter buttons (replaced dropdown)
-        assert 'data-group="coverage" data-key="none"' in result
+        assert 'data-group="coverage" data-key="missing"' in result
         assert 'data-group="coverage" data-key="partial"' in result
         assert 'data-group="coverage" data-key="full"' in result
 
@@ -268,7 +323,7 @@ class TestHTMLGeneratorFiltering:
 
         # Unified FilterGroup git buttons
         assert 'data-group="git" data-key="uncommitted"' in result
-        # Implements: REQ-p00006-B
+        # Verifies: REQ-p00006-B
         assert 'data-group="git" data-key="changed"' in result
 
     def test_REQ_d00052_E_includes_hierarchy_filter_buttons(self, sample_graph):
@@ -303,7 +358,7 @@ class TestHTMLGeneratorNavPanel:
     def test_REQ_d00052_F_includes_nav_panel_tabs(self, sample_graph):
         """Includes Req and Journeys nav panel tabs."""
         generator = HTMLGenerator(sample_graph)
-        # Implements: REQ-d00052-E
+        # Verifies: REQ-d00052-E
 
         result = generator.generate()
 
@@ -326,7 +381,7 @@ class TestHTMLGeneratorNavPanel:
 class TestHTMLGeneratorLegend:
     """Tests for legend modal."""
 
-    # Implements: REQ-p00006-A
+    # Verifies: REQ-p00006-A
     def test_includes_legend_button(self, sample_graph):
         """Includes legend button."""
         generator = HTMLGenerator(sample_graph)
@@ -335,7 +390,7 @@ class TestHTMLGeneratorLegend:
 
         assert "Legend" in result
 
-    # Implements: REQ-p00006-A
+    # Verifies: REQ-p00006-A
     def test_includes_legend_modal(self, sample_graph):
         """Includes legend modal content."""
         generator = HTMLGenerator(sample_graph)
@@ -343,14 +398,14 @@ class TestHTMLGeneratorLegend:
         result = generator.generate()
 
         assert "legend-modal" in result
-        # Implements: REQ-p00006-A
+        # Verifies: REQ-p00006-A
         assert "Change Indicators" in result
 
 
 class TestHTMLGeneratorAssertions:
     """Tests for assertion letter badges."""
 
-    # Implements: REQ-d00052-A
+    # Verifies: REQ-d00052-A
     def test_assertion_badge_class(self, sample_graph):
         """Has assertion badge CSS class."""
         generator = HTMLGenerator(sample_graph)
@@ -377,7 +432,7 @@ class TestHTMLGeneratorGitIntegration:
         assert '"hash": "abc12345"' in result
 
     def test_REQ_d00052_D_includes_git_filter_buttons(self, sample_graph):
-        # Implements: REQ-p00006-A
+        # Verifies: REQ-p00006-A
         """Includes git filter buttons in toolbar."""
         generator = HTMLGenerator(sample_graph)
 
@@ -416,7 +471,7 @@ class TestHTMLGeneratorJourneyBadges:
 
     def test_REQ_o00050_C_journey_without_validates_no_refs_section(self):
         """Journey without VALIDATES edges omits refs section in HTML."""
-        # Implements: REQ-p00006-A
+        # Verifies: REQ-p00006-A
         graph = build_graph(
             make_journey(
                 "JNY-Dev-02",
@@ -428,6 +483,6 @@ class TestHTMLGeneratorJourneyBadges:
         generator = HTMLGenerator(graph)
 
         result = generator.generate()
-        # Implements: REQ-d00052-D
+        # Verifies: REQ-d00052-D
 
         assert '<span class="journey-ref-badge"' not in result

@@ -37,7 +37,7 @@ def _make_assertion(graph: TraceGraph, assertion_id: str, label: str = "Assertio
 class TestSatisfiesResolve:
     """Validates REQ-p00014-E: Satisfies references must resolve to req or assertion."""
 
-    # Implements: REQ-p00014-E
+    # Verifies: REQ-p00014-E
     def test_REQ_p00014_E_satisfies_resolves_to_existing_requirement(self) -> None:
         """A Satisfies target pointing to an existing REQ should pass."""
         graph = TraceGraph()
@@ -53,7 +53,7 @@ class TestSatisfiesResolve:
         # most on failure. Match the sibling pass message style.
         assert check.category == "spec"
 
-    # Implements: REQ-p00014-E
+    # Verifies: REQ-p00014-E
     def test_REQ_p00014_E_satisfies_resolves_to_existing_assertion(self) -> None:
         """A Satisfies target pointing to an assertion (REQ-x-A) should resolve.
 
@@ -72,7 +72,7 @@ class TestSatisfiesResolve:
         assert check.passed, f"Expected pass for assertion target, got: {check.message}"
         assert check.name == "spec.satisfies_resolve"
 
-    # Implements: REQ-p00014-E
+    # Verifies: REQ-p00014-E
     def test_REQ_p00014_E_unresolved_satisfies_target_fails(self) -> None:
         """A Satisfies target that doesn't exist in the graph fails as a warning."""
         graph = TraceGraph()
@@ -97,7 +97,7 @@ class TestSatisfiesResolve:
             u.get("from") == "REQ-p00002" and u.get("to") == "REQ-NONEXISTENT" for u in unresolved
         ), f"Expected unresolved entry from=REQ-p00002 to=REQ-NONEXISTENT in details: {unresolved}"
 
-    # Implements: REQ-p00014-E
+    # Verifies: REQ-p00014-E
     def test_REQ_p00014_E_mixed_resolved_and_unresolved(self) -> None:
         """When some Satisfies targets resolve and others don't, only the unresolved
         ones are reported and the check fails."""
@@ -134,7 +134,7 @@ class TestSatisfiesResolve:
             assert u["to"] != "REQ-p00001"
             assert u["to"] != "REQ-p00001-A"
 
-    # Implements: REQ-p00014-E
+    # Verifies: REQ-p00014-E
     def test_REQ_p00014_E_no_satisfies_anywhere_passes(self) -> None:
         """A graph with no Satisfies references at all should pass cleanly."""
         graph = TraceGraph()
@@ -150,7 +150,7 @@ class TestSatisfiesResolve:
         # Pass message should be a non-empty success string (mirrors sibling format)
         assert check.message, "Pass message must not be empty"
 
-    # Implements: REQ-p00014-E
+    # Verifies: REQ-p00014-E
     def test_REQ_p00014_E_severity_matches_refines_resolve(self) -> None:
         """The severity on a failed satisfies_resolve must match refines_resolve.
 

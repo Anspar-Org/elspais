@@ -4,7 +4,7 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "elspais"
-version = "0.119.0"
+version = "0.119.90"
 description = "Requirements validation and traceability tools - L-Space connects all libraries"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -50,6 +50,9 @@ trace-review = [
     "starlette>=0.36",
     "uvicorn>=0.20",
 ]
+# CUR-1568: per-test line attribution (code_tested.direct) from coverage.py's
+# native `.coverage` SQLite data file, via coverage.py's public API.
+coverage = ["coverage>=7.0"]
 # All optional features
 all = [
     "jinja2>=3.0",
@@ -57,6 +60,7 @@ all = [
     "starlette>=0.36",
     "uvicorn>=0.20",
     "mcp>=1.0",
+    "coverage>=7.0",
 ]
 
 [project.scripts]
@@ -81,6 +85,28 @@ markers = [
     "e2e: end-to-end tests requiring external tools or subprocess invocation (deselected by default, run with: pytest -m e2e)",
     "browser: browser-based tests requiring Playwright (deselected by default, run with: pytest -m browser)",
 ]
+
+[tool.coverage.json]
+# CUR-1568: per-test line attribution (code_tested.direct) is fed by
+# `--cov-context=test` in .githooks/pre-commit (pytest-cov's dynamic context,
+# keyed by pytest nodeid + "|run"/"|setup"/"|teardown" -- the format elspais's
+# normalizer expects). Contexts live compactly in the .coverage SQLite DB
+# (~5 MB for this repo).
+#
+# Deliberately NOT setting `[tool.coverage.run] dynamic_context`: it is
+# coverage.py's OWN context-switching (dotted test qualname, no file path, no
+# "|run" suffix) and it wins over pytest-cov's switch_context() when both are
+# configured -- verified empirically: it silently replaced the nodeid-shaped
+# contexts and code_tested.direct stayed 0 repo-wide.
+#
+# Deliberately NOT setting `show_contexts = true`: the JSON reporter expands
+# the per-line context map to a ~9.4 GB coverage.json for this repo, and every
+# graph build that ingested it peaked at ~22 GB RSS (system-OOM territory).
+# Per-test attribution is instead read directly from the .coverage SQLite DB
+# via coverage.py's public API (CoverageSqliteParser, elspais[coverage]
+# extra) -- elspais's own `[[scanning.test.targets]]` (.elspais.toml) points
+# `coverage` at `.coverage` and Code Tested is populated again, without the
+# JSON-report size blowup described above.
 
 [tool.black]
 line-length = 100

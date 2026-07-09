@@ -108,6 +108,21 @@
     flex-shrink: 0;
 }
 
+/* Header badge for an explicit **Template** requirement
+   (Stereotype.TEMPLATE); sibling of the .template-repo-badge shown on
+   INSTANCE provenance rows. */
+.template-badge {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    padding: 1px 5px;
+    border-radius: 3px;
+    border: 1px solid var(--border-color);
+    color: var(--secondary-text);
+    background: var(--assertion-code-panel-bg);
+    flex-shrink: 0;
+}
+
 .req-card-title-display {
     flex: 1;
     font-size: 0.9rem;
@@ -297,10 +312,17 @@ body.edit-mode .view-only {
     color: var(--delete-hover);
 }
 
-/* Assertion targets display */
+/* Assertion targets display — the [A, B] suffix on link rows. Styled like
+   the .card-assertion-label pill (not muted): the assertion id is the
+   payload of an assertion-targeted link, not decoration. */
 .card-parent-targets {
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
     font-size: 0.7rem;
-    color: var(--muted-text);
+    font-weight: 700;
+    color: var(--card-assertion-label-text);
+    background: var(--card-assertion-label-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
     margin-left: 4px;
 }
 
@@ -799,13 +821,18 @@ body.edit-mode .view-only {
     flex-shrink: 0;
 }
 
-/* All assertion dimension buttons share base styles */
+/* All assertion dimension buttons share base styles.
+   .journey-step-badge (clickable step VER / Result badges — VER toggles the
+   verifying-tests panel, Result toggles the results panel, via
+   toggleJourneyStepPanel) shares the same pill shape so journey steps render
+   and behave like REQ assertion badges. */
 .assertion-implemented-btn,
 .assertion-refined-btn,
 .assertion-tested-btn,
 .assertion-verified-btn,
 .assertion-validated-btn,
-.assertion-accepted-btn {
+.assertion-accepted-btn,
+.journey-step-badge {
     flex-shrink: 0;
     padding: 2px 8px;
     font-size: 0.65rem;
@@ -829,12 +856,57 @@ body.edit-mode .view-only {
 .assertion-tested-btn:hover,
 .assertion-verified-btn:hover,
 .assertion-validated-btn:hover,
-.assertion-accepted-btn:hover {
+.assertion-accepted-btn:hover,
+.journey-step-badge:hover {
     background: var(--assertion-btn-hover-bg);
     border-color: var(--assertion-btn-hover-border);
 }
 
-/* "Yes/No" states (Implemented, Tested, Validated — existence checks) */
+/* Per-assertion coverage-state fills (REQ-d00258-G). These reuse the SAME
+   val-* palette as the requirement header badges (.status-badge.active.val-*)
+   so a per-assertion badge reads identically to the requirement badge it
+   projects from. Applied server-side on render (not via a lazy prefetch). */
+.assertion-implemented-btn.val-green,
+.assertion-tested-btn.val-green,
+.assertion-verified-btn.val-green,
+.assertion-validated-btn.val-green,
+.assertion-accepted-btn.val-green {
+    background: var(--val-green-bg);
+    border-color: var(--val-green-bg);
+    color: var(--val-green-text);
+}
+
+.assertion-implemented-btn.val-yellow,
+.assertion-tested-btn.val-yellow,
+.assertion-verified-btn.val-yellow,
+.assertion-validated-btn.val-yellow,
+.assertion-accepted-btn.val-yellow {
+    background: var(--val-yellow-bg);
+    border-color: var(--val-yellow-bg);
+    color: var(--val-yellow-text);
+}
+
+.assertion-implemented-btn.val-red,
+.assertion-tested-btn.val-red,
+.assertion-verified-btn.val-red,
+.assertion-validated-btn.val-red,
+.assertion-accepted-btn.val-red {
+    background: var(--val-red-bg);
+    border-color: var(--val-red-bg);
+    color: var(--val-red-text);
+}
+
+.assertion-implemented-btn.val-grey,
+.assertion-tested-btn.val-grey,
+.assertion-verified-btn.val-grey,
+.assertion-validated-btn.val-grey,
+.assertion-accepted-btn.val-grey {
+    background: var(--val-grey-bg);
+    border-color: var(--val-grey-bg);
+    color: var(--val-grey-text);
+}
+
+/* "Yes/No" states (Implemented, Tested, UAT Covered — existence checks) */
 .implemented-yes {
     border-color: var(--impl-yes-border);
     color: var(--impl-yes-text);
@@ -858,7 +930,7 @@ body.edit-mode .view-only {
     background: var(--impl-no-hover-bg);
 }
 
-/* "Pass/Partial/Fail" states (Verified, Accepted — result checks) */
+/* "Pass/Partial/Fail" states (Passing, UAT Passed — result checks) */
 .validation-pass {
     border-color: var(--valid-pass-border);
     color: var(--valid-pass-text);
@@ -920,7 +992,8 @@ body.edit-mode .view-only {
 .assertion-tested-btn.active,
 .assertion-verified-btn.active,
 .assertion-validated-btn.active,
-.assertion-accepted-btn.active {
+.assertion-accepted-btn.active,
+.journey-step-badge.active {
     font-weight: 700;
 }
 
@@ -979,6 +1052,13 @@ body.edit-mode .view-only {
 .assertion-test-item.test-passed { color: var(--assertion-test-passed-text); }
 .assertion-test-item.test-failed { color: var(--assertion-test-failed-text); }
 .assertion-test-item.test-no-result { color: var(--assertion-test-no-result-text); }
+
+.assertion-test-subheader {
+    color: var(--secondary-text);
+    font-size: 0.72rem;
+    font-style: italic;
+    padding: 6px 0 2px;
+}
 
 .assertion-test-icon {
     flex-shrink: 0;
@@ -1274,4 +1354,42 @@ a.assertion-test-link:hover {
     padding: 1px 4px;
     border-radius: 3px;
     font-size: 0.7rem;
+}
+
+/* Incoming Links — reverse traceability (one collapsible toggle per kind) */
+.card-incoming-links {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.incoming-link-toggle {
+    align-self: flex-start;
+    background: var(--assertion-code-panel-bg);
+    color: var(--card-section-label);
+    border: none;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.incoming-link-toggle:hover {
+    filter: brightness(1.08);
+}
+
+.incoming-link-panel {
+    margin: 2px 0 4px;
+    padding: 4px 8px;
+}
+
+.incoming-link-row {
+    gap: 8px;
+}
+
+.incoming-state-badge {
+    flex-shrink: 0;
+    font-size: 0.6rem;
+    padding: 1px 5px;
 }

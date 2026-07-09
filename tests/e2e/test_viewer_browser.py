@@ -444,9 +444,9 @@ class TestJourneyVerdictBrowser:
     def test_d00256_D_journey_fail_verdict_badge(self, page_journey, failing_journey_viewer_url):
         # Verifies: REQ-d00256-D
         """Open a FAILING journey card in the viewer; assert that:
-        - The API pre-check confirms verdict == 'fail' and failing_steps == ['step-2']
+        - The API pre-check confirms verdict == 'fail' and failing_steps == ['2']
         - The rendered card shows the 'UAT: FAIL' badge
-        - The rendered card lists 'step-2' as a failing step
+        - The rendered card lists step 2 as a failing step
         - No JS errors occur
         """
         js_errors: list[str] = []
@@ -462,9 +462,9 @@ class TestJourneyVerdictBrowser:
         assert props.get("verdict") == "fail", (
             f"Expected verdict='fail' in API, got {props.get('verdict')!r}. " f"Properties: {props}"
         )
-        assert "step-2" in props.get(
+        assert "2" in props.get(
             "failing_steps", []
-        ), f"Expected 'step-2' in failing_steps, got {props.get('failing_steps')!r}"
+        ), f"Expected '2' in failing_steps, got {props.get('failing_steps')!r}"
 
         # Load the viewer page
         page_journey.goto(failing_journey_viewer_url, wait_until="networkidle")
@@ -484,25 +484,93 @@ class TestJourneyVerdictBrowser:
             "UAT: FAIL" in card_text
         ), f"Expected 'UAT: FAIL' in journey card, got card text:\n{card_text!r}"
 
-        # Assert the failing step label is shown
+        # Assert the failing step label is shown (bare step number, "Failing
+        # steps: 2" — a substring check on "2" alone would be trivially true)
         assert (
-            "step-2" in card_text
-        ), f"Expected 'step-2' in journey card, got card text:\n{card_text!r}"
+            "Failing steps: 2" in card_text
+        ), f"Expected 'Failing steps: 2' in journey card, got card text:\n{card_text!r}"
 
         # No JS errors during the interaction
         assert not js_errors, f"JS errors during journey card render: {js_errors}"
 
     @pytest.mark.browser
     @pytest.mark.e2e
+    def test_REQ_p00006_A_incoming_links_validated_by(
+        self, page_journey, failing_journey_viewer_url
+    ):
+        # Verifies: REQ-p00006-A
+        """Open the requirement card validated by a FAILING journey; assert that:
+        - The API payload carries an incoming_links 'Validated by' section whose
+          real-path state maps to fail -> red with a 2/3 step-fraction tooltip
+        - The card shows an 'Incoming Links' section with a 'Validated by' toggle
+        - Clicking the toggle reveals the validating journey link, its red 'fail'
+          state badge, and the 2/3 step fraction in the row tooltip
+        - No JS errors occur
+        """
+        req_id = "REQ-d00001"
+        js_errors: list[str] = []
+        page_journey.on("pageerror", lambda err: js_errors.append(str(err)))
+
+        # Pre-check: API returns a Validated by section with the real-path state
+        # mapping (fail -> red) and an accurate step-fraction tooltip.
+        resp = page_journey.request.get(f"{failing_journey_viewer_url}/api/node/{req_id}")
+        assert resp.ok, f"GET /api/node/{req_id} returned {resp.status}"
+        sections = resp.json().get("incoming_links", [])
+        by_kind = {s["kind"]: s for s in sections}
+        assert "Validated by" in by_kind, f"Expected 'Validated by' section, got {sections!r}"
+        vlink = by_kind["Validated by"]["links"][0]
+        assert vlink["id"] == "JNY-OQ-Login-01"
+        assert vlink["state"]["label"] == "fail", f"Expected fail state, got {vlink['state']!r}"
+        assert vlink["state"]["color"] == "red", f"Expected red color, got {vlink['state']!r}"
+        assert (
+            "2/3 steps verified" in vlink["tooltip"]
+        ), f"Expected 2/3 fraction, got {vlink['tooltip']!r}"
+
+        page_journey.goto(failing_journey_viewer_url, wait_until="networkidle")
+        page_journey.evaluate(f"() => window.openCard('{req_id}')")
+        card_locator = page_journey.locator(f"#card-{req_id}")
+        card_locator.wait_for(state="visible", timeout=10_000)
+
+        assert "incoming links" in card_locator.inner_text().lower()
+
+        # Click the "Validated by" toggle and confirm the journey link appears.
+        toggle = card_locator.locator("button.incoming-link-toggle", has_text="Validated by")
+        toggle.wait_for(state="visible", timeout=10_000)
+        toggle.click()
+        panel = card_locator.locator(".incoming-link-panel", has_text="JNY-OQ-Login-01")
+        panel.wait_for(state="visible", timeout=10_000)
+        assert "JNY-OQ-Login-01" in panel.inner_text()
+
+        # The state badge renders red ('fail') in the DOM, not merely present.
+        badge = panel.locator(".incoming-state-badge")
+        badge.wait_for(state="visible", timeout=10_000)
+        assert (
+            "fail" in badge.inner_text().lower()
+        ), f"Expected 'fail' badge text, got {badge.inner_text()!r}"
+        badge_class = badge.get_attribute("class") or ""
+        assert "val-red" in badge_class, f"Expected val-red on badge, got class={badge_class!r}"
+
+        # The 2/3 step fraction is surfaced via the row's hover tooltip (title).
+        row = panel.locator(".incoming-link-row", has_text="JNY-OQ-Login-01")
+        row_title = row.get_attribute("title") or ""
+        assert (
+            "2/3 steps verified" in row_title
+        ), f"Expected 2/3 fraction in tooltip, got {row_title!r}"
+
+        assert not js_errors, f"JS errors during incoming-links render: {js_errors}"
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
     def test_d00256_journey_step_status_on_card(self, page_journey, failing_journey_viewer_url):
         # Verifies: REQ-d00256
         """Open the failing journey card; assert that the Steps section is
-        rendered with per-step status badges and verifying-test rows.
+        rendered like REQ assertions: plain step text with right-aligned
+        Verified/result badges, plus verifying-test rows.
 
         Checks:
         - A "Steps" section header appears in the card (rendered as "STEPS" by CSS)
-        - step-2's status badge carries the 'validation-fail' CSS class
-        - step-1 and step-3 badges do NOT carry 'validation-fail'
+        - step-2's result badge carries the 'validation-fail' CSS class
+        - step-1 and step-3 result badges do NOT carry 'validation-fail'
         - No JS errors occur
         """
         js_errors: list[str] = []
@@ -526,7 +594,10 @@ class TestJourneyVerdictBrowser:
         assert len(all_step_rows) == 3, f"Expected 3 step rows, got {len(all_step_rows)}"
 
         def row_status_class(row):
-            badge = row.locator("span[title='Step status']")
+            # Steps now render like assertions: a "Verified" badge then a
+            # result ("Passed"/"Failed") badge. The result badge is the last
+            # .journey-step-badge in the row and carries the validation-* class.
+            badge = row.locator(".journey-step-badge").last
             return badge.get_attribute("class") or ""
 
         step1_cls = row_status_class(all_step_rows[0])
@@ -550,3 +621,289 @@ class TestJourneyVerdictBrowser:
         ), f"Expected >= 3 verifying-test rows, got {len(all_test_rows)}"
 
         assert not js_errors, f"JS errors during step-status render: {js_errors}"
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_d00256_journey_step_badge_toggles_test_panel(
+        self, page_journey, failing_journey_viewer_url
+    ):
+        # Verifies: REQ-d00256
+        """Journey step badges must behave like REQ assertion badges: the
+        per-step verifying-tests panel is collapsed by default and toggles
+        open/closed when a step badge (VER/PASS/FAIL) is clicked, mirroring
+        toggleAssertionTests interaction parity for REQ cards.
+
+        Checks:
+        - The step-1 test panel is hidden on initial render
+        - Clicking a step-1 badge reveals the panel (and the test row text)
+        - Clicking the badge again hides the panel
+        - No JS errors occur
+        """
+        js_errors: list[str] = []
+        page_journey.on("pageerror", lambda err: js_errors.append(str(err)))
+
+        page_journey.goto(failing_journey_viewer_url, wait_until="networkidle")
+        page_journey.evaluate(f"() => window.openCard('{_FAILING_JOURNEY_ID}')")
+
+        card_locator = page_journey.locator(f"#card-{_FAILING_JOURNEY_ID}")
+        card_locator.wait_for(state="visible", timeout=10_000)
+
+        first_row = card_locator.locator(".journey-step-row").first
+        panel = card_locator.locator(f"#journey-step-tests-{_FAILING_JOURNEY_ID}-1")
+
+        # Panel must exist but be hidden by default (collapsed, REQ-card parity)
+        assert panel.count() == 1, "Expected a step-1 test panel in the DOM"
+        assert not panel.is_visible(), "Step-1 test panel should be hidden by default"
+
+        # Click the first badge (VER) in the row — should reveal the panel
+        badge = first_row.locator(".journey-step-badge").first
+        badge.click()
+        panel.wait_for(state="visible", timeout=5_000)
+        assert (
+            "test_step1" in panel.inner_text()
+        ), f"Expected verifying test id in revealed panel, got: {panel.inner_text()!r}"
+        assert "active" in (
+            badge.get_attribute("class") or ""
+        ), "Badge should carry 'active' class while its panel is open"
+
+        # Click again — should hide the panel
+        badge.click()
+        panel.wait_for(state="hidden", timeout=5_000)
+        assert "active" not in (
+            badge.get_attribute("class") or ""
+        ), "Badge should lose 'active' class once its panel is closed"
+
+        assert not js_errors, f"JS errors during step-badge toggle: {js_errors}"
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_d00256_journey_step_test_row_single_link(
+        self, page_journey, failing_journey_viewer_url
+    ):
+        # Verifies: REQ-d00256
+        """Each verifying-test row shows a status chip plus exactly ONE
+        clickable source link (calling showSource) -- not the same path text
+        rendered twice with no link (the CUR-1568 bug).
+
+        Checks:
+        - The revealed step-1 panel contains exactly one <a> link
+        - That link's onclick calls showSource(...)
+        - The row does not repeat its display text (no duplicated path)
+        """
+        js_errors: list[str] = []
+        page_journey.on("pageerror", lambda err: js_errors.append(str(err)))
+
+        page_journey.goto(failing_journey_viewer_url, wait_until="networkidle")
+        page_journey.evaluate(f"() => window.openCard('{_FAILING_JOURNEY_ID}')")
+
+        card_locator = page_journey.locator(f"#card-{_FAILING_JOURNEY_ID}")
+        card_locator.wait_for(state="visible", timeout=10_000)
+
+        first_row = card_locator.locator(".journey-step-row").first
+        panel = card_locator.locator(f"#journey-step-tests-{_FAILING_JOURNEY_ID}-1")
+        badge = first_row.locator(".journey-step-badge").first
+
+        # Badge sizing parity: the step badge must render at the shared
+        # assertion-badge size (0.65rem), not the ballooned inherited size
+        # from a `font: inherit` override (CUR-1568).
+        badge_rem = page_journey.evaluate(
+            "(el) => parseFloat(getComputedStyle(el).fontSize) "
+            "/ parseFloat(getComputedStyle(document.documentElement).fontSize)",
+            badge.element_handle(),
+        )
+        assert abs(badge_rem - 0.65) < 0.06, (
+            f"step badge font-size should be ~0.65rem (matching assertion "
+            f"badges), got {badge_rem:.3f}rem"
+        )
+
+        badge.click()
+        panel.wait_for(state="visible", timeout=5_000)
+
+        test_row = panel.locator(".journey-step-test-row").first
+        # Exactly one clickable link per test row (the bug rendered zero links
+        # and two duplicated <span> texts instead).
+        links = test_row.locator("a")
+        assert links.count() == 1, (
+            f"Expected exactly one link in the step-test row, got {links.count()}: "
+            f"{test_row.inner_html()!r}"
+        )
+        onclick = links.first.get_attribute("onclick") or ""
+        assert (
+            "showSource(" in onclick
+        ), f"Step-test link must call showSource, got onclick={onclick!r}"
+
+        # The display text must appear only once (no id + duplicate title spans).
+        link_text = links.first.inner_text().strip()
+        assert link_text, "link should have display text"
+        assert test_row.inner_text().count(link_text) == 1, (
+            f"Display text {link_text!r} should not be duplicated in row: "
+            f"{test_row.inner_text()!r}"
+        )
+
+        assert not js_errors, f"JS errors during step-test link render: {js_errors}"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Step-scope RESULT binding + results-file provenance in the viewer
+# (junit-step-binding fixture: testcases with file= but NO line=)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_STEP_BINDING_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "journey-uat" / "junit-step-binding"
+_STEP_BINDING_JOURNEY_ID = "JNY-OQ-Login-01"
+
+
+@pytest.fixture(scope="module")
+def step_binding_viewer_url():
+    """Start a viewer server against the journey-uat/junit-step-binding fixture.
+
+    Mirrors ``failing_journey_viewer_url`` (worktree src via PYTHONPATH) but
+    serves the fixture whose junit results bind at STEP scope: one test
+    source file with per-step Verifies tests, and results.xml testcases that
+    carry ``file=`` but no ``line=`` and embed ``<journey>/N`` step ids.
+    """
+    if not _STEP_BINDING_FIXTURE.exists():
+        pytest.skip(f"junit-step-binding fixture not present at {_STEP_BINDING_FIXTURE}")
+
+    port = _find_free_port()
+    base_url = f"http://127.0.0.1:{port}"
+
+    worktree_src = str(REPO_ROOT / "src")
+    env = dict(os.environ)
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = f"{worktree_src}:{existing}" if existing else worktree_src
+
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "elspais",
+            "viewer",
+            "--server",
+            "--port",
+            str(port),
+            "--path",
+            str(_STEP_BINDING_FIXTURE),
+        ],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+
+    try:
+        _wait_for_server(base_url)
+        yield base_url
+    finally:
+        try:
+            import urllib.request
+
+            req = urllib.request.Request(f"{base_url}/api/shutdown", method="POST")
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            pass
+
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                proc.wait(timeout=5)
+
+
+@pytest.fixture()
+def page_step_binding(step_binding_viewer_url):
+    """Launch headless Chromium against the junit-step-binding viewer."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context()
+        pg = context.new_page()
+        pg.set_default_timeout(10_000)
+        yield pg
+        browser.close()
+
+
+class TestJunitStepBindingBrowser:
+    """Step-scoped result binding and results-artifact links in the viewer."""
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_step_result_panel_not_conflated_and_links_artifact(
+        self, page_step_binding, step_binding_viewer_url
+    ):
+        # Verifies: REQ-d00256-E
+        # Verifies: REQ-d00254-F
+        """Open the journey card, toggle step-1's Result panel and assert:
+
+        1. No conflation (end-to-end): step-1's panel holds exactly one
+           STEP-scoped result row -- its own (``results.xml:3``) -- and NOT
+           the sibling step's uniquely-lined result (``results.xml:4``).
+           The two no-step-id/ambiguous testcases legitimately fan out to
+           both tests at file scope, so the panel's expected total is 3
+           rows (1 step-scoped + 2 file-scoped).
+        2. Provenance: every result row's link text points at the results
+           ARTIFACT (``results.xml:<line>``), never the test source file.
+        """
+        js_errors: list[str] = []
+        page_step_binding.on("pageerror", lambda err: js_errors.append(str(err)))
+
+        page_step_binding.goto(step_binding_viewer_url, wait_until="networkidle")
+        page_step_binding.evaluate(f"() => window.openCard('{_STEP_BINDING_JOURNEY_ID}')")
+
+        card_locator = page_step_binding.locator(f"#card-{_STEP_BINDING_JOURNEY_ID}")
+        card_locator.wait_for(state="visible", timeout=10_000)
+
+        step_rows = card_locator.locator(".journey-step-row").all()
+        assert len(step_rows) == 2, f"Expected 2 step rows, got {len(step_rows)}"
+
+        # The Result badge is the LAST .journey-step-badge in the row (VER
+        # first, then Result); it toggles the RESULTS panel.
+        panel = card_locator.locator(
+            f"#journey-step-results-{_STEP_BINDING_JOURNEY_ID}-1"
+        )
+        assert panel.count() == 1, "Expected a step-1 results panel in the DOM"
+        assert not panel.is_visible(), "Step-1 results panel should be hidden by default"
+
+        result_badge = step_rows[0].locator(".journey-step-badge").last
+        result_badge.click()
+        panel.wait_for(state="visible", timeout=5_000)
+
+        rows = panel.locator(".journey-step-result-row")
+        # 1 step-scoped result + 2 file-scope fanout results (no-step-id and
+        # ambiguous testcases) = 3. Before the step-scope fix, step 2's
+        # per-step result also fanned out here, making it 4.
+        assert rows.count() == 3, (
+            f"Expected 3 result rows (1 step-scoped + 2 file-scope), got "
+            f"{rows.count()}: {panel.inner_text()!r}"
+        )
+
+        panel_text = panel.inner_text()
+        assert "results.xml:3" in panel_text, (
+            f"Step-1 panel must show its own step-scoped result "
+            f"(results.xml:3), got: {panel_text!r}"
+        )
+        assert "results.xml:4" not in panel_text, (
+            f"Step-1 panel must NOT show step-2's result (results.xml:4, "
+            f"the conflation regression), got: {panel_text!r}"
+        )
+
+        # Every row links to the results ARTIFACT, not the test source.
+        assert "test_steps.py" not in panel_text, (
+            f"Result rows must link the results artifact, not the test "
+            f"source file, got: {panel_text!r}"
+        )
+        for i in range(rows.count()):
+            link = rows.nth(i).locator("a")
+            assert link.count() == 1, (
+                f"Result row {i} should have exactly one link: "
+                f"{rows.nth(i).inner_html()!r}"
+            )
+            link_text = link.inner_text().strip()
+            assert link_text.startswith("results.xml:"), (
+                f"Result row {i} link must be 'results.xml:<line>', got "
+                f"{link_text!r}"
+            )
+
+        assert not js_errors, f"JS errors during step-results render: {js_errors}"

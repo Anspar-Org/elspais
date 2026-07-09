@@ -1,3 +1,4 @@
+# Verifies: REQ-d00254-E
 """Tests for Python coverage.json parser."""
 
 import json

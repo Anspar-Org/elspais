@@ -1,4 +1,4 @@
-# Implements: REQ-p00006-B
+# Implements: REQ-p00006-A, REQ-p00006-B
 # Implements: REQ-d00010-A, REQ-d00010-F, REQ-d00010-G
 # Implements: REQ-d00231-A+B+C+D+E
 # Implements: REQ-d00242-A+B+C
@@ -52,6 +52,7 @@ from elspais.mcp.server import (
     _mutate_journey_section,
     _mutate_move_node_to_file,
     _mutate_rename_file,
+    _mutate_set_stereotype,
     _mutate_update_assertion,
     _mutate_update_journey_field,
     _mutate_update_remainder,
@@ -242,6 +243,204 @@ def _compute_link_data(
     return a_links, r_links
 
 
+# Journey verification tier/verdict -> val-color vocabulary (green/yellow/red/'').
+_JNY_VERDICT_COLOR = {
+    "pass": "green",
+    "partial": "yellow",
+    "fail": "red",
+    "unverified": "",
+}
+
+
+def _journey_state(journey: Any) -> dict[str, Any]:
+    """Summarize a validating journey's UAT verification for a state badge.
+
+    Reads the pre-computed ``journey_verification`` metric (never recomputes
+    coverage) and derives step counts from the journey's STEP children. Returns
+    a dict ``{label, color, verified_steps, total_steps, whole_journey}``. Robust
+    to a journey with no metric (returns an unverified/grey state).
+    """
+    from elspais.graph.relations import EdgeKind
+
+    jv = journey.get_metric("journey_verification")
+    verdict = jv.verdict if jv is not None else "unverified"
+    steps = [
+        c
+        for c in journey.iter_children(edge_kinds={EdgeKind.STRUCTURES})
+        if c.kind == NodeKind.STEP
+    ]
+    total = len(steps)
+    verified = sum(1 for s in steps if (s.get_metric("step_status") or "") == "pass")
+    return {
+        "label": verdict,
+        "color": _JNY_VERDICT_COLOR.get(verdict, ""),
+        "verified_steps": verified,
+        "total_steps": total,
+        "whole_journey": total == 0,
+    }
+
+
+def _compute_incoming_links(node: Any) -> list[dict[str, Any]]:
+    """Reverse-traceability view: things that point AT this requirement.
+
+    Surfaces, per present traceability kind, the nodes that reference this
+    requirement — distinct from the structural Children/assertions already
+    shown. Each returned section is ``{kind, links}`` where every link is
+    ``{id, ref_id, title, source_kind, state:{label,color}, tooltip}``. Only
+    kinds with >=1 incoming edge are included; the list is empty when this
+    requirement has no reverse-traceability edges.
+
+    Edge directions (as wired by the builder):
+      - Validated by:   OUTGOING VALIDATES (req -> USER_JOURNEY), possibly
+                        per-assertion; also assertion-level VALIDATES edges.
+      - Refined by:     OUTGOING REFINES to another REQUIREMENT. REFINES is
+                        stored refined->refiner (edge.source is the abstract
+                        target, edge.target the concrete refiner), so a node's
+                        refiners are the TARGETS of its outgoing REFINES edges.
+                        This is the same direction render.py._derive_refines_refs
+                        reads (there, a node's INCOMING REFINES name what it
+                        refines); reading incoming here would invert it.
+      - Satisfied by:   INCOMING SATISFIES from a declaring REQUIREMENT.
+      - Instantiated by:INCOMING INSTANCE from a clone REQUIREMENT.
+      - Integrated by:  INCOMING INTEGRATES from a consumer REQUIREMENT.
+    """
+    from elspais.graph.relations import EdgeKind
+
+    def _entry(
+        source: Any, source_kind: str, state: dict[str, Any] | None, tooltip: str
+    ) -> dict[str, Any]:
+        return {
+            "id": source.id,
+            "ref_id": source.id,
+            "title": source.get_label() or source.id,
+            "source_kind": source_kind,
+            "state": state or {"label": "", "color": ""},
+            "tooltip": tooltip,
+        }
+
+    # ── Validated by (journeys) ──
+    # Collect journeys reached via VALIDATES from the requirement and from its
+    # assertion children, accumulating which assertion labels each validates.
+    # A journey lands in ``jny_blanket`` only for a genuine whole-requirement
+    # validate (no assertion named). Assertion-scoped validates contribute a
+    # label so the tooltip reports an accurate assertion count. Two on-disk
+    # representations exist and both must be attributed correctly:
+    #   1. req -> journey edge with ``assertion_targets`` set (the common case:
+    #      ``Validates: REQ-x-A`` is rewired onto the parent REQ, see builder).
+    #   2. assertion <-> journey edge with NO ``assertion_targets`` (fallback /
+    #      direct wiring): the assertion's own label IS the scope, so treating
+    #      it as blanket would wrongly read "validates all assertions".
+    jny_targets: dict[str, set[str]] = {}
+    jny_nodes: dict[str, Any] = {}
+    jny_blanket: set[str] = set()
+
+    def _register_journey(journey: Any, edge_labels: Any, source_label: str | None) -> None:
+        jny_nodes[journey.id] = journey
+        labels = jny_targets.setdefault(journey.id, set())
+        if edge_labels:
+            labels.update(edge_labels)
+        elif source_label:
+            labels.add(source_label)
+        else:
+            jny_blanket.add(journey.id)
+
+    # Representation 1: req-level outgoing VALIDATES (req -> journey).
+    for edge in node.iter_outgoing_edges():
+        if edge.kind == EdgeKind.VALIDATES and edge.target.kind == NodeKind.USER_JOURNEY:
+            _register_journey(edge.target, edge.assertion_targets, None)
+    # Representation 2: assertion-level VALIDATES wired directly on the assertion
+    # node (either direction) with no assertion_targets -> attribute the label.
+    for child in node.iter_children(edge_kinds={EdgeKind.STRUCTURES}):
+        if child.kind != NodeKind.ASSERTION:
+            continue
+        label = child.get_field("label", "")
+        for edge in child.iter_outgoing_edges():
+            if edge.kind == EdgeKind.VALIDATES and edge.target.kind == NodeKind.USER_JOURNEY:
+                _register_journey(edge.target, edge.assertion_targets, label)
+        for edge in child.iter_incoming_edges():
+            if edge.kind == EdgeKind.VALIDATES and edge.source.kind == NodeKind.USER_JOURNEY:
+                _register_journey(edge.source, edge.assertion_targets, label)
+
+    validated_links: list[dict[str, Any]] = []
+    for jid, journey in jny_nodes.items():
+        state = _journey_state(journey)
+        labels = jny_targets.get(jid, set())
+        if jid in jny_blanket or not labels:
+            scope = "all assertions"
+        else:
+            scope = f"{len(labels)} assertion(s)"
+        if state["whole_journey"]:
+            steps_txt = f"journey verification: {state['label']}"
+        else:
+            steps_txt = (
+                f"journey {state['verified_steps']}/{state['total_steps']} "
+                f"steps verified ({state['label']})"
+            )
+        tooltip = f"{journey.id} validates {scope}; {steps_txt}"
+        validated_links.append(_entry(journey, "journey", state, tooltip))
+
+    # ── Incoming traceability edges from other requirements ──
+    refined_links: list[dict[str, Any]] = []
+    satisfied_links: list[dict[str, Any]] = []
+    instantiated_links: list[dict[str, Any]] = []
+    integrated_links: list[dict[str, Any]] = []
+
+    # Refined by: requirements that refine THIS one. Because REFINES is stored
+    # refined->refiner, `node`'s refiners are the TARGETS of its OUTGOING REFINES
+    # edges (edge.source is `node` itself, edge.target the refiner) — matching
+    # render.py._derive_refines_refs's direction.
+    for edge in node.iter_outgoing_edges():
+        if edge.kind == EdgeKind.REFINES and edge.target.kind == NodeKind.REQUIREMENT:
+            refiner = edge.target
+            title = refiner.get_label() or refiner.id
+            refined_links.append(
+                _entry(
+                    refiner,
+                    "requirement",
+                    None,
+                    f"{refiner.id} refines this requirement - {title}",
+                )
+            )
+
+    for edge in node.iter_incoming_edges():
+        src = edge.source
+        title = src.get_label() or src.id
+        if edge.kind == EdgeKind.SATISFIES and src.kind == NodeKind.REQUIREMENT:
+            satisfied_links.append(
+                _entry(
+                    src,
+                    "requirement",
+                    None,
+                    f"{src.id} satisfies this requirement (declares compliance) - {title}",
+                )
+            )
+        elif edge.kind == EdgeKind.INSTANCE and src.kind == NodeKind.REQUIREMENT:
+            instantiated_links.append(
+                _entry(
+                    src,
+                    "requirement",
+                    None,
+                    f"{src.id} is an instance of this template - {title}",
+                )
+            )
+        elif edge.kind == EdgeKind.INTEGRATES and src.kind == NodeKind.REQUIREMENT:
+            integrated_links.append(
+                _entry(src, "requirement", None, f"{src.id} integrates this requirement - {title}")
+            )
+
+    sections: list[dict[str, Any]] = []
+    for kind_label, links in (
+        ("Validated by", validated_links),
+        ("Refined by", refined_links),
+        ("Satisfied by", satisfied_links),
+        ("Instantiated by", instantiated_links),
+        ("Integrated by", integrated_links),
+    ):
+        if links:
+            sections.append({"kind": kind_label, "links": links})
+    return sections
+
+
 # ─────────────────────────────────────────────────────────────────
 # Read-only GET endpoints
 # ─────────────────────────────────────────────────────────────────
@@ -332,7 +531,13 @@ async def api_requirement(request: Request) -> JSONResponse:
 
 async def api_node(request: Request) -> JSONResponse:
     """GET /api/node/{node_id} - Full details for any node kind."""
-    from elspais.html.generator import DIMENSION_KEYS, DIMENSION_TIPS, compute_coverage_tiers
+    from elspais.html.generator import (
+        DIMENSION_KEYS,
+        DIMENSION_TIPS,
+        compute_assertion_coverage_caveats,
+        compute_assertion_coverage_states,
+        compute_coverage_tiers,
+    )
 
     state = _st(request)
     node_id = request.path_params["node_id"]
@@ -352,18 +557,42 @@ async def api_node(request: Request) -> JSONResponse:
                 "uat_coverage": "uat_cov",
                 "uat_verified": "uat_ver",
             }
-            dims: dict[str, dict[str, str]] = {}
+            expects_validation = bool(tiers.get("expects_validation", False))
+            dims: dict[str, dict[str, Any]] = {}
             for dim_key in DIMENSION_KEYS:
                 prefix = prefix_map[dim_key]
-                dims[dim_key] = {
+                entry: dict[str, Any] = {
                     "color": tiers.get(f"{prefix}_color", ""),
                     "tip": DIMENSION_TIPS.get(dim_key, ""),
                     "status_tip": tiers.get(f"{prefix}_tip", ""),
+                    # Per-dimension provenance caveat (REQ-d00069-L): "~" when the
+                    # dimension's evidence is not fully direct (indirect > direct).
+                    "marker": tiers.get(f"{prefix}_marker", ""),
                 }
+                # UAT dims carry the per-level expectation so the viewer can
+                # render a (red) UAT badge on a journey-less expects_validation
+                # requirement (REQ-d00258-F).
+                if dim_key in ("uat_coverage", "uat_verified"):
+                    entry["expects_validation"] = expects_validation
+                dims[dim_key] = entry
             result["coverage_dimensions"] = dims
 
             # Per-assertion direct link flags + REQ-level links
             result["assertion_links"], result["req_level_links"] = _compute_link_data(node)
+
+            # Per-assertion coverage states (full/partial/failing/none) projected
+            # from the SAME rollup metrics as the header badges, so the tiny
+            # per-assertion badges color consistently on initial render without
+            # waiting for a lazy prefetch (REQ-d00258-G).
+            result["assertion_coverage_states"] = compute_assertion_coverage_states(
+                node, state.config
+            )
+            # Per-assertion "leans on whole-requirement evidence" caveat (~),
+            # unified with the header ~ marker (REQ-d00069-L).
+            result["assertion_coverage_caveats"] = compute_assertion_coverage_caveats(node)
+
+            # Reverse-traceability: what points AT this requirement (REQ-p00006-A)
+            result["incoming_links"] = _compute_incoming_links(node)
 
     return JSONResponse(result)
 
@@ -614,11 +843,11 @@ async def api_tree_data(request: Request) -> JSONResponse:
         # Comment presence: direct comments on this node or its sub-elements
         _has_direct_comments = any(True for _ in g.iter_comments_for_card(node.id))
         tiers = compute_coverage_tiers(node, state.config)
-        # Derive coverage tier from combined_color for filtering
-        _cc = tiers.get("combined_color", "")
-        coverage = (
-            "full" if _cc == "green" else ("partial" if _cc in ("yellow", "orange") else "none")
-        )
+        # REQ-d00258-E: coverage filter bucket comes from the severity-aware
+        # combined_bucket (Task 6), not a naive combined_color check -- this
+        # correctly classifies e.g. a fully-but-indirectly-covered requirement
+        # as "full" instead of dropping it into "missing".
+        coverage = tiers.get("combined_bucket") or "missing"
 
         _ns_entry = ns_catalog.get(_get_repo_prefix(node)) or {}
         rows.append(
@@ -705,7 +934,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
                 "assertions": [],
                 "has_children": False,
                 "is_leaf": True,
-                "coverage": "none",
+                "coverage": "missing",
                 "is_changed": False,
                 "is_uncommitted": False,
                 "is_unsaved": False,
@@ -1000,6 +1229,30 @@ async def api_mutate_status(request: Request) -> JSONResponse:
         )
     result = _mutate_change_status(state.graph, node_id, new_status)
     status_code = 200 if result.get("success") else 400
+    return JSONResponse(result, status_code=status_code)
+
+
+async def api_mutate_template(request: Request) -> JSONResponse:
+    """POST /api/mutate/template - Set/clear a requirement's Template marker.
+
+    Body: {node_id, is_template, force?}. Un-templating a requirement with
+    live instances returns a soft-block payload ({blocked: true,
+    instance_count}) unless force is set; the client confirms and re-POSTs.
+    """
+    state = _st(request)
+    data = await request.json()
+    node_id = data.get("node_id", "")
+    is_template = data.get("is_template")
+    if not node_id or not isinstance(is_template, bool):
+        return JSONResponse(
+            {"success": False, "error": "node_id and boolean is_template required"},
+            status_code=400,
+        )
+    result = _mutate_set_stereotype(
+        state.graph, node_id, is_template, force=bool(data.get("force"))
+    )
+    # A guard soft-block is a well-formed 200 conversation, not an error.
+    status_code = 200 if result.get("success") or result.get("blocked") else 400
     return JSONResponse(result, status_code=status_code)
 
 

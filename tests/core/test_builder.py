@@ -67,7 +67,7 @@ def sample_requirements():
 class TestGraphBuilder:
     """Tests for GraphBuilder class."""
 
-    # Implements: REQ-o00050-A
+    # Verifies: REQ-o00050-A
     def test_build_creates_nodes(self, sample_requirements):
         builder = GraphBuilder()
 
@@ -79,7 +79,7 @@ class TestGraphBuilder:
         assert graph.find_by_id("REQ-p00001") is not None
         assert graph.find_by_id("REQ-o00001") is not None
 
-    # Implements: REQ-o00050-D
+    # Verifies: REQ-o00050-D
     def test_build_creates_assertion_nodes(self, sample_requirements):
         builder = GraphBuilder()
 
@@ -91,7 +91,7 @@ class TestGraphBuilder:
         assert graph.find_by_id("REQ-p00001-A") is not None
         assert graph.find_by_id("REQ-p00001-B") is not None
 
-    # Implements: REQ-o00050-D
+    # Verifies: REQ-o00050-D
     def test_build_links_assertions_to_parent(self, sample_requirements):
         builder = GraphBuilder()
 
@@ -106,7 +106,7 @@ class TestGraphBuilder:
         assert "REQ-p00001-A" in children_string(parent)
         assert "REQ-p00001" in parents_string(assertion_a)
 
-    # Implements: REQ-o00050-C
+    # Verifies: REQ-o00050-C
     def test_build_creates_implements_edges(self, sample_requirements):
         builder = GraphBuilder()
 
@@ -130,7 +130,7 @@ class TestGraphBuilder:
         else:
             pytest.fail("Expected edge from REQ-p00001 to REQ-o00001 not found")
 
-    # Implements: REQ-p00050-A
+    # Verifies: REQ-p00050-A
     def test_roots_are_top_level_requirements(self, sample_requirements):
         builder = GraphBuilder()
 
@@ -146,7 +146,7 @@ class TestGraphBuilder:
 class TestBodyTextNotStored:
     """After cleanup, body_text must not be stored in node content."""
 
-    # Implements: REQ-d00131-B
+    # Verifies: REQ-d00131-B
     def test_body_text_not_stored_after_build(self, sample_requirements):
         """After cleanup, body_text must not be stored in node content."""
         builder = GraphBuilder()
@@ -162,7 +162,7 @@ class TestBodyTextNotStored:
 class TestTraceGraph:
     """Tests for TraceGraph container."""
 
-    # Implements: REQ-p00050-A
+    # Verifies: REQ-p00050-A
     def test_find_by_id(self, sample_requirements):
         builder = GraphBuilder()
         for req in sample_requirements:
@@ -174,7 +174,7 @@ class TestTraceGraph:
         assert node is not None
         assert node.id == "REQ-p00001"
 
-    # Implements: REQ-p00050-A
+    # Verifies: REQ-p00050-A
     def test_find_by_id_not_found(self, sample_requirements):
         builder = GraphBuilder()
         for req in sample_requirements:
@@ -185,7 +185,7 @@ class TestTraceGraph:
 
         assert node is None
 
-    # Implements: REQ-d00051-F
+    # Verifies: REQ-d00051-F
     def test_all_nodes_iterator(self, sample_requirements):
         builder = GraphBuilder()
         for req in sample_requirements:
@@ -197,7 +197,7 @@ class TestTraceGraph:
         # 2 reqs + 2 assertions = 4 nodes exactly
         assert len(all_nodes) == 4
 
-    # Implements: REQ-d00130-E
+    # Verifies: REQ-d00130-E
     def test_nodes_by_kind(self, sample_requirements):
         builder = GraphBuilder()
         for req in sample_requirements:
@@ -212,7 +212,7 @@ class TestTraceGraph:
 class TestBuilderContentTypes:
     """Tests for builder handling different content types."""
 
-    # Implements: REQ-o00050-A
+    # Verifies: REQ-o00050-A
     def test_build_creates_journey_nodes(self):
         """Builder creates USER_JOURNEY nodes from journey content."""
         graph = build_graph(
@@ -224,7 +224,7 @@ class TestBuilderContentTypes:
         assert node.kind == NodeKind.USER_JOURNEY
         assert node.get_label() == "Login Flow"
 
-    # Implements: REQ-d00128-D
+    # Verifies: REQ-d00128-D
     def test_build_creates_code_ref_nodes(self):
         """Builder creates CODE nodes from code_ref content."""
         graph = build_graph(
@@ -240,7 +240,7 @@ class TestBuilderContentTypes:
         assert code_node is not None
         assert code_node.kind == NodeKind.CODE
 
-    # Implements: REQ-d00128-D
+    # Verifies: REQ-d00128-D
     def test_build_creates_test_ref_nodes(self):
         """Builder creates TEST nodes from test_ref content."""
         graph = build_graph(
@@ -256,7 +256,7 @@ class TestBuilderContentTypes:
         assert test_node is not None
         assert test_node.kind == NodeKind.TEST
 
-    # Implements: REQ-o00050-C
+    # Verifies: REQ-o00050-C
     def test_build_creates_refines_edges(self):
         """Builder creates REFINES edges from refines references."""
         graph = build_graph(
@@ -288,7 +288,7 @@ class TestBuilderContentTypes:
         orphan_ids = {n.id for n in graph.orphaned_nodes()}
         assert "REQ-o00001" not in orphan_ids
 
-    # Implements: REQ-d00127-C
+    # Verifies: REQ-d00127-C
     def test_node_content_fields_accessible(self):
         """Node content fields are accessible via get_field()."""
         graph = build_graph(
@@ -312,7 +312,7 @@ class TestBuilderContentTypes:
         assert node.status == "Active"
         assert node.hash == "abc12345"
 
-    # Implements: REQ-d00127-E
+    # Verifies: REQ-d00127-E
     def test_test_result_linked_to_test(self):
         """TEST_RESULT nodes should be children of their parent TEST."""
         graph = build_graph(
@@ -334,7 +334,7 @@ class TestBuilderContentTypes:
         assert children[0].id == "result-1"
         assert children[0].kind == NodeKind.RESULT
 
-    # Implements: REQ-d00127-E
+    # Verifies: REQ-d00127-E
     def test_test_result_without_test_id_not_linked(self):
         """TEST_RESULT without test_id should not be linked to any parent."""
         graph = build_graph(
@@ -353,7 +353,7 @@ class TestBuilderContentTypes:
 class TestTestToRequirementLinking:
     """Tests for linking tests to requirements via test names."""
 
-    # Implements: REQ-o00050-C
+    # Verifies: REQ-o00050-C
     def test_test_result_without_scanner_test_is_broken_ref(self):
         """TEST_RESULT with test_id but no scanner TEST node creates a broken reference."""
         graph = build_graph(
@@ -380,7 +380,7 @@ class TestTestToRequirementLinking:
         ]
         assert len(broken) == 1
 
-    # Implements: REQ-o00050-C
+    # Verifies: REQ-o00050-C
     def test_test_with_req_in_name_validates_requirement(self):
         """Scanner-created TEST linked to REQ, with TEST_RESULT child."""
         graph = build_graph(
@@ -417,7 +417,7 @@ class TestTestToRequirementLinking:
         assert result is not None
         assert "test:tests/test_auth.py::TestAuth::test_REQ_d00001_login" in parents_string(result)
 
-    # Implements: REQ-o00050-C
+    # Verifies: REQ-o00050-C
     def test_test_with_assertion_in_name_validates_assertion(self):
         """Test with REQ-xxx-A in name creates VALIDATES edge with assertion_targets."""
         graph = build_graph(
@@ -462,7 +462,7 @@ class TestTestToRequirementLinking:
         else:
             pytest.fail("Expected edge with assertion_targets not found")
 
-    # Implements: REQ-o00050-C
+    # Verifies: REQ-o00050-C
     def test_test_with_multiple_reqs_validates_all(self):
         """Scanner TEST with multiple REQ refs validates all requirements."""
         test_id = "test:tests/test_auth.py::TestAuth::test_REQ_d00001_REQ_d00002_combined"
@@ -495,7 +495,7 @@ class TestTestToRequirementLinking:
         assert test_id in children_string(req1)
         assert test_id in children_string(req2)
 
-    # Implements: REQ-d00127-E
+    # Verifies: REQ-d00127-E
     def test_multiple_results_share_same_test_node(self):
         """Multiple TEST_RESULTs with same test_id share one scanner-created TEST node."""
         test_id = "test:tests/test_auth.py::TestAuth::test_REQ_d00001_login"
@@ -538,7 +538,7 @@ class TestTestToRequirementLinking:
         assert "result-run1" in children
         assert "result-run2" in children
 
-    # Implements: REQ-d00127-E
+    # Verifies: REQ-d00127-E
     def test_test_without_req_in_name_is_orphan(self):
         """Test result without matching scanner TEST creates broken reference."""
         graph = build_graph(
@@ -578,7 +578,7 @@ class TestGeneralizedOrphanDetection:
     orphan candidates, alongside the existing REQUIREMENT orphan detection.
     """
 
-    # Implements: REQ-d00071-B
+    # Verifies: REQ-d00071-B
     def test_test_with_broken_validates_is_orphan(self):
         """TEST referencing non-existent REQ is an orphan."""
         graph = build_graph(
@@ -594,7 +594,7 @@ class TestGeneralizedOrphanDetection:
         assert any(n.kind == NodeKind.TEST for n in orphans)
         assert "test:tests/test_foo.py::test_something" in orphan_ids
 
-    # Implements: REQ-d00071-A
+    # Verifies: REQ-d00071-A
     def test_test_with_valid_validates_not_orphan(self):
         """TEST with resolved VALIDATES link is not an orphan."""
         graph = build_graph(
@@ -609,7 +609,7 @@ class TestGeneralizedOrphanDetection:
         orphan_ids = {n.id for n in graph.orphaned_nodes()}
         assert "test:tests/test_foo.py::test_something" not in orphan_ids
 
-    # Implements: REQ-d00071-B
+    # Verifies: REQ-d00071-B
     def test_result_without_parent_test_is_orphan(self):
         """TEST_RESULT whose YIELDS target doesn't exist is an orphan + broken ref."""
         graph = build_graph(
@@ -632,7 +632,7 @@ class TestGeneralizedOrphanDetection:
         broken_targets = {br.target_id for br in graph.broken_references()}
         assert "test:nonexistent::test_func" in broken_targets
 
-    # Implements: REQ-d00071-B
+    # Verifies: REQ-d00071-B
     def test_result_without_test_id_is_orphan(self):
         """TEST_RESULT with no test_id is an orphan (no link possible)."""
         graph = build_graph(
@@ -642,7 +642,7 @@ class TestGeneralizedOrphanDetection:
         orphan_ids = {n.id for n in graph.orphaned_nodes()}
         assert "result-no-parent" in orphan_ids
 
-    # Implements: REQ-d00071-B
+    # Verifies: REQ-d00071-B
     def test_code_with_broken_implements_is_orphan(self):
         """CODE referencing non-existent REQ is an orphan."""
         graph = build_graph(
@@ -677,7 +677,7 @@ class TestGeneralizedOrphanDetection:
         assert "REQ-p00001" not in orphan_ids
         assert "REQ-o00001" not in orphan_ids
 
-    # Implements: REQ-d00127-E
+    # Verifies: REQ-d00127-E
     def test_result_linked_to_existing_test_not_orphan(self):
         """TEST_RESULT with resolved YIELDS edge is not an orphan."""
         graph = build_graph(
@@ -1347,7 +1347,7 @@ class TestParseDirtyFlag:
     Validates: REQ-p00002-A
     """
 
-    # Implements: REQ-p00002-A
+    # Verifies: REQ-p00002-A
     def test_has_redundant_refs_sets_parse_dirty(self):
         # Verifies: REQ-p00002-A
         """Requirement built from parsed_data with has_redundant_refs=True has parse_dirty=True."""
@@ -1375,7 +1375,7 @@ class TestParseDirtyFlag:
         assert node is not None
         assert node.get_field("parse_dirty") is True
 
-    # Implements: REQ-p00002-A
+    # Verifies: REQ-p00002-A
     def test_no_redundant_refs_does_not_set_parse_dirty(self):
         # Verifies: REQ-p00002-A
         """A requirement without has_redundant_refs does NOT have parse_dirty=True."""
@@ -1523,7 +1523,7 @@ class TestImplementsEdgeMetadata:
 class TestStructuresEdgeRenderOrder:
     """Tests for render_order metadata on STRUCTURES edges."""
 
-    # Implements: REQ-d00131-B
+    # Verifies: REQ-d00131-B
     def test_structures_edges_carry_render_order(self):
         """STRUCTURES edges should have render_order metadata based on line number."""
         req = make_requirement(
@@ -1569,7 +1569,7 @@ class TestStructuresEdgeRenderOrder:
             assert orders[i] > orders[i - 1], f"render_order not monotonically increasing: {orders}"
 
 
-# Implements: REQ-d00131-B
+# Verifies: REQ-d00131-B
 def test_add_assertion_sets_render_order():
     """add_assertion() must set render_order on the new STRUCTURES edge."""
     builder = GraphBuilder()

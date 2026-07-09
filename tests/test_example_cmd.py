@@ -12,7 +12,7 @@ from unittest.mock import patch
 class TestExampleCommand:
     """Tests for the example command."""
 
-    # Implements: REQ-d00209-C
+    # Verifies: REQ-d00259-A
     def test_example_default_output(self):
         """Test example command without arguments shows quick reference."""
         from elspais.commands.example_cmd import run
@@ -30,7 +30,7 @@ class TestExampleCommand:
         output = mock_stdout.getvalue()
         assert "Requirement Format Quick Reference" in output
 
-    # Implements: REQ-d00209-C
+    # Verifies: REQ-d00259-B
     def test_example_requirement_subcommand(self):
         """Test example requirement shows requirement templates."""
         from elspais.commands.example_cmd import run
@@ -54,7 +54,7 @@ class TestExampleCommand:
         assert "REQ-o00001" in output
         assert "REQ-d00001" in output
 
-    # Implements: REQ-d00209-C
+    # Verifies: REQ-d00259-C
     def test_example_journey_subcommand(self):
         """Test example journey shows journey template."""
         from elspais.commands.example_cmd import run
@@ -76,7 +76,7 @@ class TestExampleCommand:
         assert "Steps" in output
         assert "Requirements" in output
 
-    # Implements: REQ-d00209-C
+    # Verifies: REQ-d00259-D
     def test_example_assertion_subcommand(self):
         """Test example assertion shows assertion rules."""
         from elspais.commands.example_cmd import run
@@ -97,7 +97,7 @@ class TestExampleCommand:
         assert "Label Styles" in output
         assert "Placeholders" in output
 
-    # Implements: REQ-d00209-A
+    # Verifies: REQ-d00259-E
     def test_example_ids_subcommand_no_config(self):
         """Test example ids with no config uses defaults."""
         from elspais.commands.example_cmd import run
@@ -118,7 +118,7 @@ class TestExampleCommand:
         assert "REQ-o00001" in output
         assert "REQ-d00001" in output
 
-    # Implements: REQ-d00209-A
+    # Verifies: REQ-d00259-E
     def test_example_ids_subcommand_with_config(self, tmp_path: Path):
         """Test example ids reads from config file."""
         from elspais.commands.example_cmd import run
@@ -171,7 +171,7 @@ leading_zeros = true
         output = mock_stdout.getvalue()
         assert "SPEC" in output
 
-    # Implements: REQ-d00209-C
+    # Verifies: REQ-d00259-F
     def test_example_full_no_spec_file(self, tmp_path: Path, monkeypatch):
         """Test --full flag when no spec file exists."""
         from elspais.commands.example_cmd import run
@@ -191,7 +191,7 @@ leading_zeros = true
         output = mock_stdout.getvalue()
         assert "No requirements specification found" in output
 
-    # Implements: REQ-d00209-C
+    # Verifies: REQ-d00259-F
     def test_example_full_with_spec_file(self, tmp_path: Path, monkeypatch):
         """Test --full flag with requirements-spec.md."""
         from elspais.commands.example_cmd import run
@@ -217,7 +217,7 @@ leading_zeros = true
         assert "Requirements Specification" in output
         assert "This is the full spec" in output
 
-    # Implements: REQ-d00209-C
+    # Verifies: REQ-d00259-F
     def test_example_full_with_alternate_filename(self, tmp_path: Path, monkeypatch):
         """Test --full flag with requirements-format.md (alternate name)."""
         from elspais.commands.example_cmd import run
@@ -247,7 +247,7 @@ leading_zeros = true
 class TestExampleTemplateContent:
     """Tests for template content correctness."""
 
-    # Implements: REQ-d00209-C
+    # Verifies: REQ-d00259-B
     def test_requirement_template_has_assertions_section(self):
         """Test that requirement templates include assertions section."""
         from elspais.commands.example_cmd import REQUIREMENT_TEMPLATE_DEV
@@ -255,7 +255,7 @@ class TestExampleTemplateContent:
         assert "## Assertions" in REQUIREMENT_TEMPLATE_DEV
         assert "SHALL" in REQUIREMENT_TEMPLATE_DEV
 
-    # Implements: REQ-d00209-C
+    # Verifies: REQ-d00259-B
     def test_requirement_template_has_footer(self):
         """Test that requirement templates include footer."""
         from elspais.commands.example_cmd import REQUIREMENT_TEMPLATE_PRD
@@ -263,7 +263,7 @@ class TestExampleTemplateContent:
         assert "*End*" in REQUIREMENT_TEMPLATE_PRD
         assert "**Hash**:" in REQUIREMENT_TEMPLATE_PRD
 
-    # Implements: REQ-d00209-C
+    # Verifies: REQ-d00259-C
     def test_journey_template_has_required_sections(self):
         """Test that journey template has all required sections."""
         from elspais.commands.example_cmd import JOURNEY_TEMPLATE
@@ -273,7 +273,7 @@ class TestExampleTemplateContent:
         assert "Steps" in JOURNEY_TEMPLATE
         assert "Requirements" in JOURNEY_TEMPLATE
 
-    # Implements: REQ-d00209-D
+    # Verifies: REQ-d00259-D
     def test_assertion_rules_has_configuration(self):
         """Test that assertion rules shows configuration."""
         from elspais.commands.example_cmd import ASSERTION_RULES
@@ -286,7 +286,7 @@ class TestExampleTemplateContent:
 class TestCLIIntegration:
     """Integration tests using the CLI entry point."""
 
-    # Implements: REQ-d00209-C
+    # Verifies: REQ-d00259-A
     def test_cli_main_help_includes_example(self):
         """Test example subcommand is recognized by the parser."""
         from elspais.cli import parse_args

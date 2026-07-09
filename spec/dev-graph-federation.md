@@ -177,22 +177,26 @@ B. The `Integrates:` keyword SHALL be valid only in spec files; in code, test, a
 
 C. When the resolved target of an `Integrates:` reference belongs to the same repository as the declaring requirement, the build SHALL report it as a broken reference.
 
-D. When the associate owning an `Integrates:` target participates in the federated build, the build SHALL wire an INTEGRATES edge from the declaring requirement to the target library node such that the declaring requirement counts as implemented and inherits the library node's implemented and verified coverage, while the library's own source files SHALL remain unmodified.
+D. When the associate owning an `Integrates:` target participates in the federated build, the build SHALL wire an INTEGRATES edge from the declaring requirement to the target library node such that the declaring requirement counts as implemented and inherits the library node's implemented and passing coverage (result-verified or line-coverage-credited), while the library's own source files SHALL remain unmodified.
 
 E. When an `Integrates:` target cannot be resolved, the build SHALL report a broken reference if a configured associate claims the target's ID format but lacks the ID, and SHALL record a presumed-foreign reference that does not fail the build if no configured associate claims the ID format.
 
-F. Coverage inherited through `Integrates:` edges SHALL count toward the declaring requirement's implemented status in coverage reports (so an integrating requirement is not reported as an uncovered gap), and coverage reports SHALL summarize integrated requirements grouped by the owning associate, with a federation total.
+F. Coverage inherited through `Integrates:` edges SHALL count toward the declaring requirement's implemented status in coverage reports (so an integrating requirement is not reported as an uncovered gap), and coverage reports SHALL summarize integrated requirements' implemented and passing coverage (result-verified or line-coverage-credited) grouped by the owning associate, with a federation total.
+
+G. The generic presumed-foreign determination applied after cross-repo wiring to any broken *Traceability* reference that does not already carry a diagnostic (independent of the `Integrates:`-specific determination in assertion E) SHALL NOT mark a reference foreign when the federation has no configured associates, since there is no other repository the reference could belong to. It also SHALL NOT mark a reference foreign when the target's leading token matches the declaring repo's own configured namespace and no configured associate declares that same namespace; such a reference is a malformed same-repo reference, not a cross-repo one, and SHALL remain a hard broken reference carrying a diagnostic naming the likely cause (e.g. an `[id-patterns.assertions]` separator/multi_separator mismatch).
 
 ### Rationale
 
-The bottom-up reference model (`Implements:` authored on the implementer) would force a reusable library to name each consumer's requirement IDs, coupling the library to its consumers and breaking isolated builds. `Integrates:` is the top-down inverse: authored and stored on the consumer, it points into the library and is wired as a distinct INTEGRATES edge during federation. A dedicated edge kind keeps the library's `Implements:` derivation clean (no consumer IDs leak into library files on render), while contributing to coverage like IMPLEMENTS. Test/verification results propagate by a live-query overlay that reads the library node's own metrics, consistent with the existing cross-repo inheritance mechanism.
+The bottom-up reference model (`Implements:` authored on the implementer) would force a reusable library to name each consumer's requirement IDs, coupling the library to its consumers and breaking isolated builds. `Integrates:` is the top-down inverse: authored and stored on the consumer, it points into the library and is wired as a distinct INTEGRATES edge during federation. A dedicated edge kind keeps the library's `Implements:` derivation clean (no consumer IDs leak into library files on render), while contributing to coverage like IMPLEMENTS. Passing status (the result-verified or line-coverage-credited union, REQ-d00258-B) propagates by a live-query overlay that reads the library node's own metrics, consistent with the existing cross-repo inheritance mechanism.
 
 ### Changelog
 
+- 2026-07-03 | d9d4bc98 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
+- 2026-07-03 | 425d61aa | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-05-31 | d1f691f0 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
 - 2026-05-31 | b576d134 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms, update hash, add missing changelog section
 
-*End* *External Library Integration via Integrates Keyword* | **Hash**: d1f691f0
+*End* *External Library Integration via Integrates Keyword* | **Hash**: d9d4bc98
 ---
 
 ## REQ-d00253: Federation Write/Generation Scope

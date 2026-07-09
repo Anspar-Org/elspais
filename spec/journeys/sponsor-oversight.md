@@ -16,7 +16,7 @@ Validates: REQ-p00003, REQ-p00004, REQ-p00006
 1. Dr. Chen receives notification that the milestone branch is ready for review.
 2. She clones the delivery branch and runs `elspais trace --format html -o milestone-3-trace.html` to generate the traceability matrix.
 3. She opens the HTML report and reviews the PRD requirements committed to in the milestone statement of work.
-4. She runs `elspais analyze coverage` to check that all PRD requirements have corresponding DEV implementations.
+4. She runs `elspais summary` to check that all PRD requirements have corresponding DEV implementations.
 5. She runs `elspais changed --base-branch v2.0` to see what changed since the last accepted milestone.
 6. She reviews the list of new and modified requirements to confirm they align with the milestone scope.
 7. She identifies one PRD requirement with no DEV children and requests clarification from the project manager.
