@@ -1004,6 +1004,36 @@ function onStatusChange(selectEl) {
     });
 }
 
+function onTemplateChange(el) {
+    const nodeId = el.dataset.nodeId;
+    const isTemplate = el.checked;
+
+    mutate('/api/mutate/template', { node_id: nodeId, is_template: isTemplate }).then(async function(result) {
+        // Guard soft-block: un-templating would orphan live instances.
+        // Confirm with the server-computed count, then re-POST with force.
+        if (result && result.blocked) {
+            const msg = result.instance_count +
+                ' instance(s) satisfy this requirement — removing Template will break their Satisfies references. Proceed?';
+            if (confirm(msg)) {
+                const forced = await mutate('/api/mutate/template', { node_id: nodeId, is_template: isTemplate, force: true });
+                if (forced && forced.success) {
+                    await refreshAllOpenCards();
+                    loadTreeData();
+                    return;
+                }
+            }
+            el.checked = !isTemplate; // reverted or forced-and-failed
+            return;
+        }
+        if (result && result.success) {
+            await refreshAllOpenCards();
+            loadTreeData();
+        } else {
+            el.checked = !isTemplate;
+        }
+    });
+}
+
 function onTitleBlur(el) {
     if (!editState.enabled) return;
     const nodeId = el.dataset.nodeId;

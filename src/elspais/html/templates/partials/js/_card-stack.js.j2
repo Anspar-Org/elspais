@@ -799,6 +799,17 @@ function buildCardHtml(nodeId, data, collapsed) {
     html += '</select></span>';
     html += '</div>';
 
+    // Template marker toggle (edit mode only; view mode shows the header
+    // badge). INSTANCE nodes are read-only synthetic content — no toggle.
+    if ((props.stereotype || '').toLowerCase() !== 'instance') {
+        html += '<div class="card-meta-item edit-only template-toggle-item">';
+        html += '<span class="card-meta-key">Template:</span>';
+        html += '<input type="checkbox" class="template-toggle" data-node-id="' + nodeId + '"' +
+            ((props.stereotype || '').toLowerCase() === 'template' ? ' checked' : '') +
+            ' onchange="onTemplateChange(this)" title="Mark this requirement as a Template (Satisfies: target)">';
+        html += '</div>';
+    }
+
     // Hash
     html += '<div class="card-meta-item">';
     html += '<span class="card-meta-key">Hash:</span>';
