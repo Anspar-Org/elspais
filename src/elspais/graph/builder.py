@@ -426,6 +426,8 @@ class TraceGraph:
             self._undo_update_title(entry)
         elif op == "change_status":
             self._undo_change_status(entry)
+        elif op == "set_stereotype":
+            self._undo_set_stereotype(entry)
         elif op == "add_requirement":
             self._undo_add_requirement(entry)
         elif op == "delete_requirement":
@@ -505,6 +507,17 @@ class TraceGraph:
         old_status = entry.before_state.get("status")
         if node_id in self._index and old_status is not None:
             self._index[node_id].set_field("status", old_status)
+
+    def _undo_set_stereotype(self, entry: MutationEntry) -> None:
+        """Undo a set_stereotype operation (node + assertion children)."""
+        node = self._index.get(entry.target_id)
+        old = entry.before_state.get("stereotype")
+        if node is not None and old is not None:
+            node.set_field("stereotype", Stereotype(old))
+        for child_id, child_old in entry.before_state.get("assertion_stereotypes", {}).items():
+            child = self._index.get(child_id)
+            if child is not None:
+                child.set_field("stereotype", Stereotype(child_old))
 
     def _undo_add_requirement(self, entry: MutationEntry) -> None:
         """Undo an add requirement operation (delete the added node)."""
@@ -1076,6 +1089,67 @@ class TraceGraph:
         )
 
         node.set_field("status", new_status)
+        self._mutation_log.append(entry)
+        return entry
+
+    # Implements: REQ-p00014-E
+    def set_stereotype(self, node_id: str, is_template: bool) -> MutationEntry:
+        """Set or clear a requirement's ``**Template**`` marker.
+
+        Mirrors the author-declaration path (see ``_add_requirement``): the
+        node AND its assertion children are stamped TEMPLATE together (or
+        restored to CONCRETE), so a toggled template renders identically to
+        a parsed one. INSTANCE nodes are read-only synthetic content and
+        cannot be (un)templated.
+
+        Args:
+            node_id: The requirement node ID to update.
+            is_template: True stamps TEMPLATE; False restores CONCRETE.
+
+        Returns:
+            MutationEntry recording the operation (per-assertion prior
+            stereotypes are captured in before_state for undo).
+
+        Raises:
+            KeyError: If node_id is not found.
+            ValueError: If the node is not a requirement, or is an INSTANCE.
+        """
+        if node_id not in self._index:
+            raise KeyError(f"Node '{node_id}' not found")
+
+        node = self._index[node_id]
+        if node.kind != NodeKind.REQUIREMENT:
+            raise ValueError(f"'{node_id}' is not a requirement")
+
+        old = node.get_field("stereotype") or Stereotype.CONCRETE
+        if old == Stereotype.INSTANCE:
+            raise ValueError(
+                f"'{node_id}' is an instance (read-only synthetic content); "
+                "it cannot be marked or unmarked as a template"
+            )
+        new = Stereotype.TEMPLATE if is_template else Stereotype.CONCRETE
+
+        assertion_before: dict[str, str] = {}
+        for child in node.iter_children():
+            if child.kind == NodeKind.ASSERTION:
+                cs = child.get_field("stereotype") or Stereotype.CONCRETE
+                assertion_before[child.id] = cs.value if isinstance(cs, Stereotype) else str(cs)
+
+        entry = MutationEntry(
+            operation="set_stereotype",
+            target_id=node_id,
+            before_state={
+                "stereotype": old.value if isinstance(old, Stereotype) else str(old),
+                "assertion_stereotypes": assertion_before,
+            },
+            after_state={"stereotype": new.value},
+        )
+
+        node.set_field("stereotype", new)
+        for child in node.iter_children():
+            if child.kind == NodeKind.ASSERTION:
+                child.set_field("stereotype", new)
+
         self._mutation_log.append(entry)
         return entry
 

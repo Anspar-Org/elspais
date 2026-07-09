@@ -843,6 +843,17 @@ class FederatedGraph:
         self._record_mutation(repo_name, result)
         return result
 
+    # Implements: REQ-p00014-E
+    def set_stereotype(self, node_id: str, is_template: bool) -> MutationEntry:
+        """Set or clear a requirement's ``**Template**`` marker.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[node_id]
+        result = self._graph_for(node_id).set_stereotype(node_id, is_template)
+        self._record_mutation(repo_name, result)
+        return result
+
     def add_changelog_entry(self, node_id: str, changelog_entry: dict[str, str]) -> MutationEntry:
         """Add a changelog entry to a requirement.
 
