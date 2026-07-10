@@ -60,9 +60,9 @@ from elspais.mcp.server import (
     _query_nodes,
     _undo_last_mutation,
 )
-from elspais.server.routes_ui import build_levels, build_namespaces, build_statuses
 from elspais.utilities.git import get_author_info
 from elspais.utilities.patterns import build_resolver
+from elspais.view_model import build_levels, build_namespaces, build_statuses
 
 
 def _st(request: Request) -> Any:
@@ -685,7 +685,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
     import re
 
     from elspais.html.generator import compute_coverage_tiers
-    from elspais.server.routes_ui import local_namespace_from_config
+    from elspais.view_model import local_namespace_from_config
 
     state = _st(request)
     g = state.graph

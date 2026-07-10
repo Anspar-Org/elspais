@@ -5,8 +5,8 @@
 from __future__ import annotations
 
 from elspais.config.schema import ElspaisConfig
-from elspais.server.routes_ui import (
-    _extract_viewer_config,
+from elspais.server.routes_ui import _extract_viewer_config
+from elspais.view_model import (
     build_levels,
     build_namespaces,
     build_statuses,

@@ -716,7 +716,7 @@ class HTMLGenerator:
         # Build dynamic category catalogs (levels/namespaces/statuses with
         # resolved colors). Same shape used by the live viewer routes.
         from elspais.config.schema import ElspaisConfig
-        from elspais.server.routes_ui import build_levels, build_namespaces, build_statuses
+        from elspais.view_model import build_levels, build_namespaces, build_statuses
 
         try:
             typed_cfg = ElspaisConfig.model_validate(self.config)
