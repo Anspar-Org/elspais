@@ -7,6 +7,7 @@ is required. Draft requirements can be fixed silently.
 
 import argparse
 import os
+import re
 from pathlib import Path
 from unittest.mock import patch
 
@@ -363,3 +364,100 @@ A. The system SHALL do X.
             f"content was:\n{content}"
         )
         assert correct_hash in content
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Changelog email bracketing (round-trip through fix)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# Spec content for bracket round-trip tests: Active req with stale hash
+# (forces a rewrite) and an existing changelog entry.
+def _req_with_changelog(author_field: str) -> str:
+    return f"""\
+# REQ-d00001: Test Req
+
+**Level**: DEV | **Status**: Active | **Implements**: -
+
+## Assertions
+
+A. The system SHALL do X.
+
+## Changelog
+
+- 2026-01-01 | 00000000 | - | Old Dev ({author_field}) | Initial authoring
+
+*End* *Test Req* | **Hash**: 00000000
+---
+"""
+
+
+# Matches a changelog author cell holding a BARE (unbracketed) email.
+_BARE_EMAIL_CHANGELOG = re.compile(r"\| [^|]+ \((?!<)[^)|]+@[^)|]+\) \|")
+
+
+class TestChangelogEmailBrackets:
+    """Verifies: REQ-d00131-K — rendered changelog emails are MD034-clean."""
+
+    @patch(
+        "elspais.utilities.changelog_author.resolve_changelog_author",
+        return_value=MOCK_AUTHOR,
+    )
+    def test_fix_writes_bracketed_email_for_new_entry(self, mock_author, tmp_path: Path):
+        project = _make_project(tmp_path, ACTIVE_REQ_STALE_HASH)
+        args = _make_fix_args(project, "REQ-d00001", message="brackets please")
+
+        from elspais.commands.fix_cmd import run
+
+        old_cwd = os.getcwd()
+        os.chdir(project)
+        try:
+            assert run(args) == 0
+        finally:
+            os.chdir(old_cwd)
+
+        content = (project / "spec" / "requirements.md").read_text()
+        assert "(<test@test.org>)" in content
+        assert not _BARE_EMAIL_CHANGELOG.search(content)
+
+    @patch(
+        "elspais.utilities.changelog_author.resolve_changelog_author",
+        return_value=MOCK_AUTHOR,
+    )
+    def test_fix_preserves_existing_bracketed_email(self, mock_author, tmp_path: Path):
+        project = _make_project(tmp_path, _req_with_changelog("<old@example.com>"))
+        args = _make_fix_args(project, "REQ-d00001", message="hash refresh")
+
+        from elspais.commands.fix_cmd import run
+
+        old_cwd = os.getcwd()
+        os.chdir(project)
+        try:
+            assert run(args) == 0
+        finally:
+            os.chdir(old_cwd)
+
+        content = (project / "spec" / "requirements.md").read_text()
+        assert "(<old@example.com>)" in content, "brackets must round-trip"
+        assert not _BARE_EMAIL_CHANGELOG.search(content)
+
+    @patch(
+        "elspais.utilities.changelog_author.resolve_changelog_author",
+        return_value=MOCK_AUTHOR,
+    )
+    def test_fix_canonicalizes_existing_bare_email(self, mock_author, tmp_path: Path):
+        project = _make_project(tmp_path, _req_with_changelog("old@example.com"))
+        args = _make_fix_args(project, "REQ-d00001", message="hash refresh")
+
+        from elspais.commands.fix_cmd import run
+
+        old_cwd = os.getcwd()
+        os.chdir(project)
+        try:
+            assert run(args) == 0
+        finally:
+            os.chdir(old_cwd)
+
+        content = (project / "spec" / "requirements.md").read_text()
+        assert "(<old@example.com>)" in content, "bare email must be canonicalized"
+        assert not _BARE_EMAIL_CHANGELOG.search(content)
