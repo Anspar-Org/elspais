@@ -35,7 +35,12 @@ from pathlib import Path
 from typing import Any
 
 from elspais.graph.parsers.patterns import CHANGELOG_HEADER_PATTERN
-from elspais.graph.render import EndMarker, parse_end_marker, render_end_marker
+from elspais.graph.render import (
+    EndMarker,
+    format_changelog_entry,
+    parse_end_marker,
+    render_end_marker,
+)
 from elspais.utilities.patterns import BLANK_LINE_CLEANUP_RE
 from elspais.utilities.patterns import find_req_header as _find_req_header
 
@@ -1010,17 +1015,6 @@ def change_reference_type(
 # ---------------------------------------------------------------------------
 
 
-def _format_changelog_entry(entry: dict[str, str]) -> str:
-    """Format a changelog entry dict into a markdown line."""
-    author_id = entry["author_id"]
-    if "@" in author_id and not author_id.startswith("<"):
-        author_id = f"<{author_id}>"
-    return (
-        f"- {entry['date']} | {entry['hash']} | {entry['change_order']}"
-        f" | {entry['author_name']} ({author_id}) | {entry['reason']}"
-    )
-
-
 def add_changelog_entry(
     file_path: Path,
     req_id: str,
@@ -1054,7 +1048,7 @@ def add_changelog_entry(
         return f"No End marker found for {req_id} in {file_path.name}"
     end_line_start, _end_line_end, _parsed = end_marker
 
-    entry_line = _format_changelog_entry(entry)
+    entry_line = format_changelog_entry(entry)
 
     # Look for existing ## Changelog section between header and end marker
     req_block = content[start_pos:end_line_start]
