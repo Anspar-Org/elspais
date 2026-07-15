@@ -24,8 +24,8 @@ Centralizing graph construction ensures consistent hierarchy building, cycle det
 
 ### Changelog
 
-- 2026-05-11 | 65d2ad6a | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 65d2ad6a | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 65d2ad6a | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 65d2ad6a | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Graph Builder as Single Entry Point* | **Hash**: 65d2ad6a
 ---
@@ -61,8 +61,8 @@ Separating iteration from annotation enables:
 
 ### Changelog
 
-- 2026-05-11 | c73a6e32 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | c73a6e32 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | c73a6e32 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | c73a6e32 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Composable Annotation Design* | **Hash**: c73a6e32
 ---
@@ -87,7 +87,7 @@ The deserialization layer is the abstract controller that turns raw text into th
 
 ### Changelog
 
-- 2026-07-03 | e568082e | - | Michael Lewis (michael@anspar.org) | Auto-fix: add missing changelog section
+- 2026-07-03 | e568082e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
 *End* *Domain Deserialization Layer* | **Hash**: e568082e
 ---
@@ -126,7 +126,7 @@ G. The PR validation pipeline SHALL require both ticket (CUR-XXX) and requiremen
 
 ## Changelog
 
-- 2026-03-30 | 315accce | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-03-30 | 315accce | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
 *End* *CI/CD Pipeline Enforcement* | **Hash**: 315accce
 ---

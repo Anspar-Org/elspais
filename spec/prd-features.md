@@ -40,8 +40,8 @@ F. The tool SHALL resolve relative associate paths from the canonical (non-workt
 
 ## Changelog
 
-- 2026-03-30 | c3303546 | - | Michael Lewis (michael@anspar.org) | Auto-fix: sync changelog hash
-- 2026-03-30 | f935e564 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-03-30 | c3303546 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-03-30 | f935e564 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
 *End* *Multi-Repository Requirements* | **Hash**: c3303546
 ---
@@ -79,7 +79,7 @@ C. The viewer SHALL display source files inline in a side panel with syntax-high
 
 ## Changelog
 
-- 2026-03-30 | b3dd4d1a | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-03-30 | b3dd4d1a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
 *End* *Interactive Traceability Viewer* | **Hash**: b3dd4d1a
 ---
@@ -116,19 +116,19 @@ K. Coverage on `INSTANCE` *Assertions* SHALL be computed as inherited coverage o
 
 ### Changelog
 
-- 2026-05-16 | 6c1d002c | - | Michael Lewis (michael@anspar.org) | Auto-fix: sync changelog hash
-- 2026-05-16 | - | - | Michael Lewis (michael@anspar.org) | CUR-1353 Phase 10: refresh assertion B to match single-REQ scope (no descendant REQs)
-- 2026-05-16 | 6c1d002c | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-05-16 | c7521067 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms, update hash
-- 2026-05-16 | - | - | Michael Lewis (michael@anspar.org) | CUR-1353 Phase 5: add inherited-coverage assertion (K) for INSTANCE assertions and satisfier rollups
-- 2026-05-16 | ed72021a | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-05-16 | - | - | Michael Lewis (michael@anspar.org) | CUR-1353 Phase 4: add federated diagnostics (J) for missing associates and Satisfies cycles
-- 2026-05-16 | - | - | Michael Lewis (michael@anspar.org) | CUR-1353 Phase 3: add federated cross-repo template instantiation (H)
-- 2026-05-16 | 6e4308ff | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms, update hash
-- 2026-05-16 | - | - | Michael Lewis (michael@anspar.org) | CUR-1353 Phase 2: add Template marker (E), diagnostic field (F), validation matrix (G); rewrite D to reflect the removal of file-based attribution
-- 2026-05-11 | bae1b85d | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-05-04 | bae1b85d | - | Developer (dev@example.com) | Auto-fix: canonicalize term forms, update hash
-- 2026-03-30 | 9115ce0d | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-05-16 | 6c1d002c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-05-16 | - | - | Michael Lewis (<michael@anspar.org>) | CUR-1353 Phase 10: refresh assertion B to match single-REQ scope (no descendant REQs)
+- 2026-05-16 | 6c1d002c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-05-16 | c7521067 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
+- 2026-05-16 | - | - | Michael Lewis (<michael@anspar.org>) | CUR-1353 Phase 5: add inherited-coverage assertion (K) for INSTANCE assertions and satisfier rollups
+- 2026-05-16 | ed72021a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-05-16 | - | - | Michael Lewis (<michael@anspar.org>) | CUR-1353 Phase 4: add federated diagnostics (J) for missing associates and Satisfies cycles
+- 2026-05-16 | - | - | Michael Lewis (<michael@anspar.org>) | CUR-1353 Phase 3: add federated cross-repo template instantiation (H)
+- 2026-05-16 | 6e4308ff | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
+- 2026-05-16 | - | - | Michael Lewis (<michael@anspar.org>) | CUR-1353 Phase 2: add Template marker (E), diagnostic field (F), validation matrix (G); rewrite D to reflect the removal of file-based attribution
+- 2026-05-11 | bae1b85d | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-05-04 | bae1b85d | - | Developer (<dev@example.com>) | Auto-fix: canonicalize term forms, update hash
+- 2026-03-30 | 9115ce0d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
 *End* *Satisfies Relationship* | **Hash**: 6c1d002c
 ---
@@ -179,8 +179,8 @@ Multiple data structures lead to synchronization bugs, duplicated logic, and mai
 
 ### Changelog
 
-- 2026-05-11 | 4a1e5d0b | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 4a1e5d0b | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 4a1e5d0b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 4a1e5d0b | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Unified Graph Architecture* | **Hash**: 4a1e5d0b
 ---
@@ -209,8 +209,8 @@ AI agents need programmatic access to requirements data for tasks like coverage 
 
 ### Changelog
 
-- 2026-05-11 | 3ebc237a | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-03-30 | 3ebc237a | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-05-11 | 3ebc237a | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-03-30 | 3ebc237a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
 *End* *MCP Server for AI-Driven Requirements Management* | **Hash**: 3ebc237a
 ---
@@ -231,8 +231,8 @@ D. CommentThread anchor SHALL default to the root event anchor when not explicit
 
 ### Changelog
 
-- 2026-05-11 | dd5c745e | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | dd5c745e | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | dd5c745e | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | dd5c745e | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Comment Data Models* | **Hash**: dd5c745e
 
@@ -250,8 +250,8 @@ C. CommentIndex SHALL support merge for federation following the TermDictionary 
 
 ### Changelog
 
-- 2026-05-11 | ff891bd9 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | ff891bd9 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | ff891bd9 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | ff891bd9 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Comment Index* | **Hash**: ff891bd9
 
@@ -273,8 +273,8 @@ E. Comment file path resolution SHALL mirror repo structure under .elspais/comme
 
 ### Changelog
 
-- 2026-05-11 | cdaa4044 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-03-30 | cdaa4044 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-05-11 | cdaa4044 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-03-30 | cdaa4044 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
 *End* *Comment JSONL Storage* | **Hash**: cdaa4044
 
@@ -292,8 +292,8 @@ C. Rename-triggered promotion SHALL update all anchors prefixed with the old ID 
 
 ### Changelog
 
-- 2026-05-11 | 3048ea60 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-03-30 | 3048ea60 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-05-11 | 3048ea60 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-03-30 | 3048ea60 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
 *End* *Comment Promotion Engine* | **Hash**: 3048ea60
 
@@ -313,8 +313,8 @@ D. FederatedGraph SHALL provide a repo_root_for(node_id) public method that retu
 
 ### Changelog
 
-- 2026-05-11 | 0eed8546 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 0eed8546 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 0eed8546 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 0eed8546 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Comment Graph Integration* | **Hash**: 0eed8546
 
@@ -336,8 +336,8 @@ E. Author identity SHALL be resolved server-side via get_author_info using the c
 
 ### Changelog
 
-- 2026-05-11 | b8533d82 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | b8533d82 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | b8533d82 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | b8533d82 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Comment API Endpoints* | **Hash**: b8533d82
 
@@ -353,8 +353,8 @@ B. A comment margin column SHALL render speech bubble icons with count badges fo
 
 ### Changelog
 
-- 2026-05-11 | 6869aa8a | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-03-30 | 6869aa8a | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-05-11 | 6869aa8a | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-03-30 | 6869aa8a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
 *End* *Comment UI Anchors and Margin Column* | **Hash**: 6869aa8a
 
@@ -370,8 +370,8 @@ B. Comment mode SHALL be a one-shot mode entered via C key or toolbar button (Ed
 
 ### Changelog
 
-- 2026-05-11 | 792d13ce | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 792d13ce | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 792d13ce | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 792d13ce | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Comment Inline Threads and Comment Mode* | **Hash**: 792d13ce
 
@@ -385,8 +385,8 @@ A. A Lost Comments card SHALL appear at the top of the card column when orphaned
 
 ### Changelog
 
-- 2026-05-11 | 7fc99c6a | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 7fc99c6a | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 7fc99c6a | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 7fc99c6a | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Lost Comments Card* | **Hash**: 7fc99c6a
 
@@ -402,8 +402,8 @@ B. The elspais comments compact CLI command SHALL glob .elspais/comments/**/*.js
 
 ### Changelog
 
-- 2026-05-11 | f3547362 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | f3547362 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | f3547362 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | f3547362 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Comment Compaction CLI* | **Hash**: f3547362
 
@@ -421,8 +421,8 @@ C. GET /api/term/{nonexistent_key} SHALL return HTTP 404 with an error message.
 
 ### Changelog
 
-- 2026-05-11 | 6c934e14 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 6c934e14 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 6c934e14 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 6c934e14 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Terms API Endpoints* | **Hash**: 6c934e14
 
@@ -440,8 +440,8 @@ C. Expand/collapse buttons, tree/flat toggle, and filter groups (status, git, hi
 
 ### Changelog
 
-- 2026-05-11 | 3328f677 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 3328f677 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 3328f677 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 3328f677 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Terms Tab in Viewer Nav Tree* | **Hash**: 3328f677
 
@@ -459,8 +459,8 @@ C. Term cards SHALL be read-only with no edit controls. The card SHALL be render
 
 ### Changelog
 
-- 2026-05-11 | 5dd49a51 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 5dd49a51 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 5dd49a51 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 5dd49a51 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Term Cards in Viewer Card Stack* | **Hash**: 5dd49a51
 
@@ -476,7 +476,7 @@ B. Clicking a defined-term span SHALL open the term card via a delegated click h
 
 ### Changelog
 
-- 2026-05-11 | 62a44ed3 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 62a44ed3 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 62a44ed3 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 62a44ed3 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Inline Term Highlighting in Viewer Cards* | **Hash**: 62a44ed3

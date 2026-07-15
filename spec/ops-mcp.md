@@ -26,8 +26,8 @@ Core query tools enable AI agents to discover and explore requirements without m
 
 ### Changelog
 
-- 2026-05-11 | 73c31134 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 73c31134 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 73c31134 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 73c31134 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *MCP Core Query Tools* | **Hash**: 73c31134
 ---
@@ -54,9 +54,9 @@ AI agents need context about the workspace they're operating in to provide relev
 
 ### Changelog
 
-- 2026-07-03 | aaba2940 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-05-11 | 0aa9dff4 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 0aa9dff4 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-07-03 | aaba2940 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-05-11 | 0aa9dff4 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 0aa9dff4 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *MCP Workspace Context Tools* | **Hash**: aaba2940
 ---
@@ -91,9 +91,9 @@ In-memory mutations enable AI agents to draft requirement changes that can be re
 
 ### Changelog
 
-- 2026-06-09 | 69e70749 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-05-11 | ef63f424 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-03-30 | ef63f424 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-06-09 | 69e70749 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-05-11 | ef63f424 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-03-30 | ef63f424 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
 *End* *MCP Graph Mutation Tools* | **Hash**: 69e70749
 ---
@@ -130,8 +130,8 @@ File mutations persist changes to the authoritative spec files. Git safety branc
 
 ### Changelog
 
-- 2026-05-11 | 291497b8 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-03-30 | 291497b8 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-05-11 | 291497b8 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-03-30 | 291497b8 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
 *End* *MCP File Mutation Tools* | **Hash**: 291497b8
 ---
@@ -160,8 +160,8 @@ AI agents performing requirement analysis need to understand test coverage and i
 
 ### Changelog
 
-- 2026-05-11 | e7fd1b43 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-03-30 | e7fd1b43 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-05-11 | e7fd1b43 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-03-30 | e7fd1b43 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
 *End* *MCP Test Coverage Analysis Tools* | **Hash**: e7fd1b43
 ---
@@ -192,8 +192,8 @@ Teams need to not just see what's unlinked but act on it efficiently. Combining 
 
 ### Changelog
 
-- 2026-05-11 | 17851ae2 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-03-30 | 17851ae2 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-05-11 | 17851ae2 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-03-30 | 17851ae2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
 *End* *Agent-Assisted Link Suggestion* | **Hash**: 17851ae2
 ---
@@ -224,8 +224,8 @@ LLM agents need scoped requirement subsets for sub-agent consumption. Extracting
 
 ### Changelog
 
-- 2026-05-11 | ab29e315 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | ab29e315 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | ab29e315 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | ab29e315 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *MCP Subtree Extraction Tool* | **Hash**: ab29e315
 ---
@@ -256,8 +256,8 @@ LLMs benefit from incremental exploration of results, deciding when to stop rath
 
 ### Changelog
 
-- 2026-05-11 | 743877c3 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 743877c3 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 743877c3 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 743877c3 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *MCP Cursor Protocol* | **Hash**: 743877c3
 ---
@@ -286,8 +286,8 @@ Agents listing requirements for a ticket often include both specific leaf requir
 
 ### Changelog
 
-- 2026-05-11 | c667abd2 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | c667abd2 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | c667abd2 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | c667abd2 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *MCP Minimize Requirement Set Tool* | **Hash**: c667abd2
 ---
@@ -316,8 +316,8 @@ Agents exploring requirements for a ticket need to search within a relevant subg
 
 ### Changelog
 
-- 2026-05-11 | 7f1e6589 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-03-30 | 7f1e6589 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-05-11 | 7f1e6589 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-03-30 | 7f1e6589 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
 *End* *MCP Scoped Search Tool* | **Hash**: 7f1e6589
 ---
@@ -344,8 +344,8 @@ Agents won't compose scoped_search + minimize_requirement_set unprompted. A sing
 
 ### Changelog
 
-- 2026-05-11 | fea647ee | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | fea647ee | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | fea647ee | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | fea647ee | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *MCP Discover Requirements Tool* | **Hash**: fea647ee
 ---

@@ -30,8 +30,8 @@ FederatedGraph provides config isolation for multi-repo builds while presenting 
 
 ### Changelog
 
-- 2026-05-11 | 72471144 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 72471144 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 72471144 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 72471144 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *FederatedGraph Read-Only Delegation* | **Hash**: 72471144
 ---
@@ -64,8 +64,8 @@ Mutation delegation preserves TraceGraph's existing mutation+undo logic while ad
 
 ### Changelog
 
-- 2026-05-11 | 1a0942a4 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 1a0942a4 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 1a0942a4 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 1a0942a4 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *FederatedGraph Mutation Delegation* | **Hash**: 1a0942a4
 ---
@@ -92,8 +92,8 @@ Associates are declared in the root repo's `.elspais.toml` using a structured TO
 
 ### Changelog
 
-- 2026-05-11 | 479dcbb8 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 479dcbb8 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 479dcbb8 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 479dcbb8 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Associates Config Loading* | **Hash**: 479dcbb8
 ---
@@ -122,8 +122,8 @@ Per-repo building ensures config isolation: each repo's hierarchy rules, format 
 
 ### Changelog
 
-- 2026-05-11 | 31e019a1 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 31e019a1 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 31e019a1 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 31e019a1 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Multi-Repo Build Pipeline* | **Hash**: 31e019a1
 ---
@@ -156,9 +156,9 @@ Without per-repo delegation, all nodes are validated against the root repo's con
 
 ### Changelog
 
-- 2026-06-18 | 844d12d1 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms, update hash
-- 2026-05-11 | 2313140d | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 2313140d | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-06-18 | 844d12d1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
+- 2026-05-11 | 2313140d | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 2313140d | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Per-Repo Health Check Delegation* | **Hash**: 844d12d1
 ---
@@ -191,10 +191,10 @@ The bottom-up reference model (`Implements:` authored on the implementer) would 
 
 ### Changelog
 
-- 2026-07-03 | d9d4bc98 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-07-03 | 425d61aa | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-05-31 | d1f691f0 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-05-31 | b576d134 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms, update hash, add missing changelog section
+- 2026-07-03 | d9d4bc98 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-03 | 425d61aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-05-31 | d1f691f0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-05-31 | b576d134 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash, add missing changelog section
 
 *End* *External Library Integration via Integrates Keyword* | **Hash**: d9d4bc98
 ---
@@ -221,6 +221,6 @@ Federation is fundamentally a read and validation aggregation: associates provid
 
 ### Changelog
 
-- 2026-06-01 | 28c8c538 | - | Michael Lewis (michael@anspar.org) | Auto-fix: add missing changelog section
+- 2026-06-01 | 28c8c538 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
 *End* *Federation Write/Generation Scope* | **Hash**: 28c8c538

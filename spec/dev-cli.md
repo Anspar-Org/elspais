@@ -26,8 +26,8 @@ The previous `validate` command's responsibilities are absorbed by `health`. Ref
 
 ### Changelog
 
-- 2026-05-11 | ada92a29 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | ada92a29 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | ada92a29 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | ada92a29 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Diagnostic Command Exit Code Contract* | **Hash**: ada92a29
 ---
@@ -60,8 +60,8 @@ The previous implementation hardcoded expansion in RequirementParser only, using
 
 ### Changelog
 
-- 2026-05-11 | 313fe52b | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-03-30 | 313fe52b | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-05-11 | 313fe52b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-03-30 | 313fe52b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
 *End* *Multi-Assertion Reference Expansion* | **Hash**: 313fe52b
 ---
@@ -98,8 +98,8 @@ Different projects use different ID conventions, comment styles, and directory s
 
 ### Changelog
 
-- 2026-05-11 | 89956cd7 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 89956cd7 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 89956cd7 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 89956cd7 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Unified Reference Configuration* | **Hash**: 89956cd7
 ---
@@ -126,10 +126,10 @@ A JSON graph output mode enables programmatic consumption of the full *Traceabil
 
 ### Changelog
 
-- 2026-07-02 | 64954432 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-07-02 | f4e1d611 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-05-11 | f8f0e0f2 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-03-30 | f8f0e0f2 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-07-02 | 64954432 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-02 | f4e1d611 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-05-11 | f8f0e0f2 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-03-30 | f8f0e0f2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
 *End* *Trace Command* | **Hash**: 64954432
 ---
@@ -168,8 +168,8 @@ Report-producing commands (`health`, `trace`, `coverage`, `changed`) currently e
 
 ### Changelog
 
-- 2026-05-11 | 82d76f1a | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 82d76f1a | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 82d76f1a | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 82d76f1a | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Unified Report Composition* | **Hash**: 82d76f1a
 ---
@@ -196,9 +196,9 @@ Coverage data is already computed during graph construction but is only surfaced
 
 ### Changelog
 
-- 2026-07-02 | a17871db | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-05-11 | 2fd4ab13 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-03-30 | 2fd4ab13 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-07-02 | a17871db | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-05-11 | 2fd4ab13 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-03-30 | 2fd4ab13 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
 *End* *Coverage Report Section* | **Hash**: a17871db
 ---
@@ -227,8 +227,8 @@ CLI exposure enables both interactive use and CI pipeline integration. JSON outp
 
 ### Changelog
 
-- 2026-05-11 | 44fd54e9 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 44fd54e9 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 44fd54e9 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 44fd54e9 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Link Suggestion CLI Command* | **Hash**: 44fd54e9
 ---
@@ -261,8 +261,8 @@ In a large requirements DAG, naive metrics like descendant count always favor th
 
 ### Changelog
 
-- 2026-05-11 | 86bb619b | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-03-30 | 86bb619b | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-05-11 | 86bb619b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-03-30 | 86bb619b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
 *End* *Graph Analysis Engine* | **Hash**: 86bb619b
 ---
@@ -297,8 +297,8 @@ A CLI command provides immediate visibility into which requirements are most fou
 
 ### Changelog
 
-- 2026-05-11 | 3cd66dbe | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 3cd66dbe | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 3cd66dbe | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 3cd66dbe | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Analysis CLI Command* | **Hash**: 3cd66dbe
 ---
@@ -323,8 +323,8 @@ F. The tool SHALL compare local vs. remote versions and report whether the insta
 
 ### Changelog
 
-- 2026-05-11 | 56b62d01 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 56b62d01 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 56b62d01 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 56b62d01 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Version Check and Update Notification* | **Hash**: 56b62d01
 
@@ -344,10 +344,10 @@ D. When multiple `(repo, spec_dir)` buckets contribute requirements within a lev
 
 ### Changelog
 
-- 2026-05-11 | 4310931a | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-05-04 | 4310931a | - | Developer (dev@example.com) | Auto-fix: update hash
-- 2026-05-04 | 7c4f1816 | - | Developer (dev@example.com) | Auto-fix: update hash
-- 2026-04-23 | a1e3915a | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 4310931a | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-05-04 | 4310931a | - | Developer (<dev@example.com>) | Auto-fix: update hash
+- 2026-05-04 | 7c4f1816 | - | Developer (<dev@example.com>) | Auto-fix: update hash
+- 2026-04-23 | a1e3915a | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *INDEX.md Regeneration* | **Hash**: 4310931a
 
@@ -365,8 +365,8 @@ C. When a child requirement has test coverage, its parent requirement SHALL rece
 
 ### Changelog
 
-- 2026-05-11 | 64b0dfbb | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 64b0dfbb | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 64b0dfbb | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 64b0dfbb | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Health Check Coverage Rollup* | **Hash**: 64b0dfbb
 
@@ -386,8 +386,8 @@ D. When no UAT results CSV file exists, the uat.results check SHALL report as sk
 
 ### Changelog
 
-- 2026-05-11 | 3a95ff57 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 3a95ff57 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 3a95ff57 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 3a95ff57 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *UAT Health Check Section* | **Hash**: 3a95ff57
 
@@ -449,6 +449,6 @@ Authors writing their first requirement, or reviewers checking format convention
 
 ### Changelog
 
-- 2026-07-03 | 8e05d02e | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms, update hash, add missing changelog section
+- 2026-07-03 | 8e05d02e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash, add missing changelog section
 
 *End* *Requirement Format Reference Command* | **Hash**: 8e05d02e
