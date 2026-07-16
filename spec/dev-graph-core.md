@@ -24,8 +24,8 @@ Per-node annotators enable fine-grained control over which annotations are appli
 
 ### Changelog
 
-- 2026-05-11 | 8ca0389e | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 8ca0389e | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 8ca0389e | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 8ca0389e | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Node Annotator Functions* | **Hash**: 8ca0389e
 ---
@@ -56,8 +56,8 @@ Aggregate functions provide reusable statistics computation that any output form
 
 ### Changelog
 
-- 2026-05-11 | 97c0f6fc | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 97c0f6fc | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 97c0f6fc | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 97c0f6fc | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Graph Aggregate Functions* | **Hash**: 97c0f6fc
 ---
@@ -90,9 +90,9 @@ Direct graph consumption eliminates data structure conversion overhead and ensur
 
 ### Changelog
 
-- 2026-07-03 | c5dd0546 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-05-11 | a3575fcc | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | a3575fcc | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-07-03 | c5dd0546 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-05-11 | a3575fcc | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | a3575fcc | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Output Generators Consume Graph Directly* | **Hash**: c5dd0546
 ---
@@ -113,8 +113,8 @@ A standard pipeline ensures consistent annotation across all output formats and 
 
 ### Changelog
 
-- 2026-05-11 | 0256df47 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 0256df47 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 0256df47 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 0256df47 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Annotation Pipeline Pattern* | **Hash**: 0256df47
 ---
@@ -143,8 +143,8 @@ Using metrics dict as the extension point enables adding new annotations without
 
 ### Changelog
 
-- 2026-05-11 | 0073a9c3 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 0073a9c3 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 0073a9c3 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 0073a9c3 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Node Metrics as Extension Point* | **Hash**: 0073a9c3
 ---
@@ -187,13 +187,13 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* 
 
 ### Changelog
 
-- 2026-07-07 | 2d89da53 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-07-03 | ddbc50c8 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-07-02 | 738d94e4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-06-20 | 2d05ad7b | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-06-19 | acbdf3da | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-05-11 | e9b5c3f1 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-03-30 | e9b5c3f1 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-07-07 | 2d89da53 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-03 | ddbc50c8 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-02 | 738d94e4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-06-20 | 2d05ad7b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-06-19 | acbdf3da | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-05-11 | e9b5c3f1 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-03-30 | e9b5c3f1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
 *End* *Indirect Coverage Source* | **Hash**: 2d89da53
 ---
@@ -222,8 +222,8 @@ Users need both a strict *Traceability* view (only *Assertion*-targeted tests co
 
 ### Changelog
 
-- 2026-05-11 | 3e5b1766 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-03-30 | 3e5b1766 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-05-11 | 3e5b1766 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-03-30 | 3e5b1766 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
 *End* *Indirect Coverage Toggle Display* | **Hash**: 3e5b1766
 ---
@@ -250,8 +250,8 @@ Currently, all parentless REQUIREMENTs and all USER_JOURNEYs are unconditionally
 
 ### Changelog
 
-- 2026-05-11 | 4bd239f1 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-03-30 | 4bd239f1 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-05-11 | 4bd239f1 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-03-30 | 4bd239f1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
 *End* *Unified Root vs Orphan Classification* | **Hash**: 4bd239f1
 ---
@@ -276,8 +276,8 @@ The core engine composes existing building blocks into a scoring pipeline. Each 
 
 ### Changelog
 
-- 2026-05-11 | 95f09aea | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-03-30 | 95f09aea | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-05-11 | 95f09aea | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-03-30 | 95f09aea | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
 *End* *Link Suggestion Core Engine* | **Hash**: 95f09aea
 ---
@@ -300,8 +300,8 @@ E. Keyword collection SHALL return a sorted, deduplicated list of all keywords a
 
 ### Changelog
 
-- 2026-05-11 | ebe57660 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-03-30 | ebe57660 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-05-11 | ebe57660 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-03-30 | ebe57660 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
 *End* *Keyword Extraction Annotator* | **Hash**: ebe57660
 
@@ -325,8 +325,8 @@ F. The clone SHALL handle DAG structures with multiple parents without infinite 
 
 ### Changelog
 
-- 2026-05-11 | a007d5ed | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | a007d5ed | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | a007d5ed | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | a007d5ed | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *TraceGraph Deep Clone* | **Hash**: a007d5ed
 
@@ -366,8 +366,8 @@ F. The `validate` / health-check command reports B and C as
 
 ### Changelog
 
-- 2026-05-11 | 903349d2 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-05-11 | 903349d2 | - | Developer (dev@example.com) | Auto-fix: update hash, add missing changelog section
+- 2026-05-11 | 903349d2 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-05-11 | 903349d2 | - | Developer (<dev@example.com>) | Auto-fix: update hash, add missing changelog section
 
 *End* *Section Header Depth Canonicalization* | **Hash**: 903349d2
 
@@ -401,14 +401,14 @@ J. In a selective run (a `--targets` set is present), a requirement with test re
 
 ### Changelog
 
-- 2026-07-08 | 0f7323ff | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-07-01 | 4975d47a | - | Michael Lewis (michael@anspar.org) | Auto-fix: sync changelog hash
-- 2026-06-26 | 0b87cbd4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-06-26 | abc6e487 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-06-21 | 6962b5a4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-06-20 | 81f6cdcd | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-06-20 | 98120740 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-06-20 | 00000000 | - | Michael Lewis (michael@anspar.org) | CUR-1533: initial
+- 2026-07-08 | 0f7323ff | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-01 | 4975d47a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-06-26 | 0b87cbd4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-06-26 | abc6e487 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-06-21 | 6962b5a4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-06-20 | 81f6cdcd | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-06-20 | 98120740 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-06-20 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | CUR-1533: initial
 
 *End* *Coverage-Based and Aggregate Test Verification* | **Hash**: 0f7323ff
 
@@ -502,13 +502,13 @@ L. A per-status `expects_implementation` flag SHALL declare whether a requiremen
 
 ### Changelog
 
-- 2026-07-07 | 90053f29 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-07-07 | 4767b41c | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-07-07 | 172301f4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-07-06 | 06550baf | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-07-06 | dd54712c | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-07-06 | 489752cd | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-07-03 | c843c727 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-07-02 | be97c170 | - | Michael Lewis (michael@anspar.org) | Auto-fix: add missing changelog section
+- 2026-07-07 | 90053f29 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-07 | 4767b41c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-07 | 172301f4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-06 | 06550baf | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-06 | dd54712c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-06 | 489752cd | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-03 | c843c727 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-02 | be97c170 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
 *End* *Reporting Surface Consistency* | **Hash**: 90053f29

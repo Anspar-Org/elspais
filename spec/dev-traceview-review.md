@@ -55,7 +55,7 @@ J. Health check endpoint SHALL be available at `/api/health`.
 
 ## Changelog
 
-- 2026-04-23 | b647ec64 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-04-23 | b647ec64 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Review API Server* | **Hash**: b647ec64
 
@@ -83,7 +83,7 @@ Multi-repo federation users need visibility into which repos are current and whi
 
 ### Changelog
 
-- 2026-05-11 | b4fae1d0 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | b4fae1d0 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | b4fae1d0 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | b4fae1d0 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Server Federation and Staleness* | **Hash**: b4fae1d0

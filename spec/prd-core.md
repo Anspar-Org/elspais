@@ -30,7 +30,7 @@ D. [DEPRECATED]
 
 ## Changelog
 
-- 2026-04-23 | ce489de6 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-04-23 | ce489de6 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Requirements Management Tool* | **Hash**: ce489de6
 ---
@@ -62,7 +62,7 @@ C. The tool SHALL verify content hashes match requirement body text.
 
 ## Changelog
 
-- 2026-03-30 | e8f0e4eb | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
+- 2026-03-30 | e8f0e4eb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
 *End* *Requirements Validation* | **Hash**: e8f0e4eb
 ---
@@ -91,7 +91,7 @@ B. The tool SHALL derive *Traceability* from `Implements:` metadata without manu
 
 ## Changelog
 
-- 2026-04-23 | 6a3a9426 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-04-23 | 6a3a9426 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Traceability Matrix Generation* | **Hash**: 6a3a9426
 ---
@@ -139,7 +139,7 @@ J. The tool SHALL re-read configuration from disk when reloading the graph, ensu
 
 ## Changelog
 
-- 2026-04-23 | f8ff5509 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-04-23 | f8ff5509 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Change Detection and Auditability* | **Hash**: f8ff5509
 ---
@@ -175,7 +175,7 @@ F. All tests marked `@pytest.mark.e2e` SHALL invoke the `elspais` CLI as a subpr
 
 ## Changelog
 
-- 2026-04-23 | 962216d8 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-04-23 | 962216d8 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Automated Testing* | **Hash**: 962216d8
 ---
@@ -196,8 +196,8 @@ C. Multiple requirements MAY exist at the same Level each declaring a relationsh
 
 ### Changelog
 
-- 2026-05-11 | fc1e85fe | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | fc1e85fe | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | fc1e85fe | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | fc1e85fe | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Requirement Decomposition Rules* | **Hash**: fc1e85fe
 ---
@@ -228,7 +228,7 @@ F. The tool SHALL support an `--overview` flag that generates a stakeholder-orie
 
 ## Changelog
 
-- 2026-04-23 | bfc0cadf | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-04-23 | bfc0cadf | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Spec-to-PDF Compilation* | **Hash**: bfc0cadf
 ---
@@ -251,8 +251,8 @@ E. `TermRef` SHALL have a `wrong_marking` field (str, default "") that records t
 
 ### Changelog
 
-- 2026-05-11 | 0d0fd97c | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 0d0fd97c | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 0d0fd97c | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 0d0fd97c | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *TermDictionary Data Model* | **Hash**: 0d0fd97c
 
@@ -270,9 +270,9 @@ B. The transformer SHALL handle `definition_block` nodes by extracting the term 
 
 ### Changelog
 
-- 2026-05-11 | 6adaa258 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-24 | 6adaa258 | - | Developer (dev@example.com) | Auto-fix: update hash
-- 2026-04-23 | 078ce203 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 6adaa258 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-24 | 6adaa258 | - | Developer (<dev@example.com>) | Auto-fix: update hash
+- 2026-04-23 | 078ce203 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Grammar Extension for Definition Blocks* | **Hash**: 6adaa258
 
@@ -292,8 +292,8 @@ D. `GraphBuilder` SHALL accept a `namespace` parameter (str, default "") and set
 
 ### Changelog
 
-- 2026-05-11 | 96b5223f | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 96b5223f | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 96b5223f | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 96b5223f | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *TraceGraph Terms and GraphBuilder Integration* | **Hash**: 96b5223f
 
@@ -317,8 +317,8 @@ F. `check_unmarked_usage()` SHALL produce distinct messages for wrong-marking re
 
 ### Changelog
 
-- 2026-05-11 | 0d96cc34 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 0d96cc34 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 0d96cc34 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 0d96cc34 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Term Health Checks* | **Hash**: 0d96cc34
 
@@ -338,8 +338,8 @@ D. All generated files SHALL include an auto-generated header comment. Both `--f
 
 ### Changelog
 
-- 2026-05-11 | f2da30fb | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | f2da30fb | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | f2da30fb | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | f2da30fb | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Glossary and Term Index Generators* | **Hash**: f2da30fb
 
@@ -355,8 +355,8 @@ B. `elspais fix` SHALL call glossary and term-index generation after existing fi
 
 ### Changelog
 
-- 2026-05-11 | d18fc2c9 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | d18fc2c9 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | d18fc2c9 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | d18fc2c9 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *CLI Registration for Glossary and Term Index* | **Hash**: d18fc2c9
 
@@ -382,8 +382,8 @@ G. For file extensions with no known comment style, `extract_comments()` SHALL r
 
 ### Changelog
 
-- 2026-05-11 | 499123f1 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 499123f1 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 499123f1 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 499123f1 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Comment Extraction Utilities* | **Hash**: 499123f1
 
@@ -409,11 +409,11 @@ G. When one *Defined Term*'s text contains another (e.g. `Sponsor Portal` contai
 
 ### Changelog
 
-- 2026-06-09 | f2b673a4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms, update hash
-- 2026-06-09 | 2849c41b | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-06-09 | d1eb27f4 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-05-11 | 63cb874b | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 63cb874b | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-06-09 | f2b673a4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
+- 2026-06-09 | 2849c41b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-06-09 | d1eb27f4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-05-11 | 63cb874b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 63cb874b | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Term Reference Scanner Core* | **Hash**: f2b673a4
 
@@ -433,8 +433,8 @@ D. Files matching any `exclude_files` glob pattern SHALL be skipped during scann
 
 ### Changelog
 
-- 2026-05-11 | d3a202d4 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | d3a202d4 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | d3a202d4 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | d3a202d4 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Graph-Wide Term Scan* | **Hash**: d3a202d4
 
@@ -450,8 +450,8 @@ B. Each repo's scan SHALL use its own config for `markup_styles` and `exclude_fi
 
 ### Changelog
 
-- 2026-05-11 | 7d9a30c4 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 7d9a30c4 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 7d9a30c4 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 7d9a30c4 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Federated Graph Term Scanner Pass* | **Hash**: 7d9a30c4
 
@@ -471,9 +471,9 @@ D. `run_term_checks()` SHALL call all six term checks (`duplicates`, `undefined`
 
 ### Changelog
 
-- 2026-05-11 | 76a49db3 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-24 | 76a49db3 | - | Developer (dev@example.com) | Auto-fix: update hash
-- 2026-03-29 | 9788814d | - | Michael Lewis (michael@anspar.org) | Initial creation
+- 2026-05-11 | 76a49db3 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-24 | 76a49db3 | - | Developer (<dev@example.com>) | Auto-fix: update hash
+- 2026-03-29 | 9788814d | - | Michael Lewis (<michael@anspar.org>) | Initial creation
 
 *End* *New Term Health Checks* | **Hash**: 76a49db3
 
@@ -493,11 +493,11 @@ D. The `tests.unlinked` check (`check_unlinked_tests()`) SHALL flag a test file 
 
 ### Changelog
 
-- 2026-07-03 | 583588f9 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-07-03 | c1be56e5 | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-05-11 | e1272219 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-03-30 | e1272219 | - | Michael Lewis (michael@anspar.org) | Auto-fix: sync changelog hash
-- 2026-03-29 | 6e481d63 | - | Michael Lewis (michael@anspar.org) | Initial creation
+- 2026-07-03 | 583588f9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-03 | c1be56e5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-05-11 | e1272219 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-03-30 | e1272219 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-03-29 | 6e481d63 | - | Michael Lewis (<michael@anspar.org>) | Initial creation
 
 *End* *Code No-Traceability Health Check* | **Hash**: 583588f9
 
@@ -513,8 +513,8 @@ B. Lark transformers SHALL use `strip_emphasis()` to normalize all user-text cap
 
 ### Changelog
 
-- 2026-05-11 | 16af6c80 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-05-04 | 16af6c80 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 16af6c80 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-05-04 | 16af6c80 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Markdown Emphasis Normalization Utility* | **Hash**: 16af6c80
 
@@ -528,8 +528,8 @@ A. Fenced code block content (lines between ``` markers) SHALL be preserved verb
 
 ### Changelog
 
-- 2026-05-11 | 1270eb2b | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-05-04 | 1270eb2b | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 1270eb2b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-05-04 | 1270eb2b | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Fenced Code Block Preservation* | **Hash**: 1270eb2b
 
@@ -543,7 +543,7 @@ A. `elspais fix` SHALL be idempotent: running the command twice in succession on
 
 ### Changelog
 
-- 2026-05-11 | 8a92207b | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-05-04 | 8a92207b | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 8a92207b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-05-04 | 8a92207b | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Fix Command Idempotency* | **Hash**: 8a92207b

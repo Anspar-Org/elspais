@@ -16,8 +16,8 @@ C. All consumer code that references `ConfigLoader` (type annotations, imports, 
 
 ### Changelog
 
-- 2026-05-11 | 8d323813 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 8d323813 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 8d323813 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 8d323813 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Declarative Config Schema Cleanup* | **Hash**: 8d323813
 ---
@@ -38,8 +38,8 @@ C. The generated JSON Schema SHALL include `$schema` and `title` top-level keys.
 
 ### Changelog
 
-- 2026-05-11 | 2b82ef02 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 2b82ef02 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 2b82ef02 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 2b82ef02 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *JSON Schema Export for IDE Autocomplete* | **Hash**: 2b82ef02
 ---
@@ -62,8 +62,8 @@ D. The generated TOML SHALL include human-readable comments derived from Pydanti
 
 ### Changelog
 
-- 2026-05-11 | 44aeb496 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | 44aeb496 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | 44aeb496 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | 44aeb496 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Schema-Driven Init Template Generation* | **Hash**: 44aeb496
 ---
@@ -84,8 +84,8 @@ C. The drift check SHALL pass when all schema sections are documented and no sta
 
 ### Changelog
 
-- 2026-05-11 | eb94434a | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | eb94434a | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | eb94434a | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | eb94434a | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Documentation Drift Detection* | **Hash**: eb94434a
 ---
@@ -108,8 +108,8 @@ D. `StatusRolesConfig` SHALL provide a `sort_by_role()` method that orders a lis
 
 ### Changelog
 
-- 2026-05-11 | a9cc41d2 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-04-23 | a9cc41d2 | - | Developer (dev@example.com) | Auto-fix: add missing changelog section
+- 2026-05-11 | a9cc41d2 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-04-23 | a9cc41d2 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Config-Driven Viewer UI Values* | **Hash**: a9cc41d2
 ---
@@ -152,10 +152,10 @@ N. A `_migrate_v3_to_v4` migration SHALL move flat `duplicate_severity`, `undefi
 
 ### Changelog
 
-- 2026-07-03 | e4cda67b | - | Michael Lewis (michael@anspar.org) | Auto-fix: update hash
-- 2026-05-11 | db4ad28c | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-03-30 | db4ad28c | - | Michael Lewis (michael@anspar.org) | Auto-fix: canonicalize term forms
-- 2026-03-29 | c75b87f8 | - | Michael Lewis (michael@anspar.org) | Add assertion N for config migration v3 to v4
+- 2026-07-03 | e4cda67b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-05-11 | db4ad28c | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-03-30 | db4ad28c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-03-29 | c75b87f8 | - | Michael Lewis (<michael@anspar.org>) | Add assertion N for config migration v3 to v4
 
 *End* *Config Schema v3 Models* | **Hash**: e4cda67b
 ---
@@ -184,9 +184,9 @@ G. A single helper in `utilities/patterns.py` SHALL resolve a `ComponentFormat` 
 
 ### Changelog
 
-- 2026-05-11 | e04a4e37 | - | Developer (dev@example.com) | Auto-fix: canonicalize section header depth
-- 2026-05-11 | e04a4e37 | - | Developer (dev@example.com) | Auto-fix: canonicalize term forms, update hash
-- 2026-05-11 | - | - | Developer (dev@example.com) | Initial authoring: introduce explicit case-style vocabulary and configurable assertion separator.
+- 2026-05-11 | e04a4e37 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
+- 2026-05-11 | e04a4e37 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize term forms, update hash
+- 2026-05-11 | - | - | Developer (<dev@example.com>) | Initial authoring: introduce explicit case-style vocabulary and configurable assertion separator.
 
 *End* *Component Style Vocabulary and Assertion Separator* | **Hash**: e04a4e37
 ---

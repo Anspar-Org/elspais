@@ -69,6 +69,21 @@ def parse_end_marker(line: str) -> EndMarker | None:
     return EndMarker(title=m.group("title"), hash_value=m.group("hash"))
 
 
+def format_changelog_entry(entry: dict[str, str]) -> str:
+    """Format a changelog entry dict into its markdown line.
+
+    Email-shaped author IDs are wrapped in angle brackets so rendered
+    markdown passes markdownlint MD034 (no-bare-urls) in consuming repos.
+    """
+    author_id = entry["author_id"]
+    if "@" in author_id and not author_id.startswith("<"):
+        author_id = f"<{author_id}>"
+    return (
+        f"- {entry['date']} | {entry['hash']} | {entry['change_order']}"
+        f" | {entry['author_name']} ({author_id}) | {entry['reason']}"
+    )
+
+
 def _effective_depth(stored: int | None, min_depth: int) -> int:
     """Effective rendered depth: stored, clamped to [min_depth, 6].
 
@@ -364,11 +379,7 @@ def _render_requirement(node: GraphNode, resolver: Any | None = None) -> str:
         lines.append(f"{changelog_prefix} Changelog")
         lines.append("")
         for entry in changelog:
-            author_id = entry["author_id"]
-            lines.append(
-                f"- {entry['date']} | {entry['hash']} | {entry['change_order']}"
-                f" | {entry['author_name']} ({author_id}) | {entry['reason']}"
-            )
+            lines.append(format_changelog_entry(entry))
         lines.append("")
 
     # Compute hash using configured mode (DRY: utilities/hasher.py)
