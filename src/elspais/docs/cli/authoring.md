@@ -178,10 +178,41 @@ none exists, authoring one is mandatory (back to step 3).
 The smell is not "a test cites a high-level requirement" -- it is "a test
 cites an assertion whose text does not decide the test."
 
+## End State, Not Current State
+
+A requirement states the obligation that must hold, whether or not
+anything satisfies it yet. Unimplemented is the normal case -- coverage
+is what the graph reports, and hedging the prose defeats the point of
+measuring it.
+
+So write the obligation flatly, in the present tense, as a property of
+the system:
+
+```text
+The platform starts no version of the software that does not carry
+the required approvals.
+```
+
+Not what the system does today, not the gap you found on the way in, not
+the workaround that stands in for the obligation meanwhile. Describing
+present behavior weakens the requirement into a report, and a recorded
+gap reads as permission for the gap. Gaps belong in your issue tracker;
+motivation belongs in Rationale.
+
+This governs **prose, not status**. A committed obligation nothing
+implements yet keeps its normal status (`Draft`, `Active`) and shows as
+uncovered -- that signal is the point of tracking it. `Roadmap`,
+`Future` and `Idea` mark work that is *not committed*, and they carry a
+real cost: aspirational requirements are excluded from coverage and
+analysis, so reaching for one to mean "not built yet" hides the very gap
+the requirement exists to surface.
+
 ## Anti-Patterns
 
 - **One requirement per function / per config value.** Fails step 1 --
   a detail, not an invariant. Cite the parent.
+- **Writing the current state.** Prose that reports what the system does
+  today, or names a known gap, instead of stating the obligation.
 - **Testing an abstract anchor directly.** Its text does not decide the
   test; you are really checking a child (author it), or the anchor is a
   mislevelled leaf (relevel it).

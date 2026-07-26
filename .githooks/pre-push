@@ -158,20 +158,68 @@ CONTENT_HASH=$(git write-tree 2>/dev/null | head -c 40)
 
 mkdir -p "$CACHE_DIR"
 
-if [ -f "$E2E_CACHE" ] && [ "$(cat "$E2E_CACHE" 2>/dev/null)" = "$CONTENT_HASH" ]; then
+# git holds the connection to the remote open for the whole of this hook, and
+# the remote closes an idle connection well before a full e2e run finishes.
+# When that happens git reports "Connection to <host> closed by remote host"
+# and exits 141 -- a network-shaped error with nothing pointing back here. So
+# the two guards below exist to keep this stage from running when it cannot
+# tell us anything new, and the banner exists so the failure is diagnosable
+# when it does run long.
+
+# Guard 1: a push that changes only prose cannot change e2e behaviour. The
+# documentation-sync stage below still covers the documents themselves.
+E2E_RELEVANT=true
+E2E_MERGE_BASE=""
+if E2E_MERGE_BASE=$(git merge-base HEAD origin/main 2>/dev/null); then
+    E2E_CHANGED=$(git diff --name-only "$E2E_MERGE_BASE" HEAD)
+    if [ -n "$E2E_CHANGED" ] && ! printf '%s\n' "$E2E_CHANGED" | grep -qvE '(\.md$|^docs/)'; then
+        E2E_RELEVANT=false
+    fi
+fi
+
+# Guard 2: the cache records the verdict for a tree, not just its successes.
+# Caching only passes meant any failing run -- including one caused by the
+# local environment rather than the code -- guaranteed that every subsequent
+# push re-ran the whole suite and died the same way.
+E2E_CACHED_HASH=""
+E2E_CACHED_VERDICT=""
+if [ -f "$E2E_CACHE" ]; then
+    E2E_CACHED_HASH=$(cut -d' ' -f1 < "$E2E_CACHE")
+    E2E_CACHED_VERDICT=$(cut -d' ' -f2 < "$E2E_CACHE")
+fi
+if [ -n "$ELSPAIS_E2E_FORCE" ]; then
+    E2E_CACHED_HASH=""
+    E2E_CACHED_VERDICT=""
+fi
+
+if [ "$E2E_RELEVANT" = false ]; then
+    echo -e "${GREEN}E2E tests skipped — this branch changes documentation only${NC}"
+elif [ "$E2E_CACHED_HASH" = "$CONTENT_HASH" ] && [ "$E2E_CACHED_VERDICT" = "PASS" ]; then
     echo -e "${GREEN}E2E tests cached — passed since last change${NC}"
+elif [ "$E2E_CACHED_HASH" = "$CONTENT_HASH" ] && [ "$E2E_CACHED_VERDICT" = "FAIL" ]; then
+    VALIDATION_FAILED=true
+    echo -e "${RED}E2E tests failed (cached verdict for an unchanged tree)${NC}"
+    echo "Re-run them with: ELSPAIS_E2E_FORCE=1 git push"
+    echo "Cache: $E2E_CACHE"
 else
-    echo -e "${BLUE}Running e2e tests...${NC}"
+    echo -e "${YELLOW}Running e2e tests. This stage takes several minutes, and git${NC}"
+    echo -e "${YELLOW}holds the connection to the remote open while it runs. If the${NC}"
+    echo -e "${YELLOW}push ends in \"Connection ... closed by remote host\", that is${NC}"
+    echo -e "${YELLOW}this stage overrunning the remote's idle timeout, not a network${NC}"
+    echo -e "${YELLOW}fault: the verdict is cached, so pushing again completes quickly.${NC}"
     echo ""
 
-    if ! pytest tests/ -m "e2e" --tb=short -q \
-        --junitxml="$CACHE_DIR/test-results-e2e.xml" 2>&1; then
+    E2E_RC=0
+    pytest tests/ -m "e2e" --tb=short -q \
+        --junitxml="$CACHE_DIR/test-results-e2e.xml" 2>&1 || E2E_RC=$?
+
+    if [ "$E2E_RC" -ne 0 ]; then
         VALIDATION_FAILED=true
-        rm -f "$E2E_CACHE"
+        echo "$CONTENT_HASH FAIL" > "$E2E_CACHE"
         echo -e "${RED}E2E tests failed!${NC}"
     else
+        echo "$CONTENT_HASH PASS" > "$E2E_CACHE"
         echo -e "${GREEN}E2E tests passed!${NC}"
-        echo "$CONTENT_HASH" > "$E2E_CACHE"
     fi
 fi
 echo ""
