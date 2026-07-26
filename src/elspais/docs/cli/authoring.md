@@ -195,7 +195,7 @@ the required approvals.
 
 Not what the system does today, not the gap you found on the way in, not
 the workaround that stands in for the obligation meanwhile. Describing
-present behaviour weakens the requirement into a report, and a recorded
+present behavior weakens the requirement into a report, and a recorded
 gap reads as permission for the gap. Gaps belong in your issue tracker;
 motivation belongs in Rationale.
 
