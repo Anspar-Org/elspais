@@ -97,6 +97,10 @@ M. Mutations that change a relationship SHALL be guarded on the referring node a
 
 N. Mutations acting on the mutation history as a whole — reversing mutations, discarding pending mutations, and persisting them — SHALL require the caller to name the current end of that history, SHALL reject when it does not match, and SHALL report the entries recorded since the caller's position.
 
+O. Every mutation reachable through the review server's HTTP interface SHALL also be reachable through the MCP interface, under the same preconditions and returning the same rejection shape, so that an agent and a human editing the same graph have the same capabilities and the same safety.
+
+P. Undoing a deletion SHALL restore the node's structural attachment, not merely its existence: its file membership, both edge directions with their edge metadata and assertion targets, and its root membership SHALL be restored, so the node renders back into its original file at its original position and the versions of nodes it referenced are left unchanged.
+
 ### Rationale
 
 In-memory mutations enable AI agents to draft requirement changes that can be reviewed before persisting. The undo system provides safety for exploratory editing.
@@ -105,12 +109,13 @@ A single daemon serves multiple concurrent writers — MCP agents and the viewer
 
 ### Changelog
 
+- 2026-07-26 | 7c83917e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-26 | ef195b50 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-09 | 69e70749 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | ef63f424 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | ef63f424 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *MCP Graph Mutation Tools* | **Hash**: ef195b50
+*End* *MCP Graph Mutation Tools* | **Hash**: 7c83917e
 ---
 
 ## REQ-o00063: MCP File Mutation Tools

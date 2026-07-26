@@ -6035,6 +6035,128 @@ def create_server(
         return _mutate_delete_remainder(_state["graph"], node_id)
 
     # ─────────────────────────────────────────────────────────────────────
+    # MCP/HTTP Parity Tools (REQ-o00062-O)
+    #
+    # These five mutations were reachable over the viewer's HTTP interface but
+    # not over MCP. They ship guarded — never registered unguarded.
+    # ─────────────────────────────────────────────────────────────────────
+
+    @mcp.tool()
+    def mutate_set_stereotype(
+        node_id: str, is_template: bool, if_version: str, force: bool = False
+    ) -> dict[str, Any]:
+        """Set or clear a requirement's `**Template**` marker.
+
+        Un-templating a requirement that has INSTANCE clones would break every
+        `Satisfies:` reference that produced them, so toggle-OFF is refused
+        unless force=True. Toggle-ON is always safe.
+
+        Args:
+            if_version: The version of node_id from your last read. Required.
+        """
+        guard = _guard_associate_write(_state["graph"], _state["config"], node_id)
+        if guard:
+            return guard
+        conflict = _guard_version(_state["graph"], node_id, if_version)
+        if conflict:
+            return conflict
+        node = _state["graph"].find_by_id(node_id)
+        return _attach_version(
+            _mutate_set_stereotype(_state["graph"], node_id, is_template, force), node
+        )
+
+    @mcp.tool()
+    def mutate_update_journey_field(
+        node_id: str, field_name: str, value: str, if_version: str
+    ) -> dict[str, Any]:
+        """Update a structured field on a user journey (actor, goal, context, preamble).
+
+        Args:
+            if_version: The version of node_id from your last read. Required.
+        """
+        guard = _guard_associate_write(_state["graph"], _state["config"], node_id)
+        if guard:
+            return guard
+        conflict = _guard_version(_state["graph"], node_id, if_version)
+        if conflict:
+            return conflict
+        node = _state["graph"].find_by_id(node_id)
+        return _attach_version(
+            _mutate_update_journey_field(_state["graph"], node_id, field_name, value), node
+        )
+
+    @mcp.tool()
+    def mutate_journey_section(
+        node_id: str,
+        action: str,
+        name: str,
+        if_version: str,
+        new_name: str | None = None,
+        content: str | None = None,
+    ) -> dict[str, Any]:
+        """Add, update, or delete a section on a user journey.
+
+        Args:
+            action: 'add', 'update', or 'delete'.
+            if_version: The version of node_id from your last read. Required.
+        """
+        guard = _guard_associate_write(_state["graph"], _state["config"], node_id)
+        if guard:
+            return guard
+        conflict = _guard_version(_state["graph"], node_id, if_version)
+        if conflict:
+            return conflict
+        node = _state["graph"].find_by_id(node_id)
+        return _attach_version(
+            _mutate_journey_section(_state["graph"], node_id, action, name, new_name, content),
+            node,
+        )
+
+    @mcp.tool()
+    def mutate_add_journey(
+        journey_id: str, title: str, file_id: str, if_version: str
+    ) -> dict[str, Any]:
+        """Create a new user journey in the given file.
+
+        Args:
+            if_version: The version of file_id — the FILE the journey is added
+                to — from your last read. The new journey has no prior version,
+                so the parent file is what is guarded. Required.
+        """
+        guard = _guard_associate_write(_state["graph"], _state["config"], file_id)
+        if guard:
+            return guard
+        conflict = _guard_version(_state["graph"], file_id, if_version)
+        if conflict:
+            return conflict
+        node = _state["graph"].find_by_id(file_id)
+        return _attach_version(
+            _mutate_add_journey(_state["graph"], journey_id, title, file_id), node
+        )
+
+    @mcp.tool()
+    def mutate_delete_journey(
+        node_id: str, if_version: str, confirm: bool = False
+    ) -> dict[str, Any]:
+        """Delete a user journey. Returns error unless confirm=True.
+
+        Args:
+            if_version: The version of node_id from your last read. Required.
+        """
+        guard = _guard_associate_write(_state["graph"], _state["config"], node_id)
+        if guard:
+            return guard
+        conflict = _guard_version(_state["graph"], node_id, if_version)
+        if conflict:
+            return conflict
+        # The deleted node has no meaningful resulting version, but its file's
+        # composition changed — hand back the token the caller needs next.
+        node = _state["graph"].find_by_id(node_id)
+        parent_file = node.file_node() if node is not None else None
+        result = _mutate_delete_journey(_state["graph"], node_id, confirm)
+        return _attach_version(result, parent_file) if parent_file else result
+
+    # ─────────────────────────────────────────────────────────────────────
     # Edge Mutation Tools (REQ-o00062-C)
     # ─────────────────────────────────────────────────────────────────────
 

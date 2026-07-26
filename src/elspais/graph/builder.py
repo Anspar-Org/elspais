@@ -857,13 +857,49 @@ class TraceGraph:
                 parent.unlink(node)
 
     def _undo_delete_journey(self, entry: MutationEntry) -> None:
-        """Undo a delete journey operation (restore the node)."""
+        """Undo a delete journey operation, restoring the node AND its edges.
+
+        Restoring index membership alone leaves the journey orphaned: with no
+        CONTAINS edge from its FILE it belongs to no file and renders nowhere,
+        so a "successful" undo would still lose it on the next save. Root
+        membership and both edge directions are restored too.
+        """
         node_id = entry.target_id
-        for i, node in enumerate(self._deleted_nodes):
-            if node.id == node_id:
-                self._deleted_nodes.pop(i)
+        node = None
+        for i, deleted in enumerate(self._deleted_nodes):
+            if deleted.id == node_id:
+                node = self._deleted_nodes.pop(i)
                 self._index[node_id] = node
                 break
+        if node is None:
+            return
+
+        def _restore(edge: Any, metadata: dict, targets: list[str]) -> None:
+            if edge is None:
+                return
+            if metadata:
+                edge.metadata.update(metadata)
+            # assertion_targets is a first-class Edge attribute, not metadata.
+            # Dropping it silently downgrades `Validates: REQ-x-A+B` to blanket
+            # whole-requirement validation, losing assertion-scoped coverage.
+            if targets:
+                edge.assertion_targets.clear()
+                edge.assertion_targets.extend(targets)
+
+        for parent_id, kind, metadata, targets in entry.before_state.get("parent_edges", []):
+            parent = self._index.get(parent_id)
+            if parent is None:
+                continue
+            _restore(parent.link(node, kind), metadata, targets)
+
+        for child_id, kind, metadata, targets in entry.before_state.get("child_edges", []):
+            child = self._index.get(child_id)
+            if child is None:
+                continue
+            _restore(node.link(child, kind), metadata, targets)
+
+        if entry.before_state.get("was_root") and not any(r.id == node_id for r in self._roots):
+            self._roots.append(node)
 
     def _undo_update_remainder(self, entry: MutationEntry) -> None:
         """Undo an update_remainder by restoring original text/heading."""
@@ -2893,6 +2929,16 @@ class TraceGraph:
                 "was_root": was_root,
                 "source_path": source_path,
                 "validates_ids": validates_ids,
+                # Full edge capture so undo can reattach the journey rather
+                # than restoring an orphan that renders into no file.
+                "parent_edges": [
+                    (e.source.id, e.kind, dict(e.metadata), list(e.assertion_targets or []))
+                    for e in node.iter_incoming_edges()
+                ],
+                "child_edges": [
+                    (e.target.id, e.kind, dict(e.metadata), list(e.assertion_targets or []))
+                    for e in node.iter_outgoing_edges()
+                ],
             },
             after_state={},
         )
