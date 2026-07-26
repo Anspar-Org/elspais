@@ -85,17 +85,32 @@ G. `undo_last_mutation()` and `undo_to_mutation(id)` SHALL reverse mutations usi
 
 H. *Section* (remainder) mutations SHALL include: add_remainder, update_remainder, delete_remainder, covering non-normative prose such as Rationale and Notes.
 
+I. Every mutation SHALL require the caller to supply the version of the state it intends to modify, and SHALL reject the mutation when that version does not match the graph's current state.
+
+J. A rejected mutation SHALL report the current version together with the current state of the target, so the caller can reconcile and retry without issuing a second read.
+
+K. Every successful mutation SHALL report the resulting version of the node it modified, so a caller performing a sequence of mutations need not re-read between them.
+
+L. A mutation naming a node that does not exist SHALL be reported distinctly from a version mismatch, since retrying cannot resolve it.
+
+M. Mutations that change a relationship SHALL be guarded on the referring node alone, because only the referring node's rendered form changes. Mutations that relocate content between files SHALL be guarded on the content node and on both the origin and destination files, because all three change.
+
+N. Mutations acting on the mutation history as a whole — reversing mutations, discarding pending mutations, and persisting them — SHALL require the caller to name the current end of that history, SHALL reject when it does not match, and SHALL report the entries recorded since the caller's position.
+
 ### Rationale
 
 In-memory mutations enable AI agents to draft requirement changes that can be reviewed before persisting. The undo system provides safety for exploratory editing.
 
+A single daemon serves multiple concurrent writers — MCP agents and the viewer share one graph — and nothing else can detect that two of them read the same state before both writing it. Requiring the caller to state which version it believes it is modifying turns a silent lost update into a rejection the caller can act on. The precondition is mandatory rather than optional because an unguarded mutation is a blind write, which is the failure being prevented; returning the resulting version on success keeps the cost at one read per sequence rather than one per mutation. The history guards exist for the same reason at a different granularity: reversing, discarding, or persisting affects every writer's pending work, so no caller should be able to do it to a set of mutations it has never seen.
+
 ### Changelog
 
+- 2026-07-26 | ef195b50 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-09 | 69e70749 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | ef63f424 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | ef63f424 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *MCP Graph Mutation Tools* | **Hash**: 69e70749
+*End* *MCP Graph Mutation Tools* | **Hash**: ef195b50
 ---
 
 ## REQ-o00063: MCP File Mutation Tools

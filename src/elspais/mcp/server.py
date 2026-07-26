@@ -2639,6 +2639,73 @@ def _guard_associate_write(graph: Any, config: Any, *node_ids: str) -> dict[str,
     return None
 
 
+# Implements: REQ-o00062-I, REQ-o00062-J, REQ-o00062-L
+def _guard_version(graph: Any, node_id: str, if_version: str) -> dict[str, Any] | None:
+    """Return a conflict dict if ``if_version`` is stale; otherwise None.
+
+    A single daemon serves several concurrent writers, so a caller must state
+    which version of the state it believes it is modifying. When that does not
+    match the graph, the mutation is refused rather than silently overwriting
+    whatever arrived in between.
+
+    The rejection carries the target's current state alongside the current
+    version so the caller can reconcile and retry in one round-trip. A missing
+    node is reported distinctly, because retrying cannot resolve it.
+    """
+    from elspais.graph.render import node_version
+
+    node = graph.find_by_id(node_id)
+    if node is None:
+        return {
+            "success": False,
+            "code": "node_not_found",
+            "node_id": node_id,
+            "error": f"Node '{node_id}' not found",
+        }
+
+    current = node_version(node)
+    if current == if_version:
+        return None
+
+    if node.kind == NodeKind.REQUIREMENT:
+        current_state = _get_requirement(graph, node_id)
+    else:
+        current_state = _get_node(graph, node_id)
+
+    return {
+        "success": False,
+        "code": "version_conflict",
+        "node_id": node_id,
+        "provided_version": if_version,
+        "current_version": current,
+        "current_state": current_state,
+        "hint": (
+            "State changed since you read it. Reconcile against current_state "
+            "and retry with current_version."
+        ),
+    }
+
+
+# Implements: REQ-o00062-K
+def _attach_version(result: dict[str, Any], node: Any) -> dict[str, Any]:
+    """Add the mutated node's resulting version to a successful result.
+
+    Lets a caller thread the returned token into its next mutation instead of
+    re-reading between steps. ``node`` is resolved *before* the mutation runs,
+    since a rename changes the ID the caller supplied.
+    """
+    from elspais.graph.render import node_version
+
+    if not result.get("success"):
+        return result
+    try:
+        result["version"] = node_version(node)
+    except (AttributeError, KeyError, ValueError):
+        # Deleted nodes have no meaningful resulting version.
+        pass
+    return result
+
+
 def _mutate_rename_node(graph: FederatedGraph, old_id: str, new_id: str) -> dict[str, Any]:
     """Rename a node.
 
@@ -5733,32 +5800,54 @@ def create_server(
     # ─────────────────────────────────────────────────────────────────────
 
     @mcp.tool()
-    def mutate_rename_node(old_id: str, new_id: str) -> dict[str, Any]:
-        """Rename a requirement's ID (e.g., REQ-d00001 -> REQ-d00010). Updates all references."""
+    def mutate_rename_node(old_id: str, new_id: str, if_version: str) -> dict[str, Any]:
+        """Rename a requirement's ID (e.g., REQ-d00001 -> REQ-d00010). Updates all references.
+
+        Args:
+            if_version: The version of old_id from your last read. Required —
+                rejected as version_conflict if the node changed since then.
+        """
         guard = _guard_associate_write(_state["graph"], _state["config"], old_id)
         if guard:
             return guard
-        return _mutate_rename_node(_state["graph"], old_id, new_id)
+        conflict = _guard_version(_state["graph"], old_id, if_version)
+        if conflict:
+            return conflict
+        node = _state["graph"].find_by_id(old_id)
+        return _attach_version(_mutate_rename_node(_state["graph"], old_id, new_id), node)
 
     @mcp.tool()
-    def mutate_update_title(node_id: str, new_title: str) -> dict[str, Any]:
-        """Change a requirement's display title."""
-        guard = _guard_associate_write(_state["graph"], _state["config"], node_id)
-        if guard:
-            return guard
-        return _mutate_update_title(_state["graph"], node_id, new_title)
-
-    @mcp.tool()
-    def mutate_change_status(node_id: str, new_status: str) -> dict[str, Any]:
-        """Change a requirement's status.
+    def mutate_update_title(node_id: str, new_title: str, if_version: str) -> dict[str, Any]:
+        """Change a requirement's display title.
 
         Args:
-            new_status: e.g., 'Active', 'Draft', 'Deprecated'.
+            if_version: The version of node_id from your last read. Required.
         """
         guard = _guard_associate_write(_state["graph"], _state["config"], node_id)
         if guard:
             return guard
-        return _mutate_change_status(_state["graph"], node_id, new_status)
+        conflict = _guard_version(_state["graph"], node_id, if_version)
+        if conflict:
+            return conflict
+        node = _state["graph"].find_by_id(node_id)
+        return _attach_version(_mutate_update_title(_state["graph"], node_id, new_title), node)
+
+    @mcp.tool()
+    def mutate_change_status(node_id: str, new_status: str, if_version: str) -> dict[str, Any]:
+        """Change a requirement's status.
+
+        Args:
+            new_status: e.g., 'Active', 'Draft', 'Deprecated'.
+            if_version: The version of node_id from your last read. Required.
+        """
+        guard = _guard_associate_write(_state["graph"], _state["config"], node_id)
+        if guard:
+            return guard
+        conflict = _guard_version(_state["graph"], node_id, if_version)
+        if conflict:
+            return conflict
+        node = _state["graph"].find_by_id(node_id)
+        return _attach_version(_mutate_change_status(_state["graph"], node_id, new_status), node)
 
     @mcp.tool()
     def mutate_add_requirement(
@@ -5791,11 +5880,20 @@ def create_server(
         )
 
     @mcp.tool()
-    def mutate_delete_requirement(node_id: str, confirm: bool = False) -> dict[str, Any]:
-        """Delete a requirement and its assertions. Returns error unless confirm=True."""
+    def mutate_delete_requirement(
+        node_id: str, if_version: str, confirm: bool = False
+    ) -> dict[str, Any]:
+        """Delete a requirement and its assertions. Returns error unless confirm=True.
+
+        Args:
+            if_version: The version of node_id from your last read. Required.
+        """
         guard = _guard_associate_write(_state["graph"], _state["config"], node_id)
         if guard:
             return guard
+        conflict = _guard_version(_state["graph"], node_id, if_version)
+        if conflict:
+            return conflict
         return _mutate_delete_requirement(_state["graph"], node_id, confirm)
 
     # ─────────────────────────────────────────────────────────────────────
@@ -5811,33 +5909,63 @@ def create_server(
         return _mutate_add_assertion(_state["graph"], req_id, label, text)
 
     @mcp.tool()
-    def mutate_update_assertion(assertion_id: str, new_text: str) -> dict[str, Any]:
-        """Rewrite an assertion's text (e.g., REQ-p00001-A)."""
-        guard = _guard_associate_write(_state["graph"], _state["config"], assertion_id)
-        if guard:
-            return guard
-        return _mutate_update_assertion(_state["graph"], assertion_id, new_text)
-
-    @mcp.tool()
-    def mutate_delete_assertion(
-        assertion_id: str, compact: bool = True, confirm: bool = False
+    def mutate_update_assertion(
+        assertion_id: str, new_text: str, if_version: str
     ) -> dict[str, Any]:
-        """Delete an assertion. Returns error unless confirm=True.
+        """Rewrite an assertion's text (e.g., REQ-p00001-A).
 
-        Remaining labels re-sequenced if compact=True.
+        Args:
+            if_version: The version of the PARENT REQUIREMENT from your last
+                read — assertions carry the version of the requirement that
+                renders them. Required.
         """
         guard = _guard_associate_write(_state["graph"], _state["config"], assertion_id)
         if guard:
             return guard
+        conflict = _guard_version(_state["graph"], assertion_id, if_version)
+        if conflict:
+            return conflict
+        node = _state["graph"].find_by_id(assertion_id)
+        return _attach_version(
+            _mutate_update_assertion(_state["graph"], assertion_id, new_text), node
+        )
+
+    @mcp.tool()
+    def mutate_delete_assertion(
+        assertion_id: str, if_version: str, compact: bool = True, confirm: bool = False
+    ) -> dict[str, Any]:
+        """Delete an assertion. Returns error unless confirm=True.
+
+        Remaining labels re-sequenced if compact=True.
+
+        Args:
+            if_version: The version of the PARENT REQUIREMENT from your last
+                read. Required.
+        """
+        guard = _guard_associate_write(_state["graph"], _state["config"], assertion_id)
+        if guard:
+            return guard
+        conflict = _guard_version(_state["graph"], assertion_id, if_version)
+        if conflict:
+            return conflict
         return _mutate_delete_assertion(_state["graph"], assertion_id, compact, confirm)
 
     @mcp.tool()
-    def mutate_rename_assertion(old_id: str, new_label: str) -> dict[str, Any]:
-        """Change an assertion's label (e.g., rename B to D). Updates all references."""
+    def mutate_rename_assertion(old_id: str, new_label: str, if_version: str) -> dict[str, Any]:
+        """Change an assertion's label (e.g., rename B to D). Updates all references.
+
+        Args:
+            if_version: The version of the PARENT REQUIREMENT from your last
+                read. Required.
+        """
         guard = _guard_associate_write(_state["graph"], _state["config"], old_id)
         if guard:
             return guard
-        return _mutate_rename_assertion(_state["graph"], old_id, new_label)
+        conflict = _guard_version(_state["graph"], old_id, if_version)
+        if conflict:
+            return conflict
+        node = _state["graph"].find_by_id(old_id)
+        return _attach_version(_mutate_rename_assertion(_state["graph"], old_id, new_label), node)
 
     # ─────────────────────────────────────────────────────────────────────
     # Remainder (Non-Normative Section) Mutation Tools
@@ -5845,7 +5973,7 @@ def create_server(
 
     @mcp.tool()
     def mutate_update_remainder(
-        node_id: str, text: str | None = None, heading: str | None = None
+        node_id: str, if_version: str, text: str | None = None, heading: str | None = None
     ) -> dict[str, Any]:
         """Edit a non-normative section's prose or heading (e.g. Rationale, Notes).
 
@@ -5854,11 +5982,22 @@ def create_server(
         via mutate_add_remainder use an 'm'-prefixed suffix ('...:section:m0').
         Pass text and/or heading; omit one to leave it unchanged. Recomputes the
         parent requirement's hash.
+
+        Args:
+            if_version: The version of the PARENT REQUIREMENT from your last
+                read — sections carry the version of the requirement that
+                renders them. Required.
         """
         guard = _guard_associate_write(_state["graph"], _state["config"], node_id)
         if guard:
             return guard
-        return _mutate_update_remainder(_state["graph"], node_id, text, heading)
+        conflict = _guard_version(_state["graph"], node_id, if_version)
+        if conflict:
+            return conflict
+        node = _state["graph"].find_by_id(node_id)
+        return _attach_version(
+            _mutate_update_remainder(_state["graph"], node_id, text, heading), node
+        )
 
     @mcp.tool()
     def mutate_add_remainder(req_id: str, heading: str, text: str) -> dict[str, Any]:
@@ -5873,8 +6012,15 @@ def create_server(
         return _mutate_add_remainder(_state["graph"], req_id, heading, text)
 
     @mcp.tool()
-    def mutate_delete_remainder(node_id: str, confirm: bool = False) -> dict[str, Any]:
-        """Delete a non-normative section node. Returns error unless confirm=True."""
+    def mutate_delete_remainder(
+        node_id: str, if_version: str, confirm: bool = False
+    ) -> dict[str, Any]:
+        """Delete a non-normative section node. Returns error unless confirm=True.
+
+        Args:
+            if_version: The version of the PARENT REQUIREMENT from your last
+                read. Required.
+        """
         if not confirm:
             return {
                 "success": False,
@@ -5883,6 +6029,9 @@ def create_server(
         guard = _guard_associate_write(_state["graph"], _state["config"], node_id)
         if guard:
             return guard
+        conflict = _guard_version(_state["graph"], node_id, if_version)
+        if conflict:
+            return conflict
         return _mutate_delete_remainder(_state["graph"], node_id)
 
     # ─────────────────────────────────────────────────────────────────────
