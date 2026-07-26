@@ -114,6 +114,26 @@ def calculate_hash(
     return _select_hasher(algorithm)(cleaned.encode("utf-8")).hexdigest()[:length]
 
 
+# Implements: REQ-d00131-L
+def compute_version_hash(content: str, length: int = 16) -> str:
+    """Digest a node's canonical serialization into a concurrency version.
+
+    Unlike :func:`calculate_hash`, this deliberately does NOT run
+    ``clean_requirement_body`` on the input. A version must change whenever the
+    node's on-disk representation would change, and body-cleaning normalizes
+    away whitespace differences that do reach disk — running it here would make
+    the version silently stable across real edits.
+
+    Args:
+        content: Canonical serialization of the node.
+        length: Number of hex characters to return (default 16).
+
+    Returns:
+        Hexadecimal digest string of the requested length.
+    """
+    return _select_hasher("sha256")(content.encode("utf-8")).hexdigest()[:length]
+
+
 def verify_hash(
     content: str,
     expected_hash: str,
