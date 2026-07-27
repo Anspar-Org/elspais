@@ -2706,6 +2706,46 @@ def _attach_version(result: dict[str, Any], node: Any) -> dict[str, Any]:
     return result
 
 
+# Implements: REQ-o00062-N
+def _guard_mutation_tip(graph: Any, provided_tip: str) -> dict[str, Any] | None:
+    """Return a conflict dict if ``provided_tip`` is not the current log tip.
+
+    Reversing, discarding and persisting act on every writer's pending work,
+    not just the caller's, so the caller must name the end of the history it
+    believes it is acting on. ``""`` is the wire spelling of "I believe nothing
+    is pending", which makes an omitted tip an ordinary conflict rather than a
+    separate error kind.
+
+    A tip the log has never contained is treated as a position before the
+    start, so ``unseen`` reports everything pending. Under-reporting what is
+    about to be discarded is precisely the failure this guard exists to stop.
+    """
+    entries = list(graph.mutation_log.iter_entries())
+    current_tip = entries[-1].id if entries else None
+
+    if provided_tip == (current_tip or ""):
+        return None
+
+    unseen = entries
+    for index, entry in enumerate(entries):
+        if entry.id == provided_tip:
+            unseen = entries[index + 1 :]
+            break
+
+    return {
+        "success": False,
+        "code": "mutation_log_conflict",
+        "provided_tip": provided_tip,
+        "current_tip": current_tip,
+        "unseen": [_serialize_mutation_entry(e) for e in unseen],
+        "hint": (
+            "The mutation history moved since you looked. Review 'unseen' — "
+            "those entries are the work you had not seen — then retry with "
+            "current_tip."
+        ),
+    }
+
+
 # Implements: REQ-o00062-K
 def _reattach_version_after_rebuild(
     graph: Any, result: dict[str, Any], node_id: str
@@ -5474,7 +5514,12 @@ def create_server(
         return _get_graph_status(_state["graph"])
 
     @mcp.tool()
-    def refresh_graph(full: bool = False, path: str = "", force: bool = False) -> dict[str, Any]:
+    def refresh_graph(
+        full: bool = False,
+        path: str = "",
+        force: bool = False,
+        if_tip_mutation_id: str = "",
+    ) -> dict[str, Any]:
         """Reload the requirements graph from spec files on disk.
 
         Use when: spec files were edited outside of mutation tools, or after
@@ -5484,6 +5529,10 @@ def create_server(
             full: If True, clear all caches before rebuild.
             path: Switch to a different project directory before rebuilding.
             force: If True, discard unsaved mutations and refresh anyway.
+            if_tip_mutation_id: The mutation-log tip as you last saw it.
+                Required when force=True, which discards every writer's pending
+                work — you cannot discard a mutation set you have not seen.
+                Ignored otherwise.
         """
         # Guard against accidental loss of unsaved mutations
         graph = _state.get("graph")
@@ -5497,6 +5546,10 @@ def create_server(
                         "Save with render_save() first, or pass force=True to discard."
                     ),
                 }
+        if graph is not None and force:
+            conflict = _guard_mutation_tip(graph, if_tip_mutation_id)
+            if conflict:
+                return conflict
 
         if path:
             new_dir = Path(path).resolve()
@@ -6425,16 +6478,35 @@ def create_server(
     # ─────────────────────────────────────────────────────────────────────
 
     @mcp.tool()
-    def undo_last_mutation() -> dict[str, Any]:
-        """Revert the most recent in-memory mutation (before save_mutations)."""
+    def undo_last_mutation(if_mutation_id: str) -> dict[str, Any]:
+        """Revert the most recent in-memory mutation (before save_mutations).
+
+        Args:
+            if_mutation_id: The mutation-log tip as you last saw it, or "" if
+                you believe nothing is pending. Required — undo affects every
+                writer's work, not only yours, so you cannot unwind a mutation
+                you have never seen.
+        """
+        conflict = _guard_mutation_tip(_state["graph"], if_mutation_id)
+        if conflict:
+            return conflict
         return _undo_last_mutation(_state["graph"])
 
     @mcp.tool()
-    def undo_to_mutation(mutation_id: str) -> dict[str, Any]:
+    def undo_to_mutation(mutation_id: str, if_tip_mutation_id: str) -> dict[str, Any]:
         """Revert all in-memory mutations back to a specific point (inclusive).
 
         Use get_mutation_log() to find mutation IDs.
+
+        Args:
+            mutation_id: The mutation to unwind back to (inclusive).
+            if_tip_mutation_id: The mutation-log tip as you last saw it, or ""
+                if you believe nothing is pending. Required — pinning the tip
+                stops you unwinding through work that arrived after you looked.
         """
+        conflict = _guard_mutation_tip(_state["graph"], if_tip_mutation_id)
+        if conflict:
+            return conflict
         return _undo_to_mutation(_state["graph"], mutation_id)
 
     @mcp.tool()
@@ -6628,6 +6700,7 @@ def create_server(
 
     @mcp.tool()
     def save_mutations(
+        if_tip_mutation_id: str,
         save_branch: bool = False,
         message: str | None = None,
     ) -> dict[str, Any]:
@@ -6639,6 +6712,10 @@ def create_server(
         the graph is refreshed so the in-memory state matches disk.
 
         Args:
+            if_tip_mutation_id: The mutation-log tip as you last saw it, or ""
+                if you believe nothing is pending. Required — a save persists
+                every writer's pending work, so you cannot commit a mutation
+                set you have never looked at.
             save_branch: If True, create a git safety branch before writing.
             message: Changelog reason for Active requirement changes.
                 Required when mutations affect Active requirements
@@ -6650,6 +6727,12 @@ def create_server(
         graph = _state["graph"]
         if graph is None:
             return {"success": False, "error": "graph not available"}
+
+        # Before the safety branch and before any write: a rejected save must
+        # leave no branch behind and no bytes changed on disk.
+        conflict = _guard_mutation_tip(graph, if_tip_mutation_id)
+        if conflict:
+            return conflict
 
         # Check changelog enforcement for Active requirements
         config = _state.get("config", {})
