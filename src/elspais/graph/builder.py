@@ -890,13 +890,13 @@ class TraceGraph:
             parent = self._index.get(parent_id)
             if parent is None:
                 continue
-            _restore(parent.link(node, kind), metadata, targets)
+            _restore(parent.link(node, EdgeKind(kind)), metadata, targets)
 
         for child_id, kind, metadata, targets in entry.before_state.get("child_edges", []):
             child = self._index.get(child_id)
             if child is None:
                 continue
-            _restore(node.link(child, kind), metadata, targets)
+            _restore(node.link(child, EdgeKind(kind)), metadata, targets)
 
         if entry.before_state.get("was_root") and not any(r.id == node_id for r in self._roots):
             self._roots.append(node)
@@ -2932,11 +2932,11 @@ class TraceGraph:
                 # Full edge capture so undo can reattach the journey rather
                 # than restoring an orphan that renders into no file.
                 "parent_edges": [
-                    (e.source.id, e.kind, dict(e.metadata), list(e.assertion_targets or []))
+                    (e.source.id, e.kind.value, dict(e.metadata), list(e.assertion_targets or []))
                     for e in node.iter_incoming_edges()
                 ],
                 "child_edges": [
-                    (e.target.id, e.kind, dict(e.metadata), list(e.assertion_targets or []))
+                    (e.target.id, e.kind.value, dict(e.metadata), list(e.assertion_targets or []))
                     for e in node.iter_outgoing_edges()
                 ],
             },

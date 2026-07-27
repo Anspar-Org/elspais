@@ -110,14 +110,20 @@ class TestMutateEndpoint:
     """REQ-d00010-A: mutation endpoints validate input."""
 
     def test_mutate_status_bad_node_id(self, client: TestClient):
-        """POST /api/mutate/status with nonexistent node_id returns error."""
+        """POST /api/mutate/status with nonexistent node_id returns error.
+
+        The version guard resolves the target before the mutation runs, so an
+        unknown node is reported as 404 ``node_not_found`` — distinct from the
+        409 a stale token earns, because retrying cannot make the node exist.
+        """
         resp = client.post(
             "/api/mutate/status",
-            json={"node_id": "NONEXISTENT", "new_status": "Draft"},
+            json={"node_id": "NONEXISTENT", "new_status": "Draft", "if_version": "irrelevant"},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 404
         data = resp.json()
         assert data["success"] is False
+        assert data["code"] == "node_not_found"
 
     def test_mutate_status_missing_fields(self, client: TestClient):
         """POST /api/mutate/status without required fields returns 400."""

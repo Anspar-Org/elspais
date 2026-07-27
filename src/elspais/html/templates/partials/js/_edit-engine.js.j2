@@ -5,16 +5,123 @@
 // Mutation Helper
 // =====================================================================
 
+// Every mutation carries the version of the state it intends to change, so a
+// concurrent edit by an agent or another browser is refused rather than
+// silently overwritten. The guarded id is derived from the endpoint here, in
+// one place, rather than threaded through all ~32 call sites.
+const MUTATION_GUARD_FIELD = {
+    '/api/mutate/status': 'node_id',
+    '/api/mutate/template': 'node_id',
+    '/api/mutate/title': 'node_id',
+    '/api/mutate/assertion': 'assertion_id',
+    '/api/mutate/assertion/add': 'req_id',
+    '/api/mutate/assertion/delete': 'assertion_id',
+    '/api/mutate/remainder': 'node_id',
+    '/api/mutate/remainder/add': 'req_id',
+    '/api/mutate/remainder/delete': 'node_id',
+    '/api/mutate/requirement/add': 'file_id',
+    '/api/mutate/requirement/delete': 'node_id',
+    // Only the source's rendered reference line changes.
+    '/api/mutate/edge': 'source_id',
+    '/api/mutate/journey/field': 'node_id',
+    '/api/mutate/journey/section': 'node_id',
+    '/api/mutate/journey/add': 'file_id',
+    '/api/mutate/journey/delete': 'node_id',
+    '/api/mutate/rename-file': 'file_id'
+};
+
+// Tokens last handed to us, keyed by node id. Kept beside the open cards
+// rather than inside them because a sub-node edit is guarded by its parent.
+const _nodeVersions = new Map();
+
+async function versionFor(nodeId) {
+    if (!nodeId) return '';
+    if (_nodeVersions.has(nodeId)) return _nodeVersions.get(nodeId);
+    const node = await apiFetch('/api/node/' + encodeURIComponent(nodeId));
+    const version = (node && node.version) || '';
+    if (version) _nodeVersions.set(nodeId, version);
+    return version;
+}
+
+function rememberVersion(nodeId, version) {
+    if (nodeId && version) _nodeVersions.set(nodeId, version);
+}
+
+function forgetVersion(nodeId) {
+    if (nodeId) _nodeVersions.delete(nodeId);
+}
+
+async function attachGuardTokens(endpoint, payload) {
+    if (endpoint === '/api/mutate/undo') {
+        const dirty = await apiFetch('/api/dirty');
+        payload.if_mutation_id = (dirty && dirty.tip) || '';
+        return null;
+    }
+    if (endpoint === '/api/mutate/move-to-file') {
+        // The node, the file it leaves and the file it joins all change.
+        const nodeId = payload.node_id;
+        const req = await apiFetch('/api/requirement/' + encodeURIComponent(nodeId));
+        payload.if_version = (req && req.version) || (await versionFor(nodeId));
+        payload.if_source_file_version = (req && req.file_version) || '';
+        // A destination created by this very move has no prior version; ""
+        // says "I believe there is nothing there", which the server accepts.
+        payload.if_target_version = await versionFor(payload.target_file_id);
+        return nodeId;
+    }
+    const field = MUTATION_GUARD_FIELD[endpoint];
+    if (!field) return null;
+    const guardedId = payload[field];
+    payload.if_version = await versionFor(guardedId);
+    return guardedId;
+}
+
 async function mutate(endpoint, payload) {
+    const guardedId = await attachGuardTokens(endpoint, payload);
     const data = await apiFetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
     });
+
+    if (data && data.code === 'version_conflict') {
+        // Never retry blind: the edit was composed against text that has since
+        // changed. The rejection carries the current state, so re-present it
+        // and let the user redo the edit against what is actually there.
+        forgetVersion(data.node_id);
+        rememberVersion(data.node_id, data.current_version);
+        showToast('Someone else changed this — reloading', 'error');
+        await refreshCard(data.node_id);
+        return data;
+    }
+    if (data && data.code === 'mutation_log_conflict') {
+        const count = (data.unseen || []).length;
+        showErrorModal(
+            'Pending changes you have not seen',
+            count + ' change(s) were made since you last looked. '
+                + 'Reloading so you can see them before undoing.'
+        );
+        await refreshAllOpenCards();
+        await refreshDirtyCount();
+        return data;
+    }
+    if (data && data.code === 'node_not_found') {
+        forgetVersion(guardedId);
+        showToast(data.error || 'That item no longer exists', 'error');
+        return data;
+    }
+
     if (data && data.success) {
+        // A mutation can move the versions of related nodes too — editing an
+        // assertion shifts its parent requirement, moving a node shifts two
+        // files — and we cannot tell which from here. Trust only the token we
+        // were just handed; everything else is re-fetched on next use.
+        _nodeVersions.clear();
+        // Thread the new token forward, or the next edit to this node conflicts.
+        rememberVersion(guardedId, data.version);
         showToast('Change applied', 'success');
         await refreshDirtyCount();
     } else if (data) {
+        forgetVersion(guardedId);
         showToast(data.error || 'Mutation failed', 'error');
     }
     return data;

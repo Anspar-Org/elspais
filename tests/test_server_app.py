@@ -37,6 +37,41 @@ def _wrap(graph: TraceGraph, repo_root: Path) -> FederatedGraph:
     )
 
 
+def _version(client: TestClient, node_id: str) -> str:
+    """Current version token for ``node_id``, fetched the way a client would.
+
+    Every ``/api/mutate/*`` route requires the caller to state the version of
+    the node it believes it is modifying (REQ-o00062-I/J). Sub-nodes resolve to
+    their owning requirement's token, which is what the guards compare against,
+    so the caller may pass an assertion or section id here unchanged.
+    """
+    resp = client.get(f"/api/node/{node_id}")
+    assert resp.status_code == 200, f"{node_id}: {resp.text}"
+    return resp.json()["version"]
+
+
+def _file_version(client: TestClient, req_id: str) -> str:
+    """Version token of the FILE a requirement currently lives in.
+
+    This is what ``/api/mutate/move-to-file`` wants for
+    ``if_source_file_version``; the requirement payload carries it so the move
+    needs no second read (REQ-o00060-G).
+    """
+    resp = client.get(f"/api/requirement/{req_id}")
+    assert resp.status_code == 200, f"{req_id}: {resp.text}"
+    return resp.json()["file_version"]
+
+
+def _tip(client: TestClient) -> str:
+    """Current mutation-log tip, as ``/api/mutate/undo`` requires it.
+
+    ``""`` is the wire spelling of "I believe nothing is pending".
+    """
+    resp = client.get("/api/dirty")
+    assert resp.status_code == 200, resp.text
+    return resp.json()["tip"] or ""
+
+
 @pytest.fixture
 def sample_graph():
     """Create a sample single-repo FederatedGraph for testing."""
@@ -465,10 +500,15 @@ class TestGetDirty:
     def test_REQ_d00010_A_dirty_after_mutation(self, client):
         """Graph reports dirty after a mutation."""
         # Perform a mutation
-        client.post(
+        mutated = client.post(
             "/api/mutate/status",
-            json={"node_id": "REQ-p00001", "new_status": "Draft"},
+            json={
+                "node_id": "REQ-p00001",
+                "new_status": "Draft",
+                "if_version": _version(client, "REQ-p00001"),
+            },
         )
+        assert mutated.status_code == 200, mutated.text
         resp = client.get("/api/dirty")
         data = resp.json()
         assert data["dirty"] is True
@@ -496,7 +536,11 @@ class TestMutateStatus:
         """POST /api/mutate/status changes requirement status."""
         resp = client.post(
             "/api/mutate/status",
-            json={"node_id": "REQ-p00001", "new_status": "Draft"},
+            json={
+                "node_id": "REQ-p00001",
+                "new_status": "Draft",
+                "if_version": _version(client, "REQ-p00001"),
+            },
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -514,14 +558,20 @@ class TestMutateStatus:
         assert data["success"] is False
 
     def test_REQ_d00010_A_change_status_invalid_node(self, client):
-        """Non-existent node returns error."""
+        """Non-existent node returns error.
+
+        The version guard resolves the target first, so an unknown node is now
+        reported as 404 ``node_not_found`` rather than a generic 400 — retrying
+        with a fresher token cannot make the node exist.
+        """
         resp = client.post(
             "/api/mutate/status",
-            json={"node_id": "REQ-NOPE", "new_status": "Draft"},
+            json={"node_id": "REQ-NOPE", "new_status": "Draft", "if_version": "irrelevant"},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 404
         data = resp.json()
         assert data["success"] is False
+        assert data["code"] == "node_not_found"
 
 
 class TestMutateTemplate:
@@ -531,17 +581,26 @@ class TestMutateTemplate:
         """POST /api/mutate/template sets then clears the Template marker."""
         resp = client.post(
             "/api/mutate/template",
-            json={"node_id": "REQ-p00001", "is_template": True},
+            json={
+                "node_id": "REQ-p00001",
+                "is_template": True,
+                "if_version": _version(client, "REQ-p00001"),
+            },
         )
         assert resp.status_code == 200
         data = resp.json()
         assert data["success"] is True
         assert data["mutation"]["operation"] == "set_stereotype"
 
-        # Toggle back off — no instances exist, so no soft-block.
+        # Toggle back off — no instances exist, so no soft-block. The first
+        # toggle moved the version, so re-read rather than reusing the token.
         resp = client.post(
             "/api/mutate/template",
-            json={"node_id": "REQ-p00001", "is_template": False},
+            json={
+                "node_id": "REQ-p00001",
+                "is_template": False,
+                "if_version": _version(client, "REQ-p00001"),
+            },
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -575,15 +634,21 @@ class TestMutateTemplate:
         assert resp.status_code == 400
         assert resp.json()["success"] is False
 
-    def test_REQ_p00014_E_unknown_node_returns_400(self, client):
-        """Non-existent node returns a 400 error payload (not a soft-block)."""
+    def test_REQ_p00014_E_unknown_node_returns_404(self, client):
+        """Non-existent node returns an error payload (not a soft-block).
+
+        The version guard resolves the node before the template logic runs, so
+        the error is now 404 ``node_not_found``. The point of the test — an
+        unknown node is a hard error, never the soft-block envelope — stands.
+        """
         resp = client.post(
             "/api/mutate/template",
-            json={"node_id": "REQ-NOPE", "is_template": True},
+            json={"node_id": "REQ-NOPE", "is_template": True, "if_version": "irrelevant"},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 404
         data = resp.json()
         assert data["success"] is False
+        assert data["code"] == "node_not_found"
         assert "blocked" not in data
 
     def test_REQ_p00014_E_guard_soft_block_is_http_200(self):
@@ -607,7 +672,11 @@ class TestMutateTemplate:
 
         resp = blocked_client.post(
             "/api/mutate/template",
-            json={"node_id": "REQ-p80001", "is_template": False},
+            json={
+                "node_id": "REQ-p80001",
+                "is_template": False,
+                "if_version": _version(blocked_client, "REQ-p80001"),
+            },
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -615,10 +684,16 @@ class TestMutateTemplate:
         assert data["blocked"] is True
         assert data["instance_count"] == 1
 
-        # force=True completes the confirm-and-re-POST conversation.
+        # force=True completes the confirm-and-re-POST conversation. The
+        # soft-block changed nothing, so the same token is still current.
         resp = blocked_client.post(
             "/api/mutate/template",
-            json={"node_id": "REQ-p80001", "is_template": False, "force": True},
+            json={
+                "node_id": "REQ-p80001",
+                "is_template": False,
+                "force": True,
+                "if_version": _version(blocked_client, "REQ-p80001"),
+            },
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is True
@@ -631,7 +706,11 @@ class TestMutateTitle:
         """POST /api/mutate/title updates requirement title."""
         resp = client.post(
             "/api/mutate/title",
-            json={"node_id": "REQ-p00001", "new_title": "Updated Security"},
+            json={
+                "node_id": "REQ-p00001",
+                "new_title": "Updated Security",
+                "if_version": _version(client, "REQ-p00001"),
+            },
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -656,6 +735,9 @@ class TestMutateAssertion:
             json={
                 "assertion_id": "REQ-p00001-A",
                 "new_text": "SHALL encrypt using AES-256",
+                # An assertion carries the version of the requirement that
+                # renders it; the helper resolves that for us.
+                "if_version": _version(client, "REQ-p00001-A"),
             },
         )
         assert resp.status_code == 200
@@ -682,6 +764,7 @@ class TestMutateAssertionAdd:
                 "req_id": "REQ-p00001",
                 "label": "C",
                 "text": "SHALL audit all access",
+                "if_version": _version(client, "REQ-p00001"),
             },
         )
         assert resp.status_code == 200
@@ -715,6 +798,9 @@ class TestMutateEdge:
                 "source_id": "REQ-d00001",
                 "target_id": "REQ-o00001",
                 "edge_kind": "IMPLEMENTS",
+                # Only the source's rendered reference line changes, so the
+                # edge routes guard the source alone.
+                "if_version": _version(client, "REQ-d00001"),
             },
         )
         assert resp.status_code == 200
@@ -730,6 +816,7 @@ class TestMutateEdge:
                 "source_id": "REQ-o00001",
                 "target_id": "REQ-p00001",
                 "new_kind": "REFINES",
+                "if_version": _version(client, "REQ-o00001"),
             },
         )
         assert resp.status_code == 200
@@ -744,6 +831,7 @@ class TestMutateEdge:
                 "action": "delete",
                 "source_id": "REQ-o00001",
                 "target_id": "REQ-p00001",
+                "if_version": _version(client, "REQ-o00001"),
             },
         )
         assert resp.status_code == 200
@@ -751,13 +839,18 @@ class TestMutateEdge:
         assert data["success"] is True
 
     def test_REQ_d00010_A_edge_unknown_action(self, client):
-        """Unknown action returns 400."""
+        """Unknown action returns 400.
+
+        A valid token is supplied so the 409 guard cannot stand in for the
+        400 this test is actually about.
+        """
         resp = client.post(
             "/api/mutate/edge",
             json={
                 "action": "explode",
                 "source_id": "REQ-o00001",
                 "target_id": "REQ-p00001",
+                "if_version": _version(client, "REQ-o00001"),
             },
         )
         assert resp.status_code == 400
@@ -787,12 +880,25 @@ class TestMutateAssertionDelete:
 
     def test_REQ_d00010_A_delete_assertion_success(self, client):
         # First add a temp assertion, then delete it
-        client.post(
+        added = client.post(
             "/api/mutate/assertion/add",
-            json={"req_id": "REQ-p00001", "label": "Z", "text": "Temp assertion"},
+            json={
+                "req_id": "REQ-p00001",
+                "label": "Z",
+                "text": "Temp assertion",
+                "if_version": _version(client, "REQ-p00001"),
+            },
         )
+        assert added.status_code == 200, added.text
+        # The add moved the requirement's version; the response carries the new
+        # one, so thread it straight into the delete.
         resp = client.post(
-            "/api/mutate/assertion/delete", json={"assertion_id": "REQ-p00001-Z", "confirm": True}
+            "/api/mutate/assertion/delete",
+            json={
+                "assertion_id": "REQ-p00001-Z",
+                "confirm": True,
+                "if_version": added.json()["version"],
+            },
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is True
@@ -813,7 +919,12 @@ class TestMutateRequirementDelete:
         # Add a throwaway requirement, then delete it
         sample_graph.add_requirement(req_id="REQ-z99999", title="Temp", level="DEV")
         resp = client.post(
-            "/api/mutate/requirement/delete", json={"node_id": "REQ-z99999", "confirm": True}
+            "/api/mutate/requirement/delete",
+            json={
+                "node_id": "REQ-z99999",
+                "confirm": True,
+                "if_version": _version(client, "REQ-z99999"),
+            },
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is True
@@ -831,8 +942,12 @@ class TestMutateUndo:
     """Validates REQ-d00010-A: POST /api/mutate/undo."""
 
     def test_REQ_d00010_A_undo_with_no_mutations(self, client):
-        """Undo with no mutations returns error."""
-        resp = client.post("/api/mutate/undo")
+        """Undo with no mutations returns error.
+
+        ``""`` is the tip of an empty log, so the history guard passes and the
+        "nothing to undo" 400 is what gets asserted.
+        """
+        resp = client.post("/api/mutate/undo", json={"if_mutation_id": ""})
         assert resp.status_code == 400
         data = resp.json()
         assert data["success"] is False
@@ -840,12 +955,18 @@ class TestMutateUndo:
     def test_REQ_d00010_A_undo_after_mutation(self, client):
         """Undo after mutation reverses it."""
         # Perform a mutation
-        client.post(
+        mutated = client.post(
             "/api/mutate/status",
-            json={"node_id": "REQ-p00001", "new_status": "Draft"},
+            json={
+                "node_id": "REQ-p00001",
+                "new_status": "Draft",
+                "if_version": _version(client, "REQ-p00001"),
+            },
         )
-        # Undo it
-        resp = client.post("/api/mutate/undo")
+        assert mutated.status_code == 200, mutated.text
+        # Undo it — undo discards every writer's pending work, so it is guarded
+        # on the mutation-log tip rather than on any one node.
+        resp = client.post("/api/mutate/undo", json={"if_mutation_id": _tip(client)})
         assert resp.status_code == 200
         data = resp.json()
         assert data["success"] is True
@@ -1908,6 +2029,7 @@ class TestMutateSaveRoundTrip:
                 "source_id": "REQ-t00001",
                 "target_id": "REQ-p00002",
                 "edge_kind": "refines",
+                "if_version": _version(client, "REQ-t00001"),
             },
         )
         assert resp.status_code == 200
@@ -1930,7 +2052,11 @@ class TestMutateSaveRoundTrip:
 
         resp = client.post(
             "/api/mutate/status",
-            json={"node_id": "REQ-t00001", "new_status": "Deprecated"},
+            json={
+                "node_id": "REQ-t00001",
+                "new_status": "Deprecated",
+                "if_version": _version(client, "REQ-t00001"),
+            },
         )
         assert resp.status_code == 200
 
@@ -1949,7 +2075,11 @@ class TestMutateSaveRoundTrip:
 
         resp = client.post(
             "/api/mutate/title",
-            json={"node_id": "REQ-t00001", "new_title": "Updated Title"},
+            json={
+                "node_id": "REQ-t00001",
+                "new_title": "Updated Title",
+                "if_version": _version(client, "REQ-t00001"),
+            },
         )
         assert resp.status_code == 200
 
@@ -1971,6 +2101,7 @@ class TestMutateSaveRoundTrip:
             json={
                 "assertion_id": "REQ-t00001-A",
                 "new_text": "The system SHALL do something NEW.",
+                "if_version": _version(client, "REQ-t00001-A"),
             },
         )
         assert resp.status_code == 200
@@ -1995,6 +2126,7 @@ class TestMutateSaveRoundTrip:
                 "req_id": "REQ-t00001",
                 "label": "C",
                 "text": "The system SHALL do a third thing.",
+                "if_version": _version(client, "REQ-t00001"),
             },
         )
         assert resp.status_code == 200
@@ -2032,6 +2164,7 @@ class TestMutateSaveRoundTrip:
                 "source_id": "REQ-t00001",
                 "target_id": "REQ-p00002",
                 "edge_kind": "implements",
+                "if_version": _version(client, "REQ-t00001"),
             },
         )
         assert resp.status_code == 200
@@ -2056,6 +2189,7 @@ class TestMutateSaveRoundTrip:
                 "action": "delete",
                 "source_id": "REQ-t00001",
                 "target_id": "REQ-p00001",
+                "if_version": _version(client, "REQ-t00001"),
             },
         )
         assert resp.status_code == 200
@@ -2081,6 +2215,7 @@ class TestMutateSaveRoundTrip:
                 "source_id": "REQ-t00001",
                 "target_id": "REQ-p00001",
                 "new_kind": "refines",
+                "if_version": _version(client, "REQ-t00001"),
             },
         )
         assert resp.status_code == 200
@@ -2101,7 +2236,11 @@ class TestMutateSaveRoundTrip:
 
         resp = client.post(
             "/api/mutate/assertion/delete",
-            json={"assertion_id": "REQ-t00001-B", "confirm": True},
+            json={
+                "assertion_id": "REQ-t00001-B",
+                "confirm": True,
+                "if_version": _version(client, "REQ-t00001-B"),
+            },
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is True
@@ -2122,7 +2261,11 @@ class TestMutateSaveRoundTrip:
 
         resp = client.post(
             "/api/mutate/requirement/delete",
-            json={"node_id": "REQ-t00002", "confirm": True},
+            json={
+                "node_id": "REQ-t00002",
+                "confirm": True,
+                "if_version": _version(client, "REQ-t00002"),
+            },
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is True
@@ -2143,17 +2286,26 @@ class TestMutateSaveRoundTrip:
         app, spec_file = disk_app
         client = TestClient(app)
 
-        # Mutation 1: Change status
+        # Mutation 1: Change status. Each mutation moves REQ-t00001's version,
+        # so every step threads the token the previous response handed back.
         resp = client.post(
             "/api/mutate/status",
-            json={"node_id": "REQ-t00001", "new_status": "Draft"},
+            json={
+                "node_id": "REQ-t00001",
+                "new_status": "Draft",
+                "if_version": _version(client, "REQ-t00001"),
+            },
         )
         assert resp.status_code == 200
 
         # Mutation 2: Update title
         resp = client.post(
             "/api/mutate/title",
-            json={"node_id": "REQ-t00001", "new_title": "Changed Title"},
+            json={
+                "node_id": "REQ-t00001",
+                "new_title": "Changed Title",
+                "if_version": resp.json()["version"],
+            },
         )
         assert resp.status_code == 200
 
@@ -2163,6 +2315,7 @@ class TestMutateSaveRoundTrip:
             json={
                 "assertion_id": "REQ-t00001-B",
                 "new_text": "The system SHALL do something else.",
+                "if_version": resp.json()["version"],
             },
         )
         assert resp.status_code == 200
@@ -2190,19 +2343,27 @@ class TestMutateSaveRoundTrip:
         # Mutation 1: Change status
         resp = client.post(
             "/api/mutate/status",
-            json={"node_id": "REQ-t00001", "new_status": "Draft"},
+            json={
+                "node_id": "REQ-t00001",
+                "new_status": "Draft",
+                "if_version": _version(client, "REQ-t00001"),
+            },
         )
         assert resp.status_code == 200
 
-        # Mutation 2: Update title
+        # Mutation 2: Update title (token from the response to mutation 1)
         resp = client.post(
             "/api/mutate/title",
-            json={"node_id": "REQ-t00001", "new_title": "Should Be Undone"},
+            json={
+                "node_id": "REQ-t00001",
+                "new_title": "Should Be Undone",
+                "if_version": resp.json()["version"],
+            },
         )
         assert resp.status_code == 200
 
         # Undo mutation 2
-        resp = client.post("/api/mutate/undo")
+        resp = client.post("/api/mutate/undo", json={"if_mutation_id": _tip(client)})
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
@@ -2243,10 +2404,15 @@ class TestMutateSaveRoundTrip:
         assert resp.json()["dirty"] is False
 
         # Mutate
-        client.post(
+        mutated = client.post(
             "/api/mutate/status",
-            json={"node_id": "REQ-t00001", "new_status": "Draft"},
+            json={
+                "node_id": "REQ-t00001",
+                "new_status": "Draft",
+                "if_version": _version(client, "REQ-t00001"),
+            },
         )
+        assert mutated.status_code == 200, mutated.text
         resp = client.get("/api/dirty")
         assert resp.json()["dirty"] is True
 
@@ -2270,14 +2436,19 @@ class TestMutateSaveRoundTrip:
                 "req_id": "REQ-t00001",
                 "label": "C",
                 "text": "Temporary assertion.",
+                "if_version": _version(client, "REQ-t00001"),
             },
         )
         assert resp.status_code == 200
 
-        # Delete assertion C
+        # Delete assertion C (token from the add's response)
         resp = client.post(
             "/api/mutate/assertion/delete",
-            json={"assertion_id": "REQ-t00001-C", "confirm": True},
+            json={
+                "assertion_id": "REQ-t00001-C",
+                "confirm": True,
+                "if_version": resp.json()["version"],
+            },
         )
         assert resp.status_code == 200
 
@@ -2318,11 +2489,12 @@ class TestMutateSaveRoundTrip:
                 "source_id": "REQ-t00001",
                 "target_id": "REQ-p00001",
                 "new_kind": "refines",
+                "if_version": _version(client, "REQ-t00001"),
             },
         )
         assert resp.status_code == 200
 
-        # Add a new IMPLEMENTS edge to p00002
+        # Add a new IMPLEMENTS edge to p00002 (token from the previous response)
         resp = client.post(
             "/api/mutate/edge",
             json={
@@ -2330,6 +2502,7 @@ class TestMutateSaveRoundTrip:
                 "source_id": "REQ-t00001",
                 "target_id": "REQ-p00002",
                 "edge_kind": "implements",
+                "if_version": resp.json()["version"],
             },
         )
         assert resp.status_code == 200
@@ -2351,14 +2524,22 @@ class TestMutateSaveRoundTrip:
         # Mutate first req
         resp = client.post(
             "/api/mutate/status",
-            json={"node_id": "REQ-t00001", "new_status": "Draft"},
+            json={
+                "node_id": "REQ-t00001",
+                "new_status": "Draft",
+                "if_version": _version(client, "REQ-t00001"),
+            },
         )
         assert resp.status_code == 200
 
         # Mutate second req
         resp = client.post(
             "/api/mutate/status",
-            json={"node_id": "REQ-t00002", "new_status": "Deprecated"},
+            json={
+                "node_id": "REQ-t00002",
+                "new_status": "Deprecated",
+                "if_version": _version(client, "REQ-t00002"),
+            },
         )
         assert resp.status_code == 200
 
@@ -2401,6 +2582,7 @@ class TestMutateSaveRoundTrip:
                 "req_id": "REQ-t00001",
                 "label": "C",
                 "text": "New assertion for first req.",
+                "if_version": _version(client, "REQ-t00001"),
             },
         )
         assert resp.status_code == 200
@@ -2411,6 +2593,7 @@ class TestMutateSaveRoundTrip:
                 "req_id": "REQ-t00002",
                 "label": "B",
                 "text": "New assertion for second req.",
+                "if_version": _version(client, "REQ-t00002"),
             },
         )
         assert resp.status_code == 200
@@ -2434,11 +2617,13 @@ class TestMutateValidation:
 
     # Verifies: REQ-d00010-A
     def test_mutate_status_unknown_node(self, disk_client):
+        """An unknown node is a 404 ``node_not_found``, not a stale-token 409."""
         resp = disk_client.post(
             "/api/mutate/status",
-            json={"node_id": "REQ-nonexistent", "new_status": "Draft"},
+            json={"node_id": "REQ-nonexistent", "new_status": "Draft", "if_version": "irrelevant"},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 404
+        assert resp.json()["code"] == "node_not_found"
 
     # Verifies: REQ-d00010-A
     def test_mutate_title_missing_fields(self, disk_client):
@@ -2484,12 +2669,14 @@ class TestMutateValidation:
 
     # Verifies: REQ-d00010-A
     def test_mutate_edge_unknown_action(self, disk_client):
+        # A valid token, so the 400 under test is not masked by the 409 guard.
         resp = disk_client.post(
             "/api/mutate/edge",
             json={
                 "action": "unknown",
                 "source_id": "REQ-t00001",
                 "target_id": "REQ-p00001",
+                "if_version": _version(disk_client, "REQ-t00001"),
             },
         )
         assert resp.status_code == 400
@@ -2502,6 +2689,7 @@ class TestMutateValidation:
                 "action": "add",
                 "source_id": "REQ-t00001",
                 "target_id": "REQ-p00001",
+                "if_version": _version(disk_client, "REQ-t00001"),
             },
         )
         assert resp.status_code == 400
@@ -2514,14 +2702,19 @@ class TestMutateValidation:
                 "action": "change_kind",
                 "source_id": "REQ-t00001",
                 "target_id": "REQ-p00001",
+                "if_version": _version(disk_client, "REQ-t00001"),
             },
         )
         assert resp.status_code == 400
 
     # Verifies: REQ-d00010-A
     def test_undo_with_no_mutations(self, disk_client):
-        """Undo with no pending mutations returns error."""
-        resp = disk_client.post("/api/mutate/undo")
+        """Undo with no pending mutations returns error.
+
+        ``""`` is the tip of an empty log, so the history guard passes and the
+        "nothing to undo" 400 is what gets asserted.
+        """
+        resp = disk_client.post("/api/mutate/undo", json={"if_mutation_id": ""})
         assert resp.status_code == 400
 
 
@@ -2648,10 +2841,15 @@ class TestCheckFreshness:
         client = TestClient(app)
 
         # Perform a mutation so the graph has pending changes
-        client.post(
+        mutated = client.post(
             "/api/mutate/status",
-            json={"node_id": "REQ-p00001", "new_status": "Draft"},
+            json={
+                "node_id": "REQ-p00001",
+                "new_status": "Draft",
+                "if_version": _version(client, "REQ-p00001"),
+            },
         )
+        assert mutated.status_code == 200, mutated.text
 
         resp = client.get("/api/check-freshness")
         assert resp.status_code == 200
@@ -2899,9 +3097,16 @@ class TestDetachedGuardMiddleware:
 
     def test_mutate_allowed_when_not_detached(self, client):
         """POST /api/mutate/title succeeds (or fails gracefully) when not detached."""
-        # When not detached the middleware should pass through
+        # When not detached the middleware should pass through. A current
+        # version token is supplied so the only remaining source of a 409 is
+        # the detached-HEAD middleware this test is about.
         resp = client.post(
-            "/api/mutate/title", json={"node_id": "REQ-p00001", "new_title": "New Title"}
+            "/api/mutate/title",
+            json={
+                "node_id": "REQ-p00001",
+                "new_title": "New Title",
+                "if_version": _version(client, "REQ-p00001"),
+            },
         )
         # Should NOT be 409 (the actual result depends on graph state)
         assert resp.status_code != 409
@@ -3169,13 +3374,20 @@ class TestMoveToNewFile:
         new_file = state.repo_root / "spec" / "new-reqs.md"
         assert not new_file.exists()
 
-        resp = client.post(
-            "/api/mutate/move-to-file",
-            json={
-                "node_id": "REQ-t00001",
-                "target_file_id": "file:spec/new-reqs.md",
-            },
-        )
+        body = {
+            "node_id": "REQ-t00001",
+            "target_file_id": "file:spec/new-reqs.md",
+            "if_version": _version(client, "REQ-t00001"),
+            "if_source_file_version": _file_version(client, "REQ-t00001"),
+            # The destination does not exist yet, so the caller has no token
+            # for it: "" says "I believe there is nothing there".
+            "if_target_version": "",
+        }
+        resp = client.post("/api/mutate/move-to-file", json=body)
+        # A destination created by this very call has no prior version, so ""
+        # is accepted and the move succeeds in ONE round trip. The guards all
+        # run before the file is created, so a rejection here would also leave
+        # no empty file stranded on disk.
         assert resp.status_code == 200, resp.json()
         data = resp.json()
         assert data["success"] is True
@@ -3198,6 +3410,11 @@ class TestMoveToNewFile:
             json={
                 "node_id": "REQ-t00001",
                 "target_file_id": "file:random/not-a-spec.md",
+                # Valid tokens, so the path rejection is what gets asserted
+                # rather than a version conflict masking it.
+                "if_version": _version(client, "REQ-t00001"),
+                "if_source_file_version": _file_version(client, "REQ-t00001"),
+                "if_target_version": "",
             },
         )
         assert resp.status_code == 400
@@ -3257,6 +3474,11 @@ class TestMoveToNewFile:
             json={
                 "node_id": "REQ-t00001",
                 "target_file_id": "file:spec/other.md",
+                # A move changes the node, the file it leaves and the file it
+                # joins, so all three tokens are required.
+                "if_version": _version(client, "REQ-t00001"),
+                "if_source_file_version": _file_version(client, "REQ-t00001"),
+                "if_target_version": _version(client, "file:spec/other.md"),
             },
         )
         assert resp.status_code == 200, resp.json()
