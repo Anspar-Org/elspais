@@ -6,6 +6,7 @@ All notable changes to elspais will be documented in this file.
 
 ### Fixed
 
+- **The browser test tier's dependency was declared nowhere (CUR-1829)** — `playwright` and `pytest-playwright` appeared in no extra, so a fresh virtualenv silently **deselected all 13 `@pytest.mark.browser` tests and still reported green**. A green run was therefore not evidence the tier had run. Added a `browser` extra (`pip install -e ".[browser]"`, plus `playwright install chromium` once) and documented in CLAUDE.md that `0 selected`/`skipped` means the tier did not run.
 - **`mutate_add_remainder` and `mutate_delete_remainder` raised `AttributeError` and could never succeed (CUR-1829)** — both called `graph.add_remainder(...)` / `graph.delete_remainder(...)`, which existed on `TraceGraphBuilder` but were never delegated on `FederatedGraph`. Every call failed, over MCP and over HTTP (`/api/mutate/remainder/delete` returned 500). Both delegations are added.
 - **`/api/dirty` reported at most 1 pending mutation (CUR-1829)** — it computed the count from a `limit=1` log query, so any number of pending mutations reported as `1`. It now reports the true count and also returns `tip`, the mutation-log tip that the history-level guards require callers to send.
 - **`/api/mutate/requirement/add` never validated `file_id` (CUR-1829)** — an unknown destination file returned 200 and created the requirement unparented. The destination is now resolved before the mutation.
