@@ -20,16 +20,21 @@ E. `get_hierarchy(req_id)` SHALL return ancestors and children for navigation.
 
 F. All query tools SHALL read directly from TraceGraph nodes using the iterator-only API.
 
+G. Read surfaces that return a node SHALL report the version a subsequent mutation of that node will require, and a requirement's payload SHALL also report the version of the file containing it, so that a caller never has to fetch a node twice to be allowed to change it. A means of retrieving versions for several nodes without their content SHALL exist, so a caller can refresh what it holds cheaply.
+
 ### Rationale
 
 Core query tools enable AI agents to discover and explore requirements without modifying the graph. These are safe, read-only operations.
 
+Mutations require the caller to supply the version of the state it intends to change, so every read that could precede a write has to hand that version back. Omitting it would force a second round-trip purely to obtain a token the caller had already earned, and would make the mandatory precondition feel like an obstacle rather than a guarantee.
+
 ### Changelog
 
+- 2026-07-26 | 25b3d4f7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 73c31134 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 73c31134 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *MCP Core Query Tools* | **Hash**: 73c31134
+*End* *MCP Core Query Tools* | **Hash**: 25b3d4f7
 ---
 
 ## REQ-o00061: MCP Workspace Context Tools

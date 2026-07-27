@@ -71,6 +71,7 @@ from elspais.graph.GraphNode import GraphNode, make_file_id
 from elspais.graph.mutations import MutationEntry
 from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.graph.relations import EdgeKind
+from elspais.graph.render import node_version
 from elspais.graph.serialize import (
     serialize_assertion as _serialize_assertion,
 )
@@ -1571,10 +1572,15 @@ def _get_node(graph: FederatedGraph, node_id: str) -> dict[str, Any]:
     Returns:
         Serialized node dict, or dict with 'error' key if not found.
     """
+    from elspais.graph.render import node_version
+
     node = graph.find_by_id(node_id)
     if node is None:
         return {"error": f"Node '{node_id}' not found"}
-    return _serialize_node_generic(node, graph)
+    envelope = _serialize_node_generic(node, graph)
+    # REQ-o00060-G: hand back the token a mutation of this node will require.
+    envelope["version"] = node_version(node)
+    return envelope
 
 
 def _get_requirement(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
@@ -1592,7 +1598,7 @@ def _get_requirement(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     REQ-d00062-F: Returns error for non-existent requirements.
     """
     from elspais.graph.relations import EdgeKind as EK
-    from elspais.graph.render import reconstruct_body_text
+    from elspais.graph.render import node_version, reconstruct_body_text
 
     node = graph.find_by_id(req_id)
 
@@ -1662,6 +1668,11 @@ def _get_requirement(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
         "parents": req_parents,
         "children": req_children,
         "coverage": metrics_data,
+        # REQ-o00060-G: the token a mutation of this requirement will require,
+        # plus its file's token, so a file-level operation needs no second read.
+        # file_version is None for INSTANCE and unlinked nodes, never absent.
+        "version": node_version(node),
+        "file_version": node_version(fn) if fn is not None else None,
     }
 
 
@@ -4743,6 +4754,8 @@ def _subtree_to_flat(
             "kind": node.kind.value,
             "title": node.get_label(),
             "depth": depth_level,
+            # REQ-o00060-G
+            "version": node_version(node),
         }
 
         if node.kind == NodeKind.REQUIREMENT:
@@ -4804,6 +4817,8 @@ def _subtree_to_nested(
         "id": node.id,
         "kind": node.kind.value,
         "title": node.get_label(),
+        # REQ-o00060-G
+        "version": node_version(node),
     }
 
     if node.kind == NodeKind.REQUIREMENT:
@@ -6139,6 +6154,34 @@ def create_server(
         if conflict:
             return conflict
         return _mutate_delete_remainder(_state["graph"], node_id)
+
+    @mcp.tool()
+    def get_versions(node_ids: list[str]) -> dict[str, str]:
+        """Get current version tokens for several nodes, without their content.
+
+        Use when: you hold tokens that may have gone stale and want to refresh
+        them cheaply, rather than re-reading each node in full.
+
+        Sub-nodes resolve to their owning requirement, exactly as the mutation
+        guards do — an assertion ID yields its requirement's version.
+
+        Unknown IDs are omitted from the result rather than raising, so one
+        renamed or deleted ID cannot defeat a refresh of the rest. An absent
+        key means "re-resolve this one".
+
+        Args:
+            node_ids: Node IDs to look up.
+
+        Returns:
+            Mapping of node ID to version, omitting IDs that do not resolve.
+        """
+        graph = _state["graph"]
+        versions: dict[str, str] = {}
+        for node_id in node_ids:
+            node = graph.find_by_id(node_id)
+            if node is not None:
+                versions[node_id] = node_version(node)
+        return versions
 
     # ─────────────────────────────────────────────────────────────────────
     # MCP/HTTP Parity Tools (REQ-o00062-O)

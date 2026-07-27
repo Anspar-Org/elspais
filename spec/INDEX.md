@@ -28,7 +28,7 @@
 | ---------- | ----------------------------------- | ------------------- | -------- |
 | REQ-o00050 | Graph Builder as Single Entry Point | ops-architecture.md | 65d2ad6a |
 | REQ-o00051 | Composable Annotation Design        | ops-architecture.md | c73a6e32 |
-| REQ-o00060 | MCP Core Query Tools                | ops-mcp.md          | 73c31134 |
+| REQ-o00060 | MCP Core Query Tools                | ops-mcp.md          | 25b3d4f7 |
 | REQ-o00061 | MCP Workspace Context Tools         | ops-mcp.md          | aaba2940 |
 | REQ-o00062 | MCP Graph Mutation Tools            | ops-mcp.md          | 7c83917e |
 | REQ-o00063 | MCP File Mutation Tools             | ops-mcp.md          | 291497b8 |
