@@ -1173,6 +1173,16 @@ class FederatedGraph:
         self._record_mutation(repo_name, result)
         return result
 
+    def add_remainder(self, req_id: str, heading: str, text: str) -> MutationEntry:
+        """Add a non-normative section to a requirement.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[req_id]
+        result = self._graph_for(req_id).add_remainder(req_id, heading, text)
+        self._record_mutation(repo_name, result)
+        return result
+
     def update_remainder(
         self,
         node_id: str,

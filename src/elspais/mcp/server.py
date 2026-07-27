@@ -67,7 +67,7 @@ from elspais.graph.annotators import (
 )
 from elspais.graph.factory import build_graph
 from elspais.graph.federated import FederatedGraph
-from elspais.graph.GraphNode import GraphNode
+from elspais.graph.GraphNode import GraphNode, make_file_id
 from elspais.graph.mutations import MutationEntry
 from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.graph.relations import EdgeKind
@@ -2703,6 +2703,26 @@ def _attach_version(result: dict[str, Any], node: Any) -> dict[str, Any]:
     except (AttributeError, KeyError, ValueError):
         # Deleted nodes have no meaningful resulting version.
         pass
+    return result
+
+
+# Implements: REQ-o00062-K
+def _reattach_version_after_rebuild(
+    graph: Any, result: dict[str, Any], node_id: str
+) -> dict[str, Any]:
+    """Attach the resulting version for a tool that wrote to disk and rebuilt.
+
+    The disk-backed tools replace ``_state["graph"]`` wholesale, so the node
+    object captured beforehand belongs to a discarded graph. Re-resolve by ID
+    against the rebuilt graph instead.
+    """
+    from elspais.graph.render import node_version
+
+    if not result.get("success"):
+        return result
+    node = graph.find_by_id(node_id)
+    if node is not None:
+        result["version"] = node_version(node)
     return result
 
 
@@ -5857,6 +5877,7 @@ def create_server(
         status: str = "Draft",
         parent_id: str | None = None,
         edge_kind: str | None = None,
+        if_version: str | None = None,
     ) -> dict[str, Any]:
         """Create a new requirement in the graph (in-memory until save_mutations).
 
@@ -5867,6 +5888,9 @@ def create_server(
             status: Initial status (default: Draft).
             parent_id: Optional parent requirement to link to.
             edge_kind: Edge type if parent_id set ('IMPLEMENTS' or 'REFINES').
+            if_version: The version of parent_id from your last read. Required
+                when parent_id is given; ignored otherwise, since a parentless
+                creation has nothing to clobber.
         """
         guard = (
             _guard_associate_write(_state["graph"], _state["config"], parent_id)
@@ -5875,9 +5899,16 @@ def create_server(
         )
         if guard:
             return guard
-        return _mutate_add_requirement(
+        parent = None
+        if parent_id:
+            conflict = _guard_version(_state["graph"], parent_id, if_version or "")
+            if conflict:
+                return conflict
+            parent = _state["graph"].find_by_id(parent_id)
+        result = _mutate_add_requirement(
             _state["graph"], req_id, title, level, status, parent_id, edge_kind
         )
+        return _attach_version(result, parent) if parent is not None else result
 
     @mcp.tool()
     def mutate_delete_requirement(
@@ -5901,12 +5932,22 @@ def create_server(
     # ─────────────────────────────────────────────────────────────────────
 
     @mcp.tool()
-    def mutate_add_assertion(req_id: str, label: str, text: str) -> dict[str, Any]:
-        """Add a testable assertion (A, B, C...) to a requirement. Text should include SHALL."""
+    def mutate_add_assertion(req_id: str, label: str, text: str, if_version: str) -> dict[str, Any]:
+        """Add a testable assertion (A, B, C...) to a requirement. Text should include SHALL.
+
+        Args:
+            if_version: The version of req_id — the parent requirement — from
+                your last read. The new assertion has no prior version, so the
+                parent is what is guarded. Required.
+        """
         guard = _guard_associate_write(_state["graph"], _state["config"], req_id)
         if guard:
             return guard
-        return _mutate_add_assertion(_state["graph"], req_id, label, text)
+        conflict = _guard_version(_state["graph"], req_id, if_version)
+        if conflict:
+            return conflict
+        parent = _state["graph"].find_by_id(req_id)
+        return _attach_version(_mutate_add_assertion(_state["graph"], req_id, label, text), parent)
 
     @mcp.tool()
     def mutate_update_assertion(
@@ -6000,16 +6041,28 @@ def create_server(
         )
 
     @mcp.tool()
-    def mutate_add_remainder(req_id: str, heading: str, text: str) -> dict[str, Any]:
+    def mutate_add_remainder(
+        req_id: str, heading: str, text: str, if_version: str
+    ) -> dict[str, Any]:
         """Add a non-normative section (e.g. Rationale, Notes) to a requirement.
 
         Creates a new REMAINDER section linked to the requirement. The section is
         appended after existing content; recomputes the requirement's hash.
+
+        Args:
+            if_version: The version of req_id — the parent requirement — from
+                your last read. Required.
         """
         guard = _guard_associate_write(_state["graph"], _state["config"], req_id)
         if guard:
             return guard
-        return _mutate_add_remainder(_state["graph"], req_id, heading, text)
+        conflict = _guard_version(_state["graph"], req_id, if_version)
+        if conflict:
+            return conflict
+        parent = _state["graph"].find_by_id(req_id)
+        return _attach_version(
+            _mutate_add_remainder(_state["graph"], req_id, heading, text), parent
+        )
 
     @mcp.tool()
     def mutate_delete_remainder(
@@ -6165,6 +6218,7 @@ def create_server(
         source_id: str,
         target_id: str,
         edge_kind: str,
+        if_version: str,
         assertion_targets: list[str] | None = None,
     ) -> dict[str, Any]:
         """Add a traceability relationship (Implements, Refines, Validates) between nodes.
@@ -6177,54 +6231,99 @@ def create_server(
             assertion_targets: Optional list of assertion labels or full assertion
                 IDs to target (e.g. ["A", "B"] or ["REQ-p00044-A", "REQ-p00044-B"]).
                 Full IDs are automatically normalized to bare labels.
+            if_version: The version of source_id from your last read. Only the
+                source's rendered reference line changes, so only the source is
+                guarded. Required.
         """
         guard = _guard_associate_write(_state["graph"], _state["config"], source_id, target_id)
         if guard:
             return guard
-        return _mutate_add_edge(
-            _state["graph"],
-            source_id,
-            target_id,
-            edge_kind,
-            assertion_targets,
-            config=_state.get("config"),
+        conflict = _guard_version(_state["graph"], source_id, if_version)
+        if conflict:
+            return conflict
+        source = _state["graph"].find_by_id(source_id)
+        return _attach_version(
+            _mutate_add_edge(
+                _state["graph"],
+                source_id,
+                target_id,
+                edge_kind,
+                assertion_targets,
+                config=_state.get("config"),
+            ),
+            source,
         )
 
     @mcp.tool()
-    def mutate_change_edge_kind(source_id: str, target_id: str, new_kind: str) -> dict[str, Any]:
+    def mutate_change_edge_kind(
+        source_id: str, target_id: str, new_kind: str, if_version: str
+    ) -> dict[str, Any]:
         """Change an edge's relationship type.
 
         Args:
             new_kind: 'IMPLEMENTS' or 'REFINES'.
+        Args:
+            if_version: The version of source_id from your last read. Only the
+                source's rendered reference line changes, so only the source is
+                guarded. Required.
         """
         guard = _guard_associate_write(_state["graph"], _state["config"], source_id, target_id)
         if guard:
             return guard
-        return _mutate_change_edge_kind(_state["graph"], source_id, target_id, new_kind)
+        conflict = _guard_version(_state["graph"], source_id, if_version)
+        if conflict:
+            return conflict
+        source = _state["graph"].find_by_id(source_id)
+        return _attach_version(
+            _mutate_change_edge_kind(_state["graph"], source_id, target_id, new_kind), source
+        )
 
     @mcp.tool()
-    def mutate_delete_edge(source_id: str, target_id: str, confirm: bool = False) -> dict[str, Any]:
-        """Remove a traceability relationship between nodes. Returns error unless confirm=True."""
+    def mutate_delete_edge(
+        source_id: str, target_id: str, if_version: str, confirm: bool = False
+    ) -> dict[str, Any]:
+        """Remove a traceability relationship between nodes. Returns error unless confirm=True.
+        Args:
+            if_version: The version of source_id from your last read. Only the
+                source's rendered reference line changes, so only the source is
+                guarded. Required.
+        """
         guard = _guard_associate_write(_state["graph"], _state["config"], source_id, target_id)
         if guard:
             return guard
-        return _mutate_delete_edge(_state["graph"], source_id, target_id, confirm)
+        conflict = _guard_version(_state["graph"], source_id, if_version)
+        if conflict:
+            return conflict
+        source = _state["graph"].find_by_id(source_id)
+        return _attach_version(
+            _mutate_delete_edge(_state["graph"], source_id, target_id, confirm), source
+        )
 
     @mcp.tool()
     def mutate_fix_broken_reference(
-        source_id: str, old_target_id: str, new_target_id: str
+        source_id: str, old_target_id: str, new_target_id: str, if_version: str
     ) -> dict[str, Any]:
-        """Repair a broken reference by redirecting it to a valid target node."""
+        """Repair a broken reference by redirecting it to a valid target node.
+        Args:
+            if_version: The version of source_id from your last read. Only the
+                source's rendered reference line changes, so only the source is
+                guarded. Required.
+        """
         guard = _guard_associate_write(_state["graph"], _state["config"], source_id)
         if guard:
             return guard
-        return _mutate_fix_broken_reference(
-            _state["graph"], source_id, old_target_id, new_target_id
+        conflict = _guard_version(_state["graph"], source_id, if_version)
+        if conflict:
+            return conflict
+        source = _state["graph"].find_by_id(source_id)
+        return _attach_version(
+            _mutate_fix_broken_reference(_state["graph"], source_id, old_target_id, new_target_id),
+            source,
         )
 
     @mcp.tool()
     def mutate_change_edge_targets(
-        source_id: str, target_id: str, assertion_targets: list[str]
+        source_id: str, target_id: str, assertion_targets: list[str], if_version: str
     ) -> dict[str, Any]:
         """Change assertion targets on an IMPLEMENTS/REFINES edge.
 
@@ -6232,38 +6331,93 @@ def create_server(
             source_id: The child/source node ID.
             target_id: The parent/target node ID.
             assertion_targets: Assertion labels to target (empty = whole req).
+        Args:
+            if_version: The version of source_id from your last read. Only the
+                source's rendered reference line changes, so only the source is
+                guarded. Required.
         """
         guard = _guard_associate_write(_state["graph"], _state["config"], source_id, target_id)
         if guard:
             return guard
-        return _mutate_change_edge_targets(_state["graph"], source_id, target_id, assertion_targets)
+        conflict = _guard_version(_state["graph"], source_id, if_version)
+        if conflict:
+            return conflict
+        source = _state["graph"].find_by_id(source_id)
+        return _attach_version(
+            _mutate_change_edge_targets(_state["graph"], source_id, target_id, assertion_targets),
+            source,
+        )
 
     @mcp.tool()
-    def mutate_move_node_to_file(node_id: str, target_file_id: str) -> dict[str, Any]:
+    def mutate_move_node_to_file(
+        node_id: str,
+        target_file_id: str,
+        if_version: str,
+        if_source_file_version: str,
+        if_target_version: str,
+    ) -> dict[str, Any]:
         """Move a content node to a different FILE.
+
+        Unlike an edge mutation, a move changes all three participants: the node
+        leaves one file's contents and joins another's, and its placement in the
+        destination depends on what else arrived there. All three are guarded.
 
         Args:
             node_id: The node to move.
             target_file_id: The target FILE node ID (e.g. "file:spec/other.md").
+            if_version: Version of the node being moved.
+            if_source_file_version: Version of the file it currently lives in.
+            if_target_version: Version of the destination file.
         """
         guard = _guard_associate_write(_state["graph"], _state["config"], node_id, target_file_id)
         if guard:
             return guard
-        return _mutate_move_node_to_file(_state["graph"], node_id, target_file_id)
+
+        # Resolve all three before checking any, so a missing node is reported
+        # as node_not_found rather than masked by a conflict on another token.
+        node = _state["graph"].find_by_id(node_id)
+        if node is None:
+            return _guard_version(_state["graph"], node_id, if_version)
+        source_file = node.file_node()
+        if _state["graph"].find_by_id(target_file_id) is None:
+            return _guard_version(_state["graph"], target_file_id, if_target_version)
+
+        for guarded_id, supplied in (
+            (node_id, if_version),
+            (source_file.id if source_file else None, if_source_file_version),
+            (target_file_id, if_target_version),
+        ):
+            if guarded_id is None:
+                continue
+            conflict = _guard_version(_state["graph"], guarded_id, supplied)
+            if conflict:
+                return conflict
+
+        return _attach_version(
+            _mutate_move_node_to_file(_state["graph"], node_id, target_file_id), node
+        )
 
     @mcp.tool()
-    def mutate_rename_file(file_id: str, new_relative_path: str) -> dict[str, Any]:
+    def mutate_rename_file(file_id: str, new_relative_path: str, if_version: str) -> dict[str, Any]:
         """Rename a FILE node and its on-disk path.
 
         Args:
             file_id: Current FILE node ID (e.g. "file:spec/main.md").
             new_relative_path: New repo-relative path (e.g. "spec/renamed.md").
+            if_version: The version of file_id from your last read. Required.
         """
         guard = _guard_associate_write(_state["graph"], _state["config"], file_id)
         if guard:
             return guard
-        return _mutate_rename_file(
-            _state["graph"], file_id, new_relative_path, _state.get("repo_root")
+        conflict = _guard_version(_state["graph"], file_id, if_version)
+        if conflict:
+            return conflict
+        node = _state["graph"].find_by_id(file_id)
+        return _attach_version(
+            _mutate_rename_file(
+                _state["graph"], file_id, new_relative_path, _state.get("repo_root")
+            ),
+            node,
         )
 
     # ─────────────────────────────────────────────────────────────────────
@@ -6397,6 +6551,7 @@ def create_server(
         req_id: str,
         target_id: str,
         new_type: str,
+        if_version: str,
         save_branch: bool = False,
     ) -> dict[str, Any]:
         """Change a reference type in a spec file.
@@ -6404,7 +6559,13 @@ def create_server(
         Args:
             new_type: 'IMPLEMENTS' or 'REFINES'.
             save_branch: If True, create a safety branch before modifying.
+            if_version: The version of req_id from your last read. Required.
+                Note target_id must be the rendered ref form (``p00003``), not
+                the full ID.
         """
+        conflict = _guard_version(_state["graph"], req_id, if_version)
+        if conflict:
+            return conflict
         result = _change_reference_type(
             _state["working_dir"], req_id, target_id, new_type, save_branch
         )
@@ -6414,12 +6575,13 @@ def create_server(
                 _state["working_dir"],
             )
             _state["graph"] = new_graph
-        return result
+        return _reattach_version_after_rebuild(_state["graph"], result, req_id)
 
     @mcp.tool()
     def move_requirement(
         req_id: str,
         target_file: str,
+        if_version: str,
         save_branch: bool = False,
     ) -> dict[str, Any]:
         """Move a requirement to a different spec file.
@@ -6427,7 +6589,14 @@ def create_server(
         Args:
             target_file: Relative path to the target file (e.g., 'spec/other.md').
             save_branch: If True, create a safety branch before modifying.
+            if_version: The version of req_id from your last read. Required.
+                The requirement's own version does not move — its block text is
+                identical in the new file — but the guard still protects against
+                moving a requirement someone else has edited underneath you.
         """
+        conflict = _guard_version(_state["graph"], req_id, if_version)
+        if conflict:
+            return conflict
         result = _move_requirement(_state["working_dir"], req_id, target_file, save_branch)
         # REQ-o00063-F: Refresh graph after file mutations
         if result.get("success"):
@@ -6435,7 +6604,7 @@ def create_server(
                 _state["working_dir"],
             )
             _state["graph"] = new_graph
-        return result
+        return _reattach_version_after_rebuild(_state["graph"], result, req_id)
 
     @mcp.tool()
     def restore_from_safety_branch(branch_name: str) -> dict[str, Any]:
@@ -6566,19 +6735,32 @@ def create_server(
         file_path: str,
         line: int,
         requirement_id: str,
+        if_version: str,
     ) -> dict[str, Any]:
         """Insert a ``# Implements:`` comment linking a test to a requirement.
+
+        Writes to disk immediately, so the guard matters more here than for an
+        in-memory mutation: by the time the graph is rebuilt the change is
+        already on disk.
 
         Args:
             file_path: Path to the file to modify (relative to repo root).
             line: Line number to insert at (1-based). 0 means top of file.
+            if_version: The version of the FILE being edited, from your last
+                read. The requirement is not guarded — its rendered form does
+                not change. Required.
         """
-        return _apply_link_impl(
+        file_id = make_file_id(file_path)
+        conflict = _guard_version(_state["graph"], file_id, if_version)
+        if conflict:
+            return conflict
+        result = _apply_link_impl(
             _state,
             file_path=file_path,
             line=line,
             requirement_id=requirement_id,
         )
+        return _reattach_version_after_rebuild(_state["graph"], result, file_id)
 
     # ─────────────────────────────────────────────────────────────────────
     # Subtree Extraction Tool (REQ-o00067)
