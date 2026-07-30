@@ -474,7 +474,7 @@ class TestNonForceRefreshRefusalDoesNotRegress:
         assert result.get("code") != "mutation_log_conflict"
         assert len(graph.mutation_log) == 1
 
-    def test_REQ_o00062_N_a_clean_non_force_refresh_still_works_without_a_tip(self, disk_tools):
+    def test_REQ_o00062_N_clean_non_force_refresh_still_works_without_a_tip(self, disk_tools):
         """REQ-o00062-N: The common read path gains no new precondition."""
         tools, graph = disk_tools
 

@@ -404,7 +404,7 @@ class TestJourneyEditsThreadVersions:
         assert result["success"] is True, result.get("error")
         assert "Preconditions" in render.render_node(mutable_graph.find_by_id(JOURNEY))
 
-    def test_REQ_o00062_I_a_token_from_before_the_field_edit_is_rejected(
+    def test_REQ_o00062_I_stale_token_from_before_the_field_edit_is_rejected(
         self, mutable_graph, tools
     ):
         """REQ-o00062-I: A reader holding the pre-edit journey cannot delete it."""

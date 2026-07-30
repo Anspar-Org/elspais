@@ -1595,7 +1595,8 @@ async def api_mutate_edge(request: Request) -> JSONResponse:
         return JSONResponse(
             {"success": False, "error": "source_id and target_id required"}, status_code=400
         )
-    # REQ-o00062-M: only the source's rendered reference line changes.
+    # Implements: REQ-o00062-M
+    # Only the source's rendered reference line changes.
     conflict = _version_conflict(state, data, source_id)
     if conflict is not None:
         return conflict
@@ -1830,8 +1831,9 @@ async def api_mutate_move_to_file(request: Request) -> JSONResponse:
             status_code=400,
         )
 
-    # REQ-o00062-M: the node, the file it leaves and the file it joins all
-    # change, so all three are guarded.
+    # Implements: REQ-o00062-M
+    # The node, the file it leaves and the file it joins all change, so all
+    # three are guarded.
     #
     # Every guard runs BEFORE the destination file is created. A rejected
     # mutation must leave nothing behind, and creating the file first would

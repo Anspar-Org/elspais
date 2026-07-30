@@ -856,6 +856,7 @@ class TraceGraph:
             for parent in list(node.iter_parents()):
                 parent.unlink(node)
 
+    # Implements: REQ-o00062-P
     def _undo_delete_journey(self, entry: MutationEntry) -> None:
         """Undo a delete journey operation, restoring the node AND its edges.
 
@@ -2929,6 +2930,7 @@ class TraceGraph:
                 "was_root": was_root,
                 "source_path": source_path,
                 "validates_ids": validates_ids,
+                # Implements: REQ-o00062-P
                 # Full edge capture so undo can reattach the journey rather
                 # than restoring an orphan that renders into no file.
                 "parent_edges": [

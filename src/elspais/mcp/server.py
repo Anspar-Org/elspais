@@ -1578,7 +1578,8 @@ def _get_node(graph: FederatedGraph, node_id: str) -> dict[str, Any]:
     if node is None:
         return {"error": f"Node '{node_id}' not found"}
     envelope = _serialize_node_generic(node, graph)
-    # REQ-o00060-G: hand back the token a mutation of this node will require.
+    # Implements: REQ-o00060-G
+    # Hand back the token a mutation of this node will require.
     envelope["version"] = node_version(node)
     return envelope
 
@@ -1668,7 +1669,8 @@ def _get_requirement(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
         "parents": req_parents,
         "children": req_children,
         "coverage": metrics_data,
-        # REQ-o00060-G: the token a mutation of this requirement will require,
+        # Implements: REQ-o00060-G
+        # The token a mutation of this requirement will require,
         # plus its file's token, so a file-level operation needs no second read.
         # file_version is None for INSTANCE and unlinked nodes, never absent.
         "version": node_version(node),
@@ -4754,7 +4756,7 @@ def _subtree_to_flat(
             "kind": node.kind.value,
             "title": node.get_label(),
             "depth": depth_level,
-            # REQ-o00060-G
+            # Implements: REQ-o00060-G
             "version": node_version(node),
         }
 
@@ -4817,7 +4819,7 @@ def _subtree_to_nested(
         "id": node.id,
         "kind": node.kind.value,
         "title": node.get_label(),
-        # REQ-o00060-G
+        # Implements: REQ-o00060-G
         "version": node_version(node),
     }
 
@@ -6184,7 +6186,8 @@ def create_server(
         return versions
 
     # ─────────────────────────────────────────────────────────────────────
-    # MCP/HTTP Parity Tools (REQ-o00062-O)
+    # Implements: REQ-o00062-O
+    # MCP/HTTP Parity Tools
     #
     # These five mutations were reachable over the viewer's HTTP interface but
     # not over MCP. They ship guarded — never registered unguarded.
@@ -6329,7 +6332,7 @@ def create_server(
                 Full IDs are automatically normalized to bare labels.
             if_version: The version of source_id from your last read. Only the
                 source's rendered reference line changes, so only the source is
-                guarded. Required.
+                guarded (Implements: REQ-o00062-M). Required.
         """
         guard = _guard_associate_write(_state["graph"], _state["config"], source_id, target_id)
         if guard:
@@ -6453,6 +6456,8 @@ def create_server(
         if_target_version: str,
     ) -> dict[str, Any]:
         """Move a content node to a different FILE.
+
+        Implements: REQ-o00062-M
 
         Unlike an edge mutation, a move changes all three participants: the node
         leaves one file's contents and joins another's, and its placement in the

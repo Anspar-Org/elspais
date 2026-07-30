@@ -348,7 +348,7 @@ class TestFixBrokenReferenceGuardsTheSource:
     DANGLING = "REQ-p09999"
     REPLACEMENT = "REQ-p00002"
 
-    def test_REQ_o00062_M_a_dangling_reference_is_created_to_repair(self, chain, tools):
+    def test_REQ_o00062_M_dangling_reference_is_created_to_repair(self, chain, tools):
         """REQ-o00062-M: Setup -- a reference to a missing node wires no edge,
         so the source's rendered form (and version) is unchanged by it."""
         before = node_version(chain.find_by_id(self.SOURCE))
