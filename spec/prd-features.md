@@ -150,12 +150,14 @@ B. The tool SHALL display test coverage information per requirement when test da
 
 C. The viewer SHALL display source files inline in a side panel with syntax-highlighted content and stable line numbers, when embedded content is enabled.
 
+D. The viewer SHALL present, on demand, current results for every analysis report the tool provides, without requiring the reviewer to leave the viewer.
+
 ## Changelog
 
-- 2026-07-31 | 2578f15c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | 185217a3 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-03-30 | b3dd4d1a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Interactive Traceability Viewer* | **Hash**: 2578f15c
+*End* *Interactive Traceability Viewer* | **Hash**: 185217a3
 ---
 
 ## REQ-p00014: Satisfies Relationship
