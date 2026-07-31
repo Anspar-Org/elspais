@@ -810,3 +810,107 @@ class TestCrossRepoRendering:
         assert "### REQ-p00099: Associate Capability {#REQ-p00099}" in joined
         # Assertion body preserved.
         assert "The associate component SHALL expose a federation hook." in joined
+
+
+# ---------------------------------------------------------------------------
+# Image path resolution (TOOL-31 / TOOL-32)
+# ---------------------------------------------------------------------------
+
+
+def _image_asm(tmp_path: Path) -> tuple[MarkdownAssembler, Path]:
+    """Assembler over an on-disk single-repo root for image-path tests."""
+    root_dir = tmp_path / "root"
+    root_dir.mkdir(parents=True, exist_ok=True)
+    graph = TraceGraph(repo_root=root_dir)
+    return MarkdownAssembler(_wrap(graph)), root_dir
+
+
+class TestImagePathResolution:
+    """Validates REQ-p00080-C: relative image refs survive the /tmp pandoc hop.
+
+    render_pdf() writes assembled markdown to a temp file in /tmp/, so any
+    image reference left relative resolves to nothing and the image is
+    silently dropped from the PDF (TOOL-31). The assembler must rewrite
+    relative raster/vector refs to absolute paths anchored at the source
+    file's directory in the file's owning repo.
+    """
+
+    # Verifies: REQ-p00080-C
+    def test_REQ_p00080_C_relative_image_resolved_against_source_dir(self, tmp_path):
+        """A ref relative to a spec subdirectory becomes absolute."""
+        asm, root = _image_asm(tmp_path)
+        (root / "spec" / "sub" / "images").mkdir(parents=True)
+        img = root / "spec" / "sub" / "images" / "a.png"
+        img.write_bytes(b"\x89PNG")
+        (root / "spec" / "sub" / "x.md").write_text(
+            "# Sub Spec\n\n![diagram](images/a.png)\n", encoding="utf-8"
+        )
+
+        joined = "\n".join(asm._render_file("spec/sub/x.md"))
+        assert f"![diagram]({img.resolve()})" in joined
+        assert "![diagram](images/a.png)" not in joined
+
+    # Verifies: REQ-p00080-C
+    def test_REQ_p00080_C_parent_relative_image_resolved(self, tmp_path):
+        """A ../docs/... ref (the TOOL-31 repro) resolves to the repo's docs tree."""
+        asm, root = _image_asm(tmp_path)
+        (root / "spec").mkdir()
+        (root / "docs" / "urs-extracted-images").mkdir(parents=True)
+        img = root / "docs" / "urs-extracted-images" / "image-01.png"
+        img.write_bytes(b"\x89PNG")
+        (root / "spec" / "prd-x.md").write_text(
+            "# X\n\n![shot](../docs/urs-extracted-images/image-01.png)\n",
+            encoding="utf-8",
+        )
+
+        joined = "\n".join(asm._render_file("spec/prd-x.md"))
+        assert f"![shot]({img.resolve()})" in joined
+
+    # Verifies: REQ-p00080-C
+    def test_REQ_p00080_C_image_title_preserved(self, tmp_path):
+        """An optional quoted title survives the rewrite."""
+        asm, root = _image_asm(tmp_path)
+        (root / "spec").mkdir()
+        img = root / "spec" / "b.jpg"
+        img.write_bytes(b"\xff\xd8")
+        (root / "spec" / "y.md").write_text('# Y\n\n![b](b.jpg "caption text")\n', encoding="utf-8")
+
+        joined = "\n".join(asm._render_file("spec/y.md"))
+        assert f'![b]({img.resolve()} "caption text")' in joined
+
+    # Verifies: REQ-p00080-C
+    def test_REQ_p00080_C_unresolved_and_external_refs_unchanged(self, tmp_path):
+        """Missing files and URLs are left as-is (resource-path fallback)."""
+        asm, root = _image_asm(tmp_path)
+        (root / "spec").mkdir()
+        (root / "spec" / "z.md").write_text(
+            "# Z\n\n![gone](missing/nope.png)\n\n" "![web](https://example.com/pic.png)\n",
+            encoding="utf-8",
+        )
+
+        joined = "\n".join(asm._render_file("spec/z.md"))
+        assert "![gone](missing/nope.png)" in joined
+        assert "![web](https://example.com/pic.png)" in joined
+
+    # Verifies: REQ-p00080-C
+    def test_REQ_p00080_C_associate_image_resolves_through_owning_repo(self, tmp_path):
+        """Federated composition (TOOL-32): an associate-owned file's image
+        must resolve against the ASSOCIATE repo root, not the root repo's."""
+        fed, root_dir, assoc_dir = _make_federated_overview_graph(tmp_path)
+        # Same relative path exists in BOTH repos; the associate's copy
+        # must win for the associate-owned file.
+        for repo in (root_dir, assoc_dir):
+            (repo / "spec" / "img").mkdir(parents=True, exist_ok=True)
+            (repo / "spec" / "img" / "d.png").write_bytes(b"\x89PNG")
+        assoc_md = assoc_dir / "spec" / "prd-assoc.md"
+        assoc_md.write_text(
+            assoc_md.read_text(encoding="utf-8") + "\n![d](img/d.png)\n",
+            encoding="utf-8",
+        )
+
+        asm = MarkdownAssembler(fed)
+        output = asm.assemble()
+        assoc_img = (assoc_dir / "spec" / "img" / "d.png").resolve()
+        assert f"![d]({assoc_img})" in output
+        root_img = (root_dir / "spec" / "img" / "d.png").resolve()
+        assert f"![d]({root_img})" not in output
