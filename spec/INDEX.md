@@ -104,7 +104,7 @@
 | REQ-d00206 | Server Federation and Staleness                               | dev-traceview-review.md | ddd6dc73 |
 | REQ-d00207 | Declarative Config Schema Cleanup                             | dev-graph-config.md     | 6dfbf578 |
 | REQ-d00208 | JSON Schema Export for IDE Autocomplete                       | dev-graph-config.md     | 27ca773c |
-| REQ-d00209 | Schema-Driven Init Template Generation                        | dev-graph-config.md     | 0173b043 |
+| REQ-d00209 | Schema-Driven Init Template Generation                        | dev-graph-config.md     | b25e4468 |
 | REQ-d00210 | Documentation Drift Detection                                 | dev-graph-config.md     | 59023724 |
 | REQ-d00211 | Config-Driven Viewer UI Values                                | dev-graph-config.md     | 58192a4f |
 | REQ-d00212 | Config Schema v3 Models                                       | dev-graph-config.md     | 40849780 |
