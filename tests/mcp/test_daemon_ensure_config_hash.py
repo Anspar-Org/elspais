@@ -41,7 +41,7 @@ def test_ensure_daemon_restarts_on_config_hash_mismatch(tmp_path: Path):
         daemon_json.unlink(missing_ok=True)
         return True
 
-    def mock_start(repo_root, ttl_minutes=30):
+    def mock_start(repo_root, ttl_minutes=30, spawner_pid=None):
         started.append(repo_root)
         return 54321
 

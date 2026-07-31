@@ -6517,6 +6517,17 @@ def run_server(
                 s.bind(("127.0.0.1", 0))
                 port = s.getsockname()[1]
 
+        # Spawner liveness: set for implicitly spawned daemons only (env
+        # written by daemon.start_daemon). Explicit starts (manual serve,
+        # viewer, daemon restart) have no spawner and keep TTL-only life.
+        spawner_pid: int | None = None
+        env_spawner = _os.environ.get("_ELSPAIS_SPAWNER_PID")
+        if env_spawner:
+            try:
+                spawner_pid = int(env_spawner)
+            except ValueError:
+                spawner_pid = None
+
         if daemon_json:
             from elspais.mcp.daemon import write_daemon_json
 
@@ -6525,7 +6536,25 @@ def run_server(
                 pid=_os.getpid(),
                 port=port,
                 server_type="daemon",
+                spawner_pid=spawner_pid,
             )
+
+        if spawner_pid is not None:
+            from elspais.server.spawner_watch import SpawnerWatchdog
+
+            def _unsaved_mutation_count() -> int | None:
+                log = _get_mutation_log(state.graph, limit=1)
+                count = log.get("count")
+                return count if isinstance(count, int) else None
+
+            interval = float(_os.environ.get("_ELSPAIS_SPAWNER_CHECK_INTERVAL", "60"))
+            grace = float(_os.environ.get("_ELSPAIS_SPAWNER_GRACE", "300"))
+            SpawnerWatchdog(
+                spawner_pid=spawner_pid,
+                mutation_count_fn=_unsaved_mutation_count,
+                interval_seconds=interval,
+                grace_seconds=grace,
+            ).start()
 
         uvi_config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
         anyio.run(uvicorn.Server(uvi_config).serve)

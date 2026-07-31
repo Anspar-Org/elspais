@@ -19,6 +19,91 @@ from urllib.request import urlopen
 
 _DEFAULT_TTL = 30  # minutes
 
+# Env var carrying the spawner's PID into the detached daemon process
+# (start_new_session=True reparents the daemon to PID 1, so the parent
+# chain cannot identify the spawner after the fact).
+_SPAWNER_ENV = "_ELSPAIS_SPAWNER_PID"
+
+# Public override: a session/IDE can declare itself the spawner so that
+# implicitly started daemons are reaped when it exits.
+SPAWNER_OVERRIDE_ENV = "ELSPAIS_SPAWNER_PID"
+
+
+def _iter_proc_ancestors(pid: int | None = None):
+    """Yield (pid, comm) for each ancestor of ``pid`` (exclusive), via /proc.
+
+    Best effort: stops silently on any read error or at PID 1.
+    """
+    if pid is None:
+        pid = os.getpid()
+    for _ in range(64):  # depth bound against /proc anomalies
+        try:
+            stat = Path(f"/proc/{pid}/stat").read_text()
+            # comm may contain spaces/parens; fields after the last ')'
+            # are position-stable.
+            ppid = int(stat.rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            return
+        if ppid <= 1:
+            return
+        yield ppid, _read_comm(ppid) or ""
+        pid = ppid
+
+
+def _read_comm(pid: int) -> str | None:
+    try:
+        return Path(f"/proc/{pid}/comm").read_text().strip()
+    except OSError:
+        return None
+
+
+def _session_leader_has_tty(sid: int) -> bool:
+    """True if the session leader has a controlling terminal (tty_nr != 0)."""
+    try:
+        stat = Path(f"/proc/{sid}/stat").read_text()
+        tty_nr = int(stat.rsplit(")", 1)[1].split()[4])
+        return tty_nr != 0
+    except (OSError, ValueError, IndexError):
+        return False
+
+
+def resolve_spawner_pid() -> int | None:
+    """Identify the session on whose behalf a daemon is being auto-started.
+
+    Resolution order:
+      1. ``ELSPAIS_SPAWNER_PID`` env var — explicit declaration by the
+         session/IDE (also the deterministic hook for tests).
+      2. Inside a Claude Code session (``CLAUDECODE`` env set): the
+         nearest ancestor process named ``claude`` (the session process;
+         intermediate tool shells are ephemeral).
+      3. The controlling-terminal session leader (``os.getsid(0)``), if
+         it is a real interactive session (has a tty). An interactive
+         shell qualifies; batch/CI/tool shells do not.
+
+    Returns None when no session identity can be established — the
+    daemon then keeps its TTL-only lifetime (current behavior).
+    """
+    override = os.environ.get(SPAWNER_OVERRIDE_ENV)
+    if override:
+        try:
+            pid = int(override)
+        except ValueError:
+            pid = 0
+        return pid if pid > 1 else None
+
+    if os.environ.get("CLAUDECODE"):
+        for pid, comm in _iter_proc_ancestors():
+            if comm == "claude":
+                return pid
+
+    try:
+        sid = os.getsid(0)
+    except OSError:
+        return None
+    if sid > 1 and sid != os.getpid() and _session_leader_has_tty(sid):
+        return sid
+    return None
+
 
 def compute_config_hash(config_path: Path) -> str:
     """Compute a hash of all config files that affect the graph.
@@ -88,6 +173,7 @@ def write_daemon_json(
     pid: int,
     port: int,
     server_type: str = "daemon",
+    spawner_pid: int | None = None,
 ) -> Path:
     """Write daemon.json state file for a running server.
 
@@ -99,6 +185,9 @@ def write_daemon_json(
         pid: Process ID of the server.
         port: Port the server is listening on.
         server_type: "daemon" or "viewer".
+        spawner_pid: PID of the session the daemon was implicitly
+            spawned for, or None for explicitly started servers
+            (TTL-only lifetime).
 
     Returns:
         Path to the written daemon.json file.
@@ -111,19 +200,18 @@ def write_daemon_json(
     config_path = repo_root / ".elspais.toml"
     config_hash = compute_config_hash(config_path) if config_path.is_file() else ""
 
-    daemon_json.write_text(
-        json.dumps(
-            {
-                "pid": pid,
-                "port": port,
-                "repo_root": str(repo_root),
-                "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                "version": __version__,
-                "config_hash": config_hash,
-                "type": server_type,
-            }
-        )
-    )
+    info: dict = {
+        "pid": pid,
+        "port": port,
+        "repo_root": str(repo_root),
+        "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "version": __version__,
+        "config_hash": config_hash,
+        "type": server_type,
+    }
+    if spawner_pid is not None:
+        info["spawner_pid"] = spawner_pid
+    daemon_json.write_text(json.dumps(info))
     return daemon_json
 
 
@@ -179,7 +267,11 @@ def get_daemon_info(repo_root: Path) -> dict | None:
         return None
 
 
-def start_daemon(repo_root: Path, ttl_minutes: int = _DEFAULT_TTL) -> int:
+def start_daemon(
+    repo_root: Path,
+    ttl_minutes: int = _DEFAULT_TTL,
+    spawner_pid: int | None = None,
+) -> int:
     """Start a background MCP server and return its port.
 
     Spawns ``elspais mcp serve --transport streamable-http --port 0
@@ -190,6 +282,9 @@ def start_daemon(repo_root: Path, ttl_minutes: int = _DEFAULT_TTL) -> int:
         ttl_minutes: >0 = exit after N minutes idle.
                      <0 = run forever (no timeout).
                       0 = should not be called (caller should check).
+        spawner_pid: PID of the session this daemon serves. When set,
+            the daemon watches it and shuts down after the session
+            exits. None (explicit starts) keeps TTL-only lifetime.
     """
     # Stop any existing server before overwriting daemon.json.
     # Without this, the old server becomes an undiscoverable orphan.
@@ -217,6 +312,12 @@ def start_daemon(repo_root: Path, ttl_minutes: int = _DEFAULT_TTL) -> int:
         str(serve_ttl),
     ]
 
+    child_env = {**os.environ, "_ELSPAIS_DAEMON_JSON": str(daemon_json)}
+    if spawner_pid is not None:
+        child_env[_SPAWNER_ENV] = str(spawner_pid)
+    else:
+        child_env.pop(_SPAWNER_ENV, None)
+
     with open(log_path, "w") as log_file:
         subprocess.Popen(
             cmd,
@@ -225,7 +326,7 @@ def start_daemon(repo_root: Path, ttl_minutes: int = _DEFAULT_TTL) -> int:
             stdin=subprocess.DEVNULL,
             start_new_session=True,
             cwd=str(repo_root),
-            env={**os.environ, "_ELSPAIS_DAEMON_JSON": str(daemon_json)},
+            env=child_env,
         )
 
     # Poll for daemon.json, then verify HTTP readiness.
@@ -443,4 +544,12 @@ def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
     if ttl_minutes == 0:
         raise RuntimeError("Daemon auto-launch disabled (cli_ttl=0)")
 
-    return start_daemon(repo_root, ttl_minutes=ttl_minutes)
+    # Implicit spawn on behalf of a CLI/session: tie the daemon's
+    # lifetime to that session so it cannot outlive it. Explicit starts
+    # (elspais daemon restart, manual mcp serve, viewer) do not pass a
+    # spawner and keep TTL-only behavior.
+    return start_daemon(
+        repo_root,
+        ttl_minutes=ttl_minutes,
+        spawner_pid=resolve_spawner_pid(),
+    )
