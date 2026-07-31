@@ -615,3 +615,138 @@ class TestDaemonConfigStaleRestart:
         assert daemon_json.exists()
         pid_after = json.loads(daemon_json.read_text())["pid"]
         assert pid_after != pid_before, "stale daemon should have been restarted"
+
+
+# ---------------------------------------------------------------------------
+# TOOL-12: daemons must not outlive the session that spawned them
+# ---------------------------------------------------------------------------
+
+
+class TestDaemonSpawnerLiveness:
+    """Verifies REQ-p00015-E: an implicitly spawned daemon exits after its
+    spawning session dies, instead of surviving as an orphan that could
+    keep serving values no session is refreshing.
+
+    Deterministic: the "session" is a subprocess we control and kill; the
+    daemon's check interval is shortened via the internal env knob.
+    """
+
+    def test_daemon_exits_after_spawner_dies(self, tmp_path):
+        import os
+        import sys
+        import time
+
+        from tests.e2e.helpers import Requirement, base_config, build_project
+
+        build_project(
+            tmp_path,
+            base_config(name="spawner-liveness-project"),
+            spec_files={
+                "spec/prd.md": [
+                    Requirement(
+                        "REQ-p00001",
+                        "Feature One",
+                        "PRD",
+                        assertions=[("A", "The system SHALL do one thing.")],
+                    )
+                ]
+            },
+        )
+
+        # Fake session process: long-lived until we kill it.
+        spawner = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+        daemon_pid = None
+        try:
+            # Implicit daemon spawn via the CLI reuse path, declaring the
+            # fake session as spawner.
+            result = run_elspais(
+                "summary",
+                cwd=tmp_path,
+                env={
+                    "ELSPAIS_SPAWNER_PID": str(spawner.pid),
+                    "_ELSPAIS_SPAWNER_CHECK_INTERVAL": "0.3",
+                },
+            )
+            assert result.returncode == 0, result.stderr
+
+            daemon_json = tmp_path / ".elspais" / "daemon.json"
+            assert daemon_json.exists(), "daemon should have auto-started"
+            info = json.loads(daemon_json.read_text())
+            assert info["spawner_pid"] == spawner.pid
+            daemon_pid = info["pid"]
+            os.kill(daemon_pid, 0)  # daemon alive while spawner alive
+
+            # Kill the session; the daemon must notice and exit cleanly
+            # (no unsaved mutations -> no grace period).
+            spawner.kill()
+            spawner.wait()
+
+            deadline = time.time() + 20
+            while time.time() < deadline:
+                try:
+                    os.kill(daemon_pid, 0)
+                except ProcessLookupError:
+                    break  # daemon exited
+                time.sleep(0.3)
+            else:
+                raise AssertionError(
+                    "daemon survived its spawner's death: "
+                    + (tmp_path / ".elspais" / "daemon.log").read_text()[-1000:]
+                )
+
+            log = (tmp_path / ".elspais" / "daemon.log").read_text()
+            assert "shutting down" in log
+        finally:
+            spawner.kill()
+            if daemon_pid is not None:
+                try:
+                    os.kill(daemon_pid, 15)
+                except OSError:
+                    pass
+
+    def test_explicit_restart_records_no_spawner(self, tmp_path):
+        """`elspais daemon restart` is an explicit start: the daemon keeps
+        TTL-only lifetime and records no spawner identity, even when the
+        environment declares one."""
+        import os
+        import time
+
+        from tests.e2e.helpers import Requirement, base_config, build_project
+
+        build_project(
+            tmp_path,
+            base_config(name="explicit-daemon-project"),
+            spec_files={
+                "spec/prd.md": [
+                    Requirement(
+                        "REQ-p00001",
+                        "Feature One",
+                        "PRD",
+                        assertions=[("A", "The system SHALL do one thing.")],
+                    )
+                ]
+            },
+        )
+
+        daemon_json = tmp_path / ".elspais" / "daemon.json"
+        try:
+            result = run_elspais(
+                "daemon",  # defaults to the restart action
+                cwd=tmp_path,
+                env={"ELSPAIS_SPAWNER_PID": str(os.getpid())},
+            )
+            assert result.returncode == 0, result.stderr
+            assert daemon_json.exists()
+            info = json.loads(daemon_json.read_text())
+            assert (
+                "spawner_pid" not in info
+            ), f"explicitly restarted daemon must not be session-tied: {info}"
+            # And it stays up: no watchdog is running.
+            time.sleep(1.5)
+            os.kill(info["pid"], 0)
+        finally:
+            if daemon_json.exists():
+                try:
+                    os.kill(json.loads(daemon_json.read_text())["pid"], 15)
+                except (OSError, ValueError, KeyError):
+                    pass

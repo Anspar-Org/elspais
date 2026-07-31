@@ -142,7 +142,8 @@ def create_template_requirement(args: argparse.Namespace) -> int:
 _FIELD_COMMENTS: dict[str, str] = {
     # --- top-level scalars ---
     "version": "Config schema version (do not change)",
-    "cli_ttl": "Daemon TTL in minutes (>0 = auto-start, 0 = disabled, <0 = no timeout)",
+    "cli_ttl": "Daemon TTL in minutes (>0 = auto-start, 0 = disabled, <0 = no idle timeout); "
+    "session-spawned daemons also exit when their session ends",
     "stats": "File path for MCP tool-usage statistics (optional)",
     # --- [project] ---
     "project": "Project identity",
