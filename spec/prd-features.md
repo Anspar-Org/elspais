@@ -170,6 +170,8 @@ Cross-cutting concerns — regulatory compliance frameworks, security policies, 
 
 A template is a *subtree*, not a single REQ: template-marked REQs refine other template-marked REQs to decompose one cross-cutting obligation into levels of detail (a policy root refined by its specific provisions). `Satisfies:` may target any member of a template subtree — the clone is the subtree rooted at the target, so declaring against an interior member is simply a narrower declaration. An earlier revision restricted templates to single-REQ scope (root plus directly-attached assertions, inbound `Refines:` prohibited); that made real policy hierarchies unrepresentable and is retired. The validation matrix's complements are deliberate permissions: template-to-template `Refines:` is the subtree-forming edge, and `Implements:` from CODE / `Verifies:` from TEST against template targets is the cross-cutting evidence path — assertion D produces the direct edge, assertion P makes that evidence count on every instance. Instances need no special analysis: evidence recorded against a template *Assertion* counts on each of its instances (assertion P), and from there every surface treats instances as ordinary directly-declared nodes (assertion K) — the standard rollup aggregates a cloned subtree like any other. The INSTANCE edge is the wiring by which implementations realize assertion P; whether that is computed as query-time inheritance or by materializing evidence edges onto clones is an implementation choice the spec does not fix. Which members of a subtree apply to a given repository is that repository's authoring decision, expressed by what it targets — the granularity question is no different from deciding what belongs in one REQ.
 
+Two conformance details keep the model usable with named ID schemes. Named-component styles (kebab-case, snake_case) put the assertion-separator character inside requirement names, so a string like `HHT-OPS-production-readiness-A` is lexically ambiguous between a longer requirement name and an assertion-targeted reference; the configuration guard that rejects overlapping separator/label styles (REQ-d00251-F) makes the split well-defined, and assertion Q obliges every accepting field — the metadata line included — to apply the same split, so a reference never resolves differently in a `Satisfies:`/`Refines:` header than the identical string would in a code marker. And because template targets are where authors first collide with the validation matrix, assertion R separates the two ways a reference can fail — the ID resolves to nothing, or it resolves to a node the matrix forbids — so a diagnostic never sends an author hunting a "missing" requirement that in fact exists, or relaxing a rule when the real problem is a typo.
+
 ### Assertions
 
 A. The system SHALL support a `Satisfies:` metadata field on requirements. The target MAY be a requirement or a specific *Assertion*.
@@ -202,9 +204,14 @@ O. Each cross-repo `INSTANCE` clone SHALL record the owning template repository 
 
 P. Evidence declared against a template *Assertion* SHALL count as evidence on every instance of that *Assertion*.
 
+Q. The system SHALL resolve an assertion-targeted reference to the same target *Assertion* in every field that accepts the reference form — requirement metadata fields as well as code and test *Traceability* markers — under every valid ID-pattern configuration, including component styles whose names contain the configured assertion separator.
+
+R. When a declared reference fails to produce a valid relationship, the resulting diagnostic SHALL state which failure class occurred: resolution failure (the referenced ID matches no requirement or *Assertion*) or rule violation (the target exists but the relationship is forbidden by the validation matrix).
+
 ### Changelog
 
-- 2026-07-31 | fb9e19d5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | 064c817a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-44: add Q (uniform assertion-suffix resolution across fields and ID schemes) and R (diagnostics separate resolution failure from rule violation)
 - 2026-07-30 | 47baf2fc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-30 | 7adf98fa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: templates become subtrees — B/H clone the subtree rooted at any satisfied member, G requires a template's refiners to be templates, composite obligations split out as L-P, K restated as instance uniformity with P carrying the cross-cutting evidence rule
@@ -222,7 +229,7 @@ P. Evidence declared against a template *Assertion* SHALL count as evidence on e
 - 2026-05-04 | bae1b85d | - | Developer (<dev@example.com>) | Auto-fix: canonicalize term forms, update hash
 - 2026-03-30 | 9115ce0d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Satisfies Relationship* | **Hash**: fb9e19d5
+*End* *Satisfies Relationship* | **Hash**: 064c817a
 ---
 
 ## REQ-p00016: NOT APPLICABLE Status
