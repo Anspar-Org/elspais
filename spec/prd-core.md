@@ -284,6 +284,45 @@ G. While the tool serves answers computed from a configuration that no longer ma
 *End* *Complete and Current Reporting* | **Hash**: 9aa9a8aa
 ---
 
+# REQ-p00017: Reference Integrity Under Mutation
+
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00001
+
+## Rationale
+
+The *Traceability* graph is held together by references: `Implements:`, `Verifies:`, and `Validates:` markers in code, tests, and journeys designate requirements and assertions by identifier. A reference that breaks is visible — the tool reports it. A reference that still parses but now designates something *other than what it designated before* is worse than broken: it is silently wrong, and every coverage number computed over it is silently wrong too. The governing invariant of this requirement: no mutation leaves a reference that still parses but designates something other than what it designated before.
+
+The failure shapes this requirement guards against:
+
+- Assertion labels treated as positions. If deleting assertion B renumbers C to B, every `Implements: REQ-x-B` in code silently repoints from the old B's obligation to the old C's. Labels must bind to content, never to position. Requirement hashing is already order-independent (REQ-d00131-J), so reordering assertions perturbs nothing on the hash side — label stability is the remaining reorder hazard, and this requirement closes it.
+- A requirement-ID rename that updates the spec file but not the estate's other spec references, leaving stale designations inside the graph itself.
+- References the tool cannot see. Requirement IDs appear in artifacts elspais does not parse — prose documentation, SQL migrations, Terraform, shell scripts, commit messages. The tool cannot update these, but it can refuse to strand them: an identity mapping from former to successor identifiers makes out-of-graph references mechanically updatable. The obligation is the mapping's existence and availability, not its format.
+- Deletion that ignores lifecycle. The estate classifies statuses into roles (active, provisional, aspirational, retired). A provisional or aspirational requirement has attracted no committed references, so removing or renumbering it is routine. An active requirement is load-bearing; removing it outright would strand every reference to it, so it retires in place instead. A retired requirement is a historical record; editing it would falsify the record that its identifier preserves.
+
+Interplay with existing requirements: this requirement governs what an *applied* mutation must preserve. When a mutation cannot be applied — or can be applied only partially — reporting the unapplied change and its cause is REQ-p00015-B's obligation, cited here rather than restated. REQ-d00201 and REQ-d00065 specify *which layer executes* mutations (delegation of mutation logic to the graph); they are complementary plumbing and say nothing about designation integrity, which is this requirement's subject. Protection against concurrent writers (lost updates, conflict detection) is the concern of the MCP mutation tooling spec under REQ-o00062, not of this requirement — scope here is designation integrity of the mutations that are applied.
+
+## Assertions
+
+A. If a mutation reorders or deletes *Assertions* within a requirement, then the tool SHALL NOT assign a label previously borne by one *Assertion* to a different *Assertion*.
+
+B. When a mutation renames the identifier of a requirement or of one of its *Assertions*, the tool SHALL update every reference held in the graph to the former identifier so that it designates the same entity under its new identifier.
+
+C. When a mutation changes or removes an identifier, the tool SHALL make available a mapping from each former identifier to its successor identifier, or to its removal, in a form consumable by processes that update references outside the graph.
+
+D. If a mutation would delete a requirement whose status is in the active role, then the tool SHALL transition the requirement to a retired-role status preserving its identifier rather than removing it.
+
+E. While a requirement's status is in a retired role, the tool SHALL NOT apply mutations that alter the requirement's content or identifier.
+
+F. The tool SHALL NOT assign an identifier previously borne by a requirement whose status reached the active role to a different requirement.
+
+## Changelog
+
+- 2026-07-31 | c0aae59d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-20: author reference-integrity-under-mutation invariant (GI-3)
+
+*End* *Reference Integrity Under Mutation* | **Hash**: c0aae59d
+---
+
 ## REQ-d00220: TermDictionary Data Model
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
