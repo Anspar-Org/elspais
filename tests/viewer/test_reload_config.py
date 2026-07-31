@@ -75,7 +75,12 @@ class TestReloadRefreshesConfig:
         assert resp.status_code == 200, f"Reload failed: {data}"
         assert data["success"] is True
 
-        # Verify build_graph was called with the REFRESHED config (from disk)
-        assert len(captured_configs) == 1
-        refreshed = captured_configs[0]
-        assert "extra-specs" in refreshed.get("scanning", {}).get("spec", {}).get("directories", [])
+        # Verify build_graph was called with the REFRESHED config (from disk).
+        # Note: config files are part of the staleness mtime snapshot, so the
+        # freshness middleware may rebuild once before /api/reload does —
+        # every rebuild must use the refreshed config.
+        assert captured_configs
+        for refreshed in captured_configs:
+            assert "extra-specs" in (
+                refreshed.get("scanning", {}).get("spec", {}).get("directories", [])
+            )

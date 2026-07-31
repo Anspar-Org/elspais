@@ -102,15 +102,18 @@ def _try_daemon(
     # 1. Try existing server (viewer or daemon — both use daemon.json)
     port = _get_daemon_port()
     if port:
-        # Version check: warn on stale daemon, skip if safe
+        # Staleness checks (REQ-p00004-J): version mismatch or config edited
+        # since the daemon captured its config hash. Warn-and-serve if the
+        # daemon holds unsaved work; restart if clean.
         from elspais import __version__
-        from elspais.mcp.daemon import get_daemon_info
+        from elspais.mcp.daemon import _config_hash_stale, get_daemon_info
 
         info = get_daemon_info(repo_root)
         daemon_version = info.get("version") if info else None
         version_mismatch = bool(daemon_version and daemon_version != __version__)
+        config_stale = info is not None and _config_hash_stale(info, repo_root)
 
-        if version_mismatch:
+        if version_mismatch or config_stale:
             # Check if daemon has unsaved mutations before skipping
             dirty = _try_port(port, "/api/dirty", {}, "GET")
             has_unsaved = dirty is not None and dirty.get("dirty", False)
@@ -118,9 +121,12 @@ def _try_daemon(
                 # Use stale daemon — can't restart without losing work
                 import sys
 
+                if version_mismatch:
+                    reason = f"daemon version {daemon_version} != CLI {__version__}"
+                else:
+                    reason = "daemon was started with an older configuration"
                 print(
-                    f"Warning: daemon version {daemon_version} != CLI {__version__}"
-                    " (unsaved changes prevent restart)",
+                    f"Warning: {reason} (unsaved changes prevent restart)",
                     file=sys.stderr,
                 )
             else:
@@ -139,6 +145,8 @@ def _try_daemon(
                         "daemon": daemon_version,
                         "cli": __version__,
                     }
+                if config_stale:
+                    source["config_stale"] = True
                 return result, source
 
     # 2. Auto-start daemon if allowed
