@@ -53,11 +53,7 @@ def _test_node(graph, function_name: str):
 
 
 def _result_names(test_node) -> set[str]:
-    return {
-        c.get_field("name")
-        for c in test_node.iter_children()
-        if c.kind == NodeKind.RESULT
-    }
+    return {c.get_field("name") for c in test_node.iter_children() if c.kind == NodeKind.RESULT}
 
 
 def _result_by_name(graph, name: str):

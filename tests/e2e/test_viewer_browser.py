@@ -860,9 +860,7 @@ class TestJunitStepBindingBrowser:
 
         # The Result badge is the LAST .journey-step-badge in the row (VER
         # first, then Result); it toggles the RESULTS panel.
-        panel = card_locator.locator(
-            f"#journey-step-results-{_STEP_BINDING_JOURNEY_ID}-1"
-        )
+        panel = card_locator.locator(f"#journey-step-results-{_STEP_BINDING_JOURNEY_ID}-1")
         assert panel.count() == 1, "Expected a step-1 results panel in the DOM"
         assert not panel.is_visible(), "Step-1 results panel should be hidden by default"
 
@@ -897,13 +895,11 @@ class TestJunitStepBindingBrowser:
         for i in range(rows.count()):
             link = rows.nth(i).locator("a")
             assert link.count() == 1, (
-                f"Result row {i} should have exactly one link: "
-                f"{rows.nth(i).inner_html()!r}"
+                f"Result row {i} should have exactly one link: " f"{rows.nth(i).inner_html()!r}"
             )
             link_text = link.inner_text().strip()
             assert link_text.startswith("results.xml:"), (
-                f"Result row {i} link must be 'results.xml:<line>', got "
-                f"{link_text!r}"
+                f"Result row {i} link must be 'results.xml:<line>', got " f"{link_text!r}"
             )
 
         assert not js_errors, f"JS errors during step-results render: {js_errors}"

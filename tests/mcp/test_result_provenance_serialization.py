@@ -37,9 +37,7 @@ def provenance_graph():
     """TEST with two RESULT children: one with provenance, one without."""
     graph = TraceGraph(repo_root=Path("/test/repo"))
 
-    file_node = GraphNode(
-        id="file:tests/test_login.py", kind=NodeKind.FILE, label="test_login.py"
-    )
+    file_node = GraphNode(id="file:tests/test_login.py", kind=NodeKind.FILE, label="test_login.py")
     file_node.set_field("file_type", FileType.TEST)
     file_node.set_field("relative_path", "tests/test_login.py")
 
@@ -164,15 +162,11 @@ class TestSerializeJourneyInfo:
         """A journey with steps but no VERIFIES edges serializes cleanly."""
         graph = TraceGraph(repo_root=Path("/test/repo"))
 
-        file_node = GraphNode(
-            id="file:spec/journeys.md", kind=NodeKind.FILE, label="journeys.md"
-        )
+        file_node = GraphNode(id="file:spec/journeys.md", kind=NodeKind.FILE, label="journeys.md")
         file_node.set_field("file_type", FileType.JOURNEY)
         file_node.set_field("relative_path", "spec/journeys.md")
 
-        jny = GraphNode(
-            id="JNY-Bare-01", kind=NodeKind.USER_JOURNEY, label="Bare Journey"
-        )
+        jny = GraphNode(id="JNY-Bare-01", kind=NodeKind.USER_JOURNEY, label="Bare Journey")
         jny.set_field("parse_line", 5)
         file_node.link(jny, EdgeKind.CONTAINS)
 
