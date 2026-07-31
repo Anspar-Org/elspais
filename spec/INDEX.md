@@ -21,6 +21,8 @@
 | REQ-p00060 | MCP Server for AI-Driven Requirements Management | prd-features.md | 3ebc237a |
 | REQ-p00061 | Requirement Decomposition Rules                  | prd-core.md     | fc1e85fe |
 | REQ-p00080 | Spec-to-PDF Compilation                          | prd-core.md     | bfc0cadf |
+| REQ-p00081 | Org-Wide Requirement Visibility                  | prd-features.md | 95778815 |
+| REQ-p00082 | Federated Authority and Verdict Scoping          | prd-features.md | be6068bd |
 
 ## OPERATIONS
 
@@ -39,8 +41,9 @@
 | REQ-o00068 | MCP Cursor Protocol                 | ops-mcp.md          | 743877c3 |
 | REQ-o00069 | MCP Minimize Requirement Set Tool   | ops-mcp.md          | c667abd2 |
 | REQ-o00070 | MCP Scoped Search Tool              | ops-mcp.md          | 7f1e6589 |
-| REQ-o00071 | MCP Discover Requirements Tool      | ops-mcp.md          | fea647ee |
+| REQ-o00071 | MCP Discover Requirements Tool      | ops-mcp.md          | 4ce416ba |
 | REQ-o00072 | Domain Deserialization Layer        | ops-architecture.md | e568082e |
+| REQ-o00073 | MCP Org-Wide Context                | ops-mcp.md          | 882a56ff |
 
 ## DEVELOPMENT
 
@@ -91,9 +94,9 @@
 | REQ-d00134 | Comprehensive Mutation Round-Trip Scenario Test               | dev-graph-file-nodes.md | be52daed |
 | REQ-d00200 | FederatedGraph Read-Only Delegation                           | dev-graph-federation.md | 72471144 |
 | REQ-d00201 | FederatedGraph Mutation Delegation                            | dev-graph-federation.md | 1a0942a4 |
-| REQ-d00202 | Associates Config Loading                                     | dev-graph-federation.md | 479dcbb8 |
-| REQ-d00203 | Multi-Repo Build Pipeline                                     | dev-graph-federation.md | 31e019a1 |
-| REQ-d00204 | Per-Repo Health Check Delegation                              | dev-graph-federation.md | 844d12d1 |
+| REQ-d00202 | Associates Config Loading                                     | dev-graph-federation.md | 0379ce9c |
+| REQ-d00203 | Multi-Repo Build Pipeline                                     | dev-graph-federation.md | 5544c03c |
+| REQ-d00204 | Per-Repo Health Check Delegation                              | dev-graph-federation.md | 32a98213 |
 | REQ-d00205 | MCP Federation Support                                        | dev-mcp-tools.md        | 4f16dfc7 |
 | REQ-d00206 | Server Federation and Staleness                               | dev-traceview-review.md | b4fae1d0 |
 | REQ-d00207 | Declarative Config Schema Cleanup                             | dev-graph-config.md     | 8d323813 |
@@ -142,13 +145,18 @@
 | REQ-d00250 | Section Header Depth Canonicalization                         | dev-graph-core.md       | 903349d2 |
 | REQ-d00251 | Component Style Vocabulary and Assertion Separator            | dev-graph-config.md     | e04a4e37 |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | d9d4bc98 |
-| REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | 28c8c538 |
+| REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | 9a6e0bd7 |
 | REQ-d00254 | Coverage-Based and Aggregate Test Verification                | dev-graph-core.md       | 0f7323ff |
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | bdad84a0 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | cde21cfc |
 | REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 45bb196f |
 | REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | 90053f29 |
 | REQ-d00259 | Requirement Format Reference Command                          | dev-cli.md              | 8e05d02e |
+| REQ-d00260 | Workspace Registry and Federated View Assembly                | dev-graph-federation.md | d76db5fa |
+| REQ-d00261 | Federation Role Model                                         | dev-graph-federation.md | bc16ed66 |
+| REQ-d00262 | Search Term Discrimination                                    | dev-mcp-tools.md        | e06dffa5 |
+| REQ-d00263 | Scoped Term Binding                                           | prd-core.md             | 1355b3d0 |
+| REQ-d00264 | Usage-Driven Glossary Selection                               | prd-core.md             | 02f5085d |
 
 ## User Journeys
 

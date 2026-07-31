@@ -571,3 +571,30 @@ G. All operations SHALL produce a clear error when the underlying CLI command fa
 - 2026-04-23 | f1518d2c | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *MCP Server Install/Uninstall CLI Commands* | **Hash**: f1518d2c
+---
+
+## REQ-d00262: Search Term Discrimination
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-o00060-C, REQ-o00071
+
+Relevance ranking SHALL discriminate by term informativeness: a match on a term that is rare in the indexed corpus outranks a match on a term that is common in it.
+
+### Assertions
+
+A. Relevance scoring SHALL weight each matched term by its rarity in the indexed corpus, so that a match on a corpus-rare term outranks an otherwise-equal match on a corpus-common term.
+
+B. Query-term matching SHALL be token-bounded, so that a term does not match the interior of a longer unrelated token.
+
+C. A query term SHALL match inflectional variants of the same word in indexed text.
+
+D. Ubiquitous function words SHALL NOT contribute to relevance ranking.
+
+### Rationale
+
+Presence-based scoring over fixed field weights cannot rank an enlarged corpus: a rare discriminating term and a ubiquitous one score identically, raw substring matching lets `cat` match `concatenate`, and unstemmed matching treats `request` and `requests` as unrelated. Making discovery scope optional (REQ-o00071-E) enlarges the searched corpus to the whole federated view, which is a net loss without discrimination — this REQ is the K1 invariant that must land with it. Generic thesaurus synonym expansion was considered and rejected: wrong corpus, heavy dependency, and expansion before rarity weighting widens recall against a scorer that cannot rank. Same inflection need as term-usage detection (TOOL-13).
+
+### Changelog
+
+- 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: author search term discrimination (K1)
+
+*End* *Search Term Discrimination* | **Hash**: e06dffa5

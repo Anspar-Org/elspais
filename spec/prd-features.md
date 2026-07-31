@@ -46,6 +46,74 @@ F. The tool SHALL resolve relative associate paths from the canonical (non-workt
 *End* *Multi-Repository Requirements* | **Hash**: c3303546
 ---
 
+# REQ-p00081: Org-Wide Requirement Visibility
+
+**Level**: prd | **Status**: Draft | **Implements**: REQ-p00005
+
+## Rationale
+
+An organization keeps cross-cutting requirements — CI conventions, secrets handling, storage rules, sponsor abstraction — in a policy repository that is *meta* to the repositories it governs. An author working in a governed repository needs those obligations surfaced without having to know they exist before looking for them. Measured against the live estate (2026-07-29; method preserved in the internal archive): of ~620 *Traceability* references across the organization, 2 targeted a cross-cutting requirement, 0 resolved, and no repository federated the policy repository — so "0.3% referencing" could not be distinguished from "nobody knows these apply".
+
+This requirement states the visibility invariants (V1–V3, H2). The mechanisms that realize them — the per-user workspace registry, role model, and shadowing rules — are specified at the dev level and may change without weakening these obligations.
+
+## Assertions
+
+A. The tool SHALL make a requirement authored in any repository of the caller's workspace discoverable from every repository of that workspace, without the caller naming the repository that owns it.
+
+B. The tool SHALL NOT narrow workspace discovery scope in response to an omission or error in an individual member repository's own configuration.
+
+C. The tool SHALL disclose, with every discovery result, the repository that owns the result and the freshness of the content it was computed from — a live working copy, or a baseline captured at a disclosed time.
+
+D. When a repository in the resolved discovery scope cannot be loaded, the tool SHALL report the narrowed scope — identifying the repository and the cause — on the same surface that reports the results, so that an empty result is distinguishable from an incomplete search.
+
+E. When invoked from a location that is inside a declared workspace but not inside any repository, the tool SHALL serve the workspace view rather than failing for want of a repository.
+
+## Changelog
+
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-37: inline design-doc content; the scaffolding doc is retired
+- 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: author org-wide visibility invariants (V1, V2, V3, H2)
+
+*End* *Org-Wide Requirement Visibility* | **Hash**: 95778815
+---
+
+# REQ-p00082: Federated Authority and Verdict Scoping
+
+**Level**: prd | **Status**: Draft | **Implements**: REQ-p00005
+
+## Rationale
+
+Enlarging the federated view multiplies the copies of any repository that a caller can reach (worktrees, clones, baselines) and multiplies the findings a validation run can surface. Without authority rules, a wider view degrades into noise: two versions of one requirement presented as peers, verdicts failing on defects the caller cannot fix, and tools writing into repositories the caller does not own. These are the authority invariants (A1, A2a, A2b, A3) and the expressibility invariant (E1).
+
+Visibility without authority is legitimate — it is how one files a ticket against another team's repository. What is scoped here is the *verdict* and the *write path*, not what a caller may see. Reporting breadth remains a caller choice (assertion E). Coverage needs no authority mechanism of its own: cross-repository coverage flows only along declared *Traceability* edges, so widening membership cannot silently move coverage numbers.
+
+Rejected shapes, recorded so they are not relitigated (2026-07-29 review). **Umbrella declarations** — declaring compliance with one aggregate obligation that itself declares the individual policies — were rejected: chained template instantiation is unsupported by design, and transitivity would make a repository satisfy *everything* under the umbrella, erasing exactly the per-repo applicability decision the declaration exists to record; the per-repo editing cost when a new policy lands *is* that decision, made explicit. **Encoding policy scope in namespaces** was rejected: namespaces are an identity and ownership concept, and policy applicability is a judgment that changes as the organization changes — putting it in an identifier puts it in the least revisable place in the system, and cannot express the real many-to-many between obligations and repositories. **Top-down applicability relations** (an obligation naming which repositories must comply) were ruled out of scope: realizing that an obligation applies is the un-mechanizable part, and recording the decision does not create the decision — the declaration therefore stays on the complying repository's side (assertion G).
+
+## Assertions
+
+A. For any requirement visible in a federated view, the tool SHALL present exactly one authoritative version at any moment.
+
+B. The tool SHALL NOT merge two copies of the same requirement, and SHALL NOT present two copies as peers, when the owning repository is reachable through more than one path or at more than one freshness.
+
+C. The tool SHALL attribute every validation finding to the repository that owns the content the finding is about.
+
+D. The pass/fail verdict of a validation run SHALL be computed exclusively from findings attributed to repositories within the caller's change scope, so that a finding the caller cannot fix never contributes to a failing exit status.
+
+E. Whether findings attributed to repositories outside the caller's change scope are displayed SHALL be selectable by the caller, without altering the verdict.
+
+F. The tool SHALL NOT modify content owned by a repository outside the caller's write authority, under any configuration.
+
+G. The tool SHALL support declaring, from a requirement in one workspace repository, compliance with an obligation authored in another workspace repository.
+
+H. A reference to a cross-repository obligation SHALL either resolve to that obligation or be reported as a broken reference.
+
+## Changelog
+
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-37: inline design-doc content; the scaffolding doc is retired
+- 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: author federated authority invariants (A1, A2a, A2b, A3, E1)
+
+*End* *Federated Authority and Verdict Scoping* | **Hash**: be6068bd
+---
+
 # REQ-p00006: Interactive Traceability Viewer
 
 **Level**: prd | **Status**: Active | **Implements**: REQ-p00003
