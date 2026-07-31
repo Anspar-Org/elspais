@@ -36,7 +36,7 @@
 | REQ-o00063 | MCP File Mutation Tools             | ops-mcp.md          | 291497b8 |
 | REQ-o00064 | MCP Test Coverage Analysis Tools    | ops-mcp.md          | e7fd1b43 |
 | REQ-o00065 | Agent-Assisted Link Suggestion      | ops-mcp.md          | 17851ae2 |
-| REQ-o00066 | CI/CD Pipeline Enforcement          | ops-architecture.md | 315accce |
+| REQ-o00066 | CI/CD Pipeline Enforcement          | ops-architecture.md | 84723bf6 |
 | REQ-o00067 | MCP Subtree Extraction Tool         | ops-mcp.md          | ab29e315 |
 | REQ-o00068 | MCP Cursor Protocol                 | ops-mcp.md          | 743877c3 |
 | REQ-o00069 | MCP Minimize Requirement Set Tool   | ops-mcp.md          | c667abd2 |
