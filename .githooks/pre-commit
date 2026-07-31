@@ -220,6 +220,7 @@ else
     echo ""
 
     if ! pytest tests/ --tb=short -q \
+        --junitxml="$CACHE_DIR/junit.xml" -o junit_family=xunit1 \
         --cov=src/elspais --cov-context=test --cov-report=json:"$CACHE_DIR/coverage.json" --cov-report= 2>&1; then
         echo ""
         echo -e "${RED}Tests failed!${NC}"
