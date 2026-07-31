@@ -50,7 +50,7 @@
 
 | ID         | Title                                                         | File                    | Hash     |
 | ---------- | ------------------------------------------------------------- | ----------------------- | -------- |
-| REQ-d00010 | Review API Server                                             | dev-traceview-review.md | 8ae37685 |
+| REQ-d00010 | Traceability API Server                                       | dev-traceview-review.md | aaae0fb2 |
 | REQ-d00050 | Node Annotator Functions                                      | dev-graph-core.md       | c9217201 |
 | REQ-d00051 | Graph Aggregate Functions                                     | dev-graph-core.md       | ca876d95 |
 | REQ-d00052 | Output Generators Consume Graph Directly                      | dev-graph-core.md       | abb3f6b8 |
