@@ -30,9 +30,10 @@ D. [DEPRECATED]
 
 ## Changelog
 
+- 2026-07-31 | 2d10975a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-04-23 | ce489de6 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Requirements Management Tool* | **Hash**: ce489de6
+*End* *Requirements Management Tool* | **Hash**: 2d10975a
 ---
 
 # REQ-p00002: Requirements Validation
@@ -62,9 +63,10 @@ C. The tool SHALL verify content hashes match requirement body text.
 
 ## Changelog
 
+- 2026-07-31 | b29ef9b6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-03-30 | e8f0e4eb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Requirements Validation* | **Hash**: e8f0e4eb
+*End* *Requirements Validation* | **Hash**: b29ef9b6
 ---
 
 # REQ-p00003: Traceability Matrix Generation
@@ -91,9 +93,10 @@ B. The tool SHALL derive *Traceability* from `Implements:` metadata without manu
 
 ## Changelog
 
+- 2026-07-31 | 3121ad66 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-04-23 | 6a3a9426 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Traceability Matrix Generation* | **Hash**: 6a3a9426
+*End* *Traceability Matrix Generation* | **Hash**: 3121ad66
 ---
 
 # REQ-p00004: Change Detection and Auditability
@@ -139,11 +142,12 @@ J. The tool SHALL re-read configuration from disk when reloading the graph, ensu
 
 ## Changelog
 
+- 2026-07-31 | 9bb163a9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-30 | bb148227 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: G flags satisfiers on any change within the template subtree, not just the root
 - 2026-04-23 | f8ff5509 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Change Detection and Auditability* | **Hash**: bb148227
+*End* *Change Detection and Auditability* | **Hash**: 9bb163a9
 ---
 
 # REQ-p00013: Automated Testing
@@ -177,9 +181,10 @@ F. All tests marked `@pytest.mark.e2e` SHALL invoke the `elspais` CLI as a subpr
 
 ## Changelog
 
+- 2026-07-31 | 4318202c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-04-23 | 962216d8 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Automated Testing* | **Hash**: 962216d8
+*End* *Automated Testing* | **Hash**: 4318202c
 ---
 
 ## REQ-p00061: Requirement Decomposition Rules
@@ -198,10 +203,11 @@ C. Multiple requirements MAY exist at the same Level each declaring a relationsh
 
 ### Changelog
 
+- 2026-07-31 | 462c146e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | fc1e85fe | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | fc1e85fe | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Requirement Decomposition Rules* | **Hash**: fc1e85fe
+*End* *Requirement Decomposition Rules* | **Hash**: 462c146e
 ---
 
 # REQ-p00080: Spec-to-PDF Compilation
@@ -230,9 +236,52 @@ F. The tool SHALL support an `--overview` flag that generates a stakeholder-orie
 
 ## Changelog
 
+- 2026-07-31 | 24f063f6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-04-23 | bfc0cadf | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Spec-to-PDF Compilation* | **Hash**: bfc0cadf
+*End* *Spec-to-PDF Compilation* | **Hash**: 24f063f6
+---
+
+# REQ-p00015: Complete and Current Reporting
+
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00001
+
+## Rationale
+
+The *Traceability* graph is an audit artifact. A graph that reports healthy while silently omitting requirements cannot serve that role: the verdict certifies completeness it does not have. Silent omission and silent staleness are the same defect told two ways — omission withholds content from an answer, staleness withholds time from it. Both let a consumer act on a picture of the requirements estate that the tool knows, or could know, to be wrong.
+
+Observed failure shapes this requirement guards against:
+
+- Content in a scanned file that looks like a requirement but is dropped (for example, its declared level is not configured) while every check stays healthy — so "no matches" is indistinguishable from "never admitted".
+- A configured repository that fails to load and is simply absent from answers — so "no matches" is indistinguishable from "could not look".
+- Derived data (coverage rollups, term and keyword indexes, change-state summaries) served mid-editing-session from sources that have since changed.
+- An operation log that records a write the tool never made.
+- A long-running server answering from a configuration that has since changed on disk.
+
+Interplay with existing requirements: REQ-p00004-J obliges the tool to re-read configuration from disk when reloading the graph; this requirement complements it by covering the interval between reloads — divergence must be disclosed, not silently served. REQ-p00005-E covers the configuration-time error for an invalid associate path; assertion C here covers the answer-time consequence of any load failure. REQ-p00081-D applies the same principle to workspace discovery specifically. Other spec units cite this requirement rather than restating these invariants.
+
+## Assertions
+
+A. When the tool encounters content that matches a requirement form but does not admit it into the graph, the tool SHALL report the excluded content and the cause of its exclusion.
+
+B. When the tool does not apply a requested change, the tool SHALL report the unapplied change and the cause.
+
+C. If a repository configured into the graph cannot be loaded, then the tool SHALL report the missing repository and the cause alongside every answer computed over the reduced graph.
+
+D. If content, repositories, or requested changes are absent from the graph without having been reported, then the tool SHALL NOT report a healthy verdict.
+
+E. When the tool serves a value derived from source content that has changed since the value was computed, the tool SHALL serve a value recomputed from the current content or mark the served value as stale.
+
+F. The tool SHALL record a change as applied only when the change is present at the destination the record names.
+
+G. While the tool serves answers computed from a configuration that no longer matches the configuration on disk, the tool SHALL disclose that the answers reflect a superseded configuration.
+
+## Changelog
+
+- 2026-07-31 | 9aa9a8aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-10: author completeness/freshness invariant (merges GI-1 silent omission and GI-2 silent staleness)
+
+*End* *Complete and Current Reporting* | **Hash**: 9aa9a8aa
 ---
 
 ## REQ-d00220: TermDictionary Data Model
@@ -253,10 +302,11 @@ E. `TermRef` SHALL have a `wrong_marking` field (str, default "") that records t
 
 ### Changelog
 
+- 2026-07-31 | 986251c3 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 0d0fd97c | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 0d0fd97c | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *TermDictionary Data Model* | **Hash**: 0d0fd97c
+*End* *TermDictionary Data Model* | **Hash**: 986251c3
 
 <!-- markdownlint-disable MD038 -->
 
@@ -272,11 +322,12 @@ B. The transformer SHALL handle `definition_block` nodes by extracting the term 
 
 ### Changelog
 
+- 2026-07-31 | 5a3c278b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 6adaa258 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-24 | 6adaa258 | - | Developer (<dev@example.com>) | Auto-fix: update hash
 - 2026-04-23 | 078ce203 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Grammar Extension for Definition Blocks* | **Hash**: 6adaa258
+*End* *Grammar Extension for Definition Blocks* | **Hash**: 5a3c278b
 
 ## REQ-d00222: TraceGraph Terms and GraphBuilder Integration
 
@@ -294,10 +345,11 @@ D. `GraphBuilder` SHALL accept a `namespace` parameter (str, default "") and set
 
 ### Changelog
 
+- 2026-07-31 | 0299f7c2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 96b5223f | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 96b5223f | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *TraceGraph Terms and GraphBuilder Integration* | **Hash**: 96b5223f
+*End* *TraceGraph Terms and GraphBuilder Integration* | **Hash**: 0299f7c2
 
 ## REQ-d00223: Term Health Checks
 
@@ -319,10 +371,11 @@ F. `check_unmarked_usage()` SHALL produce distinct messages for wrong-marking re
 
 ### Changelog
 
+- 2026-07-31 | b2d02a05 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 0d96cc34 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 0d96cc34 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Term Health Checks* | **Hash**: 0d96cc34
+*End* *Term Health Checks* | **Hash**: b2d02a05
 
 ## REQ-d00224: Glossary and Term Index Generators
 
@@ -340,10 +393,11 @@ D. All generated files SHALL include an auto-generated header comment. Both `--f
 
 ### Changelog
 
+- 2026-07-31 | c8ce4253 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | f2da30fb | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | f2da30fb | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Glossary and Term Index Generators* | **Hash**: f2da30fb
+*End* *Glossary and Term Index Generators* | **Hash**: c8ce4253
 
 ## REQ-d00225: CLI Registration for Glossary and Term Index
 
@@ -357,10 +411,11 @@ B. `elspais fix` SHALL call glossary and term-index generation after existing fi
 
 ### Changelog
 
+- 2026-07-31 | 2b8a5235 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | d18fc2c9 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | d18fc2c9 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *CLI Registration for Glossary and Term Index* | **Hash**: d18fc2c9
+*End* *CLI Registration for Glossary and Term Index* | **Hash**: 2b8a5235
 
 ## REQ-d00236: Comment Extraction Utilities
 
@@ -384,10 +439,11 @@ G. For file extensions with no known comment style, `extract_comments()` SHALL r
 
 ### Changelog
 
+- 2026-07-31 | 2e5b4960 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 499123f1 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 499123f1 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Comment Extraction Utilities* | **Hash**: 499123f1
+*End* *Comment Extraction Utilities* | **Hash**: 2e5b4960
 
 ## REQ-d00237: Term Reference Scanner Core
 
@@ -411,13 +467,14 @@ G. When one *Defined Term*'s text contains another (e.g. `Sponsor Portal` contai
 
 ### Changelog
 
+- 2026-07-31 | 637ac760 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-09 | f2b673a4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
 - 2026-06-09 | 2849c41b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-09 | d1eb27f4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 63cb874b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 63cb874b | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Term Reference Scanner Core* | **Hash**: f2b673a4
+*End* *Term Reference Scanner Core* | **Hash**: 637ac760
 
 ## REQ-d00238: Graph-Wide Term Scan
 
@@ -435,10 +492,11 @@ D. Files matching any `exclude_files` glob pattern SHALL be skipped during scann
 
 ### Changelog
 
+- 2026-07-31 | b14edde9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | d3a202d4 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | d3a202d4 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Graph-Wide Term Scan* | **Hash**: d3a202d4
+*End* *Graph-Wide Term Scan* | **Hash**: b14edde9
 
 ## REQ-d00239: Federated Graph Term Scanner Pass
 
@@ -452,10 +510,11 @@ B. Each repo's scan SHALL use its own config for `markup_styles` and `exclude_fi
 
 ### Changelog
 
+- 2026-07-31 | e27abfeb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 7d9a30c4 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 7d9a30c4 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Federated Graph Term Scanner Pass* | **Hash**: 7d9a30c4
+*End* *Federated Graph Term Scanner Pass* | **Hash**: e27abfeb
 
 ## REQ-d00240: New Term Health Checks
 
@@ -473,11 +532,12 @@ D. `run_term_checks()` SHALL call all six term checks (`duplicates`, `undefined`
 
 ### Changelog
 
+- 2026-07-31 | b4e70076 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 76a49db3 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-24 | 76a49db3 | - | Developer (<dev@example.com>) | Auto-fix: update hash
 - 2026-03-29 | 9788814d | - | Michael Lewis (<michael@anspar.org>) | Initial creation
 
-*End* *New Term Health Checks* | **Hash**: 76a49db3
+*End* *New Term Health Checks* | **Hash**: b4e70076
 
 ## REQ-d00263: Scoped Term Binding
 
@@ -505,7 +565,7 @@ Cross-cutting policy text wants to say `*system*` once and mean `portal system` 
 
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: author scoped term binding (org-wide terms)
 
-*End* *Scoped Term Binding* | **Hash**: 1355b3d0
+*End* *Scoped Term Binding* | **Hash**: d13a3c53
 
 ## REQ-d00264: Usage-Driven Glossary Selection
 
@@ -529,7 +589,7 @@ Definitions can be authored org-wide while each generated document carries only 
 
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: author usage-driven glossary selection (org-wide terms)
 
-*End* *Usage-Driven Glossary Selection* | **Hash**: 02f5085d
+*End* *Usage-Driven Glossary Selection* | **Hash**: 12f529a3
 
 ## REQ-d00241: Code No-Traceability Health Check
 
@@ -547,13 +607,14 @@ D. The `tests.unlinked` check (`check_unlinked_tests()`) SHALL flag a test file 
 
 ### Changelog
 
+- 2026-07-31 | de72736f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-03 | 583588f9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-03 | c1be56e5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | e1272219 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | e1272219 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-03-29 | 6e481d63 | - | Michael Lewis (<michael@anspar.org>) | Initial creation
 
-*End* *Code No-Traceability Health Check* | **Hash**: 583588f9
+*End* *Code No-Traceability Health Check* | **Hash**: de72736f
 
 ## REQ-d00246: Markdown Emphasis Normalization Utility
 
@@ -567,10 +628,11 @@ B. Lark transformers SHALL use `strip_emphasis()` to normalize all user-text cap
 
 ### Changelog
 
+- 2026-07-31 | 6db4d559 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 16af6c80 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-05-04 | 16af6c80 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Markdown Emphasis Normalization Utility* | **Hash**: 16af6c80
+*End* *Markdown Emphasis Normalization Utility* | **Hash**: 6db4d559
 
 ## REQ-d00247: Fenced Code Block Preservation
 
@@ -582,10 +644,11 @@ A. Fenced code block content (lines between ``` markers) SHALL be preserved verb
 
 ### Changelog
 
+- 2026-07-31 | 499a4ce4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 1270eb2b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-05-04 | 1270eb2b | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Fenced Code Block Preservation* | **Hash**: 1270eb2b
+*End* *Fenced Code Block Preservation* | **Hash**: 499a4ce4
 
 ## REQ-d00248: Fix Command Idempotency
 
@@ -597,7 +660,8 @@ A. `elspais fix` SHALL be idempotent: running the command twice in succession on
 
 ### Changelog
 
+- 2026-07-31 | 2b421222 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 8a92207b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-05-04 | 8a92207b | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Fix Command Idempotency* | **Hash**: 8a92207b
+*End* *Fix Command Idempotency* | **Hash**: 2b421222

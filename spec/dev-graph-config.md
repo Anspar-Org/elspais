@@ -16,10 +16,11 @@ C. All consumer code that references `ConfigLoader` (type annotations, imports, 
 
 ### Changelog
 
+- 2026-07-31 | 6dfbf578 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 8d323813 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 8d323813 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Declarative Config Schema Cleanup* | **Hash**: 8d323813
+*End* *Declarative Config Schema Cleanup* | **Hash**: 6dfbf578
 ---
 
 ## REQ-d00208: JSON Schema Export for IDE Autocomplete
@@ -38,10 +39,11 @@ C. The generated JSON Schema SHALL include `$schema` and `title` top-level keys.
 
 ### Changelog
 
+- 2026-07-31 | 27ca773c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 2b82ef02 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 2b82ef02 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *JSON Schema Export for IDE Autocomplete* | **Hash**: 2b82ef02
+*End* *JSON Schema Export for IDE Autocomplete* | **Hash**: 27ca773c
 ---
 
 ## REQ-d00209: Schema-Driven Init Template Generation
@@ -62,10 +64,11 @@ D. The generated TOML SHALL include human-readable comments derived from Pydanti
 
 ### Changelog
 
+- 2026-07-31 | 0173b043 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 44aeb496 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 44aeb496 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Schema-Driven Init Template Generation* | **Hash**: 44aeb496
+*End* *Schema-Driven Init Template Generation* | **Hash**: 0173b043
 ---
 
 ## REQ-d00210: Documentation Drift Detection
@@ -84,10 +87,11 @@ C. The drift check SHALL pass when all schema sections are documented and no sta
 
 ### Changelog
 
+- 2026-07-31 | 59023724 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | eb94434a | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | eb94434a | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Documentation Drift Detection* | **Hash**: eb94434a
+*End* *Documentation Drift Detection* | **Hash**: 59023724
 ---
 
 ## REQ-d00211: Config-Driven Viewer UI Values
@@ -108,10 +112,11 @@ D. `StatusRolesConfig` SHALL provide a `sort_by_role()` method that orders a lis
 
 ### Changelog
 
+- 2026-07-31 | 58192a4f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | a9cc41d2 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | a9cc41d2 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Config-Driven Viewer UI Values* | **Hash**: a9cc41d2
+*End* *Config-Driven Viewer UI Values* | **Hash**: 58192a4f
 ---
 
 ## REQ-d00212: Config Schema v3 Models
@@ -152,12 +157,13 @@ N. A `_migrate_v3_to_v4` migration SHALL move flat `duplicate_severity`, `undefi
 
 ### Changelog
 
+- 2026-07-31 | a0ea657d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-03 | e4cda67b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | db4ad28c | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | db4ad28c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-03-29 | c75b87f8 | - | Michael Lewis (<michael@anspar.org>) | Add assertion N for config migration v3 to v4
 
-*End* *Config Schema v3 Models* | **Hash**: e4cda67b
+*End* *Config Schema v3 Models* | **Hash**: a0ea657d
 ---
 
 ## REQ-d00251: Component Style Vocabulary and Assertion Separator
@@ -184,9 +190,10 @@ G. A single helper in `utilities/patterns.py` SHALL resolve a `ComponentFormat` 
 
 ### Changelog
 
+- 2026-07-31 | 7857498c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | e04a4e37 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | e04a4e37 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize term forms, update hash
 - 2026-05-11 | - | - | Developer (<dev@example.com>) | Initial authoring: introduce explicit case-style vocabulary and configurable assertion separator.
 
-*End* *Component Style Vocabulary and Assertion Separator* | **Hash**: e04a4e37
+*End* *Component Style Vocabulary and Assertion Separator* | **Hash**: 7857498c
 ---
