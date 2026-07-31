@@ -118,6 +118,10 @@ Together, these mechanisms support:
 - Pull request review (see exactly what requirements changed)
 - Audit trails (link requirement changes to commits)
 
+**Dependency-change review.** A requirement's references make it dependent on content it does not own: an `Implements:` or `Refines:` target, a `Satisfies:` template subtree, an `Integrates:` target in an associate repository. When that content changes, the referencing requirement's claim may no longer hold, so the requirement is flagged for review at the granularity its reference declares — a reference naming an assertion is sensitive to that assertion alone; a reference naming a whole requirement is sensitive to the requirement. A review flag records a human obligation: only an explicit review action discharges it. Automated fixing (hash regeneration, `elspais fix`) never discharges one — a flag the tool can acknowledge to itself is noise, not audit evidence. And when the referenced source cannot be consulted at all (an associate repository not checked out, for example), the honest verdict is "cannot verify", never "unchanged"; treating absence as stability is the same silent-omission defect REQ-p00015 guards against in reporting. One candidate mechanism (proposed, not obligated): store beside each reference a bounded record of the target's content hash plus a one-level subtree summary hash, compared at build time. Assertion G formerly stated this obligation for `Satisfies:` references only; assertion K generalizes it to all reference kinds, and G is superseded so a single obligation family governs.
+
+**Change reasons.** An audit trail answers *why* a requirement changed, not only *what* changed. Changes arrive through multiple editing surfaces; where the audit record requires a reason, every surface must be able to carry one. The obligation falls on each surface to gain the capability — never on the set of supported surfaces to shrink to those that already can.
+
 ## Assertions
 
 A. The tool SHALL compute and verify content hashes for change detection.
@@ -132,7 +136,7 @@ E. The tool SHALL commit modified spec files and optionally push, refusing to op
 
 F. The tool SHALL fetch and fast-forward-merge from the remote tracking branch, aborting if the merge is not fast-forwardable.
 
-G. The tool SHALL flag all requirements with SATISFIES edges for review when the content hash of any REQ in the referenced template's subtree changes.
+G. [Removed - flagging satisfying requirements on template-subtree change is a special case of the reference-granularity review obligation stated in assertion K; superseded so one obligation family governs dependency-change review]
 
 H. The tool SHALL list all local and remote git branches, stripping remote prefixes and deduplicating branches that exist both locally and remotely.
 
@@ -140,14 +144,25 @@ I. The tool SHALL switch to an existing local or remote git branch, refusing if 
 
 J. The tool SHALL re-read configuration from disk when reloading the graph, ensuring branch switches with different configurations produce correct rebuilds.
 
+K. When the content designated by any of a requirement's references changes — the designated *Assertion* where the reference names one, the designated requirement otherwise — the tool SHALL flag the referencing requirement for review.
+
+L. The tool SHALL clear a review flag only in response to an explicit review action acknowledging the flagged change.
+
+M. If the source of referenced content is unavailable for comparison, then the tool SHALL report the reference as unverifiable rather than reporting it as unchanged.
+
+N. Where the audit record requires a reason for a change, each editing surface the tool supports SHALL capture a reason from its operator and supply it with the change.
+
 ## Changelog
 
+- 2026-07-31 | 7930cf78 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-40: author dependency-change review invariants K/L/M at reference granularity; supersede G (SATISFIES-only special case) so one obligation family governs
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-16: author N - every supported editing surface captures and supplies a change reason when the audit record requires one
 - 2026-07-31 | 9bb163a9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-30 | bb148227 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: G flags satisfiers on any change within the template subtree, not just the root
 - 2026-04-23 | f8ff5509 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Change Detection and Auditability* | **Hash**: 9bb163a9
+*End* *Change Detection and Auditability* | **Hash**: 7930cf78
 ---
 
 # REQ-p00013: Automated Testing
@@ -331,6 +346,34 @@ F. The tool SHALL NOT assign an identifier previously borne by a requirement who
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-20: author reference-integrity-under-mutation invariant (GI-3)
 
 *End* *Reference Integrity Under Mutation* | **Hash**: c0aae59d
+---
+
+# REQ-p00018: Compiled Risk Register
+
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00004
+
+## Rationale
+
+Regulated development requires a risk register: what can go wrong, how each risk is mitigated, and what residual risk is accepted. A register maintained as a separate document detaches from the requirements that carry the mitigations and goes stale the day after it is written. Documenting each residual risk inline, within the requirement it concerns, keeps the risk statement next to the obligations that mitigate it — and the register becomes a derived artifact, compiled from the requirements estate, never hand-maintained.
+
+Attributing each risk to the requirement that documents it and to the specific assertions carrying its mitigation (or recording its acceptance) makes the register auditable through the same *Traceability* graph as everything else: an auditor can walk from a risk to the obligations that answer it, and from those obligations to the tests that verify them. A mitigation citation that resolves to nothing is precisely the silent-omission defect REQ-p00015 guards against in reporting surfaces — a register that quietly drops or ignores an unresolvable citation misrepresents the estate's risk posture; assertion C applies that reporting principle here rather than restating it.
+
+Table layouts, command shapes, and severity or likelihood vocabularies are mechanism choices; the assertions deliberately fix none of them.
+
+## Assertions
+
+A. The tool SHALL compile residual-risk documentation recorded inline within requirements into a single register spanning every repository of the graph.
+
+B. The register SHALL attribute each documented risk to the requirement documenting it and to the *Assertions* carrying its mitigation or accepting its residual risk.
+
+C. If a mitigation citation within residual-risk documentation does not resolve to an *Assertion* present in the graph, then the tool SHALL report the unresolved citation.
+
+## Changelog
+
+- 2026-07-31 | 0f0438e9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-4: author compiled cross-spec risk register requirement (inline residual risk, attribution to mitigating assertions, unresolved-citation reporting)
+
+*End* *Compiled Risk Register* | **Hash**: 0f0438e9
 ---
 
 ## REQ-d00220: TermDictionary Data Model
