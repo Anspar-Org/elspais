@@ -50,7 +50,7 @@ C. The generated JSON Schema SHALL include `$schema` and `title` top-level keys.
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-The `elspais init` command SHALL generate `.elspais.toml` configuration files by walking the `ElspaisConfig` Pydantic model, ensuring generated templates are always in sync with the schema. Hardcoded template strings SHALL be replaced by a schema walker that produces valid TOML from field metadata and defaults.
+The `elspais init` command SHALL generate `.elspais.toml` configuration files by walking the `ElspaisConfig` Pydantic model, ensuring generated templates are always in sync with the schema. Hardcoded template strings SHALL be replaced by a schema walker that produces valid TOML from field metadata and defaults. Beyond configuration, initialization gives a new project a working starting point rather than a blank tree.
 
 ### Assertions
 
@@ -62,13 +62,24 @@ C. The generated TOML SHALL include all sections present in the current hardcode
 
 D. The generated TOML SHALL include human-readable comments derived from Pydantic field descriptions or the current template comments.
 
+E. When scaffolding a new project, the tool SHALL offer a worked example project, accepted as healthy by the tool's own checks, that demonstrates in combination requirement hierarchy, template satisfaction, journey validation, defined terms, and code and test *Traceability* markers.
+
+F. When scaffolding a new project, the tool SHALL include baseline requirement-authoring conventions in the generated project, covering at minimum assertion granularity, normative keyword usage, and *Traceability* reference forms.
+
+### Rationale
+
+A new project today starts from configuration alone; the first spec file, the first `Satisfies:` declaration, and the first code marker are all authored cold. The worked example (E) closes that gap by showing the concepts *composed* — a small hierarchy whose requirements are satisfied, validated by a journey, use defined terms, and are implemented and verified by marked source files — rather than each concept in isolation. Which files and requirement counts make up the example is deliberately unspecified: content inventory is mechanism, not obligation.
+
+The example is intended to do triple duty: user-facing scaffold, canonical test fixture for the tool's own suite, and fixture for the mechanical style checks. Fixtures must pass their own health checks, which is why E defines the example as checks-healthy as generated. For the same reason, scaffolded templates and conventions (F) must not contradict the mechanically checkable style rules elsewhere in this spec (see the mechanical style-check requirement in the CLI spec): a fresh project that fails its own first style run would teach the wrong lesson. The authoring conventions (F) are the baseline house rules a new author needs before the first requirement — how fine an assertion should be, which normative keywords are canonical, and how requirements are referenced from code and tests.
+
 ### Changelog
 
+- 2026-07-31 | b25e4468 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
 - 2026-07-31 | 0173b043 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 44aeb496 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 44aeb496 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Schema-Driven Init Template Generation* | **Hash**: 0173b043
+*End* *Schema-Driven Init Template Generation* | **Hash**: b25e4468
 ---
 
 ## REQ-d00210: Documentation Drift Detection
