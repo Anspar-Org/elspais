@@ -128,9 +128,9 @@ class TestPRTitleValidation:
     def test_REQ_o00066_F_validate_pr_title_job_exists(self, pr_config):
         assert "validate-pr-title" in pr_config["jobs"]
 
-    def test_REQ_o00066_F_checks_for_cur_reference(self, pr_config):
+    def test_REQ_o00066_F_checks_for_ticket_reference(self, pr_config):
         run_text = _step_runs(pr_config["jobs"]["validate-pr-title"])
-        assert "CUR-" in run_text
+        assert "[A-Z]{2,10}-[0-9]+" in run_text
 
 
 # --- Assertion G: commit messages require ticket + REQ refs ---
@@ -140,9 +140,9 @@ class TestCommitMessageValidation:
     def test_REQ_o00066_G_validate_commits_job_exists(self, pr_config):
         assert "validate-commit-messages" in pr_config["jobs"]
 
-    def test_REQ_o00066_G_checks_for_cur_and_req(self, pr_config):
+    def test_REQ_o00066_G_checks_for_ticket_and_req(self, pr_config):
         run_text = _step_runs(pr_config["jobs"]["validate-commit-messages"])
-        assert "CUR-" in run_text
+        assert "[A-Z]{2,10}-[0-9]+" in run_text
         assert "REQ-" in run_text
 
 

@@ -338,14 +338,49 @@ C. The tool SHALL return results in scoped_search format containing only the min
 
 D. The tool SHALL pass through all results unchanged when no ancestor relationships exist between matches.
 
+E. When `scope_id` is omitted, discovery SHALL span the entire federated view.
+
 ### Rationale
 
 Agents won't compose scoped_search + minimize_requirement_set unprompted. A single wrapper tool is the most discoverable interface for finding the most-specific requirements within a subgraph.
 
+A mandatory scope demands the answer to the question being asked: a caller who does not yet know which subtree is relevant must already know which subtree to scope to, and the natural way to find that is grep — which defeats the tool. Optional scope (E) makes the cold-start query expressible.
+
 ### Changelog
 
+- 2026-07-30 | 4ce416ba | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: make discovery scope optional (E)
 - 2026-05-11 | fea647ee | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | fea647ee | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *MCP Discover Requirements Tool* | **Hash**: fea647ee
+*End* *MCP Discover Requirements Tool* | **Hash**: 4ce416ba
+---
+
+## REQ-o00073: MCP Org-Wide Context
+
+**Level**: ops | **Status**: Draft | **Implements**: REQ-p00060, REQ-p00081, REQ-p00082
+
+The MCP server SHALL serve the caller's full workspace context — including repositories outside the primary — with provenance on every cross-repository result and authority limits enforced at the tool surface.
+
+### Assertions
+
+A. The MCP server SHALL start and serve read tools when invoked outside any repository, provided the invocation path resolves to a declared workspace.
+
+B. Read-tool results that include content owned outside the primary repository SHALL carry the owning repository, its federation role, and its freshness — live working copy, or baseline with its capture time.
+
+C. Read tools SHALL accept a caller option selecting the baseline view of a repository that a local working copy currently shadows.
+
+D. Mutation tools SHALL reject any target owned by a reference-role repository, returning an error that names the repository and its role and applying no change.
+
+E. The view served SHALL be determined by the caller's invocation context — repository membership and workspace containment — with no mode declaration required from the caller.
+
+### Rationale
+
+A tool that requires a judgement call before use loses to the tool that needs none — which is how grep won over the MCP tools (1.8% of requirement-shaped lookups, measured 2026-07-29). One federated view with provenance, never two tools to choose between (E). Freshness disclosure (B) matters because baselines are refreshed periodically while worktrees are live; without an as-of time, agents cite stale org requirements as current. Branch skew is a feature for "does my draft duplicate something?" (shadowed view) and a bug for "what does the org currently specify?" (baseline view) — assertion C makes both askable from the same tools. Assertion D is the MCP surface of the structural refusal specified in the federation role model.
+
+### Changelog
+
+- 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: author MCP org-wide context requirements
+
+*End* *MCP Org-Wide Context* | **Hash**: 882a56ff
 ---

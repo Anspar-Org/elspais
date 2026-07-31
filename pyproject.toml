@@ -4,7 +4,7 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "elspais"
-version = "0.121.5"
+version = "0.121.16"
 description = "Requirements validation and traceability tools - L-Space connects all libraries"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -38,7 +38,7 @@ dev = [
     "pyyaml>=6.0",
 ]
 binary = ["pyinstaller>=6.0"]
-mcp = ["mcp>=1.0"]
+mcp = ["mcp>=1.0,<2"]
 # REQ-p00080-A: PDF compilation (no Python deps - uses external pandoc + xelatex)
 pdf = []
 # REQ-int-d00002-B: HTML generation requires jinja2
@@ -59,7 +59,7 @@ all = [
     "pygments>=2.0",
     "starlette>=0.36",
     "uvicorn>=0.20",
-    "mcp>=1.0",
+    "mcp>=1.0,<2",
     "coverage>=7.0",
 ]
 
