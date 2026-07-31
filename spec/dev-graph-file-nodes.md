@@ -207,14 +207,22 @@ K. Changelog entries SHALL render author identifiers that contain `@` wrapped in
 
 L. The tool SHALL make the canonical rendering of a graph object — a single requirement, a spec file's content, or a generated aggregate such as a glossary or term index — obtainable by external consumers at a caller-selected base heading level.
 
+M. The viewer SHALL construct requirement cards and journey cards through a single shared card-rendering path, with kind-specific content expressed as variation within that path rather than as a parallel per-kind implementation.
+
+N. Where a card capability — a coverage indicator, a source link, or a body section — is semantically meaningful for more than one card kind, the viewer SHALL present that capability uniformly across those kinds' cards.
+
 ### Rationale
 
 The render protocol is the inverse of parsing: each node kind knows how to serialize itself back to text. This enables the graph to reconstruct files from its internal state, which is the foundation for render-based persistence. Order-independent *Assertion* hashing ensures that *Assertion* reordering does not trigger false change-detection flags.
 
 The render contract is elspais's to own: downstream document pipelines that need a requirement's or aggregate's text must be able to obtain it from the tool rather than reimplement the render rules and drift from them. Assertion L states that availability architecturally; the delivery surface (a CLI subcommand, an MCP tool, a library call) is mechanism and deliberately unspecified. The caller-selected base heading level exists because embedding contexts place rendered content at differing document depths.
 
+Assertions M and N extend the one-canonical-render-per-object principle to the viewer's card presentation. Duplicated per-kind card builders have already produced capability divergence in practice — journey cards lacked the UAT-coverage badge that requirement cards carried — which is the failure mode a single shared path prevents. M forbids the duplicated structure; N states the observable consequence, capability parity: a capability that makes sense for both kinds appears on both, and only genuinely kind-semantic differences (an actor/goal section is meaningful only on a journey card) may distinguish them. How the shared path is decomposed internally is mechanism and deliberately unspecified.
+
 ### Changelog
 
+- 2026-07-31 | 92b4c498 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-29: author assertions M and N (card-render parity: one shared card path, capability parity across kinds)
 - 2026-07-31 | c929fc01 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-35: author assertion L (render contract available to external consumers at requested heading levels)
 - 2026-07-31 | 99fb8aea | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -222,7 +230,7 @@ The render contract is elspais's to own: downstream document pipelines that need
 - 2026-05-11 | c004c62e | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | c004c62e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Render Protocol for Graph Nodes* | **Hash**: c929fc01
+*End* *Render Protocol for Graph Nodes* | **Hash**: 92b4c498
 ---
 
 ## REQ-d00132: Render-Based Save Operation
