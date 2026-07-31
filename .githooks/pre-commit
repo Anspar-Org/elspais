@@ -208,11 +208,15 @@ UNIT_CACHE="$CACHE_DIR/.test-cache-unit"
 
 mkdir -p "$CACHE_DIR"
 
-# Compute content hash from HEAD tree (committed state after this commit)
-# Uses staged index which reflects what the commit will contain
-CONTENT_HASH=$(git write-tree 2>/dev/null | head -c 40)
+# Compute content hash from the staged index (what the commit will contain).
+# An empty hash (write-tree failure) must never be used as a cache key: a
+# recorded "" would match the next failure's "" and skip tests forever.
+CONTENT_HASH=$(git write-tree 2>/dev/null | head -c 40) || CONTENT_HASH=""
+if [ -z "$CONTENT_HASH" ]; then
+    echo -e "${YELLOW}WARNING: git write-tree produced no hash — test cache disabled for this run${NC}"
+fi
 
-if [ -f "$UNIT_CACHE" ] && [ "$(cat "$UNIT_CACHE" 2>/dev/null)" = "$CONTENT_HASH" ]; then
+if [ -n "$CONTENT_HASH" ] && [ -f "$UNIT_CACHE" ] && [ "$(cat "$UNIT_CACHE" 2>/dev/null)" = "$CONTENT_HASH" ]; then
     echo -e "${GREEN}Tests cached — no changes since last pass${NC}"
     echo ""
 else
@@ -233,7 +237,12 @@ else
     fi
 
     echo -e "${GREEN}Tests passed!${NC}"
-    echo "$CONTENT_HASH" > "$UNIT_CACHE"
+    if [ -n "$CONTENT_HASH" ]; then
+        echo "$CONTENT_HASH" > "$UNIT_CACHE"
+    else
+        # No trustworthy key for this pass — drop any stale cache instead
+        rm -f "$UNIT_CACHE"
+    fi
     echo ""
 fi
 
