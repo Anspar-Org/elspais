@@ -504,6 +504,10 @@ A. A Lost Comments card SHALL appear at the top of the card column when orphaned
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00006
 
+### Rationale
+
+Resolved review threads are disposable working notes, not audit evidence — decided deliberately (2026-07-31) after the retired roadmap design had asserted the opposite. The audit record of *why* a requirement changed lives in requirement changelogs and version control, not in the comment store; a team wanting belt-and-braces custody can commit `.elspais/comments/` before compacting, since compaction is a manual operation. Stripping resolved threads on compaction is therefore intended behavior, not an implementation accident.
+
 ### Assertions
 
 A. compact_file SHALL rewrite JSONL files stripping resolved threads entirely and collapsing promote chains to keep only the final promote event, returning the count of removed events.
