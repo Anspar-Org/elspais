@@ -21,7 +21,7 @@
 | REQ-p00060 | MCP Server for AI-Driven Requirements Management | prd-features.md | 3ebc237a |
 | REQ-p00061 | Requirement Decomposition Rules                  | prd-core.md     | fc1e85fe |
 | REQ-p00080 | Spec-to-PDF Compilation                          | prd-core.md     | bfc0cadf |
-| REQ-p00081 | Org-Wide Requirement Visibility                  | prd-features.md | 95778815 |
+| REQ-p00081 | Org-Wide Requirement Visibility                  | prd-features.md | ccd613a8 |
 | REQ-p00082 | Federated Authority and Verdict Scoping          | prd-features.md | be6068bd |
 
 ## OPERATIONS
@@ -152,7 +152,7 @@
 | REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 45bb196f |
 | REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | 90053f29 |
 | REQ-d00259 | Requirement Format Reference Command                          | dev-cli.md              | 8e05d02e |
-| REQ-d00260 | Workspace Registry and Federated View Assembly                | dev-graph-federation.md | d76db5fa |
+| REQ-d00260 | Workspace Registry and Federated View Assembly                | dev-graph-federation.md | 8c288c5d |
 | REQ-d00261 | Federation Role Model                                         | dev-graph-federation.md | bc16ed66 |
 | REQ-d00262 | Search Term Discrimination                                    | dev-mcp-tools.md        | e06dffa5 |
 | REQ-d00263 | Scoped Term Binding                                           | prd-core.md             | 1355b3d0 |

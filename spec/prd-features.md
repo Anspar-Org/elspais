@@ -68,12 +68,15 @@ D. When a repository in the resolved discovery scope cannot be loaded, the tool 
 
 E. When invoked from a location that is inside a declared workspace but not inside any repository, the tool SHALL serve the workspace view rather than failing for want of a repository.
 
+F. Every surface that reports results SHALL disclose the resolved workspace scope — the workspace serving the view, or that none resolved and the view is repository-local.
+
 ## Changelog
 
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: add unconditional workspace-scope disclosure (F) — registry-absent decision
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-37: inline design-doc content; the scaffolding doc is retired
 - 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: author org-wide visibility invariants (V1, V2, V3, H2)
 
-*End* *Org-Wide Requirement Visibility* | **Hash**: 95778815
+*End* *Org-Wide Requirement Visibility* | **Hash**: ccd613a8
 ---
 
 # REQ-p00082: Federated Authority and Verdict Scoping

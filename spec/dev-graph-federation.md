@@ -282,22 +282,35 @@ I. A workspace member that fails to load SHALL be represented in the federated v
 
 J. The configuration fingerprint used to detect stale cached graphs and daemons SHALL cover the content of the workspace registry file.
 
+K. The tool SHALL support a boolean workspace-expectation setting in repository configuration, defaulting to false.
+
+L. When the effective workspace-expectation setting is true and no workspace resolves for the caller, the tool SHALL report an error naming the registry location consulted, rather than serving a repository-local view.
+
+M. When the registry location is explicitly configured via the environment override and the file cannot be read, the tool SHALL report an error rather than serving a view without the registry.
+
+N. When the registry file exists but cannot be parsed, the tool SHALL report an error naming the file and the parse failure, rather than treating the registry as absent.
+
+O. Registry-related errors — unmet workspace expectation, unreadable registry, or unparsable registry — SHALL direct the user to the tool's own workspace documentation for remediation.
+
 ### Rationale
 
 The registry is the second discovery source beside `[associates]` (directed dependencies): membership is flat and undirected, so cycles are impossible by construction, while dependency direction — which drives resolution order and base/overlay relationships — stays in `[associates]` where cycles remain a genuine error. Both sources feed one assembly keyed by git origin, which is stable across worktrees and clones where path and name are not. This dissolves the symmetric-configuration circularity of TOOL-33: neither of two mutually-dependent repos needs to declare the other for membership.
 
 A per-user file solves what committed config cannot: associate paths are machine-specific, so org membership cannot live in `.elspais.toml`; one list per machine replaces one list per repo per machine; a workspace root is addressable even though it is not a repository (REQ-p00081-E); and CI points the environment override at a generated file resolving that job's checkout paths.
 
-Shadowing (G) serves "does my draft duplicate something?"; the explicit baseline request (H) serves "what does the org currently specify?" — same view, two legitimate freshness choices, distinguished by provenance labels rather than by a second tool. Error-state entries (I) uphold REQ-p00081-D: a repository that fails to load must narrow-and-say-so, never silently vanish from answers. How a *missing registry file* is reported remains an open decision (TOOL-38); this REQ deliberately does not specify it.
+Shadowing (G) serves "does my draft duplicate something?"; the explicit baseline request (H) serves "what does the org currently specify?" — same view, two legitimate freshness choices, distinguished by provenance labels rather than by a second tool. Error-state entries (I) uphold REQ-p00081-D: a repository that fails to load must narrow-and-say-so, never silently vanish from answers.
+
+The workspace-expectation setting (K, L) closes the registry's bootstrap hole: the registry is itself an omittable per-machine file, so without a signal the tool cannot distinguish "this machine legitimately has no workspaces" (an outside user of the tool — erroring would be wrong) from "a workspace was expected and the registry is missing" (the entire org layer silently vanishing from every answer). A committed `true` travels with every clone of an org-governed repository, so a fresh machine or a CI job without registry provisioning fails loudly instead of validating against a narrower corpus, while repositories outside any organization never see the error. The standard local-configuration override applies, serving the same purpose it does for associates (e.g. pointing an associate at a worktree during joint work): a developer can locally override the expectation when deliberately working outside the workspace. The error text points at the tool's own workspace documentation (O), which explains registry provisioning generically — which workspace to join and where an organization keeps its canonical registry content is organizational onboarding knowledge, not this tool's concern. The companion error checks (M, N) and the unconditional scope disclosure on every surface (REQ-p00081-F) cover the remaining silence: a pointed-at-but-unreadable or corrupt registry is never equivalent to "no workspaces", and even the legitimate no-workspace case is visibly labeled repo-local rather than left ambiguous.
 
 Known deviation, accepted 2026-07-29: redundant-work cost (invariant C1 — the same unchanged content is not re-parsed once per caller) is *not* required here — per-worktree daemons each parse every workspace repo. Accepted because this is on-developer-machine work at tolerable cost; revisit if it becomes noticeable, in which case the known answer is a single always-on daemon parsing the org baseline once and sharing read-only baseline graphs by reference across per-caller views.
 
 ### Changelog
 
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-37: inline design-doc content; the scaffolding doc is retired
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: registry-absent decision — workspace-expectation setting (K, L) plus registry error checks (M, N)
 - 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: author workspace registry and view assembly requirements
 
-*End* *Workspace Registry and Federated View Assembly* | **Hash**: d76db5fa
+*End* *Workspace Registry and Federated View Assembly* | **Hash**: 8c288c5d
 ---
 
 ## REQ-d00261: Federation Role Model
