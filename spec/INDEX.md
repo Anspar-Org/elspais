@@ -18,6 +18,7 @@
 | REQ-p00014 | Satisfies Relationship                           | prd-features.md | 064c817a |
 | REQ-p00015 | Complete and Current Reporting                   | prd-core.md     | 9aa9a8aa |
 | REQ-p00016 | NOT APPLICABLE Status                            | prd-features.md | 2211802a |
+| REQ-p00017 | Reference Integrity Under Mutation               | prd-core.md     | c0aae59d |
 | REQ-p00050 | Unified Graph Architecture                       | prd-features.md | 46ac5f6a |
 | REQ-p00060 | MCP Server for AI-Driven Requirements Management | prd-features.md | a729a853 |
 | REQ-p00061 | Requirement Decomposition Rules                  | prd-core.md     | 462c146e |
