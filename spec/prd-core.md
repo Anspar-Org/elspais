@@ -61,12 +61,16 @@ B. The tool SHALL detect and report hierarchy violations including circular depe
 
 C. The tool SHALL verify content hashes match requirement body text.
 
+D. The tool SHALL accept configuration of user journey identifier patterns with capabilities equivalent to those it accepts for requirement identifier patterns.
+
 ## Changelog
 
+- 2026-07-31 | d9f87a2a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-26: journey identifiers configurable equivalently to requirement identifiers (D)
 - 2026-07-31 | b29ef9b6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-03-30 | e8f0e4eb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Requirements Validation* | **Hash**: b29ef9b6
+*End* *Requirements Validation* | **Hash**: d9f87a2a
 ---
 
 # REQ-p00003: Traceability Matrix Generation
@@ -410,7 +414,7 @@ A. `check_term_duplicates()` SHALL return a `HealthCheck` reporting duplicate te
 
 B. `check_undefined_terms()` SHALL return a `HealthCheck` for `*token*`/`**token**` references that do not match any *Defined Term* and are not known structural patterns, using the configured `undefined_severity`.
 
-C. `check_unmarked_usage()` SHALL return a `HealthCheck` for whole-word case-insensitive matches of indexed terms in prose that lack `*...*` or `**...**` markup, using the configured `unmarked_severity`. Only terms with `indexed=True` SHALL be checked.
+C. `check_unmarked_usage()` SHALL return a `HealthCheck` for whole-word case-insensitive matches of terms in prose that lack `*...*` or `**...**` markup, using the configured `unmarked_severity`. Only terms whose unmarked-usage scanning is enabled SHALL be checked.
 
 D. When any severity is set to `"off"`, the corresponding check SHALL be skipped and return a passed HealthCheck with severity `"info"`.
 
@@ -418,13 +422,25 @@ E. A `run_term_checks(graph, config)` aggregator SHALL call `check_term_duplicat
 
 F. `check_unmarked_usage()` SHALL produce distinct messages for wrong-marking references (e.g., "Wrong markup for 'term' (uses __, should use configured style)") versus plain unmarked references (e.g., "Unmarked usage of 'term'").
 
+G. The tool SHALL apply each term-declaration behavior — glossary and index inclusion, unmarked-usage scanning, canonical-form fixing, and reference-panel visibility — according to that behavior's own per-term setting, unaffected by the settings of the other behaviors.
+
+H. If a term occurrence functions as system syntax — a heading, a status value, or a metadata key — then the tool SHALL NOT report that occurrence as unmarked colloquial use.
+
+I. When scanning for unmarked usage, the tool SHALL recognize inflected forms of a term, including singular and plural variants, as occurrences of that term.
+
+### Rationale
+
+Term declarations historically carried one bundled flag (`Indexed: false`) that both removed a term from the generated index and exempted it from colloquial-use checking, so deliberately unindexed terms could accumulate unmarked usages invisibly. G makes the behaviors orthogonal: inclusion in generated glossary/index output, unmarked-usage scanning, canonical-form fixing, and reference-panel visibility are separate per-term decisions, and excluding a term from one does not silently exempt it from another. The per-behavior flag names sketched during design (`Check Unmarked:`, `Syntax Word:`, `Show References:`) are proposed mechanism, not obligations — only the separability is asserted here. Per the project rule against backwards-compatibility paths, existing bundled `Indexed: false` declarations migrate outright to the separated settings when the mechanism lands; no compatibility mode preserves the bundled meaning. H and I make the scanner context-aware in both directions: a word serving as system syntax (a heading, a status value, a metadata key) is not colloquial use even though the same word in prose is, and an unmarked usage is not missed merely because it appears inflected. Existing behavior that contradicts these assertions — in particular the bundled indexed gate — is conformance-defect territory for later implementation tickets.
+
 ### Changelog
 
+- 2026-07-31 | aac4da7f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-5: orthogonal term-declaration behaviors (G) and context-aware unmarked-usage scanning (H, I); decouple C from the bundled indexed flag
 - 2026-07-31 | b2d02a05 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 0d96cc34 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 0d96cc34 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Term Health Checks* | **Hash**: b2d02a05
+*End* *Term Health Checks* | **Hash**: aac4da7f
 
 ## REQ-d00224: Glossary and Term Index Generators
 
