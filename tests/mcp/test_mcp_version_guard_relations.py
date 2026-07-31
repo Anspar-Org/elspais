@@ -769,12 +769,19 @@ MOVE_TOKENS = [
 
 
 class TestMoveNodeToFileGuardsAllThreeAffectedNodes:
-    """Validates REQ-o00062-M, REQ-o00062-I, REQ-o00062-J:
+    """Validates REQ-o00062-M, REQ-o00062-I, REQ-o00062-J, REQ-o00062-O:
 
     A move changes three things: the node's home, the origin file's contents
     and the destination file's composition (including where the arrival lands
     in render order relative to anything that arrived concurrently). All three
     are stated, and any one of them being stale is enough to refuse.
+
+    A destination that does not exist is CREATED by the move (REQ-o00062-M/O
+    parity with the HTTP route), so the rejection tests here must use targets
+    that fail spec-path validation -- a spec-valid absent target against this
+    session-scoped server would write a real file into the checked-in fixture.
+    The genuine create-success path is covered by
+    TestMoveNodeCreatesMissingDestinationParity on a throwaway copy.
     """
 
     NODE = "REQ-d00003"
@@ -818,16 +825,47 @@ class TestMoveNodeToFileGuardsAllThreeAffectedNodes:
         assert CONFLICT_KEYS <= set(result)
         assert canonical_graph.find_by_id(self.NODE).file_node().id == self.ORIGIN
 
-    def test_REQ_o00062_L_missing_destination_reports_node_not_found(self, canonical_graph, tools):
-        """REQ-o00062-L: A destination that does not exist is not retryable."""
+    def test_REQ_o00062_O_destination_outside_spec_dirs_is_rejected_and_nothing_created(
+        self, canonical_graph, tools
+    ):
+        """REQ-o00062-O: A new destination is validated against the scanning
+        config exactly as the HTTP route validates it -- a path under no
+        configured spec directory is refused with a plain error (neither a
+        version conflict nor node_not_found: retrying or re-reading cannot
+        fix it), and no file appears on disk."""
         tokens = self._live_tokens(canonical_graph)
+        tokens["if_target_version"] = ""
 
         result = tools["mutate_move_node_to_file"](
-            node_id=self.NODE, target_file_id="file:spec/absent.md", **tokens
+            node_id=self.NODE, target_file_id="file:notaspecdir/x.md", **tokens
         )
 
         assert result["success"] is False
-        assert result["code"] == "node_not_found"
+        assert result.get("code") not in ("version_conflict", "node_not_found")
+        assert "not under any configured spec directory" in result["error"]
+        assert not (HHT_LIKE / "notaspecdir" / "x.md").exists()
+        assert not (HHT_LIKE / "notaspecdir").exists()
+        assert canonical_graph.find_by_id("file:notaspecdir/x.md") is None
+        assert canonical_graph.find_by_id(self.NODE).file_node().id == self.ORIGIN
+
+    def test_REQ_o00062_O_path_traversal_destination_is_rejected_and_nothing_created(
+        self, canonical_graph, tools
+    ):
+        """REQ-o00062-O: A destination that escapes the repository root is
+        refused outright -- same precondition as the HTTP route -- and no
+        file is written anywhere."""
+        tokens = self._live_tokens(canonical_graph)
+        tokens["if_target_version"] = ""
+
+        result = tools["mutate_move_node_to_file"](
+            node_id=self.NODE, target_file_id="file:../escape.md", **tokens
+        )
+
+        assert result["success"] is False
+        assert result.get("code") not in ("version_conflict", "node_not_found")
+        assert ".." in result["error"] or "escape" in result["error"].lower()
+        assert not (HHT_LIKE.parent / "escape.md").exists()
+        assert canonical_graph.find_by_id(self.NODE).file_node().id == self.ORIGIN
 
     def test_REQ_o00062_M_all_three_current_tokens_admit_the_move(self, rollback, tools):
         """REQ-o00062-M: With every affected node reconciled, the move lands and
@@ -897,6 +935,10 @@ class TestMoveNodeCreatesMissingDestinationParity:
         assert moved.file_node() is not None
         assert moved.file_node().id == self.NEW_DESTINATION
         assert self.NODE in render.render_file(destination)
+        # Pollution tripwire: the file was created inside the throwaway copy,
+        # never inside the checked-in fixture directory.
+        assert (disk_project / self.NEW_PATH).exists()
+        assert not (HHT_LIKE / self.NEW_PATH).exists()
 
     def test_REQ_o00062_M_stale_node_token_rejects_before_the_file_is_created(
         self, disk_project, disk_tools
