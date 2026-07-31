@@ -537,3 +537,81 @@ class TestFixFailsWhenAuthorMissing:
         content = spec_file.read_text()
         assert "## Changelog" in content
         assert "real@example.com" in content
+
+
+# ---------------------------------------------------------------------------
+# TOOL-39: daemon reuse must not serve results built from pre-change config
+# ---------------------------------------------------------------------------
+
+
+class TestDaemonConfigStaleRestart:
+    """Verifies REQ-p00004-J: config is re-read from disk when reloading.
+
+    A CLI call served by an already-running daemon must reflect config
+    edits made after the daemon started: the stale daemon is restarted
+    (it holds no unsaved mutations) and the fresh graph is served.
+    """
+
+    def test_config_edit_restarts_daemon_and_reflects_change(self, tmp_path):
+        from tests.e2e.helpers import (
+            Requirement,
+            base_config,
+            build_project,
+            write_config,
+            write_spec_file,
+        )
+
+        cfg = base_config(name="stale-daemon-project")
+        build_project(
+            tmp_path,
+            cfg,
+            spec_files={
+                "spec/prd.md": [
+                    Requirement(
+                        "REQ-p00001",
+                        "Feature One",
+                        "PRD",
+                        assertions=[("A", "The system SHALL do one thing.")],
+                    )
+                ]
+            },
+        )
+
+        # First CLI call auto-starts a daemon (cli_ttl=2 in base_config)
+        trace1 = run_elspais("trace", "--format", "json", cwd=tmp_path)
+        assert trace1.returncode == 0, trace1.stderr
+        assert {r["id"] for r in json.loads(trace1.stdout)} == {"REQ-p00001"}
+
+        daemon_json = tmp_path / ".elspais" / "daemon.json"
+        assert daemon_json.exists(), "daemon should have auto-started"
+        pid_before = json.loads(daemon_json.read_text())["pid"]
+
+        # Mutate config: add a second spec directory with a new requirement.
+        # Only a config re-read can reveal REQ-p00002.
+        write_spec_file(
+            tmp_path / "spec2" / "prd2.md",
+            [
+                Requirement(
+                    "REQ-p00002",
+                    "Feature Two",
+                    "PRD",
+                    assertions=[("A", "The system SHALL do another thing.")],
+                )
+            ],
+        )
+        cfg2 = base_config(name="stale-daemon-project", spec_dir=["spec", "spec2"])
+        write_config(tmp_path / ".elspais.toml", cfg2)
+
+        # Next CLI call must not silently serve the pre-change graph.
+        trace2 = run_elspais("trace", "--format", "json", cwd=tmp_path)
+        assert trace2.returncode == 0, trace2.stderr
+        ids = {r["id"] for r in json.loads(trace2.stdout)}
+        assert ids == {
+            "REQ-p00001",
+            "REQ-p00002",
+        }, f"CLI served results from pre-change config: {ids}"
+
+        # The stale daemon (clean, no unsaved mutations) was restarted.
+        assert daemon_json.exists()
+        pid_after = json.loads(daemon_json.read_text())["pid"]
+        assert pid_after != pid_before, "stale daemon should have been restarted"

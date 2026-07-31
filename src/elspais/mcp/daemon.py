@@ -127,6 +127,28 @@ def write_daemon_json(
     return daemon_json
 
 
+def refresh_daemon_config_hash(repo_root: Path) -> None:
+    """Rewrite daemon.json's config_hash from the current config on disk.
+
+    Called by a running server after it rebuilds its graph with freshly
+    re-read config, so CLI staleness checks (_config_hash_stale) don't
+    restart a server that is already up to date.
+    """
+    path = _daemon_json_path(repo_root)
+    if not path.exists():
+        return
+    try:
+        info = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return
+    config_path = repo_root / ".elspais.toml"
+    info["config_hash"] = compute_config_hash(config_path) if config_path.is_file() else ""
+    try:
+        path.write_text(json.dumps(info))
+    except OSError:
+        pass  # Best effort — a failed refresh only risks an extra restart
+
+
 # ── Daemon lifecycle ─────────────────────────────────────────────────────
 
 

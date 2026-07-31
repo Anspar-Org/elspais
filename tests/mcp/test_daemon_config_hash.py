@@ -63,3 +63,42 @@ def test_compute_config_hash_includes_associate_configs(tmp_path: Path):
     assoc_config.write_text('[project]\nname = "assoc"\nnamespace = "BAR"\n')
     h2 = compute_config_hash(config_path)
     assert h1 != h2
+
+
+def test_refresh_daemon_config_hash_updates_stored_hash(tmp_path: Path):
+    """A server that re-read config can sync daemon.json's config_hash.
+
+    Verifies: REQ-p00004-J
+    """
+    import json
+    import os
+
+    from elspais.mcp.daemon import refresh_daemon_config_hash
+
+    config_path = tmp_path / ".elspais.toml"
+    config_path.write_text('[project]\nname = "test"\n')
+
+    daemon_dir = tmp_path / ".elspais"
+    daemon_dir.mkdir()
+    daemon_json = daemon_dir / "daemon.json"
+    daemon_json.write_text(
+        json.dumps(
+            {
+                "pid": os.getpid(),
+                "port": 12345,
+                "repo_root": str(tmp_path),
+                "started_at": "2026-01-01T00:00:00",
+                "version": "0.0.0",
+                "config_hash": "stale_hash_value_",
+                "type": "daemon",
+            }
+        )
+    )
+
+    refresh_daemon_config_hash(tmp_path)
+
+    info = json.loads(daemon_json.read_text())
+    assert info["config_hash"] == compute_config_hash(config_path)
+    # Other fields survive the rewrite
+    assert info["port"] == 12345
+    assert info["type"] == "daemon"
