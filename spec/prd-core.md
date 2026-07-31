@@ -242,6 +242,48 @@ F. The tool SHALL support an `--overview` flag that generates a stakeholder-orie
 *End* *Spec-to-PDF Compilation* | **Hash**: 24f063f6
 ---
 
+# REQ-p00015: Complete and Current Reporting
+
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00001
+
+## Rationale
+
+The *Traceability* graph is an audit artifact. A graph that reports healthy while silently omitting requirements cannot serve that role: the verdict certifies completeness it does not have. Silent omission and silent staleness are the same defect told two ways — omission withholds content from an answer, staleness withholds time from it. Both let a consumer act on a picture of the requirements estate that the tool knows, or could know, to be wrong.
+
+Observed failure shapes this requirement guards against:
+
+- Content in a scanned file that looks like a requirement but is dropped (for example, its declared level is not configured) while every check stays healthy — so "no matches" is indistinguishable from "never admitted".
+- A configured repository that fails to load and is simply absent from answers — so "no matches" is indistinguishable from "could not look".
+- Derived data (coverage rollups, term and keyword indexes, change-state summaries) served mid-editing-session from sources that have since changed.
+- An operation log that records a write the tool never made.
+- A long-running server answering from a configuration that has since changed on disk.
+
+Interplay with existing requirements: REQ-p00004-J obliges the tool to re-read configuration from disk when reloading the graph; this requirement complements it by covering the interval between reloads — divergence must be disclosed, not silently served. REQ-p00005-E covers the configuration-time error for an invalid associate path; assertion C here covers the answer-time consequence of any load failure. REQ-p00081-D applies the same principle to workspace discovery specifically. Other spec units cite this requirement rather than restating these invariants.
+
+## Assertions
+
+A. When the tool encounters content that matches a requirement form but does not admit it into the graph, the tool SHALL report the excluded content and the cause of its exclusion.
+
+B. When the tool does not apply a requested change, the tool SHALL report the unapplied change and the cause.
+
+C. If a repository configured into the graph cannot be loaded, then the tool SHALL report the missing repository and the cause alongside every answer computed over the reduced graph.
+
+D. If content, repositories, or requested changes are absent from the graph without having been reported, then the tool SHALL NOT report a healthy verdict.
+
+E. When the tool serves a value derived from source content that has changed since the value was computed, the tool SHALL serve a value recomputed from the current content or mark the served value as stale.
+
+F. The tool SHALL record a change as applied only when the change is present at the destination the record names.
+
+G. While the tool serves answers computed from a configuration that no longer matches the configuration on disk, the tool SHALL disclose that the answers reflect a superseded configuration.
+
+## Changelog
+
+- 2026-07-31 | 9aa9a8aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-10: author completeness/freshness invariant (merges GI-1 silent omission and GI-2 silent staleness)
+
+*End* *Complete and Current Reporting* | **Hash**: 9aa9a8aa
+---
+
 ## REQ-d00220: TermDictionary Data Model
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
