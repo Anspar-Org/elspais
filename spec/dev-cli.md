@@ -466,3 +466,41 @@ Authors writing their first requirement, or reviewers checking format convention
 - 2026-07-03 | 8e05d02e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash, add missing changelog section
 
 *End* *Requirement Format Reference Command* | **Hash**: c3b67490
+
+## REQ-d00266: Mechanical Requirement Style Checks
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00002-A
+
+The tool checks requirement text against the mechanically-decidable subset of the organization's requirement style rules, so that style review effort concentrates on judgment calls rather than pattern violations.
+
+### Assertions
+
+A. The tool SHALL evaluate requirement text against a configured set of style rules, each of which is decidable from spec content and graph structure alone, without human judgment.
+
+B. The tool SHALL flag keyword-discipline violations, including obligation keywords appearing outside Assertions sections and obligation words outside the canonical keyword set.
+
+C. The tool SHALL flag assertion text that references another requirement or assertion identifier.
+
+D. The tool SHALL flag assertion text containing compound-connective patterns that indicate multiple independently-decidable obligations in a single assertion.
+
+E. The tool SHALL flag notation violations, including dates not in ISO 8601 format and configurable values not written in the canonical placeholder syntax.
+
+F. The tool SHALL flag assertions whose count of attached verifying tests exceeds a configurable threshold, as a signal that the assertion is too coarse.
+
+G. The tool SHALL flag each verification link that names a requirement without naming a specific assertion.
+
+H. The tool SHALL report style findings through the standard checks reporting surface, with severity configurable per rule.
+
+### Rationale
+
+The organization's requirement style rules — EARS conditional patterns, assertion independence, keyword discipline, notation conventions — are today checkable only by manual review. A subset of those rules is mechanically decidable: a program can determine, from the text and the graph alone, whether the rule is violated. This requirement commits the tool to checking that subset. The assertions name classes of decidable rules, not a frozen rule list; the concrete rule set is configuration, so organizations can extend or disable individual rules without a spec change.
+
+The boundary matters: rules requiring judgment — whether an EARS pattern is the *right* classification for a conditional, whether an assertion sits at invariant altitude or has slid into implementation detail — are explicitly outside mechanical checking. The tool may surface advisory guidance for them, but they are never findings and never affect exit codes.
+
+Granularity flagging (F) is grounded in measurement, not taste: a survey of the live graph (TOOL-30, 2026-07-31) found the healthy distribution of tests per assertion sits at 2-10 (median 4 among covered assertions), with a distinct pathological head — 30 assertions carried more than 30 tests each, and every inspected member of that head was genuinely coarse; 16% of covered assertions exceeded 10. The recommended default thresholds are therefore warn above 10 and fail above 30 attached tests; the numbers live in configuration, not in the assertion, because they are calibration, not obligation. The companion signal (G) is the blanket verification link: a test that names only `REQ-xNNNNN` without an assertion letter dodges the granularity question entirely, so each such edge is flaggable on its own.
+
+Reporting through the standard checks surface (H) with per-rule severity keeps style findings organized by concern, consistent with the concern-based check organisation principle established for the checks system elsewhere in this spec (see the config-schema requirements); style checking adds rules to that surface rather than inventing a parallel reporting channel.
+
+Parent choice: REQ-p00002-A commits the tool to validating requirement *format* against configurable patterns and rules. Style rules are exactly that — configurable, pattern-based rules over requirement text — so mechanical style checking implements that assertion directly.
+
+*End* *Mechanical Requirement Style Checks* | **Hash**: 084c17a0
