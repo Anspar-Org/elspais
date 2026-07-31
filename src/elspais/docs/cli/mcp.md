@@ -195,14 +195,25 @@ One daemon serves several writers at once (MCP agents and the viewer GUI),
 so every `mutate_*` tool requires an `if_version` token — the target's
 `version` from your last read — and returns the new `version` on success.
 Thread the returned token into your next mutation of the same node.
+Deletions return the version of the surviving container that absorbed the
+change: the parent requirement for an assertion or section
+(`mutate_delete_assertion`, `mutate_delete_remainder`), the containing
+FILE for a whole requirement (`mutate_delete_requirement`).
+`mutate_add_requirement` accepts an optional `file_id` to place the new
+requirement into a chosen file; when given, `if_version` guards that FILE.
+`mutate_move_node_to_file` creates a missing destination file itself
+(path validated against the scanning config, guards run first); pass
+`if_target_version=""` for a destination the move creates.
 
 A stale token is rejected with `version_conflict`, carrying
 `current_version` and `current_state`: reconcile your intent against
-`current_state` before retrying — never retry blind. Undo, save, and forced
-refresh require the mutation-log tip (`if_mutation_id` /
-`if_tip_mutation_id`); `""` means "nothing pending". The viewer's
-`/api/mutate/*` HTTP routes enforce the same guards, returning HTTP 409
-with the identical rejection body.
+`current_state` before retrying — never retry blind. Undo, save, forced
+refresh, and `restore_from_safety_branch` require the mutation-log tip
+(`if_mutation_id` / `if_tip_mutation_id`); `""` means "nothing pending".
+The viewer's `/api/mutate/*` HTTP routes enforce the same guards,
+returning HTTP 409 with the identical rejection body, and its history
+routes `/api/save`, `/api/revert`, and `/api/reload` require
+`if_tip_mutation_id` in the JSON body.
 
 Full protocol: `elspais docs concurrency` (or the MCP `docs("concurrency")`
 and `faq("concurrency")` tools).

@@ -1,4 +1,4 @@
-# Verifies: REQ-o00062-I, REQ-o00062-J, REQ-o00062-K, REQ-o00062-L
+# Verifies: REQ-o00062-I, REQ-o00062-J, REQ-o00062-K, REQ-o00062-L, REQ-d00131-L
 """Optimistic-concurrency guard on the MCP content/metadata mutation tools.
 
 Every content or metadata mutation tool takes a required ``if_version``
@@ -210,6 +210,133 @@ class TestSuccessReportsVersion:
 
         assert result["success"] is False
         assert result["code"] == "version_conflict"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Journey mutations report the RESULTING version, not the consumed token
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestJourneyMutationReportsMovedVersion:
+    """Validates REQ-o00062-K, REQ-d00131-L:
+
+    A journey renders from a cached body. A successful title edit must fold
+    into that cache, so the reported ``version`` is the RESULTING token --
+    returning the very ``if_version`` the caller supplied means the on-disk
+    representation did not move and the edit will be silently dropped by the
+    next save.
+    """
+
+    TARGET = "JNY-001"
+    NEW_TITLE = "Login Flow (renamed)"
+
+    def test_REQ_o00062_K_journey_title_update_returns_moved_version(self, mutable_graph, tools):
+        """Validates REQ-o00062-K: success reports a version DIFFERENT from
+        the consumed if_version, and the render shows the new title."""
+        journey = mutable_graph.find_by_id(self.TARGET)
+        before = node_version(journey)
+
+        result = tools["mutate_update_title"](
+            node_id=self.TARGET, new_title=self.NEW_TITLE, if_version=before
+        )
+
+        assert result["success"] is True
+        # The reported token is the resulting one, not the stale input.
+        assert result["version"] != before
+        assert result["version"] == node_version(journey)
+        # And the rendered (render_save-visible) body carries the edit.
+        assert f"{self.TARGET}: {self.NEW_TITLE}" in render.render_node(journey)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Delete-assertion / delete-remainder report the parent's resulting version
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.incremental
+class TestDeleteAssertionReportsParentVersion:
+    """Validates REQ-o00062-K:
+
+    ``mutate_delete_assertion`` is guarded by the owning requirement's token
+    and changes that requirement's version, so its success result must carry
+    the parent's resulting ``version`` -- threadable into the next mutation
+    of the same requirement without a re-read.
+    """
+
+    PARENT = "REQ-o00002"
+
+    def test_REQ_o00062_K_delete_assertion_returns_parent_resulting_version(
+        self, mutable_graph, tools
+    ):
+        """Validates REQ-o00062-K: success carries the parent requirement's
+        post-mutation version."""
+        parent = mutable_graph.find_by_id(self.PARENT)
+        before = node_version(parent)
+
+        result = tools["mutate_delete_assertion"](
+            assertion_id=f"{self.PARENT}-D", if_version=before, confirm=True
+        )
+
+        assert result["success"] is True
+        assert "version" in result, "delete_assertion success carries no version"
+        assert result["version"] == node_version(parent)
+        assert result["version"] != before
+        TestDeleteAssertionReportsParentVersion.threaded = result["version"]
+
+    def test_REQ_o00062_K_returned_token_threads_into_next_parent_mutation(
+        self, mutable_graph, tools
+    ):
+        """Validates REQ-o00062-K: the token is accepted with no re-read."""
+        result = tools["mutate_change_status"](
+            node_id=self.PARENT, new_status="Draft", if_version=self.threaded
+        )
+
+        assert result["success"] is True
+        assert mutable_graph.find_by_id(self.PARENT).status == "Draft"
+
+
+@pytest.mark.incremental
+class TestDeleteRemainderReportsParentVersion:
+    """Validates REQ-o00062-K:
+
+    ``mutate_delete_remainder`` is guarded by the owning requirement's token
+    and changes that requirement's version, so its success result must carry
+    the parent's resulting ``version`` -- threadable into the next mutation
+    of the same requirement without a re-read.
+    """
+
+    PARENT = "REQ-o00002"
+
+    def test_REQ_o00062_K_delete_remainder_returns_parent_resulting_version(
+        self, mutable_graph, tools
+    ):
+        """Validates REQ-o00062-K: success carries the parent requirement's
+        post-mutation version."""
+        parent = mutable_graph.find_by_id(self.PARENT)
+        before = node_version(parent)
+
+        result = tools["mutate_delete_remainder"](
+            node_id=f"{self.PARENT}:section:1", if_version=before, confirm=True
+        )
+
+        assert result["success"] is True
+        assert "version" in result, "delete_remainder success carries no version"
+        assert result["version"] == node_version(parent)
+        assert result["version"] != before
+        TestDeleteRemainderReportsParentVersion.threaded = result["version"]
+
+    def test_REQ_o00062_K_returned_token_threads_into_next_parent_mutation(
+        self, mutable_graph, tools
+    ):
+        """Validates REQ-o00062-K: the token is accepted with no re-read."""
+        result = tools["mutate_update_title"](
+            node_id=self.PARENT,
+            new_title="Backup Strategy (revised)",
+            if_version=self.threaded,
+        )
+
+        assert result["success"] is True
+        assert mutable_graph.find_by_id(self.PARENT).get_label() == "Backup Strategy (revised)"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

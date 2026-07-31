@@ -22,6 +22,7 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 - Pattern validation: only in core/patterns.py (PatternValidator)
 - Hash computation: only in `utilities/hasher.py` (`compute_normalized_hash`, `calculate_hash`). Do NOT create alternative hash functions elsewhere.
 - Term scanning: only in `graph/term_scanner.py` (comment extraction, term reference classification, markup analysis). Uses `ast.parse()` for Python files, regex for others.
+- New-spec-file path validation: only in `utilities/spec_paths.py` (`validate_new_spec_path`) — shared by the viewer HTTP route and the MCP move tool so both surfaces accept and reject identically.
 - Coverage aggregation: only in `graph/aggregation.py` (`aggregate_by_level`, `tier_buckets`). CLI `summary`, MCP `get_project_summary`, and the viewer all read this one module so identical questions get identical answers — do NOT recompute level/tier rollups elsewhere.
 - Version-token derivation: only `node_version()` in `graph/render.py` (digest primitive `compute_version_hash()` in `utilities/hasher.py`). Do NOT derive concurrency versions elsewhere.
 - Concurrency guards: ONE helper pair — `_guard_version()` / `_guard_mutation_tip()` in `mcp/server.py` — shared by the MCP tools and the viewer HTTP routes (`server/routes_api.py` delegates to them). Do NOT reimplement the checks or hand-roll rejection bodies.

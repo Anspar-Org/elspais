@@ -57,6 +57,13 @@ async function attachGuardTokens(endpoint, payload) {
         payload.if_mutation_id = (dirty && dirty.tip) || '';
         return null;
     }
+    if (endpoint === '/api/save' || endpoint === '/api/revert' || endpoint === '/api/reload') {
+        // History-level operations persist or discard EVERY writer's pending
+        // work, so they carry the log tip the caller has actually seen.
+        const dirty = await apiFetch('/api/dirty');
+        payload.if_tip_mutation_id = (dirty && dirty.tip) || '';
+        return null;
+    }
     if (endpoint === '/api/mutate/move-to-file') {
         // The node, the file it leaves and the file it joins all change.
         const nodeId = payload.node_id;
@@ -962,7 +969,7 @@ function showBranchPickerModal(targetRepo) {
                 body: JSON.stringify(rewindBody)
             }).then(function(result) {
                 if (result && result.success) {
-                    apiFetch('/api/reload', { method: 'POST' }).then(function() {
+                    mutate('/api/reload', {}).then(function() {
                         hideLoadingOverlay();
                         closeModal();
                         showToast('Rewound to ' + hash, 'success');
@@ -1045,7 +1052,7 @@ function showBranchPickerModal(targetRepo) {
                 if (result && result.success) {
                     closeModal();
                     // Reload graph from disk after branch switch
-                    apiFetch('/api/reload', { method: 'POST' }).then(function() {
+                    mutate('/api/reload', {}).then(function() {
                         hideLoadingOverlay();
                         showToast('Switched to branch: ' + (result.branch || branch), 'success');
                         refreshBranchStatus();
@@ -1864,7 +1871,7 @@ function showCheckpointModal() {
         if (!confirm('You have ' + editState.mutationCount + ' unsaved changes. Save before checkpointing?')) {
             return;
         }
-        apiFetch('/api/save', {method: 'POST'}).then(function(saveResult) {
+        mutate('/api/save', {}).then(function(saveResult) {
             if (saveResult && saveResult.success !== false) {
                 refreshDirtyCount();
                 _openCheckpointModal();
@@ -2218,7 +2225,7 @@ async function refreshFromDisk() {
     var btn = document.getElementById('btn-refresh-disk');
     if (btn) { btn.disabled = true; btn.textContent = 'Refreshing...'; }
 
-    var result = await apiFetch('/api/reload', { method: 'POST' });
+    var result = await mutate('/api/reload', {});
     if (btn) { btn.disabled = false; btn.textContent = 'Refresh'; }
 
     if (result && result.success) {

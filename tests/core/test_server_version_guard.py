@@ -19,6 +19,7 @@ rather than shipping unguarded.
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 from dataclasses import dataclass, field
@@ -68,6 +69,18 @@ JOURNEY = "JNY-001"
 JOURNEY_FILE = "file:spec/journeys.md"
 
 UNDO_ROUTE = "/api/mutate/undo"
+
+# The wire spelling of the history precondition on the persistence routes,
+# mirroring the MCP tools they correspond to (save_mutations,
+# refresh_graph(force=True)): ``if_tip_mutation_id``, where ``""`` means
+# "I believe nothing is pending".
+HISTORY_TIP_FIELD = "if_tip_mutation_id"
+
+# The three non-``/api/mutate/*`` POST routes that act on the mutation log as
+# a whole: save persists every writer's pending work, revert and reload
+# discard it by rebuilding from disk. Imported by the parity tripwire in
+# tests/mcp/test_mcp_http_parity.py so the two suites cannot drift apart.
+HISTORY_ROUTES = ("/api/save", "/api/revert", "/api/reload")
 
 
 @dataclass(frozen=True)
@@ -600,3 +613,267 @@ class TestTokenFromTheReadSurfaceIsAccepted:
         )
 
         assert second.status_code == 200, second.text
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Save / revert / reload guard the history, exactly like undo
+# ─────────────────────────────────────────────────────────────────────────────
+
+PENDING_TITLE = "Pending From Writer A"
+
+
+def _seed_pending_mutation(client, version_of) -> None:
+    """Writer A applies one guarded mutation, leaving one pending log entry."""
+    resp = client.post(
+        "/api/mutate/title",
+        json={"node_id": REQ, "new_title": PENDING_TITLE, VERSION_FIELD: version_of(REQ)},
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def _log_tip(app_state) -> str:
+    entries = list(app_state.graph.mutation_log.iter_entries())
+    return entries[-1].id if entries else ""
+
+
+def _spec_snapshot(viewer_project: Path) -> dict[str, bytes]:
+    """Every spec file's bytes, keyed by relative path."""
+    spec_dir = viewer_project / "spec"
+    return {
+        str(p.relative_to(viewer_project)): p.read_bytes()
+        for p in sorted(spec_dir.rglob("*"))
+        if p.is_file()
+    }
+
+
+@pytest.mark.parametrize("route", HISTORY_ROUTES)
+class TestHistoryRoutesRequireTheMutationLogTip:
+    """Validates REQ-o00062-N, REQ-o00062-O:
+
+    ``/api/save`` persists every writer's pending mutations; ``/api/revert``
+    and ``/api/reload`` rebuild from disk and discard them. All three act on
+    the mutation log as a whole, so -- exactly like ``/api/mutate/undo`` and
+    the MCP ``save_mutations``/``refresh_graph(force=True)`` -- they require
+    the mutation-log tip and refuse a caller whose tip is stale, with the
+    same ``mutation_log_conflict`` body MCP produces.
+    """
+
+    def test_REQ_o00062_N_stale_tip_is_rejected_with_409(self, client, version_of, route: str):
+        """REQ-o00062-N: A tip the log never held blocks the operation."""
+        _seed_pending_mutation(client, version_of)
+
+        resp = client.post(route, json={HISTORY_TIP_FIELD: BOGUS_MUTATION_ID})
+
+        assert resp.status_code == 409, f"{route} -> {resp.status_code}: {resp.text}"
+        assert resp.json()["code"] == "mutation_log_conflict"
+
+    def test_REQ_o00062_N_absent_tip_while_work_is_pending_is_rejected(
+        self, client, version_of, route: str
+    ):
+        """REQ-o00062-N: An omitted tip asserts an empty log; asserting that
+        falsely while work is pending is a conflict, not a free pass."""
+        _seed_pending_mutation(client, version_of)
+
+        resp = client.post(route, json={})
+
+        assert resp.status_code == 409, f"{route} -> {resp.status_code}: {resp.text}"
+        assert resp.json()["code"] == "mutation_log_conflict"
+
+    def test_REQ_o00062_N_conflict_body_matches_the_mcp_rejection(
+        self, client, app_state, version_of, route: str
+    ):
+        """REQ-o00062-N: One rejection dict, not one per surface -- the body
+        carries the same keys and the same unseen listing as the MCP guard."""
+        _seed_pending_mutation(client, version_of)
+        tip = _log_tip(app_state)
+
+        payload = client.post(route, json={HISTORY_TIP_FIELD: BOGUS_MUTATION_ID}).json()
+
+        assert TIP_CONFLICT_KEYS <= set(payload), f"{route} conflict is missing keys: {payload}"
+        assert payload["provided_tip"] == BOGUS_MUTATION_ID
+        assert payload["current_tip"] == tip
+        assert [entry["id"] for entry in payload["unseen"]] == [tip]
+        assert isinstance(payload["hint"], str) and payload["hint"].strip()
+
+    def test_REQ_o00062_N_rejection_leaves_the_pending_work_intact(
+        self, client, app_state, version_of, route: str
+    ):
+        """REQ-o00062-N: The refused call persisted nothing and discarded
+        nothing -- the pending entry and its in-memory effect both survive."""
+        _seed_pending_mutation(client, version_of)
+        graph_before = app_state.graph
+
+        client.post(route, json={HISTORY_TIP_FIELD: BOGUS_MUTATION_ID})
+
+        assert app_state.graph is graph_before, f"{route} replaced the graph on a rejection"
+        assert len(app_state.graph.mutation_log) == 1
+        assert app_state.graph.find_by_id(REQ).get_label() == PENDING_TITLE
+
+    def test_REQ_o00062_N_current_tip_is_accepted(self, client, app_state, version_of, route: str):
+        """REQ-o00062-N: A caller that has seen the log may proceed."""
+        _seed_pending_mutation(client, version_of)
+        tip = _log_tip(app_state)
+
+        resp = client.post(route, json={HISTORY_TIP_FIELD: tip})
+
+        assert resp.status_code == 200, f"{route} -> {resp.status_code}: {resp.text}"
+        assert resp.json()["success"] is True
+
+    def test_REQ_o00062_N_empty_tip_with_nothing_pending_proceeds(self, client, route: str):
+        """REQ-o00062-N: The no-op case must not require a read -- "" matches
+        an empty log and the operation runs."""
+        resp = client.post(route, json={HISTORY_TIP_FIELD: ""})
+
+        assert resp.status_code == 200, f"{route} -> {resp.status_code}: {resp.text}"
+        assert resp.json()["success"] is True
+
+
+class TestHistoryRouteRejectionEffects:
+    """Validates REQ-o00062-N:
+
+    What a rejection must *not* have done, measured where each route does its
+    damage: save in bytes on disk, revert and reload in discarded log entries.
+    """
+
+    def test_REQ_o00062_N_rejected_save_leaves_the_spec_files_byte_identical(
+        self, client, viewer_project, version_of
+    ):
+        """REQ-o00062-N: The guard fires before a single byte is written."""
+        _seed_pending_mutation(client, version_of)
+        before = _spec_snapshot(viewer_project)
+
+        resp = client.post("/api/save", json={HISTORY_TIP_FIELD: BOGUS_MUTATION_ID})
+
+        assert resp.status_code == 409, f"{resp.status_code}: {resp.text}"
+        assert _spec_snapshot(viewer_project) == before
+        # No safety branch either: a rejected save must leave no git artifact.
+        assert not (viewer_project / ".git").exists()
+
+    def test_REQ_o00062_N_rejected_revert_keeps_the_pending_log(
+        self, client, app_state, version_of
+    ):
+        """REQ-o00062-N: A refused revert discarded nobody's work."""
+        _seed_pending_mutation(client, version_of)
+
+        client.post("/api/revert", json={HISTORY_TIP_FIELD: BOGUS_MUTATION_ID})
+
+        assert len(app_state.graph.mutation_log) == 1
+        assert app_state.graph.find_by_id(REQ).get_label() == PENDING_TITLE
+
+    def test_REQ_o00062_N_rejected_reload_keeps_the_pending_log(
+        self, client, app_state, version_of
+    ):
+        """REQ-o00062-N: A refused reload discarded nobody's work."""
+        _seed_pending_mutation(client, version_of)
+
+        client.post("/api/reload", json={HISTORY_TIP_FIELD: BOGUS_MUTATION_ID})
+
+        assert len(app_state.graph.mutation_log) == 1
+        assert app_state.graph.find_by_id(REQ).get_label() == PENDING_TITLE
+
+    def test_REQ_o00062_N_accepted_save_persists_the_pending_edit(
+        self, client, app_state, viewer_project, version_of
+    ):
+        """REQ-o00062-N: With the live tip named, the save runs normally."""
+        _seed_pending_mutation(client, version_of)
+
+        resp = client.post("/api/save", json={HISTORY_TIP_FIELD: _log_tip(app_state)})
+
+        assert resp.status_code == 200, resp.text
+        assert PENDING_TITLE in (viewer_project / "spec" / "dev-impl.md").read_text()
+
+    def test_REQ_o00062_N_accepted_revert_discards_the_pending_edit(
+        self, client, app_state, version_of
+    ):
+        """REQ-o00062-N: With the live tip named, the revert rebuilds."""
+        _seed_pending_mutation(client, version_of)
+
+        resp = client.post("/api/revert", json={HISTORY_TIP_FIELD: _log_tip(app_state)})
+
+        assert resp.status_code == 200, resp.text
+        assert len(app_state.graph.mutation_log) == 0
+        assert app_state.graph.find_by_id(REQ).get_label() != PENDING_TITLE
+
+    def test_REQ_o00062_N_accepted_reload_discards_the_pending_edit(
+        self, client, app_state, version_of
+    ):
+        """REQ-o00062-N: With the live tip named, the reload rebuilds."""
+        _seed_pending_mutation(client, version_of)
+
+        resp = client.post("/api/reload", json={HISTORY_TIP_FIELD: _log_tip(app_state)})
+
+        assert resp.status_code == 200, resp.text
+        assert len(app_state.graph.mutation_log) == 0
+        assert app_state.graph.find_by_id(REQ).get_label() != PENDING_TITLE
+
+    def test_REQ_o00062_N_second_writer_blind_save_sees_the_first_writers_entry(
+        self, client, app_state, version_of
+    ):
+        """REQ-o00062-N: The asymmetric two-writer story. Writer A mutates;
+        writer B, who has seen nothing, posts a save asserting an empty log.
+        B is refused and shown exactly A's pending entry -- the work B was
+        about to commit to disk sight unseen."""
+        _seed_pending_mutation(client, version_of)
+        tip = _log_tip(app_state)
+
+        resp = client.post("/api/save", json={HISTORY_TIP_FIELD: ""})
+
+        assert resp.status_code == 409, f"{resp.status_code}: {resp.text}"
+        payload = resp.json()
+        assert payload["code"] == "mutation_log_conflict"
+        assert payload["provided_tip"] == ""
+        assert payload["current_tip"] == tip
+        assert [entry["id"] for entry in payload["unseen"]] == [tip]
+        assert payload["unseen"][0]["target_id"] == REQ
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The auto-refresh middleware may not discard pending mutations either
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestAutoRefreshDoesNotDiscardPendingMutations:
+    """Validates REQ-o00062-N:
+
+    ``AppState.ensure_fresh()`` runs on every request. If it rebuilds the
+    graph while mutations are pending, it silently discards every writer's
+    unsaved work -- the same harm the tip guard exists to prevent, reachable
+    by merely touching a file's mtime. Mirroring MCP ``refresh_graph``'s
+    refusal without ``force=True``, ensure_fresh SHALL NOT rebuild while the
+    mutation log is non-empty; with nothing pending it may rebuild freely.
+    """
+
+    def _touch_scanned_file(self, viewer_project: Path) -> None:
+        target = viewer_project / "spec" / "dev-impl.md"
+        stat = target.stat()
+        os.utime(target, (stat.st_atime, stat.st_mtime + 5.0))
+
+    def test_REQ_o00062_N_pending_mutations_block_the_auto_rebuild(self, app_state, viewer_project):
+        """REQ-o00062-N: The graph object and the pending entry both survive
+        an mtime change while work is pending."""
+        app_state.graph.update_title(REQ, PENDING_TITLE)
+        assert len(app_state.graph.mutation_log) == 1
+        graph_before = app_state.graph
+        self._touch_scanned_file(viewer_project)
+        app_state._last_stale_check = 0.0
+
+        app_state.ensure_fresh()
+
+        assert app_state.graph is graph_before, (
+            "ensure_fresh() rebuilt over a non-empty mutation log, "
+            "silently discarding pending work"
+        )
+        assert len(app_state.graph.mutation_log) == 1
+        assert app_state.graph.find_by_id(REQ).get_label() == PENDING_TITLE
+
+    def test_REQ_o00062_N_clean_log_still_admits_the_auto_rebuild(self, app_state, viewer_project):
+        """REQ-o00062-N: With nothing pending there is nothing to protect --
+        the same mtime change does trigger the rebuild."""
+        graph_before = app_state.graph
+        self._touch_scanned_file(viewer_project)
+        app_state._last_stale_check = 0.0
+
+        rebuilt = app_state.ensure_fresh()
+
+        assert rebuilt is True
+        assert app_state.graph is not graph_before

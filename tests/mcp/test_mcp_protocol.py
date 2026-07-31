@@ -23,6 +23,12 @@ pytestmark = [
 ]
 
 
+# Allowance for the server's first response: startup includes a full graph
+# build (~10s on this repo), so the handshake needs far more headroom than
+# per-request calls against an already-running server.
+STARTUP_TIMEOUT = 30.0
+
+
 def _send(proc, obj: dict) -> None:
     """Send a JSON-RPC 2.0 message to the server."""
     proc.stdin.write(json.dumps(obj) + "\n")
@@ -58,7 +64,7 @@ def _initialize(proc) -> dict:
             },
         },
     )
-    response = _recv(proc)
+    response = _recv(proc, timeout=STARTUP_TIMEOUT)
     # Send initialized notification
     _send(proc, {"jsonrpc": "2.0", "method": "notifications/initialized"})
     return response

@@ -1884,58 +1884,10 @@ async def api_mutate_move_to_file(request: Request) -> JSONResponse:
 
 
 def _validate_new_spec_path(relative_path: str, config: dict[str, Any]) -> str | None:
-    """Validate that a new file path is under a configured spec directory.
+    """Single home: utilities/spec_paths.validate_new_spec_path (REQ-o00062-O)."""
+    from elspais.utilities.spec_paths import validate_new_spec_path
 
-    Returns an error message string if invalid, or None if valid.
-    """
-    import fnmatch as _fnmatch
-    from pathlib import PurePosixPath
-
-    from elspais.config import get_ignore_config
-    from elspais.config.schema import ElspaisConfig
-
-    typed_config = ElspaisConfig.model_validate(config)
-    spec_cfg = typed_config.scanning.spec
-    spec_dirs = list(spec_cfg.directories)
-    file_patterns = list(spec_cfg.file_patterns)
-    skip_dirs = list(spec_cfg.skip_dirs)
-    skip_files = list(spec_cfg.skip_files)
-
-    parts = PurePosixPath(relative_path).parts
-    if not parts:
-        return "Path is empty"
-
-    # Check that path starts with a configured spec directory
-    under_spec_dir = False
-    for spec_dir in spec_dirs:
-        spec_parts = PurePosixPath(spec_dir).parts
-        if parts[: len(spec_parts)] == spec_parts:
-            under_spec_dir = True
-            break
-    if not under_spec_dir:
-        return f"Path '{relative_path}' is not under any configured spec directory ({spec_dirs})"
-
-    # Check filename matches file_patterns
-    filename = parts[-1]
-    matches_pattern = any(_fnmatch.fnmatch(filename, pat) for pat in file_patterns)
-    if not matches_pattern:
-        return f"Filename '{filename}' does not match any spec file pattern ({file_patterns})"
-
-    # Check skip_dirs
-    for part in parts[:-1]:
-        if any(_fnmatch.fnmatch(part, pat) for pat in skip_dirs):
-            return f"Path contains skipped directory '{part}'"
-
-    # Check skip_files
-    if any(_fnmatch.fnmatch(filename, pat) for pat in skip_files):
-        return f"Filename '{filename}' matches a skip pattern"
-
-    # Check IgnoreConfig
-    ignore_cfg = get_ignore_config(config)
-    if ignore_cfg.should_ignore(relative_path, scope="spec"):
-        return f"Path '{relative_path}' is ignored by ignore configuration"
-
-    return None
+    return validate_new_spec_path(relative_path, config)
 
 
 async def api_mutate_rename_file(request: Request) -> JSONResponse:
@@ -1999,6 +1951,18 @@ async def api_shutdown(request: Request) -> JSONResponse:
 # ─────────────────────────────────────────────────────────────────
 
 
+async def _history_json(request: Request) -> dict:
+    """Parse the JSON body of a history route, tolerating an empty body.
+
+    An absent body carries no tip, which the guard treats as "" — rejected
+    whenever anything is pending. Implements: REQ-o00062-N
+    """
+    try:
+        return await request.json()
+    except Exception:
+        return {}
+
+
 async def api_save(request: Request) -> JSONResponse:
     """POST /api/save - Persist mutations to spec files on disk."""
     # Implements: REQ-d00132-A
@@ -2006,6 +1970,12 @@ async def api_save(request: Request) -> JSONResponse:
     from elspais.utilities.patterns import build_resolver as _build_resolver_for_save
 
     state = _st(request)
+    # REQ-o00062-N: persisting affects every writer's pending work — the
+    # caller must name the history it is persisting.
+    data = await _history_json(request)
+    conflict = _tip_conflict(state, data, field="if_tip_mutation_id")
+    if conflict is not None:
+        return conflict
     result = render_save(
         state.graph,
         state.repo_root,
@@ -2023,6 +1993,12 @@ async def api_revert(request: Request) -> JSONResponse:
     from elspais.graph.factory import build_graph
 
     state = _st(request)
+    # REQ-o00062-N: discarding affects every writer's pending work — the
+    # caller must name the history it is discarding.
+    data = await _history_json(request)
+    conflict = _tip_conflict(state, data, field="if_tip_mutation_id")
+    if conflict is not None:
+        return conflict
     try:
         new_graph = build_graph(
             config=state.config,
@@ -2042,6 +2018,11 @@ async def api_reload(request: Request) -> JSONResponse:
     from elspais.graph.factory import build_graph
 
     state = _st(request)
+    # REQ-o00062-N: a reload discards pending mutations exactly like revert
+    data = await _history_json(request)
+    conflict = _tip_conflict(state, data, field="if_tip_mutation_id")
+    if conflict is not None:
+        return conflict
     try:
         config_path = Path(state.repo_root) / ".elspais.toml"
         if config_path.exists():

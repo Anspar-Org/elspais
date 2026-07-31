@@ -126,6 +126,40 @@ def _http_mutation_routes() -> set[str]:
     return set(re.findall(r'Route\(\s*"(/api/mutate/[^"]+)"', source))
 
 
+def _registered_post_routes() -> set[str]:
+    """EVERY POST path registered in app.py, not only ``/api/mutate/*``.
+
+    ``_http_mutation_routes()`` sees the mutate prefix alone, which is how
+    ``/api/save``, ``/api/revert`` and ``/api/reload`` -- three routes that
+    persist or discard every writer's pending mutations -- stayed invisible
+    to the guard-coverage sweeps. This scan has no prefix filter.
+    """
+    source = APP_SOURCE.read_text(encoding="utf-8")
+    return set(re.findall(r'Route\(\s*"([^"]+)"\s*,[^)]*methods=\[[^\]]*"POST"', source))
+
+
+# The three POST routes that act on the mutation log as a whole. Kept equal
+# to tests/core/test_server_version_guard.py::HISTORY_ROUTES by the tripwire
+# below, so a route can join this list only alongside its tip-guard tests.
+HISTORY_ROUTES = {"/api/save", "/api/revert", "/api/reload"}
+
+# POST routes that change state OUTSIDE the shared graph and its pending
+# mutation log, and are therefore not subject to the version/tip guards.
+# Every entry needs a reason; an unlisted new POST route fails the tripwire.
+EXEMPT_POST_ROUTES = {
+    "/api/shutdown",  # process lifecycle; touches no graph state
+    "/api/comment/add",  # append-only comment store, its own JSONL files
+    "/api/comment/reply",  # (comments are an annotation layer, not the graph)
+    "/api/comment/resolve",
+    "/api/git/branch",  # git working-tree operations; concurrent-write
+    "/api/git/push",  # safety is git's own (index locks, non-FF refusal),
+    "/api/git/pull",  # and they do not read or write the mutation log
+    "/api/git/checkout",
+    "/api/git/commit",
+    "/api/git/checkout-commit",
+}
+
+
 @pytest.fixture
 def tools(canonical_federated_graph):
     """Map of MCP tool name -> raw closure, bound to the canonical graph."""
@@ -205,6 +239,80 @@ class TestHttpMutationsAreReachableOverMcp:
 
         assert mcp_only <= set(tools)
         assert not (mcp_only & set(ROUTE_TO_TOOL.values()))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# No POST route may escape classification
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestEveryPostRouteIsClassified:
+    """Validates REQ-o00062-O:
+
+    The guard sweeps used to build their inventory from paths matching
+    ``/api/mutate/`` only, so a state-changing route outside that prefix was
+    invisible to the very test meant to catch unguarded routes. This tripwire
+    enumerates ALL registered POST routes and requires each to be either a
+    guarded mutate route, a tip-guarded history route, or an explicitly
+    exempted non-graph route. A new state-changing POST route added without
+    joining one of those lists fails here.
+    """
+
+    def test_REQ_o00062_O_post_scan_finds_the_whole_surface(self):
+        """REQ-o00062-O: The scan sees past the mutate prefix -- a silently
+        narrow scan is exactly the hole being closed."""
+        routes = _registered_post_routes()
+
+        assert len(routes) >= 30, f"POST route scan looks broken, found {sorted(routes)}"
+        # The multi-line Route(...) registration must not be missed.
+        assert "/api/mutate/requirement/delete" in routes
+        # And the routes the old prefix-scan could never see must be.
+        assert HISTORY_ROUTES <= routes
+
+    def test_REQ_o00062_O_every_post_route_joins_exactly_one_list(self):
+        """REQ-o00062-O: mutate-guarded, history-guarded, or exempted-with-a-
+        reason. There is no fourth category."""
+        routes = _registered_post_routes()
+        mutate_routes = {r for r in routes if r.startswith("/api/mutate/")}
+
+        unclassified = routes - mutate_routes - HISTORY_ROUTES - EXEMPT_POST_ROUTES
+
+        assert not unclassified, (
+            f"POST routes with no guard classification: {sorted(unclassified)}. "
+            "Either add the version/tip guard and the matching test coverage "
+            "(RouteCase in test_server_version_guard.py, or HISTORY_ROUTES), "
+            "or exempt the route here with a reason."
+        )
+
+    def test_REQ_o00062_O_classification_lists_name_real_routes(self):
+        """REQ-o00062-O: A stale entry would mask the loss of a guarded route."""
+        routes = _registered_post_routes()
+
+        stale = (HISTORY_ROUTES | EXEMPT_POST_ROUTES) - routes
+
+        assert not stale, f"classified routes no longer registered: {sorted(stale)}"
+        assert not (HISTORY_ROUTES & EXEMPT_POST_ROUTES)
+
+    def test_REQ_o00062_O_history_routes_match_the_tip_guard_suite(self):
+        """REQ-o00062-O: The list here and the list the tip-guard tests
+        exercise are the same list, so a route cannot be declared history-
+        guarded without the tests that make that true."""
+        from tests.core.test_server_version_guard import HISTORY_ROUTES as GUARDED
+
+        assert HISTORY_ROUTES == set(GUARDED)
+
+    def test_REQ_o00062_O_mutate_routes_match_the_version_guard_suite(self):
+        """REQ-o00062-O: Every mutate route the scan finds is in the node-
+        version guard inventory (its own suite asserts the converse)."""
+        from tests.core.test_server_version_guard import ROUTE_CASES, UNDO_ROUTE
+
+        covered = {case.path for case in ROUTE_CASES} | {UNDO_ROUTE}
+        mutate_routes = {r for r in _registered_post_routes() if r.startswith("/api/mutate/")}
+
+        assert mutate_routes <= covered, (
+            f"mutate routes missing from the version-guard inventory: "
+            f"{sorted(mutate_routes - covered)}"
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

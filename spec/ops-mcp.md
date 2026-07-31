@@ -86,19 +86,19 @@ E. All mutations SHALL return a MutationEntry for audit and undo.
 
 F. Destructive operations (delete_*) SHALL require explicit `confirm=True` parameter.
 
-G. `undo_last_mutation()` and `undo_to_mutation(id)` SHALL reverse mutations using graph.undo_last() and graph.undo_to().
+G. The server SHALL support reversing the most recent mutation, and reversing history back to a named earlier mutation, restoring the graph state the mutation history records.
 
 H. *Section* (remainder) mutations SHALL include: add_remainder, update_remainder, delete_remainder, covering non-normative prose such as Rationale and Notes.
 
-I. Every mutation SHALL require the caller to supply the version of the state it intends to modify, and SHALL reject the mutation when that version does not match the graph's current state.
+I. Every mutation SHALL require the caller to supply the version of the state it intends to modify, and SHALL reject the mutation when that version does not match the graph's current state. A creation that names no existing node — a new root requirement with no parent — has no prior state to clobber and is the sole exemption.
 
 J. A rejected mutation SHALL report the current version together with the current state of the target, so the caller can reconcile and retry without issuing a second read.
 
-K. Every successful mutation SHALL report the resulting version of the node it modified, so a caller performing a sequence of mutations need not re-read between them.
+K. Every successful mutation SHALL report the resulting version of the authoring unit it modified; a deletion SHALL report the version of the surviving container that absorbed the change — the owning requirement for an assertion or section, the containing file for a whole node — so a caller performing a sequence of mutations need not re-read between them.
 
 L. A mutation naming a node that does not exist SHALL be reported distinctly from a version mismatch, since retrying cannot resolve it.
 
-M. Mutations that change a relationship SHALL be guarded on the referring node alone, because only the referring node's rendered form changes. Mutations that relocate content between files SHALL be guarded on the content node and on both the origin and destination files, because all three change.
+M. Mutations that change a relationship SHALL be guarded on the referring node alone, because only the referring node's rendered form changes. Mutations that relocate content between files SHALL be guarded on the content node and on both the origin and destination files, because all three change. A participant that does not exist when the mutation is issued — an unlinked content node, or a destination file the relocation itself creates — has no version to require.
 
 N. Mutations acting on the mutation history as a whole — reversing mutations, discarding pending mutations, and persisting them — SHALL require the caller to name the current end of that history, SHALL reject when it does not match, and SHALL report the entries recorded since the caller's position.
 
@@ -114,13 +114,14 @@ A single daemon serves multiple concurrent writers — MCP agents and the viewer
 
 ### Changelog
 
+- 2026-07-31 | ca1d9dee | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-26 | 7c83917e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-26 | ef195b50 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-09 | 69e70749 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | ef63f424 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | ef63f424 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *MCP Graph Mutation Tools* | **Hash**: 7c83917e
+*End* *MCP Graph Mutation Tools* | **Hash**: ca1d9dee
 ---
 
 ## REQ-o00063: MCP File Mutation Tools

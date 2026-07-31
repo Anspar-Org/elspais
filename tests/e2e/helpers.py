@@ -710,6 +710,12 @@ def stop_mcp(proc: subprocess.Popen) -> None:
         proc.kill()
 
 
+# Allowance for the server's first response: startup includes a full graph
+# build, so the handshake needs far more headroom than per-request calls
+# against an already-running server.
+MCP_STARTUP_TIMEOUT = 30.0
+
+
 def _mcp_send(proc: subprocess.Popen, obj: dict) -> None:
     proc.stdin.write(json.dumps(obj) + "\n")
     proc.stdin.flush()
@@ -743,7 +749,7 @@ def _mcp_initialize(proc: subprocess.Popen) -> dict:
             },
         },
     )
-    response = _mcp_recv(proc)
+    response = _mcp_recv(proc, timeout=MCP_STARTUP_TIMEOUT)
     _mcp_send(proc, {"jsonrpc": "2.0", "method": "notifications/initialized"})
     return response
 

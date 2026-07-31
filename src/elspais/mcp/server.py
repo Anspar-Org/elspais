@@ -2309,8 +2309,9 @@ _CONCURRENCY_PROTOCOL = (
     "   makes sense. NEVER retry blind with the token from the error.\n"
     "   node_not_found is different: re-resolve the ID; retrying cannot fix it.\n"
     "4. undo_last_mutation(if_mutation_id), undo_to_mutation(...,\n"
-    "   if_tip_mutation_id), save_mutations(if_tip_mutation_id) and\n"
-    "   refresh_graph(force=True, if_tip_mutation_id=...) require the\n"
+    "   if_tip_mutation_id), save_mutations(if_tip_mutation_id),\n"
+    "   refresh_graph(force=True, if_tip_mutation_id=...) and\n"
+    "   restore_from_safety_branch(..., if_tip_mutation_id) require the\n"
     '   mutation-log tip (newest entry in get_mutation_log(); "" = nothing\n'
     "   pending). On mutation_log_conflict, review 'unseen' before retrying.\n"
     "\n"
@@ -2461,7 +2462,9 @@ _FAQ_ENTRIES: list[dict[str, str]] = [
             "Use save_branch=True to create a safety branch first.\n"
             "Use undo_last_mutation(if_mutation_id=<tip>) or\n"
             "undo_to_mutation(id, if_tip_mutation_id=<tip>) to revert mistakes.\n"
-            'See docs("concurrency") for why these take the tip.'
+            "restore_from_safety_branch(branch, if_tip_mutation_id=<tip>) rolls\n"
+            "files back to a safety branch (it discards pending work, so it\n"
+            'takes the tip too). See docs("concurrency") for why these take it.'
         ),
     },
     {
@@ -2497,14 +2500,16 @@ _FAQ_ENTRIES: list[dict[str, str]] = [
         "topic": "concurrency",
         "question": "What is if_tip_mutation_id, and what does the empty tip mean?",
         "answer": (
-            "Undo, save, and forced refresh act on EVERY writer's pending work,\n"
-            "so they require the mutation-log tip: the id of the newest pending\n"
-            "mutation as you last saw it. Get it from get_mutation_log() (last\n"
-            "entry; entries are chronological) or HTTP /api/dirty's 'tip'.\n"
+            "Undo, save, forced refresh, and safety-branch restore act on EVERY\n"
+            "writer's pending work, so they require the mutation-log tip: the id\n"
+            "of the newest pending mutation as you last saw it. Get it from\n"
+            "get_mutation_log() (last entry; entries are chronological) or HTTP\n"
+            "/api/dirty's 'tip'.\n"
             "\"\" means 'I believe nothing is pending'. On mutation_log_conflict\n"
             "the rejection lists 'unseen' — entries appended since your tip —\n"
             "review them before retrying with current_tip. refresh_graph needs\n"
-            "the tip only with force=True."
+            "the tip only with force=True. Over HTTP, /api/save, /api/revert and\n"
+            "/api/reload take the same if_tip_mutation_id in the JSON body."
         ),
     },
     {
@@ -2517,7 +2522,9 @@ _FAQ_ENTRIES: list[dict[str, str]] = [
             "rejection (version_conflict or mutation_log_conflict). Send\n"
             "if_version (or if_mutation_id for undo, or the three tokens for\n"
             "move-to-file) in the request body, and thread the 'version' each\n"
-            "success returns. An unknown node is 404 with code node_not_found."
+            "success returns. The history routes /api/save, /api/revert and\n"
+            '/api/reload require if_tip_mutation_id in the JSON body ("" =\n'
+            "nothing pending). An unknown node is 404 with code node_not_found."
         ),
     },
     {
@@ -2791,6 +2798,22 @@ def _guard_version(graph: Any, node_id: str, if_version: str) -> dict[str, Any] 
 
 
 # Implements: REQ-o00062-K
+def _owning_container(graph: Any, node_id: str) -> Any | None:
+    """Resolve the surviving parent whose version a sub-node deletion reports.
+
+    The owning REQUIREMENT (or USER_JOURNEY) that renders the sub-node, per
+    REQ-o00062-K; falls back to the containing FILE for file-level sections.
+    Resolved BEFORE the deletion runs, while the child is still linked.
+    """
+    node = graph.find_by_id(node_id)
+    if node is None:
+        return None
+    for parent in node.iter_parents():
+        if parent.kind in (NodeKind.REQUIREMENT, NodeKind.USER_JOURNEY):
+            return parent
+    return node.file_node()
+
+
 def _attach_version(result: dict[str, Any], node: Any) -> dict[str, Any]:
     """Add the mutated node's resulting version to a successful result.
 
@@ -5417,17 +5440,21 @@ your last read — and returns the new `version` on success. See the
 - `mutate_rename_node(old_id, new_id, if_version)` - Rename requirement
 - `mutate_update_title(node_id, new_title, if_version)` - Change title
 - `mutate_change_status(node_id, new_status, if_version)` - Change status
-- `mutate_add_requirement(req_id, title, level, ...)` - Create requirement
-  (if_version guards parent_id when one is supplied)
+- `mutate_add_requirement(req_id, title, level, ..., file_id?)` - Create
+  requirement; file_id places it into a chosen file. if_version guards
+  file_id when given (placement changes that file's composition), else
+  parent_id; a creation naming neither is unguarded
 - `mutate_delete_requirement(node_id, if_version, confirm=True)` - Delete
-  requirement (requires confirm)
+  requirement (requires confirm); returns the containing FILE's resulting
+  version — the surviving container that absorbed the change
 - `mutate_set_stereotype(node_id, is_template, if_version)` - Set/clear **Template** marker
 
 ### Assertion Mutations (in-memory)
 Assertion tokens are the PARENT REQUIREMENT's version.
 - `mutate_add_assertion(req_id, label, text, if_version)` - Add assertion
 - `mutate_update_assertion(assertion_id, new_text, if_version)` - Update text
-- `mutate_delete_assertion(assertion_id, if_version, confirm=True)` - Delete (requires confirm)
+- `mutate_delete_assertion(assertion_id, if_version, confirm=True)` - Delete
+  (requires confirm); returns the parent requirement's resulting version
 - `mutate_rename_assertion(old_id, new_label, if_version)` - Rename label
 
 ### Section / Remainder Mutations (in-memory)
@@ -5435,7 +5462,8 @@ Remainder tokens are the PARENT REQUIREMENT's version.
 - `mutate_add_remainder(req_id, heading, text, if_version)` - Add non-normative
   section (e.g. Rationale)
 - `mutate_update_remainder(node_id, if_version, text=..., heading=...)` - Edit section prose/heading
-- `mutate_delete_remainder(node_id, if_version, confirm=True)` - Delete section (requires confirm)
+- `mutate_delete_remainder(node_id, if_version, confirm=True)` - Delete section
+  (requires confirm); returns the parent requirement's resulting version
 
 ### Edge Mutations (in-memory)
 Edge tokens guard the SOURCE node — the one whose rendered
@@ -5451,6 +5479,9 @@ Implements:/Refines: line changes.
 - `mutate_move_node_to_file(node_id, target_file_id, if_version,
   if_source_file_version, if_target_version)`
   - A move changes the node, the file it leaves, and the file it joins — all three are guarded
+  - A destination that does not exist is created by the move itself (path
+    validated against the scanning config, guards run first); it has no
+    prior version, so pass if_target_version=""
 - `mutate_rename_file(file_id, new_relative_path, if_version)` - if_version is the FILE node's token
 
 ### Undo & Inspection
@@ -5535,7 +5566,9 @@ To persist changes, use the file mutation tools:
   save_branch)` - Change Implements/Refines
 - `move_requirement(req_id, target_file, if_version, save_branch)` - Move
   requirement to different file
-- `restore_from_safety_branch(branch_name)` - Revert file changes
+- `restore_from_safety_branch(branch_name, if_tip_mutation_id)` - Revert file
+  changes; a restore discards every writer's pending work, so it requires
+  the mutation-log tip
 - `list_safety_branches()` - List available safety branches
 
 Use `save_branch=True` to create a safety branch before modifications, allowing rollback.
@@ -5559,12 +5592,15 @@ mutation requires proof you have seen the state you are changing:
    conflict, or may already be done), then retry with current_version only
    if it still makes sense. NEVER retry blind with the token from the error.
    `node_not_found` is distinct: re-resolve the ID; retrying cannot fix it.
-4. History-level tools (undo, save, refresh_graph(force=True)) require the
-   mutation-log tip ("" = nothing pending). On `mutation_log_conflict`,
-   review `unseen` — the entries appended since your tip — before retrying.
+4. History-level tools (undo, save, refresh_graph(force=True),
+   restore_from_safety_branch) require the mutation-log tip ("" = nothing
+   pending). On `mutation_log_conflict`, review `unseen` — the entries
+   appended since your tip — before retrying.
 
-The viewer's HTTP /api/mutate/* routes enforce the same guards; conflicts
-are HTTP 409 with the identical body. Full details: docs("concurrency").
+The viewer's HTTP /api/mutate/* routes enforce the same guards, and its
+history routes (/api/save, /api/revert, /api/reload) require
+if_tip_mutation_id in the JSON body; conflicts are HTTP 409 with the
+identical body. Full details: docs("concurrency").
 
 ## Common Patterns
 
@@ -6099,6 +6135,7 @@ def create_server(
         parent_id: str | None = None,
         edge_kind: str | None = None,
         if_version: str | None = None,
+        file_id: str | None = None,
     ) -> dict[str, Any]:
         """Create a new requirement in the graph (in-memory until save_mutations).
 
@@ -6109,26 +6146,38 @@ def create_server(
             status: Initial status (default: Draft).
             parent_id: Optional parent requirement to link to.
             edge_kind: Edge type if parent_id set ('IMPLEMENTS' or 'REFINES').
-            if_version: The version of parent_id from your last read. Required
-                when parent_id is given; ignored otherwise, since a parentless
-                creation has nothing to clobber.
+            if_version: The version of the guarded node from your last read —
+                file_id when given (placement changes that file's composition),
+                else parent_id. Required when either is given; ignored
+                otherwise, since a parentless creation has nothing to clobber.
+            file_id: Optional destination FILE node (e.g. 'file:spec/x.md') the
+                new requirement is placed into — same capability as the
+                viewer's add dialog (REQ-o00062-O).
         """
-        guard = (
-            _guard_associate_write(_state["graph"], _state["config"], parent_id)
-            if parent_id
-            else None
+        guard = _guard_associate_write(
+            _state["graph"], _state["config"], *(x for x in (parent_id, file_id) if x)
         )
         if guard:
             return guard
         parent = None
-        if parent_id:
-            conflict = _guard_version(_state["graph"], parent_id, if_version or "")
+        # Implements: REQ-o00062-M — placement changes the destination file's
+        # composition, so the FILE token is the one that must be current.
+        guarded_id = file_id or parent_id
+        if guarded_id:
+            conflict = _guard_version(_state["graph"], guarded_id, if_version or "")
             if conflict:
                 return conflict
-            parent = _state["graph"].find_by_id(parent_id)
+            parent = _state["graph"].find_by_id(guarded_id)
         result = _mutate_add_requirement(
             _state["graph"], req_id, title, level, status, parent_id, edge_kind
         )
+        if result.get("success") and file_id:
+            # Wire CONTAINS directly, mirroring the HTTP route: the
+            # add_requirement undo already unlinks all parents.
+            file_node = _state["graph"].find_by_id(file_id)
+            req_node = _state["graph"].find_by_id(req_id)
+            if file_node is not None and req_node is not None:
+                file_node.link(req_node, EdgeKind.CONTAINS)
         return _attach_version(result, parent) if parent is not None else result
 
     @mcp.tool()
@@ -6136,6 +6185,9 @@ def create_server(
         node_id: str, if_version: str, confirm: bool = False
     ) -> dict[str, Any]:
         """Delete a requirement and its assertions. Returns error unless confirm=True.
+
+        On success, returns the resulting `version` of the containing FILE —
+        the surviving container that absorbed the change (REQ-o00062-K).
 
         Args:
             if_version: The version of node_id from your last read. Required.
@@ -6146,7 +6198,12 @@ def create_server(
         conflict = _guard_version(_state["graph"], node_id, if_version)
         if conflict:
             return conflict
-        return _mutate_delete_requirement(_state["graph"], node_id, confirm)
+        # REQ-o00062-K: a whole-node deletion reports the version of the
+        # surviving container that absorbed the change — the containing FILE.
+        node = _state["graph"].find_by_id(node_id)
+        file_node = node.file_node() if node is not None else None
+        result = _mutate_delete_requirement(_state["graph"], node_id, confirm)
+        return _attach_version(result, file_node) if file_node is not None else result
 
     # ─────────────────────────────────────────────────────────────────────
     # Assertion Mutation Tools (REQ-o00062-B)
@@ -6198,7 +6255,8 @@ def create_server(
     ) -> dict[str, Any]:
         """Delete an assertion. Returns error unless confirm=True.
 
-        Remaining labels re-sequenced if compact=True.
+        Remaining labels re-sequenced if compact=True. On success, returns
+        the parent requirement's resulting `version` (REQ-o00062-K).
 
         Args:
             if_version: The version of the PARENT REQUIREMENT from your last
@@ -6210,7 +6268,11 @@ def create_server(
         conflict = _guard_version(_state["graph"], assertion_id, if_version)
         if conflict:
             return conflict
-        return _mutate_delete_assertion(_state["graph"], assertion_id, compact, confirm)
+        # REQ-o00062-K: deletion reports the surviving parent's resulting
+        # version — the requirement that renders (and guards) the assertion.
+        parent = _owning_container(_state["graph"], assertion_id)
+        result = _mutate_delete_assertion(_state["graph"], assertion_id, compact, confirm)
+        return _attach_version(result, parent) if parent is not None else result
 
     @mcp.tool()
     def mutate_rename_assertion(old_id: str, new_label: str, if_version: str) -> dict[str, Any]:
@@ -6291,6 +6353,9 @@ def create_server(
     ) -> dict[str, Any]:
         """Delete a non-normative section node. Returns error unless confirm=True.
 
+        On success, returns the parent requirement's resulting `version`
+        (REQ-o00062-K).
+
         Args:
             if_version: The version of the PARENT REQUIREMENT from your last
                 read. Required.
@@ -6306,7 +6371,10 @@ def create_server(
         conflict = _guard_version(_state["graph"], node_id, if_version)
         if conflict:
             return conflict
-        return _mutate_delete_remainder(_state["graph"], node_id)
+        # REQ-o00062-K: deletion reports the surviving parent's resulting version
+        parent = _owning_container(_state["graph"], node_id)
+        result = _mutate_delete_remainder(_state["graph"], node_id)
+        return _attach_version(result, parent) if parent is not None else result
 
     @mcp.tool()
     def get_versions(node_ids: list[str]) -> dict[str, str]:
@@ -6619,8 +6687,12 @@ def create_server(
             target_file_id: The target FILE node ID (e.g. "file:spec/other.md").
             if_version: Version of the node being moved.
             if_source_file_version: Version of the file it currently lives in.
-            if_target_version: Version of the destination file.
+            if_target_version: Version of the destination file. A destination
+                the move itself creates has no prior version; pass "".
         """
+        from elspais.graph import FILE_ID_PREFIX
+        from elspais.utilities.spec_paths import validate_new_spec_path
+
         guard = _guard_associate_write(_state["graph"], _state["config"], node_id, target_file_id)
         if guard:
             return guard
@@ -6631,19 +6703,50 @@ def create_server(
         if node is None:
             return _guard_version(_state["graph"], node_id, if_version)
         source_file = node.file_node()
-        if _state["graph"].find_by_id(target_file_id) is None:
+
+        # A destination that does not exist on disk is created by the move
+        # itself — same capability and rules as the viewer route
+        # (REQ-o00062-M/O): path validated against scanning config, every
+        # guard runs BEFORE the file is created, and the brand-new file has
+        # no version to require.
+        if target_file_id.startswith(FILE_ID_PREFIX):
+            relative_path = target_file_id[len(FILE_ID_PREFIX) :]
+        else:
+            relative_path = target_file_id
+        if ".." in relative_path.split("/") or relative_path.startswith("/"):
+            return {
+                "success": False,
+                "error": "Invalid path: must not contain '..' or be absolute",
+            }
+        repo_root = Path(_state.get("repo_root") or _state["working_dir"])
+        target_path = repo_root / relative_path
+        if not target_path.resolve().is_relative_to(repo_root.resolve()):
+            return {"success": False, "error": "Path escapes repository root"}
+        destination_is_new = not target_path.exists()
+
+        if not destination_is_new and _state["graph"].find_by_id(target_file_id) is None:
             return _guard_version(_state["graph"], target_file_id, if_target_version)
 
         for guarded_id, supplied in (
             (node_id, if_version),
             (source_file.id if source_file else None, if_source_file_version),
-            (target_file_id, if_target_version),
+            (None if destination_is_new else target_file_id, if_target_version),
         ):
             if guarded_id is None:
                 continue
             conflict = _guard_version(_state["graph"], guarded_id, supplied)
             if conflict:
                 return conflict
+
+        if destination_is_new:
+            error = validate_new_spec_path(relative_path, _state["config"])
+            if error:
+                return {"success": False, "error": error}
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            target_path.write_text("", encoding="utf-8")
+            from elspais.graph.GraphNode import FileType
+
+            _state["graph"].add_file_node(target_path, FileType.SPEC)
 
         return _attach_version(
             _mutate_move_node_to_file(_state["graph"], node_id, target_file_id), node
@@ -6878,8 +6981,19 @@ def create_server(
         return _reattach_version_after_rebuild(_state["graph"], result, req_id)
 
     @mcp.tool()
-    def restore_from_safety_branch(branch_name: str) -> dict[str, Any]:
-        """Restore spec files from a safety branch."""
+    def restore_from_safety_branch(branch_name: str, if_tip_mutation_id: str) -> dict[str, Any]:
+        """Restore spec files from a safety branch.
+
+        Args:
+            if_tip_mutation_id: The mutation-log tip as you last saw it, or ""
+                if you believe nothing is pending. Required — a restore
+                overwrites files and discards every writer's pending work, so
+                you cannot roll back over a mutation set you have never seen.
+        """
+        # Implements: REQ-o00062-N
+        conflict = _guard_mutation_tip(_state["graph"], if_tip_mutation_id)
+        if conflict:
+            return conflict
         result = _restore_from_safety_branch(_state["working_dir"], branch_name)
         # REQ-o00063-F: Refresh graph after file mutations
         if result.get("success"):

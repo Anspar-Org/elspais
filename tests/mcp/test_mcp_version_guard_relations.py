@@ -1,4 +1,4 @@
-# Verifies: REQ-o00062-M, REQ-o00062-I, REQ-o00062-J, REQ-o00062-K, REQ-o00062-L
+# Verifies: REQ-o00062-M, REQ-o00062-I, REQ-o00062-J, REQ-o00062-K, REQ-o00062-L, REQ-o00062-O
 """Optimistic-concurrency guard on the relationship, creation and file mutations.
 
 ``test_mcp_version_guard.py`` covers the content/metadata tools, whose guard
@@ -56,19 +56,40 @@ CONFLICT_KEYS = {
     "hint",
 }
 
-# The four history-level tools are guarded by the mutation log, not by a node
+# The history-level tools are guarded by the mutation log, not by a node
 # version -- they take no node id at all. Everything else that mutates must
 # accept a version token (see TestEveryMutationToolIsGuarded).
+# ``restore_from_safety_branch`` belongs here: it overwrites every spec file
+# from a git branch and rebuilds, discarding all pending work at once.
 HISTORY_TOOLS = {
     "undo_last_mutation",
     "undo_to_mutation",
     "save_mutations",
     "refresh_graph",
+    "restore_from_safety_branch",
 }
 
 # MCP-only mutations that write spec files directly. Named here because they
 # do not carry the ``mutate_`` prefix but are mutations all the same.
 DISK_BACKED_TOOLS = {"apply_link", "change_reference_type", "move_requirement"}
+
+# The only mutation tool whose ``if_version`` may default: a parentless
+# creation has no prior state a concurrent writer could clobber, so nothing
+# exists to guard (REQ-o00062-I names this as the sole exemption). Anything
+# else joining this set is a lost-update hole, not a design decision.
+VERSION_OPTIONAL_TOOLS = {"mutate_add_requirement"}
+
+# Mutation tools whose stale-token/behavioral conflict coverage lives in a
+# dedicated (non-parametrized) test class rather than a parametrization list,
+# because their guard shape is unique: the parent-optional create, the
+# three-token move, and the FILE rename. Each name here must have such a
+# class; see TestAddRequirementGuardsTheParentOnlyWhenThereIsOne,
+# TestMoveNodeToFileGuardsAllThreeAffectedNodes, TestRenameFileGuardsTheFile.
+DEDICATED_CLASS_TOOLS = {
+    "mutate_add_requirement",
+    "mutate_move_node_to_file",
+    "mutate_rename_file",
+}
 
 
 def node_version(node) -> str:
@@ -628,6 +649,55 @@ class TestAddRequirementGuardsTheParentOnlyWhenThereIsOne:
         assert result["code"] == "node_not_found"
 
 
+class TestAddRequirementIntoChosenFileParity:
+    """Validates REQ-o00062-O, REQ-o00062-M:
+
+    HTTP's ``/api/mutate/requirement/add`` accepts ``file_id`` -- placement of
+    the new requirement into a chosen FILE, guarded on that FILE's version
+    (the node whose rendered composition gains the new child). Capability
+    parity (REQ-o00062-O) requires the MCP tool to offer the same placement
+    under the same guard.
+    """
+
+    FILE = "file:spec/dev-impl.md"
+
+    def test_REQ_o00062_O_add_requirement_places_into_the_named_file(self, rollback, tools):
+        """REQ-o00062-O: ``file_id`` plus the FILE's live token lands the
+        create with the new requirement contained by that file."""
+        file_node = rollback.find_by_id(self.FILE)
+
+        result = tools["mutate_add_requirement"](
+            req_id="REQ-d00910",
+            title="Placed Draft",
+            level="DEV",
+            file_id=self.FILE,
+            if_version=node_version(file_node),
+        )
+
+        assert result["success"] is True, result.get("error")
+        created = rollback.find_by_id("REQ-d00910")
+        assert created is not None
+        assert created.file_node() is not None
+        assert created.file_node().id == self.FILE
+        assert "REQ-d00910" in render.render_file(rollback.find_by_id(self.FILE))
+
+    def test_REQ_o00062_M_stale_file_token_rejects_the_placement(self, rollback, tools):
+        """REQ-o00062-M: File placement is guarded on the destination FILE --
+        a stale FILE token is refused, and the conflict names the file."""
+        result = tools["mutate_add_requirement"](
+            req_id="REQ-d00911",
+            title="Never Lands",
+            level="DEV",
+            file_id=self.FILE,
+            if_version=BOGUS_VERSION,
+        )
+
+        assert result["success"] is False
+        assert result["code"] == "version_conflict"
+        assert result["node_id"] == self.FILE
+        assert rollback.find_by_id("REQ-d00911") is None
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # File mutations
 # ─────────────────────────────────────────────────────────────────────────────
@@ -782,6 +852,73 @@ class TestMoveNodeToFileGuardsAllThreeAffectedNodes:
         )
 
         assert result["version"] == node_version(rollback.find_by_id(self.NODE))
+
+
+class TestMoveNodeCreatesMissingDestinationParity:
+    """Validates REQ-o00062-O, REQ-o00062-M:
+
+    HTTP's ``/api/mutate/move-to-file`` creates a missing destination file:
+    every guard runs first, and ``if_target_version`` is not required for a
+    destination the move itself creates -- it has no prior version, so there
+    is nothing to clobber (the same rule parentless creation follows; see
+    routes_api.api_mutate_move_to_file). Capability parity (REQ-o00062-O)
+    requires the MCP tool to honor the same contract instead of reporting
+    ``node_not_found`` for the not-yet-existing FILE.
+
+    Runs against the throwaway on-disk project because the HTTP contract
+    creates the destination file on disk.
+    """
+
+    NODE = "REQ-d00003"
+    ORIGIN = "file:spec/dev-impl.md"
+    NEW_DESTINATION = "file:spec/relocated.md"
+    NEW_PATH = "spec/relocated.md"
+
+    def test_REQ_o00062_O_move_to_missing_destination_creates_and_wires_the_file(
+        self, disk_project, disk_tools
+    ):
+        """REQ-o00062-O: With the node and origin tokens live and
+        ``if_target_version=""`` for the new destination, the move lands: the
+        FILE node exists afterwards and the moved node renders into it."""
+        tools, graph = disk_tools
+
+        result = tools["mutate_move_node_to_file"](
+            node_id=self.NODE,
+            target_file_id=self.NEW_DESTINATION,
+            if_version=node_version(graph.find_by_id(self.NODE)),
+            if_source_file_version=node_version(graph.find_by_id(self.ORIGIN)),
+            if_target_version="",
+        )
+
+        assert result["success"] is True, result.get("error", result.get("code"))
+        destination = graph.find_by_id(self.NEW_DESTINATION)
+        assert destination is not None, "the move did not create the destination FILE node"
+        moved = graph.find_by_id(self.NODE)
+        assert moved.file_node() is not None
+        assert moved.file_node().id == self.NEW_DESTINATION
+        assert self.NODE in render.render_file(destination)
+
+    def test_REQ_o00062_M_stale_node_token_rejects_before_the_file_is_created(
+        self, disk_project, disk_tools
+    ):
+        """REQ-o00062-M: Guard selection -- every stated token is checked
+        BEFORE the destination is created, so a refusal strands no empty file
+        on disk and no FILE node in the graph."""
+        tools, graph = disk_tools
+
+        result = tools["mutate_move_node_to_file"](
+            node_id=self.NODE,
+            target_file_id=self.NEW_DESTINATION,
+            if_version=BOGUS_VERSION,
+            if_source_file_version=node_version(graph.find_by_id(self.ORIGIN)),
+            if_target_version="",
+        )
+
+        assert result["success"] is False
+        assert result["code"] == "version_conflict"
+        assert result["node_id"] == self.NODE
+        assert not (disk_project / self.NEW_PATH).exists()
+        assert graph.find_by_id(self.NEW_DESTINATION) is None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -980,6 +1117,65 @@ class TestEveryMutationToolIsGuarded:
         assert not unguarded, (
             f"mutation tools with no version guard: {unguarded}. "
             "Add if_version and call _guard_version before mutating."
+        )
+
+    def test_REQ_o00062_M_if_version_is_required_on_every_tool_but_the_parentless_create(
+        self, tools
+    ):
+        """REQ-o00062-M, REQ-o00062-I: A present-but-defaulted token is the same
+        hole as a missing one -- callers could still write blind. The sole
+        sanctioned exemption is parentless creation (``mutate_add_requirement``),
+        and this asserts the exemption set is exactly that one tool."""
+        optional = sorted(
+            name
+            for name in tools
+            if name.startswith("mutate_")
+            and name not in HISTORY_TOOLS
+            and "if_version" in inspect.signature(tools[name]).parameters
+            and inspect.signature(tools[name]).parameters["if_version"].default
+            is not inspect.Parameter.empty
+        )
+
+        assert optional == sorted(VERSION_OPTIONAL_TOOLS), (
+            f"mutation tools with an optional if_version: {optional}. "
+            "Only mutate_add_requirement (parentless creation, REQ-o00062-I) may "
+            "default its token; every other tool must make it required."
+        )
+
+    def test_REQ_o00062_I_every_mutate_tool_has_behavioral_conflict_coverage(self, tools):
+        """REQ-o00062-I: The signature sweep above proves a token is *accepted*;
+        this proves each tool is also *exercised* against a stale token. The
+        union of the behavioral parametrization lists (plus the dedicated
+        guard-shape classes named in DEDICATED_CLASS_TOOLS) must equal the
+        registered ``mutate_*`` surface, so a tool added tomorrow fails here
+        unless it also gains behavioral conflict tests."""
+        from tests.mcp.test_mcp_http_parity import PARITY_TOOL_CALLS
+        from tests.mcp.test_mcp_version_guard import IN_SCOPE_TOOL_CALLS
+
+        behavioral = (
+            {call[0] for call in IN_SCOPE_TOOL_CALLS}
+            | {call[0] for call in EDGE_TOOL_CALLS}
+            | {call[0] for call in CREATION_TOOL_CALLS}
+            | {call[0] for call in DISK_TOOL_CALLS}
+            | {call[0] for call in PARITY_TOOL_CALLS}
+            | DEDICATED_CLASS_TOOLS
+        )
+        registry = {
+            name for name in tools if name.startswith("mutate_") and name not in HISTORY_TOOLS
+        } | DISK_BACKED_TOOLS
+
+        uncovered = sorted(registry - behavioral)
+        assert not uncovered, (
+            f"mutation tools with no behavioral conflict coverage: {uncovered}. "
+            "Add each to a parametrization list (IN_SCOPE/EDGE/CREATION/DISK/PARITY "
+            "_TOOL_CALLS) or give it a dedicated guard class and name it in "
+            "DEDICATED_CLASS_TOOLS."
+        )
+
+        stale = sorted(behavioral - registry)
+        assert not stale, (
+            f"behavioral lists name tools that are not registered: {stale}. "
+            "Remove or rename the stale entries so the sweep stays exact."
         )
 
     def test_REQ_o00062_M_the_disk_backed_mutations_accept_if_version(self, tools):

@@ -368,13 +368,30 @@ def canonical_graph(canonical_federated_graph):
 
 
 @pytest.fixture(scope="class")
-def mutable_graph(canonical_graph):
+def mutable_graph(canonical_federated_graph, canonical_graph):
     """Yield the canonical graph for a mutation chain, undo all on teardown.
 
     Use with @pytest.mark.incremental test classes. Tests run in order,
     each mutating the graph. After the class completes, all mutations
     are undone, restoring the graph to its pristine state.
+
+    Teardown undoes through the FederatedGraph first: mutations applied via
+    federation-level surfaces (e.g. MCP tools) record federated pointers and
+    can change the cross-repo ownership map, which only
+    ``FederatedGraph.undo_last()`` restores. Undoing such mutations on the
+    bare TraceGraph would restore the node index but leave the ownership map
+    stale, breaking ``find_by_id`` for every later test in the session.
     """
+    fg = canonical_federated_graph
     yield canonical_graph
+    # Undo federation-level mutations (restores the ownership map too).
+    while len(fg.mutation_log) > 0:
+        fg.undo_last()
+    # Drain mutations made directly on the TraceGraph (no federated pointer).
+    drained_direct = False
     while canonical_graph.mutation_log.last() is not None:
         canonical_graph.undo_last()
+        drained_direct = True
+    if drained_direct:
+        # Direct undos bypass the federation; resync the ownership map.
+        fg._rebuild_ownership()

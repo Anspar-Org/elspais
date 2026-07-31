@@ -294,7 +294,21 @@ def save_daemon_mutations(info: dict) -> dict:
     port = info.get("port")
     if not port:
         return {"success": False, "error": "daemon has no port"}
-    req = _Request(f"http://127.0.0.1:{port}/api/save", method="POST")
+    # REQ-o00062-N: a save must name the history it persists. Read the
+    # current tip first; the guard rejects if it moves in between.
+    tip = ""
+    try:
+        with urlopen(f"http://127.0.0.1:{port}/api/dirty", timeout=5) as resp:
+            tip = _json.loads(resp.read().decode()).get("tip") or ""
+    except (URLError, OSError, ValueError):
+        pass  # "" means "nothing pending"; the guard rejects it if not true
+    body = _json.dumps({"if_tip_mutation_id": tip}).encode()
+    req = _Request(
+        f"http://127.0.0.1:{port}/api/save",
+        data=body,
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
     try:
         with urlopen(req, timeout=30) as resp:
             return _json.loads(resp.read().decode())

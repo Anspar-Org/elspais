@@ -6,6 +6,7 @@ Detects spec file changes and rebuilds automatically.
 """
 from __future__ import annotations
 
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -173,19 +174,32 @@ class AppState:
         """Rebuild graph if files changed. Returns True if rebuilt.
 
         Throttled to at most one mtime check per second.
-        Rebuild errors are silently swallowed so the server keeps serving
-        the previous graph rather than crashing on a bad file state.
+
+        NEVER rebuilds over pending in-memory mutations: an auto-rebuild is
+        a silent discard of every writer's unsaved work, the exact loss the
+        mutation-history guards exist to prevent. Discarding requires an
+        explicit, tip-guarded revert/reload/refresh. Implements: REQ-o00062-N
         """
         now = time.time()
         if now - self._last_stale_check < 1.0:
             return False
         self._last_stale_check = now
+        try:
+            has_pending = len(self.graph.mutation_log) > 0
+        except (AttributeError, TypeError):
+            has_pending = False
+        if has_pending:
+            return False
         if not self.is_stale():
             return False
         try:
             self._rebuild()
-        except Exception:
-            pass  # Keep serving the old graph on rebuild failure
+        except Exception as exc:
+            # Tolerated failure (visible, not swallowed): keep serving the
+            # previous graph rather than crashing on a bad file state.
+            print(
+                f"warning: auto-refresh rebuild failed, keeping old graph: {exc}", file=sys.stderr
+            )
         return True
 
     def _rebuild(self) -> None:

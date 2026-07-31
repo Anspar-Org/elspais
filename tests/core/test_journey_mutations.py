@@ -283,11 +283,13 @@ FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 def journey_graph_from_disk():
     """A private build of the hht-like fixture for delete/undo round trips.
 
-    Deliberately NOT the session-scoped ``canonical_graph``/``mutable_graph``:
-    a delete_journey + undo round trip is not perfectly reversible today (the
-    replayed VALIDATES edges come back without their ``assertion_targets``),
-    so mutating the shared graph would leak into every later test. Same fixture
-    content, private copy -- mirrors ``rebuilt_graph`` in test_node_version.py.
+    A delete_journey + undo round trip is exactly reversible today -- the
+    replayed VALIDATES edges carry their ``assertion_targets`` -- and the
+    tests below pin that. The copy stays private (deliberately NOT the
+    session-scoped ``canonical_graph``/``mutable_graph``) so that if a
+    regression ever makes the round trip lossy again, the damage is confined
+    to this module instead of leaking into every later test. Same fixture
+    content -- mirrors ``rebuilt_graph`` in test_node_version.py.
     """
     fg = build_repo_graph(repo_root=FIXTURES_DIR / "hht-like")
     return fg._repos[fg._root_repo].graph
@@ -305,13 +307,21 @@ def _edge_signature(node):
     """Structural fingerprint of a node's attachment: file + both edge sets.
 
     Edge tuples are sorted but duplicates are retained, so a lost or
-    duplicated edge changes the signature.
+    duplicated edge changes the signature. ``assertion_targets`` is part of
+    the fingerprint: a replayed VALIDATES edge that comes back without its
+    per-assertion targets is a lossy undo, and this signature must catch it.
     """
     file_node = node.file_node()
     return {
         "file_id": file_node.id if file_node is not None else None,
-        "incoming": sorted((e.source.id, e.kind.value) for e in node.iter_incoming_edges()),
-        "outgoing": sorted((e.target.id, e.kind.value) for e in node.iter_outgoing_edges()),
+        "incoming": sorted(
+            (e.source.id, e.kind.value, tuple(e.assertion_targets or ()))
+            for e in node.iter_incoming_edges()
+        ),
+        "outgoing": sorted(
+            (e.target.id, e.kind.value, tuple(e.assertion_targets or ()))
+            for e in node.iter_outgoing_edges()
+        ),
     }
 
 

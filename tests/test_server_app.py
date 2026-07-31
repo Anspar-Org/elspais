@@ -72,6 +72,21 @@ def _tip(client: TestClient) -> str:
     return resp.json()["tip"] or ""
 
 
+def _save(client: TestClient) -> dict:
+    """POST /api/save carrying the current mutation-log tip (REQ-o00062-N).
+
+    ``/api/save`` persists every writer's pending work, so it requires
+    ``if_tip_mutation_id`` -- the id of the newest pending mutation as the
+    caller last saw it (``""`` when nothing is pending). Reads the tip from
+    GET /api/dirty, saves, asserts success, and returns the response payload.
+    """
+    resp = client.post("/api/save", json={"if_tip_mutation_id": _tip(client)})
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["success"] is True, f"Save failed: {data}"
+    return data
+
+
 @pytest.fixture
 def sample_graph():
     """Create a sample single-repo FederatedGraph for testing."""
@@ -2035,10 +2050,7 @@ class TestMutateSaveRoundTrip:
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
-        resp = client.post("/api/save")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["success"] is True, f"Save failed: {data}"
+        _save(client)
 
         content = spec_file.read_text(encoding="utf-8")
         assert "**Refines**: REQ-p00002" in content
@@ -2060,9 +2072,7 @@ class TestMutateSaveRoundTrip:
         )
         assert resp.status_code == 200
 
-        resp = client.post("/api/save")
-        assert resp.status_code == 200
-        assert resp.json()["success"] is True
+        _save(client)
 
         content = spec_file.read_text(encoding="utf-8")
         assert "**Status**: Deprecated" in content
@@ -2083,9 +2093,7 @@ class TestMutateSaveRoundTrip:
         )
         assert resp.status_code == 200
 
-        resp = client.post("/api/save")
-        assert resp.status_code == 200
-        assert resp.json()["success"] is True
+        _save(client)
 
         content = spec_file.read_text(encoding="utf-8")
         assert "## REQ-t00001: Updated Title" in content
@@ -2106,9 +2114,7 @@ class TestMutateSaveRoundTrip:
         )
         assert resp.status_code == 200
 
-        resp = client.post("/api/save")
-        assert resp.status_code == 200
-        assert resp.json()["success"] is True
+        _save(client)
 
         content = spec_file.read_text(encoding="utf-8")
         assert "A. The system SHALL do something NEW." in content
@@ -2131,9 +2137,7 @@ class TestMutateSaveRoundTrip:
         )
         assert resp.status_code == 200
 
-        resp = client.post("/api/save")
-        assert resp.status_code == 200
-        assert resp.json()["success"] is True
+        _save(client)
 
         content = spec_file.read_text(encoding="utf-8")
         assert "C. The system SHALL do a third thing." in content
@@ -2169,9 +2173,7 @@ class TestMutateSaveRoundTrip:
         )
         assert resp.status_code == 200
 
-        resp = client.post("/api/save")
-        assert resp.status_code == 200
-        assert resp.json()["success"] is True
+        _save(client)
 
         content = spec_file.read_text(encoding="utf-8")
         assert "REQ-p00001" in content
@@ -2194,9 +2196,7 @@ class TestMutateSaveRoundTrip:
         )
         assert resp.status_code == 200
 
-        resp = client.post("/api/save")
-        assert resp.status_code == 200
-        assert resp.json()["success"] is True
+        _save(client)
 
         content = spec_file.read_text(encoding="utf-8")
         # After deleting the only implements target, the field value should be empty
@@ -2220,9 +2220,7 @@ class TestMutateSaveRoundTrip:
         )
         assert resp.status_code == 200
 
-        resp = client.post("/api/save")
-        assert resp.status_code == 200
-        assert resp.json()["success"] is True
+        _save(client)
 
         content = spec_file.read_text(encoding="utf-8")
         assert "**Refines**: REQ-p00001" in content
@@ -2245,9 +2243,7 @@ class TestMutateSaveRoundTrip:
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
-        resp = client.post("/api/save")
-        assert resp.status_code == 200
-        assert resp.json()["success"] is True
+        _save(client)
 
         content = spec_file.read_text(encoding="utf-8")
         assert "A. The system SHALL do something." in content
@@ -2270,9 +2266,7 @@ class TestMutateSaveRoundTrip:
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
-        resp = client.post("/api/save")
-        assert resp.status_code == 200
-        assert resp.json()["success"] is True
+        _save(client)
 
         content = spec_file.read_text(encoding="utf-8")
         assert "REQ-t00001" in content
@@ -2321,10 +2315,7 @@ class TestMutateSaveRoundTrip:
         assert resp.status_code == 200
 
         # Single save
-        resp = client.post("/api/save")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["success"] is True
+        data = _save(client)
         assert data["saved_count"] >= 1  # render-save counts files, not mutations
 
         content = spec_file.read_text(encoding="utf-8")
@@ -2368,9 +2359,7 @@ class TestMutateSaveRoundTrip:
         assert resp.json()["success"] is True
 
         # Save — only status change should persist
-        resp = client.post("/api/save")
-        assert resp.status_code == 200
-        assert resp.json()["success"] is True
+        _save(client)
 
         content = spec_file.read_text(encoding="utf-8")
         assert "**Status**: Draft" in content
@@ -2384,10 +2373,7 @@ class TestMutateSaveRoundTrip:
         client = TestClient(app)
         original_content = spec_file.read_text(encoding="utf-8")
 
-        resp = client.post("/api/save")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["success"] is True
+        data = _save(client)
         assert data["saved_count"] == 0
 
         # File should be unchanged
@@ -2417,8 +2403,7 @@ class TestMutateSaveRoundTrip:
         assert resp.json()["dirty"] is True
 
         # Save clears dirty state
-        resp = client.post("/api/save")
-        assert resp.status_code == 200
+        _save(client)
         resp = client.get("/api/dirty")
         data = resp.json()
         assert data["dirty"] is False, "Save should clear the dirty flag"
@@ -2453,8 +2438,7 @@ class TestMutateSaveRoundTrip:
         assert resp.status_code == 200
 
         # Save
-        resp = client.post("/api/save")
-        assert resp.status_code == 200
+        _save(client)
 
         content = spec_file.read_text(encoding="utf-8")
         assert "Temporary assertion" not in content
@@ -2507,9 +2491,7 @@ class TestMutateSaveRoundTrip:
         )
         assert resp.status_code == 200
 
-        resp = client.post("/api/save")
-        assert resp.status_code == 200
-        assert resp.json()["success"] is True
+        _save(client)
 
         content = spec_file.read_text(encoding="utf-8")
         assert "**Refines**: REQ-p00001" in content
@@ -2543,10 +2525,7 @@ class TestMutateSaveRoundTrip:
         )
         assert resp.status_code == 200
 
-        resp = client.post("/api/save")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["success"] is True
+        data = _save(client)
         assert data["saved_count"] >= 1  # render-save counts files, not mutations
 
         content = spec_file.read_text(encoding="utf-8")
@@ -2598,9 +2577,7 @@ class TestMutateSaveRoundTrip:
         )
         assert resp.status_code == 200
 
-        resp = client.post("/api/save")
-        assert resp.status_code == 200
-        assert resp.json()["success"] is True
+        _save(client)
 
         content = spec_file.read_text(encoding="utf-8")
         assert "C. New assertion for first req." in content

@@ -24,9 +24,17 @@ per-tool contract; `faq("concurrency")` has quick answers.
    node -- do not re-read between your own successive writes. A sequence
    of edits costs one read at the start, not one per step.
 
-Sub-nodes resolve to the requirement that renders them: an assertion or
-remainder ID yields (and is guarded by) its owning requirement's
-version, on both the read and the mutation side.
+Sub-nodes resolve to the **authoring unit** that renders them: an
+assertion or remainder ID yields (and is guarded by) the version of the
+requirement -- or user journey -- that owns it, on both the read and the
+mutation side. A journey's sections resolve to the journey, not to any
+requirement.
+
+Deletions have no surviving node to report, so they return the version
+of the surviving container that absorbed the change:
+`mutate_delete_assertion` and `mutate_delete_remainder` return the
+owning requirement's resulting version; `mutate_delete_requirement`
+returns the containing FILE's resulting version.
 
 `get_versions` **omits** unknown IDs rather than raising or returning
 None -- an absent key means "re-resolve this one" (renamed or deleted),
@@ -73,7 +81,7 @@ overwrite the guard exists to prevent.
 | Assertion and remainder mutations | the parent REQUIREMENT |
 | Edge mutations (add/delete/change kind/change targets/fix ref) | the SOURCE node only |
 | `mutate_add_assertion`, `mutate_add_remainder` | the parent requirement (`req_id`) |
-| `mutate_add_requirement` | `parent_id` if supplied; unguarded without one |
+| `mutate_add_requirement` | `file_id` if supplied (placement changes that file's composition), else `parent_id`; unguarded without either |
 | `mutate_add_journey` | the parent FILE |
 | `mutate_move_node_to_file` | three tokens: node, source file, target file |
 | `mutate_rename_file` | the FILE node |
@@ -84,7 +92,10 @@ Edge mutations guard the source because only the source's rendered
 writes that cannot clobber anything. Creation guards the parent whose
 rendered content gains the new child; a parentless creation has nothing
 to clobber. A move changes all three participants, so all three are
-guarded (a destination file created by the move itself needs no token).
+guarded -- but a destination file the move itself creates has no prior
+state to clobber, so pass `if_target_version=""` and the move creates
+the file (path validated against the scanning config, all guards run
+before anything touches disk), exactly like the viewer's HTTP route.
 
 ## History-Level Guards: the Mutation-Log Tip
 
@@ -97,6 +108,14 @@ pending mutation as you last saw it:
 - `save_mutations(if_tip_mutation_id=<tip>)`
 - `refresh_graph(force=True, if_tip_mutation_id=<tip>)` -- the tip is
   required only with `force=True`, which discards pending work
+- `restore_from_safety_branch(branch_name, if_tip_mutation_id=<tip>)` --
+  a restore overwrites files and discards every writer's pending work
+
+The viewer's three HTTP history routes carry the same guard:
+`/api/save`, `/api/revert`, and `/api/reload` require
+`if_tip_mutation_id` in the JSON body and reject a stale or missing tip
+with HTTP 409 (`mutation_log_conflict`, identical body to the MCP
+rejection). The viewer's own JS threads the tip automatically.
 
 Get the tip from `get_mutation_log()` -- entries are chronological, so
 the tip is the `id` of the last entry (raise `limit` if the log is
@@ -124,6 +143,9 @@ same helpers -- there is no softer path around the protocol:
 - An unknown node returns **404** with `code: "node_not_found"`.
 - Successful mutations return the new `version`.
 - `/api/dirty` returns the pending `mutation_count` and the `tip`.
+- The history routes `/api/save`, `/api/revert`, and `/api/reload`
+  require `if_tip_mutation_id` in the JSON body (`""` = nothing
+  pending), mirroring the MCP history tools.
 
 ## Why Tokens Survive a Refresh
 
@@ -137,3 +159,9 @@ held by other clients.
 FILE node versions cover path plus ordered child IDs -- identity and
 composition only -- so editing prose inside one requirement does not
 invalidate a pending file-level operation elsewhere in the file.
+
+The viewer's automatic refresh (the mtime-triggered rebuild that keeps
+the graph in sync with on-disk edits) never rebuilds over pending
+in-memory mutations -- an auto-rebuild would be a silent discard of
+every writer's unsaved work. Discarding pending work always requires an
+explicit, tip-guarded revert, reload, or forced refresh.

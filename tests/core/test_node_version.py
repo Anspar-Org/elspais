@@ -243,6 +243,7 @@ class TestNodeVersionBumpsOnEdgeMutation:
         """Adding an outgoing IMPLEMENTS edge bumps the source requirement."""
         node = mutable_graph.find_by_id("REQ-d00002")
         before, before_hash = node_version(node), _content_hash(node)
+        TestNodeVersionBumpsOnEdgeMutation.pristine = before
 
         mutable_graph.add_edge(
             source_id=_code_node_id(mutable_graph),
@@ -280,13 +281,20 @@ class TestNodeVersionBumpsOnEdgeMutation:
         assert node_version(node) != before
 
     def test_REQ_d00131_L_version_changes_on_edge_delete(self, mutable_graph):
-        """Deleting the edge returns the version to its pre-chain value."""
+        """Deleting the last chain edge restores the pre-chain version.
+
+        The version is a pure digest of rendered text plus outgoing
+        references, not a counter: with the edge gone the requirement is
+        byte-identical to its pre-chain self, so the token round-trips to the
+        value captured before the edge was added.
+        """
         node = mutable_graph.find_by_id("REQ-d00002")
         before = node_version(node)
 
         mutable_graph.delete_edge(source_id=_code_node_id(mutable_graph), target_id="REQ-d00002")
 
         assert node_version(node) != before
+        assert node_version(node) == self.pristine
 
 
 class TestNodeVersionPerKindResolution:

@@ -47,7 +47,9 @@ helpers, because the guard lives in the tool wrapper.
 from __future__ import annotations
 
 import inspect
+import os
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -72,12 +74,15 @@ LOG_CONFLICT_KEYS = {
     "hint",
 }
 
-# tool -> the name of its tip parameter.
+# tool -> the name of its tip parameter. ``restore_from_safety_branch`` is
+# history-level too: it overwrites every spec file from a git branch and
+# rebuilds, which discards all pending in-memory work at once.
 HISTORY_TOOL_TIP_PARAMS = {
     "undo_last_mutation": "if_mutation_id",
     "undo_to_mutation": "if_tip_mutation_id",
     "refresh_graph": "if_tip_mutation_id",
     "save_mutations": "if_tip_mutation_id",
+    "restore_from_safety_branch": "if_tip_mutation_id",
 }
 
 # ``refresh_graph`` is the one history tool whose tip is conditionally
@@ -557,6 +562,142 @@ class TestSaveMutationsRequiresTheTip:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# restore_from_safety_branch -- overwrites every spec file, discarding the log
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _run_git(project: Path, *args: str) -> None:
+    env = os.environ.copy()
+    env.pop("GIT_DIR", None)
+    env.pop("GIT_WORK_TREE", None)
+    subprocess.run(["git", *args], cwd=project, env=env, capture_output=True, check=True)
+
+
+@pytest.fixture
+def git_restore_tools(disk_project):
+    """(tools, graph, branch_name) over a git-initialized throwaway project.
+
+    ``restore_from_safety_branch`` checks spec files out of a git branch, so
+    the throwaway project is committed and given one safety branch capturing
+    its pristine state.
+    """
+    pytest.importorskip("mcp")
+    from elspais.graph.factory import build_graph
+    from elspais.mcp.server import create_server
+    from elspais.utilities.git import create_safety_branch
+
+    _run_git(disk_project, "init", "-b", "main")
+    _run_git(disk_project, "config", "user.email", "guard@test")
+    _run_git(disk_project, "config", "user.name", "Guard Test")
+    _run_git(disk_project, "add", "-A")
+    _run_git(disk_project, "commit", "-m", "pristine fixture")
+    branch = create_safety_branch(disk_project, "REQ-o00062")
+    assert branch["success"] is True, branch
+
+    graph = build_graph(repo_root=disk_project)
+    server = create_server(graph, working_dir=disk_project)
+    tools = {name: tool.fn for name, tool in server._tool_manager._tools.items()}
+    return tools, graph, branch["branch_name"]
+
+
+class TestRestoreFromSafetyBranchRequiresTheTip:
+    """Validates REQ-o00062-N:
+
+    ``restore_from_safety_branch`` is the most destructive history operation
+    of all: it overwrites the spec files wholesale from a git branch, then
+    rebuilds -- discarding every writer's pending in-memory work AND the
+    current on-disk text in one call. It therefore requires the mutation-log
+    tip on the same terms as save/refresh: ``if_tip_mutation_id``, with ``""``
+    meaning "I believe nothing is pending", and a stale tip refused as a
+    ``mutation_log_conflict`` before a single file is touched.
+    """
+
+    TARGET = "REQ-d00003"
+    TITLE = "Audit Trail Implementation (pending)"
+    SPEC_FILE = "spec/dev-impl.md"
+    SENTINEL = "<!-- on-disk state the pristine branch does not contain -->\n"
+
+    def test_REQ_o00062_N_tip_parameter_exists_and_is_required(self, git_restore_tools):
+        """REQ-o00062-N: ``if_tip_mutation_id`` is a required parameter."""
+        tools, _graph, _branch = git_restore_tools
+        params = inspect.signature(tools["restore_from_safety_branch"]).parameters
+
+        assert "if_tip_mutation_id" in params, (
+            "restore_from_safety_branch takes no mutation-log tip: a whole-repo "
+            "file restore is completely unguarded"
+        )
+        assert params["if_tip_mutation_id"].default is inspect.Parameter.empty
+
+    def test_REQ_o00062_N_stale_tip_restores_nothing(self, disk_project, git_restore_tools):
+        """REQ-o00062-N: The refusal fires before any file is touched -- the
+        pending log survives and the on-disk text keeps its sentinel."""
+        tools, graph, branch = git_restore_tools
+        seed(tools, graph, self.TARGET, self.TITLE)
+        target = disk_project / self.SPEC_FILE
+        target.write_text(target.read_text() + self.SENTINEL)
+        before = target.read_bytes()
+
+        result = tools["restore_from_safety_branch"](
+            branch_name=branch, if_tip_mutation_id=BOGUS_TIP
+        )
+
+        assert result["success"] is False
+        assert result["code"] == "mutation_log_conflict"
+        assert target.read_bytes() == before
+        assert len(graph.mutation_log) == 1
+        assert graph.find_by_id(self.TARGET).get_label() == self.TITLE
+
+    def test_REQ_o00062_N_rejection_reports_the_pending_work(self, git_restore_tools):
+        """REQ-o00062-N: The caller is shown exactly what it was about to
+        discard, in the same conflict shape as the other history tools."""
+        tools, graph, branch = git_restore_tools
+        tip = seed(tools, graph, self.TARGET, self.TITLE)
+
+        result = tools["restore_from_safety_branch"](
+            branch_name=branch, if_tip_mutation_id=BOGUS_TIP
+        )
+
+        assert LOG_CONFLICT_KEYS <= set(result)
+        assert result["provided_tip"] == BOGUS_TIP
+        assert result["current_tip"] == tip
+        assert [entry["id"] for entry in result["unseen"]] == [tip]
+
+    def test_REQ_o00062_N_omitting_the_tip_is_a_type_error(self, git_restore_tools):
+        """REQ-o00062-N: A blind whole-repo restore cannot be issued at all."""
+        tools, _graph, branch = git_restore_tools
+
+        with pytest.raises(TypeError):
+            tools["restore_from_safety_branch"](branch_name=branch)
+
+    def test_REQ_o00062_N_current_tip_admits_the_restore(self, disk_project, git_restore_tools):
+        """REQ-o00062-N: A caller that has seen the pending log may discard
+        it; the files come back from the branch and the log is empty."""
+        tools, graph, branch = git_restore_tools
+        tip = seed(tools, graph, self.TARGET, self.TITLE)
+        target = disk_project / self.SPEC_FILE
+        target.write_text(target.read_text() + self.SENTINEL)
+
+        result = tools["restore_from_safety_branch"](branch_name=branch, if_tip_mutation_id=tip)
+
+        assert result["success"] is True, result
+        assert self.SENTINEL not in target.read_text()
+        assert tools["get_mutation_log"]()["count"] == 0
+
+    def test_REQ_o00062_N_empty_tip_with_nothing_pending_admits_the_restore(
+        self, git_restore_tools
+    ):
+        """REQ-o00062-N: "" matches an empty log; the no-op belief costs no read."""
+        tools, _graph, branch = git_restore_tools
+
+        result = tools["restore_from_safety_branch"](
+            branch_name=branch, if_tip_mutation_id=EMPTY_TIP
+        )
+
+        assert result["success"] is True, result
+        assert result.get("code") != "mutation_log_conflict"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Empty log
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -654,6 +795,9 @@ class TestEveryHistoryToolIsGuarded:
             name
             for name, param in HISTORY_TOOL_TIP_PARAMS.items()
             if name not in CONDITIONALLY_REQUIRED
+            # A tool missing the parameter entirely fails the sweep above;
+            # this one polices only a present-but-defaulted tip.
+            and param in inspect.signature(tools[name]).parameters
             and inspect.signature(tools[name]).parameters[param].default
             is not inspect.Parameter.empty
         )
