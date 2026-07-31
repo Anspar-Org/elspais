@@ -4,61 +4,55 @@ These requirements define the *Traceability* viewer server and federation.
 
 ---
 
-# REQ-d00010: Review API Server
+# REQ-d00010: Traceability API Server
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00006
 
-**Purpose:** Flask-based REST API server for the review system.
+**Purpose:** REST API server backing the interactive *Traceability* viewer.
+
+## Rationale
+
+This requirement originally specified an API server for a planned review-package
+workflow (review threads, status requests, packages, sync, archives). That design
+was never built; the shipped annotation layer is the comment system, which
+deliberately diverged (append-only event storage, graph anchors, graph mutations)
+and is specified by its own requirements. The endpoint families of the abandoned
+design are retired below with their labels preserved -- assertion labels are
+append-only and never reused.
+
+This requirement now covers only the server application shell: how the server is
+constructed, cross-origin access, and static asset serving. Individual endpoint
+families are specified by the requirements that refine this server.
 
 ## Assertions
 
-A. The API server SHALL be implemented as a Flask application with `create_app(repo_root, static_dir)` factory function.
+A. The system SHALL construct the API server through an application factory function that assembles the server from pre-built application state.
 
-B. Thread endpoints SHALL support:
-    - `POST /api/reviews/reqs/{id}/threads`: Create thread
-    - `POST /api/reviews/reqs/{id}/threads/{tid}/comments`: Add comment
-    - `POST /api/reviews/reqs/{id}/threads/{tid}/resolve`: Resolve thread
-    - `POST /api/reviews/reqs/{id}/threads/{tid}/unresolve`: Unresolve thread
+B. [Removed - review-thread endpoints belong to the abandoned review-package design and were never implemented; the shipped comment system (REQ-d00226) supersedes them]
 
-C. Status endpoints SHALL support:
-    - `GET /api/reviews/reqs/{id}/status`: Get current status
-    - `POST /api/reviews/reqs/{id}/status`: Change status
-    - `GET /api/reviews/reqs/{id}/requests`: Get status requests
-    - `POST /api/reviews/reqs/{id}/requests`: Create status request
-    - `POST /api/reviews/reqs/{id}/requests/{rid}/approvals`: Add approval
+C. [Removed - review status and approval endpoints belong to the abandoned review-package design and were never implemented]
 
-D. Package endpoints SHALL support:
-    - `GET/POST /api/reviews/packages`: List/create packages
-    - `GET/PUT/DELETE /api/reviews/packages/{id}`: CRUD operations
-    - `POST/DELETE /api/reviews/packages/{id}/reqs/{req_id}`: Membership
-    - `GET/PUT /api/reviews/packages/active`: Active package management
+D. [Removed - review-package endpoints belong to the abandoned review-package design and were never implemented]
 
-E. Sync endpoints SHALL support:
-    - `GET /api/reviews/sync/status`: Sync status
-    - `POST /api/reviews/sync/push`: Manual push
-    - `POST /api/reviews/sync/fetch`: Fetch from remote
-    - `POST /api/reviews/sync/fetch-all-package`: Fetch all package branches
+E. [Removed - review sync endpoints belong to the abandoned review-package design and were never implemented]
 
-F. CORS SHALL be enabled for cross-origin requests.
+F. The API server SHALL accept cross-origin requests.
 
-G. Static file serving SHALL be supported from configured directory.
+G. The API server SHALL serve bundled static assets over HTTP.
 
-H. All write endpoints SHALL optionally trigger auto-sync based on configuration.
+H. [Removed - auto-sync of review data belongs to the abandoned review-package design and was never implemented]
 
-I. Archive endpoints SHALL support:
-    - `POST /api/reviews/packages/{id}/archive`: Manual archive
-    - `GET /api/reviews/archive`: List archived packages
-    - `GET /api/reviews/archive/{id}`: Get archived package
-    - `GET /api/reviews/archive/{id}/reqs/{req_id}/threads`: Get archived threads
+I. [Removed - review archive endpoints belong to the abandoned review-package design and were never implemented]
 
-J. Health check endpoint SHALL be available at `/api/health`.
+J. [Removed - a dedicated health-check endpoint was never implemented]
 
 ## Changelog
 
+- 2026-07-31 | aaae0fb2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
 - 2026-07-31 | 8ae37685 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-04-23 | b647ec64 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Review API Server* | **Hash**: 8ae37685
+*End* *Traceability API Server* | **Hash**: aaae0fb2
 
 ---
 
@@ -66,7 +60,7 @@ J. Health check endpoint SHALL be available at `/api/health`.
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-d00010, REQ-d00200
 
-The Flask review server SHALL expose federation repo metadata and staleness information.
+The review server SHALL expose federation repo metadata and staleness information.
 
 ### Assertions
 

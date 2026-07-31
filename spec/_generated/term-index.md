@@ -25,6 +25,7 @@
 **REQ:**
 
 - REQ-d00257
+- REQ-d00010
 - REQ-d00241
 - REQ-p00006
 - REQ-d00212-F
@@ -54,6 +55,7 @@
 - REQ-d00261:section:1
 - REQ-d00126:section:0
 - rem:spec/dev-traceview-review.md:3
+- REQ-d00010:section:0
 - REQ-o00066:section:0
 - REQ-o00065:section:1
 - REQ-p00002:section:0
