@@ -205,18 +205,24 @@ J. Requirement hash computation SHALL use order-independent *Assertion* hashing:
 
 K. Changelog entries SHALL render author identifiers that contain `@` wrapped in angle brackets (`(<a@b.org>)`), preserving brackets already present in the source, so that rendered markdown contains no bare email addresses (markdownlint MD034-clean). Non-email author identifiers SHALL render unwrapped.
 
+L. The tool SHALL make the canonical rendering of a graph object — a single requirement, a spec file's content, or a generated aggregate such as a glossary or term index — obtainable by external consumers at a caller-selected base heading level.
+
 ### Rationale
 
 The render protocol is the inverse of parsing: each node kind knows how to serialize itself back to text. This enables the graph to reconstruct files from its internal state, which is the foundation for render-based persistence. Order-independent *Assertion* hashing ensures that *Assertion* reordering does not trigger false change-detection flags.
 
+The render contract is elspais's to own: downstream document pipelines that need a requirement's or aggregate's text must be able to obtain it from the tool rather than reimplement the render rules and drift from them. Assertion L states that availability architecturally; the delivery surface (a CLI subcommand, an MCP tool, a library call) is mechanism and deliberately unspecified. The caller-selected base heading level exists because embedding contexts place rendered content at differing document depths.
+
 ### Changelog
 
+- 2026-07-31 | c929fc01 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-35: author assertion L (render contract available to external consumers at requested heading levels)
 - 2026-07-31 | 99fb8aea | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-15 | a871090c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | c004c62e | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | c004c62e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Render Protocol for Graph Nodes* | **Hash**: 99fb8aea
+*End* *Render Protocol for Graph Nodes* | **Hash**: c929fc01
 ---
 
 ## REQ-d00132: Render-Based Save Operation

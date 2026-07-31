@@ -14,6 +14,8 @@
 
 **REQ:**
 
+- REQ-p00080-G
+- REQ-p00080-I
 - REQ-d00259:section:1
 - rem:spec/requirements-spec.md:1
 - rem:spec/requirements-spec.md:7
