@@ -40,10 +40,11 @@ F. The tool SHALL resolve relative associate paths from the canonical (non-workt
 
 ## Changelog
 
+- 2026-07-31 | 3a6f18bd | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-03-30 | c3303546 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-03-30 | f935e564 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Multi-Repository Requirements* | **Hash**: c3303546
+*End* *Multi-Repository Requirements* | **Hash**: 3a6f18bd
 ---
 
 # REQ-p00081: Org-Wide Requirement Visibility
@@ -76,7 +77,7 @@ F. Every surface that reports results SHALL disclose the resolved workspace scop
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-37: inline design-doc content; the scaffolding doc is retired
 - 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: author org-wide visibility invariants (V1, V2, V3, H2)
 
-*End* *Org-Wide Requirement Visibility* | **Hash**: ccd613a8
+*End* *Org-Wide Requirement Visibility* | **Hash**: 17fa4417
 ---
 
 # REQ-p00082: Federated Authority and Verdict Scoping
@@ -115,7 +116,7 @@ H. A reference to a cross-repository obligation SHALL either resolve to that obl
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-37: inline design-doc content; the scaffolding doc is retired
 - 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: author federated authority invariants (A1, A2a, A2b, A3, E1)
 
-*End* *Federated Authority and Verdict Scoping* | **Hash**: be6068bd
+*End* *Federated Authority and Verdict Scoping* | **Hash**: a8311d6c
 ---
 
 # REQ-p00006: Interactive Traceability Viewer
@@ -151,9 +152,10 @@ C. The viewer SHALL display source files inline in a side panel with syntax-high
 
 ## Changelog
 
+- 2026-07-31 | 2578f15c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-03-30 | b3dd4d1a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Interactive Traceability Viewer* | **Hash**: b3dd4d1a
+*End* *Interactive Traceability Viewer* | **Hash**: 2578f15c
 ---
 
 ## REQ-p00014: Satisfies Relationship
@@ -165,6 +167,8 @@ C. The viewer SHALL display source files inline in a side panel with syntax-high
 Cross-cutting concerns — regulatory compliance frameworks, security policies, accessibility standards, operational baselines — define obligations that multiple independent subsystems must satisfy. The `Satisfies:` relationship enables a template-instance pattern: a set of requirements is defined once as a reusable template, and individual subsystems declare that they satisfy it. When a requirement declares `Satisfies: X`, the graph builder clones the template's REQ subtree with composite IDs, creating instance nodes that participate in normal coverage computation. A `Stereotype` enum (`CONCRETE`, `TEMPLATE`, `INSTANCE`) classifies nodes, and an `INSTANCE` edge connects each clone to its template original. Templates are declared explicitly with a `**Template**` metadata-line marker so authors opt in deliberately and so the validator can catch mis-targeted `Satisfies:`/`Refines:`/`Implements:` references at build time.
 
 A template is a *subtree*, not a single REQ: template-marked REQs refine other template-marked REQs to decompose one cross-cutting obligation into levels of detail (a policy root refined by its specific provisions). `Satisfies:` may target any member of a template subtree — the clone is the subtree rooted at the target, so declaring against an interior member is simply a narrower declaration. An earlier revision restricted templates to single-REQ scope (root plus directly-attached assertions, inbound `Refines:` prohibited); that made real policy hierarchies unrepresentable and is retired. The validation matrix's complements are deliberate permissions: template-to-template `Refines:` is the subtree-forming edge, and `Implements:` from CODE / `Verifies:` from TEST against template targets is the cross-cutting evidence path — assertion D produces the direct edge, assertion P makes that evidence count on every instance. Instances need no special analysis: evidence recorded against a template *Assertion* counts on each of its instances (assertion P), and from there every surface treats instances as ordinary directly-declared nodes (assertion K) — the standard rollup aggregates a cloned subtree like any other. The INSTANCE edge is the wiring by which implementations realize assertion P; whether that is computed as query-time inheritance or by materializing evidence edges onto clones is an implementation choice the spec does not fix. Which members of a subtree apply to a given repository is that repository's authoring decision, expressed by what it targets — the granularity question is no different from deciding what belongs in one REQ.
+
+Two conformance details keep the model usable with named ID schemes. Named-component styles (kebab-case, snake_case) put the assertion-separator character inside requirement names, so a string like `HHT-OPS-production-readiness-A` is lexically ambiguous between a longer requirement name and an assertion-targeted reference; the configuration guard that rejects overlapping separator/label styles (REQ-d00251-F) makes the split well-defined, and assertion Q obliges every accepting field — the metadata line included — to apply the same split, so a reference never resolves differently in a `Satisfies:`/`Refines:` header than the identical string would in a code marker. And because template targets are where authors first collide with the validation matrix, assertion R separates the two ways a reference can fail — the ID resolves to nothing, or it resolves to a node the matrix forbids — so a diagnostic never sends an author hunting a "missing" requirement that in fact exists, or relaxing a rule when the real problem is a typo.
 
 ### Assertions
 
@@ -198,8 +202,14 @@ O. Each cross-repo `INSTANCE` clone SHALL record the owning template repository 
 
 P. Evidence declared against a template *Assertion* SHALL count as evidence on every instance of that *Assertion*.
 
+Q. The system SHALL resolve an assertion-targeted reference to the same target *Assertion* in every field that accepts the reference form — requirement metadata fields as well as code and test *Traceability* markers — under every valid ID-pattern configuration, including component styles whose names contain the configured assertion separator.
+
+R. When a declared reference fails to produce a valid relationship, the resulting diagnostic SHALL state which failure class occurred: resolution failure (the referenced ID matches no requirement or *Assertion*) or rule violation (the target exists but the relationship is forbidden by the validation matrix).
+
 ### Changelog
 
+- 2026-07-31 | 064c817a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-44: add Q (uniform assertion-suffix resolution across fields and ID schemes) and R (diagnostics separate resolution failure from rule violation)
 - 2026-07-30 | 47baf2fc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-30 | 7adf98fa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: templates become subtrees — B/H clone the subtree rooted at any satisfied member, G requires a template's refiners to be templates, composite obligations split out as L-P, K restated as instance uniformity with P carrying the cross-cutting evidence rule
@@ -217,7 +227,7 @@ P. Evidence declared against a template *Assertion* SHALL count as evidence on e
 - 2026-05-04 | bae1b85d | - | Developer (<dev@example.com>) | Auto-fix: canonicalize term forms, update hash
 - 2026-03-30 | 9115ce0d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Satisfies Relationship* | **Hash**: 47baf2fc
+*End* *Satisfies Relationship* | **Hash**: 064c817a
 ---
 
 ## REQ-p00016: NOT APPLICABLE Status
@@ -236,7 +246,7 @@ B. N/A assertions SHALL be treated the same as deprecated status: they SHALL NOT
 
 C. Any `Implements:` references to a N/A *Assertion* SHALL NOT count toward coverage and SHALL produce errors.
 
-*End* *NOT APPLICABLE Status* | **Hash**: cf53ad98
+*End* *NOT APPLICABLE Status* | **Hash**: 2211802a
 ---
 
 ## REQ-p00050: Unified Graph Architecture
@@ -266,10 +276,11 @@ Multiple data structures lead to synchronization bugs, duplicated logic, and mai
 
 ### Changelog
 
+- 2026-07-31 | 46ac5f6a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 4a1e5d0b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 4a1e5d0b | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Unified Graph Architecture* | **Hash**: 4a1e5d0b
+*End* *Unified Graph Architecture* | **Hash**: 46ac5f6a
 ---
 
 ## REQ-p00060: MCP Server for AI-Driven Requirements Management
@@ -296,10 +307,11 @@ AI agents need programmatic access to requirements data for tasks like coverage 
 
 ### Changelog
 
+- 2026-07-31 | a729a853 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 3ebc237a | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 3ebc237a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *MCP Server for AI-Driven Requirements Management* | **Hash**: 3ebc237a
+*End* *MCP Server for AI-Driven Requirements Management* | **Hash**: a729a853
 ---
 
 ## REQ-d00226: Comment Data Models
@@ -318,10 +330,11 @@ D. CommentThread anchor SHALL default to the root event anchor when not explicit
 
 ### Changelog
 
+- 2026-07-31 | 6d420b96 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | dd5c745e | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | dd5c745e | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Comment Data Models* | **Hash**: dd5c745e
+*End* *Comment Data Models* | **Hash**: 6d420b96
 
 ## REQ-d00227: Comment Index
 
@@ -337,10 +350,11 @@ C. CommentIndex SHALL support merge for federation following the TermDictionary 
 
 ### Changelog
 
+- 2026-07-31 | 6ca252cb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | ff891bd9 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | ff891bd9 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Comment Index* | **Hash**: ff891bd9
+*End* *Comment Index* | **Hash**: 6ca252cb
 
 ## REQ-d00228: Comment JSONL Storage
 
@@ -360,10 +374,11 @@ E. Comment file path resolution SHALL mirror repo structure under .elspais/comme
 
 ### Changelog
 
+- 2026-07-31 | 7415991a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | cdaa4044 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | cdaa4044 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Comment JSONL Storage* | **Hash**: cdaa4044
+*End* *Comment JSONL Storage* | **Hash**: 7415991a
 
 ## REQ-d00229: Comment Promotion Engine
 
@@ -379,10 +394,11 @@ C. Rename-triggered promotion SHALL update all anchors prefixed with the old ID 
 
 ### Changelog
 
+- 2026-07-31 | ec366878 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 3048ea60 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 3048ea60 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Comment Promotion Engine* | **Hash**: 3048ea60
+*End* *Comment Promotion Engine* | **Hash**: ec366878
 
 ## REQ-d00230: Comment Graph Integration
 
@@ -400,10 +416,11 @@ D. FederatedGraph SHALL provide a repo_root_for(node_id) public method that retu
 
 ### Changelog
 
+- 2026-07-31 | 1eb4899c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 0eed8546 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 0eed8546 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Comment Graph Integration* | **Hash**: 0eed8546
+*End* *Comment Graph Integration* | **Hash**: 1eb4899c
 
 ## REQ-d00231: Comment API Endpoints
 
@@ -423,10 +440,11 @@ E. Author identity SHALL be resolved server-side via get_author_info using the c
 
 ### Changelog
 
+- 2026-07-31 | 639d0eb5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | b8533d82 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | b8533d82 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Comment API Endpoints* | **Hash**: b8533d82
+*End* *Comment API Endpoints* | **Hash**: 639d0eb5
 
 ## REQ-d00232: Comment UI Anchors and Margin Column
 
@@ -440,10 +458,11 @@ B. A comment margin column SHALL render speech bubble icons with count badges fo
 
 ### Changelog
 
+- 2026-07-31 | 34656218 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 6869aa8a | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 6869aa8a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Comment UI Anchors and Margin Column* | **Hash**: 6869aa8a
+*End* *Comment UI Anchors and Margin Column* | **Hash**: 34656218
 
 ## REQ-d00233: Comment Inline Threads and Comment Mode
 
@@ -457,10 +476,11 @@ B. Comment mode SHALL be a one-shot mode entered via C key or toolbar button (Ed
 
 ### Changelog
 
+- 2026-07-31 | fd4019ef | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 792d13ce | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 792d13ce | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Comment Inline Threads and Comment Mode* | **Hash**: 792d13ce
+*End* *Comment Inline Threads and Comment Mode* | **Hash**: fd4019ef
 
 ## REQ-d00234: Lost Comments Card
 
@@ -472,10 +492,11 @@ A. A Lost Comments card SHALL appear at the top of the card column when orphaned
 
 ### Changelog
 
+- 2026-07-31 | 0bd322d3 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 7fc99c6a | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 7fc99c6a | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Lost Comments Card* | **Hash**: 7fc99c6a
+*End* *Lost Comments Card* | **Hash**: 0bd322d3
 
 ## REQ-d00235: Comment Compaction CLI
 
@@ -489,10 +510,11 @@ B. The elspais comments compact CLI command SHALL glob .elspais/comments/**/*.js
 
 ### Changelog
 
+- 2026-07-31 | 69df1fbc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | f3547362 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | f3547362 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Comment Compaction CLI* | **Hash**: f3547362
+*End* *Comment Compaction CLI* | **Hash**: 69df1fbc
 
 ## REQ-d00242: Terms API Endpoints
 
@@ -508,10 +530,11 @@ C. GET /api/term/{nonexistent_key} SHALL return HTTP 404 with an error message.
 
 ### Changelog
 
+- 2026-07-31 | a4522e0f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 6c934e14 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 6c934e14 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Terms API Endpoints* | **Hash**: 6c934e14
+*End* *Terms API Endpoints* | **Hash**: a4522e0f
 
 ## REQ-d00243: Terms Tab in Viewer Nav Tree
 
@@ -527,10 +550,11 @@ C. Expand/collapse buttons, tree/flat toggle, and filter groups (status, git, hi
 
 ### Changelog
 
+- 2026-07-31 | 2873ed03 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 3328f677 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 3328f677 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Terms Tab in Viewer Nav Tree* | **Hash**: 3328f677
+*End* *Terms Tab in Viewer Nav Tree* | **Hash**: 2873ed03
 
 ## REQ-d00244: Term Cards in Viewer Card Stack
 
@@ -546,10 +570,11 @@ C. Term cards SHALL be read-only with no edit controls. The card SHALL be render
 
 ### Changelog
 
+- 2026-07-31 | 0a48035f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 5dd49a51 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 5dd49a51 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Term Cards in Viewer Card Stack* | **Hash**: 5dd49a51
+*End* *Term Cards in Viewer Card Stack* | **Hash**: 0a48035f
 
 ## REQ-d00245: Inline Term Highlighting in Viewer Cards
 
@@ -563,7 +588,8 @@ B. Clicking a defined-term span SHALL open the term card via a delegated click h
 
 ### Changelog
 
+- 2026-07-31 | 697c60cc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 62a44ed3 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 62a44ed3 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Inline Term Highlighting in Viewer Cards* | **Hash**: 62a44ed3
+*End* *Inline Term Highlighting in Viewer Cards* | **Hash**: 697c60cc
