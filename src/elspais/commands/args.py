@@ -666,6 +666,7 @@ DOCS_TOPICS = Literal[
     "ignore",
     "graph-model",
     "mcp",
+    "concurrency",
     "topics",
     "all",
 ]

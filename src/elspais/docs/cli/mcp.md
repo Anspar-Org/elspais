@@ -44,12 +44,16 @@ Get current graph health and statistics.
       "has_broken_references": false
     }
 
-**refresh_graph(full)**
+**refresh_graph(full, path, force, if_tip_mutation_id)**
 
 Force rebuild the graph from spec files.
 
   Parameters:
-    full (bool)   If true, clear all caches before rebuild
+    full (bool)              If true, clear all caches before rebuild
+    path (str)               Switch to a different project directory first
+    force (bool)             If true, discard unsaved mutations and refresh
+    if_tip_mutation_id (str) The mutation-log tip; required when force=true
+                             (see Concurrency Control below)
 
   Returns:
     success       Whether rebuild succeeded
@@ -98,6 +102,8 @@ Get full details for a single requirement.
     level           Config type key (e.g., prd, ops, dev)
     status          Draft, Active, Deprecated, etc.
     hash            Content hash for change detection
+    version         Concurrency token — pass as if_version to mutations
+    file_version    Containing FILE's token (None for INSTANCE/unlinked)
     assertions      List of assertion objects {id, label, text}
     children        Child requirements (summaries)
     parents         Parent requirements (summaries)
@@ -182,6 +188,24 @@ Get summary statistics for the project.
     total_nodes            Total nodes in graph
     orphan_count           Requirements without parents
     broken_reference_count References to non-existent requirements
+
+## Concurrency Control
+
+One daemon serves several writers at once (MCP agents and the viewer GUI),
+so every `mutate_*` tool requires an `if_version` token — the target's
+`version` from your last read — and returns the new `version` on success.
+Thread the returned token into your next mutation of the same node.
+
+A stale token is rejected with `version_conflict`, carrying
+`current_version` and `current_state`: reconcile your intent against
+`current_state` before retrying — never retry blind. Undo, save, and forced
+refresh require the mutation-log tip (`if_mutation_id` /
+`if_tip_mutation_id`); `""` means "nothing pending". The viewer's
+`/api/mutate/*` HTTP routes enforce the same guards, returning HTTP 409
+with the identical rejection body.
+
+Full protocol: `elspais docs concurrency` (or the MCP `docs("concurrency")`
+and `faq("concurrency")` tools).
 
 ## Client Configuration
 

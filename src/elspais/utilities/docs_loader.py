@@ -36,6 +36,7 @@ TOPIC_ORDER = [
     "ignore",
     "graph-model",
     "mcp",
+    "concurrency",
 ]
 
 

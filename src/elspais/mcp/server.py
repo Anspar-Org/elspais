@@ -2288,6 +2288,36 @@ def _get_changed_requirements(graph: FederatedGraph) -> dict[str, Any]:
     }
 
 
+# Built-in protocol guidance served alongside project content rules. This is
+# server behavior, not project convention, so it is not configurable away.
+_CONCURRENCY_PROTOCOL = (
+    "This server enforces optimistic concurrency: several writers (agents,\n"
+    "the viewer GUI) share one graph, and every mutate_* tool requires an\n"
+    "if_version token proving you have seen the state you are changing.\n"
+    "\n"
+    "1. READ first: get_requirement/get_node/get_subtree report 'version'\n"
+    "   (requirements also 'file_version'); get_versions(node_ids) refreshes\n"
+    "   tokens in bulk. Assertion/remainder IDs resolve to their owning\n"
+    "   requirement's version.\n"
+    "2. MUTATE with if_version from that read. Success returns the new\n"
+    "   'version' — THREAD IT into your next mutation of the same node; do\n"
+    "   not re-read between your own successive writes.\n"
+    "3. On version_conflict: the rejection carries current_version and\n"
+    "   current_state. RECONCILE — re-check your intent against\n"
+    "   current_state (the edit may no longer apply, may conflict, or may\n"
+    "   already be done), then retry with current_version only if it still\n"
+    "   makes sense. NEVER retry blind with the token from the error.\n"
+    "   node_not_found is different: re-resolve the ID; retrying cannot fix it.\n"
+    "4. undo_last_mutation(if_mutation_id), undo_to_mutation(...,\n"
+    "   if_tip_mutation_id), save_mutations(if_tip_mutation_id) and\n"
+    "   refresh_graph(force=True, if_tip_mutation_id=...) require the\n"
+    '   mutation-log tip (newest entry in get_mutation_log(); "" = nothing\n'
+    "   pending). On mutation_log_conflict, review 'unseen' before retrying.\n"
+    "\n"
+    'Full protocol: docs("concurrency"); quick answers: faq("concurrency").'
+)
+
+
 def _get_agent_instructions(config: dict[str, Any], working_dir: Path) -> dict[str, Any]:
     """Load all content rules configured for this project.
 
@@ -2296,13 +2326,14 @@ def _get_agent_instructions(config: dict[str, Any], working_dir: Path) -> dict[s
         working_dir: Repository root directory.
 
     Returns:
-        Dict with 'instructions' list and 'count'.
+        Dict with 'instructions' list, 'count', and the server's built-in
+        'concurrency_protocol' guidance (always present).
     """
     from elspais.content_rules import load_content_rules
 
     rules = load_content_rules(config, working_dir)
     if not rules:
-        return {"instructions": [], "count": 0}
+        return {"instructions": [], "count": 0, "concurrency_protocol": _CONCURRENCY_PROTOCOL}
 
     return {
         "instructions": [
@@ -2315,6 +2346,7 @@ def _get_agent_instructions(config: dict[str, Any], working_dir: Path) -> dict[s
             for rule in rules
         ],
         "count": len(rules),
+        "concurrency_protocol": _CONCURRENCY_PROTOCOL,
     }
 
 
@@ -2424,9 +2456,68 @@ _FAQ_ENTRIES: list[dict[str, str]] = [
         "question": "How do I persist changes made with mutate_* tools?",
         "answer": (
             "All mutate_* tools modify the in-memory graph only.\n"
-            "To persist to spec files, call save_mutations().\n"
-            "Use save_mutations(save_branch=True) to create a safety branch first.\n"
-            "Use undo_last_mutation() or undo_to_mutation(id) to revert mistakes."
+            "To persist to spec files, call save_mutations(if_tip_mutation_id=<tip>),\n"
+            "where <tip> is the id of the newest entry in get_mutation_log().\n"
+            "Use save_branch=True to create a safety branch first.\n"
+            "Use undo_last_mutation(if_mutation_id=<tip>) or\n"
+            "undo_to_mutation(id, if_tip_mutation_id=<tip>) to revert mistakes.\n"
+            'See docs("concurrency") for why these take the tip.'
+        ),
+    },
+    {
+        "topic": "concurrency",
+        "question": "Why did my mutation return version_conflict?",
+        "answer": (
+            "The node changed between your read and your write — another agent\n"
+            "or the viewer GUI edited it through the same daemon. The rejection\n"
+            "carries current_version and current_state. Reconcile: re-check your\n"
+            "intent against current_state (your edit may no longer apply, may\n"
+            "conflict, or may already be done), then retry with current_version\n"
+            "ONLY if the edit still makes sense. Never resubmit unchanged with\n"
+            "the token from the error — that is the blind overwrite the guard\n"
+            "exists to prevent. A node_not_found code is different: the node is\n"
+            "gone (renamed/deleted); retrying cannot fix it, re-resolve the ID."
+        ),
+    },
+    {
+        "topic": "concurrency",
+        "question": "Where do I get if_version?",
+        "answer": (
+            "From your last read of the node: get_requirement and get_node\n"
+            "return 'version' (requirements also 'file_version'), get_subtree\n"
+            "(flat/nested) carries one per node, and get_versions(node_ids)\n"
+            "refreshes tokens in bulk (unknown IDs are omitted — re-resolve\n"
+            "those). Assertion/remainder IDs resolve to their owning\n"
+            "requirement's version. Every successful mutation returns the new\n"
+            "'version' — thread it into your next mutation of that node instead\n"
+            "of re-reading between your own writes."
+        ),
+    },
+    {
+        "topic": "concurrency",
+        "question": "What is if_tip_mutation_id, and what does the empty tip mean?",
+        "answer": (
+            "Undo, save, and forced refresh act on EVERY writer's pending work,\n"
+            "so they require the mutation-log tip: the id of the newest pending\n"
+            "mutation as you last saw it. Get it from get_mutation_log() (last\n"
+            "entry; entries are chronological) or HTTP /api/dirty's 'tip'.\n"
+            "\"\" means 'I believe nothing is pending'. On mutation_log_conflict\n"
+            "the rejection lists 'unseen' — entries appended since your tip —\n"
+            "review them before retrying with current_tip. refresh_graph needs\n"
+            "the tip only with force=True."
+        ),
+    },
+    {
+        "topic": "concurrency",
+        "question": "Why did the viewer API return HTTP 409?",
+        "answer": (
+            "The viewer's /api/mutate/* routes enforce the same version and\n"
+            "mutation-tip guards as the MCP tools, via the same helpers. A stale\n"
+            "or missing token returns 409 with a JSON body identical to the MCP\n"
+            "rejection (version_conflict or mutation_log_conflict). Send\n"
+            "if_version (or if_mutation_id for undo, or the three tokens for\n"
+            "move-to-file) in the request body, and thread the 'version' each\n"
+            "success returns. An unknown node is 404 with code node_not_found."
         ),
     },
     {
@@ -5253,7 +5344,8 @@ The graph is the single source of truth - all tools read directly from it.
 ## Quick Start
 
 1. `docs(topic)` - Browse docs by topic, or search all help with a phrase
-2. `faq(topic)` - Quick answers on common topics (linking, coverage, mutations, assertions)
+2. `faq(topic)` - Quick answers on common topics (linking, coverage, mutations,
+   assertions, concurrency)
 3. `agent_instructions()` - Get project-specific authoring guidance
 4. `get_workspace_info(detail=...)` - Understand what project you're working with
 5. `get_project_summary()` - Get overview statistics and health metrics
@@ -5269,13 +5361,16 @@ The graph is the single source of truth - all tools read directly from it.
 - `docs(topic)` - Browse docs by topic name, or search all help surfaces with a phrase
   - Exact topic name (e.g., "checks") returns full content
   - Search phrase (e.g., "coverage gap") returns matching sections across all help
-- `faq(topic)` - Quick Q&A on common topics (linking, coverage, mutations, assertions, health)
+- `faq(topic)` - Quick Q&A on common topics (linking, coverage, mutations,
+  assertions, health, concurrency)
 - `agent_instructions()` - Project-specific authoring rules and conventions
 
 ### Graph Status & Control
 - `get_graph_status()` - Node counts, orphan/broken reference flags
-- `refresh_graph(full=False, path="")` - Rebuild after spec file changes
+- `refresh_graph(full=False, path="", force=False, if_tip_mutation_id="")` -
+  Rebuild after spec file changes
   - path: switch to a different project directory before rebuilding
+  - force=True discards pending mutations and requires if_tip_mutation_id (the mutation-log tip)
 
 ### Search & Navigation
 - `search(query, field="all", regex=False, limit=50)` - Find requirements
@@ -5316,33 +5411,55 @@ The graph is the single source of truth - all tools read directly from it.
 - `agent_instructions()` - Content rules providing authoring guidance for AI agents
 
 ### Node Mutations (in-memory)
-- `mutate_rename_node(old_id, new_id)` - Rename requirement
-- `mutate_update_title(node_id, new_title)` - Change title
-- `mutate_change_status(node_id, new_status)` - Change status
+Every mutate_* tool requires `if_version` — the target's version token from
+your last read — and returns the new `version` on success. See the
+"Optimistic Concurrency" section below and docs("concurrency").
+- `mutate_rename_node(old_id, new_id, if_version)` - Rename requirement
+- `mutate_update_title(node_id, new_title, if_version)` - Change title
+- `mutate_change_status(node_id, new_status, if_version)` - Change status
 - `mutate_add_requirement(req_id, title, level, ...)` - Create requirement
-- `mutate_delete_requirement(node_id, confirm=True)` - Delete requirement (requires confirm)
+  (if_version guards parent_id when one is supplied)
+- `mutate_delete_requirement(node_id, if_version, confirm=True)` - Delete
+  requirement (requires confirm)
+- `mutate_set_stereotype(node_id, is_template, if_version)` - Set/clear **Template** marker
 
 ### Assertion Mutations (in-memory)
-- `mutate_add_assertion(req_id, label, text)` - Add assertion
-- `mutate_update_assertion(assertion_id, new_text)` - Update text
-- `mutate_delete_assertion(assertion_id, confirm=True)` - Delete (requires confirm)
-- `mutate_rename_assertion(old_id, new_label)` - Rename label
+Assertion tokens are the PARENT REQUIREMENT's version.
+- `mutate_add_assertion(req_id, label, text, if_version)` - Add assertion
+- `mutate_update_assertion(assertion_id, new_text, if_version)` - Update text
+- `mutate_delete_assertion(assertion_id, if_version, confirm=True)` - Delete (requires confirm)
+- `mutate_rename_assertion(old_id, new_label, if_version)` - Rename label
 
 ### Section / Remainder Mutations (in-memory)
-- `mutate_add_remainder(req_id, heading, text)` - Add non-normative section (e.g. Rationale)
-- `mutate_update_remainder(node_id, text=..., heading=...)` - Edit section prose/heading
-- `mutate_delete_remainder(node_id, confirm=True)` - Delete section (requires confirm)
+Remainder tokens are the PARENT REQUIREMENT's version.
+- `mutate_add_remainder(req_id, heading, text, if_version)` - Add non-normative
+  section (e.g. Rationale)
+- `mutate_update_remainder(node_id, if_version, text=..., heading=...)` - Edit section prose/heading
+- `mutate_delete_remainder(node_id, if_version, confirm=True)` - Delete section (requires confirm)
 
 ### Edge Mutations (in-memory)
-- `mutate_add_edge(source_id, target_id, edge_kind)` - Add relationship
-- `mutate_change_edge_kind(source_id, target_id, new_kind)` - Change type
-- `mutate_delete_edge(source_id, target_id, confirm=True)` - Delete (requires confirm)
-- `mutate_fix_broken_reference(source_id, old_target, new_target)` - Fix broken ref
+Edge tokens guard the SOURCE node — the one whose rendered
+Implements:/Refines: line changes.
+- `mutate_add_edge(source_id, target_id, edge_kind, if_version)` - Add relationship
+- `mutate_change_edge_kind(source_id, target_id, new_kind, if_version)` - Change type
+- `mutate_change_edge_targets(source_id, target_id, assertion_targets,
+  if_version)` - Change assertion targets
+- `mutate_delete_edge(source_id, target_id, if_version, confirm=True)` - Delete (requires confirm)
+- `mutate_fix_broken_reference(source_id, old_target, new_target, if_version)` - Fix broken ref
+
+### File Mutations (in-memory)
+- `mutate_move_node_to_file(node_id, target_file_id, if_version,
+  if_source_file_version, if_target_version)`
+  - A move changes the node, the file it leaves, and the file it joins — all three are guarded
+- `mutate_rename_file(file_id, new_relative_path, if_version)` - if_version is the FILE node's token
 
 ### Undo & Inspection
-- `undo_last_mutation()` - Undo most recent mutation
-- `undo_to_mutation(mutation_id)` - Undo back to specific point
-- `get_mutation_log(limit=50)` - View mutation history
+Undo affects every writer's pending work, so it requires the mutation-log
+tip: the id of the newest entry in get_mutation_log() ("" = nothing pending).
+- `undo_last_mutation(if_mutation_id)` - Undo most recent mutation
+- `undo_to_mutation(mutation_id, if_tip_mutation_id)` - Undo back to specific point
+- `get_mutation_log(limit=50)` - View mutation history (last entry is the tip)
+- `get_versions(node_ids)` - Refresh version tokens in bulk (unknown IDs omitted)
 - `get_orphaned_nodes()` - List orphaned nodes
 - `get_broken_references()` - List broken references
 
@@ -5361,7 +5478,8 @@ The graph is the single source of truth - all tools read directly from it.
 - `suggest_links(file_path?, limit?)` - Suggest requirement links for unlinked tests
   - Uses heuristics: import chain, function name, file proximity, keyword overlap
   - Returns suggestions with confidence scores and reasons
-- `apply_link(file_path, line, requirement_id)` - Insert # Implements: comment
+- `apply_link(file_path, line, requirement_id, if_version)` - Insert # Implements: comment
+  - if_version is the token of the FILE being edited
   - Validates requirement exists before modifying files
   - Refreshes graph after insertion
 
@@ -5410,14 +5528,43 @@ to spec files automatically. This allows you to:
 To persist changes, use the file mutation tools:
 
 ### File Mutations (persistent)
-- `save_mutations(save_branch)` - Persist ALL pending in-memory mutations to spec files
-- `change_reference_type(req_id, target_id, new_type, save_branch)` - Change Implements/Refines
-- `move_requirement(req_id, target_file, save_branch)` - Move requirement to different file
+- `save_mutations(if_tip_mutation_id, save_branch)` - Persist ALL pending
+  in-memory mutations to spec files
+  - A save persists every writer's pending work, so it requires the mutation-log tip
+- `change_reference_type(req_id, target_id, new_type, if_version,
+  save_branch)` - Change Implements/Refines
+- `move_requirement(req_id, target_file, if_version, save_branch)` - Move
+  requirement to different file
 - `restore_from_safety_branch(branch_name)` - Revert file changes
 - `list_safety_branches()` - List available safety branches
 
 Use `save_branch=True` to create a safety branch before modifications, allowing rollback.
-Use `save_mutations()` after making in-memory changes with `mutate_*` tools to persist them.
+Use `save_mutations(if_tip_mutation_id=<tip>)` after making in-memory changes
+with `mutate_*` tools to persist them.
+
+## Optimistic Concurrency (version tokens)
+
+Several writers share this daemon (other agents, the viewer GUI), so every
+mutation requires proof you have seen the state you are changing:
+
+1. READ: get_requirement/get_node/get_subtree report `version` (requirements
+   also `file_version`); get_versions(node_ids) refreshes tokens in bulk.
+   Assertion/remainder IDs resolve to their owning requirement's version.
+2. MUTATE with `if_version` from that read. Success returns the new
+   `version` — thread it into your next mutation of the same node instead of
+   re-reading between your own writes.
+3. On `version_conflict`: the rejection carries `current_version` and
+   `current_state`. RECONCILE — re-check your intent against current_state
+   (someone else changed the node; your edit may no longer apply, may
+   conflict, or may already be done), then retry with current_version only
+   if it still makes sense. NEVER retry blind with the token from the error.
+   `node_not_found` is distinct: re-resolve the ID; retrying cannot fix it.
+4. History-level tools (undo, save, refresh_graph(force=True)) require the
+   mutation-log tip ("" = nothing pending). On `mutation_log_conflict`,
+   review `unseen` — the entries appended since your tip — before retrying.
+
+The viewer's HTTP /api/mutate/* routes enforce the same guards; conflicts
+are HTTP 409 with the identical body. Full details: docs("concurrency").
 
 ## Common Patterns
 
@@ -5441,10 +5588,12 @@ Use `save_mutations()` after making in-memory changes with `mutate_*` tools to p
 5. Also: docs("coverage gap") or faq("coverage") for CLI gap flags
 
 **Drafting requirement changes:**
-1. mutate_add_requirement() to create draft
-2. mutate_add_assertion() to add assertions
-3. get_mutation_log() to review changes
-4. undo_last_mutation() if needed
+1. get_requirement() / get_node() to read the target and its version
+2. mutate_add_requirement() to create draft (pass parent's version as if_version)
+3. mutate_add_assertion(..., if_version=<returned version>) to add assertions,
+   threading each returned token into the next call
+4. get_mutation_log() to review changes (last entry is the tip)
+5. undo_last_mutation(if_mutation_id=<tip>) if needed
 
 **Extracting a scoped subtree for sub-agent consumption:**
 1. get_subtree("REQ-p00001") for markdown overview
@@ -5854,6 +6003,8 @@ def create_server(
 
         Use when: writing or editing requirements — tells you the project's
         conventions for assertion format, keyword style, hash handling, etc.
+        Always includes 'concurrency_protocol': how to thread version tokens
+        through mutations and reconcile on version_conflict.
         """
         return _get_agent_instructions(_state["config"], _state["working_dir"])
 
@@ -5865,8 +6016,8 @@ def create_server(
         assertions, etc.) or the user asks a "how do I…" question.
 
         Args:
-            topic: Optional keyword to filter (e.g., "linking", "test", "coverage").
-                   If empty, returns all FAQ entries.
+            topic: Optional keyword to filter (e.g., "linking", "test",
+                   "coverage", "concurrency"). If empty, returns all FAQ entries.
         """
         return _get_faq(topic)
 
