@@ -129,7 +129,7 @@ E. The tool SHALL commit modified spec files and optionally push, refusing to op
 
 F. The tool SHALL fetch and fast-forward-merge from the remote tracking branch, aborting if the merge is not fast-forwardable.
 
-G. The tool SHALL flag all requirements with SATISFIES edges for review when the referenced template's content hash changes.
+G. The tool SHALL flag all requirements with SATISFIES edges for review when the content hash of any REQ in the referenced template's subtree changes.
 
 H. The tool SHALL list all local and remote git branches, stripping remote prefixes and deduplicating branches that exist both locally and remotely.
 
@@ -139,9 +139,11 @@ J. The tool SHALL re-read configuration from disk when reloading the graph, ensu
 
 ## Changelog
 
+- 2026-07-30 | bb148227 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: G flags satisfiers on any change within the template subtree, not just the root
 - 2026-04-23 | f8ff5509 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Change Detection and Auditability* | **Hash**: f8ff5509
+*End* *Change Detection and Auditability* | **Hash**: bb148227
 ---
 
 # REQ-p00013: Automated Testing
