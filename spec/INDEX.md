@@ -11,7 +11,7 @@
 | REQ-p00001 | Requirements Management Tool                     | prd-core.md     | 2d10975a |
 | REQ-p00002 | Requirements Validation                          | prd-core.md     | b29ef9b6 |
 | REQ-p00003 | Traceability Matrix Generation                   | prd-core.md     | 3121ad66 |
-| REQ-p00004 | Change Detection and Auditability                | prd-core.md     | 9bb163a9 |
+| REQ-p00004 | Change Detection and Auditability                | prd-core.md     | 7930cf78 |
 | REQ-p00005 | Multi-Repository Requirements                    | prd-features.md | 3a6f18bd |
 | REQ-p00006 | Interactive Traceability Viewer                  | prd-features.md | 185217a3 |
 | REQ-p00013 | Automated Testing                                | prd-core.md     | 4318202c |
@@ -19,6 +19,7 @@
 | REQ-p00015 | Complete and Current Reporting                   | prd-core.md     | 9aa9a8aa |
 | REQ-p00016 | NOT APPLICABLE Status                            | prd-features.md | 2211802a |
 | REQ-p00017 | Reference Integrity Under Mutation               | prd-core.md     | c0aae59d |
+| REQ-p00018 | Compiled Risk Register                           | prd-core.md     | 0f0438e9 |
 | REQ-p00050 | Unified Graph Architecture                       | prd-features.md | 46ac5f6a |
 | REQ-p00060 | MCP Server for AI-Driven Requirements Management | prd-features.md | a729a853 |
 | REQ-p00061 | Requirement Decomposition Rules                  | prd-core.md     | 462c146e |
