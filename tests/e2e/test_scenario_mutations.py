@@ -47,6 +47,25 @@ def _ok(result):
     return result
 
 
+# Optimistic-concurrency helpers (REQ-o00062): every mutate_* call needs the
+# target's version token from a prior read, and every history-level operation
+# (undo/save) needs the mutation-log tip.
+
+
+def _version_of(proc, node_id: str) -> str:
+    """Current version token for node_id (sub-nodes resolve to their owner)."""
+    versions = mcp_call(proc, "get_versions", {"node_ids": [node_id]})
+    assert node_id in versions, f"get_versions omitted {node_id}: {versions}"
+    return versions[node_id]
+
+
+def _log_tip(proc) -> str:
+    """The mutation-log tip (id of the newest pending entry), or '' if none."""
+    log = mcp_call(proc, "get_mutation_log", {"limit": 1000})
+    mutations = log.get("mutations", [])
+    return mutations[-1]["id"] if mutations else ""
+
+
 def _build_scenario_project(tmp_path):
     """Build a 6-requirement project across PRD/OPS/DEV with assertions."""
     config = base_config()
@@ -158,7 +177,10 @@ class TestScenarioMutationsE2E:
             # --- Phase 2: Mutations (REQ-d00134-A) ---
             mutation_count = 0
 
-            # 2a: Add a new requirement
+            # 2a: Add a new requirement, guarded by the parent's version token
+            # from the phase-1 read. The returned token is the parent's new
+            # version — thread it into later REQ-p00001 mutations.
+            p00001_version = req["version"]
             result = mcp_call(
                 proc,
                 "mutate_add_requirement",
@@ -169,12 +191,16 @@ class TestScenarioMutationsE2E:
                     "status": "Active",
                     "parent_id": "REQ-p00001",
                     "edge_kind": "IMPLEMENTS",
+                    "if_version": p00001_version,
                 },
             )
-            assert result.get("success", result.get("node_id")) is not None
+            assert result.get("success") is True, f"add_requirement failed: {result}"
+            p00001_version = result["version"]
             mutation_count += 1
 
-            # 2b: Add assertions to new requirement
+            # 2b: Add assertions to new requirement (read its token once, then
+            # thread each mutation's returned token into the next)
+            d00003_version = _version_of(proc, "REQ-d00003")
             for label, text in [
                 ("A", "The module SHALL enforce permission checks."),
                 ("B", "The module SHALL support role inheritance."),
@@ -182,25 +208,41 @@ class TestScenarioMutationsE2E:
                 result = mcp_call(
                     proc,
                     "mutate_add_assertion",
-                    {"req_id": "REQ-d00003", "label": label, "text": text},
+                    {
+                        "req_id": "REQ-d00003",
+                        "label": label,
+                        "text": text,
+                        "if_version": d00003_version,
+                    },
                 )
                 assert "_error" not in result
+                assert result.get("success") is True, f"add_assertion failed: {result}"
+                d00003_version = result["version"]
                 mutation_count += 1
 
-            # 2c: Rename a requirement
+            # 2c: Rename a requirement (returned token is the renamed node's)
             result = mcp_call(
                 proc,
                 "mutate_rename_node",
-                {"old_id": "REQ-d00001", "new_id": "REQ-d00010"},
+                {
+                    "old_id": "REQ-d00001",
+                    "new_id": "REQ-d00010",
+                    "if_version": _version_of(proc, "REQ-d00001"),
+                },
             )
             _ok(result)
+            d00010_version = result["version"]
             mutation_count += 1
 
-            # 2e: Update title
+            # 2e: Update title, threading the token returned by the rename
             result = mcp_call(
                 proc,
                 "mutate_update_title",
-                {"node_id": "REQ-d00010", "new_title": "Cryptography Module (Renamed)"},
+                {
+                    "node_id": "REQ-d00010",
+                    "new_title": "Cryptography Module (Renamed)",
+                    "if_version": d00010_version,
+                },
             )
             _ok(result)
             mutation_count += 1
@@ -209,24 +251,31 @@ class TestScenarioMutationsE2E:
             result = mcp_call(
                 proc,
                 "mutate_change_status",
-                {"node_id": "REQ-p00002", "new_status": "Draft"},
+                {
+                    "node_id": "REQ-p00002",
+                    "new_status": "Draft",
+                    "if_version": _version_of(proc, "REQ-p00002"),
+                },
             )
             _ok(result)
             mutation_count += 1
 
-            # 2g: Update an assertion
+            # 2g: Update an assertion (guarded by the owning requirement's
+            # token, threaded from 2a)
             result = mcp_call(
                 proc,
                 "mutate_update_assertion",
                 {
                     "assertion_id": "REQ-p00001-C",
                     "new_text": "The platform SHALL enforce RBAC with least privilege.",
+                    "if_version": p00001_version,
                 },
             )
             _ok(result)
+            p00001_version = result["version"]
             mutation_count += 1
 
-            # 2h: Add more assertions
+            # 2h: Add more assertions, threading the returned token
             for label, text in [
                 ("D", "The platform SHALL audit all access control changes."),
                 ("E", "The platform SHALL support multi-factor authentication."),
@@ -234,21 +283,33 @@ class TestScenarioMutationsE2E:
                 result = mcp_call(
                     proc,
                     "mutate_add_assertion",
-                    {"req_id": "REQ-p00001", "label": label, "text": text},
+                    {
+                        "req_id": "REQ-p00001",
+                        "label": label,
+                        "text": text,
+                        "if_version": p00001_version,
+                    },
                 )
                 assert "_error" not in result
+                assert result.get("success") is True, f"add_assertion failed: {result}"
+                p00001_version = result["version"]
                 mutation_count += 1
 
-            # 2i: Delete an assertion
+            # 2i: Delete an assertion (sub-node ID resolves to the owning
+            # requirement's token)
             result = mcp_call(
                 proc,
                 "mutate_delete_assertion",
-                {"assertion_id": "REQ-o00002-B", "confirm": True},
+                {
+                    "assertion_id": "REQ-o00002-B",
+                    "confirm": True,
+                    "if_version": _version_of(proc, "REQ-o00002-B"),
+                },
             )
             _ok(result)
             mutation_count += 1
 
-            # 2j: Change edge kind
+            # 2j: Change edge kind (edge mutations guard the SOURCE node)
             result = mcp_call(
                 proc,
                 "mutate_change_edge_kind",
@@ -256,12 +317,15 @@ class TestScenarioMutationsE2E:
                     "source_id": "REQ-o00001",
                     "target_id": "REQ-p00001",
                     "new_kind": "refines",
+                    "if_version": _version_of(proc, "REQ-o00001"),
                 },
             )
             _ok(result)
             mutation_count += 1
 
-            # 2k: Batch of add/rename/update operations
+            # 2k: Batch of add/rename/update operations. Parentless creation is
+            # unguarded (nothing to clobber); the follow-up assertion needs the
+            # new requirement's token.
             for i in range(4):
                 rid = f"REQ-o0010{i}"
                 result = mcp_call(
@@ -275,14 +339,21 @@ class TestScenarioMutationsE2E:
                     },
                 )
                 assert "_error" not in result
+                assert result.get("success") is True, f"add_requirement failed: {result}"
                 mutation_count += 1
 
                 result = mcp_call(
                     proc,
                     "mutate_add_assertion",
-                    {"req_id": rid, "label": "A", "text": f"Batch {i} SHALL exist."},
+                    {
+                        "req_id": rid,
+                        "label": "A",
+                        "text": f"Batch {i} SHALL exist.",
+                        "if_version": _version_of(proc, rid),
+                    },
                 )
                 assert "_error" not in result
+                assert result.get("success") is True, f"add_assertion failed: {result}"
                 mutation_count += 1
 
             # --- Phase 3: Checkpoint verification (REQ-d00134-C) ---
@@ -303,13 +374,18 @@ class TestScenarioMutationsE2E:
             assert len(log.get("mutations", log.get("entries", []))) >= 15
 
             # --- Phase 4: Undo (REQ-d00134-F) ---
-            # Undo the status change
-            result = mcp_call(proc, "undo_last_mutation", {})
+            # Undo the last mutation, threading the mutation-log tip
+            result = mcp_call(proc, "undo_last_mutation", {"if_mutation_id": _log_tip(proc)})
             _ok(result)
+            assert not result.get("code"), f"undo rejected: {result}"
             mutation_count += 1
 
             # --- Phase 5: Save (REQ-d00134-D) ---
-            result = mcp_call(proc, "save_mutations", {"save_branch": False})
+            result = mcp_call(
+                proc,
+                "save_mutations",
+                {"save_branch": False, "if_tip_mutation_id": _log_tip(proc)},
+            )
             assert result.get("success") or result.get("files_written") is not None
 
             # --- Phase 6: Reload and verify (REQ-d00134-D) ---
@@ -329,11 +405,20 @@ class TestScenarioMutationsE2E:
             result = mcp_call(
                 proc,
                 "mutate_update_title",
-                {"node_id": "REQ-d00003", "new_title": "RBAC Module v2"},
+                {
+                    "node_id": "REQ-d00003",
+                    "new_title": "RBAC Module v2",
+                    "if_version": _version_of(proc, "REQ-d00003"),
+                },
             )
             assert "_error" not in result
+            assert result.get("success") is True, f"update_title failed: {result}"
 
-            result = mcp_call(proc, "save_mutations", {"save_branch": False})
+            result = mcp_call(
+                proc,
+                "save_mutations",
+                {"save_branch": False, "if_tip_mutation_id": _log_tip(proc)},
+            )
             assert result.get("success") or result.get("files_written") is not None
 
             # Final reload and verify

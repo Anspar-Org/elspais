@@ -1,6 +1,7 @@
 # Verifies: REQ-d00010
 # Verifies: REQ-d00255-D
 # Verifies: REQ-d00256-D
+# Verifies: REQ-o00062-O
 """Playwright-based browser tests for the elspais viewer command.
 
 Validates REQ-d00010: viewer command serves the traceability UI
@@ -903,3 +904,239 @@ class TestJunitStepBindingBrowser:
             )
 
         assert not js_errors, f"JS errors during step-results render: {js_errors}"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Optimistic concurrency: edit → 409 → re-read loop (REQ-o00062-O)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_CONCURRENCY_REQ_ID = "REQ-p00001"
+
+
+@pytest.fixture(scope="module")
+def concurrency_viewer_url(tmp_path_factory):
+    """Start a viewer against a private copy of the viewer-tables fixture.
+
+    A private copy (module scope, own server) because the test mutates the
+    server's in-memory graph behind the browser's back — sharing the
+    session-scoped tables server would poison its state for other tests.
+    The repo is put on a working branch so the edit toggle activates
+    without the create-a-branch modal that guards main.
+    """
+    elspais_bin = shutil.which("elspais")
+    if elspais_bin is None:
+        pytest.skip("elspais CLI not found on PATH")
+
+    src = REPO_ROOT / "tests" / "fixtures" / "viewer-tables"
+    if not src.exists():
+        pytest.skip(f"viewer-tables fixture not present at {src}")
+
+    dest = tmp_path_factory.mktemp("viewer-concurrency-run")
+    for item in src.iterdir():
+        if item.is_dir():
+            shutil.copytree(item, dest / item.name)
+        else:
+            shutil.copy2(item, dest / item.name)
+
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "test",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "test",
+        "GIT_COMMITTER_EMAIL": "t@t",
+    }
+    subprocess.run(["git", "init"], cwd=dest, capture_output=True, env=env)
+    subprocess.run(["git", "add", "."], cwd=dest, capture_output=True, env=env)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=dest, capture_output=True, env=env)
+    # A non-main working branch: toggleEditMode() activates directly instead
+    # of raising the "create a working branch" modal.
+    subprocess.run(
+        ["git", "checkout", "-b", "concurrent-edit"], cwd=dest, capture_output=True, env=env
+    )
+
+    port = _find_free_port()
+    base_url = f"http://127.0.0.1:{port}"
+
+    proc = subprocess.Popen(
+        [elspais_bin, "viewer", "--server", "--port", str(port), "--path", str(dest)],
+        cwd=str(dest),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+
+    try:
+        _wait_for_server(base_url)
+        yield base_url
+    finally:
+        try:
+            import urllib.request
+
+            req = urllib.request.Request(f"{base_url}/api/shutdown", method="POST")
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            pass
+
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                proc.wait(timeout=5)
+
+
+@pytest.fixture()
+def page_concurrency(concurrency_viewer_url):
+    """Launch headless Chromium against the concurrency-fixture viewer."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context()
+        pg = context.new_page()
+        pg.set_default_timeout(10_000)
+        yield pg
+        browser.close()
+
+
+class TestBrowserOptimisticConcurrency:
+    """Validates REQ-o00062-O: the browser client meets the same version
+    preconditions as MCP, receives the identical 409 rejection shape, and
+    recovers by re-reading — never by blind retry."""
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_o00062_O_edit_conflict_rereads_instead_of_retrying(
+        self, page_concurrency, concurrency_viewer_url
+    ):
+        # Verifies: REQ-o00062-O
+        """Full edit -> 409 -> re-read loop through the real edit UI:
+
+        1. Enter edit mode and change the title once (succeeds; the client
+           now holds the returned token for the card).
+        2. BEHIND the browser: read a fresh token over HTTP and POST a title
+           mutation directly — the browser's held token is now stale.
+        3. Blur a second title edit composed against the stale state:
+           - the POST is rejected with HTTP 409 / code=version_conflict,
+           - the client does NOT blind-retry (exactly one POST, none succeed),
+           - the client re-reads the node (GET after the 409) and refreshes
+             the card to show the behind-the-back state,
+           - the server keeps the behind-the-back title.
+        """
+        page = page_concurrency
+        base = concurrency_viewer_url
+        req_id = _CONCURRENCY_REQ_ID
+
+        js_errors: list[str] = []
+        page.on("pageerror", lambda err: js_errors.append(str(err)))
+
+        page.goto(base, wait_until="networkidle")
+        page.evaluate(f"() => window.openCard('{req_id}')")
+        card = page.locator(f"#card-{req_id}")
+        card.wait_for(state="visible", timeout=10_000)
+
+        # Enter edit mode through the real toggle (branch check passes: the
+        # fixture repo is on a non-main working branch).
+        page.click("#edit-toggle")
+        page.wait_for_selector("body.edit-mode", timeout=10_000)
+        title_input = card.locator("input.req-card-title-edit")
+        title_input.wait_for(state="visible", timeout=10_000)
+
+        # -- Step 1: a first successful edit caches the returned token -----
+        title_input.fill("Browser Edit One")
+        title_input.blur()
+        # Success re-renders the card from server data; the fresh input
+        # carries the new title as its value.
+        page.wait_for_function(
+            f"""() => {{
+                const el = document.querySelector(
+                    '#card-{req_id} input.req-card-title-edit');
+                return el && el.value === 'Browser Edit One';
+            }}""",
+            timeout=10_000,
+        )
+
+        # -- Step 2: invalidate the browser's state behind its back --------
+        node = page.request.get(f"{base}/api/node/{req_id}").json()
+        fresh_token = node.get("version")
+        assert fresh_token, f"/api/node must report a version token, got: {node}"
+        agent_resp = page.request.post(
+            f"{base}/api/mutate/title",
+            data={
+                "node_id": req_id,
+                "new_title": "Agent Rewrote This",
+                "if_version": fresh_token,
+            },
+        )
+        assert agent_resp.status == 200, (
+            f"behind-the-back mutation with a fresh token must succeed, "
+            f"got {agent_resp.status}: {agent_resp.text()}"
+        )
+        agent_body = agent_resp.json()
+        assert agent_body.get("success") and agent_body.get("version"), agent_body
+
+        # -- Step 3: submit the stale browser edit and watch the recovery --
+        events: list[dict] = []
+
+        def _record(response):
+            events.append(
+                {
+                    "method": response.request.method,
+                    "url": response.url,
+                    "status": response.status,
+                }
+            )
+
+        page.on("response", _record)
+
+        stale_input = card.locator("input.req-card-title-edit")
+        stale_input.fill("Browser Edit Two")
+        stale_input.blur()
+
+        # The client announces the conflict rather than pretending success.
+        page.locator(".toast.error", has_text="Someone else changed this").wait_for(
+            state="visible", timeout=10_000
+        )
+
+        # The card refreshes to the CURRENT state (the agent's title), which
+        # can only come from a re-read — the browser never typed this value.
+        page.wait_for_function(
+            f"""() => {{
+                const el = document.querySelector(
+                    '#card-{req_id} input.req-card-title-edit');
+                return el && el.value === 'Agent Rewrote This';
+            }}""",
+            timeout=10_000,
+        )
+
+        # Network-level proof of the protocol:
+        mutate_posts = [
+            (i, e)
+            for i, e in enumerate(events)
+            if e["method"] == "POST" and e["url"].endswith("/api/mutate/title")
+        ]
+        assert (
+            len(mutate_posts) == 1
+        ), f"expected exactly ONE title POST (no blind retry), got: {mutate_posts}"
+        conflict_index, conflict_event = mutate_posts[0]
+        assert (
+            conflict_event["status"] == 409
+        ), f"stale edit must be rejected with HTTP 409, got {conflict_event}"
+        rereads = [
+            i
+            for i, e in enumerate(events)
+            if e["method"] == "GET" and f"/api/node/{req_id}" in e["url"]
+        ]
+        assert any(i > conflict_index for i in rereads), (
+            f"expected a re-read GET of /api/node/{req_id} AFTER the 409; " f"events: {events}"
+        )
+
+        # Server state: the behind-the-back write survived; the stale browser
+        # edit never landed.
+        final = page.request.get(f"{base}/api/node/{req_id}").json()
+        assert (
+            final.get("title") == "Agent Rewrote This"
+        ), f"server must keep the concurrent writer's state, got: {final.get('title')!r}"
+
+        assert not js_errors, f"JS errors during conflict recovery: {js_errors}"

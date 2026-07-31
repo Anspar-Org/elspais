@@ -879,10 +879,18 @@ class TestFederationMCPGuard:
         core_root = self._build(tmp_path)
         server = start_mcp(core_root)
         try:
+            # Reads are not blocked on associates: fetch the version token the
+            # mutation signature requires; the read-only guard fires regardless.
+            versions = mcp_call(server, "get_versions", {"node_ids": [self.ASSOC_REQ]})
+            assert self.ASSOC_REQ in versions, f"get_versions omitted {self.ASSOC_REQ}: {versions}"
             resp = mcp_call(
                 server,
                 "mutate_update_title",
-                {"node_id": self.ASSOC_REQ, "new_title": "Hijacked"},
+                {
+                    "node_id": self.ASSOC_REQ,
+                    "new_title": "Hijacked",
+                    "if_version": versions[self.ASSOC_REQ],
+                },
             )
         finally:
             stop_mcp(server)
@@ -902,10 +910,16 @@ class TestFederationMCPGuard:
         core_root = self._build(tmp_path, write_associates=True)
         server = start_mcp(core_root)
         try:
+            versions = mcp_call(server, "get_versions", {"node_ids": [self.ASSOC_REQ]})
+            assert self.ASSOC_REQ in versions, f"get_versions omitted {self.ASSOC_REQ}: {versions}"
             resp = mcp_call(
                 server,
                 "mutate_update_title",
-                {"node_id": self.ASSOC_REQ, "new_title": "Allowed Edit"},
+                {
+                    "node_id": self.ASSOC_REQ,
+                    "new_title": "Allowed Edit",
+                    "if_version": versions[self.ASSOC_REQ],
+                },
             )
         finally:
             stop_mcp(server)
