@@ -147,7 +147,7 @@
 | REQ-d00251 | Component Style Vocabulary and Assertion Separator            | dev-graph-config.md     | 7857498c |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 8e07589c |
 | REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | a3c30142 |
-| REQ-d00254 | Coverage-Based and Aggregate Test Verification                | dev-graph-core.md       | fb1ca602 |
+| REQ-d00254 | Coverage-Based and Aggregate Test Verification                | dev-graph-core.md       | ea4e01b1 |
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | ab5cb648 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | a34cd9a2 |
 | REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 2a8aab8b |

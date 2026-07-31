@@ -411,8 +411,11 @@ I. A target absent from `--targets` (the fresh set) whose results are ingested f
 
 J. In a selective run (a `--targets` set is present), a requirement with test references but zero result records SHALL render as not-run (`—`), distinct from a run-but-uncovered `0%`; in a full run (no `--targets`) zero results SHALL keep the existing rendering.
 
+K. The system SHALL make per-test attribution available for every configured test framework regardless of the framework's implementation language — each scanned test bound to its own identity and source line extent — sufficient for the line-level test coverage dimensions to function for that framework's tests.
+
 ### Changelog
 
+- 2026-07-31 | ea4e01b1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | fb1ca602 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-08 | 0f7323ff | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-01 | 4975d47a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
@@ -423,7 +426,7 @@ J. In a selective run (a `--targets` set is present), a requirement with test re
 - 2026-06-20 | 98120740 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | CUR-1533: initial
 
-*End* *Coverage-Based and Aggregate Test Verification* | **Hash**: fb1ca602
+*End* *Coverage-Based and Aggregate Test Verification* | **Hash**: ea4e01b1
 
 ---
 
