@@ -84,3 +84,50 @@ class TestReloadRefreshesConfig:
             assert "extra-specs" in (
                 refreshed.get("scanning", {}).get("spec", {}).get("directories", [])
             )
+
+    def test_REQ_p00004_J_reload_includes_local_overlay(self, tmp_path, _minimal_graph):
+        # Verifies: REQ-p00004-J
+        """POST /api/reload re-reads config through the same overlay-aware
+        path as AppState._rebuild(): a `.elspais.local.toml` alongside the
+        base `.elspais.toml` must be merged into the reloaded config.
+        """
+        config_path = tmp_path / ".elspais.toml"
+        config_path.write_text(
+            'version = 3\n[project]\nname = "test"\nnamespace = "REQ"\n'
+            '[scanning.spec]\ndirectories = ["spec"]\n'
+        )
+
+        initial_config = {"scanning": {"spec": {"directories": ["spec"]}}}
+        state = AppState(
+            graph=_minimal_graph,
+            repo_root=tmp_path,
+            config=initial_config,
+        )
+        app = create_app(state=state, mount_mcp=False)
+        client = TestClient(app)
+
+        # Developer-local overlay appears on disk after the server started
+        (tmp_path / ".elspais.local.toml").write_text(
+            '[scanning.spec]\ndirectories = ["spec", "local-only-specs"]\n'
+        )
+
+        captured_configs = []
+
+        def fake_build_graph(**kwargs):
+            captured_configs.append(kwargs.get("config"))
+            return _minimal_graph
+
+        with patch("elspais.graph.factory.build_graph", fake_build_graph):
+            resp = client.post("/api/reload")
+
+        data = resp.json()
+        assert resp.status_code == 200, f"Reload failed: {data}"
+        assert data["success"] is True
+
+        # Every rebuild (middleware freshness pass or the reload handler)
+        # must see the overlay-merged directories.
+        assert captured_configs
+        for refreshed in captured_configs:
+            assert "local-only-specs" in (
+                refreshed.get("scanning", {}).get("spec", {}).get("directories", [])
+            )

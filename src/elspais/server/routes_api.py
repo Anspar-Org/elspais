@@ -1886,14 +1886,14 @@ async def api_revert(request: Request) -> JSONResponse:
 async def api_reload(request: Request) -> JSONResponse:
     # Implements: REQ-p00004-J
     """POST /api/reload - Reload graph from disk with fresh config."""
-    from elspais.config import load_config
+    from elspais.config import get_config
     from elspais.graph.factory import build_graph
 
     state = _st(request)
     try:
-        config_path = Path(state.repo_root) / ".elspais.toml"
-        if config_path.exists():
-            state.config = load_config(config_path)
+        # Same config path as AppState._rebuild(): includes .elspais.local.toml
+        # and environment overlays, not just the base .elspais.toml.
+        state.config = get_config(start_path=state.repo_root, quiet=True)
 
         new_graph = build_graph(
             config=state.config,

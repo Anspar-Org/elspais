@@ -126,42 +126,6 @@ class TestAppState:
         assert result is False
         assert state.build_time == build_after_first
 
-    def test_link_mcp_state(self, tmp_path):
-        """link_mcp_state() syncs graph and config into MCP state dict."""
-        from elspais.server.state import AppState
-
-        state = AppState.from_config(repo_root=tmp_path)
-        mcp_state: dict = {}
-        state.link_mcp_state(mcp_state)
-
-        assert mcp_state["graph"] is state.graph
-        assert mcp_state["config"] is state.config
-
-    def test_rebuild_propagates_to_mcp_state(self, tmp_path):
-        """After rebuild, linked MCP state dict receives new graph."""
-        from elspais.server.state import AppState
-
-        _make_repo(tmp_path)
-        spec_dir = tmp_path / "spec"
-        spec_dir.mkdir()
-        spec_file = spec_dir / "test.md"
-        spec_file.write_text("# REQ-001\nTitle\n")
-
-        state = AppState.from_config(repo_root=tmp_path)
-        mcp_state: dict = {}
-        state.link_mcp_state(mcp_state)
-
-        original_graph = state.graph
-
-        time.sleep(0.05)
-        spec_file.write_text("# REQ-001\nNew title\n")
-
-        state._last_stale_check = 0.0
-        state.ensure_fresh()
-
-        assert mcp_state["graph"] is state.graph
-        assert mcp_state["graph"] is not original_graph
-
     def test_is_stale_detects_new_file(self, tmp_path):
         """is_stale() returns True when a new file appears in a scanned dir."""
         from elspais.server.state import AppState

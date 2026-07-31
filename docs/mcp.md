@@ -82,17 +82,7 @@ Tools that modify spec files:
 | Tool | Description |
 |------|-------------|
 | `change_reference_type()` | Switch between Implements and Refines references |
-| `specialize_reference()` | Convert REQ→REQ to REQ→Assertion reference |
 | `move_requirement()` | Move requirement between spec files |
-
-### File Operations
-
-Tools for spec file management:
-
-| Tool | Description |
-|------|-------------|
-| `prepare_file_deletion()` | Analyze file before deletion (check requirements, content) |
-| `delete_spec_file()` | Delete spec file with safety checks |
 
 ### Safety Branch Tools
 
@@ -221,43 +211,6 @@ Finding and fixing orphaned requirements:
 ```
 
 ## Safety Patterns
-
-### Always Prepare Before Deletion
-
-```python
-# WRONG: Delete without checking
-delete_spec_file(file_path, force=True)
-
-# RIGHT: Analyze first
-result = prepare_file_deletion(file_path)
-if result["can_delete"]:
-    delete_spec_file(file_path)
-else:
-    # Move requirements first with move_requirement()
-```
-
-### Use Git Safety for AI Transforms
-
-```python
-# WRONG: Transform without safety branch
-transform_with_ai(req_id, prompt, save_branch=False)
-
-# RIGHT: Always create safety branch
-result = transform_with_ai(req_id, prompt, save_branch=True)
-# If problems:
-restore_from_safety_branch(result["safety_branch"])
-```
-
-### Preview with Dry Run
-
-```python
-# Preview transformation
-preview = transform_with_ai(req_id, prompt, dry_run=True)
-# Review preview["after_text"]
-
-# Then apply
-transform_with_ai(req_id, prompt, dry_run=False)
-```
 
 ### Refresh Graph After Mutations
 
@@ -422,30 +375,6 @@ Move requirement between spec files.
   "source_file": "spec/old.md",
   "target_file": "spec/new.md",
   "position": "end"
-}
-```
-
-### transform_with_ai
-
-Transform a requirement using Claude.
-
-**Parameters:**
-- `node_id` (str): Requirement ID to transform
-- `prompt` (str): Transformation instructions
-- `output_mode` (str): "replace" (markdown) or "operations" (JSON)
-- `save_branch` (bool): Create git safety branch before changes
-- `dry_run` (bool): Preview without applying
-
-**Returns:**
-```json
-{
-  "success": true,
-  "node_id": "REQ-d00001",
-  "dry_run": false,
-  "safety_branch": "elspais-safety-20240115-143022",
-  "before_text": "...",
-  "after_text": "...",
-  "file_path": "spec/requirements.md"
 }
 ```
 

@@ -65,7 +65,6 @@ class AppState:
         self.allowed_roots = allowed_roots or _compute_allowed_roots(repo_root, config)
         self.build_time = time.time()
         self._mtimes: dict[str, float] = {}
-        self._mcp_state: dict[str, Any] | None = None  # set by link_mcp_state
         self._last_stale_check = 0.0
         self.snapshot_mtimes()
         # Per-repo detached HEAD tracking (for rewind)
@@ -210,7 +209,7 @@ class AppState:
         return True
 
     def _rebuild(self) -> None:
-        """Rebuild graph from disk. Propagates to MCP _state if linked."""
+        """Rebuild graph from disk."""
         from elspais.config import get_config
         from elspais.graph.factory import build_graph
 
@@ -230,14 +229,3 @@ class AppState:
             refresh_daemon_config_hash(self.repo_root)
         except Exception:
             pass  # Best effort — a failed refresh only risks an extra restart
-        # Propagate to MCP tools' _state dict (shared reference)
-        if self._mcp_state is not None:
-            self._mcp_state["graph"] = self.graph
-            self._mcp_state["config"] = self.config
-
-    def link_mcp_state(self, mcp_state: dict[str, Any]) -> None:
-        """Link an MCP _state dict so rebuilds propagate to MCP tools."""
-        self._mcp_state = mcp_state
-        # Ensure current graph is in sync
-        mcp_state["graph"] = self.graph
-        mcp_state["config"] = self.config
