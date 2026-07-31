@@ -24,10 +24,11 @@ FILE nodes are the foundation for representing source files as first-class graph
 
 ### Changelog
 
+- 2026-07-31 | 070e173b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 664d3990 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 664d3990 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *FILE Node Data Model* | **Hash**: 664d3990
+*End* *FILE Node Data Model* | **Hash**: 070e173b
 ---
 
 ## REQ-d00127: GraphNode API: Filtered Traversal and Edge-Only Relationships
@@ -54,10 +55,11 @@ Eliminating `add_child()` ensures every relationship in the graph has a typed ed
 
 ### Changelog
 
+- 2026-07-31 | 20632d4a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 12964863 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 12964863 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *GraphNode API: Filtered Traversal and Edge-Only Relationships* | **Hash**: 12964863
+*End* *GraphNode API: Filtered Traversal and Edge-Only Relationships* | **Hash**: 20632d4a
 ---
 
 ## REQ-d00128: FILE Node Creation in Build Pipeline
@@ -98,10 +100,11 @@ FILE nodes make source files first-class graph participants. Creating them in fa
 
 ### Changelog
 
+- 2026-07-31 | 02374cc2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 7742f15f | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 7742f15f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *FILE Node Creation in Build Pipeline* | **Hash**: 7742f15f
+*End* *FILE Node Creation in Build Pipeline* | **Hash**: 02374cc2
 ---
 
 ## REQ-d00129: SourceLocation Removal and Consumer Migration
@@ -132,10 +135,11 @@ SourceLocation duplicates information now available through the graph structure 
 
 ### Changelog
 
+- 2026-07-31 | 6d11df36 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 8bd81196 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 8bd81196 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *SourceLocation Removal and Consumer Migration* | **Hash**: 8bd81196
+*End* *SourceLocation Removal and Consumer Migration* | **Hash**: 6d11df36
 ---
 
 ## REQ-d00130: Parameterized Root Iteration and Kind-Based Index Query
@@ -164,10 +168,11 @@ Parameterized roots enable view-specific entry points into the graph: domain con
 
 ### Changelog
 
+- 2026-07-31 | 5733741e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | f56f8527 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | f56f8527 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Parameterized Root Iteration and Kind-Based Index Query* | **Hash**: f56f8527
+*End* *Parameterized Root Iteration and Kind-Based Index Query* | **Hash**: 5733741e
 ---
 
 ## REQ-d00131: Render Protocol for Graph Nodes
@@ -206,11 +211,12 @@ The render protocol is the inverse of parsing: each node kind knows how to seria
 
 ### Changelog
 
+- 2026-07-31 | 99fb8aea | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-15 | a871090c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | c004c62e | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | c004c62e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Render Protocol for Graph Nodes* | **Hash**: a871090c
+*End* *Render Protocol for Graph Nodes* | **Hash**: 99fb8aea
 ---
 
 ## REQ-d00132: Render-Based Save Operation
@@ -239,10 +245,11 @@ Render-based save replaces the brittle text surgery in persistence.py with graph
 
 ### Changelog
 
+- 2026-07-31 | c40e6417 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 7043f7af | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 7043f7af | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Render-Based Save Operation* | **Hash**: 7043f7af
+*End* *Render-Based Save Operation* | **Hash**: c40e6417
 ---
 
 ## REQ-d00134: Comprehensive Mutation Round-Trip Scenario Test
@@ -271,8 +278,9 @@ A single large scenario test that exercises the full mutation API in a realistic
 
 ### Changelog
 
+- 2026-07-31 | 6c865949 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | be52daed | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | be52daed | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Comprehensive Mutation Round-Trip Scenario Test* | **Hash**: be52daed
+*End* *Comprehensive Mutation Round-Trip Scenario Test* | **Hash**: 6c865949
 ---

@@ -7,7 +7,7 @@
 1. The system must authenticate users via SSO.
 2. The system must support OAuth 2.0 flows.
 
-*End* *User Authentication* | **Hash**: a94d767b
+*End* *User Authentication* | **Hash**: 65da632e
 ---
 
 # REQ-pSearchEngine: Search Engine
@@ -18,5 +18,5 @@
 
 1. The search engine must return results within 200ms.
 
-*End* *Search Engine* | **Hash**: 665006b0
+*End* *Search Engine* | **Hash**: 234bd33f
 ---

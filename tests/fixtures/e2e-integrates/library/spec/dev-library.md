@@ -8,4 +8,4 @@ The event log is append-only and tamper-evident.
 
 A. Events SHALL be appended, never mutated in place.
 
-*End* *Append-only event log* | **Hash**: 1fb2466d
+*End* *Append-only event log* | **Hash**: 76f78b42

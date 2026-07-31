@@ -8,7 +8,7 @@ A. The platform SHALL authenticate users.
 
 B. The platform SHALL support SSO.
 
-*End* *Core Auth* | **Hash**: 11ed68c4
+*End* *Core Auth* | **Hash**: 3cf66b48
 ---
 
 # REQ-p00002: Core Data
@@ -19,5 +19,5 @@ B. The platform SHALL support SSO.
 
 A. The platform SHALL persist user data.
 
-*End* *Core Data* | **Hash**: cdf648aa
+*End* *Core Data* | **Hash**: a3ddb48f
 ---

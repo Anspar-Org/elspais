@@ -6,5 +6,5 @@
 
 1. The pipeline must deploy to staging automatically.
 
-*End* *Deployment Pipeline* | **Hash**: a6404800
+*End* *Deployment Pipeline* | **Hash**: fe07659e
 ---

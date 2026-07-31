@@ -441,7 +441,7 @@ The hash SHALL be calculated from **assertion text only**. Non-assertion body te
 
 Any material behavioral constraint SHALL be expressed as an Assertion. Non-assertion text is supplementary context and does not affect the content hash.
 
-**Normalization rules** — for each assertion, in physical file order (assertions are NOT sorted by label before hashing):
+**Normalization rules** — for each assertion:
 
 1. Collect the assertion line and any continuation lines (until the next assertion or end of body)
 2. Join into a single line, collapsing internal newlines to spaces
@@ -449,7 +449,7 @@ Any material behavioral constraint SHALL be expressed as an Assertion. Non-asser
 4. Strip trailing whitespace from the line
 5. Normalize line endings to `\n`
 
-All normalized assertion lines are joined with `\n`, then hashed.
+**Combination** (order-independent, per REQ-d00131-J): each normalized assertion line is hashed individually, the per-assertion hashes are sorted lexicographically, and the sorted hashes are joined with `\n` and hashed to produce the requirement's final hash. Assertion order in the file therefore does not affect the hash.
 
 **Invariances** — the following changes do NOT affect the hash:
 
@@ -458,8 +458,10 @@ All normalized assertion lines are joined with `\n`, then hashed.
 - Multiple spaces between words
 - Changes to non-assertion body text (context, definitions, rationale)
 - Blank lines between assertions
+- Reordering assertions (order-independent hashing per REQ-d00131-J)
 
 **Sensitive changes** — the following changes DO affect the hash:
 
 - Any change to assertion wording (including case changes)
-- Adding, removing, or reordering assertions
+- Adding or removing assertions
+- Swapping labels between assertions (the label is part of the normalized text)

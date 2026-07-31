@@ -8,7 +8,7 @@ A. The module SHALL use bcrypt for hashing.
 
 B. The module SHALL validate JWT tokens.
 
-*End* *Auth Module* | **Hash**: a07f44d6
+*End* *Auth Module* | **Hash**: 8bebf300
 ---
 
 # REQ-d00002: Notification Service
@@ -19,5 +19,5 @@ B. The module SHALL validate JWT tokens.
 
 A. The module SHALL queue notifications.
 
-*End* *Notification Service* | **Hash**: 2602dbfa
+*End* *Notification Service* | **Hash**: 9c4dc98a
 ---

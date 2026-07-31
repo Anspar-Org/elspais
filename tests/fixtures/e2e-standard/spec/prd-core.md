@@ -25,5 +25,5 @@ A. The system SHALL send email notifications.
 
 B. The system SHALL send push notifications.
 
-*End* *Notifications* | **Hash**: f1247107
+*End* *Notifications* | **Hash**: c726a771
 ---

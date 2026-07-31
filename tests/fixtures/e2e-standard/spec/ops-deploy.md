@@ -6,7 +6,7 @@
 
 A. Operations SHALL deploy auth service with HA.
 
-*End* *Auth Deployment* | **Hash**: fcab6727
+*End* *Auth Deployment* | **Hash**: d3e0fdf3
 ---
 
 # REQ-o00002: Notification Ops

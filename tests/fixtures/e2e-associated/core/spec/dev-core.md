@@ -6,7 +6,7 @@
 
 A. The module SHALL use bcrypt for hashing.
 
-*End* *Auth Impl* | **Hash**: ff013e37
+*End* *Auth Impl* | **Hash**: 87fcb7b3
 ---
 
 # REQ-d00002: Data Module
@@ -17,5 +17,5 @@ A. The module SHALL use bcrypt for hashing.
 
 A. The module SHALL use PostgreSQL.
 
-*End* *Data Module* | **Hash**: fb0e2caf
+*End* *Data Module* | **Hash**: 46ee935c
 ---
