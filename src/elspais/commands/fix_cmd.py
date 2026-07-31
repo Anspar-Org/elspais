@@ -149,6 +149,18 @@ _FORMATTING_ONLY_REASONS: frozenset[str] = frozenset(
 )
 
 
+def _is_associate_owned(graph, node) -> bool:  # noqa: ANN001
+    """Whether *node* lives in an associate repo rather than the primary.
+
+    Delegates to the single ownership-resolution home shared with
+    render_save (graph/federated.py). Implements: REQ-d00253-E
+    """
+    from elspais.graph.federated import is_associate_owned
+
+    fnode = node.file_node()
+    return is_associate_owned(graph, fnode.id if fnode is not None else node.id)
+
+
 def _scan_and_report_unfixable(graph) -> int:  # noqa: ANN001
     """Walk `parse_unfixable_reasons` across requirements; print to stderr.
 
@@ -442,9 +454,17 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
         print(f"Validated {req_count} requirements")
         return _scan_and_report_unfixable(graph)
 
-    # Report what will be / was fixed
+    # Report what will be / was fixed. Associate-owned nodes are reported
+    # [skipping] when write_associates is false: render_save will never write
+    # their files, so a plain "Fixing" claim would be false.
+    # Implements: REQ-d00253-E
+    write_associates = config.get("federation", {}).get("write_associates", False)
     prefix = "Would fix" if dry_run else "Fixing"
     for node, reasons in fixable_nodes:
+        if not write_associates and _is_associate_owned(graph, node):
+            line = "[skipping] {node_id}: {detail} (associate-owned; write_associates=false)"
+        else:
+            line = "{prefix} {node_id}: {detail}"
         for r in reasons:
             if r == "non_canonical_term":
                 repls = node.get_field("term_replacements") or []
@@ -452,9 +472,11 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
                 for old_form, new_form in repls:
                     if (old_form, new_form) not in seen:
                         seen.add((old_form, new_form))
-                        print(f"{prefix} {node.id}: canonicalize term {old_form} -> {new_form}")
+                        detail = f"canonicalize term {old_form} -> {new_form}"
+                        print(line.format(prefix=prefix, node_id=node.id, detail=detail))
             else:
-                print(f"{prefix} {node.id}: {_REASON_LABELS.get(r, r)}")
+                detail = _REASON_LABELS.get(r, r)
+                print(line.format(prefix=prefix, node_id=node.id, detail=detail))
 
     if dry_run:
         return _scan_and_report_unfixable(graph)

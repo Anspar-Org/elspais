@@ -11,7 +11,7 @@ traceability graph from parsed content.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -478,6 +478,34 @@ class TraceGraph:
             self._undo_add_changelog_entry(entry)
         # Unknown operations are silently ignored (forward compatibility)
 
+    def _retarget_broken_refs(self, old_id: str, new_id: str) -> None:
+        """Rewrite broken references (and their leftovers) after a rename.
+
+        Handles the renamed node as broken-ref source, as exact target, and
+        as the base of assertion-suffixed targets (``old_id-<label>``, the
+        form partial multi-assertion leftovers take). All BrokenReference
+        fields (diagnostic, presumed_foreign) are preserved. When a target
+        changes, the source node's stored leftover field is kept in sync so
+        the render agrees with the broken-reference report (REQ-d00132-G).
+        """
+        suffix_prefix = old_id + "-"
+        for i, br in enumerate(self._broken_references):
+            new_source = new_id if br.source_id == old_id else br.source_id
+            if br.target_id == old_id:
+                new_target = new_id
+            elif br.target_id.startswith(suffix_prefix):
+                new_target = new_id + br.target_id[len(old_id) :]
+            else:
+                new_target = br.target_id
+            if (new_source, new_target) == (br.source_id, br.target_id):
+                continue
+            self._broken_references[i] = replace(br, source_id=new_source, target_id=new_target)
+            if new_target != br.target_id:
+                source_node = self._index.get(new_source)
+                ref_kind = EdgeKind(br.edge_kind)
+                self._remove_leftover_ref(source_node, ref_kind, br.target_id)
+                self._add_leftover_ref(source_node, ref_kind, new_target)
+
     def _undo_rename_node(self, entry: MutationEntry) -> None:
         """Undo a node rename operation."""
         old_id = entry.before_state.get("id")
@@ -493,6 +521,10 @@ class TraceGraph:
             if child is not None:
                 child.set_id(old_child_id)
                 self._index[old_child_id] = child
+
+        # Reverse the broken-reference/leftover retargeting done by rename_node.
+        if old_id and new_id:
+            self._retarget_broken_refs(new_id, old_id)
 
     def _undo_update_title(self, entry: MutationEntry) -> None:
         """Undo a title update operation."""
@@ -543,6 +575,45 @@ class TraceGraph:
                     self._roots.append(node)
                 break
 
+        # Restore broken references retired with the node (REQ-d00132-G)
+        for br_dict in entry.before_state.get("purged_broken_refs", []):
+            self._broken_references.append(BrokenReference(**br_dict))
+
+    # Stored ref fields hold UNRESOLVED leftovers only (REQ-d00132-F/G):
+    # build() strips refs that became edges, and the mutation paths below
+    # keep the leftovers in sync so the render (derived-from-edges UNION
+    # leftovers) always reflects the graph.
+    _LEFTOVER_REF_FIELDS = {
+        EdgeKind.IMPLEMENTS: "implements_refs",
+        EdgeKind.REFINES: "refines_refs",
+    }
+
+    def _add_leftover_ref(self, node: GraphNode | None, edge_kind: EdgeKind, ref: str) -> None:
+        """Record an unresolved reference so it keeps rendering.
+
+        Implements: REQ-d00132-G
+        """
+        field = self._LEFTOVER_REF_FIELDS.get(edge_kind)
+        if node is None or field is None or node.kind != NodeKind.REQUIREMENT:
+            return
+        stored = list(node.get_field(field) or [])
+        if ref not in stored:
+            stored.append(ref)
+            node.set_field(field, stored)
+
+    def _remove_leftover_ref(self, node: GraphNode | None, edge_kind: EdgeKind, ref: str) -> None:
+        """Drop an unresolved reference that has been resolved or undone.
+
+        Implements: REQ-d00132-G
+        """
+        field = self._LEFTOVER_REF_FIELDS.get(edge_kind)
+        if node is None or field is None or node.kind != NodeKind.REQUIREMENT:
+            return
+        stored = list(node.get_field(field) or [])
+        if ref in stored:
+            stored.remove(ref)
+            node.set_field(field, stored)
+
     def _undo_add_edge(self, entry: MutationEntry) -> None:
         """Undo an add edge operation."""
         if entry.after_state.get("duplicate"):
@@ -560,6 +631,11 @@ class TraceGraph:
                     for br in self._broken_references
                     if not (br.source_id == source_id and br.target_id == target_id)
                 ]
+                kind_val = entry.after_state.get("edge_kind", "")
+                if kind_val:
+                    self._remove_leftover_ref(
+                        self._index.get(source_id), EdgeKind(kind_val), target_id
+                    )
             else:
                 # Remove the specific edge that was added
                 source = self._index.get(source_id)
@@ -692,8 +768,9 @@ class TraceGraph:
                     for br in self._broken_references
                     if not (br.source_id == source_id and br.target_id == new_target_id)
                 ]
+                self._remove_leftover_ref(source, EdgeKind(edge_kind_str), new_target_id)
 
-            # Restore the original broken reference
+            # Restore the original broken reference and its leftover (REQ-d00132-G)
             self._broken_references.append(
                 BrokenReference(
                     source_id=source_id,
@@ -701,6 +778,7 @@ class TraceGraph:
                     edge_kind=edge_kind_str,
                 )
             )
+            self._add_leftover_ref(source, EdgeKind(edge_kind_str), old_target_id)
 
             # Restore orphan status
             if was_orphan and source_id in self._index:
@@ -1010,20 +1088,9 @@ class TraceGraph:
             self._orphaned_ids.discard(old_id)
             self._orphaned_ids.add(new_id)
 
-        # Update broken references that reference this node
-        for i, br in enumerate(self._broken_references):
-            if br.source_id == old_id:
-                self._broken_references[i] = BrokenReference(
-                    source_id=new_id,
-                    target_id=br.target_id,
-                    edge_kind=br.edge_kind,
-                )
-            elif br.target_id == old_id:
-                self._broken_references[i] = BrokenReference(
-                    source_id=br.source_id,
-                    target_id=new_id,
-                    edge_kind=br.edge_kind,
-                )
+        # Update broken references (and their rendered leftovers) that
+        # reference this node
+        self._retarget_broken_refs(old_id, new_id)
 
         # Collect child ID pairs for undo support (assertions and steps).
         child_ids_renamed: list[tuple[str, str]] = []
@@ -1371,6 +1438,16 @@ class TraceGraph:
 
         # Remove from index
         self._index.pop(node_id)
+
+        # Retire broken references sourced from the deleted node — a node
+        # that no longer exists has no references to report as broken.
+        # Recorded for undo restoration. Implements: REQ-d00132-G
+        purged_broken = [br for br in self._broken_references if br.source_id == node_id]
+        if purged_broken:
+            self._broken_references = [
+                br for br in self._broken_references if br.source_id != node_id
+            ]
+            entry.before_state["purged_broken_refs"] = [asdict(br) for br in purged_broken]
 
         # Move to deleted_nodes for delta tracking
         self._deleted_nodes.append(node)
@@ -1833,6 +1910,8 @@ class TraceGraph:
                 )
             )
             entry.after_state["broken"] = True
+            # The unresolved ref must still render (REQ-d00132-G)
+            self._add_leftover_ref(source, edge_kind, target_id)
 
         self._mutation_log.append(entry)
         return entry
@@ -2313,8 +2392,9 @@ class TraceGraph:
             },
         )
 
-        # Remove the old broken reference
+        # Remove the old broken reference and its rendered leftover (REQ-d00132-G)
         self._broken_references.pop(broken_ref_index)
+        self._remove_leftover_ref(source, edge_kind, old_target_id)
 
         if new_target:
             # Create valid edge
@@ -2332,6 +2412,7 @@ class TraceGraph:
                     edge_kind=broken_ref.edge_kind,
                 )
             )
+            self._add_leftover_ref(source, edge_kind, new_target_id)
             entry.after_state["still_broken"] = True
 
         self._mutation_log.append(entry)
@@ -4208,7 +4289,10 @@ class GraphBuilder:
             for resolved_target in self._expand_multi_assertion(target_id):
                 expanded_links.append((source_id, resolved_target, edge_kind))
 
-        # Resolve pending links
+        # Resolve pending links. Track which (source, target, kind) refs
+        # actually became edges so the stored ref fields can be re-scoped to
+        # unresolved leftovers afterwards (REQ-d00132-F, REQ-d00132-G).
+        resolved_refs: set[tuple[str, str, str]] = set()
         for source_id, target_id, edge_kind in expanded_links:
             source = self._nodes.get(source_id)
             target = self._nodes.get(target_id)
@@ -4331,6 +4415,8 @@ class GraphBuilder:
                     # Link target as parent of source (implements relationship)
                     edge = target.link(source, edge_kind)
 
+                resolved_refs.add((source_id, target_id, edge_kind.value))
+
                 # Store implementation line range on IMPLEMENTS/VERIFIES edges
                 if edge_kind in (EdgeKind.IMPLEMENTS, EdgeKind.VERIFIES):
                     impl_start = source.get_field("function_line") or source.get_field("parse_line")
@@ -4418,6 +4504,34 @@ class GraphBuilder:
         # fully-resolved graph. Catches rules that need post-link context
         # (currently rule 7: template REQs declaring behavioural metadata).
         self._validate_template_marker_consistency()
+
+        # Implements: REQ-d00132-F, REQ-d00132-G
+        # Re-scope the stored implements/refines fields to unresolved
+        # leftovers only. Refs that became edges are stripped — the render
+        # derives them from the live edges, so edge mutations (including
+        # deleting the LAST edge of a kind) are reflected in the output.
+        # Refs that never resolved stay stored so a rewrite cannot silently
+        # delete an author's broken reference. Multi-assertion refs keep
+        # only their unresolved expansions. Must run AFTER
+        # _validate_template_marker_consistency(), which reads the raw
+        # parsed fields.
+        for node in self._nodes.values():
+            if node.kind != NodeKind.REQUIREMENT:
+                continue
+            for ref_kind, field_name in (
+                (EdgeKind.IMPLEMENTS, "implements_refs"),
+                (EdgeKind.REFINES, "refines_refs"),
+            ):
+                stored_refs = node.get_field(field_name)
+                if not stored_refs:
+                    continue
+                leftovers = [
+                    expanded
+                    for ref in stored_refs
+                    for expanded in self._expand_multi_assertion(ref)
+                    if (node.id, expanded, ref_kind.value) not in resolved_refs
+                ]
+                node.set_field(field_name, leftovers)
 
         # Populate _expected_broken_targets from nodes with the marker
         for br in self._broken_references:

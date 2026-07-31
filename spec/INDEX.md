@@ -86,12 +86,12 @@
 | REQ-d00129 | SourceLocation Removal and Consumer Migration                 | dev-graph-file-nodes.md | 8bd81196 |
 | REQ-d00130 | Parameterized Root Iteration and Kind-Based Index Query       | dev-graph-file-nodes.md | f56f8527 |
 | REQ-d00131 | Render Protocol for Graph Nodes                               | dev-graph-file-nodes.md | 3c2ce892 |
-| REQ-d00132 | Render-Based Save Operation                                   | dev-graph-file-nodes.md | 7043f7af |
+| REQ-d00132 | Render-Based Save Operation                                   | dev-graph-file-nodes.md | 9edb10c2 |
 | REQ-d00133 | MCP FILE Node Integration                                     | dev-mcp-tools.md        | ae564dae |
 | REQ-d00134 | Comprehensive Mutation Round-Trip Scenario Test               | dev-graph-file-nodes.md | be52daed |
 | REQ-d00200 | FederatedGraph Read-Only Delegation                           | dev-graph-federation.md | 72471144 |
 | REQ-d00201 | FederatedGraph Mutation Delegation                            | dev-graph-federation.md | 1a0942a4 |
-| REQ-d00202 | Associates Config Loading                                     | dev-graph-federation.md | 479dcbb8 |
+| REQ-d00202 | Associates Config Loading                                     | dev-graph-federation.md | de074317 |
 | REQ-d00203 | Multi-Repo Build Pipeline                                     | dev-graph-federation.md | 31e019a1 |
 | REQ-d00204 | Per-Repo Health Check Delegation                              | dev-graph-federation.md | 844d12d1 |
 | REQ-d00205 | MCP Federation Support                                        | dev-mcp-tools.md        | 4f16dfc7 |
@@ -142,7 +142,7 @@
 | REQ-d00250 | Section Header Depth Canonicalization                         | dev-graph-core.md       | 903349d2 |
 | REQ-d00251 | Component Style Vocabulary and Assertion Separator            | dev-graph-config.md     | e04a4e37 |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | d9d4bc98 |
-| REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | 28c8c538 |
+| REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | e3cca300 |
 | REQ-d00254 | Coverage-Based and Aggregate Test Verification                | dev-graph-core.md       | 0f7323ff |
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | bdad84a0 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | cde21cfc |

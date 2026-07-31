@@ -1,14 +1,17 @@
-# Verifies: REQ-p00005-C
+# Verifies: REQ-p00005-C, REQ-d00202-E
 """Tests for elspais associate command.
 
 Validates REQ-p00005-C: CLI-based management of associate repository links.
 Validates REQ-p00005-E: Clear error reporting for invalid paths/configs.
+Validates REQ-d00202-E: Candidate dirs with unloadable configs are skipped
+with a reported reason; the scan completes.
 """
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
+import pytest
 import tomlkit
 
 
@@ -385,6 +388,132 @@ class TestAssociateAll:
 
         output = capsys.readouterr().out
         assert "already linked" in output.lower()
+
+
+# Broken .elspais.toml contents that make load_config() raise, paired with
+# fragments (any-of, case-insensitive) that the skip reason must mention.
+# Empirically verified against load_config():
+#   toml-syntax-error  -> tomlkit UnexpectedCharError
+#   schema-unknown-key -> pydantic ValidationError (extra="forbid" on project.type)
+#   missing-namespace  -> ValueError ([project].namespace is required)
+_BROKEN_CONFIG_CASES = [
+    pytest.param(
+        'version = 3\n[project\nname = "stale"\n',
+        ("unexpected", "parse", "invalid", "toml", "char"),
+        id="toml-syntax-error",
+    ),
+    pytest.param(
+        'version = 3\n[project]\nname = "stale"\nnamespace = "STL"\ntype = "associated"\n',
+        ("type",),
+        id="schema-unknown-key",
+    ),
+    pytest.param(
+        'version = 3\n[project]\nname = "stale"\n',
+        ("namespace",),
+        id="missing-namespace",
+    ),
+]
+
+
+def _make_broken_repo(base: Path, name: str, config_text: str) -> Path:
+    """Create a sibling dir that claims to be an elspais repo but fails to load."""
+    repo = base / name
+    repo.mkdir(exist_ok=True)
+    (repo / ".elspais.toml").write_text(config_text)
+    return repo
+
+
+class TestAssociateBrokenSiblingConfig:
+    """Validates REQ-d00202-E: a candidate directory whose elspais config fails
+    to parse or validate is skipped with the path and reason reported, without
+    aborting the scan; dirs without a config stay silently ignored."""
+
+    @pytest.mark.parametrize("config_text, reason_fragments", _BROKEN_CONFIG_CASES)
+    def test_REQ_d00202_E_discover_returns_error_string_for_unloadable_config(
+        self, tmp_path, config_text, reason_fragments
+    ):
+        """discover_associate_from_path must not raise on an unloadable config;
+        it returns an error string naming the path and the reason."""
+        from elspais.associates import discover_associate_from_path
+
+        broken = _make_broken_repo(tmp_path, "stale-sibling", config_text)
+
+        result = discover_associate_from_path(broken)
+
+        assert isinstance(
+            result, str
+        ), f"Expected an error message string for an unloadable config, got {result!r}"
+        assert str(broken) in result, f"Skip reason must name the path: {result!r}"
+        # The message must carry the underlying reason, not just the path.
+        lowered = result.lower()
+        assert any(frag in lowered for frag in reason_fragments), (
+            f"Skip reason must explain why the config failed to load "
+            f"(expected one of {reason_fragments}): {result!r}"
+        )
+
+    @pytest.mark.parametrize("config_text, reason_fragments", _BROKEN_CONFIG_CASES)
+    def test_REQ_d00202_E_broken_sibling_config_is_skipped_with_reason(
+        self, tmp_path, monkeypatch, capsys, config_text, reason_fragments
+    ):
+        """--all completes past a broken-config sibling: exits 0, links the
+        valid sibling, reports the broken path with a reason, and stays silent
+        about a plain dir that has no .elspais.toml at all.
+
+        Negative test (red phase): the unguarded load_config() call in
+        discover_associate_from_path currently propagates the exception and
+        kills the whole scan — this test fails with that raised exception
+        until the guard exists.
+        """
+        from elspais.commands.associate_cmd import run
+
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        core = _make_core_repo(workspace / "core")
+        _make_associate_repo(workspace, "callisto", "CAL")
+        # Sorted before "callisto" so the scan must survive the broken repo
+        # to reach and link the valid one.
+        broken = _make_broken_repo(workspace, "a-stale-repo", config_text)
+        plain = workspace / "b-plain-dir"
+        plain.mkdir()
+        (plain / "README.md").write_text("not an elspais repo\n")
+
+        monkeypatch.chdir(core)
+        args = argparse.Namespace(
+            associate_path=None,
+            all=True,
+            list=False,
+            unlink=None,
+            config=core / ".elspais.toml",
+            verbose=False,
+            quiet=False,
+        )
+        rc = run(args)
+        assert rc == 0, "scan must complete and exit 0 despite the broken sibling"
+
+        captured = capsys.readouterr()
+        combined = captured.out + captured.err
+
+        # The valid sibling is still discovered and linked.
+        local_config = core / ".elspais.local.toml"
+        assert local_config.exists()
+        doc = tomlkit.parse(local_config.read_text())
+        assert "callisto" in doc["associates"], "valid sibling must still be linked"
+        assert "a-stale-repo" not in doc.get("associates", {})
+
+        # The broken candidate is reported with its path and a reason.
+        assert (
+            str(broken) in combined
+        ), f"skip report must name the broken sibling's path; output was:\n{combined}"
+        lowered = combined.lower()
+        assert any(frag in lowered for frag in reason_fragments), (
+            f"skip report must include the reason (one of {reason_fragments}); "
+            f"output was:\n{combined}"
+        )
+
+        # A dir without .elspais.toml is not a candidate: no report at all.
+        assert (
+            "b-plain-dir" not in combined
+        ), f"plain dirs without .elspais.toml must stay silent; output was:\n{combined}"
 
 
 class TestAssociateList:

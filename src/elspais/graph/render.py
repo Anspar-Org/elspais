@@ -644,9 +644,14 @@ def _derive_refs_for_edge_kind(
     (e.g. one source with labels ``["A", "B"]`` renders as
     ``foo/A/B`` rather than two separate ``foo/A, foo/B`` entries).
 
-    Falls back to the stored field when no edges are found (e.g., nodes
-    created by mutations that haven't been wired yet, or broken-ref
-    cases where edges silently dropped).
+    The result is the UNION of edge-derived refs and the stored field
+    (REQ-d00132-F, REQ-d00132-G). After build, the stored field holds
+    only unresolved leftovers — refs that never became edges (broken
+    references, or refs on mutation-created nodes not yet wired) — and
+    the mutation paths keep it in sync. Deriving from edges means edge
+    mutations (including deleting the LAST edge of a kind) are reflected
+    in the output; unioning the leftovers means a rewrite never silently
+    deletes an author's unresolved reference.
     """
     # source_id -> (whole_req_flag, set of assertion labels)
     by_source: dict[str, tuple[bool, set[str]]] = {}
@@ -672,12 +677,12 @@ def _derive_refs_for_edge_kind(
             else:
                 refs.add(f"{src}-{'+'.join(sorted_labels)}")
 
-    if refs:
-        return sorted(refs)
-
-    # Fallback to stored field
+    # Union in the unresolved leftovers (REQ-d00132-G)
     stored = node.get_field(stored_field)
-    return list(stored) if stored else []
+    if stored:
+        refs.update(stored)
+
+    return sorted(refs)
 
 
 def _derive_implements_refs(node: GraphNode, resolver: Any | None = None) -> list[str]:
@@ -894,33 +899,16 @@ def render_save(
     # Find dirty FILE nodes
     dirty_file_ids = _find_dirty_files(graph, resolver=resolver)
 
-    # Federation: by default, fix/save writes only primary-repo files. The
-    # authoritative owner is the federation's ownership map (graph.repo_for):
-    # build-time associate FILE nodes are created by a recursive build where
-    # the associate is its own root, so their `repo` field is None and cannot
-    # be relied upon. We mirror the resolution used below (write path) and by
-    # the MCP write guard. The `repo` field is a fallback for any node not yet
-    # registered in the ownership map. Implements: REQ-d00253-B
+    # Federation: by default, fix/save writes only primary-repo files.
+    # Ownership resolution lives in ONE place: is_associate_owned() in
+    # graph/federated.py (shared with the fix command's report lines).
+    # Implements: REQ-d00253-B
     if not write_associates:
-        root_repo = getattr(graph, "root_repo_name", None)
-        primary_only: set[str] = set()
-        for file_id in dirty_file_ids:
-            is_associate = False
-            try:
-                owner = graph.repo_for(file_id).name
-                # Ownership map is authoritative: anything not owned by the
-                # root repo is an associate.
-                is_associate = root_repo is not None and owner != root_repo
-            except (KeyError, AttributeError):
-                # Not registered in the ownership map — fall back to the FILE
-                # node's `repo` field (non-None => associate-owned).
-                fnode = graph.find_by_id(file_id)
-                if fnode is not None and fnode.get_field("repo") is not None:
-                    is_associate = True
-            if is_associate:
-                continue  # owned by an associate — never written by default
-            primary_only.add(file_id)
-        dirty_file_ids = primary_only
+        from elspais.graph.federated import is_associate_owned
+
+        dirty_file_ids = {
+            file_id for file_id in dirty_file_ids if not is_associate_owned(graph, file_id)
+        }
 
     if not dirty_file_ids:
         # No dirty files — clear log and return

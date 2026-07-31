@@ -238,16 +238,19 @@ E. The mutation log and undo system SHALL continue to work unchanged. The mutati
 
 F. The render-based save SHALL derive implements and refines reference lists from the live graph edges rather than stored fields, ensuring edge mutations are correctly reflected in the output.
 
+G. Rendering SHALL preserve reference entries that never resolved to graph edges (broken references), including when they coexist with edge-derived references, so a rewrite does not silently delete an author's unresolved reference.
+
 ### Rationale
 
 Render-based save replaces the brittle text surgery in persistence.py with graph-native serialization. Each FILE node renders its content from the graph, making the graph the single source of truth. The consistency check (rebuild + compare) proves round-trip fidelity.
 
 ### Changelog
 
+- 2026-07-31 | 9edb10c2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 7043f7af | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 7043f7af | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Render-Based Save Operation* | **Hash**: 7043f7af
+*End* *Render-Based Save Operation* | **Hash**: 9edb10c2
 ---
 
 ## REQ-d00134: Comprehensive Mutation Round-Trip Scenario Test
