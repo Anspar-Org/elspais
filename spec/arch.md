@@ -54,8 +54,7 @@
  │   ├── init.py                 # elspais init                                                              
  │   ├── config_cmd.py           # elspais config                                                            
  │   ├── rules_cmd.py            # elspais rules                                                             
- │   ├── example_cmd.py          # elspais example                                                           
- │   └── reformat_cmd.py         # elspais reformat-with-claude                                              
+ │   └── example_cmd.py          # elspais example                                                           
  │                                                                                                           
  ├── config/                     # CONFIGURATION                                                             
  |   |  ConfigLoader.py          # Abstract config loader. Handles when config can be set (only before Graph is parsed). 
@@ -73,12 +72,6 @@
  │                                                                                                           
  ├── associates/                 # MULTI-REPO (consolidate with config?)
  │   └── __init__.py             # Associate config loading 
- │                                                                                                           
- ├── reformat/                   # AI REFORMATTING                                                           
- │   ├── detector.py             # Format detection                                                          
- │   ├── transformer.py          # Claude CLI integration                                                    
- │   ├── prompts.py              # System prompts                                                            
- │   └── line_breaks.py          # Line break normalization                                                  
  │                                                                                                           
  ├── trace/                      # VISUALIZATION (optional: trace-view extra)                                
  │   ├── models.py               # TraceViewRequirement adapter (obsolete?)

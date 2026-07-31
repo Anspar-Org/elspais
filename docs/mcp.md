@@ -94,14 +94,12 @@ Tools for spec file management:
 | `prepare_file_deletion()` | Analyze file before deletion (check requirements, content) |
 | `delete_spec_file()` | Delete spec file with safety checks |
 
-### AI Tools
+### Safety Branch Tools
 
-Tools for AI-assisted transformations:
+Tools for git-based recovery:
 
 | Tool | Description |
 |------|-------------|
-| `get_node_as_json()` | Full node serialization for AI processing |
-| `transform_with_ai()` | AI-assisted requirement transformation with git safety |
 | `restore_from_safety_branch()` | Restore repository from safety branch |
 | `list_safety_branches()` | List all safety branches created by elspais |
 
@@ -211,20 +209,7 @@ Fixing Implements vs Refines relationships:
 4. refresh_graph()                      # Rebuild with new semantics
 ```
 
-### 5. AI-Assisted Transformation
-
-Using Claude to reformat requirements:
-
-```
-1. get_node_as_json(req_id)             # Get full node data
-2. transform_with_ai(req_id, prompt,    # Apply transformation
-     save_branch=True, dry_run=True)    # Preview first
-3. transform_with_ai(req_id, prompt,    # Apply for real
-     save_branch=True, dry_run=False)
-4. # If issues: restore_from_safety_branch(branch_name)
-```
-
-### 6. Hierarchy Cleanup
+### 5. Hierarchy Cleanup
 
 Finding and fixing orphaned requirements:
 
