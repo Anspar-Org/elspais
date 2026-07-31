@@ -9,7 +9,7 @@
 | ID         | Title                                            | File            | Hash     |
 | ---------- | ------------------------------------------------ | --------------- | -------- |
 | REQ-p00001 | Requirements Management Tool                     | prd-core.md     | 2d10975a |
-| REQ-p00002 | Requirements Validation                          | prd-core.md     | b29ef9b6 |
+| REQ-p00002 | Requirements Validation                          | prd-core.md     | d9f87a2a |
 | REQ-p00003 | Traceability Matrix Generation                   | prd-core.md     | 3121ad66 |
 | REQ-p00004 | Change Detection and Auditability                | prd-core.md     | 7930cf78 |
 | REQ-p00005 | Multi-Repository Requirements                    | prd-features.md | 3a6f18bd |
@@ -107,7 +107,7 @@
 | REQ-d00209 | Schema-Driven Init Template Generation                        | dev-graph-config.md     | 0173b043 |
 | REQ-d00210 | Documentation Drift Detection                                 | dev-graph-config.md     | 59023724 |
 | REQ-d00211 | Config-Driven Viewer UI Values                                | dev-graph-config.md     | 58192a4f |
-| REQ-d00212 | Config Schema v3 Models                                       | dev-graph-config.md     | a0ea657d |
+| REQ-d00212 | Config Schema v3 Models                                       | dev-graph-config.md     | 40849780 |
 | REQ-d00213 | Version Check and Update Notification                         | dev-cli.md              | cedd398b |
 | REQ-d00214 | MCP Server Install/Uninstall CLI Commands                     | dev-mcp-tools.md        | 5f372b62 |
 | REQ-d00215 | Keyword Extraction Annotator                                  | dev-graph-core.md       | db477d99 |
@@ -118,7 +118,7 @@
 | REQ-d00220 | TermDictionary Data Model                                     | prd-core.md             | 986251c3 |
 | REQ-d00221 | Grammar Extension for Definition Blocks                       | prd-core.md             | 5a3c278b |
 | REQ-d00222 | TraceGraph Terms and GraphBuilder Integration                 | prd-core.md             | 0299f7c2 |
-| REQ-d00223 | Term Health Checks                                            | prd-core.md             | b2d02a05 |
+| REQ-d00223 | Term Health Checks                                            | prd-core.md             | aac4da7f |
 | REQ-d00224 | Glossary and Term Index Generators                            | prd-core.md             | c8ce4253 |
 | REQ-d00225 | CLI Registration for Glossary and Term Index                  | prd-core.md             | 2b8a5235 |
 | REQ-d00226 | Comment Data Models                                           | prd-features.md         | 6d420b96 |
