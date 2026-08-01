@@ -46,6 +46,7 @@
 - REQ-p00001-B
 - REQ-p00003-A
 - REQ-p00003-B
+- REQ-p00017-G
 - REQ-d00241-A
 - REQ-d00241-C
 - REQ-d00241-D
@@ -75,7 +76,9 @@
 - REQ-p00060:section:1
 - rem:spec/requirements-spec.md:15
 - rem:spec/requirements-spec.md:81
-- rem:spec/requirements-spec.md:378
+- rem:spec/requirements-spec.md:177
+- rem:spec/requirements-spec.md:179
+- rem:spec/requirements-spec.md:401
 - JNY-CEO-Dashboard-01
 - JNY-CEO-Sponsor-01
 - JNY-CEO-Audit-01

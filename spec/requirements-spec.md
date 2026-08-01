@@ -159,6 +159,29 @@ B. The system SHALL ...
   - MUST NOT be reused once removed (**IMPORTANT**)
 - If more than 26 assertions are required, the requirement MUST be split.
 
+### Assertion Parsing Directives
+
+Assertion text that begins with a non-letter character (such as `<`, `[`, or `{`) introduces an **assertion-level parsing directive**. The directive is enclosed by the opening character and its matching closing counterpart (`<>`, `[]`, `{}`); any text following the closing delimiter is the assertion's remaining content.
+
+```markdown
+F. <RETIRED>
+G. [SOME-DIRECTIVE] The system SHALL ...
+```
+
+(The second line illustrates the grammar only — a directive may prefix real assertion text, which is why the closing delimiter matters.)
+
+A directive the tool does not recognize is never silently treated as ordinary assertion text; the tool reports the unrecognized directive and its location.
+
+#### The RETIRED Directive
+
+An assertion carrying the `RETIRED` directive does not exist for coverage and traceability purposes:
+
+- It is excluded from all coverage and traceability calculations — not counted among assertions expected to be implemented, tested, or validated.
+- References targeting it are invalid, exactly as references to a nonexistent assertion: they do not resolve, and surface as broken references.
+- Its label remains allocated — the letter is never reused, preserving the label-stability rule above.
+
+`RETIRED` supersedes the informal `[Removed - ...]` placeholder convention, which the parser admits as an ordinary assertion that then counts as permanently uncovered in every coverage denominator.
+
 ### Assertion References
 
 Tests and other verification artifacts MAY reference:

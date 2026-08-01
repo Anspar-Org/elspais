@@ -9,7 +9,7 @@
 | ID         | Title                                            | File            | Hash     |
 | ---------- | ------------------------------------------------ | --------------- | -------- |
 | REQ-p00001 | Requirements Management Tool                     | prd-core.md     | 2d10975a |
-| REQ-p00002 | Requirements Validation                          | prd-core.md     | d9f87a2a |
+| REQ-p00002 | Requirements Validation                          | prd-core.md     | 03a4a779 |
 | REQ-p00003 | Traceability Matrix Generation                   | prd-core.md     | 3121ad66 |
 | REQ-p00004 | Change Detection and Auditability                | prd-core.md     | 7930cf78 |
 | REQ-p00005 | Multi-Repository Requirements                    | prd-features.md | 3a6f18bd |
@@ -18,7 +18,7 @@
 | REQ-p00014 | Satisfies Relationship                           | prd-features.md | 064c817a |
 | REQ-p00015 | Complete and Current Reporting                   | prd-core.md     | 9aa9a8aa |
 | REQ-p00016 | NOT APPLICABLE Status                            | prd-features.md | 2211802a |
-| REQ-p00017 | Reference Integrity Under Mutation               | prd-core.md     | c0aae59d |
+| REQ-p00017 | Reference Integrity Under Mutation               | prd-core.md     | 8ddf7122 |
 | REQ-p00018 | Compiled Risk Register                           | prd-core.md     | 0f0438e9 |
 | REQ-p00050 | Unified Graph Architecture                       | prd-features.md | 46ac5f6a |
 | REQ-p00060 | MCP Server for AI-Driven Requirements Management | prd-features.md | a729a853 |

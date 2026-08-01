@@ -53,6 +53,8 @@ The validation system enforces:
 - **Traceability completeness**: All requirements are reachable from root-level product requirements
 - **Content freshness**: Hashes match current content; changes are intentional
 
+**Assertion-level parsing directives.** *Assertion* text that begins with a non-letter character (such as `<`, `[`, or `{`) introduces a parsing directive scoped to that *Assertion*. Today's expected form is a bare directive (`F. <RETIRED>`), where a missing closing delimiter is tolerable; future directives may prefix real text (`G. [CRITICAL] Don't push the red button`), which is why the closing delimiter matters — the enclosure is what separates the directive from the *Assertion*'s remaining content. Assertion E states the invariant cleanly; parsing leniency for an unclosed bare directive is mechanism latitude, not an obligation. A directive the tool does not recognize must not silently degrade to ordinary *Assertion* text: content admitted into the graph under a meaning the author did not intend is the same silent-admission defect REQ-p00015-A guards against for unadmitted requirement content — the reporting principle is cited here, not restated. The semantics of individual directives (such as RETIRED) are the concern of the requirements governing the affected accounting, not of this format requirement.
+
 ## Assertions
 
 A. The tool SHALL validate requirement format against configurable patterns and rules.
@@ -63,14 +65,20 @@ C. The tool SHALL verify content hashes match requirement body text.
 
 D. The tool SHALL accept configuration of user journey identifier patterns with capabilities equivalent to those it accepts for requirement identifier patterns.
 
+E. When an *Assertion*'s text begins with a non-letter opening character that has a matching closing counterpart, the tool SHALL parse the text enclosed by the opening character and its matching closer as a parsing directive, with any text following the closer constituting the *Assertion*'s content.
+
+F. If an *Assertion* carries a parsing directive the tool does not recognize, then the tool SHALL report the unrecognized directive and its location rather than treating the directive as ordinary *Assertion* text.
+
 ## Changelog
 
+- 2026-07-31 | 03a4a779 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: author assertion-level parsing directive grammar (E) and unknown-directive reporting (F)
 - 2026-07-31 | d9f87a2a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-26: journey identifiers configurable equivalently to requirement identifiers (D)
 - 2026-07-31 | b29ef9b6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-03-30 | e8f0e4eb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Requirements Validation* | **Hash**: d9f87a2a
+*End* *Requirements Validation* | **Hash**: 03a4a779
 ---
 
 # REQ-p00003: Traceability Matrix Generation
@@ -328,6 +336,8 @@ The failure shapes this requirement guards against:
 - References the tool cannot see. Requirement IDs appear in artifacts elspais does not parse — prose documentation, SQL migrations, Terraform, shell scripts, commit messages. The tool cannot update these, but it can refuse to strand them: an identity mapping from former to successor identifiers makes out-of-graph references mechanically updatable. The obligation is the mapping's existence and availability, not its format.
 - Deletion that ignores lifecycle. The estate classifies statuses into roles (active, provisional, aspirational, retired). A provisional or aspirational requirement has attracted no committed references, so removing or renumbering it is routine. An active requirement is load-bearing; removing it outright would strand every reference to it, so it retires in place instead. A retired requirement is a historical record; editing it would falsify the record that its identifier preserves.
 
+**Assertion-level retirement (the RETIRED directive).** The estate's `[Removed - ...]` placeholder convention is convention-only: the parser builds ordinary ASSERTION nodes from placeholders, so retired letters (REQ-d00010 carries seven; REQ-p00004-G is another) count as permanently-uncovered assertions in every coverage denominator, and gap surfaces cannot distinguish "retired by design" from "never verified". The RETIRED parsing directive (syntax per REQ-p00002-E) makes retirement machine-readable: an *Assertion* carrying it "does not exist" for coverage and *Traceability* purposes — it exits every denominator (no longer counted among assertions expected to be implemented, tested, or validated), and references to it break loudly instead of designating a withdrawn obligation, which is precisely this requirement's governing invariant applied at *Assertion* granularity. What retirement does NOT release is the label: the letter stays allocated forever, the assertion-level analogue of the label-stability invariant assertion A states for reorder/delete mutations and of the identifier-reuse prohibition assertion F states for requirements. G/H/I are the *Assertion*-granularity counterparts of the requirement-level retire-in-place discipline in D/E/F. The adjacent concept in REQ-p00016 (a declaring requirement marking a template *Assertion* NOT APPLICABLE for one instance) is per-instance exclusion; RETIRED withdraws the obligation estate-wide at its definition site. Migrating existing placeholders to the directive form, the parser and coverage implementation, and the assertions-docs update are implementation-phase work: these assertions land uncovered by design, and current placeholder behavior becomes a tracked conformance gap.
+
 Interplay with existing requirements: this requirement governs what an *applied* mutation must preserve. When a mutation cannot be applied — or can be applied only partially — reporting the unapplied change and its cause is REQ-p00015-B's obligation, cited here rather than restated. REQ-d00201 and REQ-d00065 specify *which layer executes* mutations (delegation of mutation logic to the graph); they are complementary plumbing and say nothing about designation integrity, which is this requirement's subject. Protection against concurrent writers (lost updates, conflict detection) is the concern of the MCP mutation tooling spec under REQ-o00062, not of this requirement — scope here is designation integrity of the mutations that are applied.
 
 ## Assertions
@@ -344,12 +354,20 @@ E. While a requirement's status is in a retired role, the tool SHALL NOT apply m
 
 F. The tool SHALL NOT assign an identifier previously borne by a requirement whose status reached the active role to a different requirement.
 
+G. While an *Assertion* carries the RETIRED parsing directive, the tool SHALL exclude that *Assertion* from every coverage and *Traceability* calculation.
+
+H. If a reference targets an *Assertion* carrying the RETIRED parsing directive, then the tool SHALL treat the reference exactly as a reference to a nonexistent *Assertion*: unresolved, and surfaced as a broken reference.
+
+I. The tool SHALL NOT assign a label borne by an *Assertion* carrying the RETIRED parsing directive to a different *Assertion*.
+
 ## Changelog
 
+- 2026-07-31 | 8ddf7122 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: author RETIRED-directive semantics — coverage/traceability nonexistence (G), broken-reference resolution (H), permanent label allocation (I)
 - 2026-07-31 | c0aae59d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-20: author reference-integrity-under-mutation invariant (GI-3)
 
-*End* *Reference Integrity Under Mutation* | **Hash**: c0aae59d
+*End* *Reference Integrity Under Mutation* | **Hash**: 8ddf7122
 ---
 
 # REQ-p00018: Compiled Risk Register
