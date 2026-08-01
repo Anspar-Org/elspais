@@ -731,9 +731,10 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
+    repo_root = getattr(args, "git_root", None) or Path.cwd()
 
     config = get_config(config_path)
-    spec_dirs = get_spec_directories(spec_dir, config)
+    spec_dirs = get_spec_directories(spec_dir, config, base_path=repo_root)
 
     if not spec_dirs:
         return
@@ -743,6 +744,7 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
+        repo_root=repo_root,
         scan_code=False,
         scan_tests=False,
     )
@@ -792,6 +794,7 @@ def _fix_terms(args: argparse.Namespace, dry_run: bool) -> None:
 
     config_path = getattr(args, "config", None)
     spec_dir = getattr(args, "spec_dir", None)
+    repo_root = getattr(args, "git_root", None) or Path.cwd()
     config = get_config(config_path)
     terms_config = config.get("terms", {})
     output_dir = terms_config.get("output_dir", "spec/_generated")
@@ -799,6 +802,7 @@ def _fix_terms(args: argparse.Namespace, dry_run: bool) -> None:
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
+        repo_root=repo_root,
         scan_code=False,
         scan_tests=False,
     )

@@ -240,12 +240,15 @@ C. Multiple requirements MAY exist at the same Level each declaring a relationsh
 # REQ-p00080: Spec-to-PDF Compilation
 
 **Level**: prd | **Status**: Active | **Implements**: REQ-p00001
+**Satisfies**: REQ-p00019
 
 ## Rationale
 
 UAT documentation review requires formal PDF output with professional formatting. A single compiled document with table of contents, per-requirement page breaks, and a topic index enables offline review, regulatory submission, and stakeholder sign-off. Currently, spec files exist only as Markdown with no PDF generation pipeline.
 
 The `elspais pdf` command compiles requirement spec files into a professional PDF using Pandoc and LaTeX. Python assembles a clean Markdown document from the *Traceability* graph; a custom LaTeX template controls formatting; Pandoc handles Markdown-to-LaTeX conversion.
+
+The compiler declares `Satisfies:` against the REQ-p00019 anti-pattern template: a compiled document that silently drops a repository's content, substitutes a degraded rendering without disclosure, or fails without naming the missing prerequisite exhibits exactly the defect classes the template prohibits. A prerequisite-reporting obligation formerly stated here as its own assertion was removed as too narrow; the template's unactionable-failure class now carries that obligation in its general form.
 
 ## Assertions
 
@@ -267,6 +270,8 @@ H. The PDF generator SHALL support inclusion of content from every repository of
 
 ## Changelog
 
+- 2026-08-01 | 01da5fa4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-08-01 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: declare satisfaction of the REQ-p00019 anti-pattern template; the removed prerequisite-reporting assertion's obligation returns via the template's unactionable-failure class
 - 2026-08-01 | 01da5fa4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 01771861 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-35/TOOL-47 review: author compiled-output assertions G (multi-source, multi-media content) and H (federated-graph content inclusion); prerequisite-reporting assertion removed pending a general actionable-errors rule
@@ -279,6 +284,7 @@ H. The PDF generator SHALL support inclusion of content from every repository of
 # REQ-p00015: Complete and Current Reporting
 
 **Level**: prd | **Status**: Active | **Implements**: REQ-p00001
+**Satisfies**: REQ-p00019
 
 ## Rationale
 
@@ -291,6 +297,8 @@ Observed failure shapes this requirement guards against:
 - Derived data (coverage rollups, term and keyword indexes, change-state summaries) served mid-editing-session from sources that have since changed.
 - An operation log that records a write the tool never made.
 - A long-running server answering from a configuration that has since changed on disk.
+
+This requirement declares `Satisfies:` against the REQ-p00019 anti-pattern template and concretizes its truthful-representation classes for the tool's reporting core: assertions A and C pin silent omission to the shapes observed here (unadmitted requirement-form content; an unloadable configured repository), E and G pin silent staleness (derived values; superseded configuration), B and F pin unreported non-performance and phantom success on the write path, and D pins verdict integrity to the tool's own healthy verdict. The template's error-discipline classes (actionable failure reports, no suppressed error signals) bind to this subsystem through the template instance without a tool-specific strengthening.
 
 Interplay with existing requirements: REQ-p00004-J obliges the tool to re-read configuration from disk when reloading the graph; this requirement complements it by covering the interval between reloads — divergence must be disclosed, not silently served. REQ-p00005-E covers the configuration-time error for an invalid associate path; assertion C here covers the answer-time consequence of any load failure. REQ-p00081-D applies the same principle to workspace discovery specifically. Other spec units cite this requirement rather than restating these invariants.
 
@@ -312,6 +320,8 @@ G. While the tool serves answers computed from a configuration that no longer ma
 
 ## Changelog
 
+- 2026-08-01 | 9aa9a8aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-08-01 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: declare satisfaction of the REQ-p00019 anti-pattern template; rationale maps assertions to template classes
 - 2026-07-31 | 9aa9a8aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-10: author completeness/freshness invariant (merges GI-1 silent omission and GI-2 silent staleness)
 
@@ -393,6 +403,44 @@ C. If a mitigation citation within residual-risk documentation does not resolve 
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-4: author compiled cross-spec risk register requirement (inline residual risk, attribution to mitigating assertions, unresolved-citation reporting)
 
 *End* *Compiled Risk Register* | **Hash**: 0f0438e9
+---
+
+# REQ-p00019: Truthful Reporting and Error Discipline
+
+**Level**: prd | **Status**: Active | **Template** | **Implements**: -
+
+## Rationale
+
+A catalog of behavioral anti-pattern classes, stated once as a template and consumed by subsystem requirements via `Satisfies:`. Each assertion prohibits one class of anti-pattern (or mandates its dual); in each, "the system" reads as the satisfying subsystem. Per the template-instance semantics of REQ-p00014, the catalog clones into every declaring requirement and the instance assertions participate in normal coverage, so each subsystem answers for each class independently. A class that genuinely cannot arise for a satisfier is excluded per-instance through the NOT APPLICABLE mechanism (REQ-p00016) rather than by weakening the class.
+
+These are not "do not write buggy code" restated. Each class names a point where several behaviors are individually defensible — serving a cached value, substituting a default, taking no action on an error — and prohibits choosing one *silently*. Two principles generate the catalog. Truthful representation: the system never lets a consumer act on a picture of the world that the system knows, or could know, to be wrong — omission, staleness, substitution, phantom success, unreported non-performance, and an unearned healthy verdict are the six ways a served picture diverges from the known world. Error discipline: a failure is never a dead end — a report that names no cause or remedy, and a signal discarded without a recorded reason, both strand the receiver without a path to action.
+
+Genesis and interplay: the truthful-representation classes generalize the reporting invariants first stated for the *Traceability* graph in REQ-p00015, which remains their founding satisfier and concretizes them there. The unactionable-failure class generalizes a compilation-specific prerequisite-reporting obligation (formerly a REQ-p00080 assertion) that was removed as too narrow — the general rule lives here. Satisfiers typically concretize a class with their own assertions pinning the class to subsystem-specific triggers and remedies; evidence then attaches to those concretizations and to the instance assertions through the standard coverage mechanisms.
+
+## Assertions
+
+A. When the system omits from an answer content that lies within the scope the answer claims to cover, the system SHALL report the omission and its cause.
+
+B. When the system serves a value derived from sources that have changed since the value was computed, the system SHALL disclose the divergence or serve a value recomputed from the current sources.
+
+C. When the system delivers a default, cached, partial, or degraded result in place of the requested result, the system SHALL disclose the substitution.
+
+D. The system SHALL NOT represent an action as performed unless the action's effect is present at the destination the representation names.
+
+E. When the system does not perform a requested action, the system SHALL report the unperformed action and the cause.
+
+F. If an omission, divergence, substitution, or unperformed action remains undisclosed, then the system SHALL NOT report a healthy verdict.
+
+G. When the system reports a failure, the report SHALL identify the operation that failed, the cause, and the remedial action available to the caller (or state that none is known).
+
+H. The system SHALL act on or report every error signal it receives, except signals whose point of suppression carries a recorded justification that no action is required.
+
+## Changelog
+
+- 2026-08-01 | b2a947fb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-01 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: author behavioral anti-pattern template — silent omission, staleness, substitution, phantom success, unreported non-performance, verdict integrity, unactionable failures, suppressed error signals
+
+*End* *Truthful Reporting and Error Discipline* | **Hash**: b2a947fb
 ---
 
 ## REQ-d00220: TermDictionary Data Model

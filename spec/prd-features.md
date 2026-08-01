@@ -49,13 +49,15 @@ F. The tool SHALL resolve relative associate paths from the canonical (non-workt
 
 # REQ-p00081: Org-Wide Requirement Visibility
 
-**Level**: prd | **Status**: Draft | **Implements**: REQ-p00005
+**Level**: prd | **Status**: Draft | **Implements**: REQ-p00005 | **Satisfies**: REQ-p00019
 
 ## Rationale
 
 An organization keeps cross-cutting requirements — CI conventions, secrets handling, storage rules, sponsor abstraction — in a policy repository that is *meta* to the repositories it governs. An author working in a governed repository needs those obligations surfaced without having to know they exist before looking for them. Measured against the live estate (2026-07-29; method preserved in the internal archive): of ~620 *Traceability* references across the organization, 2 targeted a cross-cutting requirement, 0 resolved, and no repository federated the policy repository — so "0.3% referencing" could not be distinguished from "nobody knows these apply".
 
 This requirement states the visibility invariants (V1–V3, H2). The mechanisms that realize them — the per-user workspace registry, role model, and shadowing rules — are specified at the dev level and may change without weakening these obligations.
+
+The discovery surface declares `Satisfies:` against the REQ-p00019 anti-pattern template; assertions B, C, D, and F are its concretizations of the template's omission, staleness, and verdict-integrity classes for workspace discovery, where an undisclosed narrowing of scope makes an empty result indistinguishable from an incomplete search.
 
 ## Assertions
 
@@ -73,6 +75,7 @@ F. Every surface that reports results SHALL disclose the resolved workspace scop
 
 ## Changelog
 
+- 2026-08-01 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: declare satisfaction of the REQ-p00019 anti-pattern template; rationale maps B/C/D/F to template classes
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: add unconditional workspace-scope disclosure (F) — registry-absent decision
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-37: inline design-doc content; the scaffolding doc is retired
 - 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: author org-wide visibility invariants (V1, V2, V3, H2)

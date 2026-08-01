@@ -6,6 +6,8 @@
 
 ## PRODUCT
 
+### elspais/spec
+
 | ID         | Title                                            | File            | Hash     |
 | ---------- | ------------------------------------------------ | --------------- | -------- |
 | REQ-p00001 | Requirements Management Tool                     | prd-core.md     | 2d10975a |
@@ -20,12 +22,21 @@
 | REQ-p00016 | NOT APPLICABLE Status                            | prd-features.md | 2211802a |
 | REQ-p00017 | Reference Integrity Under Mutation               | prd-core.md     | 8ddf7122 |
 | REQ-p00018 | Compiled Risk Register                           | prd-core.md     | 0f0438e9 |
+| REQ-p00019 | Truthful Reporting and Error Discipline          | prd-core.md     | b2a947fb |
 | REQ-p00050 | Unified Graph Architecture                       | prd-features.md | 46ac5f6a |
 | REQ-p00060 | MCP Server for AI-Driven Requirements Management | prd-features.md | a729a853 |
 | REQ-p00061 | Requirement Decomposition Rules                  | prd-core.md     | 462c146e |
 | REQ-p00080 | Spec-to-PDF Compilation                          | prd-core.md     | 01da5fa4 |
 | REQ-p00081 | Org-Wide Requirement Visibility                  | prd-features.md | 17fa4417 |
 | REQ-p00082 | Federated Authority and Verdict Scoping          | prd-features.md | a8311d6c |
+
+### elspais
+
+| ID                     | Title                                   | File | Hash     |
+| ---------------------- | --------------------------------------- | ---- | -------- |
+| REQ-p00015::REQ-p00019 | Truthful Reporting and Error Discipline |      | b2a947fb |
+| REQ-p00080::REQ-p00019 | Truthful Reporting and Error Discipline |      | b2a947fb |
+| REQ-p00081::REQ-p00019 | Truthful Reporting and Error Discipline |      | b2a947fb |
 
 ## OPERATIONS
 
