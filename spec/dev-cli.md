@@ -467,7 +467,7 @@ Authors writing their first requirement, or reviewers checking format convention
 
 *End* *Requirement Format Reference Command* | **Hash**: c3b67490
 
-## REQ-d00266: Mechanical Requirement Style Checks
+## REQ-d00266: Mechanical Style Checks
 
 **Level**: dev | **Status**: Draft | **Implements**: REQ-p00002-A
 
@@ -493,14 +493,6 @@ H. The tool SHALL report style findings through the standard checks reporting su
 
 ### Rationale
 
-The organization's requirement style rules — EARS conditional patterns, assertion independence, keyword discipline, notation conventions — are today checkable only by manual review. A subset of those rules is mechanically decidable: a program can determine, from the text and the graph alone, whether the rule is violated. This requirement commits the tool to checking that subset. The assertions name classes of decidable rules, not a frozen rule list; the concrete rule set is configuration, so organizations can extend or disable individual rules without a spec change.
-
-The boundary matters: rules requiring judgment — whether an EARS pattern is the *right* classification for a conditional, whether an assertion sits at invariant altitude or has slid into implementation detail — are explicitly outside mechanical checking. The tool may surface advisory guidance for them, but they are never findings and never affect exit codes.
-
-Granularity flagging (F) is grounded in measurement, not taste: a survey of the live graph (TOOL-30, 2026-07-31) found the healthy distribution of tests per assertion sits at 2-10 (median 4 among covered assertions), with a distinct pathological head — 30 assertions carried more than 30 tests each, and every inspected member of that head was genuinely coarse; 16% of covered assertions exceeded 10. The recommended default thresholds are therefore warn above 10 and fail above 30 attached tests; the numbers live in configuration, not in the assertion, because they are calibration, not obligation. The companion signal (G) is the blanket verification link: a test that names only `REQ-xNNNNN` without an assertion letter dodges the granularity question entirely, so each such edge is flaggable on its own.
-
-Reporting through the standard checks surface (H) with per-rule severity keeps style findings organized by concern, consistent with the concern-based check organisation principle established for the checks system elsewhere in this spec (see the config-schema requirements); style checking adds rules to that surface rather than inventing a parallel reporting channel.
-
-Parent choice: REQ-p00002-A commits the tool to validating requirement *format* against configurable patterns and rules. Style rules are exactly that — configurable, pattern-based rules over requirement text — so mechanical style checking implements that assertion directly.
+Agent-generated code routinely cannot reliably be constrained to generate assertions according to a set of rules, so we must rely on checks instead. Not all checks can be automated, but those that can, are.
 
 *End* *Mechanical Requirement Style Checks* | **Hash**: 084c17a0
