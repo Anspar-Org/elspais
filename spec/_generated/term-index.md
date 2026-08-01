@@ -14,8 +14,6 @@
 
 **REQ:**
 
-- REQ-p00080-G
-- REQ-p00080-I
 - REQ-d00259:section:1
 - rem:spec/requirements-spec.md:1
 - rem:spec/requirements-spec.md:7
@@ -51,7 +49,6 @@
 - REQ-d00241-C
 - REQ-d00241-D
 - REQ-p00005-B
-- REQ-p00014-Q
 - rem:spec/AI-AGENT.md:20
 - REQ-d00084:section:0
 - REQ-d00084:section:1

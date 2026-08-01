@@ -204,14 +204,15 @@ O. Each cross-repo `INSTANCE` clone SHALL record the owning template repository 
 
 P. Evidence declared against a template *Assertion* SHALL count as evidence on every instance of that *Assertion*.
 
-Q. The system SHALL resolve an assertion-targeted reference to the same target *Assertion* in every field that accepts the reference form — requirement metadata fields as well as code and test *Traceability* markers — under every valid ID-pattern configuration, including component styles whose names contain the configured assertion separator.
+Q. The system SHALL parse each requirement or *Assertion* reference according to the ID-pattern rules of the repository that owns the referenced identifier.
 
 R. When a declared reference fails to produce a valid relationship, the resulting diagnostic SHALL state which failure class occurred: resolution failure (the referenced ID matches no requirement or *Assertion*) or rule violation (the target exists but the relationship is forbidden by the validation matrix).
 
 ### Changelog
 
+- 2026-08-01 | 50f072e0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 064c817a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
-- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-44: add Q (uniform assertion-suffix resolution across fields and ID schemes) and R (diagnostics separate resolution failure from rule violation)
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-44: add Q (references parsed per the owning repository's ID-pattern rules) and R (diagnostics separate resolution failure from rule violation)
 - 2026-07-30 | 47baf2fc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-30 | 7adf98fa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: templates become subtrees — B/H clone the subtree rooted at any satisfied member, G requires a template's refiners to be templates, composite obligations split out as L-P, K restated as instance uniformity with P carrying the cross-cutting evidence rule
@@ -229,7 +230,7 @@ R. When a declared reference fails to produce a valid relationship, the resultin
 - 2026-05-04 | bae1b85d | - | Developer (<dev@example.com>) | Auto-fix: canonicalize term forms, update hash
 - 2026-03-30 | 9115ce0d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Satisfies Relationship* | **Hash**: 064c817a
+*End* *Satisfies Relationship* | **Hash**: 50f072e0
 ---
 
 ## REQ-p00016: NOT APPLICABLE Status
@@ -506,7 +507,7 @@ A. A Lost Comments card SHALL appear at the top of the card column when orphaned
 
 ### Rationale
 
-Resolved review threads are disposable working notes, not audit evidence — decided deliberately (2026-07-31) after the retired roadmap design had asserted the opposite. The audit record of *why* a requirement changed lives in requirement changelogs and version control, not in the comment store; a team wanting belt-and-braces custody can commit `.elspais/comments/` before compacting, since compaction is a manual operation. Stripping resolved threads on compaction is therefore intended behavior, not an implementation accident.
+Resolved review threads are disposable working notes, not audit evidence. The audit record of *why* a requirement changed lives in requirement changelogs, version control, or the requirement itself.
 
 ### Assertions
 

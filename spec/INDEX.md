@@ -15,7 +15,7 @@
 | REQ-p00005 | Multi-Repository Requirements                    | prd-features.md | 3a6f18bd |
 | REQ-p00006 | Interactive Traceability Viewer                  | prd-features.md | 185217a3 |
 | REQ-p00013 | Automated Testing                                | prd-core.md     | 4318202c |
-| REQ-p00014 | Satisfies Relationship                           | prd-features.md | 064c817a |
+| REQ-p00014 | Satisfies Relationship                           | prd-features.md | 50f072e0 |
 | REQ-p00015 | Complete and Current Reporting                   | prd-core.md     | 9aa9a8aa |
 | REQ-p00016 | NOT APPLICABLE Status                            | prd-features.md | 2211802a |
 | REQ-p00017 | Reference Integrity Under Mutation               | prd-core.md     | 8ddf7122 |
@@ -23,7 +23,7 @@
 | REQ-p00050 | Unified Graph Architecture                       | prd-features.md | 46ac5f6a |
 | REQ-p00060 | MCP Server for AI-Driven Requirements Management | prd-features.md | a729a853 |
 | REQ-p00061 | Requirement Decomposition Rules                  | prd-core.md     | 462c146e |
-| REQ-p00080 | Spec-to-PDF Compilation                          | prd-core.md     | 01771861 |
+| REQ-p00080 | Spec-to-PDF Compilation                          | prd-core.md     | 01da5fa4 |
 | REQ-p00081 | Org-Wide Requirement Visibility                  | prd-features.md | 17fa4417 |
 | REQ-p00082 | Federated Authority and Verdict Scoping          | prd-features.md | a8311d6c |
 

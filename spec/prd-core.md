@@ -247,8 +247,6 @@ UAT documentation review requires formal PDF output with professional formatting
 
 The `elspais pdf` command compiles requirement spec files into a professional PDF using Pandoc and LaTeX. Python assembles a clean Markdown document from the *Traceability* graph; a custom LaTeX template controls formatting; Pandoc handles Markdown-to-LaTeX conversion.
 
-Which external tools perform conversion, typesetting, and diagram rendering is a mechanism choice; the assertions deliberately name none of them, obliging only that the compilation reports what it is missing and that its output is complete. A compiled document that silently drops diagrams, images, or a federated repository's requirements misrepresents the estate it documents — the same silent-omission defect REQ-p00015 guards against in reporting surfaces.
-
 ## Assertions
 
 A. The tool SHALL provide an `elspais pdf` CLI command that compiles spec files into a PDF document.
@@ -263,20 +261,19 @@ E. The tool SHALL insert page breaks before each requirement heading to ensure e
 
 F. The tool SHALL support an `--overview` flag that generates a stakeholder-oriented PDF containing only PRD-level requirements, with an optional `--max-depth` flag to limit core PRD graph depth while always including all associated-repo PRDs.
 
-G. When *Specification* content references a diagram source, the generated PDF SHALL present the diagram in rendered graphical form rather than as source text.
+G. The PDF generator SHALL support content derived from a variety of sources and media types.
 
-H. If an external document-processing tool required for compilation is not available, then the tool SHALL report the missing prerequisite by name.
-
-I. The generated PDF SHALL render every content element within the compilation's scope, including images referenced by *Specification* content and requirement content from every repository of a federated graph.
+H. The PDF generator SHALL support inclusion of content from every repository of a federated graph.
 
 ## Changelog
 
+- 2026-08-01 | 01da5fa4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 01771861 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
-- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-35: author compiled-output assertions G/H/I (diagram rendering, prerequisite reporting, output completeness)
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-35/TOOL-47 review: author compiled-output assertions G (multi-source, multi-media content) and H (federated-graph content inclusion); prerequisite-reporting assertion removed pending a general actionable-errors rule
 - 2026-07-31 | 24f063f6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-04-23 | bfc0cadf | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Spec-to-PDF Compilation* | **Hash**: 01771861
+*End* *Spec-to-PDF Compilation* | **Hash**: 01da5fa4
 ---
 
 # REQ-p00015: Complete and Current Reporting
