@@ -826,7 +826,7 @@ def _image_asm(tmp_path: Path) -> tuple[MarkdownAssembler, Path]:
 
 
 class TestImagePathResolution:
-    """Validates REQ-p00080-C: relative image refs survive the /tmp pandoc hop.
+    """Validates REQ-p00080-I: relative image refs survive the /tmp pandoc hop.
 
     render_pdf() writes assembled markdown to a temp file in /tmp/, so any
     image reference left relative resolves to nothing and the image is
@@ -835,8 +835,8 @@ class TestImagePathResolution:
     file's directory in the file's owning repo.
     """
 
-    # Verifies: REQ-p00080-C
-    def test_REQ_p00080_C_relative_image_resolved_against_source_dir(self, tmp_path):
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_relative_image_resolved_against_source_dir(self, tmp_path):
         """A ref relative to a spec subdirectory becomes absolute."""
         asm, root = _image_asm(tmp_path)
         (root / "spec" / "sub" / "images").mkdir(parents=True)
@@ -850,8 +850,8 @@ class TestImagePathResolution:
         assert f"![diagram]({img.resolve()})" in joined
         assert "![diagram](images/a.png)" not in joined
 
-    # Verifies: REQ-p00080-C
-    def test_REQ_p00080_C_parent_relative_image_resolved(self, tmp_path):
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_parent_relative_image_resolved(self, tmp_path):
         """A ../docs/... ref (the TOOL-31 repro) resolves to the repo's docs tree."""
         asm, root = _image_asm(tmp_path)
         (root / "spec").mkdir()
@@ -866,8 +866,8 @@ class TestImagePathResolution:
         joined = "\n".join(asm._render_file("spec/prd-x.md"))
         assert f"![shot]({img.resolve()})" in joined
 
-    # Verifies: REQ-p00080-C
-    def test_REQ_p00080_C_image_title_preserved(self, tmp_path):
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_image_title_preserved(self, tmp_path):
         """An optional quoted title survives the rewrite."""
         asm, root = _image_asm(tmp_path)
         (root / "spec").mkdir()
@@ -878,8 +878,8 @@ class TestImagePathResolution:
         joined = "\n".join(asm._render_file("spec/y.md"))
         assert f'![b]({img.resolve()} "caption text")' in joined
 
-    # Verifies: REQ-p00080-C
-    def test_REQ_p00080_C_unresolved_and_external_refs_unchanged(self, tmp_path):
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_unresolved_and_external_refs_unchanged(self, tmp_path):
         """Missing files and URLs are left as-is (resource-path fallback)."""
         asm, root = _image_asm(tmp_path)
         (root / "spec").mkdir()
@@ -892,8 +892,8 @@ class TestImagePathResolution:
         assert "![gone](missing/nope.png)" in joined
         assert "![web](https://example.com/pic.png)" in joined
 
-    # Verifies: REQ-p00080-C
-    def test_REQ_p00080_C_associate_image_resolves_through_owning_repo(self, tmp_path):
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_associate_image_resolves_through_owning_repo(self, tmp_path):
         """Federated composition (TOOL-32): an associate-owned file's image
         must resolve against the ASSOCIATE repo root, not the root repo's."""
         fed, root_dir, assoc_dir = _make_federated_overview_graph(tmp_path)

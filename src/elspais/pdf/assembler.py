@@ -1,4 +1,4 @@
-# Implements: REQ-p00080-B, REQ-p00080-C, REQ-p00080-D, REQ-p00080-E, REQ-p00080-F
+# Implements: REQ-p00080-B, REQ-p00080-C, REQ-p00080-D, REQ-p00080-E, REQ-p00080-F, REQ-p00080-I
 """Markdown assembler for PDF compilation.
 
 Uses the graph for file ordering metadata (level, depth), then reads the
@@ -386,6 +386,7 @@ class MarkdownAssembler:
     # Raster/vector image resolution
     # ------------------------------------------------------------------
 
+    # Implements: REQ-p00080-I
     def _resolve_image_paths(
         self,
         line: str,

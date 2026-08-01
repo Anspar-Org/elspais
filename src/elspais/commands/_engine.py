@@ -102,7 +102,8 @@ def _try_daemon(
     # 1. Try existing server (viewer or daemon — both use daemon.json)
     port = _get_daemon_port()
     if port:
-        # Staleness checks (REQ-p00004-J): version mismatch or config edited
+        # Implements: REQ-p00004-J, REQ-p00015-G
+        # Staleness checks: version mismatch or config edited
         # since the daemon captured its config hash. Warn-and-serve if the
         # daemon holds unsaved work; restart if clean.
         from elspais import __version__

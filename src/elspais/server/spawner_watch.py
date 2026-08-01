@@ -1,4 +1,4 @@
-# Implements: REQ-p00015-E
+# Daemon process-lifetime hygiene: deliberately unspecified in spec (no REQ governs it).
 """Spawner liveness watchdog for the background daemon.
 
 A daemon spawned implicitly to serve a CLI/session records the spawner's

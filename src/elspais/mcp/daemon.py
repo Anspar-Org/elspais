@@ -215,6 +215,7 @@ def write_daemon_json(
     return daemon_json
 
 
+# Implements: REQ-p00004-J
 def refresh_daemon_config_hash(repo_root: Path) -> None:
     """Rewrite daemon.json's config_hash from the current config on disk.
 

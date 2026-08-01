@@ -115,6 +115,7 @@ class AppState:
             config=config,
         )
 
+    # Implements: REQ-p00004-J
     def snapshot_mtimes(self) -> None:
         """Record current mtimes of all scanned spec/code/test files.
 
@@ -209,6 +210,7 @@ class AppState:
             pass  # Keep serving the old graph on rebuild failure
         return True
 
+    # Implements: REQ-p00004-J
     def _rebuild(self) -> None:
         """Rebuild graph from disk. Propagates to MCP _state if linked."""
         from elspais.config import get_config

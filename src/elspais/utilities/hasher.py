@@ -169,6 +169,7 @@ def normalize_assertion_text(label: str, text: str) -> str:
     return f"{label}. {text}"
 
 
+# Implements: REQ-d00131-J
 def compute_normalized_hash(
     assertions: list[tuple[str, str]],
     length: int = 8,
