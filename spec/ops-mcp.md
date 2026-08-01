@@ -106,6 +106,8 @@ O. Every mutation reachable through the review server's HTTP interface SHALL als
 
 P. Undoing a deletion SHALL restore the node's structural attachment, not merely its existence: its file membership, both edge directions with their edge metadata and assertion targets, and its root membership SHALL be restored, so the node renders back into its original file at its original position and the versions of nodes it referenced are left unchanged.
 
+Q. When the daemon serves HTTP, its MCP interface SHALL accept sessions at the documented endpoint and SHALL operate on the same in-memory graph as the review server's HTTP interface, so agent and human writers are guarded against each other rather than only against writers on their own transport. A mount that cannot be served SHALL be reported, not silently omitted.
+
 ### Rationale
 
 In-memory mutations enable AI agents to draft requirement changes that can be reviewed before persisting. The undo system provides safety for exploratory editing.
@@ -114,6 +116,7 @@ A single daemon serves multiple concurrent writers — MCP agents and the viewer
 
 ### Changelog
 
+- 2026-07-31 | ad214b71 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | ca1d9dee | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-26 | 7c83917e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-26 | ef195b50 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -121,7 +124,7 @@ A single daemon serves multiple concurrent writers — MCP agents and the viewer
 - 2026-05-11 | ef63f424 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | ef63f424 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *MCP Graph Mutation Tools* | **Hash**: ca1d9dee
+*End* *MCP Graph Mutation Tools* | **Hash**: ad214b71
 ---
 
 ## REQ-o00063: MCP File Mutation Tools
