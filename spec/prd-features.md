@@ -46,6 +46,78 @@ F. The tool SHALL resolve relative associate paths from the canonical (non-workt
 *End* *Multi-Repository Requirements* | **Hash**: c3303546
 ---
 
+# REQ-p00081: Org-Wide Requirement Visibility
+
+**Level**: prd | **Status**: Draft | **Implements**: REQ-p00005
+
+## Rationale
+
+An organization keeps cross-cutting requirements — CI conventions, secrets handling, storage rules, sponsor abstraction — in a policy repository that is *meta* to the repositories it governs. An author working in a governed repository needs those obligations surfaced without having to know they exist before looking for them. Measured against the live estate (2026-07-29; method preserved in the internal archive): of ~620 *Traceability* references across the organization, 2 targeted a cross-cutting requirement, 0 resolved, and no repository federated the policy repository — so "0.3% referencing" could not be distinguished from "nobody knows these apply".
+
+This requirement states the visibility invariants (V1–V3, H2). The mechanisms that realize them — the per-user workspace registry, role model, and shadowing rules — are specified at the dev level and may change without weakening these obligations.
+
+## Assertions
+
+A. The tool SHALL make a requirement authored in any repository of the caller's workspace discoverable from every repository of that workspace, without the caller naming the repository that owns it.
+
+B. The tool SHALL NOT narrow workspace discovery scope in response to an omission or error in an individual member repository's own configuration.
+
+C. The tool SHALL disclose, with every discovery result, the repository that owns the result and the freshness of the content it was computed from — a live working copy, or a baseline captured at a disclosed time.
+
+D. When a repository in the resolved discovery scope cannot be loaded, the tool SHALL report the narrowed scope — identifying the repository and the cause — on the same surface that reports the results, so that an empty result is distinguishable from an incomplete search.
+
+E. When invoked from a location that is inside a declared workspace but not inside any repository, the tool SHALL serve the workspace view rather than failing for want of a repository.
+
+F. Every surface that reports results SHALL disclose the resolved workspace scope — the workspace serving the view, or that none resolved and the view is repository-local.
+
+## Changelog
+
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: add unconditional workspace-scope disclosure (F) — registry-absent decision
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-37: inline design-doc content; the scaffolding doc is retired
+- 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: author org-wide visibility invariants (V1, V2, V3, H2)
+
+*End* *Org-Wide Requirement Visibility* | **Hash**: ccd613a8
+---
+
+# REQ-p00082: Federated Authority and Verdict Scoping
+
+**Level**: prd | **Status**: Draft | **Implements**: REQ-p00005
+
+## Rationale
+
+Enlarging the federated view multiplies the copies of any repository that a caller can reach (worktrees, clones, baselines) and multiplies the findings a validation run can surface. Without authority rules, a wider view degrades into noise: two versions of one requirement presented as peers, verdicts failing on defects the caller cannot fix, and tools writing into repositories the caller does not own. These are the authority invariants (A1, A2a, A2b, A3) and the expressibility invariant (E1).
+
+Visibility without authority is legitimate — it is how one files a ticket against another team's repository. What is scoped here is the *verdict* and the *write path*, not what a caller may see. Reporting breadth remains a caller choice (assertion E). Coverage needs no authority mechanism of its own: cross-repository coverage flows only along declared *Traceability* edges, so widening membership cannot silently move coverage numbers.
+
+Rejected shapes, recorded so they are not relitigated (2026-07-29 review). **Encoding policy scope in namespaces** was rejected: namespaces are an identity and ownership concept, and policy applicability is a judgment that changes as the organization changes — putting it in an identifier puts it in the least revisable place in the system, and cannot express the real many-to-many between obligations and repositories. **Top-down applicability relations** (an obligation naming which repositories must comply) were ruled out of scope: realizing that an obligation applies is the un-mechanizable part, and recording the decision does not create the decision — the declaration therefore stays on the complying repository's side (assertion G).
+
+## Assertions
+
+A. For any requirement visible in a federated view, the tool SHALL present exactly one authoritative version at any moment.
+
+B. The tool SHALL NOT merge two copies of the same requirement, and SHALL NOT present two copies as peers, when the owning repository is reachable through more than one path or at more than one freshness.
+
+C. The tool SHALL attribute every validation finding to the repository that owns the content the finding is about.
+
+D. The pass/fail verdict of a validation run SHALL be computed exclusively from findings attributed to repositories within the caller's change scope, so that a finding the caller cannot fix never contributes to a failing exit status.
+
+E. Whether findings attributed to repositories outside the caller's change scope are displayed SHALL be selectable by the caller, without altering the verdict.
+
+F. The tool SHALL NOT modify content owned by a repository outside the caller's write authority, under any configuration.
+
+G. The tool SHALL support declaring, from a requirement in one workspace repository, compliance with an obligation authored in another workspace repository.
+
+H. A reference to a cross-repository obligation SHALL either resolve to that obligation or be reported as a broken reference.
+
+## Changelog
+
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: drop the umbrella-rejection paragraph — granularity is an authoring choice; non-root Satisfies, N/A declarations, and the chained-instantiation prohibition already cover applicability
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-37: inline design-doc content; the scaffolding doc is retired
+- 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: author federated authority invariants (A1, A2a, A2b, A3, E1)
+
+*End* *Federated Authority and Verdict Scoping* | **Hash**: be6068bd
+---
+
 # REQ-p00006: Interactive Traceability Viewer
 
 **Level**: prd | **Status**: Active | **Implements**: REQ-p00003
@@ -92,30 +164,45 @@ C. The viewer SHALL display source files inline in a side panel with syntax-high
 
 Cross-cutting concerns — regulatory compliance frameworks, security policies, accessibility standards, operational baselines — define obligations that multiple independent subsystems must satisfy. The `Satisfies:` relationship enables a template-instance pattern: a set of requirements is defined once as a reusable template, and individual subsystems declare that they satisfy it. When a requirement declares `Satisfies: X`, the graph builder clones the template's REQ subtree with composite IDs, creating instance nodes that participate in normal coverage computation. A `Stereotype` enum (`CONCRETE`, `TEMPLATE`, `INSTANCE`) classifies nodes, and an `INSTANCE` edge connects each clone to its template original. Templates are declared explicitly with a `**Template**` metadata-line marker so authors opt in deliberately and so the validator can catch mis-targeted `Satisfies:`/`Refines:`/`Implements:` references at build time.
 
+A template is a *subtree*, not a single REQ: template-marked REQs refine other template-marked REQs to decompose one cross-cutting obligation into levels of detail (a policy root refined by its specific provisions). `Satisfies:` may target any member of a template subtree — the clone is the subtree rooted at the target, so declaring against an interior member is simply a narrower declaration. An earlier revision restricted templates to single-REQ scope (root plus directly-attached assertions, inbound `Refines:` prohibited); that made real policy hierarchies unrepresentable and is retired. The validation matrix's complements are deliberate permissions: template-to-template `Refines:` is the subtree-forming edge, and `Implements:` from CODE / `Verifies:` from TEST against template targets is the cross-cutting evidence path — assertion D produces the direct edge, assertion P makes that evidence count on every instance. Instances need no special analysis: evidence recorded against a template *Assertion* counts on each of its instances (assertion P), and from there every surface treats instances as ordinary directly-declared nodes (assertion K) — the standard rollup aggregates a cloned subtree like any other. The INSTANCE edge is the wiring by which implementations realize assertion P; whether that is computed as query-time inheritance or by materializing evidence edges onto clones is an implementation choice the spec does not fix. Which members of a subtree apply to a given repository is that repository's authoring decision, expressed by what it targets — the granularity question is no different from deciding what belongs in one REQ.
+
 ### Assertions
 
 A. The system SHALL support a `Satisfies:` metadata field on requirements. The target MAY be a requirement or a specific *Assertion*.
 
-B. When a requirement declares `Satisfies: X`, the graph builder SHALL clone the template REQ plus its directly-attached *Assertions* (single-REQ scope; templates SHALL NOT have descendant REQs — see *Assertion* G) with composite IDs of the form `declaring_id::original_id`. The cloned root SHALL be linked to the declaring requirement via a SATISFIES edge. Each clone SHALL be linked to its template original via an INSTANCE edge. The cloned subtree SHALL preserve *Assertion* content and STRUCTURES edges from the template. Coverage of cloned nodes SHALL use the standard coverage mechanism — no special computation is needed (see *Assertion* K for the inherited-coverage rule that supplements this for cross-cutting evidence).
+B. When a requirement declares `Satisfies: X`, the graph builder SHALL clone the template subtree rooted at the target — the target template REQ with its directly-attached *Assertions*, plus every descendant template REQ that refines a member of the subtree, recursively, with their *Assertions* — using composite IDs of the form `declaring_id::original_id`.
 
 C. The system SHALL classify nodes using a `Stereotype` field: `CONCRETE` (default), `TEMPLATE` (original nodes targeted by Satisfies), or `INSTANCE` (cloned copies). Each instance node SHALL have an INSTANCE edge to its template original.
 
-D. CODE that declares `Implements: <template-assertion>` and TEST that declares `Verifies: <template-assertion>` SHALL produce a direct IMPLEMENTS or VERIFIES edge to the template *Assertion*. The evidence is cross-cutting: a single implementation or test against a template *Assertion* is understood to apply to every satisfier of that template via the INSTANCE edges that connect each clone to its original.
+D. CODE that declares `Implements: <template-assertion>` and TEST that declares `Verifies: <template-assertion>` SHALL produce a direct IMPLEMENTS or VERIFIES edge to the template *Assertion*.
 
 E. Authors SHALL mark a requirement as a template by adding the no-value `**Template**` flag (markdown decoration optional) anywhere on the pipe-separated metadata line. The parser SHALL set `Stereotype.TEMPLATE` on the resulting REQ and on each of its *Assertions*. The render protocol SHALL emit the flag verbatim on the metadata line for any node with `Stereotype.TEMPLATE`.
 
 F. `BrokenReference` SHALL carry an optional `diagnostic` field that explains why a reference is invalid. The `elspais checks` command SHALL surface the diagnostic verbatim in its health-finding message so authors get actionable guidance (e.g. *"REQ-A is not marked **Template**; mark REQ-A with **Template** if it's intended to be satisfiable."*).
 
-G. The graph builder SHALL enforce a static validation matrix at build time, raising typed `BrokenReference` diagnostics for each invalid combination: `Satisfies:` against a target that exists but is not marked `**Template**`; `Satisfies:` against an `INSTANCE` target (chained instantiation); `Refines:` against a `TEMPLATE` target (compositing templates); `Refines:` against an `INSTANCE` target (refining instance content); `Implements:` from CODE against an `INSTANCE` target; `Verifies:` from TEST against an `INSTANCE` target; a REQ marked `**Template**` that declares its own `Implements:`/`Refines:` metadata targeting nodes outside its template subtree; a REQ marked `**Template**` that is targeted by an inbound `Refines:`. `Implements:` from CODE and `Verifies:` from TEST against a `TEMPLATE` target SHALL be permitted (cross-cutting evidence, *Assertion* D).
+G. The graph builder SHALL enforce a static validation matrix at build time, raising typed `BrokenReference` diagnostics for each invalid combination: `Satisfies:` against a target that exists but is not marked `**Template**`; `Satisfies:` against an `INSTANCE` target (chained instantiation); `Refines:` against a `TEMPLATE` target from a REQ not itself marked `**Template**` (a template's refiners must themselves be templates); `Refines:` against an `INSTANCE` target (refining instance content); `Implements:` from CODE against an `INSTANCE` target; `Verifies:` from TEST against an `INSTANCE` target; a REQ marked `**Template**` that declares `Implements:`/`Refines:` metadata targeting nodes outside its template subtree.
 
-H. When a requirement declares `Satisfies:` against a template owned by an associated repository, the federated graph builder SHALL clone the template REQ subtree (root REQ plus its directly-attached assertions) into the declaring repo's index with composite IDs of the form `declaring_id::original_id`, wire intra-graph `SATISFIES`, `STRUCTURES`, and `DEFINES` edges, and wire a cross-graph `INSTANCE` edge from each clone to its template original. When the as-authored target ID is non-canonical (e.g. unpadded), the federated graph builder SHALL fall back to per-repo `IdResolver` probing to canonicalize the target before cloning, so that all satisfiers of the same template produce composites using the same canonical original ID.
+H. When a requirement declares `Satisfies:` against a template owned by an associated repository, the federated graph builder SHALL clone the template subtree (the target REQ, its directly-attached *Assertions*, and descendant template REQs with theirs) into the declaring repo's index with composite IDs of the form `declaring_id::original_id`, wiring intra-graph `SATISFIES`, `STRUCTURES`, `REFINES`, and `DEFINES` edges and a cross-graph `INSTANCE` edge from each clone to its template original.
 
 J. When a cross-repository `Satisfies:` target is not claimed by any associated repository, the federated graph builder SHALL emit a typed `BrokenReference` whose diagnostic names the target ID, lists the currently-declared associates (or states that none are declared), and points authors at the `[associates.<name>]` block in `.elspais.toml`. When transitively walking `SATISFIES` and `INSTANCE` edges produces a cycle, the federated graph builder SHALL emit a typed `BrokenReference` whose diagnostic contains the word `cycle` and the cycle path; reporting one cycle per build is sufficient.
 
-K. Coverage on `INSTANCE` *Assertions* SHALL be computed as inherited coverage over the `INSTANCE` edge: an instance *Assertion*'s effective coverage equals its template original's direct coverage (inbound `IMPLEMENTS`/`VERIFIES`/`VALIDATES` edges). A satisfier requirement's coverage rollup SHALL combine its own concrete-*Assertion* coverage with the inherited coverage of the templates it satisfies, so that cross-cutting evidence on a template flows to every satisfier without per-instance re-implementation. Each cross-repo `INSTANCE` clone SHALL record the owning template repository name in a `template_repo` field so viewers can display the template's provenance.
+K. Coverage computation, rollup, and reporting SHALL treat an instance node exactly as a directly declared node of the same kind.
+
+L. When a `Satisfies:` declaration is instantiated, the graph builder SHALL link the cloned subtree root to the declaring requirement via a SATISFIES edge.
+
+M. Cloned template-subtree nodes SHALL preserve the *Assertion* content, STRUCTURES edges, and intra-subtree REFINES edges of their template originals.
+
+N. When an as-authored `Satisfies:` target ID is non-canonical (e.g. unpadded), the federated graph builder SHALL canonicalize the target via per-repo ID resolution before cloning, so that all satisfiers of the same template produce composites using the same canonical original ID.
+
+O. Each cross-repo `INSTANCE` clone SHALL record the owning template repository name in a `template_repo` field so viewers can display the template's provenance.
+
+P. Evidence declared against a template *Assertion* SHALL count as evidence on every instance of that *Assertion*.
 
 ### Changelog
 
+- 2026-07-30 | 47baf2fc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-30 | 7adf98fa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: templates become subtrees — B/H clone the subtree rooted at any satisfied member, G requires a template's refiners to be templates, composite obligations split out as L-P, K restated as instance uniformity with P carrying the cross-cutting evidence rule
 - 2026-05-16 | 6c1d002c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-05-16 | - | - | Michael Lewis (<michael@anspar.org>) | CUR-1353 Phase 10: refresh assertion B to match single-REQ scope (no descendant REQs)
 - 2026-05-16 | 6c1d002c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -130,7 +217,7 @@ K. Coverage on `INSTANCE` *Assertions* SHALL be computed as inherited coverage o
 - 2026-05-04 | bae1b85d | - | Developer (<dev@example.com>) | Auto-fix: canonicalize term forms, update hash
 - 2026-03-30 | 9115ce0d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Satisfies Relationship* | **Hash**: 6c1d002c
+*End* *Satisfies Relationship* | **Hash**: 47baf2fc
 ---
 
 ## REQ-p00016: NOT APPLICABLE Status

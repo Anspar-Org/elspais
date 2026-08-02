@@ -120,13 +120,15 @@ D. The CI pipeline SHALL scan for leaked secrets in the git history using gitlea
 
 E. The CI pipeline SHALL audit dependencies for known security vulnerabilities.
 
-F. The PR validation pipeline SHALL require a Linear ticket reference ([CUR-XXX]) in PR titles to maintain commit *Traceability* through squash merges.
+F. The PR validation pipeline SHALL require a Linear ticket reference in PR titles — a bracketed uppercase team prefix and issue number (e.g. `[TOOL-38]`, `[CUR-514]`) — to maintain commit *Traceability* through squash merges.
 
-G. The PR validation pipeline SHALL require both ticket (CUR-XXX) and requirement (REQ-XXXXX) references in commit messages.
+G. The PR validation pipeline SHALL require both a ticket reference (uppercase team prefix and issue number) and a requirement reference (REQ-XXXXX) in commit messages.
 
 ## Changelog
 
+- 2026-07-31 | 84723bf6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-37: F/G accept any Linear team prefix, not only CUR — the repo's team moved to TOOL; matches the commit-msg hook's existing pattern
 - 2026-03-30 | 315accce | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *CI/CD Pipeline Enforcement* | **Hash**: 315accce
+*End* *CI/CD Pipeline Enforcement* | **Hash**: 84723bf6
 ---

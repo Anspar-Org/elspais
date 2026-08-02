@@ -84,22 +84,33 @@ B. The `path` field SHALL be required for each associate. The `git` field SHALL 
 
 C. When no `[associates]` section exists in config, `get_associates_config()` SHALL return an empty dict.
 
-D. Associates declaring their own `[associates]` section SHALL be a hard error: "Associate 'X' declares its own associates -- only the root repo may declare associates."
+D. When an associate declares its own `[associates]` section, those declarations SHALL be resolved transitively into the same federation, so that the tool works identically from any repository in a dependency chain.
+
+E. When directed dependency declarations form a cycle, the build SHALL report a configuration error naming the declaration path that forms the cycle.
+
+F. When the same repository is reachable through more than one dependency chain (a diamond), the federation SHALL resolve it to a single entry and SHALL NOT report a cycle.
+
+G. The federation SHALL identify a repository across discovery paths by its git origin, not by its filesystem path or declared name.
+
+H. When two federated repositories both claim the same requirement ID, the build SHALL fail with an error naming the ID and both repositories.
 
 I. When scanning directories for candidate associates, a directory whose elspais configuration fails to parse or validate SHALL be skipped without aborting the scan, and each skip SHALL be reported with the directory path and the reason. Directories without an elspais configuration are not candidates and need no report.
 
 ### Rationale
 
-Associates are declared in the root repo's `.elspais.toml` using a structured TOML section. Each associate specifies a relative filesystem path and optional git remote URL. Transitive federation (associates of associates) is disallowed to keep the topology simple and predictable.
+Associates are declared in `.elspais.toml` using a structured TOML section. Each associate specifies a relative filesystem path and optional git remote URL. Transitive federation was originally disallowed (assertion D was a hard error) to keep the topology simple; that guard made symmetric or chained repo arrangements unusable from any repository but the root (TOOL-33) and blocked federating an org-policy repository reachable through a chain (TOOL-38). Directed cycles remain a genuine error because dependency direction drives resolution order; diamonds are convergence, not cycles, and the git-origin identity rule (assertion G) is what makes the two distinguishable. Disjoint ID spaces (assertion H) were previously enforced but undocumented — federating repositories must use non-overlapping ID patterns.
 
 ### Changelog
 
+- 2026-08-02 | 2a648c8e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | 1bc0e4b5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | de074317 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38/TOOL-33: replace the transitive-associates hard error (D) with transitive resolution; add cycle (E), diamond (F), git-origin identity (G), and disjoint-ID-space (H) rules
+- 2026-07-30 | 0379ce9c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 479dcbb8 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 479dcbb8 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Associates Config Loading* | **Hash**: 1bc0e4b5
+*End* *Associates Config Loading* | **Hash**: 2a648c8e
 ---
 
 ## REQ-d00203: Multi-Repo Build Pipeline
@@ -112,7 +123,7 @@ The `build_graph()` factory SHALL build separate TraceGraph instances per reposi
 
 A. When `[associates]` config is present, `build_graph()` SHALL create a separate `TraceGraph` per associate repo, each with its own config-derived resolver.
 
-B. Each associate's config SHALL be loaded from its own `.elspais.toml` and validated for transitive associates before building.
+B. Each associate's config SHALL be loaded from its own `.elspais.toml`, and any associates it declares SHALL be discovered and built into the same federation.
 
 C. Missing associate paths SHALL produce error-state `RepoEntry` with `graph=None` and a descriptive `error` message (soft fail).
 
@@ -126,10 +137,12 @@ Per-repo building ensures config isolation: each repo's hierarchy rules, format 
 
 ### Changelog
 
+- 2026-07-30 | 5544c03c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38/TOOL-33: amend B — transitive associates are built into the federation instead of being validated against
 - 2026-05-11 | 31e019a1 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 31e019a1 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Multi-Repo Build Pipeline* | **Hash**: 31e019a1
+*End* *Multi-Repo Build Pipeline* | **Hash**: 5544c03c
 ---
 
 ## REQ-d00204: Per-Repo Health Check Delegation
@@ -154,17 +167,27 @@ F. `run_spec_checks` SHALL accept a `FederatedGraph` and iterate `iter_repos()` 
 
 G. A non-config-sensitive check SHALL detect requirement cycles (a requirement reachable as its own descendant through *Traceability* edges) and report each detected cycle as a failing finding naming the requirements that form the cycle, so that a cyclic graph surfaces as a clear diagnostic rather than crashing downstream traversals.
 
+H. A finding about a reference that fails to resolve SHALL be attributed to the repository declaring the reference, not to the repository that owns (or would own) the target.
+
+I. The health-check exit status SHALL be computed exclusively from findings attributed to repositories within the invocation's write scope — the primary repository plus dependency repositories marked writable — so that a finding the caller cannot fix never fails the run.
+
+J. Findings attributed to repositories outside the invocation's write scope SHALL be available for display at the caller's option, marked with their owning repository.
+
 ### Rationale
 
 Without per-repo delegation, all nodes are validated against the root repo's config. When repos have different hierarchy rules, format rules, or changelog policies, this produces false positives (root config rejects valid associate nodes) or false negatives (root config allows invalid associate nodes). Per-repo delegation ensures each repo is validated by its own rules.
 
+Assertions H–J realize REQ-p00082's verdict-scoping invariants for the checks surface: a broken reference from the caller's repository *into* an org repository is the caller's bug and must gate the caller's change, while a malformed requirement *inside* a repository the caller cannot write to must never turn the command into noise by failing runs the caller cannot fix.
+
 ### Changelog
 
+- 2026-07-30 | 32a98213 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: add finding-ownership attribution (H) and write-scope verdict scoping (I, J)
 - 2026-06-18 | 844d12d1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
 - 2026-05-11 | 2313140d | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 2313140d | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Per-Repo Health Check Delegation* | **Hash**: 844d12d1
+*End* *Per-Repo Health Check Delegation* | **Hash**: 32a98213
 ---
 
 ## REQ-d00252: External Library Integration via Integrates Keyword
@@ -219,16 +242,111 @@ C. Generated `INDEX.md` and `term-index.md` SHALL contain only primary-repo requ
 
 D. MCP mutation tools SHALL reject mutations targeting associate-owned nodes when `federation.write_associates` is false, returning a read-only error and applying no in-memory change.
 
+E. Write and index eligibility SHALL be declarable per associate entry, with the `[federation]` table values serving as defaults for entries that do not declare their own.
+
 F. When `elspais fix` detects fixable issues in associate-owned content it will not write, its report SHALL distinguish those from applied fixes by prefixing each such line with `[skipping]`; the output SHALL never claim an associate-owned fix was applied.
 
 ### Rationale
 
 Federation is fundamentally a read and validation aggregation: associates provide cross-repo reference resolution and coverage inheritance without surrendering write authority. Making the write and generation surfaces primary-repo-only by default prevents `elspais fix` and MCP mutations from silently editing files in repositories the operator does not own. The `[federation]` opt-in flags keep the safe default while allowing deliberate multi-repo authoring when an operator owns every associate.
 
+Global booleans alone cannot express the common cross-repo workflow — enable writes for exactly one associate that points at a matching worktree while everything else stays read-only — which is why eligibility is per-entry with the global table as default (assertion E). Note `index_associates` governs only associate-repo *references* in the term index and collection manifests; term definitions federate regardless.
+
 ### Changelog
 
+- 2026-08-02 | 6bd9cd1d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | f145d18a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | e3cca300 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-30 | 9a6e0bd7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: add per-entry write/index eligibility (E)
 - 2026-06-01 | 28c8c538 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Federation Write/Generation Scope* | **Hash**: f145d18a
+*End* *Federation Write/Generation Scope* | **Hash**: 6bd9cd1d
+---
+
+## REQ-d00260: Workspace Registry and Federated View Assembly
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00081, REQ-p00082
+
+Workspace membership SHALL be declared once per machine in a per-user registry, and SHALL feed the same federation assembly as directed dependency declarations, under one set of identity and deduplication rules.
+
+### Assertions
+
+A. The tool SHALL read workspace declarations from a per-user registry file at a canonical location outside any repository.
+
+B. The tool SHALL honor an environment-variable override for the registry file location.
+
+C. Each workspace declaration SHALL name a root directory and the workspace's member repositories.
+
+D. The tool SHALL resolve the caller's workspace by path containment: a caller whose working path lies beneath a declared workspace root belongs to that workspace, including checkouts and worktrees anywhere beneath that root.
+
+E. Workspace membership SHALL be undirected: a repository is federated as a member without declaring, or being declared by, any other member repository's configuration.
+
+F. When the caller's repository belongs to a resolved workspace, the federated view SHALL contain every workspace member in addition to the associates declared by the repository's own configuration.
+
+G. When the same repository — identified by git origin — is reachable both as a local working copy and as a workspace baseline entry, the federated view SHALL contain the local working copy wholesale and drop the baseline copy, never a merge of the two.
+
+H. A caller SHALL be able to request the baseline view of a repository that a local working copy currently shadows.
+
+I. A workspace member that fails to load SHALL be represented in the federated view as an error-state entry naming the repository and the cause of failure.
+
+J. The configuration fingerprint used to detect stale cached graphs and daemons SHALL cover the content of the workspace registry file.
+
+K. The tool SHALL support a boolean workspace-expectation setting in repository configuration, defaulting to false.
+
+L. When the effective workspace-expectation setting is true and no workspace resolves for the caller, the tool SHALL report an error naming the registry location consulted, rather than serving a repository-local view.
+
+M. When the registry location is explicitly configured via the environment override and the file cannot be read, the tool SHALL report an error rather than serving a view without the registry.
+
+N. When the registry file exists but cannot be parsed, the tool SHALL report an error naming the file and the parse failure, rather than treating the registry as absent.
+
+O. Registry-related errors — unmet workspace expectation, unreadable registry, or unparsable registry — SHALL direct the user to the tool's own workspace documentation for remediation.
+
+### Rationale
+
+The registry is the second discovery source beside `[associates]` (directed dependencies): membership is flat and undirected, so cycles are impossible by construction, while dependency direction — which drives resolution order and base/overlay relationships — stays in `[associates]` where cycles remain a genuine error. Both sources feed one assembly keyed by git origin, which is stable across worktrees and clones where path and name are not. This dissolves the symmetric-configuration circularity of TOOL-33: neither of two mutually-dependent repos needs to declare the other for membership.
+
+A per-user file solves what committed config cannot: associate paths are machine-specific, so org membership cannot live in `.elspais.toml`; one list per machine replaces one list per repo per machine; a workspace root is addressable even though it is not a repository (REQ-p00081-E); and CI points the environment override at a generated file resolving that job's checkout paths.
+
+Shadowing (G) serves "does my draft duplicate something?"; the explicit baseline request (H) serves "what does the org currently specify?" — same view, two legitimate freshness choices, distinguished by provenance labels rather than by a second tool. Error-state entries (I) uphold REQ-p00081-D: a repository that fails to load must narrow-and-say-so, never silently vanish from answers.
+
+The workspace-expectation setting (K, L) closes the registry's bootstrap hole: the registry is itself an omittable per-machine file, so without a signal the tool cannot distinguish "this machine legitimately has no workspaces" (an outside user of the tool — erroring would be wrong) from "a workspace was expected and the registry is missing" (the entire org layer silently vanishing from every answer). A committed `true` travels with every clone of an org-governed repository, so a fresh machine or a CI job without registry provisioning fails loudly instead of validating against a narrower corpus, while repositories outside any organization never see the error. The standard local-configuration override applies, serving the same purpose it does for associates (e.g. pointing an associate at a worktree during joint work): a developer can locally override the expectation when deliberately working outside the workspace. The error text points at the tool's own workspace documentation (O), which explains registry provisioning generically — which workspace to join and where an organization keeps its canonical registry content is organizational onboarding knowledge, not this tool's concern. The companion error checks (M, N) and the unconditional scope disclosure on every surface (REQ-p00081-F) cover the remaining silence: a pointed-at-but-unreadable or corrupt registry is never equivalent to "no workspaces", and even the legitimate no-workspace case is visibly labeled repo-local rather than left ambiguous.
+
+Known deviation, accepted 2026-07-29: redundant-work cost (invariant C1 — the same unchanged content is not re-parsed once per caller) is *not* required here — per-worktree daemons each parse every workspace repo. Accepted because this is on-developer-machine work at tolerable cost; revisit if it becomes noticeable, in which case the known answer is a single always-on daemon parsing the org baseline once and sharing read-only baseline graphs by reference across per-caller views.
+
+### Changelog
+
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-37: inline design-doc content; the scaffolding doc is retired
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: registry-absent decision — workspace-expectation setting (K, L) plus registry error checks (M, N)
+- 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: author workspace registry and view assembly requirements
+
+*End* *Workspace Registry and Federated View Assembly* | **Hash**: 8c288c5d
+---
+
+## REQ-d00261: Federation Role Model
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-d00253, REQ-p00082
+
+Every repository in a federated view SHALL carry a role that determines its treatment per surface, replacing the single root-versus-associate axis.
+
+### Assertions
+
+A. Each repository in a federated view SHALL carry exactly one role: primary (the caller's repository), dependency (a directed associate declared for resolution and coverage), or reference (a workspace member present for resolution and discovery only).
+
+B. The graph layer SHALL refuse any mutation whose target node is owned by a reference-role repository, independent of any configuration setting.
+
+C. Search and discovery surfaces SHALL include repositories of every role, labeling each result with the owning repository's role.
+
+D. Generation surfaces — index, glossary, and document compilation — SHALL include only the primary repository plus dependency repositories marked indexable.
+
+E. Coverage rollups SHALL credit cross-repository coverage exclusively along declared *Traceability* edges, so that adding a repository to the federated view alters no coverage number by membership alone.
+
+### Rationale
+
+Reference repositories exist so cross-cutting obligations resolve and surface (REQ-p00081, REQ-p00082-G/H); writing into one from a consuming repository is incoherent under any setting, which is why refusal is structural at the graph layer (B) rather than a flippable boolean — configuration can widen dependency writability (REQ-d00253-E) but can never make a reference repository writable. Health-check treatment per role is specified in the per-repo health delegation requirement (finding attribution and write-scope verdicts); this REQ deliberately does not restate it. Assertion E is why membership growth is safe: a reference repository contributes coverage only where a repository explicitly declares a *Traceability* relationship into it.
+
+### Changelog
+
+- 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: author federation role model
+
+*End* *Federation Role Model* | **Hash**: bc16ed66

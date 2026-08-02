@@ -45,7 +45,7 @@ browser = [
     "pytest-playwright>=0.4",
 ]
 binary = ["pyinstaller>=6.0"]
-mcp = ["mcp>=1.0"]
+mcp = ["mcp>=1.0,<2"]
 # REQ-p00080-A: PDF compilation (no Python deps - uses external pandoc + xelatex)
 pdf = []
 # REQ-int-d00002-B: HTML generation requires jinja2
@@ -66,7 +66,7 @@ all = [
     "pygments>=2.0",
     "starlette>=0.36",
     "uvicorn>=0.20",
-    "mcp>=1.0",
+    "mcp>=1.0,<2",
     "coverage>=7.0",
 ]
 

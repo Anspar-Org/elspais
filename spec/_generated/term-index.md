@@ -8,6 +8,7 @@
 
 - REQ-d00223-B
 - REQ-d00237-G
+- REQ-d00264-A
 
 ## Specification
 
@@ -32,6 +33,7 @@
 - REQ-d00204-G
 - REQ-d00252-B
 - REQ-d00252-G
+- REQ-d00261-E
 - REQ-d00128-I
 - REQ-d00131-L
 - REQ-d00133-B
@@ -49,6 +51,7 @@
 - REQ-d00084:section:1
 - REQ-d00069:section:1
 - REQ-d00070:section:1
+- REQ-d00261:section:1
 - REQ-d00126:section:0
 - rem:spec/dev-traceview-review.md:3
 - REQ-o00066:section:0
@@ -57,6 +60,8 @@
 - REQ-p00003:section:0
 - REQ-p00080:section:0
 - REQ-p00005:section:0
+- REQ-p00081:section:0
+- REQ-p00082:section:0
 - REQ-p00006:section:0
 - REQ-p00060:section:1
 - rem:spec/requirements-spec.md:15

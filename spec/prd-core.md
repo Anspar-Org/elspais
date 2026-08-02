@@ -129,7 +129,7 @@ E. The tool SHALL commit modified spec files and optionally push, refusing to op
 
 F. The tool SHALL fetch and fast-forward-merge from the remote tracking branch, aborting if the merge is not fast-forwardable.
 
-G. The tool SHALL flag all requirements with SATISFIES edges for review when the referenced template's content hash changes.
+G. The tool SHALL flag all requirements with SATISFIES edges for review when the content hash of any REQ in the referenced template's subtree changes.
 
 H. The tool SHALL list all local and remote git branches, stripping remote prefixes and deduplicating branches that exist both locally and remotely.
 
@@ -139,9 +139,11 @@ J. The tool SHALL re-read configuration from disk when reloading the graph, ensu
 
 ## Changelog
 
+- 2026-07-30 | bb148227 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: G flags satisfiers on any change within the template subtree, not just the root
 - 2026-04-23 | f8ff5509 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Change Detection and Auditability* | **Hash**: f8ff5509
+*End* *Change Detection and Auditability* | **Hash**: bb148227
 ---
 
 # REQ-p00013: Automated Testing
@@ -476,6 +478,58 @@ D. `run_term_checks()` SHALL call all six term checks (`duplicates`, `undefined`
 - 2026-03-29 | 9788814d | - | Michael Lewis (<michael@anspar.org>) | Initial creation
 
 *End* *New Term Health Checks* | **Hash**: 76a49db3
+
+## REQ-d00263: Scoped Term Binding
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00002, REQ-p00081
+
+A marked term whose definition varies by context SHALL resolve through an explicit, position-independent binding declaration, so that requirement text stays terse at the point of use while its meaning stays deterministic.
+
+### Assertions
+
+A. A file or an individual requirement SHALL be able to declare a binding that maps a base term to a specific bound term for its own scope.
+
+B. A marked base term SHALL resolve using only explicit binding declarations in its scope; resolution SHALL NOT depend on document position, preceding content, or declaration order.
+
+C. When a marked base term has no binding declaration in scope, validation SHALL report an error naming the term and its location.
+
+D. A requirement's term resolution SHALL be identical after file reordering, file splitting, and template cloning of the requirement into another document context.
+
+E. Render surfaces SHALL be able to expand a bound term to its resolved form at generation time.
+
+### Rationale
+
+Cross-cutting policy text wants to say `*system*` once and mean `portal system` in one repo and `diary system` in another. Positional binding ("most recently previously declared system in the same document") was considered and rejected: inserting a requirement above would silently change a later requirement's meaning without changing its hash, `fix` reorders content, files get split, and template cloning places requirements into new document contexts — all of which would make meaning depend on position. It also contradicts the project's rule that every assertion be independently decidable without additional context. Explicit scoped binding keeps the terseness while failing loudly when unbound. Assertion D is what makes binding safe under the same reordering and cloning operations the hash system already contends with.
+
+### Changelog
+
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: author scoped term binding (org-wide terms)
+
+*End* *Scoped Term Binding* | **Hash**: 1355b3d0
+
+## REQ-d00264: Usage-Driven Glossary Selection
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00002, REQ-p00081
+
+A generated glossary SHALL be selected by usage: definitions may live anywhere in the federated view, and a generation context emits exactly the terms referenced within it.
+
+### Assertions
+
+A. Glossary generation for a context SHALL include every *Defined Term* referenced within that context, including terms whose definitions are owned by another federated repository.
+
+B. Glossary generation for a context SHALL exclude defined terms with no reference within that context, regardless of where the definitions are owned.
+
+C. The selection of terms for a context SHALL be derived from the graph's recorded term references, not from a separate scan or list.
+
+### Rationale
+
+Definitions can be authored org-wide while each generated document carries only its own vocabulary: a term defined in the policy repo appears in a consuming repo's glossary because it is used there, without dragging in its unreferenced siblings. Per-entry index eligibility on the write/generation surfaces is the same control at its coarsest granularity; this REQ is the fine-grained rule. The boundary with document tooling holds here: elspais owns the graph, term usage, and *selection* — "which terms belong in this context" is a reachability question over data the graph already holds — while layout, ordering, numbering, and per-sponsor chrome belong to the document tool (the extensibility seam is tracked in TOOL-34/TOOL-35).
+
+### Changelog
+
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: author usage-driven glossary selection (org-wide terms)
+
+*End* *Usage-Driven Glossary Selection* | **Hash**: 02f5085d
 
 ## REQ-d00241: Code No-Traceability Health Check
 
