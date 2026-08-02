@@ -61,9 +61,8 @@ def _version_of(proc, node_id: str) -> str:
 
 def _log_tip(proc) -> str:
     """The mutation-log tip (id of the newest pending entry), or '' if none."""
-    log = mcp_call(proc, "get_mutation_log", {"limit": 1000})
-    mutations = log.get("mutations", [])
-    return mutations[-1]["id"] if mutations else ""
+    log = mcp_call(proc, "get_mutation_log", {"limit": 1})
+    return log.get("current_tip", "")
 
 
 def _build_scenario_project(tmp_path):

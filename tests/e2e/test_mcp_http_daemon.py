@@ -359,3 +359,108 @@ def test_REQ_o00062_Q_two_http_sessions_conflict_detected(daemon):
                         assert retried.get("success"), f"reconciled retry failed: {retried}"
 
     _run(scenario())
+
+
+def test_REQ_o00062_Q_writes_after_a_save_survive_across_surfaces_to_disk(daemon):
+    """Validates REQ-o00062-Q: both surfaces operate on the same in-memory
+    graph ACROSS a save's rebuild-and-swap, so an accepted write on either
+    side reaches the other side and reaches disk.
+
+    This is the exact sequence that reproduced the CUR-1829 data loss before
+    SharedServerState: ``save_mutations`` rebuilt and reassigned only the MCP
+    side's graph reference, after which a guarded, *accepted* viewer HTTP
+    write landed in a graph the MCP side no longer served and the next save
+    silently dropped it from disk. Along the way this exercises
+    ``get_mutation_log``'s ``current_tip``/``total`` end-to-end as the id
+    ``save_mutations(if_tip_mutation_id=...)`` accepts.
+    """
+    from mcp import ClientSession
+    from mcp.client.streamable_http import streamablehttp_client
+
+    root, port, _log = daemon
+    _assert_readiness(port)
+    req_id = "REQ-p00003"
+    mcp_title = "Audit Logging (agent draft over MCP)"
+    http_title = "Audit Logging (human edit via viewer)"
+    spec_file = root / "spec" / "prd-core.md"
+
+    async def scenario() -> None:
+        async with streamablehttp_client(_mcp_url(port)) as (read, write, _get_sid):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+
+                # 1. MCP: guarded title write.
+                req = _tool_payload(await session.call_tool("get_requirement", {"req_id": req_id}))
+                assert req.get("version"), f"get_requirement returned no version: {req}"
+                mutated = _tool_payload(
+                    await session.call_tool(
+                        "mutate_update_title",
+                        {"node_id": req_id, "new_title": mcp_title, "if_version": req["version"]},
+                    )
+                )
+                assert mutated.get("success"), f"MCP mutation failed: {mutated}"
+
+                # 2. MCP: one get_mutation_log read yields the guard-passing
+                # tip; save with it. Earlier tests' pending mutations are in
+                # the same log, so the newest entry is the one just applied.
+                log = _tool_payload(await session.call_tool("get_mutation_log", {}))
+                assert (
+                    log["current_tip"] == mutated["mutation"]["id"]
+                ), f"current_tip is not the newest entry's id: {log}"
+                assert log["total"] >= 1
+                assert (
+                    log["mutations"][0]["id"] == log["current_tip"]
+                ), f"window is not newest-first: {log}"
+                saved = _tool_payload(
+                    await session.call_tool(
+                        "save_mutations",
+                        {
+                            "if_tip_mutation_id": log["current_tip"],
+                            "message": "e2e cross-surface save (agent)",
+                        },
+                    )
+                )
+                assert saved.get("success"), f"first save_mutations failed: {saved}"
+
+                # 3. HTTP (viewer): guarded title write against the rebuilt
+                # graph must be ACCEPTED -- fresh token, no conflict.
+                node = _http_get_json(f"http://127.0.0.1:{port}/api/node/{req_id}")
+                assert node.get("version"), f"/api/node returned no version: {node}"
+                status, body = _http_post_json(
+                    f"http://127.0.0.1:{port}/api/mutate/title",
+                    {"node_id": req_id, "new_title": http_title, "if_version": node["version"]},
+                )
+                assert status == 200, f"accepted viewer write got {status}: {body}"
+                assert body.get("success"), f"viewer write not successful: {body}"
+
+                # 4. MCP: the HTTP-written title is visible over MCP. Pre-fix
+                # this read served the stale pre-save graph and saw mcp_title.
+                after = _tool_payload(
+                    await session.call_tool("get_requirement", {"req_id": req_id})
+                )
+                assert after.get("title") == http_title, (
+                    f"MCP does not see the viewer's accepted write "
+                    f"(split-brain): {after.get('title')!r}"
+                )
+
+                # 5. MCP: save again; the viewer's write must reach disk.
+                log2 = _tool_payload(await session.call_tool("get_mutation_log", {}))
+                saved2 = _tool_payload(
+                    await session.call_tool(
+                        "save_mutations",
+                        {
+                            "if_tip_mutation_id": log2["current_tip"],
+                            "message": "e2e cross-surface save (viewer write)",
+                        },
+                    )
+                )
+                assert saved2.get("success"), f"second save_mutations failed: {saved2}"
+
+    _run(scenario())
+
+    on_disk = spec_file.read_text()
+    assert http_title in on_disk, (
+        "the viewer's accepted, guarded write was silently lost from disk "
+        f"(split-brain regression): {spec_file}"
+    )
+    assert mcp_title not in on_disk, "the superseded MCP title should have been overwritten"

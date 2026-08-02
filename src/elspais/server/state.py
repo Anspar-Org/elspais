@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from elspais.mcp.shared_state import SharedServerState
+
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
 
@@ -60,17 +62,57 @@ class AppState:
         config: dict[str, Any],
         allowed_roots: list[Path] | None = None,
     ) -> None:
-        self.graph = graph
+        # Single source of truth for graph/config, shared verbatim with the
+        # MCP tools' _state when the MCP server is mounted (create_app passes
+        # it to create_server). Both surfaces dereference this one holder, so
+        # a rebuild-swap on either side is visible everywhere with nothing to
+        # propagate or keep "in sync".
+        self.shared = SharedServerState(
+            {
+                "graph": graph,
+                "config": config,
+                "working_dir": repo_root,
+                "build_time": time.time(),
+            }
+        )
         self.repo_root = repo_root
-        self.config = config
         self.allowed_roots = allowed_roots or _compute_allowed_roots(repo_root, config)
-        self.build_time = time.time()
         self._mtimes: dict[str, float] = {}
-        self._mcp_state: dict[str, Any] | None = None  # set by link_mcp_state
         self._last_stale_check = 0.0
         self.snapshot_mtimes()
         # Per-repo detached HEAD tracking (for rewind)
         self._repo_detached: dict[str, DetachedState] = {}
+
+    @property
+    def graph(self) -> FederatedGraph:
+        return self.shared["graph"]
+
+    @graph.setter
+    def graph(self, value: FederatedGraph) -> None:
+        self.shared["graph"] = value
+
+    @property
+    def build_time(self) -> float:
+        """When the live graph was last built from disk.
+
+        Lives in the shared holder, not on AppState: the MCP save/refresh
+        tools rebuild and swap the graph through the holder, and a
+        build_time only this object could update would stay behind, making
+        the viewer's staleness check report freshly-saved files as changed.
+        """
+        return self.shared["build_time"]
+
+    @build_time.setter
+    def build_time(self, value: float) -> None:
+        self.shared["build_time"] = value
+
+    @property
+    def config(self) -> dict[str, Any]:
+        return self.shared["config"]
+
+    @config.setter
+    def config(self, value: dict[str, Any]) -> None:
+        self.shared["config"] = value
 
     def enter_detached(self, repo_name: str, branch: str, head_commit: str) -> None:
         """Record that a repo has rewound from its branch tip."""
@@ -184,45 +226,46 @@ class AppState:
         if now - self._last_stale_check < 1.0:
             return False
         self._last_stale_check = now
-        try:
-            has_pending = len(self.graph.mutation_log) > 0
-        except (AttributeError, TypeError):
-            has_pending = False
-        if has_pending:
-            return False
-        if not self.is_stale():
-            return False
-        try:
-            self._rebuild()
-        except Exception as exc:
-            # Tolerated failure (visible, not swallowed): keep serving the
-            # previous graph rather than crashing on a bad file state.
-            print(
-                f"warning: auto-refresh rebuild failed, keeping old graph: {exc}", file=sys.stderr
-            )
+        # The pending-mutations check and the rebuild must be one atomic
+        # unit: a writer landing a mutation between the check and the swap
+        # would have its accepted work silently discarded by the rebuild.
+        with self.shared.write_lock:
+            try:
+                has_pending = len(self.graph.mutation_log) > 0
+            except (AttributeError, TypeError):
+                has_pending = False
+            if has_pending:
+                return False
+            if not self.is_stale():
+                return False
+            try:
+                self._rebuild()
+            except Exception as exc:
+                # Tolerated failure (visible, not swallowed): keep serving the
+                # previous graph rather than crashing on a bad file state.
+                print(
+                    f"warning: auto-refresh rebuild failed, keeping old graph: {exc}",
+                    file=sys.stderr,
+                )
         return True
 
     def _rebuild(self) -> None:
-        """Rebuild graph from disk. Propagates to MCP _state if linked."""
+        """Rebuild graph from disk and swap it into the shared holder.
+
+        The swap is serialized under the shared write lock so no writer can
+        pass a guard against the old graph while the new one is being
+        installed. MCP tools see the new graph immediately — they read
+        through the same holder.
+        """
         from elspais.config import get_config
         from elspais.graph.factory import build_graph
 
-        self.config = get_config(start_path=self.repo_root, quiet=True)
-        self.graph = build_graph(
-            config=self.config,
-            repo_root=self.repo_root,
-        )
-        self.graph.load_comments()
-        self.build_time = time.time()
-        self.snapshot_mtimes()
-        # Propagate to MCP tools' _state dict (shared reference)
-        if self._mcp_state is not None:
-            self._mcp_state["graph"] = self.graph
-            self._mcp_state["config"] = self.config
-
-    def link_mcp_state(self, mcp_state: dict[str, Any]) -> None:
-        """Link an MCP _state dict so rebuilds propagate to MCP tools."""
-        self._mcp_state = mcp_state
-        # Ensure current graph is in sync
-        mcp_state["graph"] = self.graph
-        mcp_state["config"] = self.config
+        with self.shared.write_lock:
+            self.config = get_config(start_path=self.repo_root, quiet=True)
+            self.graph = build_graph(
+                config=self.config,
+                repo_root=self.repo_root,
+            )
+            self.graph.load_comments()
+            self.build_time = time.time()
+            self.snapshot_mtimes()

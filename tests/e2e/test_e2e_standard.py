@@ -81,9 +81,8 @@ def _log_tip(mcp_server) -> str:
     """The mutation-log tip (id of the newest pending entry), or '' if none."""
     from .helpers import mcp_call
 
-    log = mcp_call(mcp_server, "get_mutation_log", {"limit": 1000})
-    mutations = log.get("mutations", [])
-    return mutations[-1]["id"] if mutations else ""
+    log = mcp_call(mcp_server, "get_mutation_log", {"limit": 1})
+    return log.get("current_tip", "")
 
 
 def _undo(mcp_server) -> dict:

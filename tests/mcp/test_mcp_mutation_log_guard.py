@@ -698,6 +698,49 @@ class TestRestoreFromSafetyBranchRequiresTheTip:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# FederatedMutationLog.tail -- the snapshot get_mutation_log windows over
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.incremental
+class TestFederatedTail:
+    """Validates REQ-o00062-N:
+
+    ``get_mutation_log`` derives ``current_tip`` from ``tail()``, so the
+    federated tail must window from the NEWEST end (oldest-to-newest within
+    the window) and must skip a pointer whose entry has since been undone
+    rather than raising -- a concurrent undo between the pointer-list copy
+    and pointer resolution is exactly the race snapshot semantics absorb.
+    """
+
+    TARGET = "REQ-d00003"
+
+    def test_REQ_o00062_N_tail_windows_from_the_newest_end(self, chain, tools):
+        """REQ-o00062-N: tail(1) is the newest entry; tail(0) is everything."""
+        first = seed(tools, chain, self.TARGET, "Audit Trail Implementation (tail 1)")
+        second = seed(tools, chain, self.TARGET, "Audit Trail Implementation (tail 2)")
+        TestFederatedTail.seeded = [first, second]
+
+        assert [e.id for e in chain.mutation_log.tail(1)] == [second]
+        all_ids = [e.id for e in chain.mutation_log.tail(0)]
+        assert all_ids[-2:] == [first, second]
+        assert all_ids == log_ids(chain)
+
+    def test_REQ_o00062_N_dangling_pointer_is_skipped_not_raised(self, chain):
+        """REQ-o00062-N: A pointer that no longer resolves yields nothing."""
+        log = chain.mutation_log
+        log.record(chain._root_repo, BOGUS_TIP)
+        try:
+            entries = log.tail(0)
+        finally:
+            popped = log.pop()
+        assert popped.mutation_id == BOGUS_TIP
+
+        assert [e.id for e in entries][-2:] == self.seeded
+        assert BOGUS_TIP not in {e.id for e in entries}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Empty log
 # ─────────────────────────────────────────────────────────────────────────────
 

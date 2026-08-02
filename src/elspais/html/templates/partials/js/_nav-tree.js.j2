@@ -351,6 +351,9 @@ async function refreshDirtyCount() {
     const data = await apiFetch('/api/dirty');
     if (!data) return;
     editState.mutationCount = data.mutation_count || 0;
+    // We have just looked at the history, so this tip is "seen" -- our own
+    // mutations must not trip the other-writer banner.
+    editState.lastSeenTip = data.tip || '';
     const badge = document.getElementById('unsaved-badge');
     const btnSave = document.getElementById('btn-save');
     const btnUndo = document.getElementById('btn-undo');

@@ -78,6 +78,25 @@ class FederatedMutationLog:
                 if found:
                     yield found
 
+    def tail(self, limit: int) -> list[MutationEntry]:
+        """Return the most recent ``limit`` resolved entries, oldest-to-newest.
+
+        Snapshot semantics match MutationLog.tail(): the pointer list is
+        copied first, and pointers whose entry has since been undone resolve
+        to nothing and are skipped rather than raising.
+        """
+        pointers = list(self._pointers)
+        if limit > 0:
+            pointers = pointers[-limit:]
+        entries: list[MutationEntry] = []
+        for ptr in pointers:
+            entry = self._repos.get(ptr.repo_name)
+            if entry and entry.graph:
+                found = entry.graph.mutation_log.find_by_id(ptr.mutation_id)
+                if found:
+                    entries.append(found)
+        return entries
+
     def entries_since(self, mutation_id: str) -> list[FederatedMutationPointer]:
         """Get all pointers since (and including) a specific mutation."""
         for i, ptr in enumerate(self._pointers):

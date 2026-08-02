@@ -2245,17 +2245,54 @@ function dismissStaleBanner() {
     if (banner) { banner.classList.add('hidden'); }
 }
 
-// Poll for file freshness every 30 seconds
+function showStaleBanner(message) {
+    var banner = document.getElementById('stale-banner');
+    if (!banner) return;
+    var label = document.getElementById('stale-banner-text');
+    if (label) { label.textContent = message; }
+    banner.classList.remove('hidden');
+}
+
+// Poll every 30 seconds for changes we did not make.
+//
+// Two independent ways the graph moves under an open viewer:
+//   1. Spec files edited on disk (git checkout, an editor) -- caught by the
+//      server's mtime comparison.
+//   2. Another writer -- an MCP agent, a second viewer -- mutating the ONE
+//      shared in-memory graph. Those write no file, so mtime staleness can
+//      never see them; the mutation-log tip moving is the only evidence.
+// Reloading is the fix for (1); for (2) the live graph is already correct and
+// the page just needs to re-read it, so the banner offers that separately.
 setInterval(function() {
     apiFetch('/api/check-freshness').then(function(data) {
         if (!data) return;
-        var banner = document.getElementById('stale-banner');
-        if (!banner) return;
         if (data.stale) {
-            banner.classList.remove('hidden');
+            showStaleBanner('Spec files have changed on disk.');
+            return;
+        }
+        var tip = data.mutation_tip || '';
+        // Until refreshDirtyCount() has run once we have no baseline, so
+        // adopt the server's tip rather than reporting a phantom change.
+        if (editState.lastSeenTip === null) {
+            editState.lastSeenTip = tip;
+            return;
+        }
+        if (tip !== editState.lastSeenTip) {
+            showStaleBanner('Another writer changed the graph.');
         }
     });
 }, 30000);
+
+// Re-read the live graph without touching disk: the in-memory state is
+// already authoritative when another writer moved it, so this refetches
+// cards, tree and pending count instead of reloading files (which would
+// discard that writer's unsaved work).
+async function reloadFromMemory() {
+    await refreshAllOpenCards();
+    loadTreeData();
+    await refreshDirtyCount();
+    dismissStaleBanner();
+}
 
 // =====================================================================
 // Journey Editing

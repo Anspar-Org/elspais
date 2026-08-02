@@ -9,6 +9,7 @@ State is accessed via ``request.app.state.app_state`` (an AppState instance).
 """
 from __future__ import annotations
 
+import functools
 import time
 from datetime import date as date_type
 from pathlib import Path
@@ -72,6 +73,27 @@ from elspais.view_model import build_levels, build_namespaces, build_statuses
 def _st(request: Request) -> Any:
     """Shorthand to get AppState from request."""
     return request.app.state.app_state
+
+
+def _serialized_write(handler: Any) -> Any:
+    """Run a write handler under the process-wide write lock.
+
+    Guard + mutate must be one atomic unit against the MCP tools, which run
+    on FastMCP worker threads concurrently with this event loop. The request
+    body is buffered *before* acquiring the lock so the handler's
+    ``await request.json()`` resolves from cache without suspending — the
+    lock is a ``threading.RLock`` and must never be held across a genuine
+    await (another handler blocking on acquire would freeze the event loop
+    the holder needs to resume).
+    """
+
+    @functools.wraps(handler)
+    async def wrapper(request: Request) -> JSONResponse:
+        await request.body()
+        with _st(request).shared.write_lock:
+            return await handler(request)
+
+    return wrapper
 
 
 def _get_result_status(test_or_jny_node: Any) -> str | None:
@@ -1102,7 +1124,9 @@ async def api_dirty(request: Request) -> JSONResponse:
     # The full log, not limit=1: the count is the number of pending mutations,
     # and capping the query capped the answer at 1. The tip is what the
     # history-level guards (undo/save/forced refresh) require callers to send.
-    entries = list(state.graph.mutation_log.iter_entries())
+    # tail(0) snapshots the whole log -- never iterate the live list while
+    # other writers may be appending to (or undoing from) it.
+    entries = state.graph.mutation_log.tail(0)
     return JSONResponse(
         {
             "dirty": bool(entries),
@@ -1142,6 +1166,11 @@ async def api_check_freshness(request: Request) -> JSONResponse:
             "stale": len(stale_files) > 0,
             "has_pending_mutations": has_pending,
             "stale_files": sorted(stale_files),
+            # The mutation-log tip, so a polling client can notice that
+            # ANOTHER writer (an MCP agent, a second viewer) changed the
+            # graph. In-memory mutations touch no file, so mtime staleness
+            # alone can never reveal them. "" means nothing pending.
+            "mutation_tip": log.get("current_tip", ""),
         }
     )
 
@@ -1259,6 +1288,7 @@ def _with_version(state: Any, result: dict, node_id: str) -> dict:
     return _attach_version(result, node) if node is not None else result
 
 
+@_serialized_write
 async def api_mutate_status(request: Request) -> JSONResponse:
     """POST /api/mutate/status - Change requirement status."""
     state = _st(request)
@@ -1278,6 +1308,7 @@ async def api_mutate_status(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_template(request: Request) -> JSONResponse:
     """POST /api/mutate/template - Set/clear a requirement's Template marker.
 
@@ -1306,6 +1337,7 @@ async def api_mutate_template(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_title(request: Request) -> JSONResponse:
     """POST /api/mutate/title - Update requirement title."""
     state = _st(request)
@@ -1330,6 +1362,7 @@ async def api_mutate_title(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_assertion(request: Request) -> JSONResponse:
     """POST /api/mutate/assertion - Update assertion text."""
     state = _st(request)
@@ -1349,6 +1382,7 @@ async def api_mutate_assertion(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_assertion_add(request: Request) -> JSONResponse:
     """POST /api/mutate/assertion/add - Add assertion to requirement."""
     state = _st(request)
@@ -1369,6 +1403,7 @@ async def api_mutate_assertion_add(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_assertion_delete(request: Request) -> JSONResponse:
     # Implements: REQ-d00010-A
     """POST /api/mutate/assertion/delete - Delete an assertion."""
@@ -1388,6 +1423,7 @@ async def api_mutate_assertion_delete(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_remainder(request: Request) -> JSONResponse:
     """POST /api/mutate/remainder - Update remainder text/heading."""
     state = _st(request)
@@ -1411,6 +1447,7 @@ async def api_mutate_remainder(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_remainder_add(request: Request) -> JSONResponse:
     """POST /api/mutate/remainder/add - Add remainder section to requirement."""
     state = _st(request)
@@ -1431,6 +1468,7 @@ async def api_mutate_remainder_add(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_remainder_delete(request: Request) -> JSONResponse:
     """POST /api/mutate/remainder/delete - Delete a remainder section."""
     state = _st(request)
@@ -1506,6 +1544,7 @@ async def api_next_req_id(request: Request) -> JSONResponse:
     )
 
 
+@_serialized_write
 async def api_mutate_requirement_add(request: Request) -> JSONResponse:
     """POST /api/mutate/requirement/add - Create a new requirement."""
     from elspais.mcp.server import _mutate_add_requirement as _add_req
@@ -1562,6 +1601,7 @@ async def api_mutate_requirement_add(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_requirement_delete(request: Request) -> JSONResponse:
     # Implements: REQ-d00010-A
     """POST /api/mutate/requirement/delete - Delete a requirement."""
@@ -1581,6 +1621,7 @@ async def api_mutate_requirement_delete(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_edge(request: Request) -> JSONResponse:
     """POST /api/mutate/edge - Edge mutations (add/change_kind/change_targets/delete)."""
     state = _st(request)
@@ -1648,6 +1689,7 @@ async def api_mutate_edge(request: Request) -> JSONResponse:
 # ── Journey Mutations ──────────────────────────────────────────────────────
 
 
+@_serialized_write
 async def api_mutate_journey_field(request: Request) -> JSONResponse:
     """POST /api/mutate/journey/field - Update actor/goal/context/preamble."""
     state = _st(request)
@@ -1669,6 +1711,7 @@ async def api_mutate_journey_field(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_journey_section(request: Request) -> JSONResponse:
     """POST /api/mutate/journey/section - Add/update/delete a section."""
     state = _st(request)
@@ -1692,6 +1735,7 @@ async def api_mutate_journey_section(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_journey_add(request: Request) -> JSONResponse:
     """POST /api/mutate/journey/add - Create new journey."""
     from elspais.graph.parsers.patterns import JNY_ID_PATTERN
@@ -1734,6 +1778,7 @@ async def api_mutate_journey_add(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_journey_delete(request: Request) -> JSONResponse:
     """POST /api/mutate/journey/delete - Delete a journey."""
     state = _st(request)
@@ -1794,6 +1839,7 @@ async def api_journey_files(request: Request) -> JSONResponse:
     return JSONResponse({"files": files})
 
 
+@_serialized_write
 async def api_mutate_move_to_file(request: Request) -> JSONResponse:
     """POST /api/mutate/move-to-file - Move node to a different file.
 
@@ -1890,6 +1936,7 @@ def _validate_new_spec_path(relative_path: str, config: dict[str, Any]) -> str |
     return validate_new_spec_path(relative_path, config)
 
 
+@_serialized_write
 async def api_mutate_rename_file(request: Request) -> JSONResponse:
     """POST /api/mutate/rename-file - Rename a FILE node."""
     state = _st(request)
@@ -1917,6 +1964,7 @@ async def api_mutate_rename_file(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_undo(request: Request) -> JSONResponse:
     """POST /api/mutate/undo - Undo the most recent mutation."""
     state = _st(request)
@@ -1963,6 +2011,7 @@ async def _history_json(request: Request) -> dict:
         return {}
 
 
+@_serialized_write
 async def api_save(request: Request) -> JSONResponse:
     """POST /api/save - Persist mutations to spec files on disk."""
     # Implements: REQ-d00132-A
@@ -1988,6 +2037,7 @@ async def api_save(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_revert(request: Request) -> JSONResponse:
     """POST /api/revert - Revert all unsaved mutations by rebuilding from disk."""
     from elspais.graph.factory import build_graph
@@ -2011,6 +2061,7 @@ async def api_revert(request: Request) -> JSONResponse:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
 
+@_serialized_write
 async def api_reload(request: Request) -> JSONResponse:
     # Implements: REQ-p00004-J
     """POST /api/reload - Reload graph from disk with fresh config."""

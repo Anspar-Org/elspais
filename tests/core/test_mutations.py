@@ -199,6 +199,59 @@ class TestMutationLog:
         popped = log.pop()
         assert popped is None
 
+    # Verifies: REQ-o00062-E
+    @pytest.mark.parametrize(
+        "limit,expected_slice", [(2, slice(3, 5)), (5, slice(0, 5)), (7, slice(0, 5))]
+    )
+    def test_tail_returns_most_recent_oldest_to_newest(self, limit, expected_slice):
+        """tail(n) returns the last n entries in chronological order."""
+        log = MutationLog()
+        entries = [
+            MutationEntry(operation=f"op{i}", target_id=str(i), before_state={}, after_state={})
+            for i in range(5)
+        ]
+        for entry in entries:
+            log.append(entry)
+
+        assert log.tail(limit) == entries[expected_slice]
+
+    # Verifies: REQ-o00062-E
+    @pytest.mark.parametrize("limit", [0, -1])
+    def test_tail_nonpositive_limit_returns_all(self, limit):
+        """tail(0) and tail(negative) return the whole log, oldest first."""
+        log = MutationLog()
+        entries = [
+            MutationEntry(operation=f"op{i}", target_id=str(i), before_state={}, after_state={})
+            for i in range(3)
+        ]
+        for entry in entries:
+            log.append(entry)
+
+        assert log.tail(limit) == entries
+
+    # Verifies: REQ-o00062-E
+    def test_tail_is_a_snapshot(self):
+        """The list tail() returns is decoupled from later log mutations.
+
+        A live view over the internal list would let a concurrent append or
+        undo change (or invalidate) a window the caller is still reading.
+        """
+        log = MutationLog()
+        first = MutationEntry(operation="first", target_id="A", before_state={}, after_state={})
+        log.append(first)
+
+        window = log.tail(0)
+        assert window == [first]
+
+        log.append(
+            MutationEntry(operation="second", target_id="B", before_state={}, after_state={})
+        )
+        log.pop()
+        log.pop()
+
+        assert window == [first]
+        assert len(log) == 0
+
     # Verifies: REQ-d00132-E
     def test_clear(self):
         """clear() removes all entries."""

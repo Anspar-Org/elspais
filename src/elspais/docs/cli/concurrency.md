@@ -117,9 +117,9 @@ The viewer's three HTTP history routes carry the same guard:
 with HTTP 409 (`mutation_log_conflict`, identical body to the MCP
 rejection). The viewer's own JS threads the tip automatically.
 
-Get the tip from `get_mutation_log()` -- entries are chronological, so
-the tip is the `id` of the last entry (raise `limit` if the log is
-longer). Over HTTP, `/api/dirty` returns it as `tip`.
+Get the tip from `get_mutation_log()` -- it returns `current_tip`
+directly, alongside the most recent entries (newest first) and the
+`total` pending count. Over HTTP, `/api/dirty` returns it as `tip`.
 
 `""` (the empty string) means "I believe nothing is pending". It is the
 correct value when you have made no mutations and seen none.
@@ -146,6 +146,27 @@ same helpers -- there is no softer path around the protocol:
 - The history routes `/api/save`, `/api/revert`, and `/api/reload`
   require `if_tip_mutation_id` in the JSON body (`""` = nothing
   pending), mirroring the MCP history tools.
+
+## Noticing Another Writer
+
+Mutations live in memory until saved, so a writer working through the
+MCP tools changes no file. Nothing on disk moves, and a client watching
+file timestamps sees nothing -- yet the graph every surface reads has
+already changed.
+
+`/api/check-freshness` therefore reports two independent signals:
+
+- `stale` (with `stale_files`) -- spec files changed **on disk**, e.g. a
+  git checkout or an outside editor. Reloading from disk is the fix.
+- `mutation_tip` -- the mutation-log tip. Poll it and compare against the
+  tip you last saw: if it moved, another writer mutated the shared
+  in-memory graph. The live graph is already correct, so the fix is to
+  re-read it (refetch the nodes you display), *not* to reload from disk,
+  which would discard that writer's unsaved work.
+
+The viewer does exactly this on a 30-second poll and raises a banner
+naming which of the two happened. An agent holding state across calls
+can use the same field to know when to re-read.
 
 ## Why Tokens Survive a Refresh
 

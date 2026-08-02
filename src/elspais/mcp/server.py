@@ -41,8 +41,10 @@ without creating intermediate data structures (REQ-p00060-B).
 
 from __future__ import annotations
 
+import functools
 import re
-from collections.abc import Iterator
+import time as _time
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -80,6 +82,7 @@ from elspais.graph.serialize import (
 )
 from elspais.graph.terms import TermDictionary
 from elspais.mcp.search import ParsedQuery, matches_node, parse_query, score_node
+from elspais.mcp.shared_state import SharedServerState
 from elspais.utilities.patterns import build_resolver
 
 # Known schema fields (by alias and Python name) for filtering non-schema keys
@@ -2312,7 +2315,7 @@ _CONCURRENCY_PROTOCOL = (
     "   if_tip_mutation_id), save_mutations(if_tip_mutation_id),\n"
     "   refresh_graph(force=True, if_tip_mutation_id=...) and\n"
     "   restore_from_safety_branch(..., if_tip_mutation_id) require the\n"
-    '   mutation-log tip (newest entry in get_mutation_log(); "" = nothing\n'
+    '   mutation-log tip (current_tip from get_mutation_log(); "" = nothing\n'
     "   pending). On mutation_log_conflict, review 'unseen' before retrying.\n"
     "\n"
     'Full protocol: docs("concurrency"); quick answers: faq("concurrency").'
@@ -2458,7 +2461,7 @@ _FAQ_ENTRIES: list[dict[str, str]] = [
         "answer": (
             "All mutate_* tools modify the in-memory graph only.\n"
             "To persist to spec files, call save_mutations(if_tip_mutation_id=<tip>),\n"
-            "where <tip> is the id of the newest entry in get_mutation_log().\n"
+            "where <tip> is the current_tip returned by get_mutation_log().\n"
             "Use save_branch=True to create a safety branch first.\n"
             "Use undo_last_mutation(if_mutation_id=<tip>) or\n"
             "undo_to_mutation(id, if_tip_mutation_id=<tip>) to revert mistakes.\n"
@@ -2503,8 +2506,7 @@ _FAQ_ENTRIES: list[dict[str, str]] = [
             "Undo, save, forced refresh, and safety-branch restore act on EVERY\n"
             "writer's pending work, so they require the mutation-log tip: the id\n"
             "of the newest pending mutation as you last saw it. Get it from\n"
-            "get_mutation_log() (last entry; entries are chronological) or HTTP\n"
-            "/api/dirty's 'tip'.\n"
+            "get_mutation_log()'s current_tip field or HTTP /api/dirty's 'tip'.\n"
             "\"\" means 'I believe nothing is pending'. On mutation_log_conflict\n"
             "the rejection lists 'unseen' — entries appended since your tip —\n"
             "review them before retrying with current_tip. refresh_graph needs\n"
@@ -3521,19 +3523,20 @@ def _undo_to_mutation(graph: FederatedGraph, mutation_id: str) -> dict[str, Any]
 
 
 def _get_mutation_log(graph: FederatedGraph, limit: int = 50) -> dict[str, Any]:
-    """Get mutation history.
+    """Get mutation history: the most recent ``limit`` entries, newest first.
 
-    Returns the most recent mutations from the log.
+    ``current_tip`` is the id the tip-guarded tools (save_mutations,
+    undo_last_mutation, refresh_graph force=True) expect, taken from the
+    same snapshot as the entries — one read gives an agent everything the
+    concurrency protocol needs. ``total`` is the full pending count, so a
+    truncated window is detectable (len(mutations) < total).
     """
-    mutations = []
-    for entry in graph.mutation_log.iter_entries():
-        mutations.append(_serialize_mutation_entry(entry))
-        if len(mutations) >= limit:
-            break
-
+    entries = graph.mutation_log.tail(limit)
     return {
-        "mutations": mutations,
-        "count": len(mutations),
+        "mutations": [_serialize_mutation_entry(e) for e in reversed(entries)],
+        "count": len(entries),
+        "total": len(graph.mutation_log),
+        "current_tip": entries[-1].id if entries else "",
     }
 
 
@@ -5486,10 +5489,10 @@ Implements:/Refines: line changes.
 
 ### Undo & Inspection
 Undo affects every writer's pending work, so it requires the mutation-log
-tip: the id of the newest entry in get_mutation_log() ("" = nothing pending).
+tip: current_tip from get_mutation_log() ("" = nothing pending).
 - `undo_last_mutation(if_mutation_id)` - Undo most recent mutation
 - `undo_to_mutation(mutation_id, if_tip_mutation_id)` - Undo back to specific point
-- `get_mutation_log(limit=50)` - View mutation history (last entry is the tip)
+- `get_mutation_log(limit=50)` - Mutation history, newest first; includes current_tip
 - `get_versions(node_ids)` - Refresh version tokens in bulk (unknown IDs omitted)
 - `get_orphaned_nodes()` - List orphaned nodes
 - `get_broken_references()` - List broken references
@@ -5628,7 +5631,7 @@ identical body. Full details: docs("concurrency").
 2. mutate_add_requirement() to create draft (pass parent's version as if_version)
 3. mutate_add_assertion(..., if_version=<returned version>) to add assertions,
    threading each returned token into the next call
-4. get_mutation_log() to review changes (last entry is the tip)
+4. get_mutation_log() to review changes (current_tip is the tip)
 5. undo_last_mutation(if_mutation_id=<tip>) if needed
 
 **Extracting a scoped subtree for sub-agent consumption:**
@@ -5663,12 +5666,17 @@ identical body. Full details: docs("concurrency").
 def create_server(
     graph: FederatedGraph | None = None,
     working_dir: Path | None = None,
+    shared_state: SharedServerState | None = None,
 ) -> FastMCP:
     """Create the MCP server with all tools registered.
 
     Args:
         graph: Optional pre-built graph (for testing).
         working_dir: Working directory for graph building.
+        shared_state: The process-wide state holder. The unified daemon
+            passes AppState's holder so the MCP tools and the HTTP routes
+            dereference the same graph, including across rebuilds. When
+            omitted (stdio server, tests) a private holder is created.
 
     Returns:
         FastMCP server instance.
@@ -5696,12 +5704,31 @@ def create_server(
     # Create server with instructions for AI agents (REQ-d00065)
     mcp = FastMCP("elspais", instructions=MCP_SERVER_INSTRUCTIONS)
 
-    # Store graph in closure for tools
-    _state: dict[str, Any] = {
-        "graph": graph,
-        "working_dir": working_dir,
-        "config": config,
-    }
+    # Store graph in closure for tools. _state is the process-wide shared
+    # holder when one is passed (unified daemon): every ``_state["graph"]``
+    # read or swap below then acts on the same cell the HTTP routes use.
+    _state: SharedServerState = shared_state if shared_state is not None else SharedServerState()
+    _state["graph"] = graph
+    _state["working_dir"] = working_dir
+    _state["config"] = config
+
+    def _locked(fn: Callable[..., Any]) -> Callable[..., Any]:
+        """Serialize a write tool under the shared write lock.
+
+        Guard + mutate (and rebuild + swap) must be one atomic unit: FastMCP
+        runs these sync tools on worker threads, concurrently with each other
+        and with the viewer's HTTP mutate handlers, and a guard that passes
+        before another writer's mutate lands is a lost update. Applied to
+        every tool that writes to the graph, the mutation log, or disk;
+        read tools stay lock-free.
+        """
+
+        @functools.wraps(fn)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            with _state.write_lock:
+                return fn(*args, **kwargs)
+
+        return wrapper
 
     # ─────────────────────────────────────────────────────────────────────
     # Register Tools
@@ -5716,6 +5743,7 @@ def create_server(
         return _get_graph_status(_state["graph"])
 
     @mcp.tool()
+    @_locked
     def refresh_graph(
         full: bool = False,
         path: str = "",
@@ -5765,6 +5793,7 @@ def create_server(
             full=full,
         )
         _state["graph"] = new_graph
+        _state["build_time"] = _time.time()
         # REQ-d00205-B: Sync config from rebuilt graph's root repo
         if result.get("config") is not None:
             _state["config"] = result["config"]
@@ -6077,6 +6106,7 @@ def create_server(
     # ─────────────────────────────────────────────────────────────────────
 
     @mcp.tool()
+    @_locked
     def mutate_rename_node(old_id: str, new_id: str, if_version: str) -> dict[str, Any]:
         """Rename a requirement's ID (e.g., REQ-d00001 -> REQ-d00010). Updates all references.
 
@@ -6094,6 +6124,7 @@ def create_server(
         return _attach_version(_mutate_rename_node(_state["graph"], old_id, new_id), node)
 
     @mcp.tool()
+    @_locked
     def mutate_update_title(node_id: str, new_title: str, if_version: str) -> dict[str, Any]:
         """Change a requirement's display title.
 
@@ -6110,6 +6141,7 @@ def create_server(
         return _attach_version(_mutate_update_title(_state["graph"], node_id, new_title), node)
 
     @mcp.tool()
+    @_locked
     def mutate_change_status(node_id: str, new_status: str, if_version: str) -> dict[str, Any]:
         """Change a requirement's status.
 
@@ -6127,6 +6159,7 @@ def create_server(
         return _attach_version(_mutate_change_status(_state["graph"], node_id, new_status), node)
 
     @mcp.tool()
+    @_locked
     def mutate_add_requirement(
         req_id: str,
         title: str,
@@ -6181,6 +6214,7 @@ def create_server(
         return _attach_version(result, parent) if parent is not None else result
 
     @mcp.tool()
+    @_locked
     def mutate_delete_requirement(
         node_id: str, if_version: str, confirm: bool = False
     ) -> dict[str, Any]:
@@ -6210,6 +6244,7 @@ def create_server(
     # ─────────────────────────────────────────────────────────────────────
 
     @mcp.tool()
+    @_locked
     def mutate_add_assertion(req_id: str, label: str, text: str, if_version: str) -> dict[str, Any]:
         """Add a testable assertion (A, B, C...) to a requirement. Text should include SHALL.
 
@@ -6228,6 +6263,7 @@ def create_server(
         return _attach_version(_mutate_add_assertion(_state["graph"], req_id, label, text), parent)
 
     @mcp.tool()
+    @_locked
     def mutate_update_assertion(
         assertion_id: str, new_text: str, if_version: str
     ) -> dict[str, Any]:
@@ -6250,6 +6286,7 @@ def create_server(
         )
 
     @mcp.tool()
+    @_locked
     def mutate_delete_assertion(
         assertion_id: str, if_version: str, compact: bool = True, confirm: bool = False
     ) -> dict[str, Any]:
@@ -6275,6 +6312,7 @@ def create_server(
         return _attach_version(result, parent) if parent is not None else result
 
     @mcp.tool()
+    @_locked
     def mutate_rename_assertion(old_id: str, new_label: str, if_version: str) -> dict[str, Any]:
         """Change an assertion's label (e.g., rename B to D). Updates all references.
 
@@ -6296,6 +6334,7 @@ def create_server(
     # ─────────────────────────────────────────────────────────────────────
 
     @mcp.tool()
+    @_locked
     def mutate_update_remainder(
         node_id: str, if_version: str, text: str | None = None, heading: str | None = None
     ) -> dict[str, Any]:
@@ -6324,6 +6363,7 @@ def create_server(
         )
 
     @mcp.tool()
+    @_locked
     def mutate_add_remainder(
         req_id: str, heading: str, text: str, if_version: str
     ) -> dict[str, Any]:
@@ -6348,6 +6388,7 @@ def create_server(
         )
 
     @mcp.tool()
+    @_locked
     def mutate_delete_remainder(
         node_id: str, if_version: str, confirm: bool = False
     ) -> dict[str, Any]:
@@ -6413,6 +6454,7 @@ def create_server(
     # ─────────────────────────────────────────────────────────────────────
 
     @mcp.tool()
+    @_locked
     def mutate_set_stereotype(
         node_id: str, is_template: bool, if_version: str, force: bool = False
     ) -> dict[str, Any]:
@@ -6437,6 +6479,7 @@ def create_server(
         )
 
     @mcp.tool()
+    @_locked
     def mutate_update_journey_field(
         node_id: str, field_name: str, value: str, if_version: str
     ) -> dict[str, Any]:
@@ -6457,6 +6500,7 @@ def create_server(
         )
 
     @mcp.tool()
+    @_locked
     def mutate_journey_section(
         node_id: str,
         action: str,
@@ -6484,6 +6528,7 @@ def create_server(
         )
 
     @mcp.tool()
+    @_locked
     def mutate_add_journey(
         journey_id: str, title: str, file_id: str, if_version: str
     ) -> dict[str, Any]:
@@ -6506,6 +6551,7 @@ def create_server(
         )
 
     @mcp.tool()
+    @_locked
     def mutate_delete_journey(
         node_id: str, if_version: str, confirm: bool = False
     ) -> dict[str, Any]:
@@ -6532,6 +6578,7 @@ def create_server(
     # ─────────────────────────────────────────────────────────────────────
 
     @mcp.tool()
+    @_locked
     def mutate_add_edge(
         source_id: str,
         target_id: str,
@@ -6573,6 +6620,7 @@ def create_server(
         )
 
     @mcp.tool()
+    @_locked
     def mutate_change_edge_kind(
         source_id: str, target_id: str, new_kind: str, if_version: str
     ) -> dict[str, Any]:
@@ -6597,6 +6645,7 @@ def create_server(
         )
 
     @mcp.tool()
+    @_locked
     def mutate_delete_edge(
         source_id: str, target_id: str, if_version: str, confirm: bool = False
     ) -> dict[str, Any]:
@@ -6618,6 +6667,7 @@ def create_server(
         )
 
     @mcp.tool()
+    @_locked
     def mutate_fix_broken_reference(
         source_id: str, old_target_id: str, new_target_id: str, if_version: str
     ) -> dict[str, Any]:
@@ -6640,6 +6690,7 @@ def create_server(
         )
 
     @mcp.tool()
+    @_locked
     def mutate_change_edge_targets(
         source_id: str, target_id: str, assertion_targets: list[str], if_version: str
     ) -> dict[str, Any]:
@@ -6667,6 +6718,7 @@ def create_server(
         )
 
     @mcp.tool()
+    @_locked
     def mutate_move_node_to_file(
         node_id: str,
         target_file_id: str,
@@ -6753,6 +6805,7 @@ def create_server(
         )
 
     @mcp.tool()
+    @_locked
     def mutate_rename_file(file_id: str, new_relative_path: str, if_version: str) -> dict[str, Any]:
         """Rename a FILE node and its on-disk path.
 
@@ -6780,6 +6833,7 @@ def create_server(
     # ─────────────────────────────────────────────────────────────────────
 
     @mcp.tool()
+    @_locked
     def undo_last_mutation(if_mutation_id: str) -> dict[str, Any]:
         """Revert the most recent in-memory mutation (before save_mutations).
 
@@ -6795,6 +6849,7 @@ def create_server(
         return _undo_last_mutation(_state["graph"])
 
     @mcp.tool()
+    @_locked
     def undo_to_mutation(mutation_id: str, if_tip_mutation_id: str) -> dict[str, Any]:
         """Revert all in-memory mutations back to a specific point (inclusive).
 
@@ -6813,9 +6868,13 @@ def create_server(
 
     @mcp.tool()
     def get_mutation_log(limit: int = 50) -> dict[str, Any]:
-        """List pending in-memory mutations (not yet saved to disk).
+        """List pending in-memory mutations (not yet saved to disk), newest first.
 
-        Shows what save_mutations() will persist.
+        Shows what save_mutations() will persist. ``current_tip`` is the
+        token the tip-guarded tools (save_mutations, undo_last_mutation,
+        undo_to_mutation, refresh_graph force=True) require; ``total`` is
+        the full pending count even when the window is truncated by
+        ``limit``.
         """
         return _get_mutation_log(_state["graph"], limit)
 
@@ -6921,6 +6980,7 @@ def create_server(
     # ─────────────────────────────────────────────────────────────────────
 
     @mcp.tool()
+    @_locked
     def change_reference_type(
         req_id: str,
         target_id: str,
@@ -6949,9 +7009,11 @@ def create_server(
                 _state["working_dir"],
             )
             _state["graph"] = new_graph
+            _state["build_time"] = _time.time()
         return _reattach_version_after_rebuild(_state["graph"], result, req_id)
 
     @mcp.tool()
+    @_locked
     def move_requirement(
         req_id: str,
         target_file: str,
@@ -6978,9 +7040,11 @@ def create_server(
                 _state["working_dir"],
             )
             _state["graph"] = new_graph
+            _state["build_time"] = _time.time()
         return _reattach_version_after_rebuild(_state["graph"], result, req_id)
 
     @mcp.tool()
+    @_locked
     def restore_from_safety_branch(branch_name: str, if_tip_mutation_id: str) -> dict[str, Any]:
         """Restore spec files from a safety branch.
 
@@ -7001,6 +7065,7 @@ def create_server(
                 _state["working_dir"],
             )
             _state["graph"] = new_graph
+            _state["build_time"] = _time.time()
         return result
 
     @mcp.tool()
@@ -7012,6 +7077,7 @@ def create_server(
         return _list_safety_branches_impl(_state["working_dir"])
 
     @mcp.tool()
+    @_locked
     def save_mutations(
         if_tip_mutation_id: str,
         save_branch: bool = False,
@@ -7102,6 +7168,7 @@ def create_server(
                 _state["working_dir"],
             )
             _state["graph"] = new_graph
+            _state["build_time"] = _time.time()
 
         return result
 
@@ -7127,6 +7194,7 @@ def create_server(
         )
 
     @mcp.tool()
+    @_locked
     def apply_link(
         file_path: str,
         line: int,

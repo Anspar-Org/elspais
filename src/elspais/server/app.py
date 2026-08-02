@@ -237,7 +237,11 @@ def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
         try:
             from elspais.mcp.server import create_server
 
-            mcp = create_server(graph=state.graph, working_dir=state.repo_root)
+            mcp = create_server(
+                graph=state.graph,
+                working_dir=state.repo_root,
+                shared_state=state.shared,
+            )
             # The outer Mount supplies the /mcp prefix; FastMCP's internal
             # default path is also "/mcp", which would bury the endpoint at
             # /mcp/mcp while the documented /mcp answered 404.
