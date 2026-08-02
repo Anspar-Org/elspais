@@ -138,7 +138,7 @@ def cmd_all(args: argparse.Namespace) -> int:
         if isinstance(result, Associate):
             found.append((child.resolve(), result))
         elif (child / ".elspais.toml").exists():
-            # Implements: REQ-d00202-E
+            # Implements: REQ-d00202-I
             # A sibling that claims to be an elspais repo but whose config
             # cannot be loaded is skipped visibly; dirs without a config are
             # not candidates and stay silent.

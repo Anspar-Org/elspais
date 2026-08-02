@@ -1,9 +1,9 @@
-# Verifies: REQ-p00005-C, REQ-d00202-E
+# Verifies: REQ-p00005-C, REQ-d00202-I
 """Tests for elspais associate command.
 
 Validates REQ-p00005-C: CLI-based management of associate repository links.
 Validates REQ-p00005-E: Clear error reporting for invalid paths/configs.
-Validates REQ-d00202-E: Candidate dirs with unloadable configs are skipped
+Validates REQ-d00202-I: Candidate dirs with unloadable configs are skipped
 with a reported reason; the scan completes.
 """
 from __future__ import annotations
@@ -424,12 +424,12 @@ def _make_broken_repo(base: Path, name: str, config_text: str) -> Path:
 
 
 class TestAssociateBrokenSiblingConfig:
-    """Validates REQ-d00202-E: a candidate directory whose elspais config fails
+    """Validates REQ-d00202-I: a candidate directory whose elspais config fails
     to parse or validate is skipped with the path and reason reported, without
     aborting the scan; dirs without a config stay silently ignored."""
 
     @pytest.mark.parametrize("config_text, reason_fragments", _BROKEN_CONFIG_CASES)
-    def test_REQ_d00202_E_discover_returns_error_string_for_unloadable_config(
+    def test_REQ_d00202_I_discover_returns_error_string_for_unloadable_config(
         self, tmp_path, config_text, reason_fragments
     ):
         """discover_associate_from_path must not raise on an unloadable config;
@@ -452,7 +452,7 @@ class TestAssociateBrokenSiblingConfig:
         )
 
     @pytest.mark.parametrize("config_text, reason_fragments", _BROKEN_CONFIG_CASES)
-    def test_REQ_d00202_E_broken_sibling_config_is_skipped_with_reason(
+    def test_REQ_d00202_I_broken_sibling_config_is_skipped_with_reason(
         self, tmp_path, monkeypatch, capsys, config_text, reason_fragments
     ):
         """--all completes past a broken-config sibling: exits 0, links the

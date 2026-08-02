@@ -86,7 +86,7 @@ C. When no `[associates]` section exists in config, `get_associates_config()` SH
 
 D. Associates declaring their own `[associates]` section SHALL be a hard error: "Associate 'X' declares its own associates -- only the root repo may declare associates."
 
-E. When scanning directories for candidate associates, a directory whose elspais configuration fails to parse or validate SHALL be skipped without aborting the scan, and each skip SHALL be reported with the directory path and the reason. Directories without an elspais configuration are not candidates and need no report.
+I. When scanning directories for candidate associates, a directory whose elspais configuration fails to parse or validate SHALL be skipped without aborting the scan, and each skip SHALL be reported with the directory path and the reason. Directories without an elspais configuration are not candidates and need no report.
 
 ### Rationale
 
@@ -94,11 +94,12 @@ Associates are declared in the root repo's `.elspais.toml` using a structured TO
 
 ### Changelog
 
+- 2026-08-02 | 1bc0e4b5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | de074317 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 479dcbb8 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 479dcbb8 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Associates Config Loading* | **Hash**: de074317
+*End* *Associates Config Loading* | **Hash**: 1bc0e4b5
 ---
 
 ## REQ-d00203: Multi-Repo Build Pipeline
