@@ -153,7 +153,7 @@ def _is_associate_owned(graph, node) -> bool:  # noqa: ANN001
     """Whether *node* lives in an associate repo rather than the primary.
 
     Delegates to the single ownership-resolution home shared with
-    render_save (graph/federated.py). Implements: REQ-d00253-E
+    render_save (graph/federated.py). Implements: REQ-d00253-F
     """
     from elspais.graph.federated import is_associate_owned
 
@@ -457,7 +457,7 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
     # Report what will be / was fixed. Associate-owned nodes are reported
     # [skipping] when write_associates is false: render_save will never write
     # their files, so a plain "Fixing" claim would be false.
-    # Implements: REQ-d00253-E
+    # Implements: REQ-d00253-F
     write_associates = config.get("federation", {}).get("write_associates", False)
     prefix = "Would fix" if dry_run else "Fixing"
     for node, reasons in fixable_nodes:

@@ -1,7 +1,7 @@
-# Verifies: REQ-d00253-E
+# Verifies: REQ-d00253-F
 """elspais fix must not claim to fix associate-owned content it will not write.
 
-Validates REQ-d00253-E: with federation.write_associates=false, every
+Validates REQ-d00253-F: with federation.write_associates=false, every
 fix-report line for an associate-owned node is prefixed [skipping] (both
 "Fixing" and dry-run "Would fix" reports); primary-repo lines stay plain.
 """
@@ -104,7 +104,7 @@ def federated_fixable_workspace(tmp_path: Path) -> dict[str, Path]:
 
 
 class TestFixAssociateSkipReporting:
-    """Validates REQ-d00253-E: fix-report lines for associate-owned nodes are
+    """Validates REQ-d00253-F: fix-report lines for associate-owned nodes are
     prefixed [skipping] and the output never claims an associate-owned fix was
     applied; primary-repo lines remain plain."""
 
@@ -113,7 +113,7 @@ class TestFixAssociateSkipReporting:
         [(False, "Fixing"), (True, "Would fix")],
         ids=["apply", "dry-run"],
     )
-    def test_REQ_d00253_E_associate_lines_prefixed_skipping(
+    def test_REQ_d00253_F_associate_lines_prefixed_skipping(
         self, federated_fixable_workspace, monkeypatch, capsys, dry_run, verb
     ):
         """Associate-owned fixable nodes are reported [skipping]; the plain

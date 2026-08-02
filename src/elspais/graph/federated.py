@@ -1984,7 +1984,7 @@ def is_associate_owned(graph: Any, node_id: str) -> bool:
     """Whether *node_id* is owned by an associate repo rather than the primary.
 
     Single home for the write-scope ownership resolution used by
-    ``render_save`` and ``elspais fix`` reporting (REQ-d00253-B, REQ-d00253-E).
+    ``render_save`` and ``elspais fix`` reporting (REQ-d00253-B, REQ-d00253-F).
     The federation ownership map is authoritative: anything ``repo_for``
     attributes to a non-root repo is associate-owned. Nodes not registered in
     the map (or plain TraceGraphs with no federation API) fall back to the

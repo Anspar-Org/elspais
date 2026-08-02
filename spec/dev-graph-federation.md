@@ -218,7 +218,7 @@ C. Generated `INDEX.md` and `term-index.md` SHALL contain only primary-repo requ
 
 D. MCP mutation tools SHALL reject mutations targeting associate-owned nodes when `federation.write_associates` is false, returning a read-only error and applying no in-memory change.
 
-E. When `elspais fix` detects fixable issues in associate-owned content it will not write, its report SHALL distinguish those from applied fixes by prefixing each such line with `[skipping]`; the output SHALL never claim an associate-owned fix was applied.
+F. When `elspais fix` detects fixable issues in associate-owned content it will not write, its report SHALL distinguish those from applied fixes by prefixing each such line with `[skipping]`; the output SHALL never claim an associate-owned fix was applied.
 
 ### Rationale
 
@@ -226,7 +226,8 @@ Federation is fundamentally a read and validation aggregation: associates provid
 
 ### Changelog
 
+- 2026-08-02 | f145d18a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | e3cca300 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-01 | 28c8c538 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Federation Write/Generation Scope* | **Hash**: e3cca300
+*End* *Federation Write/Generation Scope* | **Hash**: f145d18a
