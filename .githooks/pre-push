@@ -183,20 +183,72 @@ fi
 # push re-ran the whole suite and died the same way.
 E2E_CACHED_HASH=""
 E2E_CACHED_VERDICT=""
+E2E_CACHED_ENV=""
 if [ -f "$E2E_CACHE" ]; then
     E2E_CACHED_HASH=$(cut -d' ' -f1 < "$E2E_CACHE")
     E2E_CACHED_VERDICT=$(cut -d' ' -f2 < "$E2E_CACHE")
+    E2E_CACHED_ENV=$(cut -d' ' -f3 < "$E2E_CACHE")
 fi
+
+# Guard 3: the e2e tier spawns `elspais` as a subprocess from PATH, so its
+# verdict describes whichever binary that resolved to -- not necessarily this
+# tree. A stale global install (pipx, ~/.local/bin) or another worktree's venv
+# produces failures that belong to the environment, and the tree hash cannot
+# tell the two runs apart: same code, same key, different software.
+#
+# So identify the environment by where the on-PATH CLI's code actually lives,
+# and make that part of the cache key. A verdict earned elsewhere is a miss,
+# not a failure -- it simply has nothing to say about this tree, so we re-run.
+# Recording it as a third field also retires every 2-field entry written
+# before this guard existed: they have no environment, so they never match.
+e2e_cli_src() {
+    _bin=$(command -v elspais 2>/dev/null) || return 1
+    _py=$(head -1 "$_bin" 2>/dev/null | sed 's|^#!||')
+    [ -x "$_py" ] || return 1
+    "$_py" -c 'import elspais,os;print(os.path.realpath(os.path.dirname(elspais.__file__)))' 2>/dev/null
+}
+E2E_REPO_SRC=$(cd "$REPO_ROOT" && python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "src/elspais")
+E2E_ENV_SRC=$(e2e_cli_src)
+
+# The venv in the worktree is the binary this tree's e2e tests mean. Prefer it
+# automatically rather than making every developer remember the PATH dance.
+if [ "$E2E_ENV_SRC" != "$E2E_REPO_SRC" ] && [ -x "$REPO_ROOT/.venv/bin/elspais" ]; then
+    _saved_path="$PATH"
+    PATH="$REPO_ROOT/.venv/bin:$PATH"
+    export PATH
+    if [ "$(e2e_cli_src)" = "$E2E_REPO_SRC" ]; then
+        E2E_ENV_SRC="$E2E_REPO_SRC"
+        echo -e "${YELLOW}E2E: using $REPO_ROOT/.venv/bin for elspais (PATH resolved elsewhere)${NC}"
+    else
+        PATH="$_saved_path"
+        export PATH
+    fi
+fi
+
+if [ "$E2E_ENV_SRC" != "$E2E_REPO_SRC" ]; then
+    echo -e "${YELLOW}E2E: on-PATH elspais is ${E2E_ENV_SRC:-<not found>},${NC}"
+    echo -e "${YELLOW}     not this tree ($E2E_REPO_SRC). Results describe that${NC}"
+    echo -e "${YELLOW}     install, not this branch. Fix with:${NC}"
+    echo -e "${YELLOW}       export PATH=\"$REPO_ROOT/.venv/bin:\$PATH\"${NC}"
+fi
+
 if [ -n "$ELSPAIS_E2E_FORCE" ]; then
     E2E_CACHED_HASH=""
     E2E_CACHED_VERDICT=""
+    E2E_CACHED_ENV=""
+fi
+
+E2E_CACHE_USABLE=false
+if [ "$E2E_CACHED_HASH" = "$CONTENT_HASH" ] && [ -n "$E2E_CACHED_ENV" ] \
+   && [ "$E2E_CACHED_ENV" = "$E2E_ENV_SRC" ]; then
+    E2E_CACHE_USABLE=true
 fi
 
 if [ "$E2E_RELEVANT" = false ]; then
     echo -e "${GREEN}E2E tests skipped — this branch changes documentation only${NC}"
-elif [ "$E2E_CACHED_HASH" = "$CONTENT_HASH" ] && [ "$E2E_CACHED_VERDICT" = "PASS" ]; then
+elif [ "$E2E_CACHE_USABLE" = true ] && [ "$E2E_CACHED_VERDICT" = "PASS" ]; then
     echo -e "${GREEN}E2E tests cached — passed since last change${NC}"
-elif [ "$E2E_CACHED_HASH" = "$CONTENT_HASH" ] && [ "$E2E_CACHED_VERDICT" = "FAIL" ]; then
+elif [ "$E2E_CACHE_USABLE" = true ] && [ "$E2E_CACHED_VERDICT" = "FAIL" ]; then
     VALIDATION_FAILED=true
     echo -e "${RED}E2E tests failed (cached verdict for an unchanged tree)${NC}"
     echo "Re-run them with: ELSPAIS_E2E_FORCE=1 git push"
@@ -215,10 +267,10 @@ else
 
     if [ "$E2E_RC" -ne 0 ]; then
         VALIDATION_FAILED=true
-        echo "$CONTENT_HASH FAIL" > "$E2E_CACHE"
+        echo "$CONTENT_HASH FAIL $E2E_ENV_SRC" > "$E2E_CACHE"
         echo -e "${RED}E2E tests failed!${NC}"
     else
-        echo "$CONTENT_HASH PASS" > "$E2E_CACHE"
+        echo "$CONTENT_HASH PASS $E2E_ENV_SRC" > "$E2E_CACHE"
         echo -e "${GREEN}E2E tests passed!${NC}"
     fi
 fi
