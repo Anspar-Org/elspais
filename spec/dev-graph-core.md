@@ -403,7 +403,7 @@ E. A reporter registry SHALL map each `reporter` format name to a parser and an 
 
 F. For each configured target, the system SHALL obtain the reporter's output (captured from the command's stdout for stdout-channel reporters, or read from the `results` glob for file-channel reporters), build RESULT nodes carrying the real test-file path (`source_file`, repo-relative) and the target's `match` mode, and ingest the target's `coverage` file. Coverage crediting SHALL be derived from the targets' `credit_coverage`/`min_coverage_fraction`. File-channel results SHALL additionally record where each result was recorded — the results artifact's repo-relative path and, when derivable from the artifact (e.g. one JUnit `<testcase>` per line), the per-result line — as provenance distinct from the test's source path, and result links in reporting surfaces SHALL point at that artifact location.
 
-G. Each target SHALL select its result-to-test matching via `match`: `source` SHALL bind each result at the most precise scope available — first step scope, when the result's recorded test name embeds exactly one journey-step id (`JNY-.../N`) that resolves to a step whose verifying test(s) live in the result's source file; then test scope, resolving the result's real source-file path and `test()` source line to the specific test node at that `(path, line)`; and only then file granularity (all passing credits the file's `Verifies:` assertions; any failure flags them). Step- and test-scoped results SHALL credit per test, never via the file-level all-pass/any-fail rule. `aggregate` SHALL use the per-app green/red engine.
+G. Each target SHALL select its result-to-test matching via `match`: `source` SHALL bind each result at the most precise scope available — first step scope, when the result's recorded test name embeds exactly one journey-step reference (in the configured reference form) that resolves to a step whose verifying test(s) live in the result's source file; then test scope, resolving the result's real source-file path and `test()` source line to the specific test node at that `(path, line)`; and only then file granularity (all passing credits the file's `Verifies:` assertions; any failure flags them). Step- and test-scoped results SHALL credit per test, never via the file-level all-pass/any-fail rule. `aggregate` SHALL use the per-app green/red engine.
 
 H. `elspais checks --run-tests` SHALL accept a `--targets` selector naming a subset of `[[scanning.test.targets]]` to execute; an unknown target name SHALL be an error, and an absent selector SHALL execute all targets. The same `--targets` flag on `summary`/`trace` SHALL mark provenance without executing anything.
 
@@ -415,6 +415,7 @@ K. The system SHALL make per-test attribution available for every configured tes
 
 ### Changelog
 
+- 2026-08-02 | cbd59482 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | ea4e01b1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | fb1ca602 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-08 | 0f7323ff | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -426,7 +427,7 @@ K. The system SHALL make per-test attribution available for every configured tes
 - 2026-06-20 | 98120740 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | CUR-1533: initial
 
-*End* *Coverage-Based and Aggregate Test Verification* | **Hash**: ea4e01b1
+*End* *Coverage-Based and Aggregate Test Verification* | **Hash**: cbd59482
 
 ---
 
@@ -454,9 +455,9 @@ D. The test-to-journey-to-requirement *Traceability* chain SHALL be visible in `
 
 ### Assertions
 
-A. A journey's `## Steps` numbered list SHALL be parsed into addressable `STEP` nodes with ids of the form `JNY-.../N` (the step number suffixing the journey id, mirroring `<requirement>/A` assertion addressing), linked under the journey via `STRUCTURES` edges.
+A. A journey's `## Steps` numbered list SHALL be parsed into addressable `STEP` nodes whose ids suffix the step number to the journey id using the configured *Assertion*-reference separator (mirroring assertion addressing), linked under the journey via `STRUCTURES` edges.
 
-B. A STEP node id (`JNY-.../N`) SHALL be a legal `Verifies:` target in test and code files, creating a VERIFIES edge scoped to that step on the parent journey node.
+B. A STEP node id SHALL be a legal `Verifies:` target in test and code files, creating a VERIFIES edge scoped to that step on the parent journey node.
 
 C. Steps SHALL roll up to the journey's verification metric: a step SHALL be considered verified if it has at least one passing and zero failing verifying tests; an untested step SHALL leave the journey in a partial verification tier rather than fully verified.
 
@@ -464,7 +465,7 @@ D. When a journey's verification tier is failing, the system SHALL identify the 
 
 E. Test results SHALL be attributed per step: a step's verification status and its surfaced result entries SHALL reflect only results bound to that step's own verifying tests (plus whole-journey verifying tests), never results belonging to a sibling step.
 
-*End* *Step-Level UAT Verification* | **Hash**: a34cd9a2
+*End* *Step-Level UAT Verification* | **Hash**: 8bf40a7c
 
 ---
 

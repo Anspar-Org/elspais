@@ -24,6 +24,8 @@ This architecture supports:
 
 CI/CD pipelines and diverse developer environments mean associated repositories may be located at different filesystem paths on each machine. Rather than requiring each environment to maintain a separate override file, the tool treats all cross-repository resolution as a local path concern: CI systems clone repos and then configure paths via the CLI, developers set paths to match their local directory layout, and the associated repository's own configuration file declares its identity (project type, namespace prefix). This keeps repository topology — which repos exist and where they are hosted — as a CI/infrastructure concern outside the tool, while the tool focuses on discovering and validating whatever local repos it is pointed at.
 
+Pattern compatibility is part of configuration validity: any two valid repository configurations must compose into a federation without contested identifiers, so a conflict surfaces as a build-time configuration error (assertion G) rather than as misattributed references.
+
 ## Assertions
 
 A. The tool SHALL support requirement references across repository boundaries using configurable namespace prefixes.
@@ -38,18 +40,23 @@ E. The tool SHALL report a clear configuration error when a configured associate
 
 F. The tool SHALL resolve relative associate paths from the canonical (non-worktree) repository root so that cross-repository paths remain valid when working from git worktrees.
 
+G. If the identifier-pattern configurations of two repositories in a federation can each claim the same identifier, then the tool SHALL report the pattern conflict when the federation is built.
+
 ## Changelog
 
+- 2026-08-02 | de05471c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: federated pattern compatibility — two repos whose patterns can claim the same identifier is a build-time configuration conflict (G)
 - 2026-07-31 | 3a6f18bd | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-03-30 | c3303546 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-03-30 | f935e564 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Multi-Repository Requirements* | **Hash**: 3a6f18bd
+*End* *Multi-Repository Requirements* | **Hash**: de05471c
 ---
 
 # REQ-p00081: Org-Wide Requirement Visibility
 
-**Level**: prd | **Status**: Draft | **Implements**: REQ-p00005 | **Satisfies**: REQ-p00019
+**Level**: prd | **Status**: Draft | **Implements**: REQ-p00005
+**Satisfies**: REQ-p00019
 
 ## Rationale
 
@@ -175,6 +182,8 @@ A template is a *subtree*, not a single REQ: template-marked REQs refine other t
 
 Two conformance details keep the model usable with named ID schemes. Named-component styles (kebab-case, snake_case) put the assertion-separator character inside requirement names, so a string like `HHT-OPS-production-readiness-A` is lexically ambiguous between a longer requirement name and an assertion-targeted reference; the configuration guard that rejects overlapping separator/label styles (REQ-d00251-F) makes the split well-defined, and assertion Q obliges every accepting field — the metadata line included — to apply the same split, so a reference never resolves differently in a `Satisfies:`/`Refines:` header than the identical string would in a code marker. And because template targets are where authors first collide with the validation matrix, assertion R separates the two ways a reference can fail — the ID resolves to nothing, or it resolves to a node the matrix forbids — so a diagnostic never sends an author hunting a "missing" requirement that in fact exists, or relaxing a rule when the real problem is a typo.
 
+Three uniformity guarantees complete the reference contract. Reserving `:` out of every configurable pattern element (assertion S) leaves `::` unambiguous as the composite instance-ID joiner in any federation of valid configurations. Assertions T and U extend Q from parsing to the full round trip: one set of acceptance rules and one rendered form per entity — determined by the owning repository — in every file type, so a repository configured with separator `/` cites `REQ-p00001/F` everywhere, never `-F` on one surface and `/F` on another. Journey and journey-step references ride the same contract, steps standing in for *Assertions* (REQ-p00002-G).
+
 ### Assertions
 
 A. The system SHALL support a `Satisfies:` metadata field on requirements. The target MAY be a requirement or a specific *Assertion*.
@@ -211,10 +220,18 @@ Q. The system SHALL parse each requirement or *Assertion* reference according to
 
 R. When a declared reference fails to produce a valid relationship, the resulting diagnostic SHALL state which failure class occurred: resolution failure (the referenced ID matches no requirement or *Assertion*) or rule violation (the target exists but the relationship is forbidden by the validation matrix).
 
+S. The system SHALL reject at configuration-validation time an identifier-pattern configuration able to produce an identifier or reference containing the character `:`.
+
+T. The system SHALL apply the owning repository's reference-acceptance rules identically in every context that accepts references — spec, code, test, result, and journey files — so that a reference string valid in one context is valid in every context.
+
+U. When the system renders a reference to a requirement, *Assertion*, journey, or journey step on any surface, it SHALL emit the form determined by the owning repository's canonical ID pattern.
+
 ### Changelog
 
+- 2026-08-02 | ee2b9541 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-01 | 50f072e0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 064c817a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: reserve `:` out of configurable pattern elements so `::` is unambiguously the composite joiner (S); uniform reference acceptance across file types (T); canonical rendered form per owning repo (U)
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-44: add Q (references parsed per the owning repository's ID-pattern rules) and R (diagnostics separate resolution failure from rule violation)
 - 2026-07-30 | 47baf2fc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-30 | 7adf98fa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -233,7 +250,7 @@ R. When a declared reference fails to produce a valid relationship, the resultin
 - 2026-05-04 | bae1b85d | - | Developer (<dev@example.com>) | Auto-fix: canonicalize term forms, update hash
 - 2026-03-30 | 9115ce0d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Satisfies Relationship* | **Hash**: 50f072e0
+*End* *Satisfies Relationship* | **Hash**: ee2b9541
 ---
 
 ## REQ-p00016: NOT APPLICABLE Status

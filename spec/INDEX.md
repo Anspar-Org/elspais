@@ -11,13 +11,13 @@
 | ID         | Title                                            | File            | Hash     |
 | ---------- | ------------------------------------------------ | --------------- | -------- |
 | REQ-p00001 | Requirements Management Tool                     | prd-core.md     | 2d10975a |
-| REQ-p00002 | Requirements Validation                          | prd-core.md     | 03a4a779 |
+| REQ-p00002 | Requirements Validation                          | prd-core.md     | c8440f64 |
 | REQ-p00003 | Traceability Matrix Generation                   | prd-core.md     | 3121ad66 |
 | REQ-p00004 | Change Detection and Auditability                | prd-core.md     | 7930cf78 |
-| REQ-p00005 | Multi-Repository Requirements                    | prd-features.md | 3a6f18bd |
+| REQ-p00005 | Multi-Repository Requirements                    | prd-features.md | de05471c |
 | REQ-p00006 | Interactive Traceability Viewer                  | prd-features.md | 185217a3 |
 | REQ-p00013 | Automated Testing                                | prd-core.md     | 4318202c |
-| REQ-p00014 | Satisfies Relationship                           | prd-features.md | 50f072e0 |
+| REQ-p00014 | Satisfies Relationship                           | prd-features.md | ee2b9541 |
 | REQ-p00015 | Complete and Current Reporting                   | prd-core.md     | 9aa9a8aa |
 | REQ-p00016 | NOT APPLICABLE Status                            | prd-features.md | 2211802a |
 | REQ-p00017 | Reference Integrity Under Mutation               | prd-core.md     | 8ddf7122 |
@@ -160,9 +160,9 @@
 | REQ-d00251 | Component Style Vocabulary and Assertion Separator            | dev-graph-config.md     | 7857498c |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 8e07589c |
 | REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | a3c30142 |
-| REQ-d00254 | Coverage-Based and Aggregate Test Verification                | dev-graph-core.md       | ea4e01b1 |
+| REQ-d00254 | Coverage-Based and Aggregate Test Verification                | dev-graph-core.md       | cbd59482 |
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | ab5cb648 |
-| REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | a34cd9a2 |
+| REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | 8bf40a7c |
 | REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 2a8aab8b |
 | REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | 5270fa45 |
 | REQ-d00259 | Requirement Format Reference Command                          | dev-cli.md              | c3b67490 |

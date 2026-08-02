@@ -69,8 +69,12 @@ E. When an *Assertion*'s text begins with a non-letter opening character that ha
 
 F. If an *Assertion* carries a parsing directive the tool does not recognize, then the tool SHALL report the unrecognized directive and its location rather than treating the directive as ordinary *Assertion* text.
 
+G. The tool SHALL form journey-step references from the journey identifier and the step designator using the separator rules configured for *Assertion* references.
+
 ## Changelog
 
+- 2026-08-02 | c8440f64 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: journey-step references use the configured assertion-separator machinery (G) — one reference grammar for assertions and steps
 - 2026-07-31 | 03a4a779 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: author assertion-level parsing directive grammar (E) and unknown-directive reporting (F)
 - 2026-07-31 | d9f87a2a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -78,7 +82,7 @@ F. If an *Assertion* carries a parsing directive the tool does not recognize, th
 - 2026-07-31 | b29ef9b6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-03-30 | e8f0e4eb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Requirements Validation* | **Hash**: 03a4a779
+*End* *Requirements Validation* | **Hash**: c8440f64
 ---
 
 # REQ-p00003: Traceability Matrix Generation
