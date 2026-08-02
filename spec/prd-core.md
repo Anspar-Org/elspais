@@ -411,11 +411,7 @@ C. If a mitigation citation within residual-risk documentation does not resolve 
 
 ## Rationale
 
-A catalog of behavioral anti-pattern classes, stated once as a template and consumed by subsystem requirements via `Satisfies:`. Each assertion prohibits one class of anti-pattern (or mandates its dual); in each, "the system" reads as the satisfying subsystem. Per the template-instance semantics of REQ-p00014, the catalog clones into every declaring requirement and the instance assertions participate in normal coverage, so each subsystem answers for each class independently. A class that genuinely cannot arise for a satisfier is excluded per-instance through the NOT APPLICABLE mechanism (REQ-p00016) rather than by weakening the class.
-
-These are not "do not write buggy code" restated. Each class names a point where several behaviors are individually defensible — serving a cached value, substituting a default, taking no action on an error — and prohibits choosing one *silently*. Two principles generate the catalog. Truthful representation: the system never lets a consumer act on a picture of the world that the system knows, or could know, to be wrong — omission, staleness, substitution, phantom success, unreported non-performance, and an unearned healthy verdict are the six ways a served picture diverges from the known world. Error discipline: a failure is never a dead end — a report that names no cause or remedy, and a signal discarded without a recorded reason, both strand the receiver without a path to action.
-
-Genesis and interplay: the truthful-representation classes generalize the reporting invariants first stated for the *Traceability* graph in REQ-p00015, which remains their founding satisfier and concretizes them there. The unactionable-failure class generalizes a compilation-specific prerequisite-reporting obligation (formerly a REQ-p00080 assertion) that was removed as too narrow — the general rule lives here. Satisfiers typically concretize a class with their own assertions pinning the class to subsystem-specific triggers and remedies; evidence then attaches to those concretizations and to the instance assertions through the standard coverage mechanisms.
+A catalog of behavioral anti-pattern classes, stated once and consumed by subsystem requirements via `Satisfies:`; in each assertion, "the system" reads as the satisfying subsystem. Each class names a point where several behaviors are individually defensible — serving a cached value, substituting a default, taking no action on an error — and prohibits choosing one silently or stranding the receiver of a failure without a path to action. Declaring satisfaction obliges the author to consider every class for that subsystem: concretize it with the satisfier's own assertions, exclude it per-instance (REQ-p00016), or leave it visibly uncovered.
 
 ## Assertions
 
@@ -438,6 +434,7 @@ H. The system SHALL act on or report every error signal it receives, except sign
 ## Changelog
 
 - 2026-08-01 | b2a947fb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: condense rationale to a short orientation preamble per review
 - 2026-08-01 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: author behavioral anti-pattern template — silent omission, staleness, substitution, phantom success, unreported non-performance, verdict integrity, unactionable failures, suppressed error signals
 
 *End* *Truthful Reporting and Error Discipline* | **Hash**: b2a947fb
