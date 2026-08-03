@@ -158,8 +158,13 @@ class AppState:
             config=config,
         )
 
+    # Implements: REQ-p00004-J
     def snapshot_mtimes(self) -> None:
-        """Record current mtimes of all scanned spec/code/test files."""
+        """Record current mtimes of all scanned spec/code/test files.
+
+        Also snapshots the config files (.elspais.toml, .elspais.local.toml)
+        so a long-running server notices config edits (REQ-p00004-J).
+        """
         self._mtimes = {}
         scan_dirs = self._get_scan_dirs()
         for d in scan_dirs:
@@ -171,6 +176,19 @@ class AppState:
                         self._mtimes[str(f)] = f.stat().st_mtime
                     except OSError:
                         pass
+        for f in self._config_files():
+            if f.is_file():
+                try:
+                    self._mtimes[str(f)] = f.stat().st_mtime
+                except OSError:
+                    pass
+
+    def _config_files(self) -> list[Path]:
+        """Config files whose edits must trigger a graph rebuild."""
+        return [
+            self.repo_root / ".elspais.toml",
+            self.repo_root / ".elspais.local.toml",
+        ]
 
     def _get_scan_dirs(self) -> list[Path]:
         """Return directories that contribute to the graph."""
@@ -210,6 +228,10 @@ class AppState:
             for f in d.rglob("*"):
                 if f.is_file() and str(f) not in self._mtimes:
                     return True
+        # Config file created after the last snapshot (e.g. new local overrides)
+        for f in self._config_files():
+            if f.is_file() and str(f) not in self._mtimes:
+                return True
         return False
 
     def ensure_fresh(self) -> bool:
@@ -249,6 +271,7 @@ class AppState:
                 )
         return True
 
+    # Implements: REQ-p00004-J
     def _rebuild(self) -> None:
         """Rebuild graph from disk and swap it into the shared holder.
 
@@ -269,3 +292,11 @@ class AppState:
             self.graph.load_comments()
             self.build_time = time.time()
             self.snapshot_mtimes()
+        # Config was re-read from disk — sync daemon.json's config_hash so
+        # CLI staleness checks don't restart an already-fresh server.
+        try:
+            from elspais.mcp.daemon import refresh_daemon_config_hash
+
+            refresh_daemon_config_hash(self.repo_root)
+        except Exception:
+            pass  # Best effort — a failed refresh only risks an extra restart

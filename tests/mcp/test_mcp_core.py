@@ -437,6 +437,83 @@ class TestRefreshGraph:
 
             assert result["success"] is True
 
+    # Verifies: REQ-p00004-J
+    def test_refresh_rereads_config_from_disk(self, tmp_path):
+        """A [levels] edit on disk takes effect on the next refresh.
+
+        Regression test for the reported defect where editing the level set
+        in .elspais.toml was not picked up by a graph refresh: a requirement
+        at an undeclared level was silently dropped, and refreshing after
+        declaring the level still served the old level set. The reload path
+        must re-read configuration from disk, not reuse the in-memory config.
+        """
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _refresh_graph
+
+        config_path = tmp_path / ".elspais.toml"
+        config_path.write_text(
+            "[project]\n"
+            'name = "cfg-reload"\n'
+            'namespace = "REQ"\n'
+            "\n"
+            "[levels.prd]\n"
+            "rank = 1\n"
+            'letter = "p"\n'
+            'display_name = "Product"\n'
+            "implements = []\n"
+        )
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        (spec_dir / "prd.md").write_text(
+            "# REQ-p00001: Product requirement\n"
+            "\n"
+            "**Level**: PRD | **Status**: Active | **Implements**: -\n"
+            "\n"
+            "Body.\n"
+            "\n"
+            "## Assertions\n"
+            "\n"
+            "A. The system SHALL do the thing.\n"
+            "\n"
+            "*End* *Product requirement* | **Hash**: 00000000\n"
+        )
+        (spec_dir / "dev.md").write_text(
+            "# REQ-d00001: Dev requirement\n"
+            "\n"
+            "**Level**: Dev | **Status**: Active | **Implements**: REQ-p00001-A\n"
+            "\n"
+            "Body.\n"
+            "\n"
+            "## Assertions\n"
+            "\n"
+            "A. The implementation SHALL do the detailed thing.\n"
+            "\n"
+            "*End* *Dev requirement* | **Hash**: 00000000\n"
+        )
+
+        # Initial build: 'dev' is not a declared level, so REQ-d00001 is absent.
+        result, graph = _refresh_graph(tmp_path)
+        assert result["success"] is True
+        assert graph.find_by_id("REQ-p00001") is not None
+        assert graph.find_by_id("REQ-d00001") is None
+
+        # Declare the dev level on disk, then refresh.
+        with config_path.open("a") as f:
+            f.write(
+                "\n[levels.dev]\n"
+                "rank = 2\n"
+                'letter = "d"\n'
+                'display_name = "Development"\n'
+                'implements = ["prd"]\n'
+            )
+
+        result2, graph2 = _refresh_graph(tmp_path, full=True)
+        assert result2["success"] is True
+        assert graph2.find_by_id("REQ-d00001") is not None
+        # The config handed back for _state sync reflects the on-disk edit.
+        assert result2["config"] is not None
+        assert "dev" in result2["config"].get("levels", {})
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Test: get_workspace_info() - REQ-o00061-A

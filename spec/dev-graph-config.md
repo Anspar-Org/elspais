@@ -16,10 +16,11 @@ C. All consumer code that references `ConfigLoader` (type annotations, imports, 
 
 ### Changelog
 
+- 2026-07-31 | 6dfbf578 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 8d323813 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 8d323813 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Declarative Config Schema Cleanup* | **Hash**: 8d323813
+*End* *Declarative Config Schema Cleanup* | **Hash**: 6dfbf578
 ---
 
 ## REQ-d00208: JSON Schema Export for IDE Autocomplete
@@ -38,17 +39,18 @@ C. The generated JSON Schema SHALL include `$schema` and `title` top-level keys.
 
 ### Changelog
 
+- 2026-07-31 | 27ca773c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 2b82ef02 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 2b82ef02 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *JSON Schema Export for IDE Autocomplete* | **Hash**: 2b82ef02
+*End* *JSON Schema Export for IDE Autocomplete* | **Hash**: 27ca773c
 ---
 
 ## REQ-d00209: Schema-Driven Init Template Generation
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-The `elspais init` command SHALL generate `.elspais.toml` configuration files by walking the `ElspaisConfig` Pydantic model, ensuring generated templates are always in sync with the schema. Hardcoded template strings SHALL be replaced by a schema walker that produces valid TOML from field metadata and defaults.
+The `elspais init` command SHALL generate `.elspais.toml` configuration files by walking the `ElspaisConfig` Pydantic model, ensuring generated templates are always in sync with the schema. Hardcoded template strings SHALL be replaced by a schema walker that produces valid TOML from field metadata and defaults. Beyond configuration, initialization gives a new project a working starting point rather than a blank tree.
 
 ### Assertions
 
@@ -60,12 +62,24 @@ C. The generated TOML SHALL include all sections present in the current hardcode
 
 D. The generated TOML SHALL include human-readable comments derived from Pydantic field descriptions or the current template comments.
 
+E. When scaffolding a new project, the tool SHALL offer a worked example project, accepted as healthy by the tool's own checks, that demonstrates in combination requirement hierarchy, template satisfaction, journey validation, defined terms, and code and test *Traceability* markers.
+
+F. When scaffolding a new project, the tool SHALL include baseline requirement-authoring conventions in the generated project, covering at minimum assertion granularity, normative keyword usage, and *Traceability* reference forms.
+
+### Rationale
+
+A new project today starts from configuration alone; the first spec file, the first `Satisfies:` declaration, and the first code marker are all authored cold. The worked example (E) closes that gap by showing the concepts *composed* — a small hierarchy whose requirements are satisfied, validated by a journey, use defined terms, and are implemented and verified by marked source files — rather than each concept in isolation. Which files and requirement counts make up the example is deliberately unspecified: content inventory is mechanism, not obligation.
+
+The example is intended to do triple duty: user-facing scaffold, canonical test fixture for the tool's own suite, and fixture for the mechanical style checks. Fixtures must pass their own health checks, which is why E defines the example as checks-healthy as generated. For the same reason, scaffolded templates and conventions (F) must not contradict the mechanically checkable style rules elsewhere in this spec (see the mechanical style-check requirement in the CLI spec): a fresh project that fails its own first style run would teach the wrong lesson. The authoring conventions (F) are the baseline house rules a new author needs before the first requirement — how fine an assertion should be, which normative keywords are canonical, and how requirements are referenced from code and tests.
+
 ### Changelog
 
+- 2026-07-31 | b25e4468 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
+- 2026-07-31 | 0173b043 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 44aeb496 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 44aeb496 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Schema-Driven Init Template Generation* | **Hash**: 44aeb496
+*End* *Schema-Driven Init Template Generation* | **Hash**: b25e4468
 ---
 
 ## REQ-d00210: Documentation Drift Detection
@@ -84,10 +98,11 @@ C. The drift check SHALL pass when all schema sections are documented and no sta
 
 ### Changelog
 
+- 2026-07-31 | 59023724 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | eb94434a | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | eb94434a | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Documentation Drift Detection* | **Hash**: eb94434a
+*End* *Documentation Drift Detection* | **Hash**: 59023724
 ---
 
 ## REQ-d00211: Config-Driven Viewer UI Values
@@ -108,10 +123,11 @@ D. `StatusRolesConfig` SHALL provide a `sort_by_role()` method that orders a lis
 
 ### Changelog
 
+- 2026-07-31 | 58192a4f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | a9cc41d2 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | a9cc41d2 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Config-Driven Viewer UI Values* | **Hash**: a9cc41d2
+*End* *Config-Driven Viewer UI Values* | **Hash**: 58192a4f
 ---
 
 ## REQ-d00212: Config Schema v3 Models
@@ -150,14 +166,27 @@ M. `FormatConfig` SHALL include a `no_traceability_severity` field (str | None, 
 
 N. A `_migrate_v3_to_v4` migration SHALL move flat `duplicate_severity`, `undefined_severity`, `unmarked_severity` from `[terms]` into `[terms.severity]` as `duplicate`, `undefined`, `unmarked`. Configs without `[terms]` SHALL pass through unchanged. Configs already having `[terms.severity]` SHALL NOT be double-migrated. `CURRENT_CONFIG_VERSION` SHALL be bumped to 4.
 
+O. The configuration schema SHALL locate each rule setting under the concern it governs, such that a setting's position in the schema identifies which checks it affects.
+
+P. The configuration schema SHALL make the severity of every health check configurable under a single consistent convention.
+
+Q. The configuration schema SHALL express file selection for scanning through a single mechanism, such that exactly one configuration surface determines whether any given file is scanned.
+
+### Rationale
+
+A–N inventory the v3/v4 model shapes; O–Q state the organising invariants those shapes must converge on. Rule settings have drifted into a layout where a setting's location no longer predicts what it governs, some check severities are configurable while others are hardcoded with no stated principle distinguishing them, and "why was this file (not) scanned" can have more than one configuration answer (per-kind skip lists alongside a global skip list, plus pattern lists). O–Q close those gaps as invariants only: candidate mechanisms discussed during design — splitting rules into concern sections such as `[rules.changelog]` and `[rules.status]`, or collapsing file selection into a unified `patterns` list — are proposals, not obligations, and deliberately absent from the assertions. Which existing semantics survive, and how existing configs migrate, is decided at implementation. Current schema shapes that contradict O–Q (including the dual file-selection surfaces described alongside B and C) are conformance-defect territory for later implementation tickets.
+
 ### Changelog
 
+- 2026-07-31 | 40849780 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-26: organising invariants for rule-setting location (O), severity configurability (P), and single file-selection mechanism (Q)
+- 2026-07-31 | a0ea657d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-03 | e4cda67b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | db4ad28c | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | db4ad28c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-03-29 | c75b87f8 | - | Michael Lewis (<michael@anspar.org>) | Add assertion N for config migration v3 to v4
 
-*End* *Config Schema v3 Models* | **Hash**: e4cda67b
+*End* *Config Schema v3 Models* | **Hash**: 40849780
 ---
 
 ## REQ-d00251: Component Style Vocabulary and Assertion Separator
@@ -184,9 +213,10 @@ G. A single helper in `utilities/patterns.py` SHALL resolve a `ComponentFormat` 
 
 ### Changelog
 
+- 2026-07-31 | 7857498c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | e04a4e37 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | e04a4e37 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize term forms, update hash
 - 2026-05-11 | - | - | Developer (<dev@example.com>) | Initial authoring: introduce explicit case-style vocabulary and configurable assertion separator.
 
-*End* *Component Style Vocabulary and Assertion Separator* | **Hash**: e04a4e37
+*End* *Component Style Vocabulary and Assertion Separator* | **Hash**: 7857498c
 ---

@@ -30,10 +30,11 @@ FederatedGraph provides config isolation for multi-repo builds while presenting 
 
 ### Changelog
 
+- 2026-07-31 | 06b84d97 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 72471144 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 72471144 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *FederatedGraph Read-Only Delegation* | **Hash**: 72471144
+*End* *FederatedGraph Read-Only Delegation* | **Hash**: 06b84d97
 ---
 
 ## REQ-d00201: FederatedGraph Mutation Delegation
@@ -64,10 +65,11 @@ Mutation delegation preserves TraceGraph's existing mutation+undo logic while ad
 
 ### Changelog
 
+- 2026-07-31 | 85081cae | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 1a0942a4 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 1a0942a4 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *FederatedGraph Mutation Delegation* | **Hash**: 1a0942a4
+*End* *FederatedGraph Mutation Delegation* | **Hash**: 85081cae
 ---
 
 ## REQ-d00202: Associates Config Loading
@@ -102,6 +104,7 @@ Associates are declared in `.elspais.toml` using a structured TOML section. Each
 
 ### Changelog
 
+- 2026-08-02 | 9b0f1733 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | 2a648c8e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | 1bc0e4b5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | de074317 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -110,7 +113,7 @@ Associates are declared in `.elspais.toml` using a structured TOML section. Each
 - 2026-05-11 | 479dcbb8 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 479dcbb8 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Associates Config Loading* | **Hash**: 2a648c8e
+*End* *Associates Config Loading* | **Hash**: 9b0f1733
 ---
 
 ## REQ-d00203: Multi-Repo Build Pipeline
@@ -137,12 +140,13 @@ Per-repo building ensures config isolation: each repo's hierarchy rules, format 
 
 ### Changelog
 
+- 2026-07-31 | 957568b6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-30 | 5544c03c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38/TOOL-33: amend B — transitive associates are built into the federation instead of being validated against
 - 2026-05-11 | 31e019a1 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 31e019a1 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Multi-Repo Build Pipeline* | **Hash**: 5544c03c
+*End* *Multi-Repo Build Pipeline* | **Hash**: 957568b6
 ---
 
 ## REQ-d00204: Per-Repo Health Check Delegation
@@ -181,13 +185,14 @@ Assertions H–J realize REQ-p00082's verdict-scoping invariants for the checks 
 
 ### Changelog
 
+- 2026-07-31 | 7e0f5586 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-30 | 32a98213 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: add finding-ownership attribution (H) and write-scope verdict scoping (I, J)
 - 2026-06-18 | 844d12d1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
 - 2026-05-11 | 2313140d | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 2313140d | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Per-Repo Health Check Delegation* | **Hash**: 32a98213
+*End* *Per-Repo Health Check Delegation* | **Hash**: 7e0f5586
 ---
 
 ## REQ-d00252: External Library Integration via Integrates Keyword
@@ -218,12 +223,13 @@ The bottom-up reference model (`Implements:` authored on the implementer) would 
 
 ### Changelog
 
+- 2026-07-31 | 8e07589c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-03 | d9d4bc98 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-03 | 425d61aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-31 | d1f691f0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-31 | b576d134 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash, add missing changelog section
 
-*End* *External Library Integration via Integrates Keyword* | **Hash**: d9d4bc98
+*End* *External Library Integration via Integrates Keyword* | **Hash**: 8e07589c
 ---
 
 ## REQ-d00253: Federation Write/Generation Scope
@@ -254,6 +260,7 @@ Global booleans alone cannot express the common cross-repo workflow — enable w
 
 ### Changelog
 
+- 2026-08-02 | f454041e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | 6bd9cd1d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | f145d18a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | e3cca300 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -261,7 +268,7 @@ Global booleans alone cannot express the common cross-repo workflow — enable w
 - 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: add per-entry write/index eligibility (E)
 - 2026-06-01 | 28c8c538 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Federation Write/Generation Scope* | **Hash**: 6bd9cd1d
+*End* *Federation Write/Generation Scope* | **Hash**: f454041e
 ---
 
 ## REQ-d00260: Workspace Registry and Federated View Assembly
@@ -320,7 +327,7 @@ Known deviation, accepted 2026-07-29: redundant-work cost (invariant C1 — the 
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: registry-absent decision — workspace-expectation setting (K, L) plus registry error checks (M, N)
 - 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: author workspace registry and view assembly requirements
 
-*End* *Workspace Registry and Federated View Assembly* | **Hash**: 8c288c5d
+*End* *Workspace Registry and Federated View Assembly* | **Hash**: 510a0f67
 ---
 
 ## REQ-d00261: Federation Role Model
@@ -349,4 +356,4 @@ Reference repositories exist so cross-cutting obligations resolve and surface (R
 
 - 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: author federation role model
 
-*End* *Federation Role Model* | **Hash**: bc16ed66
+*End* *Federation Role Model* | **Hash**: fb8db8a9

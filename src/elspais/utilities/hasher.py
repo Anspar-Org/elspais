@@ -189,24 +189,32 @@ def normalize_assertion_text(label: str, text: str) -> str:
     return f"{label}. {text}"
 
 
+# Implements: REQ-d00131-J
 def compute_normalized_hash(
     assertions: list[tuple[str, str]],
     length: int = 8,
     algorithm: str = "sha256",
 ) -> str:
-    """Compute hash from normalized assertion text.
+    """Compute hash from normalized assertion text (order-independent).
 
-    Used by normalized-text hash mode. Assertions are processed in the
-    order provided (physical file order, NOT sorted by label).
+    Used by normalized-text hash mode. Per REQ-d00131-J, each assertion's
+    normalized text is hashed individually, the per-assertion hashes are
+    sorted lexicographically, and the sorted collection is hashed into the
+    final result — so reordering assertions does not change the hash.
 
     Args:
-        assertions: List of (label, text) tuples in physical file order.
+        assertions: List of (label, text) tuples (any order; the result is
+            invariant under permutation).
         length: Number of characters in the hash (default 8).
         algorithm: Hash algorithm to use (default "sha256").
 
     Returns:
         Hexadecimal hash string of specified length.
     """
-    normalized_lines = [normalize_assertion_text(label, text) for label, text in assertions]
-    content = "\n".join(normalized_lines)
-    return _select_hasher(algorithm)(content.encode("utf-8")).hexdigest()[:length]
+    hasher = _select_hasher(algorithm)
+    assertion_hashes = sorted(
+        hasher(normalize_assertion_text(label, text).encode("utf-8")).hexdigest()
+        for label, text in assertions
+    )
+    content = "\n".join(assertion_hashes)
+    return hasher(content.encode("utf-8")).hexdigest()[:length]

@@ -7,7 +7,7 @@
 
 A. The action SHALL include an app-specific user_context parameter.
 
-*End* *Concrete Action* | **Hash**: 16cf8e37
+*End* *Concrete Action* | **Hash**: c84cc48f
 ---
 
 # APP-p00002: Stricter User Context
@@ -19,5 +19,5 @@ A. The action SHALL include an app-specific user_context parameter.
 
 A. The user_context SHALL include a non-null tenant_id.
 
-*End* *Stricter User Context* | **Hash**: 110bd09e
+*End* *Stricter User Context* | **Hash**: 3b2db0e7
 ---

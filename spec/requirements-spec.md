@@ -159,6 +159,29 @@ B. The system SHALL ...
   - MUST NOT be reused once removed (**IMPORTANT**)
 - If more than 26 assertions are required, the requirement MUST be split.
 
+### Assertion Parsing Directives
+
+Assertion text that begins with a non-letter character (such as `<`, `[`, or `{`) introduces an **assertion-level parsing directive**. The directive is enclosed by the opening character and its matching closing counterpart (`<>`, `[]`, `{}`); any text following the closing delimiter is the assertion's remaining content.
+
+```markdown
+F. <RETIRED>
+G. [SOME-DIRECTIVE] The system SHALL ...
+```
+
+(The second line illustrates the grammar only — a directive may prefix real assertion text, which is why the closing delimiter matters.)
+
+A directive the tool does not recognize is never silently treated as ordinary assertion text; the tool reports the unrecognized directive and its location.
+
+#### The RETIRED Directive
+
+An assertion carrying the `RETIRED` directive does not exist for coverage and traceability purposes:
+
+- It is excluded from all coverage and traceability calculations — not counted among assertions expected to be implemented, tested, or validated.
+- References targeting it are invalid, exactly as references to a nonexistent assertion: they do not resolve, and surface as broken references.
+- Its label remains allocated — the letter is never reused, preserving the label-stability rule above.
+
+`RETIRED` supersedes the informal `[Removed - ...]` placeholder convention, which the parser admits as an ordinary assertion that then counts as permanently uncovered in every coverage denominator.
+
 ### Assertion References
 
 Tests and other verification artifacts MAY reference:
@@ -441,7 +464,7 @@ The hash SHALL be calculated from **assertion text only**. Non-assertion body te
 
 Any material behavioral constraint SHALL be expressed as an Assertion. Non-assertion text is supplementary context and does not affect the content hash.
 
-**Normalization rules** — for each assertion, in physical file order (assertions are NOT sorted by label before hashing):
+**Normalization rules** — for each assertion:
 
 1. Collect the assertion line and any continuation lines (until the next assertion or end of body)
 2. Join into a single line, collapsing internal newlines to spaces
@@ -449,7 +472,7 @@ Any material behavioral constraint SHALL be expressed as an Assertion. Non-asser
 4. Strip trailing whitespace from the line
 5. Normalize line endings to `\n`
 
-All normalized assertion lines are joined with `\n`, then hashed.
+**Combination** (order-independent, per REQ-d00131-J): each normalized assertion line is hashed individually, the per-assertion hashes are sorted lexicographically, and the sorted hashes are joined with `\n` and hashed to produce the requirement's final hash. Assertion order in the file therefore does not affect the hash.
 
 **Invariances** — the following changes do NOT affect the hash:
 
@@ -458,8 +481,10 @@ All normalized assertion lines are joined with `\n`, then hashed.
 - Multiple spaces between words
 - Changes to non-assertion body text (context, definitions, rationale)
 - Blank lines between assertions
+- Reordering assertions (order-independent hashing per REQ-d00131-J)
 
 **Sensitive changes** — the following changes DO affect the hash:
 
 - Any change to assertion wording (including case changes)
-- Adding, removing, or reordering assertions
+- Adding or removing assertions
+- Swapping labels between assertions (the label is part of the normalized text)

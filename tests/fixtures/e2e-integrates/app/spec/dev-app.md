@@ -9,4 +9,4 @@ The app relies on an append-only event log, implemented by the library.
 
 A. The app's event log SHALL be append-only.
 
-*End* *App needs an append-only log* | **Hash**: f3f52ca4
+*End* *App needs an append-only log* | **Hash**: d4d4d604

@@ -104,7 +104,7 @@ file_patterns = ["*.md"]
 # Filenames to skip in spec directories
 skip_files = ["README.md", "requirements-format.md", "INDEX.md"]
 # Subdirectories to skip in spec directories
-skip_dirs = ["roadmap", "_generated"]
+skip_dirs = ["_generated"]
 # Index file for ordering (empty = no index)
 index_file = ""
 

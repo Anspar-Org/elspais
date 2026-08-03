@@ -24,10 +24,11 @@ Centralizing graph construction ensures consistent hierarchy building, cycle det
 
 ### Changelog
 
+- 2026-07-31 | 33e0f3ec | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 65d2ad6a | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 65d2ad6a | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Graph Builder as Single Entry Point* | **Hash**: 65d2ad6a
+*End* *Graph Builder as Single Entry Point* | **Hash**: 33e0f3ec
 ---
 
 ## REQ-o00051: Composable Annotation Design
@@ -61,10 +62,11 @@ Separating iteration from annotation enables:
 
 ### Changelog
 
+- 2026-07-31 | 2fabd3d4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | c73a6e32 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | c73a6e32 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Composable Annotation Design* | **Hash**: c73a6e32
+*End* *Composable Annotation Design* | **Hash**: 2fabd3d4
 ---
 
 ## REQ-o00072: Domain Deserialization Layer
@@ -87,9 +89,10 @@ The deserialization layer is the abstract controller that turns raw text into th
 
 ### Changelog
 
+- 2026-07-31 | 53789928 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-03 | e568082e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Domain Deserialization Layer* | **Hash**: e568082e
+*End* *Domain Deserialization Layer* | **Hash**: 53789928
 ---
 
 # REQ-o00066: CI/CD Pipeline Enforcement
@@ -126,9 +129,10 @@ G. The PR validation pipeline SHALL require both a ticket reference (uppercase t
 
 ## Changelog
 
+- 2026-07-31 | 67d7ec07 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 84723bf6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-37: F/G accept any Linear team prefix, not only CUR — the repo's team moved to TOOL; matches the commit-msg hook's existing pattern
 - 2026-03-30 | 315accce | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *CI/CD Pipeline Enforcement* | **Hash**: 84723bf6
+*End* *CI/CD Pipeline Enforcement* | **Hash**: 67d7ec07
 ---

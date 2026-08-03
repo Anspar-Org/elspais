@@ -7,7 +7,7 @@
 1. The module must use bcrypt for password hashing.
 2. The module must validate JWT tokens.
 
-*End* *Auth Module* | **Hash**: 99a091b1
+*End* *Auth Module* | **Hash**: 1be1a2b9
 ---
 
 # REQ-dSearchIndex: Search Index
@@ -18,5 +18,5 @@
 
 1. The index must support full-text search.
 
-*End* *Search Index* | **Hash**: 9218a75e
+*End* *Search Index* | **Hash**: 5fa8f299
 ---

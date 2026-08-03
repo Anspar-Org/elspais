@@ -30,11 +30,12 @@ Mutations require the caller to supply the version of the state it intends to ch
 
 ### Changelog
 
+- 2026-08-02 | 3a9ae713 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-26 | 25b3d4f7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 73c31134 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 73c31134 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *MCP Core Query Tools* | **Hash**: 25b3d4f7
+*End* *MCP Core Query Tools* | **Hash**: 3a9ae713
 ---
 
 ## REQ-o00061: MCP Workspace Context Tools
@@ -59,11 +60,12 @@ AI agents need context about the workspace they're operating in to provide relev
 
 ### Changelog
 
+- 2026-07-31 | 3306c687 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-03 | aaba2940 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 0aa9dff4 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 0aa9dff4 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *MCP Workspace Context Tools* | **Hash**: aaba2940
+*End* *MCP Workspace Context Tools* | **Hash**: 3306c687
 ---
 
 ## REQ-o00062: MCP Graph Mutation Tools
@@ -116,6 +118,7 @@ A single daemon serves multiple concurrent writers — MCP agents and the viewer
 
 ### Changelog
 
+- 2026-08-02 | e4b381e0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | ad214b71 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | ca1d9dee | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-26 | 7c83917e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -124,7 +127,7 @@ A single daemon serves multiple concurrent writers — MCP agents and the viewer
 - 2026-05-11 | ef63f424 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | ef63f424 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *MCP Graph Mutation Tools* | **Hash**: ad214b71
+*End* *MCP Graph Mutation Tools* | **Hash**: e4b381e0
 ---
 
 ## REQ-o00063: MCP File Mutation Tools
@@ -159,10 +162,11 @@ File mutations persist changes to the authoritative spec files. Git safety branc
 
 ### Changelog
 
+- 2026-07-31 | 05c1e9c4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 291497b8 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 291497b8 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *MCP File Mutation Tools* | **Hash**: 291497b8
+*End* *MCP File Mutation Tools* | **Hash**: 05c1e9c4
 ---
 
 ## REQ-o00064: MCP Test Coverage Analysis Tools
@@ -189,10 +193,11 @@ AI agents performing requirement analysis need to understand test coverage and i
 
 ### Changelog
 
+- 2026-07-31 | a97fc5c4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | e7fd1b43 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | e7fd1b43 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *MCP Test Coverage Analysis Tools* | **Hash**: e7fd1b43
+*End* *MCP Test Coverage Analysis Tools* | **Hash**: a97fc5c4
 ---
 
 ## REQ-o00065: Agent-Assisted Link Suggestion
@@ -221,10 +226,11 @@ Teams need to not just see what's unlinked but act on it efficiently. Combining 
 
 ### Changelog
 
+- 2026-07-31 | 06f8e1ac | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 17851ae2 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 17851ae2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Agent-Assisted Link Suggestion* | **Hash**: 17851ae2
+*End* *Agent-Assisted Link Suggestion* | **Hash**: 06f8e1ac
 ---
 
 ## REQ-o00067: MCP Subtree Extraction Tool
@@ -253,10 +259,11 @@ LLM agents need scoped requirement subsets for sub-agent consumption. Extracting
 
 ### Changelog
 
+- 2026-07-31 | ea2ba371 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | ab29e315 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | ab29e315 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *MCP Subtree Extraction Tool* | **Hash**: ab29e315
+*End* *MCP Subtree Extraction Tool* | **Hash**: ea2ba371
 ---
 
 ## REQ-o00068: MCP Cursor Protocol
@@ -285,10 +292,11 @@ LLMs benefit from incremental exploration of results, deciding when to stop rath
 
 ### Changelog
 
+- 2026-07-31 | f876db43 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 743877c3 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 743877c3 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *MCP Cursor Protocol* | **Hash**: 743877c3
+*End* *MCP Cursor Protocol* | **Hash**: f876db43
 ---
 
 ## REQ-o00069: MCP Minimize Requirement Set Tool
@@ -315,10 +323,11 @@ Agents listing requirements for a ticket often include both specific leaf requir
 
 ### Changelog
 
+- 2026-07-31 | 68c20489 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | c667abd2 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | c667abd2 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *MCP Minimize Requirement Set Tool* | **Hash**: c667abd2
+*End* *MCP Minimize Requirement Set Tool* | **Hash**: 68c20489
 ---
 
 ## REQ-o00070: MCP Scoped Search Tool
@@ -345,10 +354,11 @@ Agents exploring requirements for a ticket need to search within a relevant subg
 
 ### Changelog
 
+- 2026-07-31 | c79f263d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 7f1e6589 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 7f1e6589 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *MCP Scoped Search Tool* | **Hash**: 7f1e6589
+*End* *MCP Scoped Search Tool* | **Hash**: c79f263d
 ---
 
 ## REQ-o00071: MCP Discover Requirements Tool
@@ -377,12 +387,13 @@ A mandatory scope demands the answer to the question being asked: a caller who d
 
 ### Changelog
 
+- 2026-07-31 | 128366d2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-30 | 4ce416ba | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: make discovery scope optional (E)
 - 2026-05-11 | fea647ee | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | fea647ee | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *MCP Discover Requirements Tool* | **Hash**: 4ce416ba
+*End* *MCP Discover Requirements Tool* | **Hash**: 128366d2
 ---
 
 ## REQ-o00073: MCP Org-Wide Context
@@ -411,5 +422,5 @@ A tool that requires a judgement call before use loses to the tool that needs no
 
 - 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: author MCP org-wide context requirements
 
-*End* *MCP Org-Wide Context* | **Hash**: 882a56ff
+*End* *MCP Org-Wide Context* | **Hash**: 346f3031
 ---

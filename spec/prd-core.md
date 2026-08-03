@@ -30,9 +30,10 @@ D. [DEPRECATED]
 
 ## Changelog
 
+- 2026-07-31 | 2d10975a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-04-23 | ce489de6 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Requirements Management Tool* | **Hash**: ce489de6
+*End* *Requirements Management Tool* | **Hash**: 2d10975a
 ---
 
 # REQ-p00002: Requirements Validation
@@ -52,6 +53,8 @@ The validation system enforces:
 - **Traceability completeness**: All requirements are reachable from root-level product requirements
 - **Content freshness**: Hashes match current content; changes are intentional
 
+**Assertion-level parsing directives.** *Assertion* text that begins with a non-letter character (such as `<`, `[`, or `{`) introduces a parsing directive scoped to that *Assertion*. Today's expected form is a bare directive (`F. <RETIRED>`), where a missing closing delimiter is tolerable; future directives may prefix real text (`G. [CRITICAL] Don't push the red button`), which is why the closing delimiter matters — the enclosure is what separates the directive from the *Assertion*'s remaining content. Assertion E states the invariant cleanly; parsing leniency for an unclosed bare directive is mechanism latitude, not an obligation. A directive the tool does not recognize must not silently degrade to ordinary *Assertion* text: content admitted into the graph under a meaning the author did not intend is the same silent-admission defect REQ-p00015-A guards against for unadmitted requirement content — the reporting principle is cited here, not restated. The semantics of individual directives (such as RETIRED) are the concern of the requirements governing the affected accounting, not of this format requirement.
+
 ## Assertions
 
 A. The tool SHALL validate requirement format against configurable patterns and rules.
@@ -60,11 +63,26 @@ B. The tool SHALL detect and report hierarchy violations including circular depe
 
 C. The tool SHALL verify content hashes match requirement body text.
 
+D. The tool SHALL accept configuration of user journey identifier patterns with capabilities equivalent to those it accepts for requirement identifier patterns.
+
+E. When an *Assertion*'s text begins with a non-letter opening character that has a matching closing counterpart, the tool SHALL parse the text enclosed by the opening character and its matching closer as a parsing directive, with any text following the closer constituting the *Assertion*'s content.
+
+F. If an *Assertion* carries a parsing directive the tool does not recognize, then the tool SHALL report the unrecognized directive and its location rather than treating the directive as ordinary *Assertion* text.
+
+G. The tool SHALL form journey-step references from the journey identifier and the step designator using the separator rules configured for *Assertion* references.
+
 ## Changelog
 
+- 2026-08-02 | c8440f64 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: journey-step references use the configured assertion-separator machinery (G) — one reference grammar for assertions and steps
+- 2026-07-31 | 03a4a779 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: author assertion-level parsing directive grammar (E) and unknown-directive reporting (F)
+- 2026-07-31 | d9f87a2a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-26: journey identifiers configurable equivalently to requirement identifiers (D)
+- 2026-07-31 | b29ef9b6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-03-30 | e8f0e4eb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Requirements Validation* | **Hash**: e8f0e4eb
+*End* *Requirements Validation* | **Hash**: c8440f64
 ---
 
 # REQ-p00003: Traceability Matrix Generation
@@ -91,9 +109,10 @@ B. The tool SHALL derive *Traceability* from `Implements:` metadata without manu
 
 ## Changelog
 
+- 2026-07-31 | 3121ad66 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-04-23 | 6a3a9426 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Traceability Matrix Generation* | **Hash**: 6a3a9426
+*End* *Traceability Matrix Generation* | **Hash**: 3121ad66
 ---
 
 # REQ-p00004: Change Detection and Auditability
@@ -115,6 +134,10 @@ Together, these mechanisms support:
 - Pull request review (see exactly what requirements changed)
 - Audit trails (link requirement changes to commits)
 
+**Dependency-change review.** A requirement's references make it dependent on content it does not own: an `Implements:` or `Refines:` target, a `Satisfies:` template subtree, an `Integrates:` target in an associate repository. When that content changes, the referencing requirement's claim may no longer hold, so the requirement is flagged for review at the granularity its reference declares — a reference naming an assertion is sensitive to that assertion alone; a reference naming a whole requirement is sensitive to the requirement. A review flag records a human obligation: only an explicit review action discharges it. Automated fixing (hash regeneration, `elspais fix`) never discharges one — a flag the tool can acknowledge to itself is noise, not audit evidence. And when the referenced source cannot be consulted at all (an associate repository not checked out, for example), the honest verdict is "cannot verify", never "unchanged"; treating absence as stability is the same silent-omission defect REQ-p00015 guards against in reporting. One candidate mechanism (proposed, not obligated): store beside each reference a bounded record of the target's content hash plus a one-level subtree summary hash, compared at build time. Assertion G formerly stated this obligation for `Satisfies:` references only; assertion K generalizes it to all reference kinds, and G is superseded so a single obligation family governs.
+
+**Change reasons.** An audit trail answers *why* a requirement changed, not only *what* changed. Changes arrive through multiple editing surfaces; where the audit record requires a reason, every surface must be able to carry one. The obligation falls on each surface to gain the capability — never on the set of supported surfaces to shrink to those that already can.
+
 ## Assertions
 
 A. The tool SHALL compute and verify content hashes for change detection.
@@ -129,7 +152,7 @@ E. The tool SHALL commit modified spec files and optionally push, refusing to op
 
 F. The tool SHALL fetch and fast-forward-merge from the remote tracking branch, aborting if the merge is not fast-forwardable.
 
-G. The tool SHALL flag all requirements with SATISFIES edges for review when the content hash of any REQ in the referenced template's subtree changes.
+G. [Removed - flagging satisfying requirements on template-subtree change is a special case of the reference-granularity review obligation stated in assertion K; superseded so one obligation family governs dependency-change review]
 
 H. The tool SHALL list all local and remote git branches, stripping remote prefixes and deduplicating branches that exist both locally and remotely.
 
@@ -137,13 +160,25 @@ I. The tool SHALL switch to an existing local or remote git branch, refusing if 
 
 J. The tool SHALL re-read configuration from disk when reloading the graph, ensuring branch switches with different configurations produce correct rebuilds.
 
+K. When the content designated by any of a requirement's references changes — the designated *Assertion* where the reference names one, the designated requirement otherwise — the tool SHALL flag the referencing requirement for review.
+
+L. The tool SHALL clear a review flag only in response to an explicit review action acknowledging the flagged change.
+
+M. If the source of referenced content is unavailable for comparison, then the tool SHALL report the reference as unverifiable rather than reporting it as unchanged.
+
+N. Where the audit record requires a reason for a change, each editing surface the tool supports SHALL capture a reason from its operator and supply it with the change.
+
 ## Changelog
 
+- 2026-07-31 | 7930cf78 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-40: author dependency-change review invariants K/L/M at reference granularity; supersede G (SATISFIES-only special case) so one obligation family governs
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-16: author N - every supported editing surface captures and supplies a change reason when the audit record requires one
+- 2026-07-31 | 9bb163a9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-30 | bb148227 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: G flags satisfiers on any change within the template subtree, not just the root
 - 2026-04-23 | f8ff5509 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Change Detection and Auditability* | **Hash**: bb148227
+*End* *Change Detection and Auditability* | **Hash**: 7930cf78
 ---
 
 # REQ-p00013: Automated Testing
@@ -177,9 +212,10 @@ F. All tests marked `@pytest.mark.e2e` SHALL invoke the `elspais` CLI as a subpr
 
 ## Changelog
 
+- 2026-07-31 | 4318202c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-04-23 | 962216d8 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Automated Testing* | **Hash**: 962216d8
+*End* *Automated Testing* | **Hash**: 4318202c
 ---
 
 ## REQ-p00061: Requirement Decomposition Rules
@@ -198,21 +234,25 @@ C. Multiple requirements MAY exist at the same Level each declaring a relationsh
 
 ### Changelog
 
+- 2026-07-31 | 462c146e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | fc1e85fe | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | fc1e85fe | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Requirement Decomposition Rules* | **Hash**: fc1e85fe
+*End* *Requirement Decomposition Rules* | **Hash**: 462c146e
 ---
 
 # REQ-p00080: Spec-to-PDF Compilation
 
 **Level**: prd | **Status**: Active | **Implements**: REQ-p00001
+**Satisfies**: REQ-p00019
 
 ## Rationale
 
 UAT documentation review requires formal PDF output with professional formatting. A single compiled document with table of contents, per-requirement page breaks, and a topic index enables offline review, regulatory submission, and stakeholder sign-off. Currently, spec files exist only as Markdown with no PDF generation pipeline.
 
 The `elspais pdf` command compiles requirement spec files into a professional PDF using Pandoc and LaTeX. Python assembles a clean Markdown document from the *Traceability* graph; a custom LaTeX template controls formatting; Pandoc handles Markdown-to-LaTeX conversion.
+
+The compiler declares `Satisfies:` against the REQ-p00019 anti-pattern template: a compiled document that silently drops a repository's content, substitutes a degraded rendering without disclosure, or fails without naming the missing prerequisite exhibits exactly the defect classes the template prohibits. A prerequisite-reporting obligation formerly stated here as its own assertion was removed as too narrow; the template's unactionable-failure class now carries that obligation in its general form.
 
 ## Assertions
 
@@ -228,11 +268,180 @@ E. The tool SHALL insert page breaks before each requirement heading to ensure e
 
 F. The tool SHALL support an `--overview` flag that generates a stakeholder-oriented PDF containing only PRD-level requirements, with an optional `--max-depth` flag to limit core PRD graph depth while always including all associated-repo PRDs.
 
+G. The PDF generator SHALL support content derived from a variety of sources and media types.
+
+H. The PDF generator SHALL support inclusion of content from every repository of a federated graph.
+
 ## Changelog
 
+- 2026-08-01 | 01da5fa4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-08-01 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: declare satisfaction of the REQ-p00019 anti-pattern template; the removed prerequisite-reporting assertion's obligation returns via the template's unactionable-failure class
+- 2026-08-01 | 01da5fa4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | 01771861 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-35/TOOL-47 review: author compiled-output assertions G (multi-source, multi-media content) and H (federated-graph content inclusion); prerequisite-reporting assertion removed pending a general actionable-errors rule
+- 2026-07-31 | 24f063f6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-04-23 | bfc0cadf | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Spec-to-PDF Compilation* | **Hash**: bfc0cadf
+*End* *Spec-to-PDF Compilation* | **Hash**: 01da5fa4
+---
+
+# REQ-p00015: Complete and Current Reporting
+
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00001
+**Satisfies**: REQ-p00019
+
+## Rationale
+
+The *Traceability* graph is an audit artifact. A graph that reports healthy while silently omitting requirements cannot serve that role: the verdict certifies completeness it does not have. Silent omission and silent staleness are the same defect told two ways — omission withholds content from an answer, staleness withholds time from it. Both let a consumer act on a picture of the requirements estate that the tool knows, or could know, to be wrong.
+
+Observed failure shapes this requirement guards against:
+
+- Content in a scanned file that looks like a requirement but is dropped (for example, its declared level is not configured) while every check stays healthy — so "no matches" is indistinguishable from "never admitted".
+- A configured repository that fails to load and is simply absent from answers — so "no matches" is indistinguishable from "could not look".
+- Derived data (coverage rollups, term and keyword indexes, change-state summaries) served mid-editing-session from sources that have since changed.
+- An operation log that records a write the tool never made.
+- A long-running server answering from a configuration that has since changed on disk.
+
+This requirement declares `Satisfies:` against the REQ-p00019 anti-pattern template and concretizes its truthful-representation classes for the tool's reporting core: assertions A and C pin silent omission to the shapes observed here (unadmitted requirement-form content; an unloadable configured repository), E and G pin silent staleness (derived values; superseded configuration), B and F pin unreported non-performance and phantom success on the write path, and D pins verdict integrity to the tool's own healthy verdict. The template's error-discipline classes (actionable failure reports, no suppressed error signals) bind to this subsystem through the template instance without a tool-specific strengthening.
+
+Interplay with existing requirements: REQ-p00004-J obliges the tool to re-read configuration from disk when reloading the graph; this requirement complements it by covering the interval between reloads — divergence must be disclosed, not silently served. REQ-p00005-E covers the configuration-time error for an invalid associate path; assertion C here covers the answer-time consequence of any load failure. REQ-p00081-D applies the same principle to workspace discovery specifically. Other spec units cite this requirement rather than restating these invariants.
+
+## Assertions
+
+A. When the tool encounters content that matches a requirement form but does not admit it into the graph, the tool SHALL report the excluded content and the cause of its exclusion.
+
+B. When the tool does not apply a requested change, the tool SHALL report the unapplied change and the cause.
+
+C. If a repository configured into the graph cannot be loaded, then the tool SHALL report the missing repository and the cause alongside every answer computed over the reduced graph.
+
+D. If content, repositories, or requested changes are absent from the graph without having been reported, then the tool SHALL NOT report a healthy verdict.
+
+E. When the tool serves a value derived from source content that has changed since the value was computed, the tool SHALL serve a value recomputed from the current content or mark the served value as stale.
+
+F. The tool SHALL record a change as applied only when the change is present at the destination the record names.
+
+G. While the tool serves answers computed from a configuration that no longer matches the configuration on disk, the tool SHALL disclose that the answers reflect a superseded configuration.
+
+## Changelog
+
+- 2026-08-01 | 9aa9a8aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-08-01 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: declare satisfaction of the REQ-p00019 anti-pattern template; rationale maps assertions to template classes
+- 2026-07-31 | 9aa9a8aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-10: author completeness/freshness invariant (merges GI-1 silent omission and GI-2 silent staleness)
+
+*End* *Complete and Current Reporting* | **Hash**: 9aa9a8aa
+---
+
+# REQ-p00017: Reference Integrity Under Mutation
+
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00001
+
+## Rationale
+
+The *Traceability* graph is held together by references: `Implements:`, `Verifies:`, and `Validates:` markers in code, tests, and journeys designate requirements and assertions by identifier. A reference that breaks is visible — the tool reports it. A reference that still parses but now designates something *other than what it designated before* is worse than broken: it is silently wrong, and every coverage number computed over it is silently wrong too. The governing invariant of this requirement: no mutation leaves a reference that still parses but designates something other than what it designated before.
+
+The failure shapes this requirement guards against:
+
+- Assertion labels treated as positions. If deleting assertion B renumbers C to B, every `Implements: REQ-x-B` in code silently repoints from the old B's obligation to the old C's. Labels must bind to content, never to position. Requirement hashing is already order-independent (REQ-d00131-J), so reordering assertions perturbs nothing on the hash side — label stability is the remaining reorder hazard, and this requirement closes it.
+- A requirement-ID rename that updates the spec file but not the estate's other spec references, leaving stale designations inside the graph itself.
+- References the tool cannot see. Requirement IDs appear in artifacts elspais does not parse — prose documentation, SQL migrations, Terraform, shell scripts, commit messages. The tool cannot update these, but it can refuse to strand them: an identity mapping from former to successor identifiers makes out-of-graph references mechanically updatable. The obligation is the mapping's existence and availability, not its format.
+- Deletion that ignores lifecycle. The estate classifies statuses into roles (active, provisional, aspirational, retired). A provisional or aspirational requirement has attracted no committed references, so removing or renumbering it is routine. An active requirement is load-bearing; removing it outright would strand every reference to it, so it retires in place instead. A retired requirement is a historical record; editing it would falsify the record that its identifier preserves.
+
+**Assertion-level retirement (the RETIRED directive).** The estate's `[Removed - ...]` placeholder convention is convention-only: the parser builds ordinary ASSERTION nodes from placeholders, so retired letters (REQ-d00010 carries seven; REQ-p00004-G is another) count as permanently-uncovered assertions in every coverage denominator, and gap surfaces cannot distinguish "retired by design" from "never verified". The RETIRED parsing directive (syntax per REQ-p00002-E) makes retirement machine-readable: an *Assertion* carrying it "does not exist" for coverage and *Traceability* purposes — it exits every denominator (no longer counted among assertions expected to be implemented, tested, or validated), and references to it break loudly instead of designating a withdrawn obligation, which is precisely this requirement's governing invariant applied at *Assertion* granularity. What retirement does NOT release is the label: the letter stays allocated forever, the assertion-level analogue of the label-stability invariant assertion A states for reorder/delete mutations and of the identifier-reuse prohibition assertion F states for requirements. G/H/I are the *Assertion*-granularity counterparts of the requirement-level retire-in-place discipline in D/E/F. The adjacent concept in REQ-p00016 (a declaring requirement marking a template *Assertion* NOT APPLICABLE for one instance) is per-instance exclusion; RETIRED withdraws the obligation estate-wide at its definition site. Migrating existing placeholders to the directive form, the parser and coverage implementation, and the assertions-docs update are implementation-phase work: these assertions land uncovered by design, and current placeholder behavior becomes a tracked conformance gap.
+
+Interplay with existing requirements: this requirement governs what an *applied* mutation must preserve. When a mutation cannot be applied — or can be applied only partially — reporting the unapplied change and its cause is REQ-p00015-B's obligation, cited here rather than restated. REQ-d00201 and REQ-d00065 specify *which layer executes* mutations (delegation of mutation logic to the graph); they are complementary plumbing and say nothing about designation integrity, which is this requirement's subject. Protection against concurrent writers (lost updates, conflict detection) is the concern of the MCP mutation tooling spec under REQ-o00062, not of this requirement — scope here is designation integrity of the mutations that are applied.
+
+## Assertions
+
+A. If a mutation reorders or deletes *Assertions* within a requirement, then the tool SHALL NOT assign a label previously borne by one *Assertion* to a different *Assertion*.
+
+B. When a mutation renames the identifier of a requirement or of one of its *Assertions*, the tool SHALL update every reference held in the graph to the former identifier so that it designates the same entity under its new identifier.
+
+C. When a mutation changes or removes an identifier, the tool SHALL make available a mapping from each former identifier to its successor identifier, or to its removal, in a form consumable by processes that update references outside the graph.
+
+D. If a mutation would delete a requirement whose status is in the active role, then the tool SHALL transition the requirement to a retired-role status preserving its identifier rather than removing it.
+
+E. While a requirement's status is in a retired role, the tool SHALL NOT apply mutations that alter the requirement's content or identifier.
+
+F. The tool SHALL NOT assign an identifier previously borne by a requirement whose status reached the active role to a different requirement.
+
+G. While an *Assertion* carries the RETIRED parsing directive, the tool SHALL exclude that *Assertion* from every coverage and *Traceability* calculation.
+
+H. If a reference targets an *Assertion* carrying the RETIRED parsing directive, then the tool SHALL treat the reference exactly as a reference to a nonexistent *Assertion*: unresolved, and surfaced as a broken reference.
+
+I. The tool SHALL NOT assign a label borne by an *Assertion* carrying the RETIRED parsing directive to a different *Assertion*.
+
+## Changelog
+
+- 2026-07-31 | 8ddf7122 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: author RETIRED-directive semantics — coverage/traceability nonexistence (G), broken-reference resolution (H), permanent label allocation (I)
+- 2026-07-31 | c0aae59d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-20: author reference-integrity-under-mutation invariant (GI-3)
+
+*End* *Reference Integrity Under Mutation* | **Hash**: 8ddf7122
+---
+
+# REQ-p00018: Compiled Risk Register
+
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00004
+
+## Rationale
+
+Regulated development requires a risk register: what can go wrong, how each risk is mitigated, and what residual risk is accepted. A register maintained as a separate document detaches from the requirements that carry the mitigations and goes stale the day after it is written. Documenting each residual risk inline, within the requirement it concerns, keeps the risk statement next to the obligations that mitigate it — and the register becomes a derived artifact, compiled from the requirements estate, never hand-maintained.
+
+Attributing each risk to the requirement that documents it and to the specific assertions carrying its mitigation (or recording its acceptance) makes the register auditable through the same *Traceability* graph as everything else: an auditor can walk from a risk to the obligations that answer it, and from those obligations to the tests that verify them. A mitigation citation that resolves to nothing is precisely the silent-omission defect REQ-p00015 guards against in reporting surfaces — a register that quietly drops or ignores an unresolvable citation misrepresents the estate's risk posture; assertion C applies that reporting principle here rather than restating it.
+
+Table layouts, command shapes, and severity or likelihood vocabularies are mechanism choices; the assertions deliberately fix none of them.
+
+## Assertions
+
+A. The tool SHALL compile residual-risk documentation recorded inline within requirements into a single register spanning every repository of the graph.
+
+B. The register SHALL attribute each documented risk to the requirement documenting it and to the *Assertions* carrying its mitigation or accepting its residual risk.
+
+C. If a mitigation citation within residual-risk documentation does not resolve to an *Assertion* present in the graph, then the tool SHALL report the unresolved citation.
+
+## Changelog
+
+- 2026-07-31 | 0f0438e9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-4: author compiled cross-spec risk register requirement (inline residual risk, attribution to mitigating assertions, unresolved-citation reporting)
+
+*End* *Compiled Risk Register* | **Hash**: 0f0438e9
+---
+
+# REQ-p00019: Truthful Reporting and Error Discipline
+
+**Level**: prd | **Status**: Active | **Template** | **Implements**: -
+
+## Rationale
+
+A catalog of behavioral anti-pattern classes, stated once and consumed by subsystem requirements via `Satisfies:`; in each assertion, "the system" reads as the satisfying subsystem. Each class names a point where several behaviors are individually defensible — serving a cached value, substituting a default, taking no action on an error — and prohibits choosing one silently or stranding the receiver of a failure without a path to action. Declaring satisfaction obliges the author to consider every class for that subsystem: concretize it with the satisfier's own assertions, exclude it per-instance (REQ-p00016), or leave it visibly uncovered.
+
+## Assertions
+
+A. When the system omits from an answer content that lies within the scope the answer claims to cover, the system SHALL report the omission and its cause.
+
+B. When the system serves a value derived from sources that have changed since the value was computed, the system SHALL disclose the divergence or serve a value recomputed from the current sources.
+
+C. When the system delivers a default, cached, partial, or degraded result in place of the requested result, the system SHALL disclose the substitution.
+
+D. The system SHALL NOT represent an action as performed unless the action's effect is present at the destination the representation names.
+
+E. When the system does not perform a requested action, the system SHALL report the unperformed action and the cause.
+
+F. If an omission, divergence, substitution, or unperformed action remains undisclosed, then the system SHALL NOT report a healthy verdict.
+
+G. When the system reports a failure, the report SHALL identify the operation that failed, the cause, and the remedial action available to the caller (or state that none is known).
+
+H. The system SHALL act on or report every error signal it receives, except signals whose point of suppression carries a recorded justification that no action is required.
+
+## Changelog
+
+- 2026-08-01 | b2a947fb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: condense rationale to a short orientation preamble per review
+- 2026-08-01 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: author behavioral anti-pattern template — silent omission, staleness, substitution, phantom success, unreported non-performance, verdict integrity, unactionable failures, suppressed error signals
+
+*End* *Truthful Reporting and Error Discipline* | **Hash**: b2a947fb
 ---
 
 ## REQ-d00220: TermDictionary Data Model
@@ -253,10 +462,11 @@ E. `TermRef` SHALL have a `wrong_marking` field (str, default "") that records t
 
 ### Changelog
 
+- 2026-07-31 | 986251c3 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 0d0fd97c | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 0d0fd97c | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *TermDictionary Data Model* | **Hash**: 0d0fd97c
+*End* *TermDictionary Data Model* | **Hash**: 986251c3
 
 <!-- markdownlint-disable MD038 -->
 
@@ -272,11 +482,12 @@ B. The transformer SHALL handle `definition_block` nodes by extracting the term 
 
 ### Changelog
 
+- 2026-07-31 | 5a3c278b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 6adaa258 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-24 | 6adaa258 | - | Developer (<dev@example.com>) | Auto-fix: update hash
 - 2026-04-23 | 078ce203 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Grammar Extension for Definition Blocks* | **Hash**: 6adaa258
+*End* *Grammar Extension for Definition Blocks* | **Hash**: 5a3c278b
 
 ## REQ-d00222: TraceGraph Terms and GraphBuilder Integration
 
@@ -294,10 +505,11 @@ D. `GraphBuilder` SHALL accept a `namespace` parameter (str, default "") and set
 
 ### Changelog
 
+- 2026-07-31 | 0299f7c2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 96b5223f | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 96b5223f | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *TraceGraph Terms and GraphBuilder Integration* | **Hash**: 96b5223f
+*End* *TraceGraph Terms and GraphBuilder Integration* | **Hash**: 0299f7c2
 
 ## REQ-d00223: Term Health Checks
 
@@ -309,7 +521,7 @@ A. `check_term_duplicates()` SHALL return a `HealthCheck` reporting duplicate te
 
 B. `check_undefined_terms()` SHALL return a `HealthCheck` for `*token*`/`**token**` references that do not match any *Defined Term* and are not known structural patterns, using the configured `undefined_severity`.
 
-C. `check_unmarked_usage()` SHALL return a `HealthCheck` for whole-word case-insensitive matches of indexed terms in prose that lack `*...*` or `**...**` markup, using the configured `unmarked_severity`. Only terms with `indexed=True` SHALL be checked.
+C. `check_unmarked_usage()` SHALL return a `HealthCheck` for whole-word case-insensitive matches of terms in prose that lack `*...*` or `**...**` markup, using the configured `unmarked_severity`. Only terms whose unmarked-usage scanning is enabled SHALL be checked.
 
 D. When any severity is set to `"off"`, the corresponding check SHALL be skipped and return a passed HealthCheck with severity `"info"`.
 
@@ -317,12 +529,25 @@ E. A `run_term_checks(graph, config)` aggregator SHALL call `check_term_duplicat
 
 F. `check_unmarked_usage()` SHALL produce distinct messages for wrong-marking references (e.g., "Wrong markup for 'term' (uses __, should use configured style)") versus plain unmarked references (e.g., "Unmarked usage of 'term'").
 
+G. The tool SHALL apply each term-declaration behavior — glossary and index inclusion, unmarked-usage scanning, canonical-form fixing, and reference-panel visibility — according to that behavior's own per-term setting, unaffected by the settings of the other behaviors.
+
+H. If a term occurrence functions as system syntax — a heading, a status value, or a metadata key — then the tool SHALL NOT report that occurrence as unmarked colloquial use.
+
+I. When scanning for unmarked usage, the tool SHALL recognize inflected forms of a term, including singular and plural variants, as occurrences of that term.
+
+### Rationale
+
+Term declarations historically carried one bundled flag (`Indexed: false`) that both removed a term from the generated index and exempted it from colloquial-use checking, so deliberately unindexed terms could accumulate unmarked usages invisibly. G makes the behaviors orthogonal: inclusion in generated glossary/index output, unmarked-usage scanning, canonical-form fixing, and reference-panel visibility are separate per-term decisions, and excluding a term from one does not silently exempt it from another. The per-behavior flag names sketched during design (`Check Unmarked:`, `Syntax Word:`, `Show References:`) are proposed mechanism, not obligations — only the separability is asserted here. Per the project rule against backwards-compatibility paths, existing bundled `Indexed: false` declarations migrate outright to the separated settings when the mechanism lands; no compatibility mode preserves the bundled meaning. H and I make the scanner context-aware in both directions: a word serving as system syntax (a heading, a status value, a metadata key) is not colloquial use even though the same word in prose is, and an unmarked usage is not missed merely because it appears inflected. Existing behavior that contradicts these assertions — in particular the bundled indexed gate — is conformance-defect territory for later implementation tickets.
+
 ### Changelog
 
+- 2026-07-31 | aac4da7f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-5: orthogonal term-declaration behaviors (G) and context-aware unmarked-usage scanning (H, I); decouple C from the bundled indexed flag
+- 2026-07-31 | b2d02a05 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 0d96cc34 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 0d96cc34 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Term Health Checks* | **Hash**: 0d96cc34
+*End* *Term Health Checks* | **Hash**: aac4da7f
 
 ## REQ-d00224: Glossary and Term Index Generators
 
@@ -340,10 +565,11 @@ D. All generated files SHALL include an auto-generated header comment. Both `--f
 
 ### Changelog
 
+- 2026-07-31 | c8ce4253 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | f2da30fb | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | f2da30fb | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Glossary and Term Index Generators* | **Hash**: f2da30fb
+*End* *Glossary and Term Index Generators* | **Hash**: c8ce4253
 
 ## REQ-d00225: CLI Registration for Glossary and Term Index
 
@@ -357,10 +583,11 @@ B. `elspais fix` SHALL call glossary and term-index generation after existing fi
 
 ### Changelog
 
+- 2026-07-31 | 2b8a5235 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | d18fc2c9 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | d18fc2c9 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *CLI Registration for Glossary and Term Index* | **Hash**: d18fc2c9
+*End* *CLI Registration for Glossary and Term Index* | **Hash**: 2b8a5235
 
 ## REQ-d00236: Comment Extraction Utilities
 
@@ -384,10 +611,11 @@ G. For file extensions with no known comment style, `extract_comments()` SHALL r
 
 ### Changelog
 
+- 2026-07-31 | 2e5b4960 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 499123f1 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 499123f1 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Comment Extraction Utilities* | **Hash**: 499123f1
+*End* *Comment Extraction Utilities* | **Hash**: 2e5b4960
 
 ## REQ-d00237: Term Reference Scanner Core
 
@@ -411,13 +639,14 @@ G. When one *Defined Term*'s text contains another (e.g. `Sponsor Portal` contai
 
 ### Changelog
 
+- 2026-07-31 | 637ac760 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-09 | f2b673a4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
 - 2026-06-09 | 2849c41b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-09 | d1eb27f4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 63cb874b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 63cb874b | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Term Reference Scanner Core* | **Hash**: f2b673a4
+*End* *Term Reference Scanner Core* | **Hash**: 637ac760
 
 ## REQ-d00238: Graph-Wide Term Scan
 
@@ -435,10 +664,11 @@ D. Files matching any `exclude_files` glob pattern SHALL be skipped during scann
 
 ### Changelog
 
+- 2026-07-31 | b14edde9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | d3a202d4 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | d3a202d4 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Graph-Wide Term Scan* | **Hash**: d3a202d4
+*End* *Graph-Wide Term Scan* | **Hash**: b14edde9
 
 ## REQ-d00239: Federated Graph Term Scanner Pass
 
@@ -452,10 +682,11 @@ B. Each repo's scan SHALL use its own config for `markup_styles` and `exclude_fi
 
 ### Changelog
 
+- 2026-07-31 | e27abfeb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 7d9a30c4 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 7d9a30c4 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Federated Graph Term Scanner Pass* | **Hash**: 7d9a30c4
+*End* *Federated Graph Term Scanner Pass* | **Hash**: e27abfeb
 
 ## REQ-d00240: New Term Health Checks
 
@@ -473,11 +704,12 @@ D. `run_term_checks()` SHALL call all six term checks (`duplicates`, `undefined`
 
 ### Changelog
 
+- 2026-07-31 | b4e70076 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 76a49db3 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-24 | 76a49db3 | - | Developer (<dev@example.com>) | Auto-fix: update hash
 - 2026-03-29 | 9788814d | - | Michael Lewis (<michael@anspar.org>) | Initial creation
 
-*End* *New Term Health Checks* | **Hash**: 76a49db3
+*End* *New Term Health Checks* | **Hash**: b4e70076
 
 ## REQ-d00263: Scoped Term Binding
 
@@ -505,7 +737,7 @@ Cross-cutting policy text wants to say `*system*` once and mean `portal system` 
 
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: author scoped term binding (org-wide terms)
 
-*End* *Scoped Term Binding* | **Hash**: 1355b3d0
+*End* *Scoped Term Binding* | **Hash**: d13a3c53
 
 ## REQ-d00264: Usage-Driven Glossary Selection
 
@@ -529,7 +761,7 @@ Definitions can be authored org-wide while each generated document carries only 
 
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: author usage-driven glossary selection (org-wide terms)
 
-*End* *Usage-Driven Glossary Selection* | **Hash**: 02f5085d
+*End* *Usage-Driven Glossary Selection* | **Hash**: 12f529a3
 
 ## REQ-d00241: Code No-Traceability Health Check
 
@@ -547,13 +779,14 @@ D. The `tests.unlinked` check (`check_unlinked_tests()`) SHALL flag a test file 
 
 ### Changelog
 
+- 2026-07-31 | de72736f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-03 | 583588f9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-03 | c1be56e5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | e1272219 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | e1272219 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-03-29 | 6e481d63 | - | Michael Lewis (<michael@anspar.org>) | Initial creation
 
-*End* *Code No-Traceability Health Check* | **Hash**: 583588f9
+*End* *Code No-Traceability Health Check* | **Hash**: de72736f
 
 ## REQ-d00246: Markdown Emphasis Normalization Utility
 
@@ -567,10 +800,11 @@ B. Lark transformers SHALL use `strip_emphasis()` to normalize all user-text cap
 
 ### Changelog
 
+- 2026-07-31 | 6db4d559 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 16af6c80 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-05-04 | 16af6c80 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Markdown Emphasis Normalization Utility* | **Hash**: 16af6c80
+*End* *Markdown Emphasis Normalization Utility* | **Hash**: 6db4d559
 
 ## REQ-d00247: Fenced Code Block Preservation
 
@@ -582,10 +816,11 @@ A. Fenced code block content (lines between ``` markers) SHALL be preserved verb
 
 ### Changelog
 
+- 2026-07-31 | 499a4ce4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 1270eb2b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-05-04 | 1270eb2b | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Fenced Code Block Preservation* | **Hash**: 1270eb2b
+*End* *Fenced Code Block Preservation* | **Hash**: 499a4ce4
 
 ## REQ-d00248: Fix Command Idempotency
 
@@ -597,7 +832,8 @@ A. `elspais fix` SHALL be idempotent: running the command twice in succession on
 
 ### Changelog
 
+- 2026-07-31 | 2b421222 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 8a92207b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-05-04 | 8a92207b | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Fix Command Idempotency* | **Hash**: 8a92207b
+*End* *Fix Command Idempotency* | **Hash**: 2b421222

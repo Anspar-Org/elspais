@@ -82,26 +82,14 @@ Tools that modify spec files:
 | Tool | Description |
 |------|-------------|
 | `change_reference_type()` | Switch between Implements and Refines references |
-| `specialize_reference()` | Convert REQ→REQ to REQ→Assertion reference |
 | `move_requirement()` | Move requirement between spec files |
 
-### File Operations
+### Safety Branch Tools
 
-Tools for spec file management:
-
-| Tool | Description |
-|------|-------------|
-| `prepare_file_deletion()` | Analyze file before deletion (check requirements, content) |
-| `delete_spec_file()` | Delete spec file with safety checks |
-
-### AI Tools
-
-Tools for AI-assisted transformations:
+Tools for git-based recovery:
 
 | Tool | Description |
 |------|-------------|
-| `get_node_as_json()` | Full node serialization for AI processing |
-| `transform_with_ai()` | AI-assisted requirement transformation with git safety |
 | `restore_from_safety_branch()` | Restore repository from safety branch |
 | `list_safety_branches()` | List all safety branches created by elspais |
 
@@ -211,20 +199,7 @@ Fixing Implements vs Refines relationships:
 4. refresh_graph()                      # Rebuild with new semantics
 ```
 
-### 5. AI-Assisted Transformation
-
-Using Claude to reformat requirements:
-
-```
-1. get_node_as_json(req_id)             # Get full node data
-2. transform_with_ai(req_id, prompt,    # Apply transformation
-     save_branch=True, dry_run=True)    # Preview first
-3. transform_with_ai(req_id, prompt,    # Apply for real
-     save_branch=True, dry_run=False)
-4. # If issues: restore_from_safety_branch(branch_name)
-```
-
-### 6. Hierarchy Cleanup
+### 5. Hierarchy Cleanup
 
 Finding and fixing orphaned requirements:
 
@@ -236,43 +211,6 @@ Finding and fixing orphaned requirements:
 ```
 
 ## Safety Patterns
-
-### Always Prepare Before Deletion
-
-```python
-# WRONG: Delete without checking
-delete_spec_file(file_path, force=True)
-
-# RIGHT: Analyze first
-result = prepare_file_deletion(file_path)
-if result["can_delete"]:
-    delete_spec_file(file_path)
-else:
-    # Move requirements first with move_requirement()
-```
-
-### Use Git Safety for AI Transforms
-
-```python
-# WRONG: Transform without safety branch
-transform_with_ai(req_id, prompt, save_branch=False)
-
-# RIGHT: Always create safety branch
-result = transform_with_ai(req_id, prompt, save_branch=True)
-# If problems:
-restore_from_safety_branch(result["safety_branch"])
-```
-
-### Preview with Dry Run
-
-```python
-# Preview transformation
-preview = transform_with_ai(req_id, prompt, dry_run=True)
-# Review preview["after_text"]
-
-# Then apply
-transform_with_ai(req_id, prompt, dry_run=False)
-```
 
 ### Refresh Graph After Mutations
 
@@ -437,30 +375,6 @@ Move requirement between spec files.
   "source_file": "spec/old.md",
   "target_file": "spec/new.md",
   "position": "end"
-}
-```
-
-### transform_with_ai
-
-Transform a requirement using Claude.
-
-**Parameters:**
-- `node_id` (str): Requirement ID to transform
-- `prompt` (str): Transformation instructions
-- `output_mode` (str): "replace" (markdown) or "operations" (JSON)
-- `save_branch` (bool): Create git safety branch before changes
-- `dry_run` (bool): Preview without applying
-
-**Returns:**
-```json
-{
-  "success": true,
-  "node_id": "REQ-d00001",
-  "dry_run": false,
-  "safety_branch": "elspais-safety-20240115-143022",
-  "before_text": "...",
-  "after_text": "...",
-  "file_path": "spec/requirements.md"
 }
 ```
 

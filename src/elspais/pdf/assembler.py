@@ -1,4 +1,4 @@
-# Implements: REQ-p00080-B, REQ-p00080-C, REQ-p00080-D, REQ-p00080-E, REQ-p00080-F
+# Implements: REQ-p00080-B, REQ-p00080-C, REQ-p00080-D, REQ-p00080-E, REQ-p00080-F, REQ-p00080-H
 """Markdown assembler for PDF compilation.
 
 Uses the graph for file ordering metadata (level, depth), then reads the
@@ -67,6 +67,14 @@ _FOOTER_RE = re.compile(r"^\*End\*")
 
 # Matches Markdown image references to .mmd files: ![alt](path.mmd)
 _MMD_IMAGE_RE = re.compile(r"(!\[[^\]]*\]\()([^)]+\.mmd)(\))")
+
+# Matches Markdown image references to raster/vector image files with an
+# optional quoted title: ![alt](path.png), ![alt](img/x.jpg "caption").
+# .mmd references are handled separately by _MMD_IMAGE_RE.
+_IMAGE_REF_RE = re.compile(
+    r"(!\[[^\]]*\]\()([^)\s]+\.(?:png|jpe?g|gif|svg))((?:\s+\"[^\"]*\")?\))",
+    re.IGNORECASE,
+)
 
 log = logging.getLogger(__name__)
 
@@ -251,6 +259,11 @@ class MarkdownAssembler:
                     line, file_path, owning_repo_root=owning_repo_root
                 )
 
+            # Rewrite relative raster/vector image references to absolute
+            # paths anchored at the owning repo (TOOL-31).
+            if "![" in line:
+                line = self._resolve_image_paths(line, file_path, owning_repo_root=owning_repo_root)
+
             # Ensure blank line before first list item so Pandoc renders as a list
             stripped = line.lstrip()
             if (
@@ -368,6 +381,57 @@ class MarkdownAssembler:
             return f"{prefix}{png_path}{suffix}"
 
         return _MMD_IMAGE_RE.sub(_replace_mmd, line)
+
+    # ------------------------------------------------------------------
+    # Raster/vector image resolution
+    # ------------------------------------------------------------------
+
+    # Implements: REQ-p00080-H
+    def _resolve_image_paths(
+        self,
+        line: str,
+        source_file: str,
+        owning_repo_root: Path | None = None,
+    ) -> str:
+        """Rewrite relative image references to absolute paths.
+
+        Pandoc runs against a temp file in ``/tmp/``, so relative image
+        paths in the assembled markdown resolve to nothing and images
+        silently vanish from the PDF. Each reference is resolved against
+        the *source spec file's* directory in the file's *owning* repo,
+        then against that repo's root -- mirroring
+        ``_resolve_mermaid_images``. Anchoring per file is what keeps
+        federation correct: different files resolve against different
+        repo roots, which a single global ``--resource-path`` cannot
+        express (and refs relative to spec subdirectories aren't on the
+        resource path at all).
+
+        Absolute paths and URLs are left untouched. Unresolved refs are
+        left unchanged so pandoc's ``--resource-path`` fallback (wired
+        in ``pdf_cmd``) still gets a chance to find them.
+        """
+        anchor = owning_repo_root if owning_repo_root is not None else self._graph.repo_root
+
+        def _replace(match: re.Match) -> str:
+            prefix = match.group(1)  # ![alt](
+            img_path = match.group(2)  # relative/path.png
+            suffix = match.group(3)  # optional "title" + )
+
+            if "://" in img_path or Path(img_path).is_absolute():
+                return match.group(0)
+
+            # Resolve relative to the source file's directory first
+            source_dir = Path(source_file).parent
+            candidate = (anchor / source_dir / img_path).resolve()
+            if not candidate.exists():
+                # Then relative to the owning repo root
+                candidate = (anchor / img_path).resolve()
+            if not candidate.exists():
+                return match.group(0)  # Leave for --resource-path fallback
+
+            return f"{prefix}{candidate}{suffix}"
+
+        return _IMAGE_REF_RE.sub(_replace, line)
 
     @staticmethod
     def _generate_mermaid_png(mmd_path: Path, png_path: Path) -> Path | None:

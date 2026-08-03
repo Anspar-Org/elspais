@@ -92,14 +92,6 @@ When requirements change:
 - Old assertions can be marked as "Removed" placeholders to maintain label sequence
 - Multi-repo support via sponsors config for associated repositories (e.g., `TTN-REQ-p00001`)
 
-### 6. AI-Assisted Reformatting
-
-Migrate legacy "Acceptance Criteria" format to assertions:
-
-```bash
-elspais reformat-with-claude --dry-run
-```
-
 ---
 
 ## Key Concepts

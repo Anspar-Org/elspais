@@ -202,24 +202,47 @@ class TestComputeNormalizedHash:
         assert hash1 != hash2
 
     # Verifies: REQ-d00131-J
-    def test_hash_mode_order_matters(self):
-        # Verifies: REQ-p00004-A
-        """Assertion order affects the hash: [A, B] != [B, A]."""
-        hash1 = compute_normalized_hash(
-            [
-                ("A", "First assertion."),
-                ("B", "Second assertion."),
-            ]
-        )
-        hash2 = compute_normalized_hash(
-            [
-                ("B", "Second assertion."),
-                ("A", "First assertion."),
-            ]
-        )
+    @pytest.mark.parametrize(
+        "permutation",
+        [
+            [1, 0, 2],
+            [2, 1, 0],
+            [1, 2, 0],
+            [2, 0, 1],
+        ],
+    )
+    def test_hash_mode_reorder_invariant(self, permutation):
+        """Assertion reordering does not change the hash (order-independent)."""
+        assertions = [
+            ("A", "First assertion."),
+            ("B", "Second assertion."),
+            ("C", "Third assertion."),
+        ]
+        permuted = [assertions[i] for i in permutation]
+        assert compute_normalized_hash(assertions) == compute_normalized_hash(permuted)
+
+    # Verifies: REQ-d00131-J
+    def test_hash_mode_reorder_invariant_but_content_sensitive(self):
+        """Reordering preserves the hash while a content edit changes it."""
+        original = [("A", "First assertion."), ("B", "Second assertion.")]
+        reordered = [("B", "Second assertion."), ("A", "First assertion.")]
+        edited = [("A", "First assertion, changed."), ("B", "Second assertion.")]
+        base = compute_normalized_hash(original)
+        assert compute_normalized_hash(reordered) == base
+        assert compute_normalized_hash(edited) != base
+
+    # Verifies: REQ-d00131-J
+    def test_hash_mode_label_swap_changes_hash(self):
+        """Swapping labels between assertions is a content change, not a reorder."""
+        hash1 = compute_normalized_hash([("A", "First."), ("B", "Second.")])
+        hash2 = compute_normalized_hash([("A", "Second."), ("B", "First.")])
         assert hash1 != hash2
 
     # Verifies: REQ-d00131-J
+    def test_hash_mode_single_assertion_stable(self):
+        """A single-assertion list hashes deterministically."""
+        single = [("A", "Only assertion.")]
+        assert compute_normalized_hash(single) == compute_normalized_hash(list(single))
 
     # Verifies: REQ-p00004-A
     def test_hash_mode_case_sensitive(self):

@@ -32,6 +32,16 @@ stats = ""
 #   >0: auto-start daemon, exit after N minutes idle (default: 30)
 #    0: never auto-launch daemon from CLI (manual start only)
 #   <0: auto-start daemon that never times out
+#
+# Spawner liveness: a daemon auto-started on behalf of a session (a Claude
+# Code session, an IDE declaring itself via the ELSPAIS_SPAWNER_PID env var,
+# or an interactive shell) also exits shortly after that session ends, even
+# when cli_ttl < 0 — orphaned daemons do not accumulate. If the daemon holds
+# unsaved in-memory mutations when its session dies, it logs a warning to
+# .elspais/daemon.log, waits a bounded grace period (5 minutes), then exits
+# WITHOUT saving; nothing is persisted silently. Explicitly started servers
+# (`elspais daemon restart`, `elspais mcp serve`, the viewer) are never
+# session-tied and keep TTL-only behavior.
 cli_ttl = 30
 
 #──────────────────────────────────────────────────────────────────────────────
@@ -454,6 +464,11 @@ ELSPAIS_VALIDATION_ALLOW__UNRESOLVED__CROSS__REPO=false
 # JSON list values
 ELSPAIS_SCANNING_SKIP='["node_modules", ".git"]'
 ```
+
+Reserved (never treated as config overrides): `ELSPAIS_VERSION`
+(min-CLI-version pin) and `ELSPAIS_SPAWNER_PID` (a session/IDE declares
+itself the spawner of implicitly auto-started daemons, tying the daemon's
+lifetime to that process — see the `cli_ttl` comment above).
 
 ## Minimal Configuration Examples
 

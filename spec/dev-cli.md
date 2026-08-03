@@ -26,10 +26,11 @@ The previous `validate` command's responsibilities are absorbed by `health`. Ref
 
 ### Changelog
 
+- 2026-07-31 | acc2aa77 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | ada92a29 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | ada92a29 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Diagnostic Command Exit Code Contract* | **Hash**: ada92a29
+*End* *Diagnostic Command Exit Code Contract* | **Hash**: acc2aa77
 ---
 
 ## REQ-d00081: Multi-Assertion Reference Expansion
@@ -60,10 +61,11 @@ The previous implementation hardcoded expansion in RequirementParser only, using
 
 ### Changelog
 
+- 2026-07-31 | 25c43ce2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 313fe52b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 313fe52b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Multi-Assertion Reference Expansion* | **Hash**: 313fe52b
+*End* *Multi-Assertion Reference Expansion* | **Hash**: 25c43ce2
 ---
 
 ## REQ-d00082: Unified Reference Configuration
@@ -98,10 +100,11 @@ Different projects use different ID conventions, comment styles, and directory s
 
 ### Changelog
 
+- 2026-07-31 | 00cd96fc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 89956cd7 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 89956cd7 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Unified Reference Configuration* | **Hash**: 89956cd7
+*End* *Unified Reference Configuration* | **Hash**: 00cd96fc
 ---
 
 ## REQ-d00084: Trace Command
@@ -126,12 +129,13 @@ A JSON graph output mode enables programmatic consumption of the full *Traceabil
 
 ### Changelog
 
+- 2026-07-31 | 1bd6bca1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-02 | 64954432 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-02 | f4e1d611 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | f8f0e0f2 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | f8f0e0f2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Trace Command* | **Hash**: 64954432
+*End* *Trace Command* | **Hash**: 1bd6bca1
 ---
 
 ## REQ-d00085: Unified Report Composition
@@ -168,10 +172,11 @@ Report-producing commands (`health`, `trace`, `coverage`, `changed`) currently e
 
 ### Changelog
 
+- 2026-07-31 | 0d1e518a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 82d76f1a | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 82d76f1a | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Unified Report Composition* | **Hash**: 82d76f1a
+*End* *Unified Report Composition* | **Hash**: 0d1e518a
 ---
 
 ## REQ-d00086: Coverage Report Section
@@ -196,11 +201,12 @@ Coverage data is already computed during graph construction but is only surfaced
 
 ### Changelog
 
+- 2026-07-31 | a12d2826 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-02 | a17871db | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 2fd4ab13 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 2fd4ab13 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Coverage Report Section* | **Hash**: a17871db
+*End* *Coverage Report Section* | **Hash**: a12d2826
 ---
 
 ## REQ-d00073: Link Suggestion CLI Command
@@ -227,10 +233,11 @@ CLI exposure enables both interactive use and CI pipeline integration. JSON outp
 
 ### Changelog
 
+- 2026-07-31 | 975970c4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 44fd54e9 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 44fd54e9 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Link Suggestion CLI Command* | **Hash**: 44fd54e9
+*End* *Link Suggestion CLI Command* | **Hash**: 975970c4
 ---
 
 ## REQ-d00124: Graph Analysis Engine
@@ -261,10 +268,11 @@ In a large requirements DAG, naive metrics like descendant count always favor th
 
 ### Changelog
 
+- 2026-07-31 | b153d5f6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 86bb619b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 86bb619b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Graph Analysis Engine* | **Hash**: 86bb619b
+*End* *Graph Analysis Engine* | **Hash**: b153d5f6
 ---
 
 ## REQ-d00125: Analysis CLI Command
@@ -297,10 +305,11 @@ A CLI command provides immediate visibility into which requirements are most fou
 
 ### Changelog
 
+- 2026-07-31 | 474fa8af | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 3cd66dbe | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 3cd66dbe | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Analysis CLI Command* | **Hash**: 3cd66dbe
+*End* *Analysis CLI Command* | **Hash**: 474fa8af
 ---
 
 ## REQ-d00213: Version Check and Update Notification
@@ -323,10 +332,11 @@ F. The tool SHALL compare local vs. remote versions and report whether the insta
 
 ### Changelog
 
+- 2026-07-31 | cedd398b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 56b62d01 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 56b62d01 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Version Check and Update Notification* | **Hash**: 56b62d01
+*End* *Version Check and Update Notification* | **Hash**: cedd398b
 
 ## REQ-d00217: INDEX.md Regeneration
 
@@ -344,12 +354,13 @@ D. When multiple `(repo, spec_dir)` buckets contribute requirements within a lev
 
 ### Changelog
 
+- 2026-07-31 | 7cff1581 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 4310931a | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-05-04 | 4310931a | - | Developer (<dev@example.com>) | Auto-fix: update hash
 - 2026-05-04 | 7c4f1816 | - | Developer (<dev@example.com>) | Auto-fix: update hash
 - 2026-04-23 | a1e3915a | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *INDEX.md Regeneration* | **Hash**: 4310931a
+*End* *INDEX.md Regeneration* | **Hash**: 7cff1581
 
 ## REQ-d00218: Health Check Coverage Rollup
 
@@ -365,10 +376,11 @@ C. When a child requirement has test coverage, its parent requirement SHALL rece
 
 ### Changelog
 
+- 2026-07-31 | 7783c3f1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 64b0dfbb | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 64b0dfbb | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Health Check Coverage Rollup* | **Hash**: 64b0dfbb
+*End* *Health Check Coverage Rollup* | **Hash**: 7783c3f1
 
 ## REQ-d00219: UAT Health Check Section
 
@@ -386,10 +398,11 @@ D. When no UAT results CSV file exists, the uat.results check SHALL report as sk
 
 ### Changelog
 
+- 2026-07-31 | c2b0cc8e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 3a95ff57 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 3a95ff57 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *UAT Health Check Section* | **Hash**: 3a95ff57
+*End* *UAT Health Check Section* | **Hash**: c2b0cc8e
 
 ## REQ-d00249: Configured test runner execution
 
@@ -421,7 +434,7 @@ both gaps: a single command can execute tests and re-evaluate checks,
 and the checks pass warns when results are out of date even without
 running tests.
 
-*End* *Configured test runner execution* | **Hash**: 8a579eb1
+*End* *Configured test runner execution* | **Hash**: 784f8350
 
 ## REQ-d00259: Requirement Format Reference Command
 
@@ -449,6 +462,37 @@ Authors writing their first requirement, or reviewers checking format convention
 
 ### Changelog
 
+- 2026-07-31 | c3b67490 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-03 | 8e05d02e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash, add missing changelog section
 
-*End* *Requirement Format Reference Command* | **Hash**: 8e05d02e
+*End* *Requirement Format Reference Command* | **Hash**: c3b67490
+
+## REQ-d00266: Mechanical Style Checks
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00002-A
+
+The tool checks requirement text against the mechanically-decidable subset of the organization's requirement style rules, so that style review effort concentrates on judgment calls rather than pattern violations.
+
+### Assertions
+
+A. The tool SHALL evaluate requirement text against a configured set of style rules, each of which is decidable from spec content and graph structure alone, without human judgment.
+
+B. The tool SHALL flag keyword-discipline violations, including obligation keywords appearing outside Assertions sections and obligation words outside the canonical keyword set.
+
+C. The tool SHALL flag assertion text that references another requirement or assertion identifier.
+
+D. The tool SHALL flag assertion text containing compound-connective patterns that indicate multiple independently-decidable obligations in a single assertion.
+
+E. The tool SHALL flag notation violations, including dates not in ISO 8601 format and configurable values not written in the canonical placeholder syntax.
+
+F. The tool SHALL flag assertions whose count of attached verifying tests exceeds a configurable threshold, as a signal that the assertion is too coarse.
+
+G. The tool SHALL flag each verification link that names a requirement without naming a specific assertion.
+
+H. The tool SHALL report style findings through the standard checks reporting surface, with severity configurable per rule.
+
+### Rationale
+
+Agent-generated code routinely cannot reliably be constrained to generate assertions according to a set of rules, so we must rely on checks instead. Not all checks can be automated, but those that can, are.
+
+*End* *Mechanical Requirement Style Checks* | **Hash**: 084c17a0

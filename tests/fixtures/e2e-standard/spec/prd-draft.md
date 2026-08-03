@@ -6,5 +6,5 @@
 
 A. The system SHALL provide draft feature.
 
-*End* *Draft Feature* | **Hash**: a29019f8
+*End* *Draft Feature* | **Hash**: 964b6fe6
 ---
