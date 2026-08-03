@@ -30,9 +30,9 @@
 | ---------- | ----------------------------------- | ------------------- | -------- |
 | REQ-o00050 | Graph Builder as Single Entry Point | ops-architecture.md | 65d2ad6a |
 | REQ-o00051 | Composable Annotation Design        | ops-architecture.md | c73a6e32 |
-| REQ-o00060 | MCP Core Query Tools                | ops-mcp.md          | 73c31134 |
+| REQ-o00060 | MCP Core Query Tools                | ops-mcp.md          | 25b3d4f7 |
 | REQ-o00061 | MCP Workspace Context Tools         | ops-mcp.md          | aaba2940 |
-| REQ-o00062 | MCP Graph Mutation Tools            | ops-mcp.md          | 69e70749 |
+| REQ-o00062 | MCP Graph Mutation Tools            | ops-mcp.md          | ad214b71 |
 | REQ-o00063 | MCP File Mutation Tools             | ops-mcp.md          | 291497b8 |
 | REQ-o00064 | MCP Test Coverage Analysis Tools    | ops-mcp.md          | e7fd1b43 |
 | REQ-o00065 | Agent-Assisted Link Suggestion      | ops-mcp.md          | 17851ae2 |
@@ -88,13 +88,13 @@
 | REQ-d00128 | FILE Node Creation in Build Pipeline                          | dev-graph-file-nodes.md | 7742f15f |
 | REQ-d00129 | SourceLocation Removal and Consumer Migration                 | dev-graph-file-nodes.md | 8bd81196 |
 | REQ-d00130 | Parameterized Root Iteration and Kind-Based Index Query       | dev-graph-file-nodes.md | f56f8527 |
-| REQ-d00131 | Render Protocol for Graph Nodes                               | dev-graph-file-nodes.md | a871090c |
-| REQ-d00132 | Render-Based Save Operation                                   | dev-graph-file-nodes.md | 7043f7af |
+| REQ-d00131 | Render Protocol for Graph Nodes                               | dev-graph-file-nodes.md | 3c2ce892 |
+| REQ-d00132 | Render-Based Save Operation                                   | dev-graph-file-nodes.md | 9edb10c2 |
 | REQ-d00133 | MCP FILE Node Integration                                     | dev-mcp-tools.md        | ae564dae |
 | REQ-d00134 | Comprehensive Mutation Round-Trip Scenario Test               | dev-graph-file-nodes.md | be52daed |
 | REQ-d00200 | FederatedGraph Read-Only Delegation                           | dev-graph-federation.md | 72471144 |
 | REQ-d00201 | FederatedGraph Mutation Delegation                            | dev-graph-federation.md | 1a0942a4 |
-| REQ-d00202 | Associates Config Loading                                     | dev-graph-federation.md | 0379ce9c |
+| REQ-d00202 | Associates Config Loading                                     | dev-graph-federation.md | 2a648c8e |
 | REQ-d00203 | Multi-Repo Build Pipeline                                     | dev-graph-federation.md | 5544c03c |
 | REQ-d00204 | Per-Repo Health Check Delegation                              | dev-graph-federation.md | 32a98213 |
 | REQ-d00205 | MCP Federation Support                                        | dev-mcp-tools.md        | 4f16dfc7 |
@@ -145,7 +145,7 @@
 | REQ-d00250 | Section Header Depth Canonicalization                         | dev-graph-core.md       | 903349d2 |
 | REQ-d00251 | Component Style Vocabulary and Assertion Separator            | dev-graph-config.md     | e04a4e37 |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | d9d4bc98 |
-| REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | 9a6e0bd7 |
+| REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | 6bd9cd1d |
 | REQ-d00254 | Coverage-Based and Aggregate Test Verification                | dev-graph-core.md       | 0f7323ff |
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | bdad84a0 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | cde21cfc |

@@ -126,6 +126,7 @@ def cmd_all(args: argparse.Namespace) -> int:
         return 1
 
     found: list[tuple[Path, Associate]] = []
+    skipped: list[str] = []
 
     for child in sorted(scan_base.iterdir()):
         if not child.is_dir():
@@ -136,6 +137,15 @@ def cmd_all(args: argparse.Namespace) -> int:
         result = discover_associate_from_path(child)
         if isinstance(result, Associate):
             found.append((child.resolve(), result))
+        elif (child / ".elspais.toml").exists():
+            # Implements: REQ-d00202-I
+            # A sibling that claims to be an elspais repo but whose config
+            # cannot be loaded is skipped visibly; dirs without a config are
+            # not candidates and stay silent.
+            skipped.append(result)
+
+    for reason in skipped:
+        print(f"  Skipping: {reason}")
 
     if not found:
         print("No associate repositories found in sibling directories.")

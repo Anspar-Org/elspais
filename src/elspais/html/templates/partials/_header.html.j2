@@ -117,7 +117,8 @@
 </header>
 
 <div class="stale-banner hidden" id="stale-banner">
-    <span>Spec files have changed on disk.</span>
+    <span id="stale-banner-text">Spec files have changed on disk.</span>
+    <button class="btn btn-sm" onclick="reloadFromMemory()">Show Changes</button>
     <button class="btn btn-sm" onclick="refreshFromDisk()">Refresh Now</button>
     <button class="btn btn-sm stale-dismiss" onclick="dismissStaleBanner()">&times;</button>
 </div>

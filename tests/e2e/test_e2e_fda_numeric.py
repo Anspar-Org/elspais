@@ -255,16 +255,21 @@ class TestMCPNumericAssertions:
             assert "0" in labels
             assert "1" in labels
 
-            # Add another numeric assertion
-            mcp_call(
+            # Add another numeric assertion, guarded by the version token from
+            # the read above (REQ-o00062 optimistic concurrency).
+            version = req.get("version")
+            assert version, f"get_requirement reported no version token: {req}"
+            result = mcp_call(
                 proc,
                 "mutate_add_assertion",
                 {
                     "req_id": "PRD-00001",
                     "label": "2",
                     "text": "The system SHALL do two.",
+                    "if_version": version,
                 },
             )
+            assert result.get("success") is True, f"mutate_add_assertion failed: {result}"
 
             # Verify it was added
             req2 = mcp_call(proc, "get_requirement", {"req_id": "PRD-00001"})

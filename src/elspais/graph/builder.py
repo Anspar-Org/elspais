@@ -11,7 +11,7 @@ traceability graph from parsed content.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -478,6 +478,34 @@ class TraceGraph:
             self._undo_add_changelog_entry(entry)
         # Unknown operations are silently ignored (forward compatibility)
 
+    def _retarget_broken_refs(self, old_id: str, new_id: str) -> None:
+        """Rewrite broken references (and their leftovers) after a rename.
+
+        Handles the renamed node as broken-ref source, as exact target, and
+        as the base of assertion-suffixed targets (``old_id-<label>``, the
+        form partial multi-assertion leftovers take). All BrokenReference
+        fields (diagnostic, presumed_foreign) are preserved. When a target
+        changes, the source node's stored leftover field is kept in sync so
+        the render agrees with the broken-reference report (REQ-d00132-G).
+        """
+        suffix_prefix = old_id + "-"
+        for i, br in enumerate(self._broken_references):
+            new_source = new_id if br.source_id == old_id else br.source_id
+            if br.target_id == old_id:
+                new_target = new_id
+            elif br.target_id.startswith(suffix_prefix):
+                new_target = new_id + br.target_id[len(old_id) :]
+            else:
+                new_target = br.target_id
+            if (new_source, new_target) == (br.source_id, br.target_id):
+                continue
+            self._broken_references[i] = replace(br, source_id=new_source, target_id=new_target)
+            if new_target != br.target_id:
+                source_node = self._index.get(new_source)
+                ref_kind = EdgeKind(br.edge_kind)
+                self._remove_leftover_ref(source_node, ref_kind, br.target_id)
+                self._add_leftover_ref(source_node, ref_kind, new_target)
+
     def _undo_rename_node(self, entry: MutationEntry) -> None:
         """Undo a node rename operation."""
         old_id = entry.before_state.get("id")
@@ -494,12 +522,18 @@ class TraceGraph:
                 child.set_id(old_child_id)
                 self._index[old_child_id] = child
 
+        # Reverse the broken-reference/leftover retargeting done by rename_node.
+        if old_id and new_id:
+            self._retarget_broken_refs(new_id, old_id)
+        self._restore_journey_bodies(entry)
+
     def _undo_update_title(self, entry: MutationEntry) -> None:
         """Undo a title update operation."""
         node_id = entry.target_id
         old_title = entry.before_state.get("title")
         if node_id in self._index and old_title is not None:
             self._index[node_id].set_label(old_title)
+            self._restore_journey_bodies(entry)
 
     def _undo_change_status(self, entry: MutationEntry) -> None:
         """Undo a status change operation."""
@@ -530,18 +564,104 @@ class TraceGraph:
             for parent in list(node.iter_parents()):
                 parent.unlink(node)
 
+    @staticmethod
+    def _restore_edge_attrs(edge: Any, metadata: dict, targets: list[str]) -> None:
+        """Reapply captured metadata and assertion targets to a replayed edge.
+
+        assertion_targets is a first-class Edge attribute, not metadata.
+        Dropping it silently downgrades assertion-scoped references to blanket
+        whole-requirement ones. Implements: REQ-o00062-P
+        """
+        if edge is None:
+            return
+        if metadata:
+            edge.metadata.update(metadata)
+        if targets:
+            edge.assertion_targets.clear()
+            edge.assertion_targets.extend(targets)
+
     def _undo_delete_requirement(self, entry: MutationEntry) -> None:
-        """Undo a delete requirement operation (restore the node)."""
-        # Find and restore from deleted_nodes
+        """Undo a delete requirement, restoring the node AND its attachment.
+
+        Restoring index membership alone leaves the requirement orphaned:
+        with no CONTAINS edge from its FILE it renders into no file, so a
+        "successful" undo would still lose it on the next save. Both edge
+        directions, assertion children, orphan bookkeeping, and root
+        membership are restored too. Implements: REQ-o00062-P
+        """
         node_id = entry.target_id
-        for i, node in enumerate(self._deleted_nodes):
-            if node.id == node_id:
-                self._deleted_nodes.pop(i)
+        node = None
+        for i, deleted in enumerate(self._deleted_nodes):
+            if deleted.id == node_id:
+                node = self._deleted_nodes.pop(i)
                 self._index[node_id] = node
-                # Restore as root if it was one
-                if entry.before_state.get("was_root"):
-                    self._roots.append(node)
                 break
+        if node is None:
+            return
+
+        # Restore assertion children popped alongside the node
+        for child_id in entry.before_state.get("assertion_child_ids", []):
+            for i, deleted in enumerate(self._deleted_nodes):
+                if deleted.id == child_id:
+                    self._index[child_id] = self._deleted_nodes.pop(i)
+                    break
+
+        # Replay both edge directions with their metadata and targets
+        for parent_id, kind, metadata, targets in entry.before_state.get("parent_edges", []):
+            parent = self._index.get(parent_id)
+            if parent is not None:
+                self._restore_edge_attrs(parent.link(node, EdgeKind(kind)), metadata, targets)
+        for child_id, kind, metadata, targets in entry.before_state.get("child_edges", []):
+            child = self._index.get(child_id)
+            if child is not None:
+                self._restore_edge_attrs(node.link(child, EdgeKind(kind)), metadata, targets)
+
+        # Children orphaned by the deletion are attached again
+        for child_id in entry.before_state.get("orphaned_child_ids", []):
+            self._orphaned_ids.discard(child_id)
+
+        # Restore as root if it was one
+        if entry.before_state.get("was_root") and not any(r.id == node_id for r in self._roots):
+            self._roots.append(node)
+
+        # Restore broken references retired with the node (REQ-d00132-G)
+        for br_dict in entry.before_state.get("purged_broken_refs", []):
+            self._broken_references.append(BrokenReference(**br_dict))
+
+    # Stored ref fields hold UNRESOLVED leftovers only (REQ-d00132-F/G):
+    # build() strips refs that became edges, and the mutation paths below
+    # keep the leftovers in sync so the render (derived-from-edges UNION
+    # leftovers) always reflects the graph.
+    _LEFTOVER_REF_FIELDS = {
+        EdgeKind.IMPLEMENTS: "implements_refs",
+        EdgeKind.REFINES: "refines_refs",
+    }
+
+    def _add_leftover_ref(self, node: GraphNode | None, edge_kind: EdgeKind, ref: str) -> None:
+        """Record an unresolved reference so it keeps rendering.
+
+        Implements: REQ-d00132-G
+        """
+        field = self._LEFTOVER_REF_FIELDS.get(edge_kind)
+        if node is None or field is None or node.kind != NodeKind.REQUIREMENT:
+            return
+        stored = list(node.get_field(field) or [])
+        if ref not in stored:
+            stored.append(ref)
+            node.set_field(field, stored)
+
+    def _remove_leftover_ref(self, node: GraphNode | None, edge_kind: EdgeKind, ref: str) -> None:
+        """Drop an unresolved reference that has been resolved or undone.
+
+        Implements: REQ-d00132-G
+        """
+        field = self._LEFTOVER_REF_FIELDS.get(edge_kind)
+        if node is None or field is None or node.kind != NodeKind.REQUIREMENT:
+            return
+        stored = list(node.get_field(field) or [])
+        if ref in stored:
+            stored.remove(ref)
+            node.set_field(field, stored)
 
     def _undo_add_edge(self, entry: MutationEntry) -> None:
         """Undo an add edge operation."""
@@ -560,6 +680,11 @@ class TraceGraph:
                     for br in self._broken_references
                     if not (br.source_id == source_id and br.target_id == target_id)
                 ]
+                kind_val = entry.after_state.get("edge_kind", "")
+                if kind_val:
+                    self._remove_leftover_ref(
+                        self._index.get(source_id), EdgeKind(kind_val), target_id
+                    )
             else:
                 # Remove the specific edge that was added
                 source = self._index.get(source_id)
@@ -575,6 +700,7 @@ class TraceGraph:
                         ):
                             target.remove_edge(edge)
                             break
+                    self._restore_journey_bodies(entry)
 
             # Restore orphan status
             if was_orphan and source_id in self._index:
@@ -594,6 +720,7 @@ class TraceGraph:
             if source and target:
                 edge_kind = EdgeKind(edge_kind_str)
                 target.link(source, edge_kind, assertion_targets or None)
+                self._restore_journey_bodies(entry)
 
                 # Remove from orphans if it was marked orphan after deletion
                 if became_orphan:
@@ -613,6 +740,7 @@ class TraceGraph:
                     if edge.source.id == target_id:
                         edge.kind = EdgeKind(old_kind)
                         break
+                self._restore_journey_bodies(entry)
 
     def _undo_change_edge_targets(self, entry: MutationEntry) -> None:
         """Undo an edge assertion_targets change."""
@@ -626,10 +754,12 @@ class TraceGraph:
                     if edge.source.id == target_id and edge.kind in (
                         EdgeKind.IMPLEMENTS,
                         EdgeKind.REFINES,
+                        EdgeKind.VALIDATES,
                     ):
                         edge.assertion_targets.clear()
                         edge.assertion_targets.extend(old_targets)
                         break
+                self._restore_journey_bodies(entry)
 
     def _undo_move_node_to_file(self, entry: MutationEntry) -> None:
         """Undo a move_node_to_file operation."""
@@ -685,6 +815,7 @@ class TraceGraph:
                 new_target = self._index.get(new_target_id)
                 if source and new_target:
                     new_target.unlink(source)
+                    self._restore_journey_bodies(entry)
             else:
                 # Remove from broken references (with new target)
                 self._broken_references = [
@@ -692,8 +823,9 @@ class TraceGraph:
                     for br in self._broken_references
                     if not (br.source_id == source_id and br.target_id == new_target_id)
                 ]
+                self._remove_leftover_ref(source, EdgeKind(edge_kind_str), new_target_id)
 
-            # Restore the original broken reference
+            # Restore the original broken reference and its leftover (REQ-d00132-G)
             self._broken_references.append(
                 BrokenReference(
                     source_id=source_id,
@@ -701,6 +833,7 @@ class TraceGraph:
                     edge_kind=edge_kind_str,
                 )
             )
+            self._add_leftover_ref(source, EdgeKind(edge_kind_str), old_target_id)
 
             # Restore orphan status
             if was_orphan and source_id in self._index:
@@ -856,14 +989,39 @@ class TraceGraph:
             for parent in list(node.iter_parents()):
                 parent.unlink(node)
 
+    # Implements: REQ-o00062-P
     def _undo_delete_journey(self, entry: MutationEntry) -> None:
-        """Undo a delete journey operation (restore the node)."""
+        """Undo a delete journey operation, restoring the node AND its edges.
+
+        Restoring index membership alone leaves the journey orphaned: with no
+        CONTAINS edge from its FILE it belongs to no file and renders nowhere,
+        so a "successful" undo would still lose it on the next save. Root
+        membership and both edge directions are restored too.
+        """
         node_id = entry.target_id
-        for i, node in enumerate(self._deleted_nodes):
-            if node.id == node_id:
-                self._deleted_nodes.pop(i)
+        node = None
+        for i, deleted in enumerate(self._deleted_nodes):
+            if deleted.id == node_id:
+                node = self._deleted_nodes.pop(i)
                 self._index[node_id] = node
                 break
+        if node is None:
+            return
+
+        for parent_id, kind, metadata, targets in entry.before_state.get("parent_edges", []):
+            parent = self._index.get(parent_id)
+            if parent is None:
+                continue
+            self._restore_edge_attrs(parent.link(node, EdgeKind(kind)), metadata, targets)
+
+        for child_id, kind, metadata, targets in entry.before_state.get("child_edges", []):
+            child = self._index.get(child_id)
+            if child is None:
+                continue
+            self._restore_edge_attrs(node.link(child, EdgeKind(kind)), metadata, targets)
+
+        if entry.before_state.get("was_root") and not any(r.id == node_id for r in self._roots):
+            self._roots.append(node)
 
     def _undo_update_remainder(self, entry: MutationEntry) -> None:
         """Undo an update_remainder by restoring original text/heading."""
@@ -955,7 +1113,11 @@ class TraceGraph:
         entry = MutationEntry(
             operation="rename_node",
             target_id=old_id,
-            before_state={"id": old_id, "title": old_title},
+            before_state={
+                "id": old_id,
+                "title": old_title,
+                "journey_bodies": self._journey_bodies_snapshot(node),
+            },
             after_state={"id": new_id, "title": old_title},
         )
 
@@ -973,20 +1135,9 @@ class TraceGraph:
             self._orphaned_ids.discard(old_id)
             self._orphaned_ids.add(new_id)
 
-        # Update broken references that reference this node
-        for i, br in enumerate(self._broken_references):
-            if br.source_id == old_id:
-                self._broken_references[i] = BrokenReference(
-                    source_id=new_id,
-                    target_id=br.target_id,
-                    edge_kind=br.edge_kind,
-                )
-            elif br.target_id == old_id:
-                self._broken_references[i] = BrokenReference(
-                    source_id=br.source_id,
-                    target_id=new_id,
-                    edge_kind=br.edge_kind,
-                )
+        # Update broken references (and their rendered leftovers) that
+        # reference this node
+        self._retarget_broken_refs(old_id, new_id)
 
         # Collect child ID pairs for undo support (assertions and steps).
         child_ids_renamed: list[tuple[str, str]] = []
@@ -1029,6 +1180,9 @@ class TraceGraph:
         # Implements: REQ-d00230-C
         update_anchors_on_rename(self._comment_index, old_id, new_id, self.repo_root)
 
+        # A journey's cached body embeds its ID in the header line
+        self._reconcile_journey_bodies(node)
+
         self._mutation_log.append(entry)
         return entry
 
@@ -1054,11 +1208,15 @@ class TraceGraph:
         entry = MutationEntry(
             operation="update_title",
             target_id=node_id,
-            before_state={"title": old_title},
+            before_state={
+                "title": old_title,
+                "journey_bodies": self._journey_bodies_snapshot(node),
+            },
             after_state={"title": new_title},
         )
 
         node.set_label(new_title)
+        self._reconcile_journey_bodies(node)
         self._mutation_log.append(entry)
         return entry
 
@@ -1328,12 +1486,36 @@ class TraceGraph:
                 "parent_ids": [p.id for p in node.iter_parents()],
                 "child_ids": [c.id for c in node.iter_children()],
                 "source_path": source_path,
+                # Implements: REQ-o00062-P
+                # Full edge capture so undo reattaches the requirement rather
+                # than restoring an orphan that renders into no file.
+                "parent_edges": [
+                    (e.source.id, e.kind.value, dict(e.metadata), list(e.assertion_targets or []))
+                    for e in node.iter_incoming_edges()
+                ],
+                "child_edges": [
+                    (e.target.id, e.kind.value, dict(e.metadata), list(e.assertion_targets or []))
+                    for e in node.iter_outgoing_edges()
+                ],
+                "assertion_child_ids": [
+                    c.id for c in node.iter_children() if c.kind == NodeKind.ASSERTION
+                ],
             },
             after_state={},  # Node deleted
         )
 
         # Remove from index
         self._index.pop(node_id)
+
+        # Retire broken references sourced from the deleted node — a node
+        # that no longer exists has no references to report as broken.
+        # Recorded for undo restoration. Implements: REQ-d00132-G
+        purged_broken = [br for br in self._broken_references if br.source_id == node_id]
+        if purged_broken:
+            self._broken_references = [
+                br for br in self._broken_references if br.source_id != node_id
+            ]
+            entry.before_state["purged_broken_refs"] = [asdict(br) for br in purged_broken]
 
         # Move to deleted_nodes for delta tracking
         self._deleted_nodes.append(node)
@@ -1350,16 +1532,21 @@ class TraceGraph:
             parent.unlink(node)
 
         # Mark children as orphans (except assertions which go with the req)
+        orphaned_children: list[str] = []
         for child in list(node.iter_children()):
             if child.kind == NodeKind.ASSERTION:
-                # Delete assertion children too
+                # Delete assertion children too. Sever the edge so undo can
+                # replay the captured child_edges without duplicating it.
                 if child.id in self._index:
                     self._index.pop(child.id)
                     self._deleted_nodes.append(child)
+                node.unlink(child)
             else:
                 # Non-assertion children become orphans
                 node.unlink(child)
                 self._orphaned_ids.add(child.id)
+                orphaned_children.append(child.id)
+        entry.before_state["orphaned_child_ids"] = orphaned_children
 
         self._mutation_log.append(entry)
         return entry
@@ -1759,6 +1946,7 @@ class TraceGraph:
                 "source_id": source_id,
                 "target_id": target_id,
                 "was_orphan": was_orphan,
+                "journey_bodies": self._journey_bodies_snapshot(source, target),
             },
             after_state={
                 "source_id": source_id,
@@ -1786,6 +1974,7 @@ class TraceGraph:
 
             # Source is no longer orphan (it now has a parent)
             self._orphaned_ids.discard(source_id)
+            self._reconcile_journey_bodies(source, target)
         else:
             # Target doesn't exist - record as broken reference
             self._broken_references.append(
@@ -1796,6 +1985,8 @@ class TraceGraph:
                 )
             )
             entry.after_state["broken"] = True
+            # The unresolved ref must still render (REQ-d00132-G)
+            self._add_leftover_ref(source, edge_kind, target_id)
 
         self._mutation_log.append(entry)
         return entry
@@ -1848,6 +2039,7 @@ class TraceGraph:
                 "target_id": target_id,
                 "edge_kind": old_kind.value,
                 "assertion_targets": list(edge_to_update.assertion_targets),
+                "journey_bodies": self._journey_bodies_snapshot(source, self._index.get(target_id)),
             },
             after_state={
                 "source_id": source_id,
@@ -1859,6 +2051,7 @@ class TraceGraph:
 
         # Update the edge kind directly (dataclass field, not _kind)
         edge_to_update.kind = new_kind
+        self._reconcile_journey_bodies(source, self._index.get(target_id))
 
         self._mutation_log.append(entry)
         return entry
@@ -1916,6 +2109,7 @@ class TraceGraph:
                 "source_id": source_id,
                 "target_id": target_id,
                 "assertion_targets": old_targets,
+                "journey_bodies": self._journey_bodies_snapshot(source, self._index.get(target_id)),
             },
             after_state={
                 "source_id": source_id,
@@ -1927,6 +2121,7 @@ class TraceGraph:
         # Update assertion_targets in place
         edge_to_update.assertion_targets.clear()
         edge_to_update.assertion_targets.extend(assertion_targets)
+        self._reconcile_journey_bodies(source, self._index.get(target_id))
 
         self._mutation_log.append(entry)
         return entry
@@ -1974,6 +2169,7 @@ class TraceGraph:
                 "target_id": target_id,
                 "edge_kind": edge_to_delete.kind.value,
                 "assertion_targets": list(edge_to_delete.assertion_targets),
+                "journey_bodies": self._journey_bodies_snapshot(source, target),
             },
             after_state={
                 "source_id": source_id,
@@ -1983,6 +2179,7 @@ class TraceGraph:
 
         # Remove the specific edge (not all edges between these nodes)
         target.remove_edge(edge_to_delete)
+        self._reconcile_journey_bodies(source, target)
 
         # Check if source is now orphaned (no parents, not a root)
         if source.parent_count() == 0 and not self.has_root(source_id):
@@ -2268,6 +2465,7 @@ class TraceGraph:
                 "old_target_id": old_target_id,
                 "edge_kind": broken_ref.edge_kind,
                 "was_orphan": was_orphan,
+                "journey_bodies": self._journey_bodies_snapshot(source, new_target),
             },
             after_state={
                 "source_id": source_id,
@@ -2276,12 +2474,14 @@ class TraceGraph:
             },
         )
 
-        # Remove the old broken reference
+        # Remove the old broken reference and its rendered leftover (REQ-d00132-G)
         self._broken_references.pop(broken_ref_index)
+        self._remove_leftover_ref(source, edge_kind, old_target_id)
 
         if new_target:
             # Create valid edge
             new_target.link(source, edge_kind)
+            self._reconcile_journey_bodies(source, new_target)
 
             # Source is no longer orphan
             self._orphaned_ids.discard(source_id)
@@ -2295,6 +2495,7 @@ class TraceGraph:
                     edge_kind=broken_ref.edge_kind,
                 )
             )
+            self._add_leftover_ref(source, edge_kind, new_target_id)
             entry.after_state["still_broken"] = True
 
         self._mutation_log.append(entry)
@@ -2317,13 +2518,29 @@ class TraceGraph:
         context = node.get_field("context")
         if context:
             lines.append(f"**Context**: {context}")
-        # Validates references from live graph edges (REQ is parent of JNY)
-        validates_refs: list[str] = []
+        # Validates references from live graph edges (REQ is parent of JNY).
+        # Aggregate assertion targets per source so `Validates: REQ-x-A+B`
+        # round-trips instead of degrading to duplicate whole-req refs
+        # (mirrors _derive_refs_for_edge_kind in graph/render.py).
+        by_source: dict[str, tuple[bool, set[str]]] = {}
         for edge in node.iter_incoming_edges():
-            if edge.kind == EdgeKind.VALIDATES:
-                validates_refs.append(edge.source.id)
+            if edge.kind != EdgeKind.VALIDATES:
+                continue
+            whole, labels = by_source.get(edge.source.id, (False, set()))
+            if edge.assertion_targets:
+                labels.update(edge.assertion_targets)
+            else:
+                whole = True
+            by_source[edge.source.id] = (whole, labels)
+        validates_refs: list[str] = []
+        for src in sorted(by_source):
+            whole, labels = by_source[src]
+            if whole or not labels:
+                validates_refs.append(src)
+            if labels:
+                validates_refs.append(f"{src}-{'+'.join(sorted(labels))}")
         if validates_refs:
-            lines.append(f"Validates: {', '.join(sorted(validates_refs))}")
+            lines.append(f"Validates: {', '.join(validates_refs)}")
         preamble = node.get_field("body_lines", [])
         if preamble:
             lines.append("")
@@ -2335,6 +2552,40 @@ class TraceGraph:
         lines.append("")
         lines.append(render_end_marker(node.id, None))
         return "\n".join(lines)
+
+    def _journey_bodies_snapshot(self, *nodes: GraphNode | None) -> dict[str, str]:
+        """Capture the exact cached body of any USER_JOURNEY among *nodes*.
+
+        Stored in a mutation's before_state so undo restores the journey's
+        body byte-for-byte; forward reconciliation canonicalizes, so
+        re-reconstructing on undo would not round-trip the original text.
+        """
+        return {
+            node.id: node.get_field("body")
+            for node in nodes
+            if node is not None and node.kind == NodeKind.USER_JOURNEY
+        }
+
+    def _restore_journey_bodies(self, entry: MutationEntry) -> None:
+        """Restore journey bodies captured by _journey_bodies_snapshot."""
+        for node_id, body in (entry.before_state.get("journey_bodies") or {}).items():
+            node = self._index.get(node_id)
+            if node is not None:
+                node.set_field("body", body)
+
+    def _reconcile_journey_bodies(self, *nodes: GraphNode | None) -> None:
+        """Refresh the cached body of any USER_JOURNEY among *nodes*.
+
+        Journeys render — and derive their concurrency version — from the
+        cached ``body`` field, so every mutation that changes their ID,
+        title, or VALIDATES edges must fold the live state back into that
+        cache. Otherwise the mutation reports success while the render (and
+        the version token) silently keeps the pre-mutation text.
+        Implements: REQ-d00131-L, REQ-o00062-K
+        """
+        for node in nodes:
+            if node is not None and node.kind == NodeKind.USER_JOURNEY:
+                node.set_field("body", self._reconstruct_journey_body(node))
 
     def update_journey_field(self, node_id: str, field_name: str, value: str) -> MutationEntry:
         """Update a structured field on a USER_JOURNEY node and reconstruct body.
@@ -2893,6 +3144,17 @@ class TraceGraph:
                 "was_root": was_root,
                 "source_path": source_path,
                 "validates_ids": validates_ids,
+                # Implements: REQ-o00062-P
+                # Full edge capture so undo can reattach the journey rather
+                # than restoring an orphan that renders into no file.
+                "parent_edges": [
+                    (e.source.id, e.kind.value, dict(e.metadata), list(e.assertion_targets or []))
+                    for e in node.iter_incoming_edges()
+                ],
+                "child_edges": [
+                    (e.target.id, e.kind.value, dict(e.metadata), list(e.assertion_targets or []))
+                    for e in node.iter_outgoing_edges()
+                ],
             },
             after_state={},
         )
@@ -4160,7 +4422,10 @@ class GraphBuilder:
             for resolved_target in self._expand_multi_assertion(target_id):
                 expanded_links.append((source_id, resolved_target, edge_kind))
 
-        # Resolve pending links
+        # Resolve pending links. Track which (source, target, kind) refs
+        # actually became edges so the stored ref fields can be re-scoped to
+        # unresolved leftovers afterwards (REQ-d00132-F, REQ-d00132-G).
+        resolved_refs: set[tuple[str, str, str]] = set()
         for source_id, target_id, edge_kind in expanded_links:
             source = self._nodes.get(source_id)
             target = self._nodes.get(target_id)
@@ -4283,6 +4548,8 @@ class GraphBuilder:
                     # Link target as parent of source (implements relationship)
                     edge = target.link(source, edge_kind)
 
+                resolved_refs.add((source_id, target_id, edge_kind.value))
+
                 # Store implementation line range on IMPLEMENTS/VERIFIES edges
                 if edge_kind in (EdgeKind.IMPLEMENTS, EdgeKind.VERIFIES):
                     impl_start = source.get_field("function_line") or source.get_field("parse_line")
@@ -4370,6 +4637,34 @@ class GraphBuilder:
         # fully-resolved graph. Catches rules that need post-link context
         # (currently rule 7: template REQs declaring behavioural metadata).
         self._validate_template_marker_consistency()
+
+        # Implements: REQ-d00132-F, REQ-d00132-G
+        # Re-scope the stored implements/refines fields to unresolved
+        # leftovers only. Refs that became edges are stripped — the render
+        # derives them from the live edges, so edge mutations (including
+        # deleting the LAST edge of a kind) are reflected in the output.
+        # Refs that never resolved stay stored so a rewrite cannot silently
+        # delete an author's broken reference. Multi-assertion refs keep
+        # only their unresolved expansions. Must run AFTER
+        # _validate_template_marker_consistency(), which reads the raw
+        # parsed fields.
+        for node in self._nodes.values():
+            if node.kind != NodeKind.REQUIREMENT:
+                continue
+            for ref_kind, field_name in (
+                (EdgeKind.IMPLEMENTS, "implements_refs"),
+                (EdgeKind.REFINES, "refines_refs"),
+            ):
+                stored_refs = node.get_field(field_name)
+                if not stored_refs:
+                    continue
+                leftovers = [
+                    expanded
+                    for ref in stored_refs
+                    for expanded in self._expand_multi_assertion(ref)
+                    if (node.id, expanded, ref_kind.value) not in resolved_refs
+                ]
+                node.set_field(field_name, leftovers)
 
         # Populate _expected_broken_targets from nodes with the marker
         for br in self._broken_references:

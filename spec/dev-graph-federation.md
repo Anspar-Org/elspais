@@ -94,18 +94,23 @@ G. The federation SHALL identify a repository across discovery paths by its git 
 
 H. When two federated repositories both claim the same requirement ID, the build SHALL fail with an error naming the ID and both repositories.
 
+I. When scanning directories for candidate associates, a directory whose elspais configuration fails to parse or validate SHALL be skipped without aborting the scan, and each skip SHALL be reported with the directory path and the reason. Directories without an elspais configuration are not candidates and need no report.
+
 ### Rationale
 
 Associates are declared in `.elspais.toml` using a structured TOML section. Each associate specifies a relative filesystem path and optional git remote URL. Transitive federation was originally disallowed (assertion D was a hard error) to keep the topology simple; that guard made symmetric or chained repo arrangements unusable from any repository but the root (TOOL-33) and blocked federating an org-policy repository reachable through a chain (TOOL-38). Directed cycles remain a genuine error because dependency direction drives resolution order; diamonds are convergence, not cycles, and the git-origin identity rule (assertion G) is what makes the two distinguishable. Disjoint ID spaces (assertion H) were previously enforced but undocumented — federating repositories must use non-overlapping ID patterns.
 
 ### Changelog
 
-- 2026-07-30 | 0379ce9c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-02 | 2a648c8e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-02 | 1bc0e4b5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | de074317 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38/TOOL-33: replace the transitive-associates hard error (D) with transitive resolution; add cycle (E), diamond (F), git-origin identity (G), and disjoint-ID-space (H) rules
+- 2026-07-30 | 0379ce9c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 479dcbb8 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 479dcbb8 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Associates Config Loading* | **Hash**: 0379ce9c
+*End* *Associates Config Loading* | **Hash**: 2a648c8e
 ---
 
 ## REQ-d00203: Multi-Repo Build Pipeline
@@ -239,6 +244,8 @@ D. MCP mutation tools SHALL reject mutations targeting associate-owned nodes whe
 
 E. Write and index eligibility SHALL be declarable per associate entry, with the `[federation]` table values serving as defaults for entries that do not declare their own.
 
+F. When `elspais fix` detects fixable issues in associate-owned content it will not write, its report SHALL distinguish those from applied fixes by prefixing each such line with `[skipping]`; the output SHALL never claim an associate-owned fix was applied.
+
 ### Rationale
 
 Federation is fundamentally a read and validation aggregation: associates provide cross-repo reference resolution and coverage inheritance without surrendering write authority. Making the write and generation surfaces primary-repo-only by default prevents `elspais fix` and MCP mutations from silently editing files in repositories the operator does not own. The `[federation]` opt-in flags keep the safe default while allowing deliberate multi-repo authoring when an operator owns every associate.
@@ -247,11 +254,14 @@ Global booleans alone cannot express the common cross-repo workflow — enable w
 
 ### Changelog
 
+- 2026-08-02 | 6bd9cd1d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-02 | f145d18a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | e3cca300 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-30 | 9a6e0bd7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: add per-entry write/index eligibility (E)
 - 2026-06-01 | 28c8c538 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Federation Write/Generation Scope* | **Hash**: 9a6e0bd7
+*End* *Federation Write/Generation Scope* | **Hash**: 6bd9cd1d
 ---
 
 ## REQ-d00260: Workspace Registry and Federated View Assembly

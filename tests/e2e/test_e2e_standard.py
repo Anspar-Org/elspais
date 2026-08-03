@@ -1,5 +1,6 @@
 # Verifies: REQ-p00002, REQ-p00003, REQ-p00004, REQ-p00060,
-#            REQ-d00074-A+B+C+D, REQ-d00080, REQ-d00085-A, REQ-d00250-E
+#            REQ-d00074-A+B+C+D, REQ-d00080, REQ-d00085-A, REQ-d00250-E,
+#            REQ-o00062-I+J+K, REQ-d00131-L
 """Standard workhorse e2e tests — module-scoped fixture with daemon acceleration.
 
 Tests standard 3-tier hierarchy (REQ-p/o/d), uppercase assertions,
@@ -58,6 +59,40 @@ def mcp_server(project):
     proc = start_mcp(project)
     yield proc
     stop_mcp(proc)
+
+
+# ---------------------------------------------------------------------------
+# Optimistic-concurrency helpers (REQ-o00062): every mutate_* call needs the
+# target's version token from a prior read, and every history-level operation
+# (undo/save/forced refresh) needs the mutation-log tip.
+# ---------------------------------------------------------------------------
+
+
+def _version_of(mcp_server, node_id: str) -> str:
+    """Current version token for node_id (sub-nodes resolve to their owner)."""
+    from .helpers import mcp_call
+
+    versions = mcp_call(mcp_server, "get_versions", {"node_ids": [node_id]})
+    assert node_id in versions, f"get_versions omitted {node_id}: {versions}"
+    return versions[node_id]
+
+
+def _log_tip(mcp_server) -> str:
+    """The mutation-log tip (id of the newest pending entry), or '' if none."""
+    from .helpers import mcp_call
+
+    log = mcp_call(mcp_server, "get_mutation_log", {"limit": 1})
+    return log.get("current_tip", "")
+
+
+def _undo(mcp_server) -> dict:
+    """Undo the last mutation, threading the current mutation-log tip."""
+    from .helpers import mcp_call
+
+    result = mcp_call(mcp_server, "undo_last_mutation", {"if_mutation_id": _log_tip(mcp_server)})
+    assert isinstance(result, dict)
+    assert not result.get("code"), f"undo rejected: {result}"
+    return result
 
 
 # ===================================================================
@@ -1191,7 +1226,7 @@ class TestStandardMCPMutations:
         get_result = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00099"})
         assert get_result and get_result.get("id") == "REQ-p00099"
 
-        undo = mcp_call(mcp_server, "undo_last_mutation", {})
+        undo = _undo(mcp_server)
         assert isinstance(undo, dict)
 
         after_undo = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00099"})
@@ -1203,39 +1238,55 @@ class TestStandardMCPMutations:
         original = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00001"})
         orig_title = original["title"]
 
-        mcp_call(
+        result = mcp_call(
             mcp_server,
             "mutate_update_title",
-            {"node_id": "REQ-p00001", "new_title": "Updated Title"},
+            {
+                "node_id": "REQ-p00001",
+                "new_title": "Updated Title",
+                "if_version": original["version"],
+            },
         )
+        assert result.get("success"), f"update_title failed: {result}"
 
         updated = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00001"})
         assert updated["title"] == "Updated Title"
 
-        mcp_call(mcp_server, "undo_last_mutation", {})
+        _undo(mcp_server)
         reverted = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00001"})
         assert reverted["title"] == orig_title
 
     def test_03_mutation_log(self, project, mcp_server):
         from .helpers import mcp_call
 
-        mcp_call(
+        first = mcp_call(
             mcp_server,
             "mutate_update_title",
-            {"node_id": "REQ-p00001", "new_title": "Title V1"},
+            {
+                "node_id": "REQ-p00001",
+                "new_title": "Title V1",
+                "if_version": _version_of(mcp_server, "REQ-p00001"),
+            },
         )
-        mcp_call(
+        assert first.get("success"), f"first update failed: {first}"
+        # Thread the returned token into the next write of the same node.
+        second = mcp_call(
             mcp_server,
             "mutate_update_title",
-            {"node_id": "REQ-p00001", "new_title": "Title V2"},
+            {
+                "node_id": "REQ-p00001",
+                "new_title": "Title V2",
+                "if_version": first["version"],
+            },
         )
+        assert second.get("success"), f"second update failed: {second}"
 
         log = mcp_call(mcp_server, "get_mutation_log", {"limit": 10})
         assert isinstance(log, (list, dict))
 
         # Undo both to restore original state
-        mcp_call(mcp_server, "undo_last_mutation", {})
-        mcp_call(mcp_server, "undo_last_mutation", {})
+        _undo(mcp_server)
+        _undo(mcp_server)
 
     def test_04_add_assertion(self, project, mcp_server):
         from .helpers import mcp_call
@@ -1243,17 +1294,23 @@ class TestStandardMCPMutations:
         result = mcp_call(
             mcp_server,
             "mutate_add_assertion",
-            {"req_id": "REQ-p00001", "label": "D", "text": "The system SHALL support SSO."},
+            {
+                "req_id": "REQ-p00001",
+                "label": "D",
+                "text": "The system SHALL support SSO.",
+                "if_version": _version_of(mcp_server, "REQ-p00001"),
+            },
         )
         assert isinstance(result, dict)
         assert not result.get("_error")
+        assert result.get("success"), f"add_assertion failed: {result}"
 
         req = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00001"})
         labels = [a.get("label", "") for a in req.get("assertions", [])]
         assert "D" in labels
 
         # Undo to restore original state
-        mcp_call(mcp_server, "undo_last_mutation", {})
+        _undo(mcp_server)
 
     def test_05_update_assertion(self, project, mcp_server):
         from .helpers import mcp_call
@@ -1264,12 +1321,16 @@ class TestStandardMCPMutations:
             {
                 "assertion_id": "REQ-p00001-A",
                 "new_text": "The system SHALL create and manage user accounts.",
+                # Assertion mutations are guarded by the owning requirement;
+                # get_versions resolves the sub-node to that owner.
+                "if_version": _version_of(mcp_server, "REQ-p00001-A"),
             },
         )
         assert isinstance(result, dict)
+        assert result.get("success"), f"update_assertion failed: {result}"
 
         # Undo to restore original state
-        mcp_call(mcp_server, "undo_last_mutation", {})
+        _undo(mcp_server)
 
     def test_06_delete_assertion_and_undo(self, project, mcp_server):
         from .helpers import mcp_call
@@ -1277,15 +1338,20 @@ class TestStandardMCPMutations:
         result = mcp_call(
             mcp_server,
             "mutate_delete_assertion",
-            {"assertion_id": "REQ-p00001-C", "confirm": True},
+            {
+                "assertion_id": "REQ-p00001-C",
+                "confirm": True,
+                "if_version": _version_of(mcp_server, "REQ-p00001-C"),
+            },
         )
         assert isinstance(result, dict)
+        assert result.get("success"), f"delete_assertion failed: {result}"
 
         req = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00001"})
         labels = [a.get("label", "") for a in req.get("assertions", [])]
         assert "C" not in labels
 
-        mcp_call(mcp_server, "undo_last_mutation", {})
+        _undo(mcp_server)
         req2 = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00001"})
         labels2 = [a.get("label", "") for a in req2.get("assertions", [])]
         assert "C" in labels2
@@ -1296,9 +1362,14 @@ class TestStandardMCPMutations:
         result = mcp_call(
             mcp_server,
             "mutate_rename_assertion",
-            {"old_id": "REQ-p00001-A", "new_label": "X"},
+            {
+                "old_id": "REQ-p00001-A",
+                "new_label": "X",
+                "if_version": _version_of(mcp_server, "REQ-p00001-A"),
+            },
         )
         assert isinstance(result, dict)
+        assert result.get("success"), f"rename_assertion failed: {result}"
 
         req = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00001"})
         labels = [a.get("label", "") for a in req.get("assertions", [])]
@@ -1306,7 +1377,7 @@ class TestStandardMCPMutations:
         assert "A" not in labels
 
         # Undo to restore original state
-        mcp_call(mcp_server, "undo_last_mutation", {})
+        _undo(mcp_server)
 
     def test_08_add_edge(self, project, mcp_server):
         from .helpers import mcp_call
@@ -1314,13 +1385,20 @@ class TestStandardMCPMutations:
         result = mcp_call(
             mcp_server,
             "mutate_add_edge",
-            {"source_id": "REQ-d00002", "target_id": "REQ-o00001", "edge_kind": "implements"},
+            {
+                "source_id": "REQ-d00002",
+                "target_id": "REQ-o00001",
+                "edge_kind": "implements",
+                # Edge mutations guard the SOURCE node only.
+                "if_version": _version_of(mcp_server, "REQ-d00002"),
+            },
         )
         assert isinstance(result, dict)
         assert not result.get("_error"), f"Edge add failed: {result}"
+        assert result.get("success"), f"Edge add rejected: {result}"
 
         # Undo to restore original state
-        mcp_call(mcp_server, "undo_last_mutation", {})
+        _undo(mcp_server)
 
     def test_09_delete_edge_and_undo(self, project, mcp_server):
         from .helpers import mcp_call
@@ -1328,11 +1406,17 @@ class TestStandardMCPMutations:
         result = mcp_call(
             mcp_server,
             "mutate_delete_edge",
-            {"source_id": "REQ-d00001", "target_id": "REQ-o00001", "confirm": True},
+            {
+                "source_id": "REQ-d00001",
+                "target_id": "REQ-o00001",
+                "confirm": True,
+                "if_version": _version_of(mcp_server, "REQ-d00001"),
+            },
         )
         assert isinstance(result, dict)
+        assert result.get("success"), f"delete_edge failed: {result}"
 
-        mcp_call(mcp_server, "undo_last_mutation", {})
+        _undo(mcp_server)
 
         hier = mcp_call(mcp_server, "get_hierarchy", {"req_id": "REQ-d00001"})
         ancestors = hier.get("ancestors", [])
@@ -1344,12 +1428,18 @@ class TestStandardMCPMutations:
         result = mcp_call(
             mcp_server,
             "mutate_change_edge_kind",
-            {"source_id": "REQ-d00003", "target_id": "REQ-d00001", "new_kind": "implements"},
+            {
+                "source_id": "REQ-d00003",
+                "target_id": "REQ-d00001",
+                "new_kind": "implements",
+                "if_version": _version_of(mcp_server, "REQ-d00003"),
+            },
         )
         assert isinstance(result, dict)
+        assert result.get("success"), f"change_edge_kind failed: {result}"
 
         # Undo to restore original state
-        mcp_call(mcp_server, "undo_last_mutation", {})
+        _undo(mcp_server)
 
     def test_11_rename_node_and_undo(self, project, mcp_server):
         from .helpers import mcp_call
@@ -1357,10 +1447,15 @@ class TestStandardMCPMutations:
         result = mcp_call(
             mcp_server,
             "mutate_rename_node",
-            {"old_id": "REQ-p00003", "new_id": "REQ-p00099"},
+            {
+                "old_id": "REQ-p00003",
+                "new_id": "REQ-p00099",
+                "if_version": _version_of(mcp_server, "REQ-p00003"),
+            },
         )
         assert isinstance(result, dict)
         assert not result.get("_error"), f"Rename failed: {result}"
+        assert result.get("success"), f"Rename rejected: {result}"
 
         req = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00099"})
         assert req and req.get("id") == "REQ-p00099"
@@ -1368,7 +1463,7 @@ class TestStandardMCPMutations:
         old = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00003"})
         assert old is None or old.get("_error") or old.get("error")
 
-        mcp_call(mcp_server, "undo_last_mutation", {})
+        _undo(mcp_server)
 
         restored = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00003"})
         assert restored and restored.get("id") == "REQ-p00003"
@@ -1379,16 +1474,21 @@ class TestStandardMCPMutations:
         result = mcp_call(
             mcp_server,
             "mutate_change_status",
-            {"node_id": "REQ-p00001", "new_status": "Draft"},
+            {
+                "node_id": "REQ-p00001",
+                "new_status": "Draft",
+                "if_version": _version_of(mcp_server, "REQ-p00001"),
+            },
         )
         assert isinstance(result, dict)
+        assert result.get("success"), f"change_status failed: {result}"
 
         req = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00001"})
         req_str = json.dumps(req)
         assert "Draft" in req_str
 
         # Undo to restore original state
-        mcp_call(mcp_server, "undo_last_mutation", {})
+        _undo(mcp_server)
 
     def test_13_delete_requirement_and_undo(self, project, mcp_server):
         from .helpers import mcp_call
@@ -1396,9 +1496,14 @@ class TestStandardMCPMutations:
         result = mcp_call(
             mcp_server,
             "mutate_delete_requirement",
-            {"node_id": "REQ-p00003", "confirm": True},
+            {
+                "node_id": "REQ-p00003",
+                "confirm": True,
+                "if_version": _version_of(mcp_server, "REQ-p00003"),
+            },
         )
         assert isinstance(result, dict)
+        assert result.get("success"), f"delete_requirement failed: {result}"
 
         req = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00003"})
         assert req is None or req.get("_error") or req.get("error")
@@ -1406,7 +1511,7 @@ class TestStandardMCPMutations:
         req1 = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00001"})
         assert req1 and req1.get("id") == "REQ-p00001"
 
-        mcp_call(mcp_server, "undo_last_mutation", {})
+        _undo(mcp_server)
 
         restored = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00003"})
         assert restored and restored.get("id") == "REQ-p00003"
@@ -1414,22 +1519,23 @@ class TestStandardMCPMutations:
     def test_14_undo_multiple(self, project, mcp_server):
         from .helpers import mcp_call
 
-        mcp_call(
-            mcp_server, "mutate_update_title", {"node_id": "REQ-p00001", "new_title": "Title V1"}
-        )
-        mcp_call(
-            mcp_server, "mutate_update_title", {"node_id": "REQ-p00001", "new_title": "Title V2"}
-        )
-        mcp_call(
-            mcp_server, "mutate_update_title", {"node_id": "REQ-p00001", "new_title": "Title V3"}
-        )
+        token = _version_of(mcp_server, "REQ-p00001")
+        for title in ("Title V1", "Title V2", "Title V3"):
+            result = mcp_call(
+                mcp_server,
+                "mutate_update_title",
+                {"node_id": "REQ-p00001", "new_title": title, "if_version": token},
+            )
+            assert result.get("success"), f"update to {title!r} failed: {result}"
+            # Thread the returned token forward between successive writes.
+            token = result["version"]
 
         log = mcp_call(mcp_server, "get_mutation_log", {"limit": 10})
         assert isinstance(log, (list, dict))
 
-        mcp_call(mcp_server, "undo_last_mutation", {})
-        mcp_call(mcp_server, "undo_last_mutation", {})
-        mcp_call(mcp_server, "undo_last_mutation", {})
+        _undo(mcp_server)
+        _undo(mcp_server)
+        _undo(mcp_server)
 
         req = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00001"})
         # Title should be back to whatever it was before these three mutations
@@ -1467,16 +1573,18 @@ class TestStandardMCPMutations:
         )
         assert isinstance(subtree, dict)
 
-        # 7. Add assertion
-        mcp_call(
+        # 7. Add assertion (guarded by the parent requirement's token)
+        add_result = mcp_call(
             mcp_server,
             "mutate_add_assertion",
             {
                 "req_id": "REQ-d00002",
                 "label": "B",
                 "text": "The module SHALL log delivery status.",
+                "if_version": req["version"],
             },
         )
+        assert add_result.get("success"), f"add_assertion failed: {add_result}"
 
         # 8. Verify
         req2 = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-d00002"})
@@ -1488,7 +1596,7 @@ class TestStandardMCPMutations:
         assert isinstance(log, (list, dict))
 
         # 10. Undo
-        mcp_call(mcp_server, "undo_last_mutation", {})
+        _undo(mcp_server)
 
         # 11. Verify undone
         req3 = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-d00002"})
@@ -1503,8 +1611,8 @@ class TestStandardMCPMutations:
         """Complex mutation workflow: add req, assertions, edges, save."""
         from .helpers import mcp_call
 
-        # 1. Add new OPS requirement
-        mcp_call(
+        # 1. Add new OPS requirement (parentless creation is unguarded)
+        added = mcp_call(
             mcp_server,
             "mutate_add_requirement",
             {
@@ -1514,33 +1622,44 @@ class TestStandardMCPMutations:
                 "status": "Draft",
             },
         )
+        assert added.get("success"), f"add_requirement failed: {added}"
 
-        # 2. Add edge
-        mcp_call(
+        # 2. Add edge (guarded by the source's token)
+        edge = mcp_call(
             mcp_server,
             "mutate_add_edge",
-            {"source_id": "REQ-o00099", "target_id": "REQ-p00001", "edge_kind": "implements"},
+            {
+                "source_id": "REQ-o00099",
+                "target_id": "REQ-p00001",
+                "edge_kind": "implements",
+                "if_version": _version_of(mcp_server, "REQ-o00099"),
+            },
         )
+        assert edge.get("success"), f"add_edge failed: {edge}"
 
-        # 3. Add assertions
-        mcp_call(
+        # 3. Add assertions, threading the returned token between writes
+        first = mcp_call(
             mcp_server,
             "mutate_add_assertion",
             {
                 "req_id": "REQ-o00099",
                 "label": "A",
                 "text": "Operations SHALL deploy new service.",
+                "if_version": edge["version"],
             },
         )
-        mcp_call(
+        assert first.get("success"), f"first add_assertion failed: {first}"
+        second = mcp_call(
             mcp_server,
             "mutate_add_assertion",
             {
                 "req_id": "REQ-o00099",
                 "label": "B",
                 "text": "Operations SHALL monitor new service.",
+                "if_version": first["version"],
             },
         )
+        assert second.get("success"), f"second add_assertion failed: {second}"
 
         # 4. Verify
         req = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-o00099"})
@@ -1553,22 +1672,37 @@ class TestStandardMCPMutations:
         ancestor_ids = [a.get("id", "") for a in hier.get("ancestors", [])]
         assert "REQ-p00001" in ancestor_ids
 
-        # 6. Save
-        save = mcp_call(mcp_server, "save_mutations", {"save_branch": False})
+        # 6. Save (requires the mutation-log tip)
+        save = mcp_call(
+            mcp_server,
+            "save_mutations",
+            {"save_branch": False, "if_tip_mutation_id": _log_tip(mcp_server)},
+        )
         assert not save.get("_error"), f"Save failed: {save}"
+        assert not save.get("code"), f"Save rejected: {save}"
 
     def test_17_save_refresh_roundtrip(self, project, mcp_server):
         """Mutate -> save -> refresh -> verify persisted."""
         from .helpers import mcp_call
 
-        mcp_call(
+        result = mcp_call(
             mcp_server,
             "mutate_update_title",
-            {"node_id": "REQ-p00001", "new_title": "Updated Via MCP"},
+            {
+                "node_id": "REQ-p00001",
+                "new_title": "Updated Via MCP",
+                "if_version": _version_of(mcp_server, "REQ-p00001"),
+            },
         )
+        assert result.get("success"), f"update_title failed: {result}"
 
-        save = mcp_call(mcp_server, "save_mutations", {"save_branch": False})
+        save = mcp_call(
+            mcp_server,
+            "save_mutations",
+            {"save_branch": False, "if_tip_mutation_id": _log_tip(mcp_server)},
+        )
         assert not save.get("_error"), f"Save failed: {save}"
+        assert not save.get("code"), f"Save rejected: {save}"
 
         refresh = mcp_call(mcp_server, "refresh_graph", {})
         assert not refresh.get("_error"), f"Refresh failed: {refresh}"
@@ -1580,15 +1714,25 @@ class TestStandardMCPMutations:
         """Save mutations persists changes to disk."""
         from .helpers import mcp_call
 
-        mcp_call(
+        update = mcp_call(
             mcp_server,
             "mutate_update_title",
-            {"node_id": "REQ-p00001", "new_title": "Persisted Title Change"},
+            {
+                "node_id": "REQ-p00001",
+                "new_title": "Persisted Title Change",
+                "if_version": _version_of(mcp_server, "REQ-p00001"),
+            },
         )
+        assert update.get("success"), f"update_title failed: {update}"
 
-        result = mcp_call(mcp_server, "save_mutations", {"save_branch": False})
+        result = mcp_call(
+            mcp_server,
+            "save_mutations",
+            {"save_branch": False, "if_tip_mutation_id": _log_tip(mcp_server)},
+        )
         assert isinstance(result, dict)
         assert not result.get("_error"), f"Save failed: {result}"
+        assert not result.get("code"), f"Save rejected: {result}"
 
         spec = project / "spec" / "prd-core.md"
         content = spec.read_text()
@@ -1629,6 +1773,7 @@ class TestStandardMCPMutations:
                 broken = mcp_call(proc, "get_broken_references", {})
                 assert isinstance(broken, (list, dict))
 
+                versions = mcp_call(proc, "get_versions", {"node_ids": ["REQ-d00001"]})
                 result = mcp_call(
                     proc,
                     "mutate_fix_broken_reference",
@@ -1636,11 +1781,177 @@ class TestStandardMCPMutations:
                         "source_id": "REQ-d00001",
                         "old_target_id": "REQ-p99999",
                         "new_target_id": "REQ-p00001",
+                        "if_version": versions["REQ-d00001"],
                     },
                 )
                 assert isinstance(result, dict)
+                assert result.get("success"), f"fix_broken_reference failed: {result}"
             finally:
                 stop_mcp(proc)
+
+
+# ===================================================================
+# Group 4b: MCP optimistic-concurrency acceptance tests
+# (REQ-o00062-I/J/K, REQ-d00131-L)
+# ===================================================================
+
+
+@pytest.mark.incremental
+class TestMCPOptimisticConcurrency:
+    """Two writers, one server: stale tokens are refused with reconcilable payloads.
+
+    Client A and client B are two independent writer sessions against the
+    same MCP server process (and therefore the same in-memory graph — the
+    situation the version guard exists for). Each session holds only the
+    version tokens from its own reads; nothing else distinguishes writers
+    on the wire, so the sessions are exercised as separate token-holding
+    flows over the shared server.
+
+    All mutations are undone at the end, so later tests see the original
+    fixture state and nothing touches disk.
+    """
+
+    NODE = "REQ-p00002"
+    state: dict = {}
+
+    def test_01_REQ_o00062_K_success_returns_new_version(self, project, mcp_server):
+        """Validates REQ-o00062-K: a successful mutation returns the node's new token."""
+        from .helpers import mcp_call
+
+        read_a = mcp_call(mcp_server, "get_requirement", {"req_id": self.NODE})
+        read_b = mcp_call(mcp_server, "get_requirement", {"req_id": self.NODE})
+        assert read_a.get("version"), f"read surface must report a version: {read_a}"
+        # Same content, same token: the version is content-derived, so two
+        # clients reading the same state hold the same token.
+        assert read_a["version"] == read_b["version"]
+        self.state["token_b"] = read_b["version"]
+        self.state["title_before"] = read_a["title"]
+
+        result = mcp_call(
+            mcp_server,
+            "mutate_update_title",
+            {
+                "node_id": self.NODE,
+                "new_title": "Title From Client A",
+                "if_version": read_a["version"],
+            },
+        )
+        assert result.get("success"), f"client A mutation failed: {result}"
+        assert result.get("version"), f"success payload must carry the new token: {result}"
+        assert result["version"] != read_a["version"], (
+            "the returned token must reflect the changed content, "
+            "not echo the token the caller sent"
+        )
+        self.state["version_after_a"] = result["version"]
+
+    def test_02_REQ_o00062_I_stale_token_is_refused(self, project, mcp_server):
+        """Validates REQ-o00062-I: a mutation with a stale token is rejected, not applied."""
+        from .helpers import mcp_call
+
+        conflict = mcp_call(
+            mcp_server,
+            "mutate_update_title",
+            {
+                "node_id": self.NODE,
+                "new_title": "Title From Client B",
+                "if_version": self.state["token_b"],
+            },
+        )
+        assert conflict.get("success") is False, f"stale write must be refused: {conflict}"
+        assert conflict.get("code") == "version_conflict", f"wrong rejection code: {conflict}"
+
+        # The refused write must not have landed: A's title is intact.
+        req = mcp_call(mcp_server, "get_requirement", {"req_id": self.NODE})
+        assert (
+            req["title"] == "Title From Client A"
+        ), f"stale write leaked through the guard: title is {req['title']!r}"
+        self.state["conflict"] = conflict
+
+    def test_03_REQ_o00062_J_conflict_carries_current_version_and_state(self, project, mcp_server):
+        """Validates REQ-o00062-J: the rejection carries current_version and current_state."""
+        conflict = self.state["conflict"]
+        assert conflict["provided_version"] == self.state["token_b"]
+        assert conflict["current_version"] == self.state["version_after_a"], (
+            "current_version in the conflict must equal the token client A "
+            f"was handed on success: {conflict}"
+        )
+        current_state = conflict.get("current_state")
+        assert isinstance(current_state, dict), f"missing current_state: {conflict}"
+        assert current_state.get("id") == self.NODE
+        # current_state reflects A's write — enough for B to reconcile
+        # without a second read.
+        assert current_state.get("title") == "Title From Client A"
+        assert current_state.get("version") == conflict["current_version"]
+
+    def test_04_REQ_o00062_K_retry_with_current_version_succeeds(self, project, mcp_server):
+        """Validates REQ-o00062-K: after reconciling, retrying with current_version succeeds."""
+        from .helpers import mcp_call
+
+        retry = mcp_call(
+            mcp_server,
+            "mutate_update_title",
+            {
+                "node_id": self.NODE,
+                "new_title": "Title From Client B",
+                "if_version": self.state["conflict"]["current_version"],
+            },
+        )
+        assert retry.get("success"), f"retry with current_version failed: {retry}"
+        req = mcp_call(mcp_server, "get_requirement", {"req_id": self.NODE})
+        assert req["title"] == "Title From Client B"
+
+        # Restore the fixture state for later tests (nothing was saved).
+        _undo(mcp_server)
+        _undo(mcp_server)
+        restored = mcp_call(mcp_server, "get_requirement", {"req_id": self.NODE})
+        assert restored["title"] == self.state["title_before"]
+
+
+@pytest.mark.incremental
+class TestVersionTokensSurviveRefresh:
+    """Tokens are content-derived, not build-instance-derived (REQ-d00131-L)."""
+
+    NODE = "REQ-o00002"
+
+    def test_01_REQ_d00131_L_refresh_on_unchanged_content_keeps_tokens_valid(
+        self, project, mcp_server
+    ):
+        """Validates REQ-d00131-L: refresh_graph over unchanged files leaves held tokens usable."""
+        from .helpers import mcp_call
+
+        before = mcp_call(mcp_server, "get_requirement", {"req_id": self.NODE})
+        token = before["version"]
+        assert token
+
+        # Earlier tests either undid or saved their mutations, so a plain
+        # (non-force) refresh must be accepted here.
+        refresh = mcp_call(mcp_server, "refresh_graph", {})
+        assert not refresh.get("_error"), f"refresh failed: {refresh}"
+        assert refresh.get("success") is not False, f"refresh refused: {refresh}"
+
+        # The rebuilt graph reports the same content-derived token...
+        assert (
+            _version_of(mcp_server, self.NODE) == token
+        ), "rebuilding from unchanged files must not change version tokens"
+
+        # ...and, decisively, a mutation guarded by the PRE-refresh token
+        # succeeds against the rebuilt graph.
+        result = mcp_call(
+            mcp_server,
+            "mutate_update_title",
+            {
+                "node_id": self.NODE,
+                "new_title": "Token Survived The Refresh",
+                "if_version": token,
+            },
+        )
+        assert result.get(
+            "success"
+        ), f"pre-refresh token was invalidated by a no-op rebuild: {result}"
+
+        _undo(mcp_server)
+        restored = mcp_call(mcp_server, "get_requirement", {"req_id": self.NODE})
+        assert restored["title"] == before["title"]
 
 
 # ===================================================================

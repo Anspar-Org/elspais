@@ -477,7 +477,6 @@ def collect_coverage(graph: Any, config: dict[str, Any] | None = None) -> dict[s
     return result
 
 
-
 __all__ = [
     "DENOMINATOR_DIMENSION",
     "TIER_TO_BUCKET",

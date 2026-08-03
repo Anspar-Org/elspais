@@ -21,9 +21,18 @@ async function apiFetch(url, options) {
     try {
         var resp = await fetch(url, options);
         var data = await resp.json();
-        if (!resp.ok && data.error) {
-            showToast(data.error, 'error');
-            return null;
+        if (!resp.ok) {
+            // A precondition rejection is a conversation, not a dead end: it
+            // carries the current state so the caller can reconcile. Hand it
+            // back with its status instead of collapsing it to a toast.
+            if (data && data.code) {
+                data._status = resp.status;
+                return data;
+            }
+            if (data.error) {
+                showToast(data.error, 'error');
+                return null;
+            }
         }
         return data;
     } catch (err) {

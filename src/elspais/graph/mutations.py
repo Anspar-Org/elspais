@@ -116,6 +116,17 @@ class MutationLog:
         """
         yield from self._entries
 
+    def tail(self, limit: int) -> list[MutationEntry]:
+        """Return the most recent ``limit`` entries, oldest-to-newest.
+
+        Returns a snapshot list, never a live iterator: concurrent writers
+        append (and undo removes) entries, and handing out a live view over
+        ``_entries`` invites skipped or double-yielded elements. The
+        snapshot is internally consistent; freshness is the tip guard's job.
+        """
+        entries = list(self._entries)
+        return entries[-limit:] if limit > 0 else entries
+
     def __len__(self) -> int:
         """Return the number of entries in the log."""
         return len(self._entries)

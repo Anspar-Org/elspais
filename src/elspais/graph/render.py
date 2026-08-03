@@ -21,7 +21,12 @@ from typing import TYPE_CHECKING, Any
 
 from elspais.graph.GraphNode import GraphNode, NodeKind, make_file_id
 from elspais.graph.relations import EdgeKind, Stereotype
-from elspais.utilities.hasher import HASH_VALUE_PATTERN, calculate_hash, compute_normalized_hash
+from elspais.utilities.hasher import (
+    HASH_VALUE_PATTERN,
+    calculate_hash,
+    compute_normalized_hash,
+    compute_version_hash,
+)
 
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
@@ -161,6 +166,94 @@ def compute_hash_for_node(node: GraphNode, hash_mode: str) -> str | None:
         if not body:
             return None
         return calculate_hash(body)
+
+
+# Implements: REQ-d00131-L
+def _version_owner(node: GraphNode) -> GraphNode:
+    """Return the authoring unit whose version governs ``node``.
+
+    ASSERTION and REMAINDER nodes are not rendered independently, so they carry
+    the version of the REQUIREMENT/USER_JOURNEY that renders them. File-level
+    REMAINDER sections have no such owner (they hang off a FILE via CONTAINS);
+    those govern themselves.
+    """
+    if node.kind not in (NodeKind.ASSERTION, NodeKind.REMAINDER):
+        return node
+    for parent in node.iter_parents():
+        if parent.kind in (NodeKind.REQUIREMENT, NodeKind.USER_JOURNEY):
+            return parent
+    return node
+
+
+# Implements: REQ-d00131-L
+def _canonical_edges(node: GraphNode) -> str:
+    """Serialize a node's outgoing traceability edges in a stable order.
+
+    Storage order must not affect the version, so the tuples are sorted.
+    """
+    from elspais.graph.edge_sets import TRACEABILITY_EDGE_KINDS
+
+    rows: list[str] = []
+    for edge in node.iter_outgoing_edges():
+        if edge.kind not in TRACEABILITY_EDGE_KINDS:
+            continue
+        targets = list(edge.assertion_targets or [])
+        rows.append(f"{edge.kind.value}\x1f{edge.target.id}\x1f{','.join(sorted(targets))}")
+    return "\x1e".join(sorted(rows))
+
+
+# Implements: REQ-d00131-L
+def _file_version_text(node: GraphNode) -> str:
+    """Serialize a FILE node's identity and composition.
+
+    Path plus the ordered IDs of its CONTAINS children — deliberately NOT the
+    children's content, so editing prose inside one requirement does not
+    invalidate a pending file-level operation on the file holding it. Excludes
+    ``git_branch``/``git_commit``, which vary by checkout rather than by content.
+    """
+    children: list[tuple[float, str]] = []
+    for edge in node.iter_outgoing_edges():
+        if edge.kind == EdgeKind.CONTAINS:
+            children.append((edge.metadata.get("render_order", 0.0), edge.target.id))
+    children.sort()
+    ordered = "\x1e".join(child_id for _, child_id in children)
+    return f"{node.get_field('relative_path') or ''}\x1d{ordered}"
+
+
+# Implements: REQ-d00131-L
+def node_version(node: GraphNode) -> str:
+    """Compute a node's concurrency version.
+
+    The version changes when, and only when, the node's on-disk representation
+    would change. It is derived from content rather than from a counter, so a
+    rebuild from unchanged content yields unchanged versions and a routine graph
+    refresh does not invalidate versions held by clients.
+
+    Args:
+        node: Any graph node.
+
+    Returns:
+        16-char hex digest.
+    """
+    owner = _version_owner(node)
+    if owner is not node:
+        return node_version(owner)
+
+    if node.kind == NodeKind.FILE:
+        text = _file_version_text(node)
+    elif node.kind in (NodeKind.CODE, NodeKind.TEST):
+        # A CODE node's ID embeds an absolute path, so it must never reach the
+        # digest — versions would otherwise differ between machines.
+        text = node.get_field("raw_text") or ""
+    else:
+        try:
+            text = render_node(node)
+        except ValueError:
+            # Not independently renderable and has no owning authoring unit.
+            text = node.get_label() or ""
+
+    kind = node.kind.value if hasattr(node.kind, "value") else str(node.kind)
+    return compute_version_hash(f"{kind}\x1d{text}\x1d{_canonical_edges(node)}")
 
 
 def render_node(node: GraphNode, resolver: Any | None = None) -> str:
@@ -551,9 +644,14 @@ def _derive_refs_for_edge_kind(
     (e.g. one source with labels ``["A", "B"]`` renders as
     ``foo/A/B`` rather than two separate ``foo/A, foo/B`` entries).
 
-    Falls back to the stored field when no edges are found (e.g., nodes
-    created by mutations that haven't been wired yet, or broken-ref
-    cases where edges silently dropped).
+    The result is the UNION of edge-derived refs and the stored field
+    (REQ-d00132-F, REQ-d00132-G). After build, the stored field holds
+    only unresolved leftovers — refs that never became edges (broken
+    references, or refs on mutation-created nodes not yet wired) — and
+    the mutation paths keep it in sync. Deriving from edges means edge
+    mutations (including deleting the LAST edge of a kind) are reflected
+    in the output; unioning the leftovers means a rewrite never silently
+    deletes an author's unresolved reference.
     """
     # source_id -> (whole_req_flag, set of assertion labels)
     by_source: dict[str, tuple[bool, set[str]]] = {}
@@ -579,12 +677,12 @@ def _derive_refs_for_edge_kind(
             else:
                 refs.add(f"{src}-{'+'.join(sorted_labels)}")
 
-    if refs:
-        return sorted(refs)
-
-    # Fallback to stored field
+    # Union in the unresolved leftovers (REQ-d00132-G)
     stored = node.get_field(stored_field)
-    return list(stored) if stored else []
+    if stored:
+        refs.update(stored)
+
+    return sorted(refs)
 
 
 def _derive_implements_refs(node: GraphNode, resolver: Any | None = None) -> list[str]:
@@ -801,33 +899,16 @@ def render_save(
     # Find dirty FILE nodes
     dirty_file_ids = _find_dirty_files(graph, resolver=resolver)
 
-    # Federation: by default, fix/save writes only primary-repo files. The
-    # authoritative owner is the federation's ownership map (graph.repo_for):
-    # build-time associate FILE nodes are created by a recursive build where
-    # the associate is its own root, so their `repo` field is None and cannot
-    # be relied upon. We mirror the resolution used below (write path) and by
-    # the MCP write guard. The `repo` field is a fallback for any node not yet
-    # registered in the ownership map. Implements: REQ-d00253-B
+    # Federation: by default, fix/save writes only primary-repo files.
+    # Ownership resolution lives in ONE place: is_associate_owned() in
+    # graph/federated.py (shared with the fix command's report lines).
+    # Implements: REQ-d00253-B
     if not write_associates:
-        root_repo = getattr(graph, "root_repo_name", None)
-        primary_only: set[str] = set()
-        for file_id in dirty_file_ids:
-            is_associate = False
-            try:
-                owner = graph.repo_for(file_id).name
-                # Ownership map is authoritative: anything not owned by the
-                # root repo is an associate.
-                is_associate = root_repo is not None and owner != root_repo
-            except (KeyError, AttributeError):
-                # Not registered in the ownership map — fall back to the FILE
-                # node's `repo` field (non-None => associate-owned).
-                fnode = graph.find_by_id(file_id)
-                if fnode is not None and fnode.get_field("repo") is not None:
-                    is_associate = True
-            if is_associate:
-                continue  # owned by an associate — never written by default
-            primary_only.add(file_id)
-        dirty_file_ids = primary_only
+        from elspais.graph.federated import is_associate_owned
+
+        dirty_file_ids = {
+            file_id for file_id in dirty_file_ids if not is_associate_owned(graph, file_id)
+        }
 
     if not dirty_file_ids:
         # No dirty files — clear log and return

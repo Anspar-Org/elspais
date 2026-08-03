@@ -9,6 +9,8 @@ State is stored on ``app.state.app_state`` as an ``AppState`` instance.
 """
 from __future__ import annotations
 
+import contextlib
+import sys
 from pathlib import Path
 
 from starlette.applications import Starlette
@@ -226,15 +228,31 @@ def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
         Route("/api/git/monorepo-eligible", api_git_monorepo_eligible),
     ]
 
-    # Mount MCP sub-app at /mcp
+    # Mount MCP sub-app at /mcp. Implements: REQ-o00062-Q
+    # Sharing state.graph with the viewer routes is what makes the version
+    # guards protect agent and human writers against EACH OTHER — the whole
+    # point of the concurrency contract.
+    mcp_app = None
     if mount_mcp:
         try:
             from elspais.mcp.server import create_server
 
-            mcp = create_server(graph=state.graph, working_dir=state.repo_root)
-            routes.append(Mount("/mcp", app=mcp.streamable_http_app()))
-        except Exception:
-            pass  # MCP not available or setup failed
+            mcp = create_server(
+                graph=state.graph,
+                working_dir=state.repo_root,
+                shared_state=state.shared,
+            )
+            # The outer Mount supplies the /mcp prefix; FastMCP's internal
+            # default path is also "/mcp", which would bury the endpoint at
+            # /mcp/mcp while the documented /mcp answered 404.
+            mcp.settings.streamable_http_path = "/"
+            mcp_app = mcp.streamable_http_app()
+            routes.append(Mount("/mcp", app=mcp_app))
+        except Exception as exc:
+            # Tolerated failure (visible, never silent): the server still
+            # serves the viewer, but a missing MCP surface must be reported.
+            print(f"warning: MCP mount unavailable at /mcp: {exc}", file=sys.stderr)
+            mcp_app = None
 
     # Mount static files if directory exists
     templates_dir = Path(__file__).parent.parent / "html" / "templates"
@@ -258,7 +276,20 @@ def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
         Middleware(DetachedGuardMiddleware),
     ]
 
-    app = Starlette(routes=routes, middleware=middleware)
+    # Starlette does not run mounted sub-apps' lifespans, and FastMCP's
+    # StreamableHTTPSessionManager only works inside its lifespan — without
+    # this, every MCP session over HTTP is terminated at initialize.
+    # Implements: REQ-o00062-Q
+    lifespan = None
+    if mcp_app is not None:
+        _mcp_app = mcp_app
+
+        @contextlib.asynccontextmanager
+        async def lifespan(app):  # noqa: ANN001, ANN202
+            async with _mcp_app.router.lifespan_context(_mcp_app):
+                yield
+
+    app = Starlette(routes=routes, middleware=middleware, lifespan=lifespan)
     app.state.app_state = state
 
     return app
