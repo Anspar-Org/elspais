@@ -780,9 +780,11 @@ class TestWholeReqOnlyCoverageCheck:
             make_code_ref,
             make_requirement,
         )
+
         graph = build_graph(
             make_requirement(
-                "REQ-100", level="PRD",
+                "REQ-100",
+                level="PRD",
                 assertions=[{"label": "A", "text": "a"}, {"label": "B", "text": "b"}],
             ),
             make_code_ref(implements=["REQ-100"], source_path="src/impl.py"),  # blanket
@@ -803,9 +805,11 @@ class TestWholeReqOnlyCoverageCheck:
             make_code_ref,
             make_requirement,
         )
+
         graph = build_graph(
             make_requirement(
-                "REQ-100", level="PRD",
+                "REQ-100",
+                level="PRD",
                 assertions=[{"label": "A", "text": "a"}],
             ),
             make_code_ref(implements=["REQ-100-A"], source_path="src/impl.py"),  # targeted

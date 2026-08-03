@@ -411,9 +411,13 @@ class TestApiNodePayload:
 
         rollup = RollupMetrics(total_assertions=2)
         rollup.implemented = CoverageDimension(
-            total=2, direct=1, indirect=2,
-            direct_labels={"A"}, indirect_labels={"A", "B"},
-            direct_pct_by_label={"A": 1.0}, indirect_pct_by_label={"A": 1.0, "B": 1.0},
+            total=2,
+            direct=1,
+            indirect=2,
+            direct_labels={"A"},
+            indirect_labels={"A", "B"},
+            direct_pct_by_label={"A": 1.0},
+            indirect_pct_by_label={"A": 1.0, "B": 1.0},
         )
         graph = build_graph(
             make_requirement(
@@ -440,23 +444,28 @@ class TestApiNodePayload:
         assert "assertion_coverage_caveats" in data
         caveats = data["assertion_coverage_caveats"]
         assert isinstance(caveats, dict)
-        assert caveats["A"]["implemented"] is False   # has direct evidence
-        assert caveats["B"]["implemented"] is True    # blanket-only -> ~
+        assert caveats["A"]["implemented"] is False  # has direct evidence
+        assert caveats["B"]["implemented"] is True  # blanket-only -> ~
 
 
 def test_REQ_d00069_L_caveat_true_for_blanket_only_assertion():
     """An assertion covered only on the indirect footing is flagged caveated."""
     from elspais.html.generator import compute_assertion_coverage_caveats
+
     rollup = RollupMetrics(total_assertions=2)
     rollup.implemented = CoverageDimension(
-        total=2, direct=1, indirect=2,
-        direct_labels={"A"}, indirect_labels={"A", "B"},
-        direct_pct_by_label={"A": 1.0}, indirect_pct_by_label={"A": 1.0, "B": 1.0},
+        total=2,
+        direct=1,
+        indirect=2,
+        direct_labels={"A"},
+        indirect_labels={"A", "B"},
+        direct_pct_by_label={"A": 1.0},
+        indirect_pct_by_label={"A": 1.0, "B": 1.0},
     )
     node = _req_with_rollup(rollup, labels=("A", "B"))
     caveats = compute_assertion_coverage_caveats(node)
-    assert caveats["A"]["implemented"] is False   # has direct evidence
-    assert caveats["B"]["implemented"] is True    # blanket-only -> ~
+    assert caveats["A"]["implemented"] is False  # has direct evidence
+    assert caveats["B"]["implemented"] is True  # blanket-only -> ~
 
 
 def test_REQ_d00258_G_states_honor_allow_indirect_strict():
@@ -464,14 +473,18 @@ def test_REQ_d00258_G_states_honor_allow_indirect_strict():
     (strict footing), matching the header badge (no header/pill split)."""
     rollup = RollupMetrics(total_assertions=2)
     rollup.implemented = CoverageDimension(
-        total=2, direct=1, indirect=2,
-        direct_labels={"A"}, indirect_labels={"A", "B"},
-        direct_pct_by_label={"A": 1.0}, indirect_pct_by_label={"A": 1.0, "B": 1.0},
+        total=2,
+        direct=1,
+        indirect=2,
+        direct_labels={"A"},
+        indirect_labels={"A", "B"},
+        direct_pct_by_label={"A": 1.0},
+        indirect_pct_by_label={"A": 1.0, "B": 1.0},
     )
     node = _req_with_rollup(rollup, labels=("A", "B"))
     strict = {"rules": {"coverage": {"allow_indirect": False}}}
     states = compute_assertion_coverage_states(node, strict)
     assert states["A"]["implemented"] == "full"
-    assert states["B"]["implemented"] == "missing"   # blanket-only, strict
+    assert states["B"]["implemented"] == "missing"  # blanket-only, strict
     generous = compute_assertion_coverage_states(node, None)
-    assert generous["B"]["implemented"] == "full"    # generous default
+    assert generous["B"]["implemented"] == "full"  # generous default

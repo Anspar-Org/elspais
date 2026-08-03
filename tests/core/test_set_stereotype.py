@@ -303,9 +303,7 @@ class TestMutateSetStereotypeGuard:
         from elspais.graph.factory import build_graph as factory_build_graph
         from elspais.mcp.server import _mutate_set_stereotype
 
-        app_root = (
-            Path(__file__).resolve().parents[1] / "fixtures" / "e2e-xrepo-template" / "app"
-        )
+        app_root = Path(__file__).resolve().parents[1] / "fixtures" / "e2e-xrepo-template" / "app"
         fed = factory_build_graph(repo_root=app_root)
         template = fed.find_by_id("LIB-p00001")
         assert template is not None
