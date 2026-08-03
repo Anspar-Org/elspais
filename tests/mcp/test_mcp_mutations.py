@@ -1062,6 +1062,68 @@ class TestGetMutationLog:
 
         assert len(result["mutations"]) == 2
 
+    # Verifies: REQ-o00062-E, REQ-o00062-N
+    def test_window_is_the_most_recent_entries_newest_first(self, mutation_graph):
+        """A truncated window holds the MOST RECENT entries, newest first.
+
+        The pre-fix behavior (CUR-1829) returned the OLDEST ``limit`` entries
+        while claiming to be the most recent, so ``current_tip`` derived from
+        that window named a mid-log entry the tip guard would reject.
+        """
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_mutation_log, _mutate_update_title
+
+        applied_ids = []
+        for i in range(1, 5):
+            result = _mutate_update_title(mutation_graph, "REQ-p00001", f"Title {i}")
+            applied_ids.append(result["mutation"]["id"])
+
+        result = _get_mutation_log(mutation_graph, limit=2)
+
+        # The last two applied mutations, newest first.
+        assert [m["id"] for m in result["mutations"]] == [applied_ids[3], applied_ids[2]]
+        assert result["count"] == 2
+        assert result["total"] == 4
+        assert result["current_tip"] == applied_ids[3]
+
+    # Verifies: REQ-o00062-N
+    def test_current_tip_is_the_id_the_tip_guard_accepts(self, mutation_graph):
+        """One get_mutation_log read hands an agent a guard-passing tip,
+        even when the window is truncated below the full pending count."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import (
+            _get_mutation_log,
+            _guard_mutation_tip,
+            _mutate_update_title,
+        )
+
+        for i in range(3):
+            _mutate_update_title(mutation_graph, "REQ-p00001", f"Title {i}")
+
+        result = _get_mutation_log(mutation_graph, limit=1)
+
+        assert _guard_mutation_tip(mutation_graph, result["current_tip"]) is None
+        # Any other entry in the log is NOT the tip and must be refused.
+        non_tip = list(mutation_graph.mutation_log.iter_entries())[0].id
+        assert non_tip != result["current_tip"]
+        conflict = _guard_mutation_tip(mutation_graph, non_tip)
+        assert conflict is not None
+        assert conflict["code"] == "mutation_log_conflict"
+
+    # Verifies: REQ-o00062-E
+    def test_empty_log_reports_empty_tip_and_zero_total(self, mutation_graph):
+        """An empty log yields current_tip == "" (the wire spelling of
+        'nothing pending') and total == 0."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_mutation_log
+
+        result = _get_mutation_log(mutation_graph)
+
+        assert result["mutations"] == []
+        assert result["count"] == 0
+        assert result["total"] == 0
+        assert result["current_tip"] == ""
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Test: Inspection Tools

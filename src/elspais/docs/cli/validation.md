@@ -49,6 +49,17 @@ requirements into the primary `INDEX.md` or `term-index.md`. Read operations
 (health checks, cross-repo reference resolution, coverage rollup) always
 federate regardless of this default.
 
+When `write_associates` is false, fixable issues found in associate-owned
+requirements are reported but not written. The fix report marks those lines
+explicitly instead of claiming a fix:
+
+```text
+[skipping] CAL-p00001: update hash (associate-owned; write_associates=false)
+```
+
+Dry-run output (`--dry-run`) uses the same `[skipping]` prefix in place of
+`Would fix` for associate-owned requirements.
+
 To opt in to wider write/generation scope, set flags in `.elspais.toml`:
 
 ```toml

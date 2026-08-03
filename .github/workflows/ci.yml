@@ -91,9 +91,50 @@ jobs:
       - name: Run tests
         run: pytest --tb=short -q
 
+  stress-test:
+    # Concurrency stress battery (pytest -m stress): races live daemon
+    # surfaces with barrier-released writer threads. Only required when the
+    # change can affect the concurrency machinery — the guard/lock/shared-
+    # state code paths — so unrelated PRs don't pay for it.
+    name: Concurrency Stress
+    needs: [compute-hash, prepare-image]
+    runs-on: ubuntu-latest
+    container: ghcr.io/anspar-org/elspais-ci:py3.12-sha-${{ needs.compute-hash.outputs.hash }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Mark workspace safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Detect concurrency-relevant changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            concurrency:
+              - 'src/elspais/mcp/**'
+              - 'src/elspais/server/**'
+              - 'src/elspais/graph/**'
+              - 'tests/stress/**'
+              - 'pyproject.toml'
+              - '.github/workflows/ci.yml'
+
+      - name: Install package with dev dependencies
+        if: steps.filter.outputs.concurrency == 'true'
+        run: pip install -e ".[dev,all]"
+
+      - name: Run concurrency stress battery
+        if: steps.filter.outputs.concurrency == 'true'
+        run: pytest tests/stress -m stress --tb=short -q
+
+      - name: Skipped (no concurrency-relevant changes)
+        if: steps.filter.outputs.concurrency != 'true'
+        run: echo "No concurrency-relevant files changed; stress battery not required."
+
   promote-image:
     name: Promote CI Image (Python ${{ matrix.python-version }})
-    needs: [compute-hash, test]
+    needs: [compute-hash, test, stress-test]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:

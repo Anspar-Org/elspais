@@ -9,6 +9,7 @@ State is accessed via ``request.app.state.app_state`` (an AppState instance).
 """
 from __future__ import annotations
 
+import functools
 import time
 from datetime import date as date_type
 from pathlib import Path
@@ -26,8 +27,10 @@ from elspais.graph.comment_store import (
     parse_anchor,
 )
 from elspais.graph.comments import CommentEvent, CommentThread
+from elspais.graph.GraphNode import make_file_id
 from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.mcp.server import (
+    _attach_version,
     _get_assertion_code_map,
     _get_assertion_refines_map,
     _get_assertion_test_map,
@@ -37,6 +40,8 @@ from elspais.mcp.server import (
     _get_mutation_log,
     _get_node,
     _get_requirement,
+    _guard_mutation_tip,
+    _guard_version,
     _mutate_add_assertion,
     _mutate_add_edge,
     _mutate_add_journey,
@@ -68,6 +73,27 @@ from elspais.view_model import build_levels, build_namespaces, build_statuses
 def _st(request: Request) -> Any:
     """Shorthand to get AppState from request."""
     return request.app.state.app_state
+
+
+def _serialized_write(handler: Any) -> Any:
+    """Run a write handler under the process-wide write lock.
+
+    Guard + mutate must be one atomic unit against the MCP tools, which run
+    on FastMCP worker threads concurrently with this event loop. The request
+    body is buffered *before* acquiring the lock so the handler's
+    ``await request.json()`` resolves from cache without suspending — the
+    lock is a ``threading.RLock`` and must never be held across a genuine
+    await (another handler blocking on acquire would freeze the event loop
+    the holder needs to resume).
+    """
+
+    @functools.wraps(handler)
+    async def wrapper(request: Request) -> JSONResponse:
+        await request.body()
+        with _st(request).shared.write_lock:
+            return await handler(request)
+
+    return wrapper
 
 
 def _get_result_status(test_or_jny_node: Any) -> str | None:
@@ -1095,9 +1121,19 @@ async def api_spec_files(request: Request) -> JSONResponse:
 async def api_dirty(request: Request) -> JSONResponse:
     """GET /api/dirty - Check if graph has unsaved mutations."""
     state = _st(request)
-    log = _get_mutation_log(state.graph, limit=1)
-    count = log.get("count", 0)
-    return JSONResponse({"dirty": count > 0, "mutation_count": count})
+    # The full log, not limit=1: the count is the number of pending mutations,
+    # and capping the query capped the answer at 1. The tip is what the
+    # history-level guards (undo/save/forced refresh) require callers to send.
+    # tail(0) snapshots the whole log -- never iterate the live list while
+    # other writers may be appending to (or undoing from) it.
+    entries = state.graph.mutation_log.tail(0)
+    return JSONResponse(
+        {
+            "dirty": bool(entries),
+            "mutation_count": len(entries),
+            "tip": entries[-1].id if entries else None,
+        }
+    )
 
 
 async def api_check_freshness(request: Request) -> JSONResponse:
@@ -1130,6 +1166,11 @@ async def api_check_freshness(request: Request) -> JSONResponse:
             "stale": len(stale_files) > 0,
             "has_pending_mutations": has_pending,
             "stale_files": sorted(stale_files),
+            # The mutation-log tip, so a polling client can notice that
+            # ANOTHER writer (an MCP agent, a second viewer) changed the
+            # graph. In-memory mutations touch no file, so mtime staleness
+            # alone can never reveal them. "" means nothing pending.
+            "mutation_tip": log.get("current_tip", ""),
         }
     )
 
@@ -1217,6 +1258,37 @@ async def api_run_trace(request: Request) -> JSONResponse:
 # ─────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-o00062-I, REQ-o00062-J, REQ-o00062-N, REQ-o00062-O
+def _version_conflict(state: Any, data: dict, node_id: str, field: str = "if_version"):
+    """Return a 409 response if the caller's token is stale, else None.
+
+    Delegates to the same `_guard_version` the MCP tools use and returns its
+    dict verbatim: the viewer and an agent must see byte-identical rejections,
+    or "same rejection shape" is only an aspiration. A missing token is not a
+    special case -- absent reads as "" and conflicts like any other stale value.
+    """
+    conflict = _guard_version(state.graph, node_id, data.get(field) or "")
+    if conflict is None:
+        return None
+    status = 404 if conflict.get("code") == "node_not_found" else 409
+    return JSONResponse(conflict, status_code=status)
+
+
+def _tip_conflict(state: Any, data: dict, field: str = "if_mutation_id"):
+    """Return a 409 response if the caller's mutation-log tip is stale."""
+    conflict = _guard_mutation_tip(state.graph, data.get(field) or "")
+    if conflict is None:
+        return None
+    return JSONResponse(conflict, status_code=409)
+
+
+def _with_version(state: Any, result: dict, node_id: str) -> dict:
+    """Attach the resulting version, resolving the node after the mutation."""
+    node = state.graph.find_by_id(node_id)
+    return _attach_version(result, node) if node is not None else result
+
+
+@_serialized_write
 async def api_mutate_status(request: Request) -> JSONResponse:
     """POST /api/mutate/status - Change requirement status."""
     state = _st(request)
@@ -1227,11 +1299,16 @@ async def api_mutate_status(request: Request) -> JSONResponse:
         return JSONResponse(
             {"success": False, "error": "node_id and new_status required"}, status_code=400
         )
+    conflict = _version_conflict(state, data, node_id)
+    if conflict is not None:
+        return conflict
     result = _mutate_change_status(state.graph, node_id, new_status)
+    result = _with_version(state, result, node_id)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_template(request: Request) -> JSONResponse:
     """POST /api/mutate/template - Set/clear a requirement's Template marker.
 
@@ -1248,14 +1325,19 @@ async def api_mutate_template(request: Request) -> JSONResponse:
             {"success": False, "error": "node_id and boolean is_template required"},
             status_code=400,
         )
+    conflict = _version_conflict(state, data, node_id)
+    if conflict is not None:
+        return conflict
     result = _mutate_set_stereotype(
         state.graph, node_id, is_template, force=bool(data.get("force"))
     )
     # A guard soft-block is a well-formed 200 conversation, not an error.
+    result = _with_version(state, result, node_id)
     status_code = 200 if result.get("success") or result.get("blocked") else 400
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_title(request: Request) -> JSONResponse:
     """POST /api/mutate/title - Update requirement title."""
     state = _st(request)
@@ -1266,16 +1348,21 @@ async def api_mutate_title(request: Request) -> JSONResponse:
         return JSONResponse(
             {"success": False, "error": "node_id and new_title required"}, status_code=400
         )
+    conflict = _version_conflict(state, data, node_id)
+    if conflict is not None:
+        return conflict
     result = _mutate_update_title(state.graph, node_id, new_title)
     # For journeys, reconstruct body to keep header line in sync
     if result.get("success"):
         node = state.graph.find_by_id(node_id)
         if node and node.kind == NodeKind.USER_JOURNEY:
             state.graph.reconstruct_journey_body(node_id)
+    result = _with_version(state, result, node_id)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_assertion(request: Request) -> JSONResponse:
     """POST /api/mutate/assertion - Update assertion text."""
     state = _st(request)
@@ -1286,11 +1373,16 @@ async def api_mutate_assertion(request: Request) -> JSONResponse:
         return JSONResponse(
             {"success": False, "error": "assertion_id and new_text required"}, status_code=400
         )
+    conflict = _version_conflict(state, data, assertion_id)
+    if conflict is not None:
+        return conflict
     result = _mutate_update_assertion(state.graph, assertion_id, new_text)
+    result = _with_version(state, result, assertion_id)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_assertion_add(request: Request) -> JSONResponse:
     """POST /api/mutate/assertion/add - Add assertion to requirement."""
     state = _st(request)
@@ -1302,11 +1394,16 @@ async def api_mutate_assertion_add(request: Request) -> JSONResponse:
         return JSONResponse(
             {"success": False, "error": "req_id, label, and text required"}, status_code=400
         )
+    conflict = _version_conflict(state, data, req_id)
+    if conflict is not None:
+        return conflict
     result = _mutate_add_assertion(state.graph, req_id, label, text)
+    result = _with_version(state, result, req_id)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_assertion_delete(request: Request) -> JSONResponse:
     # Implements: REQ-d00010-A
     """POST /api/mutate/assertion/delete - Delete an assertion."""
@@ -1318,11 +1415,15 @@ async def api_mutate_assertion_delete(request: Request) -> JSONResponse:
         return JSONResponse({"success": False, "error": "assertion_id required"}, status_code=400)
     if not confirm:
         return JSONResponse({"success": False, "error": "confirm=true required"}, status_code=400)
+    conflict = _version_conflict(state, data, assertion_id)
+    if conflict is not None:
+        return conflict
     result = _mutate_delete_assertion(state.graph, assertion_id, confirm=True)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_remainder(request: Request) -> JSONResponse:
     """POST /api/mutate/remainder - Update remainder text/heading."""
     state = _st(request)
@@ -1337,11 +1438,16 @@ async def api_mutate_remainder(request: Request) -> JSONResponse:
             {"success": False, "error": "At least one of text or heading required"},
             status_code=400,
         )
+    conflict = _version_conflict(state, data, node_id)
+    if conflict is not None:
+        return conflict
     result = _mutate_update_remainder(state.graph, node_id, text=text, heading=heading)
+    result = _with_version(state, result, node_id)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_remainder_add(request: Request) -> JSONResponse:
     """POST /api/mutate/remainder/add - Add remainder section to requirement."""
     state = _st(request)
@@ -1353,11 +1459,16 @@ async def api_mutate_remainder_add(request: Request) -> JSONResponse:
         return JSONResponse(
             {"success": False, "error": "req_id and heading required"}, status_code=400
         )
+    conflict = _version_conflict(state, data, req_id)
+    if conflict is not None:
+        return conflict
     result = _mutate_add_remainder(state.graph, req_id, heading, text)
+    result = _with_version(state, result, req_id)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_remainder_delete(request: Request) -> JSONResponse:
     """POST /api/mutate/remainder/delete - Delete a remainder section."""
     state = _st(request)
@@ -1365,6 +1476,9 @@ async def api_mutate_remainder_delete(request: Request) -> JSONResponse:
     node_id = data.get("node_id", "")
     if not node_id:
         return JSONResponse({"success": False, "error": "node_id required"}, status_code=400)
+    conflict = _version_conflict(state, data, node_id)
+    if conflict is not None:
+        return conflict
     result = _mutate_delete_remainder(state.graph, node_id)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
@@ -1430,6 +1544,7 @@ async def api_next_req_id(request: Request) -> JSONResponse:
     )
 
 
+@_serialized_write
 async def api_mutate_requirement_add(request: Request) -> JSONResponse:
     """POST /api/mutate/requirement/add - Create a new requirement."""
     from elspais.mcp.server import _mutate_add_requirement as _add_req
@@ -1462,6 +1577,11 @@ async def api_mutate_requirement_add(request: Request) -> JSONResponse:
             status_code=400,
         )
 
+    # The destination file was never validated: an unknown file_id created an
+    # unparented requirement and returned 200.
+    conflict = _version_conflict(state, data, file_id)
+    if conflict is not None:
+        return conflict
     result = _add_req(state.graph, req_id, title, level)
     if result.get("success") and file_id:
         # Wire CONTAINS edge directly (not via move_node_to_file which
@@ -1476,10 +1596,12 @@ async def api_mutate_requirement_add(request: Request) -> JSONResponse:
                 file_node.link(req_node, EdgeKind.CONTAINS)
         except (ValueError, KeyError):
             pass
+    result = _with_version(state, result, file_id)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_requirement_delete(request: Request) -> JSONResponse:
     # Implements: REQ-d00010-A
     """POST /api/mutate/requirement/delete - Delete a requirement."""
@@ -1491,11 +1613,15 @@ async def api_mutate_requirement_delete(request: Request) -> JSONResponse:
         return JSONResponse({"success": False, "error": "node_id required"}, status_code=400)
     if not confirm:
         return JSONResponse({"success": False, "error": "confirm=true required"}, status_code=400)
+    conflict = _version_conflict(state, data, node_id)
+    if conflict is not None:
+        return conflict
     result = _mutate_delete_requirement(state.graph, node_id, confirm=True)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_edge(request: Request) -> JSONResponse:
     """POST /api/mutate/edge - Edge mutations (add/change_kind/change_targets/delete)."""
     state = _st(request)
@@ -1510,6 +1636,11 @@ async def api_mutate_edge(request: Request) -> JSONResponse:
         return JSONResponse(
             {"success": False, "error": "source_id and target_id required"}, status_code=400
         )
+    # Implements: REQ-o00062-M
+    # Only the source's rendered reference line changes.
+    conflict = _version_conflict(state, data, source_id)
+    if conflict is not None:
+        return conflict
 
     if action == "add":
         edge_kind = data.get("edge_kind", "")
@@ -1550,6 +1681,7 @@ async def api_mutate_edge(request: Request) -> JSONResponse:
         if source_node and source_node.kind == NodeKind.USER_JOURNEY:
             state.graph.reconstruct_journey_body(source_id)
 
+    result = _with_version(state, result, source_id)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
 
@@ -1557,6 +1689,7 @@ async def api_mutate_edge(request: Request) -> JSONResponse:
 # ── Journey Mutations ──────────────────────────────────────────────────────
 
 
+@_serialized_write
 async def api_mutate_journey_field(request: Request) -> JSONResponse:
     """POST /api/mutate/journey/field - Update actor/goal/context/preamble."""
     state = _st(request)
@@ -1569,11 +1702,16 @@ async def api_mutate_journey_field(request: Request) -> JSONResponse:
             {"success": False, "error": "node_id and field required"},
             status_code=400,
         )
+    conflict = _version_conflict(state, data, node_id)
+    if conflict is not None:
+        return conflict
     result = _mutate_update_journey_field(state.graph, node_id, field_name, value)
+    result = _with_version(state, result, node_id)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_journey_section(request: Request) -> JSONResponse:
     """POST /api/mutate/journey/section - Add/update/delete a section."""
     state = _st(request)
@@ -1588,11 +1726,16 @@ async def api_mutate_journey_section(request: Request) -> JSONResponse:
         )
     new_name = data.get("new_name")
     content = data.get("content")
+    conflict = _version_conflict(state, data, node_id)
+    if conflict is not None:
+        return conflict
     result = _mutate_journey_section(state.graph, node_id, action, name, new_name, content)
+    result = _with_version(state, result, node_id)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_journey_add(request: Request) -> JSONResponse:
     """POST /api/mutate/journey/add - Create new journey."""
     from elspais.graph.parsers.patterns import JNY_ID_PATTERN
@@ -1626,11 +1769,16 @@ async def api_mutate_journey_add(request: Request) -> JSONResponse:
             status_code=400,
         )
 
+    conflict = _version_conflict(state, data, file_id)
+    if conflict is not None:
+        return conflict
     result = _mutate_add_journey(state.graph, journey_id, title, file_id)
+    result = _with_version(state, result, file_id)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_journey_delete(request: Request) -> JSONResponse:
     """POST /api/mutate/journey/delete - Delete a journey."""
     state = _st(request)
@@ -1642,7 +1790,16 @@ async def api_mutate_journey_delete(request: Request) -> JSONResponse:
             {"success": False, "error": "node_id required"},
             status_code=400,
         )
+    conflict = _version_conflict(state, data, node_id)
+    if conflict is not None:
+        return conflict
+    # The journey is about to vanish; hand back its file's token instead, so
+    # the caller has something usable for its next edit in that file.
+    _deleted = state.graph.find_by_id(node_id)
+    _pf = _deleted.file_node() if _deleted is not None else None
+    _parent_file_id = _pf.id if _pf is not None else ""
     result = _mutate_delete_journey(state.graph, node_id, confirm=confirm)
+    result = _with_version(state, result, _parent_file_id)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
 
@@ -1682,6 +1839,7 @@ async def api_journey_files(request: Request) -> JSONResponse:
     return JSONResponse({"files": files})
 
 
+@_serialized_write
 async def api_mutate_move_to_file(request: Request) -> JSONResponse:
     """POST /api/mutate/move-to-file - Move node to a different file.
 
@@ -1719,7 +1877,35 @@ async def api_mutate_move_to_file(request: Request) -> JSONResponse:
             status_code=400,
         )
 
-    if not target_path.exists():
+    # Implements: REQ-o00062-M
+    # The node, the file it leaves and the file it joins all change, so all
+    # three are guarded.
+    #
+    # Every guard runs BEFORE the destination file is created. A rejected
+    # mutation must leave nothing behind, and creating the file first would
+    # both strand an empty spec file on disk after a 409 and make the first
+    # move to a new file impossible to authorize — the caller cannot know the
+    # version of a node that did not exist when it made the request.
+    _destination_is_new = not target_path.exists()
+
+    _moved = state.graph.find_by_id(node_id)
+    _origin = _moved.file_node() if _moved is not None else None
+    conflict = _version_conflict(state, data, node_id)
+    if conflict is not None:
+        return conflict
+    if _origin is not None:
+        conflict = _version_conflict(state, data, _origin.id, "if_source_file_version")
+        if conflict is not None:
+            return conflict
+    if not _destination_is_new:
+        # A destination created by this very call has no prior version, so
+        # there is nothing to clobber and nothing to guard — the same rule
+        # parentless creation follows.
+        conflict = _version_conflict(state, data, target_file_id, "if_target_version")
+        if conflict is not None:
+            return conflict
+
+    if _destination_is_new:
         # Validate path against scanning config
         error = _validate_new_spec_path(relative_path, state.config)
         if error:
@@ -1738,65 +1924,19 @@ async def api_mutate_move_to_file(request: Request) -> JSONResponse:
         state.graph.add_file_node(target_path, FileType.SPEC)
 
     result = _mutate_move_node_to_file(state.graph, node_id, target_file_id)
+    result = _with_version(state, result, node_id)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
 
 
 def _validate_new_spec_path(relative_path: str, config: dict[str, Any]) -> str | None:
-    """Validate that a new file path is under a configured spec directory.
+    """Single home: utilities/spec_paths.validate_new_spec_path (REQ-o00062-O)."""
+    from elspais.utilities.spec_paths import validate_new_spec_path
 
-    Returns an error message string if invalid, or None if valid.
-    """
-    import fnmatch as _fnmatch
-    from pathlib import PurePosixPath
-
-    from elspais.config import get_ignore_config
-    from elspais.config.schema import ElspaisConfig
-
-    typed_config = ElspaisConfig.model_validate(config)
-    spec_cfg = typed_config.scanning.spec
-    spec_dirs = list(spec_cfg.directories)
-    file_patterns = list(spec_cfg.file_patterns)
-    skip_dirs = list(spec_cfg.skip_dirs)
-    skip_files = list(spec_cfg.skip_files)
-
-    parts = PurePosixPath(relative_path).parts
-    if not parts:
-        return "Path is empty"
-
-    # Check that path starts with a configured spec directory
-    under_spec_dir = False
-    for spec_dir in spec_dirs:
-        spec_parts = PurePosixPath(spec_dir).parts
-        if parts[: len(spec_parts)] == spec_parts:
-            under_spec_dir = True
-            break
-    if not under_spec_dir:
-        return f"Path '{relative_path}' is not under any configured spec directory ({spec_dirs})"
-
-    # Check filename matches file_patterns
-    filename = parts[-1]
-    matches_pattern = any(_fnmatch.fnmatch(filename, pat) for pat in file_patterns)
-    if not matches_pattern:
-        return f"Filename '{filename}' does not match any spec file pattern ({file_patterns})"
-
-    # Check skip_dirs
-    for part in parts[:-1]:
-        if any(_fnmatch.fnmatch(part, pat) for pat in skip_dirs):
-            return f"Path contains skipped directory '{part}'"
-
-    # Check skip_files
-    if any(_fnmatch.fnmatch(filename, pat) for pat in skip_files):
-        return f"Filename '{filename}' matches a skip pattern"
-
-    # Check IgnoreConfig
-    ignore_cfg = get_ignore_config(config)
-    if ignore_cfg.should_ignore(relative_path, scope="spec"):
-        return f"Path '{relative_path}' is ignored by ignore configuration"
-
-    return None
+    return validate_new_spec_path(relative_path, config)
 
 
+@_serialized_write
 async def api_mutate_rename_file(request: Request) -> JSONResponse:
     """POST /api/mutate/rename-file - Rename a FILE node."""
     state = _st(request)
@@ -1808,19 +1948,31 @@ async def api_mutate_rename_file(request: Request) -> JSONResponse:
             {"success": False, "error": "file_id and new_relative_path required"},
             status_code=400,
         )
+    conflict = _version_conflict(state, data, file_id)
+    if conflict is not None:
+        return conflict
+    # The rename changes the FILE's id, so report the version under the new one.
+    _renamed_file_id = make_file_id(new_relative_path)
     result = _mutate_rename_file(
         state.graph,
         file_id,
         new_relative_path,
         state.repo_root,
     )
+    result = _with_version(state, result, _renamed_file_id)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_mutate_undo(request: Request) -> JSONResponse:
     """POST /api/mutate/undo - Undo the most recent mutation."""
     state = _st(request)
+    data = await request.json()
+    # REQ-o00062-N: undo affects every writer's pending work, not just yours.
+    conflict = _tip_conflict(state, data)
+    if conflict is not None:
+        return conflict
     result = _undo_last_mutation(state.graph)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
@@ -1847,6 +1999,19 @@ async def api_shutdown(request: Request) -> JSONResponse:
 # ─────────────────────────────────────────────────────────────────
 
 
+async def _history_json(request: Request) -> dict:
+    """Parse the JSON body of a history route, tolerating an empty body.
+
+    An absent body carries no tip, which the guard treats as "" — rejected
+    whenever anything is pending. Implements: REQ-o00062-N
+    """
+    try:
+        return await request.json()
+    except Exception:
+        return {}
+
+
+@_serialized_write
 async def api_save(request: Request) -> JSONResponse:
     """POST /api/save - Persist mutations to spec files on disk."""
     # Implements: REQ-d00132-A
@@ -1854,6 +2019,12 @@ async def api_save(request: Request) -> JSONResponse:
     from elspais.utilities.patterns import build_resolver as _build_resolver_for_save
 
     state = _st(request)
+    # REQ-o00062-N: persisting affects every writer's pending work — the
+    # caller must name the history it is persisting.
+    data = await _history_json(request)
+    conflict = _tip_conflict(state, data, field="if_tip_mutation_id")
+    if conflict is not None:
+        return conflict
     result = render_save(
         state.graph,
         state.repo_root,
@@ -1866,11 +2037,18 @@ async def api_save(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+@_serialized_write
 async def api_revert(request: Request) -> JSONResponse:
     """POST /api/revert - Revert all unsaved mutations by rebuilding from disk."""
     from elspais.graph.factory import build_graph
 
     state = _st(request)
+    # REQ-o00062-N: discarding affects every writer's pending work — the
+    # caller must name the history it is discarding.
+    data = await _history_json(request)
+    conflict = _tip_conflict(state, data, field="if_tip_mutation_id")
+    if conflict is not None:
+        return conflict
     try:
         new_graph = build_graph(
             config=state.config,
@@ -1883,6 +2061,7 @@ async def api_revert(request: Request) -> JSONResponse:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
 
+@_serialized_write
 async def api_reload(request: Request) -> JSONResponse:
     # Implements: REQ-p00004-J
     """POST /api/reload - Reload graph from disk with fresh config."""
@@ -1890,6 +2069,11 @@ async def api_reload(request: Request) -> JSONResponse:
     from elspais.graph.factory import build_graph
 
     state = _st(request)
+    # REQ-o00062-N: a reload discards pending mutations exactly like revert
+    data = await _history_json(request)
+    conflict = _tip_conflict(state, data, field="if_tip_mutation_id")
+    if conflict is not None:
+        return conflict
     try:
         # Same config path as AppState._rebuild(): includes .elspais.local.toml
         # and environment overlays, not just the base .elspais.toml.

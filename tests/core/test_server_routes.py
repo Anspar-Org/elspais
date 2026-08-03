@@ -2,6 +2,7 @@
 """Tests for Starlette server routes using TestClient."""
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import pytest
@@ -110,14 +111,20 @@ class TestMutateEndpoint:
     """REQ-d00010-A: mutation endpoints validate input."""
 
     def test_mutate_status_bad_node_id(self, client: TestClient):
-        """POST /api/mutate/status with nonexistent node_id returns error."""
+        """POST /api/mutate/status with nonexistent node_id returns error.
+
+        The version guard resolves the target before the mutation runs, so an
+        unknown node is reported as 404 ``node_not_found`` — distinct from the
+        409 a stale token earns, because retrying cannot make the node exist.
+        """
         resp = client.post(
             "/api/mutate/status",
-            json={"node_id": "NONEXISTENT", "new_status": "Draft"},
+            json={"node_id": "NONEXISTENT", "new_status": "Draft", "if_version": "irrelevant"},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 404
         data = resp.json()
         assert data["success"] is False
+        assert data["code"] == "node_not_found"
 
     def test_mutate_status_missing_fields(self, client: TestClient):
         """POST /api/mutate/status without required fields returns 400."""
@@ -322,6 +329,156 @@ class TestCheckFreshness:
         data = resp.json()
         assert "stale" in data
         assert "has_pending_mutations" in data
+
+
+class TestFreshnessConcurrencySignals:
+    """REQ-o00062-Q: /api/check-freshness carries what a polling viewer needs
+    to notice the OTHER writer on the shared graph.
+
+    Two things can change under a viewer's feet: spec files on disk (mtime
+    staleness, the historical answer) and the in-memory graph (an MCP agent or
+    a second viewer mutating through the same holder). The second writes no
+    file at all, so mtime staleness can never reveal it -- hence the
+    mutation-log tip in the same payload. And the build_time the mtime
+    comparison uses lives in the shared holder, so a rebuild on the MCP side
+    moves it too; reading a private copy is how a freshly-saved file gets
+    reported as changed.
+    """
+
+    _VALID_SPEC = (
+        "# REQ-p00001: Test Requirement\n"
+        "\n"
+        "**Level**: PRD | **Status**: Active\n"
+        "\n"
+        "Body text.\n"
+        "\n"
+        "A. First assertion\n"
+        "\n"
+        "*End* *REQ-p00001*\n"
+    )
+
+    @pytest.fixture
+    def freshness(self, tmp_path: Path):
+        """(client, state) over a project with one parseable requirement."""
+        from elspais.server.app import create_app
+        from elspais.server.state import AppState
+
+        (tmp_path / ".elspais.toml").write_text(_MINIMAL_CONFIG)
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        (spec_dir / "test.md").write_text(self._VALID_SPEC)
+
+        state = AppState.from_config(repo_root=tmp_path)
+        app = create_app(state=state, mount_mcp=False)
+        return TestClient(app), state
+
+    @staticmethod
+    def _mutate(client: TestClient, new_status: str, node_id: str = "REQ-p00001") -> None:
+        """One guarded in-memory status mutation (writes no file)."""
+        version = client.get(f"/api/node/{node_id}").json()["version"]
+        resp = client.post(
+            "/api/mutate/status",
+            json={"node_id": node_id, "new_status": new_status, "if_version": version},
+        )
+        assert resp.status_code == 200, resp.text
+
+    # Verifies: REQ-o00062-Q
+    def test_mutation_tip_is_empty_while_nothing_is_pending(self, freshness):
+        """An empty log reports ``""`` -- the wire spelling the guards accept."""
+        client, _state = freshness
+        data = client.get("/api/check-freshness").json()
+        assert data["mutation_tip"] == ""
+        assert data["has_pending_mutations"] is False
+
+    # Verifies: REQ-o00062-Q
+    def test_mutation_tip_is_the_token_the_history_guards_accept(self, freshness):
+        """The reported tip is exactly what a history-level guard demands.
+
+        A client that polls this endpoint must be able to turn the value it
+        reads into an ``if_tip_mutation_id`` for undo/save without a second
+        round trip, so the field has to BE the log tip, not a paraphrase.
+        """
+        from elspais.mcp.server import _guard_mutation_tip
+
+        client, state = freshness
+        self._mutate(client, "Draft")
+
+        data = client.get("/api/check-freshness").json()
+        tip = data["mutation_tip"]
+
+        assert tip, "a pending mutation must be advertised by id"
+        assert tip == client.get("/api/dirty").json()["tip"]
+        assert _guard_mutation_tip(state.graph, tip) is None
+        # The pre-mutation value a stale poller still holds is now refused.
+        assert _guard_mutation_tip(state.graph, "") is not None
+
+    # Verifies: REQ-o00062-Q
+    def test_in_memory_mutation_is_invisible_to_mtime_staleness(self, freshness):
+        """The whole reason the tip is exposed: nothing on disk moved."""
+        client, _state = freshness
+        self._mutate(client, "Draft")
+
+        data = client.get("/api/check-freshness").json()
+        assert data["has_pending_mutations"] is True
+        assert data["stale"] is False, "an in-memory mutation writes no spec file"
+        assert data["stale_files"] == []
+        assert data["mutation_tip"]
+
+    # Verifies: REQ-o00062-Q
+    def test_mutation_tip_advances_when_another_writer_appends(self, freshness):
+        """A poller detects the second writer by the tip changing."""
+        client, _state = freshness
+        self._mutate(client, "Draft")
+        first = client.get("/api/check-freshness").json()["mutation_tip"]
+
+        self._mutate(client, "Active")
+        second = client.get("/api/check-freshness").json()["mutation_tip"]
+
+        assert first and second
+        assert second != first
+
+    # Verifies: REQ-p00006-A
+    @pytest.mark.parametrize(
+        "offset,expect_stale",
+        [(-3600.0, True), (3600.0, False)],
+        ids=["holder-build-time-in-the-past", "holder-build-time-in-the-future"],
+    )
+    def test_staleness_reads_build_time_from_the_shared_holder(
+        self, freshness, offset, expect_stale
+    ):
+        """The mtime comparison uses ``shared["build_time"]``, not a private copy.
+
+        The MCP save/refresh tools stamp the holder cell directly after they
+        swap the graph. If the route read a value only AppState could update,
+        a save would leave build_time behind its own freshly-written files and
+        the viewer would raise a false "spec files changed on disk" alarm.
+        """
+        client, state = freshness
+        assert client.get("/api/check-freshness").json()["stale"] is False
+
+        state.shared["build_time"] = time.time() + offset
+
+        data = client.get("/api/check-freshness").json()
+        assert data["stale"] is expect_stale
+        assert bool(data["stale_files"]) is expect_stale
+
+    # Verifies: REQ-o00062-N
+    def test_dirty_reports_the_whole_log_not_a_capped_slice(self, freshness):
+        """/api/dirty counts every pending mutation and names the real tip.
+
+        The count is snapshotted with ``tail(0)``: a live iterator over the
+        log can be invalidated mid-walk by another writer appending or undoing.
+        """
+        client, state = freshness
+        self._mutate(client, "Draft")
+        self._mutate(client, "Active")
+
+        data = client.get("/api/dirty").json()
+        entries = list(state.graph.mutation_log.iter_entries())
+
+        assert data["dirty"] is True
+        assert data["mutation_count"] == len(entries) == 2
+        assert data["tip"] == entries[-1].id
 
 
 class TestNoCacheMiddleware:

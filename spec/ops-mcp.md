@@ -20,17 +20,22 @@ E. `get_hierarchy(req_id)` SHALL return ancestors and children for navigation.
 
 F. All query tools SHALL read directly from TraceGraph nodes using the iterator-only API.
 
+G. Read surfaces that return a node SHALL report the version a subsequent mutation of that node will require, and a requirement's payload SHALL also report the version of the file containing it, so that a caller never has to fetch a node twice to be allowed to change it. A means of retrieving versions for several nodes without their content SHALL exist, so a caller can refresh what it holds cheaply.
+
 ### Rationale
 
 Core query tools enable AI agents to discover and explore requirements without modifying the graph. These are safe, read-only operations.
 
+Mutations require the caller to supply the version of the state it intends to change, so every read that could precede a write has to hand that version back. Omitting it would force a second round-trip purely to obtain a token the caller had already earned, and would make the mandatory precondition feel like an obstacle rather than a guarantee.
+
 ### Changelog
 
-- 2026-07-31 | 709cd10b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-02 | 3a9ae713 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-26 | 25b3d4f7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 73c31134 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 73c31134 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *MCP Core Query Tools* | **Hash**: 709cd10b
+*End* *MCP Core Query Tools* | **Hash**: 3a9ae713
 ---
 
 ## REQ-o00061: MCP Workspace Context Tools
@@ -83,22 +88,46 @@ E. All mutations SHALL return a MutationEntry for audit and undo.
 
 F. Destructive operations (delete_*) SHALL require explicit `confirm=True` parameter.
 
-G. `undo_last_mutation()` and `undo_to_mutation(id)` SHALL reverse mutations using graph.undo_last() and graph.undo_to().
+G. The server SHALL support reversing the most recent mutation, and reversing history back to a named earlier mutation, restoring the graph state the mutation history records.
 
 H. *Section* (remainder) mutations SHALL include: add_remainder, update_remainder, delete_remainder, covering non-normative prose such as Rationale and Notes.
+
+I. Every mutation SHALL require the caller to supply the version of the state it intends to modify, and SHALL reject the mutation when that version does not match the graph's current state. A creation that names no existing node — a new root requirement with no parent — has no prior state to clobber and is the sole exemption.
+
+J. A rejected mutation SHALL report the current version together with the current state of the target, so the caller can reconcile and retry without issuing a second read.
+
+K. Every successful mutation SHALL report the resulting version of the authoring unit it modified; a deletion SHALL report the version of the surviving container that absorbed the change — the owning requirement for an assertion or section, the containing file for a whole node — so a caller performing a sequence of mutations need not re-read between them.
+
+L. A mutation naming a node that does not exist SHALL be reported distinctly from a version mismatch, since retrying cannot resolve it.
+
+M. Mutations that change a relationship SHALL be guarded on the referring node alone, because only the referring node's rendered form changes. Mutations that relocate content between files SHALL be guarded on the content node and on both the origin and destination files, because all three change. A participant that does not exist when the mutation is issued — an unlinked content node, or a destination file the relocation itself creates — has no version to require.
+
+N. Mutations acting on the mutation history as a whole — reversing mutations, discarding pending mutations, and persisting them — SHALL require the caller to name the current end of that history, SHALL reject when it does not match, and SHALL report the entries recorded since the caller's position.
+
+O. Every mutation reachable through the review server's HTTP interface SHALL also be reachable through the MCP interface, under the same preconditions and returning the same rejection shape, so that an agent and a human editing the same graph have the same capabilities and the same safety.
+
+P. Undoing a deletion SHALL restore the node's structural attachment, not merely its existence: its file membership, both edge directions with their edge metadata and assertion targets, and its root membership SHALL be restored, so the node renders back into its original file at its original position and the versions of nodes it referenced are left unchanged.
+
+Q. When the daemon serves HTTP, its MCP interface SHALL accept sessions at the documented endpoint and SHALL operate on the same in-memory graph as the review server's HTTP interface, so agent and human writers are guarded against each other rather than only against writers on their own transport. A mount that cannot be served SHALL be reported, not silently omitted.
 
 ### Rationale
 
 In-memory mutations enable AI agents to draft requirement changes that can be reviewed before persisting. The undo system provides safety for exploratory editing.
 
+A single daemon serves multiple concurrent writers — MCP agents and the viewer share one graph — and nothing else can detect that two of them read the same state before both writing it. Requiring the caller to state which version it believes it is modifying turns a silent lost update into a rejection the caller can act on. The precondition is mandatory rather than optional because an unguarded mutation is a blind write, which is the failure being prevented; returning the resulting version on success keeps the cost at one read per sequence rather than one per mutation. The history guards exist for the same reason at a different granularity: reversing, discarding, or persisting affects every writer's pending work, so no caller should be able to do it to a set of mutations it has never seen.
+
 ### Changelog
 
-- 2026-07-31 | e4779cb5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-02 | e4b381e0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | ad214b71 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-31 | ca1d9dee | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-26 | 7c83917e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-26 | ef195b50 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-09 | 69e70749 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | ef63f424 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | ef63f424 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *MCP Graph Mutation Tools* | **Hash**: e4779cb5
+*End* *MCP Graph Mutation Tools* | **Hash**: e4b381e0
 ---
 
 ## REQ-o00063: MCP File Mutation Tools

@@ -1,9 +1,14 @@
-# Verifies: REQ-p00006
+# Verifies: REQ-p00006, REQ-o00062-G, REQ-o00062-P
 """Tests for journey mutation operations."""
+
+from pathlib import Path
 
 import pytest
 
 from elspais.graph import NodeKind
+from elspais.graph.factory import build_graph as build_repo_graph
+from elspais.graph.relations import EdgeKind
+from elspais.graph.render import render_file
 from tests.core.graph_test_helpers import (
     build_graph,
     make_journey,
@@ -268,3 +273,124 @@ class TestJourneyUndo:
         assert graph.find_by_id("JNY-LOGIN-01") is None
         graph.undo_last()
         assert graph.find_by_id("JNY-LOGIN-01") is not None
+
+
+CANONICAL_JOURNEY_ID = "JNY-001"
+FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
+
+
+@pytest.fixture
+def journey_graph_from_disk():
+    """A private build of the hht-like fixture for delete/undo round trips.
+
+    A delete_journey + undo round trip is exactly reversible today -- the
+    replayed VALIDATES edges carry their ``assertion_targets`` -- and the
+    tests below pin that. The copy stays private (deliberately NOT the
+    session-scoped ``canonical_graph``/``mutable_graph``) so that if a
+    regression ever makes the round trip lossy again, the damage is confined
+    to this module instead of leaking into every later test. Same fixture
+    content -- mirrors ``rebuilt_graph`` in test_node_version.py.
+    """
+    fg = build_repo_graph(repo_root=FIXTURES_DIR / "hht-like")
+    return fg._repos[fg._root_repo].graph
+
+
+def _contains_edge(file_node, journey_id):
+    """Return the FILE -> journey CONTAINS edge, or None if detached."""
+    for edge in file_node.iter_outgoing_edges():
+        if edge.kind == EdgeKind.CONTAINS and edge.target.id == journey_id:
+            return edge
+    return None
+
+
+def _edge_signature(node):
+    """Structural fingerprint of a node's attachment: file + both edge sets.
+
+    Edge tuples are sorted but duplicates are retained, so a lost or
+    duplicated edge changes the signature. ``assertion_targets`` is part of
+    the fingerprint: a replayed VALIDATES edge that comes back without its
+    per-assertion targets is a lossy undo, and this signature must catch it.
+    """
+    file_node = node.file_node()
+    return {
+        "file_id": file_node.id if file_node is not None else None,
+        "incoming": sorted(
+            (e.source.id, e.kind.value, tuple(e.assertion_targets or ()))
+            for e in node.iter_incoming_edges()
+        ),
+        "outgoing": sorted(
+            (e.target.id, e.kind.value, tuple(e.assertion_targets or ()))
+            for e in node.iter_outgoing_edges()
+        ),
+    }
+
+
+class TestUndoDeleteJourneyRestoresAttachment:
+    """Validates REQ-o00062-G: undoing delete_journey SHALL reverse the mutation.
+
+    Reversal means the journey comes back *attached* -- restoring index
+    membership alone leaves it orphaned (no FILE parent, zero edges), so it
+    renders into no file and the next save silently drops it.
+    """
+
+    def test_undo_restores_file_parent_and_edge_counts_reqo00062g(self, journey_graph_from_disk):
+        journey = journey_graph_from_disk.find_by_id(CANONICAL_JOURNEY_ID)
+        before = _edge_signature(journey)
+        # Guard: the canonical fixture journey must actually be attached,
+        # otherwise the round-trip below would compare orphan to orphan.
+        assert before["file_id"] == "file:spec/journeys.md"
+        assert before["incoming"] and before["outgoing"]
+
+        journey_graph_from_disk.delete_journey(CANONICAL_JOURNEY_ID)
+        assert journey_graph_from_disk.find_by_id(CANONICAL_JOURNEY_ID) is None
+
+        journey_graph_from_disk.undo_last()
+        restored = journey_graph_from_disk.find_by_id(CANONICAL_JOURNEY_ID)
+        assert restored is not None
+        assert _edge_signature(restored) == before
+
+    def test_undo_restores_journey_to_rendered_file_reqo00062g(self, journey_graph_from_disk):
+        journey = journey_graph_from_disk.find_by_id(CANONICAL_JOURNEY_ID)
+        file_node = journey.file_node()
+        before_text = render_file(file_node)
+        assert "JNY-001: Login Flow" in before_text
+
+        journey_graph_from_disk.delete_journey(CANONICAL_JOURNEY_ID)
+        assert "JNY-001: Login Flow" not in render_file(file_node)
+
+        journey_graph_from_disk.undo_last()
+        after_text = render_file(file_node)
+        # The real consequence: an orphaned journey belongs to no file, so
+        # render_file()/render_save() would write the file back without it.
+        assert "JNY-001: Login Flow" in after_text
+        assert after_text == before_text
+
+    def test_undo_preserves_contains_render_order_reqo00062g(self, journey_graph_from_disk):
+        journey = journey_graph_from_disk.find_by_id(CANONICAL_JOURNEY_ID)
+        file_node = journey.file_node()
+        before_edge = _contains_edge(file_node, CANONICAL_JOURNEY_ID)
+        assert before_edge is not None
+        before_order = before_edge.metadata.get("render_order")
+        assert before_order is not None
+        before_position = [
+            e.target.id
+            for e in sorted(
+                (e for e in file_node.iter_outgoing_edges() if e.kind == EdgeKind.CONTAINS),
+                key=lambda e: e.metadata.get("render_order", 0.0),
+            )
+        ].index(CANONICAL_JOURNEY_ID)
+
+        journey_graph_from_disk.delete_journey(CANONICAL_JOURNEY_ID)
+        journey_graph_from_disk.undo_last()
+
+        after_edge = _contains_edge(file_node, CANONICAL_JOURNEY_ID)
+        assert after_edge is not None
+        assert after_edge.metadata.get("render_order") == before_order
+        after_position = [
+            e.target.id
+            for e in sorted(
+                (e for e in file_node.iter_outgoing_edges() if e.kind == EdgeKind.CONTAINS),
+                key=lambda e: e.metadata.get("render_order", 0.0),
+            )
+        ].index(CANONICAL_JOURNEY_ID)
+        assert after_position == before_position

@@ -27,6 +27,11 @@ pytestmark = [
 # Helpers
 # ---------------------------------------------------------------------------
 
+# Allowance for the server's first response: startup includes a full graph
+# build (~10s on this repo), so the handshake needs far more headroom than
+# per-request calls against an already-running server.
+STARTUP_TIMEOUT = 30.0
+
 
 def _send(proc, obj: dict) -> None:
     """Send a JSON-RPC 2.0 message to the server."""
@@ -63,7 +68,7 @@ def _initialize(proc) -> dict:
             },
         },
     )
-    response = _recv(proc)
+    response = _recv(proc, timeout=STARTUP_TIMEOUT)
     # Send initialized notification
     _send(proc, {"jsonrpc": "2.0", "method": "notifications/initialized"})
     return response
@@ -255,22 +260,38 @@ class TestMCPMutationRoundtrip:
         original = _call_tool(mcp, "get_requirement", {"req_id": "REQ-p00001"}, msg_id=2)
         original_title = original.get("title", "")
         assert original_title, "Expected a non-empty original title"
+        version = original.get("version")
+        assert version, f"get_requirement reported no version token: {original}"
 
-        # 2. Mutate the title
+        # 2. Mutate the title, guarded by the token from the read
         mutate_result = _call_tool(
             mcp,
             "mutate_update_title",
-            {"node_id": "REQ-p00001", "new_title": "Test Mutation Title"},
+            {
+                "node_id": "REQ-p00001",
+                "new_title": "Test Mutation Title",
+                "if_version": version,
+            },
             msg_id=3,
         )
         assert isinstance(mutate_result, dict), f"Mutation failed: {mutate_result}"
+        assert mutate_result.get("success") is True, f"Mutation failed: {mutate_result}"
 
-        # 3. Undo the mutation
-        undo_result = _call_tool(mcp, "undo_last_mutation", {}, msg_id=4)
+        # 3. Undo the mutation, threading the mutation-log tip
+        log = _call_tool(mcp, "get_mutation_log", {"limit": 1000}, msg_id=4)
+        mutations = log.get("mutations", [])
+        assert mutations, f"Expected the pending mutation in the log: {log}"
+        undo_result = _call_tool(
+            mcp,
+            "undo_last_mutation",
+            {"if_mutation_id": mutations[-1]["id"]},
+            msg_id=5,
+        )
         assert isinstance(undo_result, dict), f"Undo failed: {undo_result}"
+        assert undo_result.get("success") is True, f"Undo failed: {undo_result}"
 
         # 4. Verify the title reverted
-        after_undo = _call_tool(mcp, "get_requirement", {"req_id": "REQ-p00001"}, msg_id=5)
+        after_undo = _call_tool(mcp, "get_requirement", {"req_id": "REQ-p00001"}, msg_id=6)
         assert after_undo.get("title") == original_title, (
             f"Title did not revert: expected {original_title!r}, "
             f"got {after_undo.get('title')!r}"

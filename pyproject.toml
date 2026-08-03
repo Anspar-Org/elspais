@@ -4,7 +4,7 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "elspais"
-version = "0.121.42"
+version = "0.121.43"
 description = "Requirements validation and traceability tools - L-Space connects all libraries"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -36,6 +36,13 @@ dev = [
     "ruff>=0.1.0",
     "mypy>=1.0",
     "pyyaml>=6.0",
+]
+# CUR-1829: the `browser` test tier (`pytest -m browser`) was undeclared, so a
+# fresh venv silently deselected all 13 of its tests and still reported green.
+# Requires `playwright install chromium` once for the browser binaries.
+browser = [
+    "playwright>=1.40",
+    "pytest-playwright>=0.4",
 ]
 binary = ["pyinstaller>=6.0"]
 mcp = ["mcp>=1.0,<2"]
@@ -80,10 +87,11 @@ include = ["tests/", "docs/"]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
-addopts = "--tb=short --ignore=tests/_obsolete --ignore=tests/fixtures -m 'not e2e and not browser'"
+addopts = "--tb=short --ignore=tests/_obsolete --ignore=tests/fixtures -m 'not e2e and not browser and not stress'"
 markers = [
     "e2e: end-to-end tests requiring external tools or subprocess invocation (deselected by default, run with: pytest -m e2e)",
     "browser: browser-based tests requiring Playwright (deselected by default, run with: pytest -m browser)",
+    "stress: concurrency stress battery racing live daemon surfaces (deselected by default, run with: pytest -m stress; scale with ELSPAIS_STRESS_SCALE)",
 ]
 
 [tool.coverage.json]

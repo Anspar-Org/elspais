@@ -63,6 +63,8 @@ elspais mcp install --global --desktop
 
 The MCP server provides tools for searching requirements, navigating hierarchies, checking coverage, and drafting mutations — all operating on the live traceability graph.
 
+Mutations use optimistic concurrency: several writers (agents and the viewer GUI) can share one daemon, so every mutation requires a version token from a prior read and stale writes are rejected rather than silently overwriting. See `elspais docs concurrency` for the protocol.
+
 ## Requirement Format
 
 Requirements are written in Markdown:

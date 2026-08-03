@@ -205,6 +205,8 @@ J. Requirement hash computation SHALL use order-independent *Assertion* hashing:
 
 K. Changelog entries SHALL render author identifiers that contain `@` wrapped in angle brackets (`(<a@b.org>)`), preserving brackets already present in the source, so that rendered markdown contains no bare email addresses (markdownlint MD034-clean). Non-email author identifiers SHALL render unwrapped.
 
+L. Every node SHALL have a version derived from its rendered text together with its outgoing *Traceability* references, such that the version changes when and only when the node's on-disk representation would change. Rebuilding the graph from unchanged content SHALL yield unchanged versions. Nodes that are not rendered independently SHALL resolve to the version of the authoring unit that renders them, and a file's version SHALL derive from its path and the ordered identity of its contents rather than from the content itself.
+
 M. The tool SHALL make the canonical rendering of a graph object — a single requirement, a spec file's content, or a generated aggregate such as a glossary or term index — obtainable by external consumers at a caller-selected base heading level.
 
 N. The viewer SHALL construct requirement cards and journey cards through a single shared card-rendering path, with kind-specific content expressed as variation within that path rather than as a parallel per-kind implementation.
@@ -219,8 +221,11 @@ The render contract is elspais's to own: downstream document pipelines that need
 
 Assertions N and O extend the one-canonical-render-per-object principle to the viewer's card presentation. Duplicated per-kind card builders have already produced capability divergence in practice — journey cards lacked the UAT-coverage badge that requirement cards carried — which is the failure mode a single shared path prevents. N forbids the duplicated structure; O states the observable consequence, capability parity: a capability that makes sense for both kinds appears on both, and only genuinely kind-semantic differences (an actor/goal section is meaningful only on a journey card) may distinguish them. How the shared path is decomposed internally is mechanism and deliberately unspecified.
 
+Deriving the version from rendered output rather than from a counter means a rebuild that produces identical content produces identical versions, so refreshing the graph does not invalidate every outstanding version held by a client. It also makes the version content-addressed: if a node changes and then changes back, a version captured before the round trip still matches, and correctly so — the state is identical to what its holder observed. A file's version excludes its children's content so that editing prose inside one requirement does not invalidate a pending file-level operation.
+
 ### Changelog
 
+- 2026-08-02 | fd882e78 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | f1f1ab9b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 92b4c498 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: relabel L/M/N to M/N/O — main's CUR-1829 minted L (node version) first
@@ -228,11 +233,12 @@ Assertions N and O extend the one-canonical-render-per-object principle to the v
 - 2026-07-31 | c929fc01 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-35: author assertion M (render contract available to external consumers at requested heading levels)
 - 2026-07-31 | 99fb8aea | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-07-26 | 3c2ce892 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
 - 2026-07-15 | a871090c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | c004c62e | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | c004c62e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Render Protocol for Graph Nodes* | **Hash**: f1f1ab9b
+*End* *Render Protocol for Graph Nodes* | **Hash**: fd882e78
 ---
 
 ## REQ-d00132: Render-Based Save Operation
@@ -255,17 +261,20 @@ E. The mutation log and undo system SHALL continue to work unchanged. The mutati
 
 F. The render-based save SHALL derive implements and refines reference lists from the live graph edges rather than stored fields, ensuring edge mutations are correctly reflected in the output.
 
+G. Rendering SHALL preserve reference entries that never resolved to graph edges (broken references), including when they coexist with edge-derived references, so a rewrite does not silently delete an author's unresolved reference.
+
 ### Rationale
 
 Render-based save replaces the brittle text surgery in persistence.py with graph-native serialization. Each FILE node renders its content from the graph, making the graph the single source of truth. The consistency check (rebuild + compare) proves round-trip fidelity.
 
 ### Changelog
 
+- 2026-08-02 | 91068610 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | c40e6417 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 7043f7af | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 7043f7af | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Render-Based Save Operation* | **Hash**: c40e6417
+*End* *Render-Based Save Operation* | **Hash**: 91068610
 ---
 
 ## REQ-d00134: Comprehensive Mutation Round-Trip Scenario Test

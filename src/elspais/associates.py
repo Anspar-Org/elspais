@@ -118,11 +118,22 @@ def discover_associate_from_path(
     if not config_file.exists():
         return f"No .elspais.toml found in associate path: {repo_path}"
 
+    from tomlkit.exceptions import TOMLKitError
+
     from elspais.config import load_config
 
     # Route through the single canonical loader so migrations and field
     # strips (e.g. legacy rules.format.allowed_statuses) apply consistently.
-    config = load_config(config_file)
+    # Implements: REQ-d00202-I
+    # Tolerated failure, scoped to config parse/validation errors: a sibling
+    # with a stale or incompatible .elspais.toml is reported as unloadable
+    # (path + reason), never raised — discovery scans must survive it.
+    # ValueError covers pydantic ValidationError and the loader's own
+    # missing-name/namespace checks; TOMLKitError covers syntax errors.
+    try:
+        config = load_config(config_file)
+    except (ValueError, TOMLKitError) as exc:
+        return f"Cannot load associate config in {repo_path}: {exc}"
 
     project = config.get("project", {})
     scanning_spec = config.get("scanning", {}).get("spec", {})

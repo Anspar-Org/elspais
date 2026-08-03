@@ -173,6 +173,11 @@ const editState = {
     openCardOrder: [],
     dirtyFields: new Map(),
     mutationCount: 0,
+    // Mutation-log tip as of our last look. The freshness poll compares the
+    // server's tip against this to tell "another writer changed the graph"
+    // from "nothing happened" -- in-memory mutations touch no file, so file
+    // mtimes can never reveal them. null = not yet established.
+    lastSeenTip: null,
     activeNavTab: 'req',
     treeData: [],
     collapsedTreeNodes: new Set(),

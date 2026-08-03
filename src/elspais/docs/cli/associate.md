@@ -43,6 +43,15 @@ elspais associate --all
 
 Scans sibling directories for any repository whose `.elspais.toml` loads successfully (excluding the current repo itself).
 
+Sibling directories without a `.elspais.toml` are silently ignored (they are not candidates). A candidate whose `.elspais.toml` exists but fails to load (stale schema, missing namespace, TOML syntax error) is skipped with a printed reason instead of aborting the scan:
+
+```bash
+elspais associate --all
+# Found: /home/user/repos/callisto (CAL)
+#   Skipping: Cannot load associate config in /home/user/repos/old-proj: <reason>
+# Linked 1 associate
+```
+
 ### Listing links
 
 ```bash

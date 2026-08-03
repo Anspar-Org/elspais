@@ -78,6 +78,25 @@ class FederatedMutationLog:
                 if found:
                     yield found
 
+    def tail(self, limit: int) -> list[MutationEntry]:
+        """Return the most recent ``limit`` resolved entries, oldest-to-newest.
+
+        Snapshot semantics match MutationLog.tail(): the pointer list is
+        copied first, and pointers whose entry has since been undone resolve
+        to nothing and are skipped rather than raising.
+        """
+        pointers = list(self._pointers)
+        if limit > 0:
+            pointers = pointers[-limit:]
+        entries: list[MutationEntry] = []
+        for ptr in pointers:
+            entry = self._repos.get(ptr.repo_name)
+            if entry and entry.graph:
+                found = entry.graph.mutation_log.find_by_id(ptr.mutation_id)
+                if found:
+                    entries.append(found)
+        return entries
+
     def entries_since(self, mutation_id: str) -> list[FederatedMutationPointer]:
         """Get all pointers since (and including) a specific mutation."""
         for i, ptr in enumerate(self._pointers):
@@ -1173,6 +1192,26 @@ class FederatedGraph:
         self._record_mutation(repo_name, result)
         return result
 
+    def delete_remainder(self, node_id: str) -> MutationEntry:
+        """Delete a non-normative section node.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[node_id]
+        result = self._graph_for(node_id).delete_remainder(node_id)
+        self._record_mutation(repo_name, result)
+        return result
+
+    def add_remainder(self, req_id: str, heading: str, text: str) -> MutationEntry:
+        """Add a non-normative section to a requirement.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[req_id]
+        result = self._graph_for(req_id).add_remainder(req_id, heading, text)
+        self._record_mutation(repo_name, result)
+        return result
+
     def update_remainder(
         self,
         node_id: str,
@@ -1939,3 +1978,28 @@ class FederatedGraph:
             if entry.graph is not None:
                 for node_id in entry.graph._index:
                     self._ownership[node_id] = entry.name
+
+
+def is_associate_owned(graph: Any, node_id: str) -> bool:
+    """Whether *node_id* is owned by an associate repo rather than the primary.
+
+    Single home for the write-scope ownership resolution used by
+    ``render_save`` and ``elspais fix`` reporting (REQ-d00253-B, REQ-d00253-F).
+    The federation ownership map is authoritative: anything ``repo_for``
+    attributes to a non-root repo is associate-owned. Nodes not registered in
+    the map (or plain TraceGraphs with no federation API) fall back to the
+    node's ``repo`` field — build-time associate FILE nodes are created by a
+    recursive build where the associate is its own root, so their ``repo``
+    field is None and only the ownership map can classify them; the field is
+    a fallback, not the authority.
+
+    The MCP write guard (``_guard_associate_write``) intentionally does NOT
+    share this fallback: there an unknown/new node must stay writable.
+    """
+    root_repo = getattr(graph, "root_repo_name", None)
+    try:
+        owner = graph.repo_for(node_id).name
+        return root_repo is not None and owner != root_repo
+    except (KeyError, AttributeError):
+        node = graph.find_by_id(node_id)
+        return node is not None and node.get_field("repo") is not None
