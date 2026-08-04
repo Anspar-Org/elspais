@@ -145,9 +145,9 @@ FRAMEWORKS = [
 
 
 # Verifies: REQ-d00254-K
-@pytest.mark.parametrize("path,src,prescan,ref_to_test,extents", FRAMEWORKS)
+@pytest.mark.parametrize("path,src,_prescan,ref_to_test,_extents", FRAMEWORKS)
 def test_each_scanned_test_gets_its_own_identity(
-    dispatcher, path, src, prescan, ref_to_test, extents
+    dispatcher, path, src, _prescan, ref_to_test, _extents
 ):
     """Two tests in one file are bound to two distinct identities, each anchored
     at its own test's start line -- not merged into a single unit."""
@@ -170,10 +170,8 @@ def test_each_scanned_test_gets_its_own_identity(
 
 
 # Verifies: REQ-d00254-K
-@pytest.mark.parametrize("path,src,prescan,ref_to_test,extents", FRAMEWORKS)
-def test_each_scanned_test_gets_its_own_line_extent(
-    dispatcher, path, src, prescan, ref_to_test, extents
-):
+@pytest.mark.parametrize("_path,src,prescan,_ref_to_test,extents", FRAMEWORKS)
+def test_each_scanned_test_gets_its_own_line_extent(_path, src, prescan, _ref_to_test, extents):
     """The prescan behind each framework yields a per-test line extent: every
     line of a test resolves to that test's (start, end), and one test's extent
     never reaches into the next test."""
@@ -416,8 +414,9 @@ def test_external_records_take_precedence_end_to_end(tmp_path):
 
 # Verifies: REQ-d00254-N
 def test_external_records_take_precedence_end_to_end_absolute_paths(tmp_path):
-    """Same build, with the command echoing absolute paths (the only path form
-    the current wiring accepts): precedence resolves per file."""
+    """Same build, with the command echoing absolute paths instead of the
+    repo-relative ones it was handed: either form is accepted, and precedence
+    still resolves per file."""
     project, command, _capture = _make_project(tmp_path, emit_absolute=True)
 
     assert _built_test_node_ids(project, command) == {
