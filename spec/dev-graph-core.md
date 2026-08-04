@@ -383,11 +383,11 @@ F. The `validate` / health-check command reports B and C as
 
 *End* *Section Header Depth Canonicalization* | **Hash**: 48fc2f11
 
-## REQ-d00254: Coverage-Based and Aggregate Test Verification
+## REQ-d00254: Test Evidence: Attribution, Ingestion, and Coverage Crediting
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00051
 
-The coverage annotation system SHALL credit test verification through two complementary paths: aggregate app-green status for unmatched test-file edges, and line-coverage fraction for implementation-code edges; both are tracked as separate dimensions distinct from direct `Verifies:` evidence.
+Test verification evidence SHALL be attributed per test as it is scanned, ingested from configured test targets, and credited through two complementary paths: aggregate app-green status for unmatched test-file edges, and line-coverage fraction for implementation-code edges; both are tracked as separate dimensions distinct from direct `Verifies:` evidence.
 
 ### Assertions
 
@@ -411,10 +411,27 @@ I. A target absent from `--targets` (the fresh set) whose results are ingested f
 
 J. In a selective run (a `--targets` set is present), a requirement with test references but zero result records SHALL render as not-run (`—`), distinct from a run-but-uncovered `0%`; in a full run (no `--targets`) zero results SHALL keep the existing rendering.
 
-K. The system SHALL make per-test attribution available for every configured test framework regardless of the framework's implementation language — each scanned test bound to its own identity and source line extent — sufficient for the line-level test coverage dimensions to function for that framework's tests.
+K. For every configured test framework, the system SHALL bind each scanned test to its own identity within its source file and to that test's line extent, regardless of the framework's implementation language.
+
+L. Where an external test-prescan command is configured, the system SHALL obtain per-test attribution for the candidate test files from that command.
+
+M. The system SHALL exchange prescan data with a configured external test-prescan command by writing the candidate test file paths to the command's standard input and reading attribution records from its standard output, each record binding one test to its source file, its identity within that file, and its starting line.
+
+N. Where an external test-prescan command returns attribution records for a scanned test file, the system SHALL bind that file's tests from those records in preference to the system's built-in attribution.
+
+### Rationale
+
+K states the outcome the scanning side owes the crediting side: without per-test identity and extent, the line-level dimensions computed here have nothing to intersect implementation ranges against, and a framework's tests can only ever be credited at file granularity. The obligation is deliberately language-neutral — it fixes what attribution must yield, not whether a given language earns built-in support or is served through an external command.
+
+L, M and N cut the external route into a capability, a mechanism, and a precedence rule so each can change independently. L and M differ in kind: L survives a reimplementation that swaps the transport, while M memorializes the transport itself — file paths on standard input, attribution records on standard output. M is frozen not because it is an invariant but because it is a published integration point that third-party prescan scripts already implement, so breaking it breaks consumers outside this repository. Recording it as its own letter keeps that compatibility obligation targeted: a future transport change, or an added record field, edits M and leaves the capability and precedence untouched, and M can be retired without withdrawing either.
+
+M binds each record to a starting line only. Extent on the external route is derived from the surrounding records rather than reported, so the derivation stays an implementation choice while K's extent obligation still holds for tests attributed that way.
+
+N resolves per file, not per configuration, because both routes are routinely live in a single run: a project may configure a command that returns records for one file type while every other scanned test file falls to built-in attribution.
 
 ### Changelog
 
+- 2026-08-03 | 22faeb40 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | cbd59482 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | ea4e01b1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | fb1ca602 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -427,7 +444,7 @@ K. The system SHALL make per-test attribution available for every configured tes
 - 2026-06-20 | 98120740 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | CUR-1533: initial
 
-*End* *Coverage-Based and Aggregate Test Verification* | **Hash**: cbd59482
+*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 22faeb40
 
 ---
 
