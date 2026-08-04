@@ -255,6 +255,7 @@ def create_file_node(
     return node
 
 
+# Implements: REQ-d00254-L+M
 def _run_prescan_command(
     command: str,
     test_dirs: list[str],
@@ -327,7 +328,7 @@ def _run_prescan_command(
             print("Warning: prescan_command output is not a JSON array", file=sys.stderr)
             return None
 
-        # Group by file path
+        # Group by file path, exactly as the command reported it
         by_file: dict[str, list[dict]] = {}
         for entry in entries:
             file_path = entry.get("file", "")
@@ -723,6 +724,16 @@ def build_graph(
                 prescan_data = _run_prescan_command(
                     prescan_command, test_dirs, test_patterns, test_skip_dirs, repo_root
                 )
+                # Paths go out on stdin repo-relative, so a conforming command
+                # answers with those, while scanning dispatches absolute paths.
+                # Alias each relative key to its absolute form so records govern
+                # either way (REQ-d00254-N).
+                if prescan_data:
+                    for reported in list(prescan_data):
+                        if not Path(reported).is_absolute():
+                            prescan_data.setdefault(
+                                str(repo_root / reported), prescan_data[reported]
+                            )
 
             # Build dispatch function with prescan data
             def _dispatch_test(content: str, file_path: str) -> list:

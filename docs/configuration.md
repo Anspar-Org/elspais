@@ -176,8 +176,13 @@ file_patterns = ["test_*.py", "*_test.py"]
 skip_dirs = []
 reference_keyword = "Verifies"
 # External command for test structure discovery (optional).
-# Receives test file paths on stdin (one per line) and outputs JSON on stdout:
+# Receives test file paths on stdin (one per line, repo-relative) and outputs
+# JSON on stdout:
 #   [{"file": "path", "function": "name", "class": "Name|null", "line": N}]
+# `file` may be repo-relative (as handed in) or absolute; either is matched
+# against the scanned file. Files the command reports on are attributed from
+# its records; every other scanned test file keeps built-in attribution, so a
+# command may cover one file type and leave the rest alone.
 # prescan_command = "dart run tool/list_tests.dart"
 
 # Configured test targets - result ingestion and coverage attribution.

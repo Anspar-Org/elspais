@@ -315,9 +315,11 @@ class FileDispatcher:
         lines = [(i + 1, line) for i, line in enumerate(content.split("\n"))]
 
         # Pre-scan for function/class context
+        # Implements: REQ-d00254-K
         is_python = file_path.endswith(".py")
         is_dart = file_path.endswith(".dart")
 
+        # Implements: REQ-d00254-N
         if prescan_data and file_path in prescan_data:
             line_context, all_test_funcs, first_def_line = external_prescan(
                 prescan_data[file_path], lines
