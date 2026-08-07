@@ -937,9 +937,9 @@ class TestUnresolvableAssetDiagnostics:
     located in any repository of the compiled graph is reported with the
     reference as written, the declaring spec file, and the locations searched.
 
-    Today the assembler drops such refs silently: ``_resolve_image_paths``
-    and ``_resolve_mermaid_images`` both return ``match.group(0)`` and
-    record nothing, so the PDF simply comes out short an image.
+    An image the compiler cannot place vanishes from the PDF leaving the
+    surrounding prose intact, so the compiled document reads as complete.
+    Recording the reference is what lets the caller say otherwise.
     """
 
     # Verifies: REQ-p00080-I
@@ -1110,9 +1110,9 @@ class TestUnreadableSourceFileDiagnostics:
     repository it was expected in, instead of emitting the document as though
     that content never existed.
 
-    Today ``_render_file`` answers an unresolvable path with a bare ``return
-    []``: an entire repository's requirements, assertions and rationale can
-    leave the compiled document without a single word of warning. That is the
+    A path that resolves nowhere contributes no content, so an entire
+    repository's requirements, assertions and rationale can leave the compiled
+    document. Reporting the omission is what separates that from the
     silent-omission anti-pattern REQ-p00019 prohibits and REQ-p00080's
     instance of it concretizes.
 
@@ -1298,3 +1298,348 @@ class TestCrossRepoTopicIndexInAssembledDocument:
         assert (
             "[root] [REQ-p00001]" not in line
         ), f"host repo entry must render bare, not annotated: {line!r}"
+
+
+# ---------------------------------------------------------------------------
+# Percent-encoded references (REQ-p00080-I)
+# ---------------------------------------------------------------------------
+
+
+class TestPercentEncodedImageReferences:
+    """Validates REQ-p00080-I: a URL-encoded image reference is judged on the
+    file the encoding actually names, so the report never accuses a reference
+    pandoc places without difficulty.
+
+    Markdown authors percent-encode the characters that would otherwise break
+    an inline link, spaces above all. Pandoc decodes the reference before
+    fetching, so ``img/with%20space.png`` reaches ``img/with space.png`` on
+    disk and the image lands in the PDF. A resolver that probes the encoded
+    spelling verbatim finds nothing, and a report built on that probe names a
+    reference that was never omitted -- an accusation the reader cannot act
+    on, because the remedy it suggests is already satisfied.
+    """
+
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_percent_encoded_reference_resolves_to_decoded_file(self, tmp_path):
+        """A ``%20`` reference whose decoded file exists is rewritten to that
+        file's absolute path and reported as nothing at all.
+        """
+        asm, root = _image_asm(tmp_path)
+        (root / "spec" / "img").mkdir(parents=True)
+        img = root / "spec" / "img" / "with space.png"
+        img.write_bytes(b"\x89PNG")
+        (root / "spec" / "x.md").write_text(
+            "# X\n\n![x](img/with%20space.png)\n",
+            encoding="utf-8",
+        )
+
+        joined = "\n".join(asm._render_file("spec/x.md"))
+
+        assert f"![x]({img.resolve()})" in joined, (
+            f"the decoded file exists on disk but the reference was not "
+            f"rewritten to it: {joined!r}"
+        )
+        assert asm.diagnostic_count() == 0, (
+            f"a reference pandoc resolves without difficulty was reported as "
+            f"omitted: {[d.reference for d in asm.iter_diagnostics()]}"
+        )
+
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_percent_encoded_reference_missing_reports_as_written(self, tmp_path):
+        """Decoding is for the probe only: when the decoded file is absent too,
+        the diagnostic still quotes the reference the author wrote, because
+        that is the string they must find in the spec to correct it.
+        """
+        asm, root = _image_asm(tmp_path)
+        (root / "spec").mkdir()
+        (root / "spec" / "x.md").write_text(
+            "# X\n\n![x](img/no%20such.png)\n",
+            encoding="utf-8",
+        )
+
+        asm._render_file("spec/x.md")
+
+        diags = list(asm.iter_diagnostics())
+        assert len(diags) == 1, f"expected exactly one diagnostic, got {diags!r}"
+        assert diags[0].kind == "image"
+        assert diags[0].reference == "img/no%20such.png", (
+            f"the diagnostic must quote the reference as written in the spec, "
+            f"not its decoded form: {diags[0].reference!r}"
+        )
+        assert diags[0].source_file == "spec/x.md"
+
+
+# ---------------------------------------------------------------------------
+# Fenced code blocks (REQ-p00080-I)
+# ---------------------------------------------------------------------------
+
+
+class TestFencedCodeBlockReferences:
+    """Validates REQ-p00080-I: an image reference inside a fenced code block is
+    a sample of markdown, not a reference the document ever intended to place.
+
+    A fenced block reproduces source text verbatim for the reader. Treating
+    its contents as live references costs twice: an unresolvable sample earns
+    a diagnostic for content that was never omitted, and a resolvable one gets
+    rewritten to an absolute path, so the reader is shown a path from the
+    author's machine in place of the line they were meant to copy. Both are
+    failures of the same obligation -- what the compiler reports and renders
+    must correspond to what it actually did.
+
+    Indented (four-space) code blocks are out of scope; fences alone are
+    recognised.
+    """
+
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_unresolvable_reference_in_fence_is_not_reported(self, tmp_path):
+        """A sample naming a file that does not exist is neither reported nor
+        altered -- the fenced line survives byte-for-byte.
+        """
+        asm, root = _image_asm(tmp_path)
+        (root / "spec").mkdir()
+        sample = "![example](path/to/your-image.png)"
+        (root / "spec" / "doc.md").write_text(
+            f"# Doc\n\nEmbed an image like this:\n\n```markdown\n{sample}\n```\n",
+            encoding="utf-8",
+        )
+
+        joined = "\n".join(asm._render_file("spec/doc.md"))
+
+        assert asm.diagnostic_count() == 0, (
+            f"a markdown sample inside a fence was reported as an omitted "
+            f"reference: {[d.reference for d in asm.iter_diagnostics()]}"
+        )
+        assert sample in joined.split("\n"), (
+            f"the fenced sample line must survive verbatim; rendered output " f"was {joined!r}"
+        )
+
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_fence_suppresses_rewrite_while_prose_still_rewrites(self, tmp_path):
+        """The same reference is rewritten in prose and left alone in a fence.
+
+        Both halves are asserted together so that fence tracking cannot be
+        satisfied by simply not rewriting anything.
+        """
+        asm, root = _image_asm(tmp_path)
+        (root / "spec" / "img").mkdir(parents=True)
+        img = root / "spec" / "img" / "real.png"
+        img.write_bytes(b"\x89PNG")
+        (root / "spec" / "doc.md").write_text(
+            "# Doc\n"
+            "\n"
+            "![real](img/real.png)\n"
+            "\n"
+            "```markdown\n"
+            "![real](img/real.png)\n"
+            "```\n",
+            encoding="utf-8",
+        )
+
+        lines = asm._render_file("spec/doc.md")
+
+        assert f"![real]({img.resolve()})" in lines, (
+            f"the prose reference must still be rewritten to an absolute " f"path: {lines!r}"
+        )
+        assert "![real](img/real.png)" in lines, (
+            f"the fenced sample must keep the relative path the author wrote: " f"{lines!r}"
+        )
+        assert asm.diagnostic_count() == 0
+
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_tilde_fence_behaves_like_backtick_fence(self, tmp_path):
+        """``~~~`` opens and closes a fence exactly as ``` does."""
+        asm, root = _image_asm(tmp_path)
+        (root / "spec").mkdir()
+        sample = "![example](path/to/your-image.png)"
+        (root / "spec" / "doc.md").write_text(
+            f"# Doc\n\n~~~markdown\n{sample}\n~~~\n\n![gone](also/missing.png)\n",
+            encoding="utf-8",
+        )
+
+        joined = "\n".join(asm._render_file("spec/doc.md"))
+
+        refs = [d.reference for d in asm.iter_diagnostics()]
+        assert "path/to/your-image.png" not in refs, (
+            f"a reference inside a ~~~ fence was reported as omitted: " f"{refs!r}"
+        )
+        assert "also/missing.png" in refs, (
+            f"the fence must close at the second ~~~ so the prose reference "
+            f"after it is still judged: {refs!r}"
+        )
+        assert sample in joined.split("\n"), f"the fenced sample line was altered: {joined!r}"
+
+
+# ---------------------------------------------------------------------------
+# Absolute image references (REQ-p00080-I)
+# ---------------------------------------------------------------------------
+
+
+class TestAbsoluteImageReferences:
+    """Validates REQ-p00080-I: an absolute image path that does not exist is
+    reported by the compiler, before the typesetter dies on it.
+
+    An absolute reference needs no resolution, so the assembler passes it
+    through untouched -- and pandoc then aborts the whole compile on a file it
+    cannot open, naming the path and nothing else. The reader is left with no
+    document, no declaring spec file, and no remedy. Probing the path costs
+    one stat call and turns that dead end into the same actionable report
+    every other unresolvable reference gets.
+    """
+
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_missing_absolute_path_is_reported(self, tmp_path):
+        """A nonexistent absolute reference yields one diagnostic naming the
+        declaring spec file and stating that the path is absolute and absent.
+        """
+        asm, root = _image_asm(tmp_path)
+        (root / "spec").mkdir()
+        absent = tmp_path / "nowhere" / "abs.png"
+        (root / "spec" / "a.md").write_text(
+            f"# A\n\n![abs]({absent})\n",
+            encoding="utf-8",
+        )
+
+        asm._render_file("spec/a.md")
+
+        diags = list(asm.iter_diagnostics())
+        assert len(diags) == 1, f"expected exactly one diagnostic, got {diags!r}"
+        diag = diags[0]
+        assert diag.kind == "image"
+        assert diag.reference == str(absent)
+        assert diag.source_file == "spec/a.md", (
+            f"the declaring spec file is the one thing pandoc's own abort "
+            f"cannot supply: {diag.source_file!r}"
+        )
+        assert "absolute" in diag.cause.lower(), (
+            f"the cause must say the path is absolute, so the reader knows "
+            f"no search would have helped: {diag.cause!r}"
+        )
+        assert diag.remedy
+
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_existing_absolute_path_is_left_alone(self, tmp_path):
+        """An absolute reference that resolves is neither rewritten nor
+        reported (no false positive).
+        """
+        asm, root = _image_asm(tmp_path)
+        (root / "spec").mkdir()
+        present = tmp_path / "elsewhere" / "abs.png"
+        present.parent.mkdir(parents=True)
+        present.write_bytes(b"\x89PNG")
+        (root / "spec" / "a.md").write_text(
+            f"# A\n\n![abs]({present})\n",
+            encoding="utf-8",
+        )
+
+        joined = "\n".join(asm._render_file("spec/a.md"))
+
+        assert f"![abs]({present})" in joined
+        assert asm.diagnostic_count() == 0, (
+            f"an absolute reference that exists must not be reported: "
+            f"{[d.reference for d in asm.iter_diagnostics()]}"
+        )
+
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_file_url_reference_is_not_reported(self, tmp_path):
+        """Regression guard: a ``file://`` reference is a URL, not a local
+        path the assembler is entitled to judge.
+        """
+        asm, root = _image_asm(tmp_path)
+        (root / "spec").mkdir()
+        (root / "spec" / "a.md").write_text(
+            "# A\n\n![f](file:///opt/assets/pic.png)\n",
+            encoding="utf-8",
+        )
+
+        joined = "\n".join(asm._render_file("spec/a.md"))
+
+        assert "![f](file:///opt/assets/pic.png)" in joined
+        assert asm.diagnostic_count() == 0, (
+            f"a URL reference must never be reported as a missing local file: "
+            f"{[d.reference for d in asm.iter_diagnostics()]}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Unloadable associate repository (REQ-p00080-J)
+# ---------------------------------------------------------------------------
+
+
+def _fed_with_unloadable_associate(tmp_path: Path):
+    """Federation whose associate never loaded: no graph, no directory.
+
+    This is the shape a misconfigured ``[associates.<name>] path`` produces --
+    the entry survives federation so the name is still known, but it carries
+    no graph and its configured root is not on disk.
+    """
+    from elspais.graph.federated import FederatedGraph, RepoEntry
+
+    fed, root_dir, assoc_dir = _make_federated_overview_graph(tmp_path)
+    missing_root = tmp_path / "nowhere"
+    entries = []
+    for entry in fed.iter_repos():
+        if entry.name == "assoc":
+            entries.append(RepoEntry(name="assoc", graph=None, config=None, repo_root=missing_root))
+        else:
+            entries.append(entry)
+    return FederatedGraph(entries, root_repo="root"), root_dir, missing_root
+
+
+class TestUnloadableRepositoryDiagnostics:
+    """Validates REQ-p00080-J: a configured repository that never loaded is
+    reported, rather than silently subtracting every requirement it owns.
+
+    A repository whose configured path does not resolve contributes no graph,
+    so nothing downstream ever names one of its files -- the file-level report
+    cannot fire, and the document simply comes out without that repository's
+    section. The reader has no way to tell that from a project that legitimately
+    has one fewer repository. The omission is a whole repository, so it is
+    disclosed as one, naming the repository and the path that was expected to
+    hold it.
+    """
+
+    # Verifies: REQ-p00080-J
+    def test_REQ_p00080_J_unloadable_repository_is_reported(self, tmp_path):
+        """One unloadable associate yields exactly one repository diagnostic
+        naming the repo and the configured root, and the root repo's content
+        still renders.
+        """
+        fed, _root_dir, missing_root = _fed_with_unloadable_associate(tmp_path)
+
+        asm = MarkdownAssembler(fed)
+        output = asm.assemble()
+
+        repo_diags = [d for d in asm.iter_diagnostics() if d.kind == "repository"]
+        assert len(repo_diags) == 1, (
+            f"expected exactly one repository diagnostic, got "
+            f"{[(d.kind, d.reference) for d in asm.iter_diagnostics()]}"
+        )
+        diag = repo_diags[0]
+        assert diag.reference == "assoc"
+        assert diag.source_file == "", "the omitted thing IS the repository"
+        assert diag.repo == "assoc"
+        assert any(
+            str(missing_root) in location for location in diag.searched
+        ), f"the configured root is missing from the searched locations: {diag.searched!r}"
+        assert diag.cause, "the diagnostic must state why the repository is absent"
+        assert "associate" in diag.remedy.lower(), (
+            f"the remedy must point at the associate configuration, which is "
+            f"where the wrong path lives: {diag.remedy!r}"
+        )
+
+        # Degraded, not aborted.
+        assert "Root Product Vision" in output
+
+    # Verifies: REQ-p00080-J
+    def test_REQ_p00080_J_healthy_federation_reports_no_repository(self, tmp_path):
+        """Regression guard: every repo loading normally reports nothing."""
+        fed, _root_dir, _assoc_dir = _make_federated_overview_graph(tmp_path)
+
+        asm = MarkdownAssembler(fed)
+        asm.assemble()
+
+        repo_diags = [d for d in asm.iter_diagnostics() if d.kind == "repository"]
+        assert repo_diags == [], (
+            f"a healthy federation must report no missing repository: "
+            f"{[d.reference for d in repo_diags]}"
+        )

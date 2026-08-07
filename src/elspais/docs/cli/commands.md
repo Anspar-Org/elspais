@@ -188,14 +188,20 @@ prefix so the reader can tell where a section comes from.
 Image and Mermaid references resolve against the declaring spec file's own
 directory, then its owning repository's root, then the resource path (every
 repository's root and `spec/` directory) -- so in a federated project each
-file's figures come from its own repo. A reference no repository can supply, a
-Mermaid source that cannot be rendered, or a spec file that cannot be found in
-its owning repository (which takes every requirement it holds out of the
-document) is reported on stderr with the locations searched and a remedy, and
-the completion line is qualified
-`(INCOMPLETE: N references omitted -- see warnings above)`. The exit code stays
-`0`: the document is produced, and the degradation is disclosed rather than
-fatal. See `elspais docs pdf`.
+file's figures come from its own repo. Percent-encoded references resolve on
+their decoded form; references inside fenced code blocks are left alone
+entirely (indented code blocks are not recognised). A reference no repository
+can supply, a Mermaid source that cannot be rendered, a spec file that cannot
+be found in its owning repository, or a configured associate repository that
+fails to load (each of which takes requirements out of the document) is
+reported on stderr with the locations searched and a remedy. Resources pandoc
+itself could not fetch -- `.webp`, `.pdf`, reference-style links and other
+media outside the compiler's grammar -- are folded into the same report,
+deduplicated so one missing file counts once, and the completion line is
+qualified `(INCOMPLETE: N references omitted -- see warnings above)`. The exit
+code stays `0`: the document is produced, and the degradation is disclosed
+rather than fatal. Raw HTML `<img>` tags are **not** supported and cannot be
+reported -- use Markdown image syntax. See `elspais docs pdf`.
 
 ## summary
 
