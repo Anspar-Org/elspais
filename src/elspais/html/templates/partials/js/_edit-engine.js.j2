@@ -2198,14 +2198,44 @@ function initShareSlider() {
 // Implements: REQ-d00267-C
 // =====================================================================
 
-window.addEventListener('beforeunload', function(e) {
+// A tab that will not close looks the same whether this handler armed and its
+// dialog never rendered or the page never got as far as deciding. The state
+// the decision reads, and the decision itself, are what tell those apart, so
+// both are recoverable from the browser's own console rather than inferred
+// from what the page happens to be showing. This reports; it does not decide.
+// Implements: REQ-d00267-D
+function unloadWarningState() {
     var count = editState.mutationCount;
-    var hasReportedMutations = typeof count === 'number' && count > 0;
-    if (hasReportedMutations) {
+    var known = typeof count === 'number';
+    return {
+        willWarnOnClose: known && count > 0,
+        pendingCount: known ? count : null,
+        countKnown: known,
+        countEstablishedAt: editState.dirtyCountAt,
+        countSource: editState.dirtyCountSource,
+        lastSeenTip: editState.lastSeenTip
+    };
+}
+window.unloadWarningState = unloadWarningState;
+
+window.addEventListener('beforeunload', function(e) {
+    var state = unloadWarningState();
+    if (state.willWarnOnClose) {
+        console.info('[elspais] beforeunload: warning, the server reported ' +
+            state.pendingCount + ' pending change(s). Call unloadWarningState() ' +
+            'for the state behind this decision.');
         e.preventDefault();
         e.returnValue = '';
+    } else {
+        console.info('[elspais] beforeunload: not warning, ' + (state.countKnown
+            ? 'the server reported no pending changes.'
+            : 'the pending count is unknown (the server could not be reached).') +
+            ' Call unloadWarningState() for the state behind this decision.');
     }
 });
+
+console.info('[elspais] unloadWarningState() reports whether this page will ' +
+    'warn before you close it, and the state that decides it.');
 
 // =====================================================================
 // Branch Status: on-load check and polling (REQ-p00004-C, REQ-p00004-D)

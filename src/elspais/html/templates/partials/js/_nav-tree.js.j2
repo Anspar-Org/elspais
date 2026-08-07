@@ -359,6 +359,8 @@ function markDirtyCountUnknown() {
     if (!badge) return;
     var last = editState.mutationCount;
     editState.mutationCount = null;
+    editState.dirtyCountSource = 'unreachable';
+    editState.dirtyCountAt = new Date().toISOString();
     // lastSeenTip is deliberately NOT touched: only a successful read has
     // actually seen the history, and marking another writer's tip as "seen"
     // on a failed read would suppress the other-writer banner.
@@ -376,6 +378,8 @@ async function refreshDirtyCount() {
     const data = await apiFetch('/api/dirty');
     if (!data) { markDirtyCountUnknown(); return; }
     editState.mutationCount = data.mutation_count || 0;
+    editState.dirtyCountSource = 'server';
+    editState.dirtyCountAt = new Date().toISOString();
     // We have just looked at the history, so this tip is "seen" -- our own
     // mutations must not trip the other-writer banner.
     editState.lastSeenTip = data.tip || '';

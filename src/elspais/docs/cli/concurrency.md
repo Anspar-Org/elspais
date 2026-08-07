@@ -203,6 +203,60 @@ lives in the server, closing the tab destroys nothing -- the warning is a
 courtesy, not a guard on data in the page -- so while the count is
 unknown the viewer does not obstruct navigation.
 
+## Finding Out Why the Page Did (or Did Not) Warn
+
+The viewer in edit mode can tell you the state behind that decision, so
+you do not have to infer it from what the page is showing. Open the
+browser's developer console and call:
+
+```text
+  > unloadWarningState()
+
+  {
+    willWarnOnClose:    true | false
+    pendingCount:       N | null
+    countKnown:         true | false
+    countEstablishedAt: "2026-08-07T12:34:56.789Z" | null
+    countSource:        "server" | "unreachable" | null
+    lastSeenTip:        "<mutation id>" | ""
+  }
+```
+
+Field by field:
+
+- `willWarnOnClose` -- whether the page will warn if you try to leave
+  right now. It is exactly `countKnown && pendingCount > 0`.
+- `pendingCount` -- the pending-change count the server last reported;
+  `null` when the count is unknown (the `?` badge).
+- `countKnown` -- whether `pendingCount` is a number the server actually
+  gave, as opposed to an absent value.
+- `countEstablishedAt` -- when that outcome was recorded, ISO-8601.
+  `null` before the page has asked at all. Both outcomes stamp it, and
+  the 30-second poll produces one every cycle, so an old timestamp does
+  not mean "the server went quiet" -- it means no outcome of either kind
+  has been recorded since, i.e. the page has stopped asking.
+- `countSource` -- `"server"` if the count came from an answered
+  `/api/dirty`, `"unreachable"` if the last attempt to reach the server
+  failed, `null` if the page has not yet made the request.
+- `lastSeenTip` -- the mutation-log tip as of the last *successful*
+  read, which is what the other-writer banner compares against. A failed
+  read leaves it alone, so it can be older than `countEstablishedAt`.
+  `""` means nothing was pending when it was read.
+
+This function reports; it does not decide anything. Calling it changes
+no state and does not arm or disarm the warning.
+
+The console also carries the decision itself. Each time you attempt to
+navigate away, the handler logs one line beginning `[elspais]
+beforeunload:` saying whether it warned and why -- naming the pending
+count when it warned, and naming the count as unknown when it did not.
+If you tried to close the page and no such line appeared, the page never
+reached the decision; if the line is there, it did, and the values it
+names are the ones the decision was made on.
+
+Both of these exist only in edit mode. A read-only viewer never warns
+before navigation and does not define `unloadWarningState`.
+
 ## Why Tokens Survive a Refresh
 
 The version is a 16-character digest of the node's rendered text plus

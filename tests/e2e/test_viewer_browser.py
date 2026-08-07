@@ -5,6 +5,7 @@
 # Verifies: REQ-d00267-A
 # Verifies: REQ-d00267-B
 # Verifies: REQ-d00267-C
+# Verifies: REQ-d00267-D
 """Playwright-based browser tests for the elspais viewer command.
 
 Validates REQ-d00010: viewer command serves the traceability UI
@@ -21,6 +22,7 @@ import socket
 import subprocess
 import sys
 import time
+from datetime import datetime
 
 import pytest
 
@@ -1507,4 +1509,315 @@ class TestBrowserPendingWorkIndicatorTruth:
         assert not dialogs, (
             f"navigation must not be obstructed while the pending count is "
             f"unknown, but a beforeunload dialog was raised: {dialogs}"
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Unload decision observability (REQ-d00267-D)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_UNLOAD_STATE_KEYS = {
+    "willWarnOnClose",
+    "pendingCount",
+    "countKnown",
+    "countEstablishedAt",
+    "countSource",
+    "lastSeenTip",
+}
+
+
+def _has_unload_state(page) -> bool:
+    """Is the on-demand inspection hook present at all?"""
+    return page.evaluate("() => typeof window.unloadWarningState === 'function'")
+
+
+def _unload_state(page) -> dict:
+    """Read the inspection hook, failing with a diagnosis if it is absent.
+
+    Going through a helper keeps every downstream test's failure a plain
+    assertion about missing behaviour rather than a raw ReferenceError out of
+    page.evaluate, which reads like a broken harness.
+    """
+    assert _has_unload_state(page), (
+        "window.unloadWarningState() is not defined: the state behind the "
+        "navigation warning is not inspectable from the console"
+    )
+    return page.evaluate("() => window.unloadWarningState()")
+
+
+def _server_dirty(page, base: str) -> dict:
+    """Ask the server directly what it considers pending."""
+    return page.request.get(f"{base}/api/dirty").json()
+
+
+def _revert_to_zero(page, base: str) -> None:
+    """Discard every pending mutation so the server truthfully reports zero.
+
+    The badge fixture's server is module-scoped and earlier tests leave real
+    pending work in it, so "nothing pending" cannot be assumed — it has to be
+    established. /api/revert rebuilds the graph from disk, which empties the
+    mutation log outright; it is guarded on the mutation-log tip, so the
+    current tip is read from /api/dirty and echoed back ("" when the log is
+    already empty).
+    """
+    tip = _server_dirty(page, base).get("tip") or ""
+    resp = page.request.post(f"{base}/api/revert", data={"if_tip_mutation_id": tip})
+    assert resp.status == 200, f"revert setup failed: {resp.status} {resp.text()}"
+    after = _server_dirty(page, base)
+    assert after.get("mutation_count") == 0, f"revert must leave nothing pending, got: {after}"
+
+
+def _console_sink(page) -> list[str]:
+    """Collect console message text emitted by the page from now on."""
+    messages: list[str] = []
+    page.on("console", lambda msg: messages.append(msg.text))
+    return messages
+
+
+def _beforeunload_messages(messages: list[str]) -> list[str]:
+    """The subset of console output reporting the navigation decision."""
+    return [m for m in messages if "[elspais]" in m and "beforeunload" in m.lower()]
+
+
+class TestBrowserUnloadDecisionObservable:
+    """Validates REQ-d00267-D: the state deciding whether the viewer warns
+    before navigation is inspectable on demand — the count, whether the count
+    is known, and when it was last established — and the decision actually
+    reached is reported at the moment navigation is attempted.
+
+    This is instrumentation for a field report of a tab that would not close,
+    whose cause was never observed. A busy main thread and a beforeunload
+    dialog that never rendered look identical from outside; the arming state
+    and the emitted decision are what tell them apart, so both are asserted
+    against the REAL observed dialog behaviour rather than on their own.
+    """
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00267_D_unload_state_is_inspectable(self, page_badge, badge_viewer_url):
+        # Verifies: REQ-d00267-D
+        """The inspection hook exists as a global function and reports the
+        whole decision input: count, known-ness, when established, provenance,
+        the seen tip, and the arming decision itself."""
+        page = page_badge
+        page.goto(badge_viewer_url, wait_until="networkidle")
+
+        assert _has_unload_state(page), (
+            "an operator with nothing but the browser console must be able to "
+            "call window.unloadWarningState(); it is not a function"
+        )
+
+        state = page.evaluate("() => window.unloadWarningState()")
+        assert isinstance(state, dict), f"unloadWarningState() must return an object, got {state!r}"
+        missing = _UNLOAD_STATE_KEYS - set(state)
+        assert not missing, (
+            f"unloadWarningState() must report the full decision input; "
+            f"missing keys {sorted(missing)} (got {sorted(state)})"
+        )
+        assert isinstance(
+            state["willWarnOnClose"], bool
+        ), f"willWarnOnClose must be a boolean decision, got {state['willWarnOnClose']!r}"
+        assert isinstance(
+            state["countKnown"], bool
+        ), f"countKnown must be a boolean, got {state['countKnown']!r}"
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00267_D_state_and_dialog_agree_when_work_pending(
+        self, page_badge, badge_viewer_url
+    ):
+        # Verifies: REQ-d00267-D
+        """With a server-reported pending count, the reported decision says it
+        will warn AND a real close raises the dialog. Asserting both in one
+        test is the point: a reported value that re-derives the condition
+        instead of reflecting the handler could otherwise say 'warn' while the
+        page silently lets you leave."""
+        page = page_badge
+        page.goto(badge_viewer_url, wait_until="networkidle")
+
+        pending = _create_pending_mutation(page, badge_viewer_url, "Badge Decision Pending")
+        _refresh_dirty(page)
+
+        state = _unload_state(page)
+        assert state["willWarnOnClose"] is True, (
+            f"the server reports {pending} pending: the reported decision must "
+            f"be to warn, got {state!r}"
+        )
+        assert (
+            state["pendingCount"] == pending
+        ), f"pendingCount must be the server's count {pending}, got {state['pendingCount']!r}"
+        assert (
+            state["countKnown"] is True
+        ), f"a server-reported count is known, got countKnown={state['countKnown']!r}"
+        assert (
+            state["countSource"] == "server"
+        ), f"the count came from the server, got countSource={state['countSource']!r}"
+        assert state["countEstablishedAt"], (
+            "the moment the count was established must be reported, got "
+            f"{state['countEstablishedAt']!r}"
+        )
+        # Parsed, not merely non-empty: an operator reading this after the
+        # fact needs to know how stale the count is.
+        established = datetime.fromisoformat(
+            str(state["countEstablishedAt"]).replace("Z", "+00:00")
+        )
+        assert established.year >= 2020, f"implausible countEstablishedAt: {established!r}"
+
+        dialogs = _close_observing_beforeunload(page)
+        assert dialogs, (
+            f"unloadWarningState() reported willWarnOnClose=True with "
+            f"{pending} pending, but closing the page raised no beforeunload "
+            f"dialog — the reported decision does not match the handler"
+        )
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00267_D_state_and_dialog_agree_when_count_unknown(
+        self, page_badge, badge_viewer_url
+    ):
+        # Verifies: REQ-d00267-D
+        """With the count endpoint unreachable the reported decision says it
+        will NOT warn, names the count as unknown and unreachable-sourced, and
+        a real close is in fact unobstructed."""
+        page = page_badge
+        page.goto(badge_viewer_url, wait_until="networkidle")
+
+        _create_pending_mutation(page, badge_viewer_url, "Badge Decision Unknown")
+        _refresh_dirty(page)
+        assert _unload_state(page)["countKnown"] is True, "precondition: count must start known"
+
+        _go_unknown(page)
+        state = _unload_state(page)
+
+        assert state["willWarnOnClose"] is False, (
+            f"an unverifiable claim must not arm the warning; reported " f"decision was {state!r}"
+        )
+        assert (
+            state["pendingCount"] is None
+        ), f"an unknown count must be reported as null, got {state['pendingCount']!r}"
+        assert (
+            state["countKnown"] is False
+        ), f"countKnown must be false while unreachable, got {state['countKnown']!r}"
+        assert state["countSource"] == "unreachable", (
+            f"the state must name WHY the count is what it is, expected "
+            f"'unreachable', got {state['countSource']!r}"
+        )
+
+        dialogs = _close_observing_beforeunload(page)
+        assert not dialogs, (
+            f"unloadWarningState() reported willWarnOnClose=False, but closing "
+            f"the page raised a beforeunload dialog: {dialogs}"
+        )
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00267_D_handler_disarmed_when_server_dead_and_nothing_pending(
+        self, page_badge, badge_viewer_url
+    ):
+        # Verifies: REQ-d00267-D
+        """The discriminating case for the field report: the server reported
+        ZERO pending and then went away. This is the state an operator was in
+        when they could not close the tab, so the reported decision must show
+        the handler disarmed in BOTH sub-states — while the page still holds
+        the reported zero, and after the failed poll turns it unknown — and a
+        real close must go through.
+
+        Nothing-pending is established by reverting, not assumed: the badge
+        fixture's server is module-scoped and earlier tests in this module
+        leave real pending work in it.
+        """
+        page = page_badge
+        page.goto(badge_viewer_url, wait_until="networkidle")
+
+        _revert_to_zero(page, badge_viewer_url)
+        _refresh_dirty(page)
+
+        reported_zero = _unload_state(page)
+        assert reported_zero["pendingCount"] == 0, (
+            f"precondition: the server reported nothing pending, so the page "
+            f"must hold 0, got {reported_zero['pendingCount']!r}"
+        )
+        assert reported_zero["countKnown"] is True, reported_zero
+        assert reported_zero["countSource"] == "server", reported_zero
+        assert reported_zero["willWarnOnClose"] is False, (
+            f"a server-reported zero must leave the warning disarmed, got " f"{reported_zero!r}"
+        )
+
+        # The server now goes away. Nothing pending was ever reported, so the
+        # failed poll must not resurrect a warning out of thin air.
+        _go_unknown(page)
+        dead = _unload_state(page)
+        assert dead["countKnown"] is False, dead
+        assert dead["willWarnOnClose"] is False, (
+            f"server dead with nothing pending must stay disarmed — this is "
+            f"the state in which a tab reportedly would not close; got {dead!r}"
+        )
+
+        dialogs = _close_observing_beforeunload(page)
+        assert not dialogs, (
+            f"with nothing pending and the server unreachable the page must "
+            f"close unobstructed, but a beforeunload dialog was raised: {dialogs}"
+        )
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00267_D_decision_is_reported_at_navigation_when_armed(
+        self, page_badge, badge_viewer_url
+    ):
+        # Verifies: REQ-d00267-D
+        """Attempting navigation with work pending emits a console record of
+        the decision reached, naming the pending count. Without this an
+        operator cannot tell 'the handler ran and armed' from 'the handler
+        never ran' after the fact."""
+        page = page_badge
+        page.goto(badge_viewer_url, wait_until="networkidle")
+
+        pending = _create_pending_mutation(page, badge_viewer_url, "Badge Decision Console Armed")
+        _refresh_dirty(page)
+        assert _unload_state(page)["willWarnOnClose"] is True, "precondition: must be armed"
+
+        messages = _console_sink(page)
+        dialogs = _close_observing_beforeunload(page)
+        assert dialogs, "precondition: the armed case must actually raise the dialog"
+
+        reported = _beforeunload_messages(messages)
+        assert reported, (
+            f"attempting navigation must emit an '[elspais]' beforeunload "
+            f"decision record; console carried only {messages!r}"
+        )
+        assert any(str(pending) in m for m in reported), (
+            f"the armed decision record must name the pending count "
+            f"{pending} it armed on, got {reported!r}"
+        )
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00267_D_decision_is_reported_at_navigation_when_not_armed(
+        self, page_badge, badge_viewer_url
+    ):
+        # Verifies: REQ-d00267-D
+        """Attempting navigation with the count unknown emits its own console
+        record of the decision, distinguishable from the armed one: the
+        handler ran and chose NOT to obstruct. A silent not-armed path would
+        be indistinguishable from a handler that never fired at all."""
+        page = page_badge
+        page.goto(badge_viewer_url, wait_until="networkidle")
+
+        pending = _create_pending_mutation(page, badge_viewer_url, "Badge Decision Console Quiet")
+        _refresh_dirty(page)
+        _go_unknown(page)
+        assert _unload_state(page)["willWarnOnClose"] is False, "precondition: must be disarmed"
+
+        messages = _console_sink(page)
+        dialogs = _close_observing_beforeunload(page)
+        assert not dialogs, "precondition: the unknown case must not raise a dialog"
+
+        reported = _beforeunload_messages(messages)
+        assert reported, (
+            f"a not-armed navigation attempt must still report the decision "
+            f"it reached; console carried only {messages!r}"
+        )
+        assert not any(str(pending) in m for m in reported), (
+            f"the not-armed record must be distinguishable from the armed one "
+            f"and must not claim a pending count it did not arm on: {reported!r}"
         )

@@ -642,6 +642,15 @@ guard on data in the page. Obstructing navigation over a claim the viewer cannot
 verify therefore buys no safety and can leave an operator unable to leave the
 page at all.
 
+That last failure mode is reported from the field and its cause is not yet
+established: a page that will not close looks identical whether the navigation
+warning fired and its dialog never rendered, or the page never got as far as
+deciding. The two are told apart by the state the decision reads and by whether
+the decision was reached at all, so that state and that decision must be
+recoverable after the fact by an operator with nothing but the browser's own
+console — not reconstructed by inference from what the page happens to be
+displaying.
+
 ### Assertions
 
 A. When the viewer cannot obtain the pending-change count from the server, the viewer SHALL present the count as unknown, and SHALL present it neither as the last count obtained nor as zero.
@@ -650,8 +659,11 @@ B. When the server reports a pending-change count after the viewer has presented
 
 C. The viewer SHALL warn an operator before navigating away only while the server has reported that changes are pending; while the pending-change count is unknown, the viewer SHALL NOT obstruct navigation.
 
+D. The viewer SHALL make the state that decides whether it warns before navigation inspectable on demand — the count, whether the count is known, and when it was last established — and SHALL report the decision it reached at the moment navigation is attempted.
+
 ### Changelog
 
+- 2026-08-07 | 5d25457c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-07 | 94abbc63 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Viewer Pending-Work Indicator Truth* | **Hash**: 94abbc63
+*End* *Viewer Pending-Work Indicator Truth* | **Hash**: 5d25457c
