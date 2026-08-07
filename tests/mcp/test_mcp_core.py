@@ -8,6 +8,7 @@
 # Validates REQ-d00062-E, REQ-d00062-F
 # Validates REQ-d00063-A, REQ-d00063-B, REQ-d00063-C, REQ-d00063-D, REQ-d00063-E
 # Validates REQ-d00064-A, REQ-d00064-B, REQ-d00064-C, REQ-d00064-D, REQ-d00064-E
+# Validates REQ-p00015-B, REQ-p00015-F
 """Tests for MCP core tools.
 
 Tests REQ-o00060: MCP Core Query Tools
@@ -410,32 +411,46 @@ class TestRefreshGraph:
     """Tests for refresh_graph() tool."""
 
     # Verifies: REQ-o00060-B
-    def test_refresh_rebuilds_graph(self, sample_graph):
-        """Refresh should rebuild the graph from spec files."""
+    def test_refresh_rebuilds_graph(self, sample_graph, tmp_path):
+        """Refresh should rebuild the graph from spec files and publish it."""
         pytest.importorskip("mcp")
-        from elspais.mcp.server import _refresh_graph
+        from elspais.mcp.shared_state import SharedServerState, rebuild_shared_graph
 
-        # This is a functional test - verify refresh returns a valid graph
-        with patch("elspais.mcp.server.build_graph") as mock_build:
+        state = SharedServerState({"working_dir": tmp_path})
+
+        # This is a functional test - verify refresh publishes a valid graph
+        with (
+            patch("elspais.config.get_config") as mock_config,
+            patch("elspais.graph.factory.build_graph") as mock_build,
+        ):
+            mock_config.return_value = {}
             mock_build.return_value = sample_graph
 
-            result, new_graph = _refresh_graph(Path("/test/repo"))
+            result = rebuild_shared_graph(state)
 
             mock_build.assert_called_once()
             assert result["success"] is True
+            assert state["graph"] is sample_graph
 
     # Verifies: REQ-o00060-B
-    def test_refresh_full_clears_caches(self, sample_graph):
-        """Refresh with full=True should clear all caches."""
+    def test_refresh_full_clears_caches(self, sample_graph, tmp_path):
+        """Refresh with full=True should rebuild everything from disk."""
         pytest.importorskip("mcp")
-        from elspais.mcp.server import _refresh_graph
+        from elspais.mcp.shared_state import SharedServerState, rebuild_shared_graph
 
-        with patch("elspais.mcp.server.build_graph") as mock_build:
+        state = SharedServerState({"working_dir": tmp_path})
+
+        with (
+            patch("elspais.config.get_config") as mock_config,
+            patch("elspais.graph.factory.build_graph") as mock_build,
+        ):
+            mock_config.return_value = {}
             mock_build.return_value = sample_graph
 
-            result, _ = _refresh_graph(Path("/test/repo"), full=True)
+            result = rebuild_shared_graph(state, full=True)
 
             assert result["success"] is True
+            assert state["graph"] is sample_graph
 
     # Verifies: REQ-p00004-J
     def test_refresh_rereads_config_from_disk(self, tmp_path):
@@ -448,7 +463,7 @@ class TestRefreshGraph:
         must re-read configuration from disk, not reuse the in-memory config.
         """
         pytest.importorskip("mcp")
-        from elspais.mcp.server import _refresh_graph
+        from elspais.mcp.shared_state import SharedServerState, rebuild_shared_graph
 
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
@@ -491,9 +506,12 @@ class TestRefreshGraph:
             "*End* *Dev requirement* | **Hash**: 00000000\n"
         )
 
+        state = SharedServerState({"working_dir": tmp_path})
+
         # Initial build: 'dev' is not a declared level, so REQ-d00001 is absent.
-        result, graph = _refresh_graph(tmp_path)
+        result = rebuild_shared_graph(state)
         assert result["success"] is True
+        graph = state["graph"]
         assert graph.find_by_id("REQ-p00001") is not None
         assert graph.find_by_id("REQ-d00001") is None
 
@@ -507,12 +525,131 @@ class TestRefreshGraph:
                 'implements = ["prd"]\n'
             )
 
-        result2, graph2 = _refresh_graph(tmp_path, full=True)
+        result2 = rebuild_shared_graph(state, full=True)
         assert result2["success"] is True
+        graph2 = state["graph"]
         assert graph2.find_by_id("REQ-d00001") is not None
-        # The config handed back for _state sync reflects the on-disk edit.
+        # The published config reflects the on-disk edit.
         assert result2["config"] is not None
         assert "dev" in result2["config"].get("levels", {})
+        assert "dev" in state["config"].get("levels", {})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test: a failed rebuild never substitutes an empty graph - REQ-p00015-F
+# ─────────────────────────────────────────────────────────────────────────────
+
+_VALID_CONFIG = (
+    "[project]\n"
+    'name = "cfg-error"\n'
+    'namespace = "REQ"\n'
+    "\n"
+    "[levels.prd]\n"
+    "rank = 1\n"
+    'letter = "p"\n'
+    'display_name = "Product"\n'
+    "implements = []\n"
+)
+
+# tomlkit rejects the bare newline inside the unterminated string, and the
+# config loader wraps the parse error with the offending file's path.
+_BROKEN_CONFIG = '[project]\nname = "cfg-error\n'
+
+_SPEC_REQ = (
+    "# REQ-p00001: Product requirement\n"
+    "\n"
+    "**Level**: PRD | **Status**: Active | **Implements**: -\n"
+    "\n"
+    "Body.\n"
+    "\n"
+    "## Assertions\n"
+    "\n"
+    "A. The system SHALL do the thing.\n"
+    "\n"
+    "*End* *Product requirement* | **Hash**: 00000000\n"
+)
+
+
+def _make_project(tmp_path):
+    """Write a valid single-repo project to disk and return its config path."""
+    config_path = tmp_path / ".elspais.toml"
+    config_path.write_text(_VALID_CONFIG)
+    spec_dir = tmp_path / "spec"
+    spec_dir.mkdir()
+    (spec_dir / "prd.md").write_text(_SPEC_REQ)
+    return config_path
+
+
+class TestRefreshGraphConfigError:
+    """Validates REQ-p00015-F: a rebuild that cannot parse the configuration
+    leaves the previously served graph live rather than substituting an empty
+    one, so no refresh is recorded as applied when nothing was rebuilt.
+
+    Validates REQ-p00015-B: the unapplied refresh is reported to the caller
+    with its cause, as a ``CONFIG ERROR:`` message naming the offending file.
+    """
+
+    # Verifies: REQ-p00015-F, REQ-p00015-B
+    def test_REQ_p00015_F_unparseable_config_keeps_the_live_graph(self, tmp_path):
+        """An unparseable .elspais.toml must not wipe the graph in the holder."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.shared_state import SharedServerState, rebuild_shared_graph
+
+        config_path = _make_project(tmp_path)
+        state = SharedServerState({"working_dir": tmp_path})
+
+        assert rebuild_shared_graph(state)["success"] is True
+        live_graph = state["graph"]
+        live_config = state["config"]
+        build_time = state["build_time"]
+        assert live_graph.find_by_id("REQ-p00001") is not None
+
+        config_path.write_text(_BROKEN_CONFIG)
+        result = rebuild_shared_graph(state, full=True)
+
+        # REQ-p00015-B: the unapplied refresh is reported, with its cause.
+        assert result["success"] is False
+        assert result["message"].startswith("CONFIG ERROR:")
+        assert ".elspais.toml" in result["message"]
+        assert result["node_count"] == 0
+        assert result["config"] is None
+
+        # REQ-p00015-F: nothing was published, so the previous graph is still
+        # the one being served -- same object, still queryable, same stamp.
+        assert state["graph"] is live_graph
+        assert state["config"] is live_config
+        assert state["build_time"] == build_time
+        assert state["graph"].find_by_id("REQ-p00001") is not None
+
+    # Verifies: REQ-p00015-F, REQ-p00015-B
+    def test_REQ_p00015_F_refresh_graph_tool_keeps_the_live_graph(self, tmp_path):
+        """The MCP surface an agent calls must not wipe the graph either."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import create_server
+        from elspais.mcp.shared_state import SharedServerState
+
+        config_path = _make_project(tmp_path)
+        state = SharedServerState({"working_dir": tmp_path})
+
+        # The server loads config at construction, so build it while valid.
+        server = create_server(working_dir=tmp_path, shared_state=state)
+        refresh = server._tool_manager._tools["refresh_graph"].fn
+
+        live_graph = state["graph"]
+        assert live_graph.find_by_id("REQ-p00001") is not None
+        build_time = state["build_time"]
+
+        config_path.write_text(_BROKEN_CONFIG)
+        result = refresh()
+
+        assert result["success"] is False
+        assert result["message"].startswith("CONFIG ERROR:")
+        assert ".elspais.toml" in result["message"]
+        assert result["node_count"] == 0
+
+        assert state["graph"] is live_graph
+        assert state["build_time"] == build_time
+        assert state["graph"].find_by_id("REQ-p00001") is not None
 
 
 # ─────────────────────────────────────────────────────────────────────────────

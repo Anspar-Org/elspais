@@ -136,6 +136,8 @@ Together, these mechanisms support:
 
 **Dependency-change review.** A requirement's references make it dependent on content it does not own: an `Implements:` or `Refines:` target, a `Satisfies:` template subtree, an `Integrates:` target in an associate repository. When that content changes, the referencing requirement's claim may no longer hold, so the requirement is flagged for review at the granularity its reference declares — a reference naming an assertion is sensitive to that assertion alone; a reference naming a whole requirement is sensitive to the requirement. A review flag records a human obligation: only an explicit review action discharges it. Automated fixing (hash regeneration, `elspais fix`) never discharges one — a flag the tool can acknowledge to itself is noise, not audit evidence. And when the referenced source cannot be consulted at all (an associate repository not checked out, for example), the honest verdict is "cannot verify", never "unchanged"; treating absence as stability is the same silent-omission defect REQ-p00015 guards against in reporting. One candidate mechanism (proposed, not obligated): store beside each reference a bounded record of the target's content hash plus a one-level subtree summary hash, compared at build time. Assertion G formerly stated this obligation for `Satisfies:` references only; assertion K generalizes it to all reference kinds, and G is superseded so a single obligation family governs.
 
+**Reloading and the change-detection state.** Change detection compares the content the tool holds against the content on disk, so it depends on records of what the tool last read — a snapshot of the scanned files, a fingerprint of the configuration a long-running server was started with. A reload replaces the held content; a reload that does not also bring those records forward leaves the tool believing it is behind when it is current, and the cost is real work done twice or a running server discarded and restarted for nothing. The obligation is on reloading as such, not on any one surface that offers it: a reload reached through a request, through an agent tool, or through automatic freshness detection leaves the same state behind it.
+
 **Change reasons.** An audit trail answers *why* a requirement changed, not only *what* changed. Changes arrive through multiple editing surfaces; where the audit record requires a reason, every surface must be able to carry one. The obligation falls on each surface to gain the capability — never on the set of supported surfaces to shrink to those that already can.
 
 ## Assertions
@@ -168,8 +170,12 @@ M. If the source of referenced content is unavailable for comparison, then the t
 
 N. Where the audit record requires a reason for a change, each editing surface the tool supports SHALL capture a reason from its operator and supply it with the change.
 
+O. When the tool reloads the graph from disk, the tool SHALL bring the change-detection state it holds for the reloaded content into agreement with that content, so that no subsequent staleness check reports change the completed reload has already absorbed.
+
 ## Changelog
 
+- 2026-08-07 | b7e19864 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-07 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-11: author O - a completed reload leaves the change-detection state in agreement with the content it loaded, on every reload surface
 - 2026-07-31 | 7930cf78 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-40: author dependency-change review invariants K/L/M at reference granularity; supersede G (SATISFIES-only special case) so one obligation family governs
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-16: author N - every supported editing surface captures and supplies a change reason when the audit record requires one
@@ -178,7 +184,7 @@ N. Where the audit record requires a reason for a change, each editing surface t
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: G flags satisfiers on any change within the template subtree, not just the root
 - 2026-04-23 | f8ff5509 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Change Detection and Auditability* | **Hash**: 7930cf78
+*End* *Change Detection and Auditability* | **Hash**: b7e19864
 ---
 
 # REQ-p00013: Automated Testing

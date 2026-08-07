@@ -13,7 +13,7 @@
 | REQ-p00001 | Requirements Management Tool                     | prd-core.md     | 2d10975a |
 | REQ-p00002 | Requirements Validation                          | prd-core.md     | c8440f64 |
 | REQ-p00003 | Traceability Matrix Generation                   | prd-core.md     | 3121ad66 |
-| REQ-p00004 | Change Detection and Auditability                | prd-core.md     | 7930cf78 |
+| REQ-p00004 | Change Detection and Auditability                | prd-core.md     | b7e19864 |
 | REQ-p00005 | Multi-Repository Requirements                    | prd-features.md | de05471c |
 | REQ-p00006 | Interactive Traceability Viewer                  | prd-features.md | 185217a3 |
 | REQ-p00013 | Automated Testing                                | prd-core.md     | 4318202c |

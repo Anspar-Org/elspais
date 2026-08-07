@@ -573,3 +573,110 @@ class TestPerRepoDetachedState:
         state.repo_root = tmp_path
         state._repo_detached = {}
         return state
+
+
+class TestMcpRefreshAbsorbsChangeDetectionState:
+    """Validates REQ-p00004-O: MCP ``refresh_graph`` is a reload from disk and
+    must bring the change-detection state held for the reloaded content into
+    agreement with it.
+
+    The MCP tools and the viewer share one holder, so an MCP refresh that
+    leaves the viewer's mtime snapshot and daemon.json's config hash behind
+    makes the viewer rebuild the same files a second time and makes the CLI
+    restart a daemon that is already current.
+    """
+
+    SPEC_REQ = """\
+### REQ-p00001: Refresh Freshness Probe
+
+**Level**: PRD | **Status**: Active
+
+The system SHALL absorb its own reloads.
+
+## Assertions
+
+A. The system SHALL leave no staleness a completed reload already absorbed.
+
+*End* *Refresh Freshness Probe* | **Hash**: 00000000
+"""
+
+    def _project(self, tmp_path):
+        """A real repo plus an AppState and the MCP tools over its holder."""
+        import pytest as _pytest
+
+        _pytest.importorskip("mcp")
+        from elspais.mcp.server import create_server
+        from elspais.server.state import AppState
+
+        _make_repo(tmp_path)
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        spec_file = spec_dir / "core.md"
+        spec_file.write_text(self.SPEC_REQ)
+
+        state = AppState.from_config(repo_root=tmp_path)
+        server = create_server(graph=state.graph, working_dir=tmp_path, shared_state=state.shared)
+        tools = {name: tool.fn for name, tool in server._tool_manager._tools.items()}
+        return state, tools, spec_file
+
+    def test_REQ_p00004_O_mcp_refresh_leaves_no_redundant_rebuild(self, tmp_path):
+        """After MCP refresh_graph absorbs a disk change, the viewer's next
+        freshness check must not find that same change still outstanding."""
+        state, tools, spec_file = self._project(tmp_path)
+
+        time.sleep(0.05)
+        spec_file.write_text(self.SPEC_REQ.replace("SHALL absorb", "SHALL always absorb"))
+
+        result = tools["refresh_graph"]()
+        assert result.get("success") is True, result
+        build_time_after_refresh = state.build_time
+
+        state._last_stale_check = 0.0
+        rebuilt = state.ensure_fresh()
+
+        assert rebuilt is False, (
+            "the freshness check after a completed MCP refresh reported the "
+            "change the refresh already absorbed, and rebuilt a second time"
+        )
+        assert (
+            state.build_time == build_time_after_refresh
+        ), "build_time moved after the refresh with nothing changed on disk"
+
+    def test_REQ_p00004_O_mcp_refresh_syncs_daemon_config_hash(self, tmp_path):
+        """A refresh that re-read an edited config must leave daemon.json's
+        config_hash agreeing with that config, with no later request needed."""
+        import json
+
+        from elspais.mcp.daemon import compute_config_hash
+
+        state, tools, _spec_file = self._project(tmp_path)
+        config_path = tmp_path / ".elspais.toml"
+
+        daemon_json = tmp_path / ".elspais" / "daemon.json"
+        daemon_json.parent.mkdir(parents=True, exist_ok=True)
+        daemon_json.write_text(
+            json.dumps(
+                {
+                    "pid": 1,
+                    "port": 5000,
+                    "repo_root": str(tmp_path),
+                    "started_at": "2026-01-01T00:00:00",
+                    "version": "0.0.0",
+                    "config_hash": compute_config_hash(config_path),
+                    "type": "daemon",
+                }
+            )
+        )
+
+        time.sleep(0.05)
+        config_path.write_text(_MINIMAL_CONFIG.replace('name = "test"', 'name = "renamed-on-disk"'))
+        assert json.loads(daemon_json.read_text())["config_hash"] != compute_config_hash(
+            config_path
+        ), "fixture must present a genuinely stale recorded config hash"
+
+        result = tools["refresh_graph"]()
+        assert result.get("success") is True, result
+
+        assert json.loads(daemon_json.read_text())["config_hash"] == compute_config_hash(
+            config_path
+        ), "daemon.json still records the config the refresh replaced"
