@@ -1,4 +1,4 @@
-# Implements: REQ-p00080-A, REQ-p00080-C
+# Implements: REQ-p00080-A, REQ-p00080-C, REQ-p00080-K
 """Pandoc PDF renderer.
 
 Invokes pandoc as a subprocess to convert assembled Markdown to PDF.
@@ -100,10 +100,17 @@ def render_pdf(
             env=env,
         )
 
+        # Pandoc reports a dropped image as a warning and still exits 0
+        # ("Could not fetch resource X: replacing image with description").
+        # Gating this echo on a non-zero exit code would swallow every
+        # such degradation, so the operator sees pandoc's own words
+        # regardless of the verdict.
+        # Implements: REQ-p00080-K
+        if result.stderr:
+            print(result.stderr.rstrip("\n"), file=sys.stderr)
+
         if result.returncode != 0:
             print("Error: pandoc failed.", file=sys.stderr)
-            if result.stderr:
-                print(result.stderr, file=sys.stderr)
             return result.returncode
 
         return 0

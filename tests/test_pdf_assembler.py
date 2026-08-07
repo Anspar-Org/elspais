@@ -878,9 +878,15 @@ class TestImagePathResolution:
         joined = "\n".join(asm._render_file("spec/y.md"))
         assert f'![b]({img.resolve()} "caption text")' in joined
 
-    # Verifies: REQ-p00080-H
+    # Verifies: REQ-p00080-H, REQ-p00080-I
     def test_REQ_p00080_H_unresolved_and_external_refs_unchanged(self, tmp_path):
-        """Missing files and URLs are left as-is (resource-path fallback)."""
+        """Missing files and URLs are left as-is (resource-path fallback).
+
+        Leaving the markdown untouched is correct -- pandoc still gets a
+        shot via ``--resource-path``. What is NOT correct is staying
+        silent about it (REQ-p00080-I): the missing ref must be recorded
+        as a diagnostic while the URL must not.
+        """
         asm, root = _image_asm(tmp_path)
         (root / "spec").mkdir()
         (root / "spec" / "z.md").write_text(
@@ -891,6 +897,11 @@ class TestImagePathResolution:
         joined = "\n".join(asm._render_file("spec/z.md"))
         assert "![gone](missing/nope.png)" in joined
         assert "![web](https://example.com/pic.png)" in joined
+
+        # The unresolvable ref is reported; the URL is not a failure.
+        refs = [d.reference for d in asm.iter_diagnostics()]
+        assert "missing/nope.png" in refs
+        assert not any("example.com" in r for r in refs)
 
     # Verifies: REQ-p00080-H
     def test_REQ_p00080_H_associate_image_resolves_through_owning_repo(self, tmp_path):
@@ -914,3 +925,175 @@ class TestImagePathResolution:
         assert f"![d]({assoc_img})" in output
         root_img = (root_dir / "spec" / "img" / "d.png").resolve()
         assert f"![d]({root_img})" not in output
+
+
+# ---------------------------------------------------------------------------
+# Unresolvable-asset diagnostics (REQ-p00080-I)
+# ---------------------------------------------------------------------------
+
+
+class TestUnresolvableAssetDiagnostics:
+    """Validates REQ-p00080-I: an image or diagram reference that cannot be
+    located in any repository of the compiled graph is reported with the
+    reference as written, the declaring spec file, and the locations searched.
+
+    Today the assembler drops such refs silently: ``_resolve_image_paths``
+    and ``_resolve_mermaid_images`` both return ``match.group(0)`` and
+    record nothing, so the PDF simply comes out short an image.
+    """
+
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_unresolvable_image_is_reported(self, tmp_path):
+        """One unresolvable ref yields exactly one diagnostic carrying the
+        reference as written, the declaring file, and the searched paths.
+        """
+        asm, root = _image_asm(tmp_path)
+        (root / "spec").mkdir()
+        (root / "spec" / "z.md").write_text(
+            "# Z\n\n![gone](missing/nope.png)\n",
+            encoding="utf-8",
+        )
+
+        asm._render_file("spec/z.md")
+
+        diags = list(asm.iter_diagnostics())
+        assert len(diags) == 1, f"expected exactly one diagnostic, got {diags!r}"
+        assert asm.diagnostic_count() == 1
+        diag = diags[0]
+        assert diag.kind == "image"
+        assert diag.reference == "missing/nope.png"
+        assert diag.source_file == "spec/z.md"
+        assert diag.searched, "diagnostic must record the locations searched"
+        expected = str((root / "spec" / "missing" / "nope.png").resolve())
+        assert (
+            expected in diag.searched
+        ), f"source-directory candidate {expected!r} missing from {diag.searched!r}"
+
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_url_reference_is_not_reported(self, tmp_path):
+        """A remote (http/https) ref is not a local resolution failure."""
+        asm, root = _image_asm(tmp_path)
+        (root / "spec").mkdir()
+        (root / "spec" / "u.md").write_text(
+            "# U\n\n![web](https://example.com/pic.png)\n",
+            encoding="utf-8",
+        )
+
+        asm._render_file("spec/u.md")
+
+        assert asm.diagnostic_count() == 0
+        assert list(asm.iter_diagnostics()) == []
+
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_resolvable_image_produces_no_diagnostic(self, tmp_path):
+        """A ref that resolves normally must not be reported (no false positive)."""
+        asm, root = _image_asm(tmp_path)
+        (root / "spec" / "images").mkdir(parents=True)
+        (root / "spec" / "images" / "ok.png").write_bytes(b"\x89PNG")
+        (root / "spec" / "ok.md").write_text(
+            "# OK\n\n![fine](images/ok.png)\n",
+            encoding="utf-8",
+        )
+
+        joined = "\n".join(asm._render_file("spec/ok.md"))
+
+        img = (root / "spec" / "images" / "ok.png").resolve()
+        assert f"![fine]({img})" in joined
+        assert asm.diagnostic_count() == 0
+
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_resource_root_hit_produces_no_diagnostic(self, tmp_path):
+        """A ref reachable only via a resource root is NOT a failure.
+
+        ``deep/e.png`` lives at ``<root>/spec/deep/e.png``. It is neither
+        under the source file's directory (``spec/sub/``) nor under the
+        anchor repo root, so the two-candidate rewrite logic gives up --
+        but pandoc WILL find it, because ``<root>/spec`` is on
+        ``--resource-path``. Reporting it would be a false alarm.
+        """
+        asm, root = _image_asm(tmp_path)
+        (root / "spec" / "sub").mkdir(parents=True)
+        (root / "spec" / "deep").mkdir(parents=True)
+        (root / "spec" / "deep" / "e.png").write_bytes(b"\x89PNG")
+        (root / "spec" / "sub" / "x.md").write_text(
+            "# Sub\n\n![depth](deep/e.png)\n",
+            encoding="utf-8",
+        )
+
+        joined = "\n".join(asm._render_file("spec/sub/x.md"))
+
+        # Left for pandoc's --resource-path to resolve, as REQ-p00080-H allows.
+        assert "![depth](deep/e.png)" in joined
+        assert asm.diagnostic_count() == 0, (
+            f"resource-root-reachable ref must not be reported: "
+            f"{[d.reference for d in asm.iter_diagnostics()]}"
+        )
+
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_unresolvable_mermaid_diagram_is_reported(self, tmp_path):
+        """An unresolvable .mmd reference is reported with kind 'diagram'.
+
+        ``_resolve_mermaid_images`` currently returns the match unchanged
+        and records nothing, so the diagram vanishes without a trace.
+        """
+        asm, root = _image_asm(tmp_path)
+        (root / "spec").mkdir()
+        (root / "spec" / "d.md").write_text(
+            "# D\n\n![flow](missing/flow.mmd)\n",
+            encoding="utf-8",
+        )
+
+        asm._render_file("spec/d.md")
+
+        diags = list(asm.iter_diagnostics())
+        assert len(diags) == 1, f"expected exactly one diagnostic, got {diags!r}"
+        diag = diags[0]
+        assert diag.kind == "diagram"
+        assert diag.reference == "missing/flow.mmd"
+        assert diag.source_file == "spec/d.md"
+        assert diag.searched
+
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_diagnostic_format_is_actionable(self):
+        """format() surfaces the reference, the declaring file, and a
+        searched location in one human-readable block.
+        """
+        from elspais.pdf.assembler import AssemblyDiagnostic
+
+        diag = AssemblyDiagnostic(
+            kind="image",
+            reference="missing/nope.png",
+            source_file="spec/z.md",
+            repo="root",
+            searched=("/repo/spec/missing/nope.png", "/repo/missing/nope.png"),
+            cause="File not found in any searched location.",
+            remedy="Add the file or correct the reference.",
+        )
+
+        text = diag.format()
+        assert "missing/nope.png" in text
+        assert "spec/z.md" in text
+        assert "/repo/spec/missing/nope.png" in text
+
+
+class TestResourceRoots:
+    """Validates REQ-p00080-C: the assembler owns the single ordered,
+    de-duplicated set of pandoc resource roots (each repo's root plus its
+    spec/ directory), so the pdf command has no reason to rebuild its own.
+    """
+
+    # Verifies: REQ-p00080-C
+    def test_REQ_p00080_C_resource_roots_cover_every_repo_in_order(self, tmp_path):
+        """Federated: root repo's pair precedes the associate's, no dupes."""
+        fed, root_dir, assoc_dir = _make_federated_overview_graph(tmp_path)
+        asm = MarkdownAssembler(fed)
+
+        roots = asm.resource_roots()
+
+        assert [Path(p) for p in roots] == [
+            root_dir.resolve(),
+            (root_dir / "spec").resolve(),
+            assoc_dir.resolve(),
+            (assoc_dir / "spec").resolve(),
+        ]
+        assert len(roots) == len(set(roots)), f"duplicate resource roots: {roots!r}"

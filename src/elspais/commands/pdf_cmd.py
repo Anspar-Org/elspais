@@ -1,4 +1,4 @@
-# Implements: REQ-p00080-A, REQ-p00080-E, REQ-p00080-F
+# Implements: REQ-p00080-A, REQ-p00080-E, REQ-p00080-F, REQ-p00080-I, REQ-p00080-K
 """
 elspais.commands.pdf_cmd - Compile spec files into a PDF document.
 
@@ -75,20 +75,24 @@ def run(args: argparse.Namespace) -> int:
     )
     markdown_content = assembler.assemble()
 
+    # Content the assembler could not place. Reported before the verdict
+    # so the operator reads the cause ahead of the qualified success line.
+    # Implements: REQ-p00080-I
+    diagnostics = list(assembler.iter_diagnostics())
+    if diagnostics:
+        noun = "reference" if len(diagnostics) == 1 else "references"
+        print(
+            f"Warning: {len(diagnostics)} {noun} could not be placed in the document.",
+            file=sys.stderr,
+        )
+        for diagnostic in diagnostics:
+            print(diagnostic.format(), file=sys.stderr)
+
     # Invoke Pandoc to produce PDF
     output_path = getattr(args, "output", None) or Path("spec-output.pdf")
     template = getattr(args, "template", None)
 
     from elspais.pdf.renderer import render_pdf
-
-    resource_paths: list[Path] = []
-    seen: set[Path] = set()
-    for entry in graph.iter_repos():
-        for candidate in (entry.repo_root, entry.repo_root / "spec"):
-            resolved = candidate.resolve()
-            if resolved not in seen:
-                seen.add(resolved)
-                resource_paths.append(resolved)
 
     rc = render_pdf(
         markdown_content,
@@ -96,9 +100,19 @@ def run(args: argparse.Namespace) -> int:
         engine=engine,
         template=template,
         cover=cover,
-        resource_paths=resource_paths,
+        resource_paths=assembler.resource_roots(),
     )
 
     if rc == 0:
-        print(f"PDF written to {output_path}")
+        # A document missing content it was asked to carry is not an
+        # unqualified success, and must not be reported as one.
+        # Implements: REQ-p00080-K
+        if diagnostics:
+            noun = "reference" if len(diagnostics) == 1 else "references"
+            print(
+                f"PDF written to {output_path} "
+                f"(INCOMPLETE: {len(diagnostics)} {noun} omitted -- see warnings above)"
+            )
+        else:
+            print(f"PDF written to {output_path}")
     return rc

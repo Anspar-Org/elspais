@@ -176,6 +176,18 @@ Generates a lighter document for stakeholders:
 - Default title: "Product Requirements Overview"
 - `--max-depth` limits core PRD depth (associates always fully included)
 
+**Figures and completeness:**
+
+Image and Mermaid references resolve against the declaring spec file's own
+directory, then its owning repository's root, then the resource path (every
+repository's root and `spec/` directory) -- so in a federated project each
+file's figures come from its own repo. A reference no repository can supply,
+or a Mermaid source that cannot be rendered, is reported on stderr with the
+locations searched and a remedy, and the completion line is qualified
+`(INCOMPLETE: N references omitted -- see warnings above)`. The exit code stays
+`0`: the document is produced, and the degradation is disclosed rather than
+fatal. See `elspais docs pdf`.
+
 ## summary
 
 Generate coverage summary reports.

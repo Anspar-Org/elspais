@@ -117,3 +117,57 @@ class TestResourcePathFlag:
         cmd = captured["cmd"]
         matches = [a for a in cmd if isinstance(a, str) and a.startswith("--resource-path")]
         assert matches == [], f"Expected no --resource-path arg, got: {matches}"
+
+
+class TestPandocWarningsSurfaced:
+    """Validates REQ-p00080-K: pandoc's own degradation warnings reach the
+    operator instead of being swallowed on a successful exit.
+
+    Pandoc emits "[WARNING] Could not fetch resource X: replacing image
+    with description" and still exits 0, so gating the stderr echo on a
+    non-zero return code hides every dropped image.
+    """
+
+    # Verifies: REQ-p00080-K
+    def test_REQ_p00080_K_pandoc_stderr_echoed_on_success(self, tmp_path, capsys):
+        """A warning emitted alongside rc=0 is written to sys.stderr."""
+        warning = (
+            "[WARNING] Could not fetch resource missing/nope.png: "
+            "replacing image with description"
+        )
+
+        bundled = (
+            Path(__file__).parent.parent / "src" / "elspais" / "pdf" / "templates" / "elspais.latex"
+        )
+        assert bundled.exists(), "Bundled template fixture missing"
+
+        def fake_run(cmd, *args, **kwargs):
+            return _fake_completed(returncode=0, stderr=warning + "\n")
+
+        with patch("elspais.pdf.renderer.subprocess.run", side_effect=fake_run):
+            rc = render_pdf(
+                "# x",
+                output_path=tmp_path / "o.pdf",
+                template=bundled,
+            )
+
+        captured = capsys.readouterr()
+        assert rc == 0
+        assert "Could not fetch resource missing/nope.png" in captured.err
+
+    # Verifies: REQ-p00080-K
+    def test_REQ_p00080_K_silent_pandoc_run_emits_nothing(self, tmp_path, capsys):
+        """Regression guard: an empty pandoc stderr produces no output."""
+        bundled = (
+            Path(__file__).parent.parent / "src" / "elspais" / "pdf" / "templates" / "elspais.latex"
+        )
+
+        with patch(
+            "elspais.pdf.renderer.subprocess.run",
+            side_effect=lambda cmd, *a, **k: _fake_completed(returncode=0, stderr=""),
+        ):
+            rc = render_pdf("# x", output_path=tmp_path / "o.pdf", template=bundled)
+
+        captured = capsys.readouterr()
+        assert rc == 0
+        assert captured.err == ""

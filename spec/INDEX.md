@@ -26,7 +26,7 @@
 | REQ-p00050 | Unified Graph Architecture                       | prd-features.md | 46ac5f6a |
 | REQ-p00060 | MCP Server for AI-Driven Requirements Management | prd-features.md | a729a853 |
 | REQ-p00061 | Requirement Decomposition Rules                  | prd-core.md     | 462c146e |
-| REQ-p00080 | Spec-to-PDF Compilation                          | prd-core.md     | 01da5fa4 |
+| REQ-p00080 | Spec-to-PDF Compilation                          | prd-core.md     | acc97ca9 |
 | REQ-p00081 | Org-Wide Requirement Visibility                  | prd-features.md | 17fa4417 |
 | REQ-p00082 | Federated Authority and Verdict Scoping          | prd-features.md | a8311d6c |
 

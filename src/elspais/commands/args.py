@@ -658,6 +658,7 @@ DOCS_TOPICS = Literal[
     "config",
     "commands",
     "checks",
+    "pdf",
     "test-targets",
     "doctor",
     "analysis",

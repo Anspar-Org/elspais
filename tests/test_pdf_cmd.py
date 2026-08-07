@@ -172,13 +172,14 @@ class TestResourcePathsCallSite:
 
         args = parse_args(["pdf"])
 
+        # A real MarkdownAssembler is used deliberately: the resource-path
+        # set is the assembler's to own, so a mocked assembler would hide
+        # whether the command actually consults it.
         with (
             patch("elspais.commands.pdf_cmd._check_tool", return_value="/usr/bin/x"),
             patch("elspais.graph.factory.build_graph", return_value=fed),
-            patch("elspais.pdf.assembler.MarkdownAssembler") as MockAsm,
             patch("elspais.pdf.renderer.render_pdf", side_effect=fake_render_pdf),
         ):
-            MockAsm.return_value.assemble.return_value = "# fake"
             rc = pdf_cmd.run(args)
 
         assert rc == 0
@@ -224,10 +225,8 @@ class TestResourcePathsCallSite:
         with (
             patch("elspais.commands.pdf_cmd._check_tool", return_value="/usr/bin/x"),
             patch("elspais.graph.factory.build_graph", return_value=fed),
-            patch("elspais.pdf.assembler.MarkdownAssembler") as MockAsm,
             patch("elspais.pdf.renderer.render_pdf", side_effect=fake_render_pdf),
         ):
-            MockAsm.return_value.assemble.return_value = "# fake"
             rc = pdf_cmd.run(args)
 
         assert rc == 0
@@ -242,3 +241,77 @@ class TestResourcePathsCallSite:
         # No duplicates and ordering preserved (root pair before assoc pair).
         assert len(rp) == len(set(rp))
         assert rp.index(root_dir.resolve()) < rp.index(assoc_dir.resolve())
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Degradation disclosure (REQ-p00080-K)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _fed_with_missing_image(tmp_path: Path):
+    """Federated graph whose associate spec references a missing image."""
+    from tests.test_pdf_assembler import _make_federated_overview_graph
+
+    fed, root_dir, assoc_dir = _make_federated_overview_graph(tmp_path)
+    assoc_md = assoc_dir / "spec" / "prd-assoc.md"
+    assoc_md.write_text(
+        assoc_md.read_text(encoding="utf-8") + "\n![gone](missing/nope.png)\n",
+        encoding="utf-8",
+    )
+    return fed
+
+
+class TestDegradationDisclosure:
+    """Validates REQ-p00080-K: when referenced content was omitted from the
+    compiled document, the completion report discloses the degradation
+    rather than reporting unqualified success.
+
+    Today ``run()`` prints a bare "PDF written to <path>" whether or not
+    every referenced image made it into the document.
+    """
+
+    # Verifies: REQ-p00080-K
+    def test_REQ_p00080_K_missing_image_disclosed_in_completion_report(self, tmp_path, capsys):
+        """The diagnostic goes to stderr and the success line is qualified."""
+        from elspais.commands import pdf_cmd
+
+        fed = _fed_with_missing_image(tmp_path)
+        args = parse_args(["pdf"])
+
+        with (
+            patch("elspais.commands.pdf_cmd._check_tool", return_value="/usr/bin/x"),
+            patch("elspais.graph.factory.build_graph", return_value=fed),
+            patch("elspais.pdf.renderer.render_pdf", return_value=0),
+        ):
+            rc = pdf_cmd.run(args)
+
+        captured = capsys.readouterr()
+        assert rc == 0
+        # The unresolvable reference is reported to the operator.
+        assert "missing/nope.png" in captured.err
+        assert "spec/prd-assoc.md" in captured.err
+        # The success line survives but no longer claims unqualified success.
+        assert "PDF written to" in captured.out
+        assert "INCOMPLETE" in captured.out
+
+    # Verifies: REQ-p00080-K
+    def test_REQ_p00080_K_clean_run_reports_unqualified_success(self, tmp_path, capsys):
+        """Regression guard: nothing degraded means no disclosure noise."""
+        from elspais.commands import pdf_cmd
+        from tests.test_pdf_assembler import _make_federated_overview_graph
+
+        fed, _root_dir, _assoc_dir = _make_federated_overview_graph(tmp_path)
+        args = parse_args(["pdf", "--output", "clean.pdf"])
+
+        with (
+            patch("elspais.commands.pdf_cmd._check_tool", return_value="/usr/bin/x"),
+            patch("elspais.graph.factory.build_graph", return_value=fed),
+            patch("elspais.pdf.renderer.render_pdf", return_value=0),
+        ):
+            rc = pdf_cmd.run(args)
+
+        captured = capsys.readouterr()
+        assert rc == 0
+        assert "PDF written to clean.pdf" in captured.out
+        assert "INCOMPLETE" not in captured.out
+        assert "INCOMPLETE" not in captured.err
