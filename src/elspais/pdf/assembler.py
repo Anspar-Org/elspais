@@ -1,5 +1,5 @@
 # Implements: REQ-p00080-B, REQ-p00080-C, REQ-p00080-D, REQ-p00080-E, REQ-p00080-F
-# Implements: REQ-p00080-H, REQ-p00080-I, REQ-p00080-K
+# Implements: REQ-p00080-H, REQ-p00080-I, REQ-p00080-J, REQ-p00080-K
 """Markdown assembler for PDF compilation.
 
 Uses the graph for file ordering metadata (level, depth), then reads the
@@ -82,7 +82,7 @@ _IMAGE_REF_RE = re.compile(
 log = logging.getLogger(__name__)
 
 
-# Implements: REQ-p00080-I
+# Implements: REQ-p00080-I, REQ-p00080-J
 @dataclass(frozen=True)
 class AssemblyDiagnostic:
     """Referenced content the assembler could not place in the document.
@@ -172,7 +172,7 @@ class MarkdownAssembler:
     # Degradation reporting
     # ------------------------------------------------------------------
 
-    # Implements: REQ-p00080-I
+    # Implements: REQ-p00080-I, REQ-p00080-J
     def iter_diagnostics(self) -> Iterator[AssemblyDiagnostic]:
         """Iterate content the assembly could not place, in discovery order."""
         yield from self._diagnostics
@@ -326,8 +326,11 @@ class MarkdownAssembler:
         ``owning_repo_root`` anchors path resolution to the file's owning
         associate when supplied (cross-repo PDF rendering).
         """
-        resolved = self._resolve_path(file_path, owning_repo_root=owning_repo_root)
+        resolved, searched = self._resolve_path_candidates(
+            file_path, owning_repo_root=owning_repo_root
+        )
         if not resolved or not resolved.exists():
+            self._record_unreadable_source_file(file_path, owning_repo_root, searched)
             return []
 
         source = resolved.read_text(encoding="utf-8")
@@ -427,25 +430,81 @@ class MarkdownAssembler:
         scan of every repo in ``iter_repos()`` so that cross-repo
         references render even when the caller didn't track ownership.
         """
+        resolved, _searched = self._resolve_path_candidates(
+            file_path, owning_repo_root=owning_repo_root
+        )
+        return resolved
+
+    def _resolve_path_candidates(
+        self,
+        file_path: str,
+        owning_repo_root: Path | None = None,
+    ) -> tuple[Path | None, list[Path]]:
+        """Resolve a source path, also returning every location tried.
+
+        Callers that must report a failure need the candidate list, and
+        deriving it twice would let the report drift from the search.
+        """
+        searched: list[Path] = []
         p = Path(file_path)
-        if p.is_absolute() and p.exists():
-            return p
+        if p.is_absolute():
+            searched.append(p)
+            if p.exists():
+                return p, searched
         if owning_repo_root is not None:
             candidate = owning_repo_root / file_path
+            searched.append(candidate)
             if candidate.exists():
-                return candidate
+                return candidate, searched
         # Try relative to root repo
         candidate = self._graph.repo_root / file_path
-        if candidate.exists():
-            return candidate
+        if candidate not in searched:
+            searched.append(candidate)
+            if candidate.exists():
+                return candidate, searched
         # Fall back: search every federated repo (cross-repo file with
         # no ownership context — rare in normal callers but needed for
         # mermaid blocks emitted from preamble-style global text).
         for entry in self._graph.iter_repos():
             candidate = entry.repo_root / file_path
+            if candidate in searched:
+                continue
+            searched.append(candidate)
             if candidate.exists():
-                return candidate
-        return None
+                return candidate, searched
+        return None, searched
+
+    # Implements: REQ-p00080-J
+    def _record_unreadable_source_file(
+        self,
+        file_path: str,
+        owning_repo_root: Path | None,
+        searched: list[Path],
+    ) -> None:
+        """Record a spec file whose content could not be read.
+
+        A file that cannot be located takes every requirement, assertion
+        and rationale it holds out of the document. Dropping a whole
+        repository's content without saying so is the omission
+        REQ-p00080's REQ-p00019 instance prohibits.
+        """
+        self._record_diagnostic(
+            AssemblyDiagnostic(
+                kind="source-file",
+                reference=file_path,
+                source_file="",
+                repo=self._repo_name_for_root(owning_repo_root),
+                searched=tuple(str(p) for p in searched),
+                cause=(
+                    "Spec file not found in its owning repository; every "
+                    "requirement it holds is absent from the document."
+                ),
+                remedy=(
+                    "Restore the file, or correct the associate's configured "
+                    "path so the repository resolves."
+                ),
+            )
+        )
 
     # ------------------------------------------------------------------
     # Mermaid diagram resolution
@@ -893,8 +952,14 @@ class MarkdownAssembler:
 
     def _topics_from_file(self, file_path: str, owning_repo_root: Path | None = None) -> list[str]:
         """Extract Topics: lines from the pre-requirement section of a file."""
-        resolved = self._resolve_path(file_path, owning_repo_root=owning_repo_root)
+        resolved, searched = self._resolve_path_candidates(
+            file_path, owning_repo_root=owning_repo_root
+        )
         if not resolved or not resolved.exists():
+            # Recorded here too because overview mode can index a file it
+            # never renders. `_record_diagnostic` dedupes, so a file missed
+            # by both passes is still reported once.
+            self._record_unreadable_source_file(file_path, owning_repo_root, searched)
             return []
         text = resolved.read_text(encoding="utf-8")
         topics: list[str] = []

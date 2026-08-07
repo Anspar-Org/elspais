@@ -1,4 +1,4 @@
-# Implements: REQ-p00080-A, REQ-p00080-E, REQ-p00080-F, REQ-p00080-I, REQ-p00080-K
+# Implements: REQ-p00080-A, REQ-p00080-E, REQ-p00080-F, REQ-p00080-I, REQ-p00080-J, REQ-p00080-K
 """
 elspais.commands.pdf_cmd - Compile spec files into a PDF document.
 
@@ -77,7 +77,7 @@ def run(args: argparse.Namespace) -> int:
 
     # Content the assembler could not place. Reported before the verdict
     # so the operator reads the cause ahead of the qualified success line.
-    # Implements: REQ-p00080-I
+    # Implements: REQ-p00080-I, REQ-p00080-J
     diagnostics = list(assembler.iter_diagnostics())
     if diagnostics:
         noun = "reference" if len(diagnostics) == 1 else "references"

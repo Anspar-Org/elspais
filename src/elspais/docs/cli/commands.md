@@ -176,14 +176,23 @@ Generates a lighter document for stakeholders:
 - Default title: "Product Requirements Overview"
 - `--max-depth` limits core PRD depth (associates always fully included)
 
+**Federated projects:**
+
+One run from the root repository compiles every repository in the graph into a
+single document. Each spec file is read from its own repository, and Topic
+Index entries for requirements owned by an associate carry a `[<repo-name>]`
+prefix so the reader can tell where a section comes from.
+
 **Figures and completeness:**
 
 Image and Mermaid references resolve against the declaring spec file's own
 directory, then its owning repository's root, then the resource path (every
 repository's root and `spec/` directory) -- so in a federated project each
-file's figures come from its own repo. A reference no repository can supply,
-or a Mermaid source that cannot be rendered, is reported on stderr with the
-locations searched and a remedy, and the completion line is qualified
+file's figures come from its own repo. A reference no repository can supply, a
+Mermaid source that cannot be rendered, or a spec file that cannot be found in
+its owning repository (which takes every requirement it holds out of the
+document) is reported on stderr with the locations searched and a remedy, and
+the completion line is qualified
 `(INCOMPLETE: N references omitted -- see warnings above)`. The exit code stays
 `0`: the document is produced, and the degradation is disclosed rather than
 fatal. See `elspais docs pdf`.

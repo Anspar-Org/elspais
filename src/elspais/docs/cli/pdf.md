@@ -41,6 +41,27 @@ elspais pdf --overview --title "Product Requirements Overview"
 - xelatex: Install TeX Live, MiKTeX, or MacTeX
 - mermaid CLI (`mmdc`), only if your specs reference `.mmd` diagram sources
 
+## Federated projects
+
+One run from the root repository compiles the whole federation. Every
+repository in the compiled graph contributes its requirements to the same
+document -- there is no per-associate run to make and no output to stitch
+together afterwards.
+
+Each spec file is read from **its own** repository, resolved through the
+graph's ownership map, so an associate's requirement text comes from the
+associate checkout rather than from a same-named path under the root repo.
+
+Topic Index entries name the repository an associate requirement comes from:
+
+```text
+**telemetry**: REQ-p00004, [assoc] REQ-p00011, [assoc] REQ-p00012
+```
+
+Requirements owned by the root repository are listed bare; only entries from
+another repository carry the `[<repo-name>]` prefix, so the annotation marks
+what is foreign rather than repeating what is already the default.
+
 ## Figures and diagrams
 
 Images (`.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`) and Mermaid sources (`.mmd`)
@@ -70,9 +91,12 @@ on the resource path -- pandoc can place an image but cannot render a diagram.
 
 ## Incomplete documents
 
-A referenced figure or diagram that no repository can supply is reported on
-stderr, naming the reference as written, the spec file declaring it, the owning
-repository, every location searched, the cause, and the remedy:
+Content the compiler is asked to carry but cannot place is reported on stderr
+rather than dropped in silence. Every report names the reference as written,
+the owning repository, every location searched, the cause and the remedy -- and,
+where the reference was declared inside a spec file, that file too.
+
+A referenced figure or diagram that no repository can supply looks like this:
 
 ```text
 Warning: 1 reference could not be placed in the document.
@@ -86,6 +110,25 @@ PDF written to out.pdf (INCOMPLETE: 1 reference omitted -- see warnings above)
 A Mermaid diagram whose source is found but cannot be rendered -- `mmdc` is not
 installed, or it failed -- is reported the same way, with the remedy to install
 the mermaid CLI or commit a pre-rendered `.png` alongside the `.mmd` source.
+
+A spec file the graph knows about but which cannot be found in its owning
+repository is reported through the same channel. That failure is larger than a
+missing figure: every requirement, assertion and rationale the file holds is
+absent from the document, and in a federated project a misconfigured associate
+path can take an entire repository's content out. Such a file is named as a
+`source-file` reference, with the repository it was expected in:
+
+```text
+Warning: 1 reference could not be placed in the document.
+  source-file reference 'spec/prd-assoc.md' [repo: assoc]
+    cause: Spec file not found in its owning repository; every requirement it holds is absent from the document.
+    searched: /repos/assoc/spec/prd-assoc.md, /repos/core/spec/prd-assoc.md
+    remedy: Restore the file, or correct the associate's configured path so the repository resolves.
+PDF written to out.pdf (INCOMPLETE: 1 reference omitted -- see warnings above)
+```
+
+The document is still produced, and the repositories that did resolve still
+render in full. It is degraded, and the degradation is on the record.
 
 When anything was omitted, the completion line is qualified: a document missing
 content it was asked to carry is not reported as an unqualified success.

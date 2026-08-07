@@ -992,6 +992,35 @@ requires_pdfimages = pytest.mark.skipif(
     reason="pdfimages not found — install poppler-utils to inspect embedded PDF images",
 )
 
+requires_pdftotext = pytest.mark.skipif(
+    shutil.which("pdftotext") is None,
+    reason="pdftotext not found — install poppler-utils to extract compiled PDF text",
+)
+
+
+def _pdf_text(pdf_path):
+    """Return the PDF's text with all whitespace runs collapsed to one space.
+
+    ``pdftotext`` breaks lines wherever the typeset page did, so a phrase
+    that reads as one sentence in the source arrives split across lines.
+    Normalising first is what makes substring matching mean anything.
+    """
+    import re as _re
+
+    raw = subprocess.run(
+        ["pdftotext", str(pdf_path), "-"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return _re.sub(r"\s+", " ", raw)
+
+
+# Distinctive rationale text: short words only, so LaTeX cannot hyphenate a
+# token apart and defeat the substring match after whitespace normalisation.
+CORE_RATIONALE_MARKER = "Core spec rationale marker alpha kilo nine."
+ASSOC_RATIONALE_MARKER = "Assoc spec rationale marker delta zulu seven."
+
 # Pixel dimensions distinguish which repo an image was resolved from.
 CORE_IMAGE_PX = 64
 ASSOC_IMAGE_PX = 48
@@ -1038,6 +1067,7 @@ class TestPdfMediaFidelity:
                         "PRD",
                         body="Core diagram below.\n\n![core diagram](images/core.png)\n",
                         assertions=[("A", "The system SHALL render core imagery.")],
+                        rationale=CORE_RATIONALE_MARKER,
                     ),
                 ],
             },
@@ -1060,6 +1090,7 @@ class TestPdfMediaFidelity:
                         "PRD",
                         body="Associate diagram below.\n\n![assoc diagram](images/assoc.png)\n",
                         assertions=[("A", "The associate SHALL render its own imagery.")],
+                        rationale=ASSOC_RATIONALE_MARKER,
                     ),
                 ],
             },
@@ -1186,3 +1217,69 @@ class TestPdfMediaFidelity:
         assert (
             "INCOMPLETE" not in complete.stdout
         ), f"a document missing nothing was reported as degraded: {complete.stdout}"
+
+    # Verifies: REQ-p00080-H
+    @requires_pandoc
+    @requires_xelatex
+    @requires_pdftotext
+    def test_REQ_p00080_H_associate_requirement_text_appears_in_compiled_pdf(self, federated_pdf):
+        """One compile from the ROOT repo carries the ASSOCIATE's prose.
+
+        A federated document that renders only the host repo's spec files is
+        indistinguishable from a complete one to anyone who wasn't told what
+        was federated in. The associate's assertion AND its rationale must
+        both survive the round trip, alongside the root repo's own content.
+        """
+        result, out = federated_pdf
+        assert result.returncode == 0, f"pdf failed: {result.stderr}"
+        assert out.exists(), "PDF file was not created"
+
+        text = _pdf_text(out)
+        print(f"\npdftotext {out} (normalised):\n{text}")
+
+        assert (
+            "The associate SHALL render its own imagery." in text
+        ), "associate requirement's assertion text missing from the compiled PDF"
+        assert (
+            "rationale marker delta zulu seven" in text
+        ), "associate requirement's rationale missing from the compiled PDF"
+        # The root repo's own content is still there — federation adds, not replaces.
+        assert (
+            "The system SHALL render core imagery." in text
+        ), "root repo's assertion text missing from the compiled PDF"
+        assert (
+            "rationale marker alpha kilo nine" in text
+        ), "root repo's rationale missing from the compiled PDF"
+
+    # Verifies: REQ-p00080-D
+    @requires_pandoc
+    @requires_xelatex
+    @requires_pdftotext
+    def test_REQ_p00080_D_topic_index_annotates_cross_repo_entries_in_compiled_pdf(
+        self, federated_pdf
+    ):
+        """The [<associate>] annotation survives typesetting into the PDF.
+
+        The Topic Index is where a reader learns which repo a requirement
+        came from; an annotation that only exists in the intermediate
+        markdown tells that reader nothing.
+        """
+        result, out = federated_pdf
+        assert result.returncode == 0, f"pdf failed: {result.stderr}"
+
+        text = _pdf_text(out)
+        index_marker = "Topic Index"
+        assert index_marker in text, f"no Topic Index in the compiled PDF: {text}"
+        index_text = text[text.rindex(index_marker) :]
+        print(f"\npdftotext {out} — Topic Index section (normalised):\n{index_text}")
+
+        assert "[assoc] ASC-p00001" in index_text, (
+            f"associate entry not annotated with its repo name in the compiled "
+            f"Topic Index: {index_text}"
+        )
+        assert (
+            "REQ-p00001" in index_text
+        ), f"root repo entry missing from the compiled Topic Index: {index_text}"
+        assert (
+            "[pdf-core] REQ-p00001" not in index_text
+        ), f"host repo entry must render bare, not annotated: {index_text}"
