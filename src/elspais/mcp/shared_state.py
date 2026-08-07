@@ -49,9 +49,16 @@ class SharedServerState(dict):
         # Callbacks run inside rebuild_shared_graph()'s critical section, after
         # the new config and graph are published. This is how change-detection
         # state that lives outside the holder is brought forward by a rebuild
-        # reached through any surface: AppState registers its mtime
-        # re-snapshot here rather than each reload path remembering to call it
-        # (REQ-p00004-O). A stdio MCP server registers nothing and keeps none.
+        # reached through any surface: the process serving the graph registers
+        # its mtime re-snapshot and its daemon-fingerprint sync here, rather
+        # than each reload path remembering to call them (REQ-p00004-O).
+        #
+        # Registration is also what scopes those effects to the process that
+        # owns them. A stdio MCP server holds a private graph of its own and
+        # registers nothing, so it never writes freshness records belonging to
+        # a daemon running in the same repo — a fingerprint stamped by a
+        # process that did not rebuild the daemon's graph would suppress a
+        # restart that is genuinely needed.
         self.post_rebuild_hooks: list[Callable[[], None]] = []
 
 
@@ -127,22 +134,20 @@ def rebuild_shared_graph(state: SharedServerState, full: bool = False) -> dict[s
         state["graph"] = new_graph
         state["build_time"] = time.time()
         for hook in state.post_rebuild_hooks:
-            hook()
-
-    # Configuration was re-read from disk — bring the running daemon's
-    # recorded config fingerprint forward too, so a CLI staleness check does
-    # not restart a server that is already current (REQ-p00004-O).
-    try:
-        from elspais.mcp.daemon import refresh_daemon_config_hash
-
-        refresh_daemon_config_hash(working_dir)
-    except Exception as exc:
-        # Tolerated failure (visible, not swallowed): a fingerprint that
-        # stays behind costs at most one needless daemon restart.
-        print(
-            f"warning: could not refresh daemon config hash: {exc}",
-            file=sys.stderr,
-        )
+            try:
+                hook()
+            except Exception as exc:
+                # The new graph is already published and is what every reader
+                # now sees, so this rebuild did happen and must be reported as
+                # having happened (REQ-p00015-F). A hook that could not bring
+                # its own state forward is a visible warning, not a retraction
+                # of a swap that is already visible.
+                name = getattr(hook, "__qualname__", repr(hook))
+                print(
+                    f"warning: post-rebuild hook {name} failed after the graph "
+                    f"was published: {exc}",
+                    file=sys.stderr,
+                )
 
     return {
         "success": True,

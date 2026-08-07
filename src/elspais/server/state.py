@@ -80,12 +80,14 @@ class AppState:
         self._mtimes: dict[str, float] = {}
         self._last_stale_check = 0.0
         self.snapshot_mtimes()
-        # The mtime snapshot is change-detection state that lives here rather
-        # than in the holder, so every rebuild — including one reached through
-        # an MCP tool, which knows nothing about this object — must bring it
-        # forward. Registering it as a hook is what makes that true of the one
-        # rebuild routine instead of each caller (REQ-p00004-O).
+        # Change-detection state that lives outside the holder — this object's
+        # mtime snapshot, and the config fingerprint recorded for the server
+        # this object belongs to. Every rebuild must bring both forward,
+        # including one reached through an MCP tool that knows nothing about
+        # this object; registering them as hooks is what makes that true of
+        # the one rebuild routine instead of each caller (REQ-p00004-O).
         self.shared.post_rebuild_hooks.append(self.snapshot_mtimes)
+        self.shared.post_rebuild_hooks.append(self._refresh_daemon_config_hash)
         # Per-repo detached HEAD tracking (for rewind)
         self._repo_detached: dict[str, DetachedState] = {}
 
@@ -188,6 +190,26 @@ class AppState:
                     self._mtimes[str(f)] = f.stat().st_mtime
                 except OSError:
                     pass
+
+    # Implements: REQ-p00004-O
+    def _refresh_daemon_config_hash(self) -> None:
+        """Bring the recorded config fingerprint forward after a rebuild.
+
+        The rebuild re-read configuration from disk, so the fingerprint a CLI
+        staleness check compares against must move with it or the CLI tears
+        down a server that is already serving exactly that configuration.
+
+        This is registered as a hook rather than performed by the rebuild
+        routine so that it happens only for the process that actually owns the
+        record — the one serving the graph the daemon file describes. A
+        different process rebuilding its own private graph in the same
+        repository must not stamp this record: a fingerprint that is falsely
+        current suppresses a restart that is needed, which is worse than the
+        needless restart a stale one costs.
+        """
+        from elspais.mcp.daemon import refresh_daemon_config_hash
+
+        refresh_daemon_config_hash(self.repo_root)
 
     def _config_files(self) -> list[Path]:
         """Config files whose edits must trigger a graph rebuild."""

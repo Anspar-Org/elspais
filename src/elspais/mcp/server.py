@@ -5738,6 +5738,7 @@ def create_server(
             if conflict:
                 return conflict
 
+        previous_dir = _state["working_dir"]
         if path:
             new_dir = Path(path).resolve()
             if not new_dir.is_dir():
@@ -5745,9 +5746,15 @@ def create_server(
             _state["working_dir"] = new_dir
 
         # The one rebuild routine: it re-reads config, publishes config and
-        # graph together, brings the change-detection state forward, and syncs
-        # the daemon's config fingerprint (REQ-p00004-J/O, REQ-d00205-B).
+        # graph together, and brings the change-detection state forward
+        # (REQ-p00004-J/O, REQ-d00205-B).
         result = rebuild_shared_graph(_state, full=full)
+        if not result.get("success"):
+            # The rebuild published nothing, so the graph and config still
+            # describe the previous directory. Leaving working_dir pointing at
+            # the new one would answer every later read from one project while
+            # targeting another (REQ-p00015-F).
+            _state["working_dir"] = previous_dir
         result["working_dir"] = str(_state["working_dir"])
         return result
 

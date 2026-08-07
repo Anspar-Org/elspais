@@ -652,6 +652,82 @@ class TestRefreshGraphConfigError:
         assert state["graph"].find_by_id("REQ-p00001") is not None
 
 
+class TestRefreshGraphFailedDirectorySwitch:
+    """Validates REQ-p00015-F: a project switch that publishes nothing must
+    leave no part of it applied.
+
+    ``refresh_graph(path=...)`` is one operation with two effects: point the
+    server at another project, and serve that project's graph. When the
+    rebuild declines to publish, keeping the first effect splits the server --
+    the graph, the config and every later read still describe the original
+    project while the recorded working directory names a different one, so
+    file writes and path resolution target a project nothing was loaded from.
+    A refresh reported as unapplied must be unapplied entirely.
+    """
+
+    # Verifies: REQ-p00015-F
+    def test_REQ_p00015_F_failed_switch_restores_the_working_dir(self, tmp_path):
+        """A failed switch leaves working_dir and the served graph agreeing."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import create_server
+        from elspais.mcp.shared_state import SharedServerState
+
+        original_dir = tmp_path / "original"
+        original_dir.mkdir()
+        _make_project(original_dir)
+
+        # The target exists -- so the tool reaches the rebuild rather than
+        # returning early on a missing directory -- but cannot be loaded.
+        broken_dir = tmp_path / "broken"
+        broken_dir.mkdir()
+        (broken_dir / ".elspais.toml").write_text(_BROKEN_CONFIG)
+
+        state = SharedServerState({"working_dir": original_dir})
+        server = create_server(working_dir=original_dir, shared_state=state)
+        refresh = server._tool_manager._tools["refresh_graph"].fn
+
+        live_graph = state["graph"]
+        assert live_graph.find_by_id("REQ-p00001") is not None
+
+        result = refresh(path=str(broken_dir))
+
+        assert result["success"] is False, result
+        assert result["message"].startswith("CONFIG ERROR:")
+        # The reported directory is the one the served graph came from.
+        assert result["working_dir"] == str(original_dir)
+        # ...and so is the one recorded for every later read and write.
+        assert state["working_dir"] == original_dir
+        assert state["graph"] is live_graph
+        assert state["graph"].find_by_id("REQ-p00001") is not None
+
+    # Verifies: REQ-p00015-F
+    def test_REQ_p00015_F_successful_switch_keeps_the_new_dir(self, tmp_path):
+        """The counterpart: a switch that did publish stays switched."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import create_server
+        from elspais.mcp.shared_state import SharedServerState
+
+        original_dir = tmp_path / "original"
+        original_dir.mkdir()
+        _make_project(original_dir)
+
+        other_dir = tmp_path / "other"
+        other_dir.mkdir()
+        _make_project(other_dir)
+
+        state = SharedServerState({"working_dir": original_dir})
+        server = create_server(working_dir=original_dir, shared_state=state)
+        refresh = server._tool_manager._tools["refresh_graph"].fn
+        live_graph = state["graph"]
+
+        result = refresh(path=str(other_dir))
+
+        assert result["success"] is True, result
+        assert result["working_dir"] == str(other_dir)
+        assert state["working_dir"] == other_dir
+        assert state["graph"] is not live_graph
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Test: get_workspace_info() - REQ-o00061-A
 # ─────────────────────────────────────────────────────────────────────────────
