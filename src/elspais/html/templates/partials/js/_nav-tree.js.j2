@@ -347,9 +347,34 @@ function updateHeaderStats() {
     });
 }
 
+// The unsaved badge answers "how much work is pending?", and there are three
+// answers, not two: none, some, and "we could not ask". The count lives in the
+// server process; when the server cannot be reached the page has no way to
+// recompute it, so it must say so rather than keep presenting the last number
+// as current fact (which asserts work that may exist in no process) or fall
+// back to zero (which would hide work still pending behind a momentary blip).
+// Implements: REQ-d00267-A
+function markDirtyCountUnknown() {
+    var badge = document.getElementById('unsaved-badge');
+    if (!badge) return;
+    var last = editState.mutationCount;
+    editState.mutationCount = null;
+    // lastSeenTip is deliberately NOT touched: only a successful read has
+    // actually seen the history, and marking another writer's tip as "seen"
+    // on a failed read would suppress the other-writer banner.
+    badge.textContent = '?';
+    badge.title = 'Unsaved count unknown - the viewer server is unreachable.' +
+        (typeof last === 'number' ? ' Last confirmed: ' + last + '.' : '');
+    badge.classList.add('unknown');
+    badge.classList.remove('hidden');
+    // Save/Undo keep whatever state they had. Disabling them would assert
+    // "nothing to save", which is exactly what is not known; clicking either
+    // while the server is down surfaces the network error, which is honest.
+}
+
 async function refreshDirtyCount() {
     const data = await apiFetch('/api/dirty');
-    if (!data) return;
+    if (!data) { markDirtyCountUnknown(); return; }
     editState.mutationCount = data.mutation_count || 0;
     // We have just looked at the history, so this tip is "seen" -- our own
     // mutations must not trip the other-writer banner.
@@ -357,6 +382,10 @@ async function refreshDirtyCount() {
     const badge = document.getElementById('unsaved-badge');
     const btnSave = document.getElementById('btn-save');
     const btnUndo = document.getElementById('btn-undo');
+    // A server answer always supersedes an unknown presentation.
+    // Implements: REQ-d00267-B
+    badge.classList.remove('unknown');
+    badge.title = '';
     if (editState.mutationCount > 0) {
         badge.textContent = editState.mutationCount;
         badge.classList.remove('hidden');

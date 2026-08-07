@@ -2,6 +2,9 @@
 # Verifies: REQ-d00255-D
 # Verifies: REQ-d00256-D
 # Verifies: REQ-o00062-O
+# Verifies: REQ-d00267-A
+# Verifies: REQ-d00267-B
+# Verifies: REQ-d00267-C
 """Playwright-based browser tests for the elspais viewer command.
 
 Validates REQ-d00010: viewer command serves the traceability UI
@@ -22,6 +25,7 @@ import time
 import pytest
 
 pw = pytest.importorskip("playwright", reason="playwright not installed")
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError  # noqa: E402
 from playwright.sync_api import sync_playwright  # noqa: E402
 
 from .conftest import REPO_ROOT  # noqa: E402
@@ -1140,3 +1144,367 @@ class TestBrowserOptimisticConcurrency:
         ), f"server must keep the concurrent writer's state, got: {final.get('title')!r}"
 
         assert not js_errors, f"JS errors during conflict recovery: {js_errors}"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pending-work indicator truth: reported / unknown (REQ-d00267-A/B/C)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_BADGE_REQ_ID = "REQ-p00001"
+
+
+@pytest.fixture(scope="module")
+def badge_viewer_url(tmp_path_factory):
+    """Start a viewer against a private copy of the viewer-tables fixture.
+
+    A private copy (module scope, own server, own port) because these tests
+    push real pending mutations into the server's in-memory graph — sharing
+    the session-scoped tables server would leave unsaved work behind for
+    every other test. The repo is put on a non-main working branch so the
+    edit surfaces are usable without the create-a-branch modal.
+    """
+    elspais_bin = shutil.which("elspais")
+    if elspais_bin is None:
+        pytest.skip("elspais CLI not found on PATH")
+
+    src = REPO_ROOT / "tests" / "fixtures" / "viewer-tables"
+    if not src.exists():
+        pytest.skip(f"viewer-tables fixture not present at {src}")
+
+    dest = tmp_path_factory.mktemp("viewer-badge-run")
+    for item in src.iterdir():
+        if item.is_dir():
+            shutil.copytree(item, dest / item.name)
+        else:
+            shutil.copy2(item, dest / item.name)
+
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "test",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "test",
+        "GIT_COMMITTER_EMAIL": "t@t",
+    }
+    subprocess.run(["git", "init"], cwd=dest, capture_output=True, env=env)
+    subprocess.run(["git", "add", "."], cwd=dest, capture_output=True, env=env)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=dest, capture_output=True, env=env)
+    subprocess.run(["git", "checkout", "-b", "badge-truth"], cwd=dest, capture_output=True, env=env)
+
+    port = _find_free_port()
+    base_url = f"http://127.0.0.1:{port}"
+
+    proc = subprocess.Popen(
+        [elspais_bin, "viewer", "--server", "--port", str(port), "--path", str(dest)],
+        cwd=str(dest),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+
+    try:
+        _wait_for_server(base_url)
+        yield base_url
+    finally:
+        try:
+            import urllib.request
+
+            req = urllib.request.Request(f"{base_url}/api/shutdown", method="POST")
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            pass
+
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                proc.wait(timeout=5)
+
+
+@pytest.fixture()
+def page_badge(badge_viewer_url):
+    """Launch headless Chromium against the badge-fixture viewer."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context()
+        pg = context.new_page()
+        pg.set_default_timeout(10_000)
+        yield pg
+        browser.close()
+
+
+def _badge_state(page) -> dict:
+    """Snapshot everything the pending-work indicator presents."""
+    return page.evaluate(
+        """() => {
+            const b = document.getElementById('unsaved-badge');
+            return {
+                text: b ? b.textContent.trim() : null,
+                classes: b ? Array.from(b.classList) : null,
+                title: b ? (b.getAttribute('title') || '') : null,
+                count: editState.mutationCount,
+                count_type: typeof editState.mutationCount,
+                tip: editState.lastSeenTip,
+            };
+        }"""
+    )
+
+
+def _refresh_dirty(page) -> None:
+    """Drive the count refresh explicitly instead of waiting on the 30s poll."""
+    page.evaluate("() => refreshDirtyCount()")
+
+
+def _create_pending_mutation(page, base: str, new_title: str) -> int:
+    """Make real server-side pending work; return the server's pending count."""
+    node = page.request.get(f"{base}/api/node/{_BADGE_REQ_ID}").json()
+    token = node.get("version")
+    assert token, f"/api/node must report a version token, got: {node}"
+    resp = page.request.post(
+        f"{base}/api/mutate/title",
+        data={"node_id": _BADGE_REQ_ID, "new_title": new_title, "if_version": token},
+    )
+    assert resp.status == 200, f"pending-work setup mutation failed: {resp.status} {resp.text()}"
+    dirty = page.request.get(f"{base}/api/dirty").json()
+    count = dirty.get("mutation_count")
+    assert isinstance(count, int) and count > 0, f"server must report pending work, got: {dirty}"
+    return count
+
+
+def _go_unknown(page) -> None:
+    """Make /api/dirty unreachable and refresh, leaving the count unknown."""
+    page.route("**/api/dirty", lambda route: route.abort())
+    _refresh_dirty(page)
+
+
+def _close_observing_beforeunload(page, timeout: float = 5.0) -> list[str]:
+    """Close the page for real and report any beforeunload dialog it raised.
+
+    Chromium suppresses beforeunload dialogs on pages the user has never
+    interacted with, so a genuine click comes first. The wait is on the
+    BROWSER CONTEXT, not the page: Chromium delivers the dialog after the
+    page target is already gone, so a page-scoped waiter would be torn down
+    before it ever saw it. A dialog left unanswered would hang the close, so
+    it is accepted as soon as it is observed.
+    """
+    context = page.context
+    dialogs: list[str] = []
+
+    page.click(".header-title")  # real user gesture
+    try:
+        with context.expect_event("dialog", timeout=timeout * 1000) as info:
+            page.close(run_before_unload=True)
+        dialog = info.value
+        dialogs.append(dialog.type)
+        try:
+            dialog.accept()
+        except Exception:
+            # The target can already be gone by the time we answer; the
+            # observation is what the test cares about.
+            pass
+    except PlaywrightTimeoutError:
+        pass
+
+    if not page.is_closed():
+        page.close()
+    return dialogs
+
+
+class TestBrowserPendingWorkIndicatorTruth:
+    """Validates REQ-d00267-A, REQ-d00267-B, REQ-d00267-C: the viewer's
+    pending-change indicator is server-truth with three states — nothing
+    pending, work pending, and count unknown. A failed count fetch must
+    present as unknown rather than collapsing to the last count or to zero,
+    a later successful fetch must restore the reported count, and the
+    navigation warning must arm only on a server-reported pending count."""
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00267_A_badge_hidden_when_server_reports_zero(self, page_badge, badge_viewer_url):
+        # Verifies: REQ-d00267-A
+        """Control: a live server reporting nothing pending hides the badge."""
+        page = page_badge
+        page.goto(badge_viewer_url, wait_until="networkidle")
+
+        dirty = page.request.get(f"{badge_viewer_url}/api/dirty").json()
+        assert dirty.get("mutation_count") == 0, (
+            f"this test must run before any mutation test in the module; "
+            f"server already reports pending work: {dirty}"
+        )
+
+        _refresh_dirty(page)
+        state = _badge_state(page)
+        assert (
+            "hidden" in state["classes"]
+        ), f"server reported 0 pending: badge must be hidden, got classes {state['classes']}"
+        assert state["count"] == 0, f"editState.mutationCount must be 0, got {state['count']!r}"
+        assert (
+            state["count_type"] == "number"
+        ), f"a reported count is a number, got type {state['count_type']!r}"
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00267_A_badge_reads_unknown_when_server_unreachable(
+        self, page_badge, badge_viewer_url
+    ):
+        # Verifies: REQ-d00267-A
+        """An unreachable count endpoint presents as unknown, not as the last
+        count and not as zero — the two collapses REQ-d00267-A forbids."""
+        page = page_badge
+        page.goto(badge_viewer_url, wait_until="networkidle")
+
+        pending = _create_pending_mutation(page, badge_viewer_url, "Badge Pending One")
+        _refresh_dirty(page)
+        reported = _badge_state(page)
+        assert reported["text"] == str(
+            pending
+        ), f"precondition: badge must show the server's count {pending}, got {reported['text']!r}"
+        assert "hidden" not in reported["classes"], reported["classes"]
+
+        _go_unknown(page)
+        state = _badge_state(page)
+
+        assert state["text"] == "?", (
+            f"unknown count must be presented as '?', got {state['text']!r} "
+            f"(classes {state['classes']})"
+        )
+        assert state["text"] != str(pending), (
+            f"unknown count must NOT keep presenting the last count "
+            f"{pending} as though it were current"
+        )
+        assert state["text"] != "0", "unknown count must NOT be presented as zero"
+        assert "unknown" in state["classes"], (
+            f"badge must carry the 'unknown' class while the count is "
+            f"unknown, got {state['classes']}"
+        )
+        assert "hidden" not in state["classes"], (
+            f"an unknown count is not 'nothing pending' — the badge must stay "
+            f"visible, got {state['classes']}"
+        )
+        assert state["title"], "unknown badge must carry an explanatory title attribute"
+        assert (
+            "unreachable" in state["title"].lower()
+        ), f"unknown badge title must name the unreachable server, got {state['title']!r}"
+        assert state["count"] is None, (
+            f"editState.mutationCount must be null (unknown), got "
+            f"{state['count']!r} (type {state['count_type']!r})"
+        )
+
+        page.unroute("**/api/dirty")
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00267_A_failed_fetch_does_not_advance_last_seen_tip(
+        self, page_badge, badge_viewer_url
+    ):
+        # Verifies: REQ-d00267-A
+        """Regression guard: a failed count fetch has seen no history, so it
+        must not mark the mutation-log tip as seen (which would suppress the
+        other-writer banner on a tip the page never actually observed)."""
+        page = page_badge
+        page.goto(badge_viewer_url, wait_until="networkidle")
+
+        _create_pending_mutation(page, badge_viewer_url, "Badge Pending Tip")
+        _refresh_dirty(page)
+        before = _badge_state(page)["tip"]
+        assert before, f"precondition: a successful refresh must record a tip, got {before!r}"
+
+        _go_unknown(page)
+        after = _badge_state(page)["tip"]
+        assert (
+            after == before
+        ), f"a failed /api/dirty fetch must leave lastSeenTip untouched: {before!r} -> {after!r}"
+
+        page.unroute("**/api/dirty")
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00267_B_badge_returns_to_server_truth_after_transient_failure(
+        self, page_badge, badge_viewer_url
+    ):
+        # Verifies: REQ-d00267-B
+        """A transient blip must not silently drop the pending work: once the
+        server answers again, the unknown presentation is replaced by the
+        reported count."""
+        page = page_badge
+        page.goto(badge_viewer_url, wait_until="networkidle")
+
+        pending = _create_pending_mutation(page, badge_viewer_url, "Badge Pending Two")
+        _refresh_dirty(page)
+        assert _badge_state(page)["text"] == str(pending)
+
+        _go_unknown(page)
+        unknown = _badge_state(page)
+        assert unknown["text"] == "?" and "unknown" in unknown["classes"], (
+            f"precondition: the badge must first be in the unknown state, got "
+            f"text {unknown['text']!r} classes {unknown['classes']}"
+        )
+
+        page.unroute("**/api/dirty")
+        _refresh_dirty(page)
+        state = _badge_state(page)
+
+        assert state["text"] == str(pending), (
+            f"after the server answers again the badge must show the reported "
+            f"count {pending}, got {state['text']!r}"
+        )
+        assert (
+            "unknown" not in state["classes"]
+        ), f"the unknown presentation must be replaced, got {state['classes']}"
+        assert "hidden" not in state["classes"], state["classes"]
+        assert (
+            state["count"] == pending
+        ), f"editState.mutationCount must be the reported count {pending}, got {state['count']!r}"
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00267_C_navigation_warned_while_server_reports_pending(
+        self, page_badge, badge_viewer_url
+    ):
+        # Verifies: REQ-d00267-C
+        """Non-vacuity control for the unknown case: with a server-REPORTED
+        pending count the navigation warning is armed and a real close raises
+        the beforeunload dialog."""
+        page = page_badge
+        page.goto(badge_viewer_url, wait_until="networkidle")
+
+        pending = _create_pending_mutation(page, badge_viewer_url, "Badge Pending Warn")
+        _refresh_dirty(page)
+        state = _badge_state(page)
+        assert state["count"] == pending and state["count_type"] == "number", state
+
+        dialogs = _close_observing_beforeunload(page)
+        assert dialogs, (
+            "with the server reporting pending changes, closing the page must "
+            "raise a beforeunload dialog; none was observed"
+        )
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00267_C_navigation_not_obstructed_while_count_unknown(
+        self, page_badge, badge_viewer_url
+    ):
+        # Verifies: REQ-d00267-C
+        """While the count is unknown the viewer must not obstruct navigation:
+        it cannot verify the claim, and blocking on it can strand an operator."""
+        page = page_badge
+        page.goto(badge_viewer_url, wait_until="networkidle")
+
+        _create_pending_mutation(page, badge_viewer_url, "Badge Pending Unknown Nav")
+        _refresh_dirty(page)
+
+        _go_unknown(page)
+        state = _badge_state(page)
+        assert state["count"] is None, (
+            f"precondition: the count must be unknown before testing "
+            f"navigation, got {state['count']!r}"
+        )
+
+        dialogs = _close_observing_beforeunload(page)
+        assert not dialogs, (
+            f"navigation must not be obstructed while the pending count is "
+            f"unknown, but a beforeunload dialog was raised: {dialogs}"
+        )

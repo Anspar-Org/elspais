@@ -2184,14 +2184,24 @@ function initShareSlider() {
 })();
 
 // =====================================================================
-// Unsaved Changes Warning (REQ-p00004-E)
+// Unsaved Changes Warning
+//
+// The warning is a courtesy about state held in the SERVER process: closing
+// this tab destroys nothing. So it arms only on work the server has actually
+// reported. While the count is unknown the page cannot verify the claim, and
+// obstructing the exit over an unverifiable claim buys no safety at all -- it
+// only leaves an operator unable to leave the page.
+//
+// The condition is read from editState, not from the badge's text: the badge
+// now renders '?' when the count is unknown, and parsing that would disarm by
+// accident rather than by decision.
+// Implements: REQ-d00267-C
 // =====================================================================
 
 window.addEventListener('beforeunload', function(e) {
-    var dirtyBadge = document.getElementById('unsaved-badge');
-    var hasMutations = dirtyBadge && !dirtyBadge.classList.contains('hidden') &&
-                       parseInt(dirtyBadge.textContent, 10) > 0;
-    if (hasMutations) {
+    var count = editState.mutationCount;
+    var hasReportedMutations = typeof count === 'number' && count > 0;
+    if (hasReportedMutations) {
         e.preventDefault();
         e.returnValue = '';
     }
@@ -2263,9 +2273,17 @@ function showStaleBanner(message) {
 //      never see them; the mutation-log tip moving is the only evidence.
 // Reloading is the fix for (1); for (2) the live graph is already correct and
 // the page just needs to re-read it, so the banner offers that separately.
+//
+// This poll is also the page's only heartbeat. refreshDirtyCount() runs at
+// load and after mutations, so a server that dies while the operator sits idle
+// would never re-enter it and the pending count would stay frozen at its last
+// value. Losing the heartbeat is evidence the count can no longer be trusted,
+// and regaining it is the cue to resync. Implements: REQ-d00267-A, REQ-d00267-B
 setInterval(function() {
     apiFetch('/api/check-freshness').then(function(data) {
-        if (!data) return;
+        if (!data) { markDirtyCountUnknown(); return; }
+        // The server is answering again; recover the count we stopped knowing.
+        if (editState.mutationCount === null) { refreshDirtyCount(); }
         if (data.stale) {
             showStaleBanner('Spec files have changed on disk.');
             return;

@@ -172,7 +172,10 @@ const editState = {
     openCards: new Map(),
     openCardOrder: [],
     dirtyFields: new Map(),
-    mutationCount: 0,
+    // Pending mutations live in the server process, not in this page, so this
+    // count is server-truth and we may not have it: a number is what the
+    // server last reported, null means we could not ask. Implements: REQ-d00267-A
+    mutationCount: null,
     // Mutation-log tip as of our last look. The freshness poll compares the
     // server's tip against this to tell "another writer changed the graph"
     // from "nothing happened" -- in-memory mutations touch no file, so file

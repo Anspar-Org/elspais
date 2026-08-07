@@ -620,3 +620,38 @@ B. Clicking a defined-term span SHALL open the term card via a delegated click h
 - 2026-04-23 | 62a44ed3 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Inline Term Highlighting in Viewer Cards* | **Hash**: 697c60cc
+
+## REQ-d00267: Viewer Pending-Work Indicator Truth
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006, REQ-p00015
+
+The viewer's pending-change indicator is server-truth: the changes it counts are
+held in the server process, not in the page. So the page has three states to
+tell apart, not two — the server reported nothing pending, the server reported
+work pending, and the server could not be asked — and collapsing the third into
+either of the first two makes the page lie. Reporting the last known count as
+though it were current asserts work that may exist in no process; reporting zero
+hides work that may still be pending behind a momentary network failure. This is
+REQ-p00015-E's distinction between a value and the absence of one, applied in the
+presentation layer.
+
+The navigation warning is the same distinction with consequences. Because the
+pending changes live in the server and not in the tab, closing the tab destroys
+nothing, and the warning is a courtesy about server-side state rather than a
+guard on data in the page. Obstructing navigation over a claim the viewer cannot
+verify therefore buys no safety and can leave an operator unable to leave the
+page at all.
+
+### Assertions
+
+A. When the viewer cannot obtain the pending-change count from the server, the viewer SHALL present the count as unknown, and SHALL present it neither as the last count obtained nor as zero.
+
+B. When the server reports a pending-change count after the viewer has presented the count as unknown, the viewer SHALL replace the unknown presentation with the reported count.
+
+C. The viewer SHALL warn an operator before navigating away only while the server has reported that changes are pending; while the pending-change count is unknown, the viewer SHALL NOT obstruct navigation.
+
+### Changelog
+
+- 2026-08-07 | 94abbc63 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
+
+*End* *Viewer Pending-Work Indicator Truth* | **Hash**: 94abbc63

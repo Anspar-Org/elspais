@@ -168,6 +168,41 @@ The viewer does exactly this on a 30-second poll and raises a banner
 naming which of the two happened. An agent holding state across calls
 can use the same field to know when to re-read.
 
+## The Viewer's Pending-Change Badge
+
+The badge beside the viewer's Save button counts work held in the
+**server** process, not in the browser page. The page cannot recompute
+that number on its own, so it has three states to report, not two:
+
+```text
+  server said 0 pending  ->  badge hidden
+  server said N pending  ->  badge shows N, red
+  server could not be asked -> badge shows ?, amber, with a tooltip
+                               naming the last confirmed count
+```
+
+The third state exists because both ways of collapsing it lie. Leaving
+the last count on screen asserts pending work that may exist in no
+process; showing zero hides work that is still pending behind a
+momentary network failure. `?` claims neither a count nor safety. The
+next answer from the server -- from a mutation, or from the 30-second
+poll -- replaces it with the reported count.
+
+That poll is the page's only heartbeat: the count is otherwise refreshed
+only at load and after a mutation, so a server that dies while the
+operator sits idle would leave a frozen number on screen forever. A
+failed poll therefore marks the count unknown, and a poll that answers
+again resyncs it. A failed read does **not** advance the tip the page
+has "seen", so the other-writer banner still fires for anything that
+happened while the server was unreachable, and Save/Undo keep whatever
+state they had rather than asserting that there is nothing to save.
+
+The warning shown before navigating away follows the same rule: it arms
+only while the server has **reported** pending work. Because that work
+lives in the server, closing the tab destroys nothing -- the warning is a
+courtesy, not a guard on data in the page -- so while the count is
+unknown the viewer does not obstruct navigation.
+
 ## Why Tokens Survive a Refresh
 
 The version is a 16-character digest of the node's rendered text plus
