@@ -843,7 +843,7 @@ class TestDaemonFingerprintIsStampedOnlyByItsOwner:
         return recorded
 
     # Verifies: REQ-p00004-O, REQ-p00015-G
-    def test_REQ_p00004_O_a_holder_without_hooks_leaves_the_record_alone(self, tmp_path):
+    def test_REQ_p00004_O_hookless_holder_leaves_the_record_alone(self, tmp_path):
         """A bare holder -- what a stdio MCP server carries -- must not stamp
         a daemon record it does not own."""
         import json

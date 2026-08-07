@@ -315,10 +315,10 @@ class AppState:
 
         This object owns no rebuild logic of its own. ``rebuild_shared_graph``
         re-reads config, publishes config and graph together under the shared
-        write lock, runs the post-rebuild hooks (this object's mtime
-        re-snapshot among them) and syncs the daemon's config fingerprint —
-        the same routine the explicit reload surfaces reach, so every path
-        leaves identical state behind it.
+        write lock, and runs the post-rebuild hooks — this object's mtime
+        re-snapshot and its daemon-fingerprint sync among them. It is the same
+        routine the explicit reload surfaces reach, so every path leaves
+        identical state behind it.
 
         Raises on failure so ``ensure_fresh()`` keeps serving the previous
         graph and reports honestly that no rebuild happened.
