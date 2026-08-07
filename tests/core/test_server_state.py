@@ -1,4 +1,4 @@
-# Verifies: REQ-d00010
+# Verifies: REQ-d00010, REQ-p00015-B, REQ-p00015-F
 """Tests for server state management and auto-refresh."""
 import time
 from pathlib import Path
@@ -199,6 +199,124 @@ class TestAppState:
 
         state = AppState.from_config(repo_root=tmp_path)
         assert tmp_path in state.allowed_roots
+
+
+class TestEnsureFreshHonestRebuildReport:
+    """Validates REQ-p00015-F: ensure_fresh() records a rebuild as applied only
+    when the rebuilt graph is what the state actually serves afterwards.
+
+    Validates REQ-p00015-B: when the rebuild does not happen, the state reports
+    the unapplied rebuild and its cause on stderr.
+
+    A rebuild that raises leaves the previous graph in place. Reporting that
+    rebuild to the caller as done is phantom success: the caller is told the
+    served graph came from disk when it did not. The same defect one level
+    down is a partially-applied rebuild -- the freshly read on-disk config
+    recorded in the holder while the graph beside it was built from the old
+    one.
+    """
+
+    REBUILD_CAUSE = "probe-cause-disk-vanished"
+
+    @staticmethod
+    def _stale_state(tmp_path):
+        """An AppState whose spec file changed on disk since the last build."""
+        from elspais.server.state import AppState
+
+        _make_repo(tmp_path)
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        spec_file = spec_dir / "test.md"
+        spec_file.write_text("# REQ-001\nTitle\n")
+
+        state = AppState.from_config(repo_root=tmp_path)
+        time.sleep(0.05)
+        spec_file.write_text("# REQ-001\nNew title\n")
+        # Reset throttle so ensure_fresh() actually checks.
+        state._last_stale_check = 0.0
+        assert state.is_stale(), "fixture must present a genuinely stale state"
+        return state
+
+    def _break_rebuild(self, state, monkeypatch):
+        """Make _rebuild() raise with a distinctive, greppable cause."""
+
+        def _raise() -> None:
+            raise RuntimeError(self.REBUILD_CAUSE)
+
+        monkeypatch.setattr(state, "_rebuild", _raise)
+
+    def test_REQ_p00015_F_failed_rebuild_is_not_reported_as_rebuilt(self, tmp_path, monkeypatch):
+        """A rebuild that raised must not be returned as a rebuild that happened."""
+        state = self._stale_state(tmp_path)
+        self._break_rebuild(state, monkeypatch)
+
+        assert state.ensure_fresh() is False, "ensure_fresh() reported a rebuild it did not perform"
+
+    def test_REQ_p00015_F_failed_rebuild_keeps_serving_the_previous_graph(
+        self, tmp_path, monkeypatch
+    ):
+        """The record's destination -- the served graph -- must be untouched."""
+        state = self._stale_state(tmp_path)
+        graph_before = state.graph
+        build_time_before = state.build_time
+        self._break_rebuild(state, monkeypatch)
+
+        state.ensure_fresh()
+
+        assert state.graph is graph_before, "failed rebuild swapped the served graph"
+        assert state.build_time == build_time_before, "failed rebuild advanced the build clock"
+
+    def test_REQ_p00015_B_failed_rebuild_reports_the_cause(self, tmp_path, monkeypatch, capsys):
+        """The unapplied rebuild and its cause reach stderr."""
+        state = self._stale_state(tmp_path)
+        self._break_rebuild(state, monkeypatch)
+
+        state.ensure_fresh()
+
+        err = capsys.readouterr().err
+        assert "rebuild" in err, f"failure report does not name the operation: {err!r}"
+        assert self.REBUILD_CAUSE in err, f"failure report does not carry the cause: {err!r}"
+
+    def test_REQ_p00015_F_failed_rebuild_does_not_record_the_new_config(
+        self, tmp_path, monkeypatch
+    ):
+        """A rebuild that dies mid-way must not record its config half.
+
+        The config in the shared holder names the configuration the served
+        graph was built from. Swapping in the newly read on-disk config while
+        the old graph is still served records a change that is not present at
+        the destination the record names.
+        """
+        state = self._stale_state(tmp_path)
+        assert state.config["project"]["name"] == "test"
+
+        # New config on disk, and a build that cannot complete against it.
+        (tmp_path / ".elspais.toml").write_text(
+            _MINIMAL_CONFIG.replace('name = "test"', 'name = "renamed-on-disk"')
+        )
+        state._last_stale_check = 0.0
+
+        def _raise(*args, **kwargs):
+            raise RuntimeError(self.REBUILD_CAUSE)
+
+        monkeypatch.setattr("elspais.graph.factory.build_graph", _raise)
+
+        state.ensure_fresh()
+
+        assert state.config["project"]["name"] == "test", (
+            "failed rebuild recorded the new on-disk config while still "
+            "serving the graph built from the old one"
+        )
+
+    def test_REQ_p00015_F_successful_rebuild_is_reported_as_rebuilt(self, tmp_path):
+        """A rebuild that completed is still reported -- honesty cuts both ways."""
+        state = self._stale_state(tmp_path)
+        graph_before = state.graph
+        build_time_before = state.build_time
+
+        assert state.ensure_fresh() is True
+        assert state.graph is not graph_before
+        assert state.build_time > build_time_before
 
 
 class TestSharedStateWithMcpServer:

@@ -234,8 +234,17 @@ class AppState:
                 return True
         return False
 
+    # Implements: REQ-p00015-F, REQ-p00015-B
     def ensure_fresh(self) -> bool:
-        """Rebuild graph if files changed. Returns True if rebuilt.
+        """Rebuild graph if files changed.
+
+        Returns True only when a rebuild completed and the new graph is the
+        one now being served. A rebuild that was skipped (throttled, pending
+        mutations, nothing stale) and a rebuild that was attempted and failed
+        both return False: the caller must never be told an effect occurred
+        that is not present in the served graph (REQ-p00015-F). A failure is
+        reported with its cause on stderr rather than being swallowed
+        (REQ-p00015-B).
 
         Throttled to at most one mtime check per second.
 
@@ -269,9 +278,10 @@ class AppState:
                     f"warning: auto-refresh rebuild failed, keeping old graph: {exc}",
                     file=sys.stderr,
                 )
-        return True
+                return False
+            return True
 
-    # Implements: REQ-p00004-J
+    # Implements: REQ-p00004-J, REQ-p00015-F
     def _rebuild(self) -> None:
         """Rebuild graph from disk and swap it into the shared holder.
 
@@ -279,17 +289,30 @@ class AppState:
         pass a guard against the old graph while the new one is being
         installed. MCP tools see the new graph immediately — they read
         through the same holder.
+
+        Nothing is published until the new graph exists. Config and graph are
+        one unit: a holder advertising the on-disk config while serving a
+        graph built from the previous one would record a change that is not
+        present at the destination it names (REQ-p00015-F). A failed rebuild
+        therefore leaves config, graph, build_time and the mtime snapshot all
+        untouched, and the next freshness check retries.
         """
         from elspais.config import get_config
         from elspais.graph.factory import build_graph
 
         with self.shared.write_lock:
-            self.config = get_config(start_path=self.repo_root, quiet=True)
-            self.graph = build_graph(
-                config=self.config,
+            # Built into locals first: config re-read from disk
+            # (REQ-p00004-J) and the graph built from it, neither visible
+            # until both exist.
+            new_config = get_config(start_path=self.repo_root, quiet=True)
+            new_graph = build_graph(
+                config=new_config,
                 repo_root=self.repo_root,
             )
-            self.graph.load_comments()
+            new_graph.load_comments()
+
+            self.config = new_config
+            self.graph = new_graph
             self.build_time = time.time()
             self.snapshot_mtimes()
         # Config was re-read from disk — sync daemon.json's config_hash so
