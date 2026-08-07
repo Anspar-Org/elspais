@@ -637,10 +637,22 @@ presentation layer.
 
 The navigation warning is the same distinction with consequences. Because the
 pending changes live in the server and not in the tab, closing the tab destroys
-nothing, and the warning is a courtesy about server-side state rather than a
-guard on data in the page. Obstructing navigation over a claim the viewer cannot
-verify therefore buys no safety and can leave an operator unable to leave the
-page at all.
+none of the changes the indicator counts, and the warning is a courtesy about
+server-side state rather than a guard on data in the page. Obstructing
+navigation over a claim the viewer cannot verify therefore buys no safety and
+can leave an operator unable to leave the page at all.
+
+An operation that acts on the server-side changes themselves is the opposite
+case, and the two must not be conflated. Switching branches, checkpointing, or
+reverting can discard or strand pending changes, so the cost of proceeding on a
+wrong belief is real; there, an unknown count has to be treated as work that may
+exist. Navigation is permissive under uncertainty because it destroys nothing;
+operations that destroy are restrictive under the same uncertainty. Where the
+refusal already happens at the server — a history-level operation that carries
+the change-history position the caller has seen is rejected outright when
+anything unseen is pending, and an unread position is sent as "I believe
+nothing is pending" — the obligation is discharged there and needs no second
+check in the page. It binds in the page exactly where nothing else refuses.
 
 That last failure mode is reported from the field and its cause is not yet
 established: a page that will not close looks identical whether the navigation
@@ -653,7 +665,7 @@ displaying.
 
 ### Assertions
 
-A. When the viewer cannot obtain the pending-change count from the server, the viewer SHALL present the count as unknown, and SHALL present it neither as the last count obtained nor as zero.
+A. When the viewer cannot obtain the pending-change count from the server, the viewer SHALL present the count as unknown, SHALL present it neither as the last count obtained nor as zero, and SHALL NOT record the change history it failed to read as seen.
 
 B. When the server reports a pending-change count after the viewer has presented the count as unknown, the viewer SHALL replace the unknown presentation with the reported count.
 
@@ -661,9 +673,12 @@ C. The viewer SHALL warn an operator before navigating away only while the serve
 
 D. The viewer SHALL make the state that decides whether it warns before navigation inspectable on demand — the count, whether the count is known, and when it was last established — and SHALL report the decision it reached at the moment navigation is attempted.
 
+E. An operation that would discard, strand, or commit around pending changes SHALL treat an unknown pending-change count as changes that may exist, never as zero.
+
 ### Changelog
 
+- 2026-08-07 | c1be85e3 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-07 | 5d25457c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-07 | 94abbc63 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Viewer Pending-Work Indicator Truth* | **Hash**: 5d25457c
+*End* *Viewer Pending-Work Indicator Truth* | **Hash**: c1be85e3

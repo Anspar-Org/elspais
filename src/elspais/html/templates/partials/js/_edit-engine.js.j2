@@ -130,6 +130,14 @@ async function mutate(endpoint, payload) {
     } else if (data) {
         forgetVersion(guardedId);
         showToast(data.error || 'Mutation failed', 'error');
+    } else {
+        // No usable response at all. The count we are showing was established
+        // before this attempt and may now be wrong, so re-probe rather than
+        // keep presenting it -- and re-probe rather than assume the server is
+        // gone, since apiFetch also yields null for a server that answered
+        // with an error. Only /api/dirty decides what the count is.
+        // Implements: REQ-d00267-A
+        await refreshDirtyCount();
     }
     return data;
 }
@@ -697,6 +705,19 @@ function showBranchPickerModal(targetRepo) {
     // Guard: unsaved mutations
     if (editState.mutationCount > 0) {
         showErrorModal('Unsaved changes', 'Save or revert changes before switching branches.');
+        return;
+    }
+    // An unknown count is not a zero. Switching branches under one could
+    // strand pending changes on the branch being left, so uncertainty is
+    // restrictive here -- the opposite of the navigation warning, which is
+    // permissive because closing a tab destroys nothing. Refusing rather
+    // than prompting: saving needs the same server whose silence caused the
+    // uncertainty. Implements: REQ-d00267-E
+    if (editState.mutationCount === null) {
+        showErrorModal('Unsaved changes unknown',
+            'The number of unsaved changes is unknown - the server could not ' +
+            'be reached. Switching branches now could strand changes that are ' +
+            'still pending. Restore the server and try again.');
         return;
     }
 
@@ -1866,6 +1887,17 @@ function onAddRelationship(nodeId, btn) {
 // =====================================================================
 
 function showCheckpointModal() {
+    // An unknown count is not a zero: checkpointing under one commits around
+    // changes that may be pending, producing a commit that silently omits
+    // them. Refuse rather than prompt -- the prompt's only remedy is a save,
+    // which needs the server that just went quiet. Implements: REQ-d00267-E
+    if (editState.mutationCount === null) {
+        showErrorModal('Unsaved changes unknown',
+            'The number of unsaved changes is unknown - the server could not ' +
+            'be reached. A checkpoint taken now could silently omit changes ' +
+            'that are still pending. Restore the server and try again.');
+        return;
+    }
     // Guard: prompt to save if unsaved mutations
     if (editState.mutationCount > 0) {
         if (!confirm('You have ' + editState.mutationCount + ' unsaved changes. Save before checkpointing?')) {
@@ -2304,16 +2336,22 @@ function showStaleBanner(message) {
 // Reloading is the fix for (1); for (2) the live graph is already correct and
 // the page just needs to re-read it, so the banner offers that separately.
 //
-// This poll is also the page's only heartbeat. refreshDirtyCount() runs at
-// load and after mutations, so a server that dies while the operator sits idle
-// would never re-enter it and the pending count would stay frozen at its last
-// value. Losing the heartbeat is evidence the count can no longer be trusted,
-// and regaining it is the cue to resync. Implements: REQ-d00267-A, REQ-d00267-B
-setInterval(function() {
-    apiFetch('/api/check-freshness').then(function(data) {
-        if (!data) { markDirtyCountUnknown(); return; }
-        // The server is answering again; recover the count we stopped knowing.
-        if (editState.mutationCount === null) { refreshDirtyCount(); }
+// This poll is also the page's only heartbeat for the pending count.
+// refreshDirtyCount() otherwise runs at load and after mutations, so a server
+// that dies while the operator sits idle would never re-enter it and the count
+// would stay frozen at its last value.
+//
+// The two jobs are independent on purpose. Only the count endpoint may speak
+// for the count: letting a freshness failure mark the count unknown pinned the
+// badge to '?' -- and the navigation warning off -- for as long as that one
+// endpoint stayed broken, even with the count endpoint answering perfectly.
+// And the count probe must not adopt the mutation-log tip, or every cycle
+// would silently mark another writer's mutations as seen and the banner below
+// would never raise again. Implements: REQ-d00267-A, REQ-d00267-B
+function pollForExternalChanges() {
+    refreshDirtyCount({ adoptTip: false });
+    return apiFetch('/api/check-freshness').then(function(data) {
+        if (!data) return;
         if (data.stale) {
             showStaleBanner('Spec files have changed on disk.');
             return;
@@ -2329,7 +2367,8 @@ setInterval(function() {
             showStaleBanner('Another writer changed the graph.');
         }
     });
-}, 30000);
+}
+setInterval(pollForExternalChanges, 30000);
 
 // Re-read the live graph without touching disk: the in-memory state is
 // already authoritative when another writer moved it, so this refetches

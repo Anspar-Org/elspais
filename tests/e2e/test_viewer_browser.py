@@ -6,6 +6,7 @@
 # Verifies: REQ-d00267-B
 # Verifies: REQ-d00267-C
 # Verifies: REQ-d00267-D
+# Verifies: REQ-d00267-E
 """Playwright-based browser tests for the elspais viewer command.
 
 Validates REQ-d00010: viewer command serves the traceability UI
@@ -1574,6 +1575,12 @@ def _console_sink(page) -> list[str]:
     return messages
 
 
+# The armed branch's own phrasing. The not-armed branch's known-zero wording
+# ("no pending changes") deliberately does not contain the parenthesised form,
+# so this one literal discriminates against BOTH not-armed variants.
+_ARMED_PHRASE = "pending change(s)"
+
+
 def _beforeunload_messages(messages: list[str]) -> list[str]:
     """The subset of console output reporting the navigation decision."""
     return [m for m in messages if "[elspais]" in m and "beforeunload" in m.lower()]
@@ -1789,6 +1796,13 @@ class TestBrowserUnloadDecisionObservable:
             f"the armed decision record must name the pending count "
             f"{pending} it armed on, got {reported!r}"
         )
+        assert any(_ARMED_PHRASE in m for m in reported), (
+            f"the armed record must carry its own phrasing {_ARMED_PHRASE!r} "
+            f"so it is distinguishable from the not-armed one: {reported!r}"
+        )
+        assert not any(
+            "not warning" in m for m in reported
+        ), f"the armed record must not read as a not-warning decision: {reported!r}"
 
     @pytest.mark.browser
     @pytest.mark.e2e
@@ -1803,7 +1817,7 @@ class TestBrowserUnloadDecisionObservable:
         page = page_badge
         page.goto(badge_viewer_url, wait_until="networkidle")
 
-        pending = _create_pending_mutation(page, badge_viewer_url, "Badge Decision Console Quiet")
+        _create_pending_mutation(page, badge_viewer_url, "Badge Decision Console Quiet")
         _refresh_dirty(page)
         _go_unknown(page)
         assert _unload_state(page)["willWarnOnClose"] is False, "precondition: must be disarmed"
@@ -1817,7 +1831,489 @@ class TestBrowserUnloadDecisionObservable:
             f"a not-armed navigation attempt must still report the decision "
             f"it reached; console carried only {messages!r}"
         )
-        assert not any(str(pending) in m for m in reported), (
-            f"the not-armed record must be distinguishable from the armed one "
-            f"and must not claim a pending count it did not arm on: {reported!r}"
+        # Discriminate on the two branches' own phrasing. An earlier version of
+        # this test asserted the armed count's digits were absent, which the
+        # not-armed line can never contain — it constrained nothing.
+        assert all("not warning" in m for m in reported), (
+            f"the not-armed record must say so in words, so an operator "
+            f"reading the console can tell which branch ran: {reported!r}"
+        )
+        assert not any(_ARMED_PHRASE in m for m in reported), (
+            f"the not-armed record must not carry the armed record's "
+            f"pending-count phrasing {_ARMED_PHRASE!r}: {reported!r}"
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pending-work count under PARTIAL failure (REQ-d00267-A/B)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _has_poll(page) -> bool:
+    """Is the 30s poll reachable as a named function a test can drive?"""
+    return page.evaluate("() => typeof window.pollForExternalChanges === 'function'")
+
+
+def _poll_once(page) -> None:
+    """Run one poll cycle and wait for its count probe to actually land.
+
+    The poll is not required to hand back a promise, so completion is observed
+    rather than awaited: `dirtyCountAt` is cleared first and the wait is for
+    something to set it again. Both count outcomes stamp it — a server answer
+    and a failed read alike — so this is a true "a probe happened" signal, not
+    a "the probe succeeded" one. That is what makes an absence assertion
+    (`the badge never went to ?`) strict instead of racy.
+    """
+    assert _has_poll(page), (
+        "window.pollForExternalChanges() is not defined: the 30s poll is not a "
+        "named function, so the page's only count heartbeat cannot be driven "
+        "or observed"
+    )
+    page.evaluate("() => { editState.dirtyCountAt = null; }")
+    page.evaluate("() => pollForExternalChanges()")
+    _wait_for_js(
+        page,
+        "() => editState.dirtyCountAt !== null",
+        "a poll cycle must probe the pending count, but nothing re-established it",
+    )
+
+
+def _wait_for_js(page, expression: str, message: str, timeout: float = 5.0) -> None:
+    """Wait for a page-side condition, failing as an assertion rather than a
+    raw Playwright timeout so the report reads as missing behaviour."""
+    try:
+        page.wait_for_function(expression, timeout=timeout * 1000)
+    except PlaywrightTimeoutError:
+        raise AssertionError(f"{message} (waiting on: {expression})") from None
+
+
+def _dom_present(page, selector: str) -> bool:
+    return page.evaluate(f"() => document.querySelector({selector!r}) !== null")
+
+
+def _error_modal_text(page) -> str:
+    return page.evaluate(
+        """() => {
+            const el = document.getElementById('error-modal-overlay');
+            return el ? el.textContent : '';
+        }"""
+    )
+
+
+class TestBrowserPendingWorkUnderPartialFailure:
+    """Validates REQ-d00267-A, REQ-d00267-B: the pending-change count is
+    established by, and only by, the count endpoint — on a heartbeat, and
+    honestly when the answer is unusable.
+
+    Partial failure is the interesting case. One endpoint going down while
+    another stays healthy must not let the healthy one's silence, or the
+    broken one's noise, speak for the count: a failure elsewhere that pins the
+    badge to unknown disarms the navigation warning forever, and a malformed
+    answer read as zero hides real work.
+    """
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00267_A_poll_cycle_drives_the_count(self, page_badge, badge_viewer_url):
+        # Verifies: REQ-d00267-A
+        """The poll is the page's only count heartbeat: an idle page whose
+        server dies must notice without any mutation or reload. Driving the
+        poll alone — never refreshDirtyCount() directly — must turn the count
+        unknown, and must recover it once the server answers again."""
+        page = page_badge
+        page.goto(badge_viewer_url, wait_until="networkidle")
+
+        _create_pending_mutation(page, badge_viewer_url, "Badge Poll Heartbeat")
+        _refresh_dirty(page)
+        assert _badge_state(page)["count_type"] == "number", "precondition: count must start known"
+
+        # Only the count endpoint dies; check-freshness stays healthy, so an
+        # unknown count here can only have come from the count probe itself.
+        page.route("**/api/dirty", lambda route: route.abort())
+        _poll_once(page)
+        _wait_for_js(
+            page,
+            "() => editState.mutationCount === null",
+            "a poll cycle with the count endpoint down must mark the count "
+            "unknown; the page went on presenting a count it could not confirm",
+        )
+        assert _badge_state(page)["text"] == "?", _badge_state(page)
+
+        page.unroute("**/api/dirty")
+        _poll_once(page)
+        _wait_for_js(
+            page,
+            "() => typeof editState.mutationCount === 'number'",
+            "a poll cycle after the server recovered must re-establish the count",
+        )
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00267_A_freshness_failure_does_not_speak_for_the_count(
+        self, page_badge, badge_viewer_url
+    ):
+        # Verifies: REQ-d00267-A
+        """Regression guard for the stuck-at-'?' bug. Only /api/dirty outcomes
+        may establish the count. A failing /api/check-freshness alongside a
+        perfectly healthy /api/dirty used to mark the count unknown, which
+        pinned the badge at '?' and left the navigation warning disarmed for
+        the rest of the session even though the server was answering."""
+        page = page_badge
+        page.goto(badge_viewer_url, wait_until="networkidle")
+
+        pending = _create_pending_mutation(page, badge_viewer_url, "Badge Freshness Down")
+        _refresh_dirty(page)
+        assert _badge_state(page)["text"] == str(pending), "precondition: badge shows the count"
+
+        page.route("**/api/check-freshness", lambda route: route.abort())
+
+        for cycle in range(3):
+            _poll_once(page)
+            state = _badge_state(page)
+            assert state["text"] != "?", (
+                f"cycle {cycle + 1}: /api/dirty is healthy, so the count is "
+                f"knowable; a check-freshness failure must not present it as "
+                f"unknown (badge {state['text']!r}, classes {state['classes']})"
+            )
+            assert "unknown" not in state["classes"], f"cycle {cycle + 1}: {state['classes']}"
+            assert state["count"] == pending, (
+                f"cycle {cycle + 1}: the badge must keep showing the server's "
+                f"real count {pending}, got {state['count']!r}"
+            )
+            assert _unload_state(page)["willWarnOnClose"] is True, (
+                f"cycle {cycle + 1}: work is pending and the count endpoint is "
+                f"healthy, so the navigation warning must stay armed"
+            )
+
+        page.unroute("**/api/check-freshness")
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00267_A_poll_does_not_adopt_another_writers_tip(
+        self, page_badge, badge_viewer_url
+    ):
+        # Verifies: REQ-d00267-A
+        """The poll's count probe must not record the change history as seen.
+        Adopting the tip every 30s would mark another writer's mutations as
+        already-looked-at and the 'Another writer changed the graph' banner
+        could never raise again — the poll would silently destroy the very
+        warning it exists to give."""
+        page = page_badge
+        page.goto(badge_viewer_url, wait_until="networkidle")
+
+        _create_pending_mutation(page, badge_viewer_url, "Badge Tip Baseline")
+        _refresh_dirty(page)
+        seen_before = _badge_state(page)["tip"]
+        assert seen_before, f"precondition: a baseline tip must be recorded, got {seen_before!r}"
+
+        # Another writer moves the graph behind this page's back.
+        _create_pending_mutation(page, badge_viewer_url, "Badge Tip Other Writer")
+        other_tip = _server_dirty(page, badge_viewer_url).get("tip")
+        assert other_tip and other_tip != seen_before, (
+            f"precondition: the other writer must have advanced the tip "
+            f"{seen_before!r} -> {other_tip!r}"
+        )
+
+        _poll_once(page)
+
+        assert _badge_state(page)["tip"] == seen_before, (
+            f"the poll must not record history it never showed the operator as "
+            f"seen: lastSeenTip moved {seen_before!r} -> "
+            f"{_badge_state(page)['tip']!r}"
+        )
+        _wait_for_js(
+            page,
+            "() => { const b = document.getElementById('stale-banner');"
+            " return b && !b.classList.contains('hidden'); }",
+            "another writer moved the tip, so the poll must raise the "
+            "'Another writer changed the graph' banner",
+        )
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00267_A_failed_mutation_reprobes_and_marks_unknown_if_dead(
+        self, page_badge, badge_viewer_url
+    ):
+        # Verifies: REQ-d00267-A
+        """A mutation POST that comes back with nothing leaves the page's idea
+        of the count unfounded — the request may or may not have landed. The
+        count must be re-established, and with the count endpoint also down
+        that re-establishment is 'unknown', not the stale number."""
+        page = page_badge
+        page.goto(badge_viewer_url, wait_until="networkidle")
+
+        _create_pending_mutation(page, badge_viewer_url, "Badge Failed Mutation Dead")
+        _refresh_dirty(page)
+        assert _badge_state(page)["count_type"] == "number", "precondition: count must start known"
+
+        # /api/node stays reachable so the guard token still resolves and the
+        # POST itself is what fails.
+        page.route("**/api/mutate/title", lambda route: route.abort())
+        page.route("**/api/dirty", lambda route: route.abort())
+        _attempt_title_mutation(page, "Badge Failed Mutation Dead 2")
+
+        _wait_for_js(
+            page,
+            "() => editState.mutationCount === null",
+            "a mutation POST that failed against an unreachable server must "
+            "leave the count unknown, not standing at its stale value",
+        )
+
+        page.unroute("**/api/mutate/title")
+        page.unroute("**/api/dirty")
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00267_B_failed_mutation_reprobes_and_recovers_if_alive(
+        self, page_badge, badge_viewer_url
+    ):
+        # Verifies: REQ-d00267-B
+        """The other half of the same path: a rejected request is not a dead
+        server. With the count endpoint healthy the re-probe must reach it and
+        restore a real number, rather than assuming death.
+
+        The count is deliberately forced to unknown first. Asserting only that
+        the count is right afterwards would pass even if nothing re-probed at
+        all — recovery from unknown is what proves the probe ran.
+        """
+        page = page_badge
+        page.goto(badge_viewer_url, wait_until="networkidle")
+
+        _refresh_dirty(page)
+        page.evaluate("() => markDirtyCountUnknown()")
+        assert _badge_state(page)["count"] is None, "precondition: count must be unknown"
+
+        page.route("**/api/mutate/title", lambda route: route.abort())
+        _attempt_title_mutation(page, "Badge Failed Mutation Alive")
+
+        _wait_for_js(
+            page,
+            "() => typeof editState.mutationCount === 'number'",
+            "a failed mutation POST must re-probe the count; the count "
+            "endpoint was healthy, so the count must be known again rather "
+            "than assumed unknowable",
+        )
+        server = _server_dirty(page, badge_viewer_url).get("mutation_count")
+        assert _badge_state(page)["count"] == server, (
+            f"the re-probe must adopt the server's real count {server}, got "
+            f"{_badge_state(page)['count']!r}"
+        )
+
+        page.unroute("**/api/mutate/title")
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00267_A_malformed_count_response_is_unknown_not_zero(
+        self, page_badge, badge_viewer_url
+    ):
+        # Verifies: REQ-d00267-A
+        """A 200 carrying no usable count is an answer the page cannot read.
+        Coercing it to zero would hide pending work behind a hidden badge and
+        a disarmed warning, which is exactly the collapse REQ-d00267-A
+        forbids — the response reached us, but the count did not."""
+        page = page_badge
+        page.goto(badge_viewer_url, wait_until="networkidle")
+
+        _create_pending_mutation(page, badge_viewer_url, "Badge Malformed Dirty")
+        _refresh_dirty(page)
+        assert _badge_state(page)["count_type"] == "number", "precondition: count must start known"
+
+        page.route(
+            "**/api/dirty",
+            lambda route: route.fulfill(status=200, content_type="application/json", body="{}"),
+        )
+        _refresh_dirty(page)
+        state = _badge_state(page)
+
+        assert state["count"] is None, (
+            f"a response without a numeric count is unreadable, not zero; "
+            f"editState.mutationCount was {state['count']!r}"
+        )
+        assert state["text"] == "?", f"badge must read unknown, got {state['text']!r}"
+        assert "hidden" not in state["classes"], (
+            f"an unreadable count is not 'nothing pending' — the badge must "
+            f"stay visible, got {state['classes']}"
+        )
+        assert _unload_state(page)["countKnown"] is False, _unload_state(page)
+
+        page.unroute("**/api/dirty")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Destructive operations under an unknown count (REQ-d00267-E)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _attempt_title_mutation(page, new_title: str) -> None:
+    """Drive the page's own mutate() path for the badge fixture's requirement.
+
+    mutate() is the unit under test here, and it is a global, so it is invoked
+    directly rather than through a card's edit UI: opening a card and typing
+    would exercise a great deal of unrelated machinery for no extra coverage
+    of the failed-POST branch, and would be far less deterministic.
+    """
+    page.evaluate(
+        """async (payload) => {
+            await mutate('/api/mutate/title', payload);
+        }""",
+        {"node_id": _BADGE_REQ_ID, "new_title": new_title},
+    )
+
+
+class TestBrowserDestructiveOperationsUnderUnknownCount:
+    """Validates REQ-d00267-E: an operation that would discard, strand, or
+    commit around pending changes treats an unknown count as changes that may
+    exist, never as zero.
+
+    Note the polarity is the opposite of the navigation warning, deliberately.
+    Closing a tab destroys nothing held in the page, so uncertainty there
+    stays permissive. These operations act ON the server-side changes, so the
+    same uncertainty has to be restrictive. Both guards read
+    `editState.mutationCount > 0`, and `null > 0` is false, so a single
+    network blip is enough to walk straight past them.
+
+    They refuse rather than prompt: 'save first' is not actionable advice when
+    saving needs the same server whose silence caused the uncertainty.
+    """
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00267_E_branch_picker_refuses_while_count_unknown(
+        self, page_badge, badge_viewer_url
+    ):
+        # Verifies: REQ-d00267-E
+        """Switching branches under an unknown count could strand pending work
+        on the branch being left. Driven through the real UI (a click on the
+        branch badge). Only /api/dirty is broken — the branch endpoints are
+        healthy — so a refusal here is attributable to the guard and not to a
+        failed fetch, and without the guard the picker really does open."""
+        page = page_badge
+        page.on("dialog", lambda d: d.dismiss())
+        page.goto(badge_viewer_url, wait_until="networkidle")
+
+        _go_unknown(page)
+        assert _badge_state(page)["count"] is None, "precondition: count must be unknown"
+
+        page.click("#branch-badge")
+
+        _wait_for_js(
+            page,
+            "() => document.getElementById('error-modal-overlay') !== null",
+            "an unknown count may be hiding pending work, so the branch "
+            "picker must refuse and say so; no error modal appeared",
+        )
+        assert not _dom_present(page, "#branch-modal-overlay"), (
+            "the branch picker must not open while the pending count is "
+            "unknown — switching branches could strand work the page cannot "
+            "confirm is absent"
+        )
+        text = _error_modal_text(page).lower()
+        assert "unknown" in text, (
+            f"the refusal must name the reason — the count is unknown — so the "
+            f"operator knows to restore the server rather than retry; got {text!r}"
+        )
+
+        page.unroute("**/api/dirty")
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00267_E_branch_picker_opens_when_server_reports_zero(
+        self, page_badge, badge_viewer_url
+    ):
+        # Verifies: REQ-d00267-E
+        """Negative control: the guard must key on 'unknown', not on 'not
+        greater than zero'. A server-REPORTED zero is a real answer and must
+        still let the picker open, or the refusal is just a broken feature."""
+        page = page_badge
+        page.on("dialog", lambda d: d.dismiss())
+        page.goto(badge_viewer_url, wait_until="networkidle")
+
+        _revert_to_zero(page, badge_viewer_url)
+        _refresh_dirty(page)
+        assert _badge_state(page)["count"] == 0, "precondition: server reports nothing pending"
+
+        page.click("#branch-badge")
+
+        _wait_for_js(
+            page,
+            "() => document.getElementById('branch-modal-overlay') !== null",
+            "with the server reporting nothing pending the branch picker must " "open normally",
+        )
+        assert not _dom_present(page, "#error-modal-overlay"), (
+            f"a reported zero is a real answer and must not be refused; "
+            f"error modal said {_error_modal_text(page)!r}"
+        )
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00267_E_checkpoint_refuses_while_count_unknown(
+        self, page_badge, badge_viewer_url
+    ):
+        # Verifies: REQ-d00267-E
+        """Checkpointing under an unknown count commits around changes that
+        may be pending, producing a commit that silently omits them.
+
+        Driven by calling showCheckpointModal() directly rather than clicking
+        #btn-checkpoint: that button is enabled only when the repo has
+        uncommitted files, and the badge fixture's repo is committed clean, so
+        there is no clickable path to the guard. The dialog handler is
+        defensive — the guard must refuse outright, never prompt, because
+        saving would need the same server that just went quiet.
+        """
+        page = page_badge
+        dialogs: list[str] = []
+        page.on("dialog", lambda d: (dialogs.append(d.type), d.dismiss()))
+        page.goto(badge_viewer_url, wait_until="networkidle")
+
+        _go_unknown(page)
+        assert _badge_state(page)["count"] is None, "precondition: count must be unknown"
+
+        page.evaluate("() => showCheckpointModal()")
+
+        _wait_for_js(
+            page,
+            "() => document.getElementById('error-modal-overlay') !== null",
+            "an unknown count may be hiding pending work, so checkpointing "
+            "must refuse and say so; no error modal appeared",
+        )
+        assert not dialogs, (
+            f"the guard must refuse outright, not prompt: saving needs the "
+            f"same server whose silence caused the uncertainty, so a prompt "
+            f"offers no action the operator can take; got dialogs {dialogs}"
+        )
+        text = _error_modal_text(page).lower()
+        assert (
+            "unknown" in text
+        ), f"the refusal must name the reason — the count is unknown; got {text!r}"
+
+        page.unroute("**/api/dirty")
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00267_E_checkpoint_not_refused_when_server_reports_zero(
+        self, page_badge, badge_viewer_url
+    ):
+        # Verifies: REQ-d00267-E
+        """Negative control for the checkpoint guard: a server-reported zero
+        is a real answer and must pass through to the normal checkpoint path
+        rather than being refused."""
+        page = page_badge
+        page.on("dialog", lambda d: d.dismiss())
+        page.goto(badge_viewer_url, wait_until="networkidle")
+
+        _revert_to_zero(page, badge_viewer_url)
+        _refresh_dirty(page)
+        assert _badge_state(page)["count"] == 0, "precondition: server reports nothing pending"
+
+        # Waiting on the request the un-refused path makes, not on a clock:
+        # a reported zero falls straight through to the checkpoint modal,
+        # whose first act is to read git status. If the guard wrongly refused,
+        # that request never happens and this fails as a timeout naming the
+        # missing call rather than passing on a sleep that was long enough.
+        with page.expect_response("**/api/git/status", timeout=10_000):
+            page.evaluate("() => showCheckpointModal()")
+
+        assert not _dom_present(page, "#error-modal-overlay"), (
+            f"a reported zero is a real answer and must not be refused; "
+            f"error modal said {_error_modal_text(page)!r}"
         )
