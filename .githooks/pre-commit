@@ -47,21 +47,54 @@ unset GIT_COMMITTER_DATE
 
 HOOK_REPO_ROOT=$(git rev-parse --show-toplevel)
 
+# A console-script shebang is not reliably `#!<absolute-path-to-python>`: some
+# layouts write `#!/usr/bin/env python3`, and options may follow the
+# interpreter. So walk the shebang's words, step over the `env` trampoline and
+# any flags, and resolve a bare name through PATH as `env` itself would. An
+# interpreter that cannot be identified yields no answer rather than a wrong
+# one, and every caller below treats "no answer" as "not this tree" — the safe
+# direction, since the only thing gated on it is a destructive write.
 hook_cli_src() {
     _bin=$(command -v elspais 2>/dev/null) || return 1
-    _py=$(head -1 "$_bin" 2>/dev/null | sed 's|^#!||')
+    _shebang=$(head -1 "$_bin" 2>/dev/null) || return 1
+    case "$_shebang" in
+        '#!'*) ;;
+        *) return 1 ;;
+    esac
+
+    _py=""
+    for _word in ${_shebang#\#!}; do
+        case "$_word" in
+            -*) continue ;;
+        esac
+        case "$(basename "$_word")" in
+            env) continue ;;
+        esac
+        case "$_word" in
+            /*) _py="$_word" ;;
+            *)  _py=$(command -v "$_word" 2>/dev/null) || _py="" ;;
+        esac
+        if [ -n "$_py" ]; then break; fi
+    done
+
+    [ -n "$_py" ] || return 1
     [ -x "$_py" ] || return 1
     "$_py" -c 'import elspais,os;print(os.path.realpath(os.path.dirname(elspais.__file__)))' 2>/dev/null
 }
 
-HOOK_REPO_SRC=$(cd "$HOOK_REPO_ROOT" && python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "src/elspais")
+# `set -e` is in force, and `VAR=$(fn)` adopts the function's exit status — so
+# an unset fallback here would abort the whole hook the moment `elspais` is not
+# installed, silently and before any other check runs. `elspais` is optional to
+# this hook; not finding it must stay a fact it can act on, not a fatal error.
+HOOK_REPO_SRC=$(cd "$HOOK_REPO_ROOT" && python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "src/elspais") \
+    || HOOK_REPO_SRC="$HOOK_REPO_ROOT/src/elspais"
 
 if [ "$(hook_cli_src)" != "$HOOK_REPO_SRC" ] && [ -x "$HOOK_REPO_ROOT/.venv/bin/elspais" ]; then
     PATH="$HOOK_REPO_ROOT/.venv/bin:$PATH"
     export PATH
 fi
 
-HOOK_CLI_SRC=$(hook_cli_src)
+HOOK_CLI_SRC=$(hook_cli_src) || HOOK_CLI_SRC=""
 
 # Colors for output
 RED='\033[0;31m'
