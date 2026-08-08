@@ -53,7 +53,7 @@ A. The system SHALL use bcrypt with cost factor 12.
 ### 3. Continuous Validation
 
 ```bash
-elspais validate          # Check format, hierarchy, broken links
+elspais checks            # Check format, hierarchy, broken links
 elspais fix               # Fix hashes and formatting
 elspais changed           # Show uncommitted spec changes
 ```
@@ -80,8 +80,8 @@ Generate traceability matrix:
 
 ```bash
 elspais trace --format html    # Basic matrix
-elspais trace --view           # Interactive HTML with coverage stats
-elspais trace --graph           # Full DAG: requirements→assertions→code→tests
+elspais viewer --static        # Interactive HTML with coverage stats
+elspais graph                  # Full DAG as JSON: requirements, assertions, code, tests
 ```
 
 ### 5. Evolution & Change Management
@@ -90,7 +90,7 @@ When requirements change:
 
 - Hash changes trigger review (visible in `elspais changed`)
 - Old assertions can be marked as "Removed" placeholders to maintain label sequence
-- Multi-repo support via sponsors config for associated repositories (e.g., `TTN-REQ-p00001`)
+- Multi-repo support via `[associates.<name>]` config (each with `path` and `namespace`) for associated repositories (e.g., `REQ-TTN-p00001`)
 
 ---
 
@@ -104,4 +104,4 @@ When requirements change:
 | **Implements** | Child references parent(s), never reverse |
 | **Conflict** | Duplicate IDs detected and marked |
 
-The tool has minimal dependencies (only `tomlkit` for TOML parsing), with optional extras for HTML generation (`[trace-view]`) and review server (`[trace-review]`).
+The tool has few runtime dependencies (`tomlkit` for TOML parsing, `pydantic` for config schema validation, `tyro` for CLI generation, and `lark` for parsing), with optional extras for HTML generation (`[trace-view]`) and review server (`[trace-review]`).

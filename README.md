@@ -34,7 +34,7 @@ pip install elspais[all]           # Everything
 elspais init
 
 # Validate requirements
-elspais validate
+elspais checks
 
 # Auto-fix hashes and formatting
 elspais fix
@@ -122,19 +122,18 @@ Link associated repositories that extend a core requirement set:
 ```bash
 elspais init --type associated --associated-prefix CAL
 elspais associate ../core-repo
-elspais validate --mode combined
+elspais checks
 ```
 
 ## CLI Commands
 
 ```
-elspais validate       Validate requirements format, links, and hashes
+elspais checks         Verify requirements traceability and configuration
 elspais fix            Auto-fix spec file issues (hashes, formatting)
 elspais trace          Generate traceability matrix (markdown, html, csv)
 elspais viewer         Start interactive viewer server
-elspais health         Check repository and configuration health
 elspais doctor         Diagnose environment and installation health
-elspais analyze        Analyze hierarchy, orphans, or coverage
+elspais analysis       Analyze foundational requirement importance
 elspais changed        Detect git changes to spec files
 elspais edit           Edit requirements in-place
 elspais config         View and modify configuration

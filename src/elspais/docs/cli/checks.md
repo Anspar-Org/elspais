@@ -117,7 +117,7 @@ stale hashes.
 Checks that `INDEX.md` lists exactly the requirements and journeys in the
 current graph. Reports missing IDs, extra IDs, or both.
 
-**Follow-up:** Run `elspais index regenerate` to rebuild INDEX.md.
+**Follow-up:** Run `elspais fix` to rebuild INDEX.md.
 
 #### `spec.needs_rewrite` — Pending Rewrites
 

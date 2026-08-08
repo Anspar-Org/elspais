@@ -2,9 +2,9 @@
 
 ## Running Health Checks
 
-  $ elspais health                     # Check all rules
-  $ elspais health --format json       # Output JSON for tooling
-  $ elspais -v health                  # Verbose output
+  $ elspais checks                     # Check all rules
+  $ elspais checks --format json       # Output JSON for tooling
+  $ elspais -v checks                  # Verbose output
 
 ## Command Options
 
@@ -105,7 +105,7 @@ For expected issues, add inline suppression:
 
 For tooling and CI integration:
 
-  $ elspais health --format json > health-report.json
+  $ elspais checks --format json > health-report.json
 
 ## CI Integration
 
@@ -116,5 +116,5 @@ Add to your CI pipeline:
 steps:
   - uses: actions/checkout@v4
   - run: pip install elspais
-  - run: elspais health
+  - run: elspais checks
 ```
