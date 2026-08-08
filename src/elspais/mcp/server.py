@@ -7374,8 +7374,19 @@ def run_server(
         daemon_json = Path(env_dj)
 
     if transport == "stdio":
-        mcp = create_server(working_dir=working_dir)
-        mcp.run(transport="stdio")
+        # Implements: REQ-o00074-I
+        # A stdio server holds its own graph and its own pending
+        # mutations, and it ends when its client's pipe closes rather
+        # than by any decision of its own. Hold the holder so the same
+        # routine can account for that work; a private one created
+        # inside create_server would be unreachable from here.
+        stdio_state = SharedServerState()
+        mcp = create_server(working_dir=working_dir, shared_state=stdio_state)
+        try:
+            mcp.run(transport="stdio")
+        finally:
+            trigger = "the client's connection closed"
+            report_shutdown_outcome(finalize_shutdown(stdio_state, trigger), trigger)
     else:
         # HTTP: use unified app (REST + MCP + auto-refresh)
         import socket

@@ -48,7 +48,9 @@ stats = ""
 # cli_ttl is the only limit. If the daemon holds unsaved in-memory
 # mutations when its last client is gone, it logs the count to
 # .elspais/daemon.log, waits a bounded grace period (30 minutes), then
-# SAVES them to disk and stops — nothing is discarded. The save is
+# SAVES them to disk and stops — nothing is discarded. The same holds for
+# every other way a daemon stops, including an expired cli_ttl and an
+# external stop signal: it saves what it is holding first. The save is
 # recorded in .elspais/automatic-save.json and reported to the next client
 # in the ordinary workspace/status metadata; a client-requested save
 # retires the record. Explicitly started servers (`elspais daemon

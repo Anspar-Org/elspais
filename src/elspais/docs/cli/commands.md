@@ -482,16 +482,24 @@ CLI and MCP agents.
 
   $ elspais daemon restart             # Re-read .elspais.toml, fresh graph
   $ elspais daemon restart --persist   # Save pending mutations first
-  $ elspais daemon restart --force     # Discard pending mutations
+  $ elspais daemon restart --force     # Restart without saving first
 
 **Options:**
 
   `--persist`  Save unsaved in-memory mutations before restarting
-  `--force`    Restart anyway, discarding unsaved in-memory mutations
+  `--force`    Restart without saving first
 
 A restart refuses to run while the daemon holds unsaved in-memory
 mutations unless one of those two flags says what to do with them.
 `--persist` and `--force` are mutually exclusive.
+
+`--force` does not destroy the mutations. It stops the daemon without
+saving them *first*, and the daemon then saves them on its way out like
+any other stop, leaving the usual record. A daemon holding work does not
+get to end without that work reaching disk, whoever asked it to stop —
+an unwanted write costs one `git checkout` to undo, and there is no
+comparable way back from a discard. To undo the changes rather than the
+save, revert the files.
 
 **Lifetime:** a daemon started this way is an explicit start — it records
 no session and lives by `cli_ttl` alone. A daemon that a CLI command

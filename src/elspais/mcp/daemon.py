@@ -608,8 +608,15 @@ def restart_daemon(
     In-memory mutation safety:
         - If the daemon reports 0 unsaved mutations: restart proceeds.
         - Otherwise, default behavior is to refuse with an error listing
-          the count. Caller must opt in via ``force`` (discard) or
-          ``persist`` (save first). These flags are mutually exclusive.
+          the count. Caller must opt in via ``persist`` (save here, before
+          stopping) or ``force`` (stop without saving here). These flags
+          are mutually exclusive.
+
+    ``force`` is not a discard. Stopping the daemon runs its shutdown
+    routine, which writes what it holds whatever prompted the stop, so
+    the mutations reach disk either way; the flags differ in who saves
+    them and whether a changelog reason can be supplied. Undoing the
+    changes means reverting the files, not skipping the save.
 
     Returns:
         Dict with ``success`` (bool) and ``message`` (str). On successful
@@ -658,7 +665,9 @@ def restart_daemon(
                 "success": False,
                 "error": (
                     f"Cannot restart — daemon has {count} unsaved in-memory mutation(s). "
-                    "Use --force to discard them, or --persist to save first."
+                    "Use --persist to save them here with a changelog reason, or "
+                    "--force to restart without doing so — the daemon saves them "
+                    "itself as it stops either way."
                 ),
                 "mutation_count": count,
             }
