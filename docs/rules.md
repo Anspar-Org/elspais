@@ -59,18 +59,19 @@ REQ-d00003 implements REQ-d00001  ✗ Circular!
 
 ### `allow_structural_orphans`
 
-Control orphaned requirements (requirements with no traceability parent):
+Control nodes that have no FILE ancestor — nodes that failed to wire into the
+file structure at all. These indicate build pipeline bugs, not traceability
+gaps.
 
 ```toml
 [rules.hierarchy]
-allow_structural_orphans = false  # All DEV/OPS must implement something
+allow_structural_orphans = false
 ```text
 
-When `false`:
-
-- Root PRD requirements are allowed (they have no parent)
-- All DEV requirements must implement at least one other requirement
-- All OPS requirements must implement at least one PRD
+When `false`, the `spec.structural_orphans` check reports any such node as an
+error. Requirements that simply have no `Implements:` reference are a separate
+concern: they are unlinked, not structural orphans, and are reported by the
+`code.unlinked` and `tests.unlinked` checks on the artifact side.
 
 ### `cross_repo_implements`
 
@@ -231,9 +232,8 @@ Violations are reported with severity levels:
    Implements reference not found: p99999
    File: spec/dev-impl.md:120
 
-⚠️ WARNING [spec.structural_orphans] REQ-d00010
-   DEV requirement has no Implements reference
-   File: spec/dev-orphan.md:1
+ℹ️ INFO [tests.unlinked] tests/test_widget.py
+   Test file has no traceability markers
 
 ⚠️ WARNING [spec.hash_integrity] REQ-p00003
    Hash mismatch: expected a1b2c3d4, found x9y8z7w6
