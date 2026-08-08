@@ -347,16 +347,63 @@ function updateHeaderStats() {
     });
 }
 
-async function refreshDirtyCount() {
+// The unsaved badge answers "how much work is pending?", and there are three
+// answers, not two: none, some, and "we could not ask". The count lives in the
+// server process; when the server cannot be reached the page has no way to
+// recompute it, so it must say so rather than keep presenting the last number
+// as current fact (which asserts work that may exist in no process) or fall
+// back to zero (which would hide work still pending behind a momentary blip).
+// Implements: REQ-d00267-A
+function markDirtyCountUnknown() {
+    var last = editState.mutationCount;
+    // State first, DOM second: if the badge element were ever absent, leaving
+    // a stale count in editState would make the page believe it still knows.
+    editState.mutationCount = null;
+    editState.dirtyCountSource = 'unreachable';
+    editState.dirtyCountAt = new Date().toISOString();
+    // lastSeenTip is deliberately NOT touched: only a successful read has
+    // actually seen the history, and marking another writer's tip as "seen"
+    // on a failed read would suppress the other-writer banner.
+    var badge = document.getElementById('unsaved-badge');
+    if (!badge) return;
+    badge.textContent = '?';
+    badge.title = 'Unsaved count unknown - the viewer server is unreachable ' +
+        'or not answering.' +
+        (typeof last === 'number' ? ' Last confirmed: ' + last + '.' : '');
+    badge.classList.add('unknown');
+    badge.classList.remove('hidden');
+    // Save/Undo keep whatever state they had. Disabling them would assert
+    // "nothing to save", which is exactly what is not known; clicking either
+    // while the server is down surfaces the network error, which is honest.
+}
+
+// `options.adoptTip === false` reads the count WITHOUT claiming to have seen
+// the mutation history. The background poll needs that: it re-establishes the
+// count every cycle, and adopting the tip there would silently mark another
+// writer's mutations as seen and retire the other-writer banner for good.
+async function refreshDirtyCount(options) {
+    const adoptTip = !(options && options.adoptTip === false);
     const data = await apiFetch('/api/dirty');
-    if (!data) return;
-    editState.mutationCount = data.mutation_count || 0;
+    // An answer we cannot read is not an answer. Coercing a missing or
+    // non-numeric count to zero would report pending work as confirmed
+    // absent -- the one collapse this whole mechanism exists to prevent.
+    if (!data || typeof data.mutation_count !== 'number') {
+        markDirtyCountUnknown();
+        return;
+    }
+    editState.mutationCount = data.mutation_count;
+    editState.dirtyCountSource = 'server';
+    editState.dirtyCountAt = new Date().toISOString();
     // We have just looked at the history, so this tip is "seen" -- our own
     // mutations must not trip the other-writer banner.
-    editState.lastSeenTip = data.tip || '';
+    if (adoptTip) { editState.lastSeenTip = data.tip || ''; }
     const badge = document.getElementById('unsaved-badge');
     const btnSave = document.getElementById('btn-save');
     const btnUndo = document.getElementById('btn-undo');
+    // A server answer always supersedes an unknown presentation.
+    // Implements: REQ-d00267-B
+    badge.classList.remove('unknown');
+    badge.title = '';
     if (editState.mutationCount > 0) {
         badge.textContent = editState.mutationCount;
         badge.classList.remove('hidden');

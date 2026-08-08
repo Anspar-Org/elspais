@@ -81,3 +81,13 @@
 .unsaved-badge.hidden {
     display: none;
 }
+
+/* Pending count unknown: the server could not be asked. Deliberately not the
+   red count colour -- red on this surface means "you have N unsaved changes",
+   and a state about our knowledge must not look like a state of the world.
+   Presenting the count as unknown is done in JS; this only supplies colour. */
+.unsaved-badge.unknown {
+    background: var(--btn-warning-bg);
+    color: var(--btn-warning-text);
+    cursor: help;
+}

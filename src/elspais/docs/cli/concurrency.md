@@ -168,6 +168,150 @@ The viewer does exactly this on a 30-second poll and raises a banner
 naming which of the two happened. An agent holding state across calls
 can use the same field to know when to re-read.
 
+## The Viewer's Pending-Change Badge
+
+The badge beside the viewer's Save button counts work held in the
+**server** process, not in the browser page. The page cannot recompute
+that number on its own, so it has three states to report, not two:
+
+```text
+  server said 0 pending  ->  badge hidden
+  server said N pending  ->  badge shows N, red
+  no usable answer       ->  badge shows ?, amber, with a tooltip
+                             naming the last confirmed count
+```
+
+The third state is not only "the network dropped". It covers every way
+the page can fail to get a number it can trust: an unreachable server, a
+server that answered with an error, and an answer whose count is missing
+or not a number. All three are the absence of a value, and coercing any
+of them to zero would report pending work as confirmed absent. The
+tooltip says so -- "the viewer server is unreachable or not answering".
+
+The third state exists because both ways of collapsing it lie. Leaving
+the last count on screen asserts pending work that may exist in no
+process; showing zero hides work that is still pending behind a
+momentary network failure. `?` claims neither a count nor safety. The
+next usable answer from the server -- from a mutation, or from the
+30-second poll -- replaces it with the reported count.
+
+### The Count's Heartbeat
+
+The count is server-truth, so the page re-establishes it on a 30-second
+poll. Every cycle the poll probes `/api/dirty` and records the outcome,
+success or failure. Without that the count would move only at load and
+after this page's own mutations, and a server that died while the
+operator sat idle would leave a frozen number on screen forever.
+
+Two rules keep that probe honest:
+
+- **Only the count endpoint speaks for the count.** The same poll also
+  calls `/api/check-freshness` for the stale-file and other-writer
+  banners, but a failure there leaves the count alone. Letting it mark
+  the count unknown pinned the badge to `?` -- and the navigation
+  warning off -- for as long as that one endpoint stayed broken, even
+  with `/api/dirty` answering perfectly.
+- **The probe never adopts the mutation-log tip**, on success or on
+  failure. Adopting it would mark another writer's mutations as seen
+  every cycle and the "Another writer changed the graph" banner would
+  never raise again. The tip advances only where the page has actually
+  re-read state: at load, after its own mutation, and on a reload from
+  memory. So `lastSeenTip` can lag the count by many cycles, which is
+  correct.
+
+**This makes an idle tab reactive to other writers.** Because the probe
+runs whether or not you touch the page, pending changes arriving through
+the shared daemon from someone else -- an MCP agent, a second viewer --
+show up in *this* tab's badge within 30 seconds, and arm its
+before-navigation warning. That follows from the badge being server-truth
+rather than a tally of what this page did, but it is a real change in
+behaviour from a badge that moved only when this page acted: a tab you
+have not touched can start warning you before it closes.
+
+### Leaving, Versus Acting on the Changes
+
+The warning shown before navigating away arms only while the server has
+**reported** pending work. Because that work lives in the server, closing
+the tab destroys nothing -- the warning is a courtesy, not a guard on
+data in the page -- so while the count is unknown the viewer does not
+obstruct navigation.
+
+Operations that act on those server-side changes take the opposite
+stance under the same uncertainty, and the two must not be conflated.
+Switching branches or taking a checkpoint while the count is unknown
+would risk stranding pending changes on the branch being left, or
+committing around changes that are still pending. Both therefore
+**refuse** -- an error modal, not a prompt. A prompt's only remedy is to
+save first, and saving needs the same server whose silence caused the
+uncertainty in the first place. Navigation is permissive because it
+destroys nothing; an operation that can destroy is restrictive.
+
+Save, Revert and Refresh need no such modal: each carries the
+mutation-log tip read fresh from `/api/dirty`, and a failed read
+degrades that to `""` -- "I believe nothing is pending" -- which the
+server rejects with a 409 if anything actually is. The guard is enforced
+server-side rather than presented in the page.
+
+## Finding Out Why the Page Did (or Did Not) Warn
+
+The viewer in edit mode can tell you the state behind that decision, so
+you do not have to infer it from what the page is showing. Open the
+browser's developer console and call:
+
+```text
+  > unloadWarningState()
+
+  {
+    willWarnOnClose:    true | false
+    pendingCount:       N | null
+    countKnown:         true | false
+    countEstablishedAt: "2026-08-07T12:34:56.789Z" | null
+    countSource:        "server" | "unreachable" | null
+    lastSeenTip:        "<mutation id>" | ""
+  }
+```
+
+Field by field:
+
+- `willWarnOnClose` -- whether the page will warn if you try to leave
+  right now. It is exactly `countKnown && pendingCount > 0`.
+- `pendingCount` -- the pending-change count the server last reported;
+  `null` when the count is unknown (the `?` badge).
+- `countKnown` -- whether `pendingCount` is a number the server actually
+  gave, as opposed to an absent value.
+- `countEstablishedAt` -- when that outcome was recorded, ISO-8601.
+  `null` before the page has asked at all. Both outcomes stamp it, and
+  the 30-second poll produces one every cycle, so an old timestamp does
+  not mean "the server went quiet" -- it means no outcome of either kind
+  has been recorded since, i.e. the page has stopped asking. (Browsers
+  throttle timers in backgrounded tabs, so a tab that has been in the
+  background can show an old timestamp legitimately. Read it in a tab
+  that has been in the foreground.)
+- `countSource` -- `"server"` if the count came from a usable
+  `/api/dirty` answer, `"unreachable"` if the last attempt produced no
+  usable answer (no response, an error response, or a count that was not
+  a number), `null` if the page has not yet made the request.
+- `lastSeenTip` -- the mutation-log tip as of the last point at which
+  this page actually re-read state, which is what the other-writer
+  banner compares against. Neither a failed read nor the poll's routine
+  count probe advances it, so it is routinely older than
+  `countEstablishedAt` -- that is not a fault. `""` means nothing was
+  pending when it was read.
+
+This function reports; it does not decide anything. Calling it changes
+no state and does not arm or disarm the warning.
+
+The console also carries the decision itself. Each time you attempt to
+navigate away, the handler logs one line beginning `[elspais]
+beforeunload:` saying whether it warned and why -- naming the pending
+count when it warned, and naming the count as unknown when it did not.
+If you tried to close the page and no such line appeared, the page never
+reached the decision; if the line is there, it did, and the values it
+names are the ones the decision was made on.
+
+Both of these exist only in edit mode. A read-only viewer never warns
+before navigation and does not define `unloadWarningState`.
+
 ## Why Tokens Survive a Refresh
 
 The version is a 16-character digest of the node's rendered text plus

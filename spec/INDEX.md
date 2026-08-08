@@ -172,6 +172,7 @@
 | REQ-d00263 | Scoped Term Binding                                           | prd-core.md             | d13a3c53 |
 | REQ-d00264 | Usage-Driven Glossary Selection                               | prd-core.md             | 12f529a3 |
 | REQ-d00266 | Mechanical Style Checks                                       | dev-cli.md              | 084c17a0 |
+| REQ-d00267 | Viewer Pending-Work Indicator Truth                           | prd-features.md         | c1be85e3 |
 
 ## User Journeys
 

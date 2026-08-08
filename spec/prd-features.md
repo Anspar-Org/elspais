@@ -620,3 +620,65 @@ B. Clicking a defined-term span SHALL open the term card via a delegated click h
 - 2026-04-23 | 62a44ed3 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Inline Term Highlighting in Viewer Cards* | **Hash**: 697c60cc
+
+## REQ-d00267: Viewer Pending-Work Indicator Truth
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006, REQ-p00015
+
+The viewer's pending-change indicator is server-truth: the changes it counts are
+held in the server process, not in the page. So the page has three states to
+tell apart, not two — the server reported nothing pending, the server reported
+work pending, and the server could not be asked — and collapsing the third into
+either of the first two makes the page lie. Reporting the last known count as
+though it were current asserts work that may exist in no process; reporting zero
+hides work that may still be pending behind a momentary network failure. This is
+REQ-p00015-E's distinction between a value and the absence of one, applied in the
+presentation layer.
+
+The navigation warning is the same distinction with consequences. Because the
+pending changes live in the server and not in the tab, closing the tab destroys
+none of the changes the indicator counts, and the warning is a courtesy about
+server-side state rather than a guard on data in the page. Obstructing
+navigation over a claim the viewer cannot verify therefore buys no safety and
+can leave an operator unable to leave the page at all.
+
+An operation that acts on the server-side changes themselves is the opposite
+case, and the two must not be conflated. Switching branches, checkpointing, or
+reverting can discard or strand pending changes, so the cost of proceeding on a
+wrong belief is real; there, an unknown count has to be treated as work that may
+exist. Navigation is permissive under uncertainty because it destroys nothing;
+operations that destroy are restrictive under the same uncertainty. Where the
+refusal already happens at the server — a history-level operation that carries
+the change-history position the caller has seen is rejected outright when
+anything unseen is pending, and an unread position is sent as "I believe
+nothing is pending" — the obligation is discharged there and needs no second
+check in the page. It binds in the page exactly where nothing else refuses.
+
+That last failure mode is reported from the field and its cause is not yet
+established: a page that will not close looks identical whether the navigation
+warning fired and its dialog never rendered, or the page never got as far as
+deciding. The two are told apart by the state the decision reads and by whether
+the decision was reached at all, so that state and that decision must be
+recoverable after the fact by an operator with nothing but the browser's own
+console — not reconstructed by inference from what the page happens to be
+displaying.
+
+### Assertions
+
+A. When the viewer cannot obtain the pending-change count from the server, the viewer SHALL present the count as unknown, SHALL present it neither as the last count obtained nor as zero, and SHALL NOT record the change history it failed to read as seen.
+
+B. When the server reports a pending-change count after the viewer has presented the count as unknown, the viewer SHALL replace the unknown presentation with the reported count.
+
+C. The viewer SHALL warn an operator before navigating away only while the server has reported that changes are pending; while the pending-change count is unknown, the viewer SHALL NOT obstruct navigation.
+
+D. The viewer SHALL make the state that decides whether it warns before navigation inspectable on demand — the count, whether the count is known, and when it was last established — and SHALL report the decision it reached at the moment navigation is attempted.
+
+E. An operation that would discard, strand, or commit around pending changes SHALL treat an unknown pending-change count as changes that may exist, never as zero.
+
+### Changelog
+
+- 2026-08-07 | c1be85e3 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-07 | 5d25457c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-07 | 94abbc63 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
+
+*End* *Viewer Pending-Work Indicator Truth* | **Hash**: c1be85e3
