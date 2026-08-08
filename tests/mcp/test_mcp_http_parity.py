@@ -147,7 +147,11 @@ HISTORY_ROUTES = {"/api/save", "/api/revert", "/api/reload"}
 # mutation log, and are therefore not subject to the version/tip guards.
 # Every entry needs a reason; an unlisted new POST route fails the tripwire.
 EXEMPT_POST_ROUTES = {
-    "/api/shutdown",  # process lifecycle; touches no graph state
+    "/api/shutdown",  # process lifecycle. It disposes of the whole pending
+    # set — writing it, or dropping it when told to — but only a stop asking
+    # for a discard names a version, and it names the mutation-log tip
+    # (REQ-o00074-I), which is the history guard rather than a node version.
+    # An ordinary stop writes what is there and needs no token to do it.
     "/api/session/attach",  # process lifetime only: records that a client is
     # using this daemon (REQ-o00074-E). Reads and writes no graph state and no
     # mutation-log entry, so there is no version for a caller to name.

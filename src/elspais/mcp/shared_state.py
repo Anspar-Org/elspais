@@ -71,10 +71,31 @@ class SharedServerState(dict):
         # moment a stop is decided, while this says the final persist has
         # already run, so a later stop path does not repeat it.
         self._shutdown_finalized = False
+        # Raised when a client stopping this process has said what is to
+        # become of the work it holds. Preserving that work is what
+        # happens when nobody has said; an instruction to drop it is the
+        # statement that was otherwise missing (REQ-o00074-I).
+        self._discard_requested = False
 
     def begin_shutdown(self) -> None:
         """Mark this process as shutting down. Irreversible by design."""
         self._shutting_down.set()
+
+    def request_discard(self) -> None:
+        """Record an instruction to drop the work this process holds.
+
+        Set under ``write_lock`` in the same critical section that decides
+        the stop, so the set of changes the instruction covers is the set
+        that existed when it was given: a writer already past the refusal
+        check has finished before this runs, and one arriving afterwards
+        meets a process that has committed to stopping and is refused.
+        """
+        self._discard_requested = True
+
+    @property
+    def discard_requested(self) -> bool:
+        """True when a client has instructed this process to drop its work."""
+        return self._discard_requested
 
     @property
     def is_shutting_down(self) -> bool:
@@ -91,11 +112,16 @@ def finalize_shutdown(state: SharedServerState, trigger: str) -> dict[str, Any]:
     """Account for the work this process holds, then commit it to stopping.
 
     Every way the process can stop runs this and nothing else: the
-    client-liveness deadline, the idle timeout, and the fall-through
-    after the server stops serving, which is where an external stop
-    signal arrives. A process holding unsaved changes therefore persists
-    them whatever prompted it to stop, rather than only on the one path
-    somebody thought to write a save into.
+    client-liveness deadline, the idle timeout, a client asking it to
+    stop, and the fall-through after the server stops serving, which is
+    where an external stop signal arrives. A process holding unsaved
+    changes therefore persists them whatever prompted it to stop, rather
+    than only on the one path somebody thought to write a save into.
+
+    Unless it was told not to. A client that stopped this process may
+    have said what is to become of the work; when it has, that answer
+    stands and nothing is written. Preservation is what happens when
+    nobody has said, not a rule that outranks whoever did.
 
     Ordering. The whole routine runs under ``write_lock``, so a writer
     that had already passed the refusal check is finished before the
@@ -118,10 +144,10 @@ def finalize_shutdown(state: SharedServerState, trigger: str) -> dict[str, Any]:
             observation. It is recorded verbatim for the next client.
 
     Returns:
-        ``{"success", "finalized", "pending", "saved", "files_written"}``,
-        plus ``"error"`` when the save failed. ``finalized`` is False on a
-        repeat call, which is how a caller tells "already accounted for"
-        from "just accounted for".
+        ``{"success", "finalized", "pending", "saved", "discarded",
+        "files_written"}``, plus ``"error"`` when the save failed.
+        ``finalized`` is False on a repeat call, which is how a caller
+        tells "already accounted for" from "just accounted for".
     """
     with state.write_lock:
         if state._shutdown_finalized:
@@ -132,6 +158,7 @@ def finalize_shutdown(state: SharedServerState, trigger: str) -> dict[str, Any]:
                 "finalized": False,
                 "pending": None,
                 "saved": False,
+                "discarded": False,
                 "files_written": 0,
             }
 
@@ -146,7 +173,8 @@ def finalize_shutdown(state: SharedServerState, trigger: str) -> dict[str, Any]:
 
         result: dict[str, Any] = {}
         saved = False
-        if pending is None or pending > 0:
+        discarded = state.discard_requested
+        if not discarded and (pending is None or pending > 0):
             result = persist_pending(state, automatic=True, trigger=trigger)
             if not result.get("success"):
                 return {
@@ -154,10 +182,22 @@ def finalize_shutdown(state: SharedServerState, trigger: str) -> dict[str, Any]:
                     "finalized": False,
                     "pending": pending,
                     "saved": False,
+                    "discarded": False,
                     "files_written": 0,
                     "error": result.get("error", "save failed"),
                 }
             saved = True
+
+        if discarded:
+            # The work is going, at the instruction of somebody who said
+            # so. Nothing was lost that anyone needs telling about, so the
+            # sentinel goes with it rather than reporting a loss the next
+            # process would have to explain (REQ-o00074-L).
+            from elspais.mcp.daemon import clear_unsaved_changes
+
+            working_dir = state.get("working_dir")
+            if working_dir is not None:
+                clear_unsaved_changes(working_dir)
 
         state._shutdown_finalized = True
         state.begin_shutdown()
@@ -166,8 +206,60 @@ def finalize_shutdown(state: SharedServerState, trigger: str) -> dict[str, Any]:
             "finalized": True,
             "pending": pending,
             "saved": saved,
+            "discarded": discarded,
             "files_written": result.get("saved_count") or 0,
         }
+
+
+# Implements: REQ-o00074-L
+def attach_dirty_sentinel(state: SharedServerState) -> bool:
+    """Make this process's unwritten changes visible from outside it.
+
+    Two things happen here, once, as a server starts. A sentinel left
+    behind by a process that is gone is turned into a finding about that
+    process, so that presence from here on means only what this process
+    is holding. Then this process's mutation log is watched, so the
+    sentinel appears the moment it starts holding changes — before the
+    change is acknowledged — and goes when it stops.
+
+    Re-attached after every rebuild, because a rebuild publishes a new
+    graph with a new log and an observer left on the old one would be
+    watching a log nobody writes to.
+
+    Returns True if an earlier process was found to have died holding
+    changes.
+    """
+    from elspais.mcp.daemon import (
+        adopt_inherited_sentinel,
+        clear_unsaved_changes,
+        mark_unsaved_changes,
+    )
+
+    working_dir = state.get("working_dir")
+    if working_dir is None:
+        return False
+
+    inherited = adopt_inherited_sentinel(working_dir)
+
+    def _observe(holding: bool) -> None:
+        if holding:
+            mark_unsaved_changes(working_dir)
+        else:
+            clear_unsaved_changes(working_dir)
+
+    def _attach() -> None:
+        graph = state.get("graph")
+        log = getattr(graph, "mutation_log", None)
+        if log is not None:
+            log.set_dirty_observer(_observe)
+            # A rebuilt graph holds nothing; say so rather than leaving
+            # the previous graph's sentinel standing for it.
+            if not len(log):
+                clear_unsaved_changes(working_dir)
+
+    _attach()
+    state.post_rebuild_hooks.append(_attach)
+    return inherited
 
 
 def report_shutdown_outcome(outcome: dict[str, Any], trigger: str) -> None:
@@ -182,6 +274,14 @@ def report_shutdown_outcome(outcome: dict[str, Any], trigger: str) -> None:
             file=sys.stderr,
             flush=True,
         )
+    elif outcome.get("discarded"):
+        if pending:
+            print(
+                f"Stopping because {trigger}: dropped {pending} pending "
+                "mutation(s) as instructed. Nothing was written to disk.",
+                file=sys.stderr,
+                flush=True,
+            )
     elif outcome.get("saved"):
         print(
             f"Stopping because {trigger}: saved {pending} pending "
@@ -215,7 +315,11 @@ def persist_pending(
     hand has to be able to keep it rather than lose it to an exception.
     """
     from elspais.graph.render import render_save
-    from elspais.mcp.daemon import clear_automatic_save, record_automatic_save
+    from elspais.mcp.daemon import (
+        clear_automatic_save,
+        clear_lost_changes,
+        record_automatic_save,
+    )
     from elspais.mcp.server import (
         _add_changelog_for_active_mutations,
         _get_active_mutated_reqs,
@@ -225,7 +329,7 @@ def persist_pending(
 
     graph = state.get("graph")
     if graph is None:
-        return {"success": False, "error": "graph not available"}
+        return {"success": False, "code": "save_failed", "error": "graph not available"}
     working_dir = state["working_dir"]
     config = state.get("config", {})
 
@@ -240,6 +344,9 @@ def persist_pending(
                 ids = ", ".join(sorted(active_mutated))
                 return {
                     "success": False,
+                    # Not a conflict and not an infrastructure failure: the
+                    # caller has to supply something before this can succeed.
+                    "code": "changelog_message_required",
                     "error": (
                         f"Active requirement(s) modified: {ids}. "
                         "Provide a 'message' parameter with the changelog reason."
@@ -267,13 +374,14 @@ def persist_pending(
             ),
         )
     except Exception as exc:
-        return {"success": False, "error": f"save failed: {exc!r}"}
+        return {"success": False, "code": "save_failed", "error": f"save failed: {exc!r}"}
 
     if result.get("success") and changelog_enforce and message:
         cl_result = _add_changelog_for_active_mutations(graph, working_dir, config, message)
         if not cl_result.get("success", True):
             return {
                 "success": False,
+                "code": "save_failed",
                 "error": cl_result.get("error", "Changelog author resolution failed"),
             }
 
@@ -288,6 +396,11 @@ def persist_pending(
             )
         else:
             clear_automatic_save(working_dir)
+            # The tree on disk is now one a client wrote deliberately, so
+            # an older finding about a process that died holding changes
+            # has been overtaken: it described the tree the client has
+            # just replaced (REQ-o00074-L).
+            clear_lost_changes(working_dir)
     return result
 
 

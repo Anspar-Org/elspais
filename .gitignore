@@ -98,6 +98,13 @@ traceability_matrix.html
 .elspais/automatic-save.json
 **/.elspais/automatic-save.json
 
+# Sentinels for changes a server is holding, and for changes a dead one
+# was holding. Same reason: one checkout's process state.
+.elspais/unsaved-changes
+**/.elspais/unsaved-changes
+.elspais/lost-changes
+**/.elspais/lost-changes
+
 # Ephemeral planning/workflow docs
 MASTER_PLAN*.md
 *_TASK_*.md

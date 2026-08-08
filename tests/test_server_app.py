@@ -79,8 +79,16 @@ def _save(client: TestClient) -> dict:
     ``if_tip_mutation_id`` -- the id of the newest pending mutation as the
     caller last saw it (``""`` when nothing is pending). Reads the tip from
     GET /api/dirty, saves, asserts success, and returns the response payload.
+
+    The changelog reason rides along because the route now enforces the same
+    rule the MCP save tool does: a pending change to an Active requirement is
+    refused until the caller says why it was made. Tests here are about the
+    round trip, not about the reason, so they supply one.
     """
-    resp = client.post("/api/save", json={"if_tip_mutation_id": _tip(client)})
+    resp = client.post(
+        "/api/save",
+        json={"if_tip_mutation_id": _tip(client), "message": "test round-trip save"},
+    )
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["success"] is True, f"Save failed: {data}"

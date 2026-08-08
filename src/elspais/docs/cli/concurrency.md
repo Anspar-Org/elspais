@@ -141,6 +141,12 @@ same helpers -- there is no softer path around the protocol:
   identical to the MCP rejection (`version_conflict` or
   `mutation_log_conflict`).
 - An unknown node returns **404** with `code: "node_not_found"`.
+- 409 means a conflict and nothing else. A save that fails for another
+  reason says so with its own status and `code`: **400** with
+  `changelog_message_required` when an Active requirement changed and no
+  changelog reason was given, **500** with `save_failed` when the write
+  itself failed. Neither is fixed by re-reading and retrying, which is
+  what 409 asks for.
 - Successful mutations return the new `version`.
 - `/api/dirty` returns the pending `mutation_count` and the `tip`.
 - The history routes `/api/save`, `/api/revert`, and `/api/reload`
@@ -167,7 +173,12 @@ That deadline is not the only way the process ends, and none of the
 others discards either. A daemon that stops because its idle timeout
 expired, or because something outside it signalled it, persists what it
 is holding first and leaves the same record. Whatever prompts the stop,
-work you applied and never saved is on disk afterwards rather than gone.
+work you applied and never saved is on disk afterwards rather than gone
+— unless somebody said they did not want it, which is what
+`elspais daemon --discard-changes` says. A discard covers the
+mutations that existed when it was asked for: one applied in between
+moves the tip and the whole request is refused, so nothing is thrown away
+that the person asking never saw.
 
 A save the daemon performed is recorded, and the record reaches you in
 the metadata you already read: `get_workspace_info` and
@@ -180,6 +191,16 @@ distinguish those. Read the diff and decide. Saving deliberately
 (`save_mutations(if_tip_mutation_id=<tip>)`) retires the record, and is
 still the right habit before your session ends. See `docs("commands")`
 for the full lifetime rules.
+
+A process can also die without reaching any of that — killed outright,
+or with its machine. While a server holds unsaved changes it says so in a
+sentinel file beside its state record, written before the change is
+acknowledged; a server that starts and finds one left by a process that
+is gone reports a `lost_changes` block on the same surfaces as the
+automatic-save record. It tells you that changes were held and never
+written, and that is all it can tell you: nothing keeps the changes
+themselves, so this is a disclosure, not a recovery. Saving at your own
+request retires it.
 
 Once a daemon has decided to stop, further mutations are refused with
 `server_shutting_down` (HTTP 409, same body, on the viewer's routes)

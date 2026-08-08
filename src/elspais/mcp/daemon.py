@@ -14,7 +14,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 _DEFAULT_TTL = 30  # minutes
@@ -286,6 +286,109 @@ def _automatic_save_path(repo_root: Path) -> Path:
     return _daemon_dir(repo_root) / "automatic-save.json"
 
 
+def _unsaved_changes_path(repo_root: Path) -> Path:
+    """Sentinel meaning "a server is holding changes it has not written".
+
+    Presence is the whole signal. It says nothing about how many changes
+    there are or what they touch, because nothing it could say would be
+    true by the time it mattered: the file is written once, when the
+    holding starts, and the holding goes on changing afterwards.
+
+    A sibling of daemon.json rather than a key inside it, for the same
+    reason the automatic-save record is: daemon.json is unlinked when the
+    process stops, and this has to reach the process that comes next.
+    """
+    return _daemon_dir(repo_root) / "unsaved-changes"
+
+
+def _lost_changes_path(repo_root: Path) -> Path:
+    """Sentinel meaning "a process that is gone ended holding changes".
+
+    Separate from the sentinel above because the two answer different
+    questions — what is held now, and what was held by something that no
+    longer exists — and one file cannot answer both without the answer to
+    each being read as the answer to the other.
+    """
+    return _daemon_dir(repo_root) / "lost-changes"
+
+
+def _touch_sentinel(path: Path, what: str) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+    except OSError as exc:
+        # Best effort, and said out loud. The alternative — refusing the
+        # mutation because its sentinel could not be written — would turn
+        # an honesty measure into an outage.
+        print(f"warning: could not record that {what}: {exc}", file=sys.stderr)
+
+
+def _remove_sentinel(path: Path, what: str) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except OSError as exc:
+        print(f"warning: could not clear the record that {what}: {exc}", file=sys.stderr)
+
+
+# Implements: REQ-o00074-L
+def mark_unsaved_changes(repo_root: Path) -> None:
+    """Record that changes are being held unwritten, before they are acknowledged."""
+    _touch_sentinel(_unsaved_changes_path(repo_root), "changes are being held unwritten")
+
+
+# Implements: REQ-o00074-L
+def clear_unsaved_changes(repo_root: Path) -> None:
+    """Record that nothing is being held any more."""
+    _remove_sentinel(_unsaved_changes_path(repo_root), "changes were being held unwritten")
+
+
+# Implements: REQ-o00074-L
+def has_unsaved_changes_sentinel(repo_root: Path) -> bool:
+    return _unsaved_changes_path(repo_root).exists()
+
+
+# Implements: REQ-o00074-L
+def has_lost_changes(repo_root: Path) -> bool:
+    """True while an earlier process is known to have died holding changes."""
+    return _lost_changes_path(repo_root).exists()
+
+
+# Implements: REQ-o00074-L
+def clear_lost_changes(repo_root: Path) -> None:
+    """Retire the finding once a client has written the tree at its own request."""
+    _remove_sentinel(_lost_changes_path(repo_root), "an earlier process died holding changes")
+
+
+# Implements: REQ-o00074-L
+def adopt_inherited_sentinel(repo_root: Path) -> bool:
+    """Turn a sentinel left by a dead process into a finding about it.
+
+    Called once, as a server starts. A sentinel that is still present
+    then was written by a process that is gone, and it was still present
+    because that process never reached the point of clearing it — it
+    ended holding changes it never wrote.
+
+    The sentinel is not simply left in place: from this moment it would
+    read as a statement about the starting process, which holds nothing.
+    It is not simply deleted either, because deleting it is the only way
+    the finding can be lost a second time. It becomes the other record,
+    which says what is actually known.
+
+    Returns True if such a sentinel was found.
+    """
+    if not has_unsaved_changes_sentinel(repo_root):
+        return False
+    _touch_sentinel(_lost_changes_path(repo_root), "an earlier process died holding changes")
+    clear_unsaved_changes(repo_root)
+    print(
+        "warning: a previous elspais server ended while holding changes it never "
+        "wrote to disk. What they were cannot be recovered — the files on disk do "
+        "not include them.",
+        file=sys.stderr,
+    )
+    return True
+
+
 # Implements: REQ-o00074-I
 def record_automatic_save(
     repo_root: Path,
@@ -389,7 +492,16 @@ def start_daemon(
     """
     # Stop any existing server before overwriting daemon.json.
     # Without this, the old server becomes an undiscoverable orphan.
+    #
+    # And wait for it to be gone before starting its replacement. A
+    # stopping daemon is still saving what it holds, and its sentinel is
+    # still standing; a successor that boots first would read that
+    # sentinel as evidence of a process that died holding work, which is
+    # a loss that is not happening (REQ-o00074-L).
+    outgoing = get_daemon_info(repo_root)
     stop_daemon(repo_root)
+    if outgoing is not None:
+        wait_for_daemon_exit(outgoing)
 
     daemon_json = _daemon_json_path(repo_root)
     daemon_json.parent.mkdir(parents=True, exist_ok=True)
@@ -558,8 +670,12 @@ def ensure_client_registered(info: dict | None) -> bool:
     return attach_client(info, pid)
 
 
-def save_daemon_mutations(info: dict) -> dict:
+def save_daemon_mutations(info: dict, message: str | None = None) -> dict:
     """Ask the daemon to persist pending mutations to disk.
+
+    ``message`` is the changelog reason for changes to Active
+    requirements; the save is refused without one when changelog
+    enforcement is on and such a change is pending.
 
     Returns the daemon's JSON response, or ``{"success": False, "error": "..."}``
     if the call fails.
@@ -578,7 +694,10 @@ def save_daemon_mutations(info: dict) -> dict:
             tip = _json.loads(resp.read().decode()).get("tip") or ""
     except (URLError, OSError, ValueError):
         pass  # "" means "nothing pending"; the guard rejects it if not true
-    body = _json.dumps({"if_tip_mutation_id": tip}).encode()
+    payload: dict = {"if_tip_mutation_id": tip}
+    if message:
+        payload["message"] = message
+    body = _json.dumps(payload).encode()
     req = _Request(
         f"http://127.0.0.1:{port}/api/save",
         data=body,
@@ -588,16 +707,99 @@ def save_daemon_mutations(info: dict) -> dict:
     try:
         with urlopen(req, timeout=30) as resp:
             return _json.loads(resp.read().decode())
+    except HTTPError as e:
+        # A refused save answers with a body saying why — a stale tip, a
+        # missing changelog reason, a write that failed. Report that,
+        # rather than the status code the caller cannot act on.
+        return _rejection_body(e)
     except URLError as e:
         return {"success": False, "error": f"daemon unreachable: {e}"}
     except (OSError, ValueError) as e:
         return {"success": False, "error": str(e)}
 
 
+def _rejection_body(exc: HTTPError) -> dict:
+    """Parse a refusing server's JSON body, falling back to its status."""
+    import json as _json
+
+    try:
+        body = _json.loads(exc.read().decode())
+    except (OSError, ValueError):
+        return {"success": False, "error": f"server refused the request: HTTP {exc.code}"}
+    if not isinstance(body, dict):
+        return {"success": False, "error": f"server refused the request: HTTP {exc.code}"}
+    body.setdefault("success", False)
+    return body
+
+
+# Implements: REQ-o00074-I
+def request_daemon_stop(info: dict, discard_changes: bool = False) -> dict:
+    """Ask a running daemon to stop, saying what to do with what it holds.
+
+    Without ``discard_changes`` this is an ordinary stop and the daemon
+    writes its pending changes on the way out. With it, the caller has
+    said those changes are not wanted, and the daemon drops them.
+
+    A discard names the mutation-log tip the caller last saw, so the
+    instruction covers the changes that existed when it was given: if
+    another writer has applied one since, the daemon refuses the whole
+    request and reports the conflict rather than sweeping that change
+    into a discard nobody asked for it to cover.
+    """
+    import json as _json
+    from urllib.request import Request as _Request
+
+    port = info.get("port")
+    if not port:
+        return {"success": False, "error": "daemon has no port"}
+
+    body: dict = {}
+    if discard_changes:
+        tip = ""
+        try:
+            with urlopen(f"http://127.0.0.1:{port}/api/dirty", timeout=5) as resp:
+                tip = _json.loads(resp.read().decode()).get("tip") or ""
+        except (URLError, OSError, ValueError):
+            pass  # "" means "nothing pending"; the guard rejects it if not true
+        body = {"discard_changes": True, "if_tip_mutation_id": tip}
+
+    req = _Request(
+        f"http://127.0.0.1:{port}/api/shutdown",
+        data=_json.dumps(body).encode(),
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urlopen(req, timeout=30) as resp:
+            return _json.loads(resp.read().decode())
+    except HTTPError as e:
+        return _rejection_body(e)
+    except URLError as e:
+        return {"success": False, "error": f"daemon unreachable: {e}"}
+    except (OSError, ValueError) as e:
+        return {"success": False, "error": str(e)}
+
+
+def wait_for_daemon_exit(info: dict, timeout: float = 20.0) -> bool:
+    """Block until the daemon process is gone. True if it went."""
+    pid = info.get("pid")
+    if not pid:
+        return True
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            return True
+        time.sleep(0.2)
+    return False
+
+
 def restart_daemon(
     repo_root: Path,
-    force: bool = False,
+    discard_changes: bool = False,
     persist: bool = False,
+    message: str | None = None,
     ttl_minutes: int | None = None,
 ) -> dict:
     """Stop and restart the daemon, picking up any config file changes.
@@ -607,26 +809,28 @@ def restart_daemon(
 
     In-memory mutation safety:
         - If the daemon reports 0 unsaved mutations: restart proceeds.
-        - Otherwise, default behavior is to refuse with an error listing
-          the count. Caller must opt in via ``persist`` (save here, before
-          stopping) or ``force`` (stop without saving here). These flags
+        - Otherwise, the default is to refuse with an error listing the
+          count. The caller says what to do with the work: ``persist``
+          saves it here, with a changelog reason, before stopping;
+          ``discard_changes`` instructs the daemon to drop it. The two
           are mutually exclusive.
 
-    ``force`` is not a discard. Stopping the daemon runs its shutdown
-    routine, which writes what it holds whatever prompted the stop, so
-    the mutations reach disk either way; the flags differ in who saves
-    them and whether a changelog reason can be supplied. Undoing the
-    changes means reverting the files, not skipping the save.
+    A daemon stopped by any other route writes what it holds as it goes,
+    because nobody has said otherwise. ``discard_changes`` is that
+    statement: the work is dropped and nothing reaches disk. It is sent
+    to the daemon naming the changes it covers, so a change another
+    writer applied in the meantime is reported rather than dropped with
+    the rest.
 
     Returns:
         Dict with ``success`` (bool) and ``message`` (str). On successful
         restart, also includes ``port``. On refusal due to unsaved
         mutations, includes ``mutation_count`` and an ``error`` key.
     """
-    if force and persist:
+    if discard_changes and persist:
         return {
             "success": False,
-            "error": "--force and --persist are mutually exclusive",
+            "error": "--discard-changes and --persist are mutually exclusive",
         }
 
     info = get_daemon_info(repo_root)
@@ -646,32 +850,50 @@ def restart_daemon(
             "port": port,
         }
 
-    # Daemon is running — check for unsaved work.
-    count = get_daemon_mutation_count(info)
-    if count and count > 0:
-        if persist:
-            save_result = save_daemon_mutations(info)
-            if not save_result.get("success"):
-                return {
-                    "success": False,
-                    "error": (
-                        f"Cannot restart — persist requested but save failed: "
-                        f"{save_result.get('error', save_result)}"
-                    ),
-                    "mutation_count": count,
-                }
-        elif not force:
+    # An instruction to discard goes to the daemon whatever the pending
+    # count reads, because that count is a read that can go stale: a
+    # mutation applied just after it would otherwise be stopped over with
+    # an ordinary signal and saved, which is the opposite of what was
+    # asked for. The daemon decides against the log it holds.
+    if discard_changes:
+        stop_result = request_daemon_stop(info, discard_changes=True)
+        if not stop_result.get("success"):
             return {
                 "success": False,
                 "error": (
-                    f"Cannot restart — daemon has {count} unsaved in-memory mutation(s). "
-                    "Use --persist to save them here with a changelog reason, or "
-                    "--force to restart without doing so — the daemon saves them "
-                    "itself as it stops either way."
+                    f"Cannot restart — the daemon did not discard: "
+                    f"{stop_result.get('error', stop_result)}"
                 ),
-                "mutation_count": count,
+                "code": stop_result.get("code"),
+                "mutation_count": get_daemon_mutation_count(info),
             }
-        # force: fall through and kill anyway
+        wait_for_daemon_exit(info)
+    else:
+        # Daemon is running — check for unsaved work.
+        count = get_daemon_mutation_count(info)
+        if count and count > 0:
+            if persist:
+                save_result = save_daemon_mutations(info, message=message)
+                if not save_result.get("success"):
+                    return {
+                        "success": False,
+                        "error": (
+                            f"Cannot restart — persist requested but save failed: "
+                            f"{save_result.get('error', save_result)}"
+                        ),
+                        "mutation_count": count,
+                    }
+            else:
+                return {
+                    "success": False,
+                    "error": (
+                        f"Cannot restart — daemon has {count} unsaved in-memory mutation(s). "
+                        "Use --persist (with --message when Active requirements "
+                        "changed) to save them here, or --discard-changes to throw "
+                        "them away."
+                    ),
+                    "mutation_count": count,
+                }
 
     # At this point we're committed to restart.
     stop_daemon(repo_root)
@@ -728,7 +950,7 @@ def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
 
     # Implicit spawn on behalf of a CLI/session: tie the daemon's
     # lifetime to that session so it cannot outlive it. Explicit starts
-    # (elspais daemon restart, manual mcp serve, viewer) do not pass a
+    # (elspais daemon, manual mcp serve, viewer) do not pass a
     # spawner and keep TTL-only behavior.
     return start_daemon(
         repo_root,

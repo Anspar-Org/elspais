@@ -976,10 +976,11 @@ class TestViewerSaveRetiresTheRecord:
     request, any outstanding record of a save the daemon performed is retired --
     on the viewer's HTTP save route as well as on the MCP one.
 
-    The two routes do not share a save implementation: ``/api/save`` calls the
-    renderer directly rather than going through the shared persist path, so the
-    retirement is a separate step there. Covering only the MCP path would leave
-    a viewer user reading a notice about a save that its own save superseded.
+    Both routes reach disk through ``persist_pending``, which is where the
+    retirement lives, so this is the canary for that arrangement: a viewer save
+    that stopped going through the shared path would still write the files and
+    would leave the notice standing behind them, and a viewer user would be
+    reading about a save its own save had superseded.
     """
 
     @pytest.fixture
@@ -1022,7 +1023,10 @@ class TestViewerSaveRetiresTheRecord:
 
         dirty = client.get("/api/dirty").json()
         assert dirty["mutation_count"] == 1
-        resp = client.post("/api/save", json={"if_tip_mutation_id": dirty["tip"]})
+        resp = client.post(
+            "/api/save",
+            json={"if_tip_mutation_id": dirty["tip"], "message": "the client asked for this"},
+        )
         assert resp.status_code == 200, resp.text
         assert resp.json()["success"] is True
         assert (
@@ -1412,3 +1416,121 @@ class TestExplicitStartRecordsNoClient:
 
         assert result["success"] is True
         assert captured["spawner_pid"] is None
+
+
+class TestRestartSaysWhatBecomesOfTheWork:
+    """Validates REQ-o00074-I: a restart holding unsaved work refuses until the
+    caller says what is to become of it, and the two answers are exclusive.
+
+    ``--persist`` saves it here, where a changelog reason can be supplied;
+    ``--discard-changes`` instructs the daemon to drop it. A restart that
+    simply proceeded would meet a daemon that saves whatever it holds on its
+    way out, which is the opposite of what a caller wanting rid of the work
+    asked for.
+    """
+
+    def test_REQ_o00074_I_the_two_answers_are_mutually_exclusive(self, tmp_path):
+        from elspais.mcp.daemon import restart_daemon
+
+        result = restart_daemon(tmp_path, discard_changes=True, persist=True)
+
+        assert result["success"] is False
+        assert "discard-changes" in result["error"] and "persist" in result["error"], result
+
+    def test_REQ_o00074_I_neither_answer_refuses_and_offers_both(self, tmp_path):
+        from elspais.mcp.daemon import restart_daemon
+
+        with (
+            patch("elspais.mcp.daemon.get_daemon_info", return_value={"pid": 999, "port": 1}),
+            patch("elspais.mcp.daemon.get_daemon_mutation_count", return_value=3),
+            patch("elspais.mcp.daemon.stop_daemon") as stop,
+        ):
+            result = restart_daemon(tmp_path)
+
+        assert result["success"] is False
+        assert result["mutation_count"] == 3
+        assert "--persist" in result["error"], result
+        assert "--discard-changes" in result["error"], result
+        assert "--force" not in result["error"], "the retired flag is still being offered"
+        assert stop.call_count == 0, "the daemon was stopped despite the refusal"
+
+    def test_REQ_o00074_I_the_discard_goes_to_the_daemon_however_the_count_reads(self, tmp_path):
+        """The pending count is a read that can go stale between the read and
+        the instruction. A discard that trusted a zero would stop the daemon
+        with an ordinary signal, and the daemon would save the change that had
+        arrived in between -- so the instruction is always sent, and the daemon
+        decides against the log it actually holds."""
+        from elspais.mcp.daemon import restart_daemon
+
+        stops: list[bool] = []
+
+        with (
+            patch("elspais.mcp.daemon.get_daemon_info", return_value={"pid": 999, "port": 1}),
+            patch("elspais.mcp.daemon.get_daemon_mutation_count", return_value=0),
+            patch(
+                "elspais.mcp.daemon.request_daemon_stop",
+                side_effect=lambda info, discard_changes=False: (
+                    stops.append(discard_changes) or {"success": True, "discarded": True}
+                ),
+            ),
+            patch("elspais.mcp.daemon.wait_for_daemon_exit", return_value=True),
+            patch("elspais.mcp.daemon.stop_daemon"),
+            patch("elspais.mcp.daemon.get_cli_ttl", return_value=30),
+            patch("elspais.mcp.daemon.start_daemon", return_value=12002),
+        ):
+            result = restart_daemon(tmp_path, discard_changes=True)
+
+        assert result["success"] is True, result
+        assert stops == [True], "the discard instruction never reached the daemon"
+
+    def test_REQ_o00074_I_refused_discard_abandons_the_restart(self, tmp_path):
+        """The daemon refused because another writer's change arrived. Killing
+        it now would destroy that change, which is exactly what the refusal was
+        protecting -- so the restart stops here and says why."""
+        from elspais.mcp.daemon import restart_daemon
+
+        rejection = {
+            "success": False,
+            "code": "mutation_log_conflict",
+            "error": "the log has moved on",
+        }
+
+        with (
+            patch("elspais.mcp.daemon.get_daemon_info", return_value={"pid": 999, "port": 1}),
+            patch("elspais.mcp.daemon.get_daemon_mutation_count", return_value=1),
+            patch("elspais.mcp.daemon.request_daemon_stop", return_value=rejection),
+            patch("elspais.mcp.daemon.stop_daemon") as stop,
+            patch("elspais.mcp.daemon.start_daemon") as start,
+        ):
+            result = restart_daemon(tmp_path, discard_changes=True)
+
+        assert result["success"] is False
+        assert result["code"] == "mutation_log_conflict"
+        assert "the log has moved on" in result["error"]
+        assert stop.call_count == 0, "the refused restart killed the daemon anyway"
+        assert start.call_count == 0
+
+    def test_REQ_o00074_I_the_changelog_reason_reaches_the_persisting_save(self, tmp_path):
+        """``--persist`` saves here rather than in the daemon's own shutdown
+        precisely so a reason can be given for it; a reason the caller typed and
+        the save never saw would leave the tree failing its own changelog rule.
+        """
+        from elspais.mcp.daemon import restart_daemon
+
+        seen: list[str | None] = []
+
+        with (
+            patch("elspais.mcp.daemon.get_daemon_info", return_value={"pid": 999, "port": 1}),
+            patch("elspais.mcp.daemon.get_daemon_mutation_count", return_value=2),
+            patch(
+                "elspais.mcp.daemon.save_daemon_mutations",
+                side_effect=lambda info, message=None: (seen.append(message) or {"success": True}),
+            ),
+            patch("elspais.mcp.daemon.stop_daemon"),
+            patch("elspais.mcp.daemon.get_cli_ttl", return_value=30),
+            patch("elspais.mcp.daemon.start_daemon", return_value=12003),
+        ):
+            result = restart_daemon(tmp_path, persist=True, message="because the review said so")
+
+        assert result["success"] is True, result
+        assert seen == ["because the review said so"]

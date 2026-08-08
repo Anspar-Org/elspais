@@ -602,3 +602,163 @@ class TestIdleTimeoutStopsThroughTheSameRoutine:
         assert not (project / ".elspais" / "automatic-save.json").exists()
         assert middleware._timer is not armed, "the timer was not restarted, so nothing retries"
         assert middleware._timer.is_alive()
+
+
+class _RecordedTimer:
+    """Stands in for the timer that signals the process, and never fires.
+
+    ``api_shutdown`` schedules its own SIGTERM. In these tests the process it
+    would signal is the test runner, so the scheduling is recorded and stopped
+    here -- and recorded rather than merely stopped, because "a stop was
+    actually set in motion" is half of what several of these tests assert.
+    """
+
+    scheduled: list[float] = []
+
+    def __init__(self, interval, function, *args, **kwargs):
+        self.interval = interval
+        self.function = function
+        self.daemon = False
+
+    def start(self) -> None:
+        type(self).scheduled.append(self.interval)
+
+    def cancel(self) -> None:  # pragma: no cover - never reached
+        pass
+
+
+@pytest.fixture
+def stop_is_not_carried_out(monkeypatch):
+    """Let the route decide to stop without the test runner being killed."""
+    import threading
+
+    _RecordedTimer.scheduled = []
+    monkeypatch.setattr(threading, "Timer", _RecordedTimer)
+    return _RecordedTimer
+
+
+def _tip(client) -> str:
+    """The mutation-log tip as a caller reads it before asking for anything."""
+    resp = client.get("/api/dirty")
+    assert resp.status_code == 200, resp.text
+    return resp.json()["tip"] or ""
+
+
+class TestAnInstructedDiscardIsHonoured:
+    """Validates REQ-o00074-I: preservation is what happens when nobody has
+    said what the work is worth. An operator who says "throw it away" has
+    supplied the statement that was missing, and the work is dropped.
+
+    The instruction covers the changes that existed when it was given and no
+    others: a change applied since the caller read the tip is reported rather
+    than swept into a discard nobody asked for it to cover.
+    """
+
+    def test_REQ_o00074_I_the_instructed_discard_keeps_the_work_off_disk(
+        self, app_state, client, project, stop_is_not_carried_out
+    ):
+        from elspais.mcp.daemon import read_automatic_save
+
+        spec = _spec_file(app_state, project, REQ)
+        before = spec.read_bytes()
+        title = "Thrown away at the operator's instruction"
+        _apply_title(client, app_state, title)
+
+        resp = client.post(
+            "/api/shutdown",
+            json={"discard_changes": True, "if_tip_mutation_id": _tip(client)},
+        )
+
+        assert resp.status_code == 200, resp.text
+        payload = resp.json()
+        assert payload["discarded"] is True, payload
+        assert payload["saved"] is False, "the discard was overridden and the work written anyway"
+        assert (
+            spec.read_bytes() == before
+        ), "the work the operator said to throw away reached disk anyway"
+        assert (
+            read_automatic_save(project) is None
+        ), "a save that never happened was announced to the next client"
+        assert stop_is_not_carried_out.scheduled, "the process was not actually going to stop"
+
+    def test_REQ_o00074_I_stopping_without_the_instruction_still_saves(
+        self, app_state, client, project, stop_is_not_carried_out
+    ):
+        """The negative half, and the hole this closed: a stop request carrying
+        no instruction is not an instruction to discard. Nobody has said what
+        the work is worth, so it is written and the save is disclosed."""
+        from elspais.mcp.daemon import read_automatic_save
+
+        spec = _spec_file(app_state, project, REQ)
+        title = "Written by an ordinary stop"
+        _apply_title(client, app_state, title)
+        assert title not in spec.read_text()
+
+        resp = client.post("/api/shutdown")
+
+        assert resp.status_code == 200, resp.text
+        payload = resp.json()
+        assert payload["saved"] is True, payload
+        assert payload["discarded"] is False
+        assert (
+            title in spec.read_text()
+        ), "an ordinary stop destroyed the work the process was holding"
+        record = read_automatic_save(project)
+        assert record is not None, "the process saved without saying it had"
+        assert record["saved_by"] == "daemon"
+        assert record["mutation_count"] == payload["pending"]
+
+    def test_REQ_o00074_I_the_discard_covers_only_the_changes_it_named(
+        self, app_state, client, project, stop_is_not_carried_out
+    ):
+        """A writer applied a change between the operator reading the tip and
+        the instruction arriving. That change was never in view of whoever gave
+        the instruction, so the whole request is refused: it is not destroyed,
+        it is not written, and the process stays up holding it."""
+        spec = _spec_file(app_state, project, REQ)
+        before = spec.read_bytes()
+
+        stale_tip = _tip(client)  # read before anything was pending
+        title = "Applied after the operator looked"
+        _apply_title(client, app_state, title)
+
+        resp = client.post(
+            "/api/shutdown",
+            json={"discard_changes": True, "if_tip_mutation_id": stale_tip},
+        )
+
+        assert resp.status_code == 409, f"{resp.status_code}: {resp.text}"
+        payload = resp.json()
+        assert payload["code"] == "mutation_log_conflict"
+        assert payload["current_tip"] == _tip(client)
+        assert [entry["id"] for entry in payload["unseen"]] == [_tip(client)]
+
+        assert (
+            app_state.shared.is_shutting_down is False
+        ), "a refused stop request stopped the process anyway"
+        assert app_state.shared.shutdown_finalized is False
+        assert stop_is_not_carried_out.scheduled == [], "a refused stop was set in motion"
+        assert len(app_state.graph.mutation_log) == 1, "the refused discard ran anyway"
+        assert app_state.graph.find_by_id(REQ).get_label() == title
+        assert spec.read_bytes() == before, "the refused request wrote to disk"
+
+    def test_REQ_o00074_I_refused_discard_can_be_retried_once_the_tip_is_read(
+        self, app_state, client, project, stop_is_not_carried_out
+    ):
+        """The refusal is a conflict, so the documented recipe has to work:
+        re-read the tip, look at what arrived, and ask again."""
+        _apply_title(client, app_state, "Applied after the operator looked")
+        assert (
+            client.post(
+                "/api/shutdown", json={"discard_changes": True, "if_tip_mutation_id": ""}
+            ).status_code
+            == 409
+        )
+
+        resp = client.post(
+            "/api/shutdown",
+            json={"discard_changes": True, "if_tip_mutation_id": _tip(client)},
+        )
+
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["discarded"] is True

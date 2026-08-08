@@ -438,9 +438,9 @@ Manage links to associated repositories.
 
 Link suggestion tools for connecting tests to requirements.
 
-  $ elspais link suggest                    # Suggest links for unlinked tests
-  $ elspais link suggest --file test_auth.py  # Suggest for specific file
-  $ elspais link suggest --apply            # Auto-apply suggestions
+  $ elspais link                    # Suggest links for unlinked tests
+  $ elspais link --file test_auth.py  # Suggest for specific file
+  $ elspais link --apply            # Auto-apply suggestions
 
 **Options:**
 
@@ -480,26 +480,33 @@ MCP (Model Context Protocol) server commands.
 Manage the background daemon. One daemon per repository serves both the
 CLI and MCP agents.
 
-  $ elspais daemon restart             # Re-read .elspais.toml, fresh graph
-  $ elspais daemon restart --persist   # Save pending mutations first
-  $ elspais daemon restart --force     # Restart without saving first
+  $ elspais daemon                     # Re-read .elspais.toml, fresh graph
+  $ elspais daemon --persist \
+      --message "why"                  # Save pending mutations first
+  $ elspais daemon --discard-changes   # Throw the pending mutations away
 
 **Options:**
 
-  `--persist`  Save unsaved in-memory mutations before restarting
-  `--force`    Restart without saving first
+  `--persist`           Save unsaved in-memory mutations before restarting
+  `--message TEXT`      Changelog reason for `--persist`, required when the
+                        mutations touch Active requirements
+  `--discard-changes`   Throw the unsaved in-memory mutations away
 
 A restart refuses to run while the daemon holds unsaved in-memory
 mutations unless one of those two flags says what to do with them.
-`--persist` and `--force` are mutually exclusive.
+`--persist` and `--discard-changes` are mutually exclusive.
 
-`--force` does not destroy the mutations. It stops the daemon without
-saving them *first*, and the daemon then saves them on its way out like
-any other stop, leaving the usual record. A daemon holding work does not
-get to end without that work reaching disk, whoever asked it to stop —
-an unwanted write costs one `git checkout` to undo, and there is no
-comparable way back from a discard. To undo the changes rather than the
-save, revert the files.
+`--discard-changes` destroys the mutations: the daemon drops them and
+stops, and nothing reaches disk. Without it a stopping daemon writes
+what it holds and records that it did so, because nobody has said the
+work is unwanted — an unwanted write costs one `git checkout` to undo,
+and there is no comparable way back from a discard. `--discard-changes`
+is that statement.
+
+The discard covers the mutations that exist when you ask for it. If
+another writer applies one in between, the daemon refuses the whole
+request rather than throwing away a change you never saw; re-read what
+is pending and decide again.
 
 **Lifetime:** a daemon started this way is an explicit start — it records
 no session and lives by `cli_ttl` alone. A daemon that a CLI command
@@ -551,7 +558,7 @@ unavailable only the environment variable can resolve. A guessed identity
 would be worse than none, so when nothing resolves the daemon simply keeps
 its `cli_ttl` lifetime.
 
-**Started deliberately (explicit).** `elspais daemon restart`, a manual
+**Started deliberately (explicit).** `elspais daemon`, a manual
 `elspais mcp serve`, and the viewer record no session at all. Their
 lifetime is governed solely by `cli_ttl`, and `daemon.json` carries no
 `spawner_pid` key.
@@ -569,11 +576,14 @@ number, taken from the whole mutation log — and the deadline. It then
 waits a bounded grace period (30 minutes) and, if nothing has changed by
 then, **saves the pending mutations to disk** and stops.
 
-Nothing is discarded. Spec files are under revision control, where an
-unwanted write costs one `git diff` and one `git checkout` to undo, while
-work that is destroyed has to be redone from memory and sometimes cannot
-be. If the save itself fails, the daemon keeps the mutations, reports the
-failure, and retries rather than dropping them.
+Nothing is discarded unless you say so. Spec files are under revision
+control, where an unwanted write costs one `git diff` and one
+`git checkout` to undo, while work that is destroyed has to be redone
+from memory and sometimes cannot be — so saving is what happens when
+nobody has said the work is unwanted. `elspais daemon --discard-changes`
+is how you say it. If the save itself fails, the
+daemon keeps the mutations, reports the failure, and retries rather than
+dropping them.
 
     last client gone, nothing pending -> shut down at next check
     last client gone, work pending    -> log the count, hold for 30 min
@@ -581,16 +591,18 @@ failure, and retries rather than dropping them.
       a client attaches in that window  -> keep serving
       nothing happens                   -> SAVE to disk, record it, stop
 
-**Every way of stopping saves.** The grace deadline above is not the only
-way a daemon stops, and the others hold the same work. An idle timeout
-firing while a client is alive but quiet, and an external stop — `elspais
-daemon restart`, a `kill`, a container shutting down — both persist
-pending mutations and leave the same record before the process ends.
-Going quiet is not the same as going away, and being told to stop says
-nothing about what the daemon happens to be holding:
+**Every way of stopping saves, unless you asked otherwise.** The grace
+deadline above is not the only way a daemon stops, and the others hold
+the same work. An idle timeout firing while a client is alive but quiet,
+and an external stop — `elspais daemon`, a `kill`, a container
+shutting down — both persist pending mutations and leave the same record
+before the process ends. Going quiet is not the same as going away, and
+being told to stop says nothing about what the daemon happens to be
+holding. Being told to discard does:
 
     idle timeout expires, work pending -> SAVE to disk, record it, stop
     stop signal arrives, work pending  -> SAVE to disk, record it, stop
+    told to discard, work pending      -> drop it, write nothing, stop
     stopping with nothing pending      -> stop, and write no record
 
 If the save fails on either of the first two, the mutations are kept.
@@ -612,10 +624,26 @@ it reports.
 
 The record is retired the moment any client saves at its own request
 (`save_mutations` over MCP, Save in the viewer, or
-`elspais daemon restart --persist`). A later automatic save replaces it.
+`elspais daemon --persist`). A later automatic save replaces it.
 Committing or reverting the files does not clear it — the daemon is not
 watching your working tree — so save deliberately, or delete the file, if
 you want the notice gone.
+
+**A process that dies holding work says so.** While a server holds
+changes it has not written, `.elspais/unsaved-changes` exists; it is
+created before the change is acknowledged and removed when the last one
+is saved, reverted or discarded. Presence is the entire signal — it
+records no counts and no ids, and it is not a recovery mechanism: nothing
+anywhere keeps the changes themselves.
+
+If a server starts and finds that file, the process that wrote it is gone
+and never wrote what it held — a SIGKILL, a machine that slept, a
+supervisor with a shorter patience than the save took. The finding
+becomes `.elspais/lost-changes` and is reported as a `lost_changes` block
+on the same surfaces the automatic-save record uses, so what you learn is
+that something was lost, not what. It is retired the next time a client
+saves at its own request. A discard you asked for is not a loss and
+leaves nothing behind.
 
 **Applied changes restart the clock.** A mutation applied after the last
 client was seen gone counts as proof that a writer is present even when

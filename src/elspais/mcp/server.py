@@ -83,6 +83,7 @@ from elspais.graph.terms import TermDictionary
 from elspais.mcp.search import ParsedQuery, matches_node, parse_query, score_node
 from elspais.mcp.shared_state import (
     SharedServerState,
+    attach_dirty_sentinel,
     finalize_shutdown,
     persist_pending,
     rebuild_shared_graph,
@@ -840,6 +841,9 @@ def _get_graph_status(
     record = _automatic_save_record(working_dir)
     if record is not None:
         status["automatic_save"] = record
+    notice = _lost_changes_notice(working_dir)
+    if notice is not None:
+        status["lost_changes"] = notice
     return status
 
 
@@ -1754,6 +1758,10 @@ def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dic
     record = _automatic_save_record(working_dir)
     if record is not None:
         info["automatic_save"] = record
+    # Implements: REQ-o00074-L
+    notice = _lost_changes_notice(working_dir)
+    if notice is not None:
+        info["lost_changes"] = notice
     return info
 
 
@@ -1770,6 +1778,28 @@ def _automatic_save_record(working_dir: Path | str | None) -> dict[str, Any] | N
     from elspais.mcp.daemon import read_automatic_save
 
     return read_automatic_save(Path(working_dir))
+
+
+# Implements: REQ-o00074-L
+def _lost_changes_notice(working_dir: Path | str | None) -> dict[str, Any] | None:
+    """Present while a process is known to have died holding unwritten changes.
+
+    Presence is the whole of what is known. Nothing recorded what the
+    changes were, and this says so rather than implying otherwise.
+    """
+    if working_dir is None:
+        return None
+    from elspais.mcp.daemon import has_lost_changes
+
+    if not has_lost_changes(Path(working_dir)):
+        return None
+    return {
+        "note": (
+            "A previous server process ended while holding changes it never wrote "
+            "to disk. The files you are reading do not include them, nothing "
+            "records what they were, and they cannot be recovered."
+        )
+    }
 
 
 # ── Shared profile helpers ──────────────────────────────────────────────────
@@ -2523,7 +2553,10 @@ _FAQ_ENTRIES: list[dict[str, str]] = [
             "move-to-file) in the request body, and thread the 'version' each\n"
             "success returns. The history routes /api/save, /api/revert and\n"
             '/api/reload require if_tip_mutation_id in the JSON body ("" =\n'
-            "nothing pending). An unknown node is 404 with code node_not_found."
+            "nothing pending). An unknown node is 404 with code node_not_found.\n"
+            "409 means a conflict only: a save refused for a missing changelog\n"
+            "reason is 400 (changelog_message_required) and a save whose write\n"
+            "failed is 500 (save_failed). Retrying those unchanged cannot help."
         ),
     },
     {
@@ -7382,6 +7415,13 @@ def run_server(
         # inside create_server would be unreachable from here.
         stdio_state = SharedServerState()
         mcp = create_server(working_dir=working_dir, shared_state=stdio_state)
+        # No dirty sentinel here, deliberately. The sentinel is a
+        # per-checkout signal with no owner recorded in it, and a stdio
+        # server is the one kind that can run beside another server in
+        # the same repo: it would read the daemon's sentinel as evidence
+        # of a dead process and clear it, reporting a loss that never
+        # happened and erasing the record of one that might. The HTTP
+        # servers are one per repo and can own it unambiguously.
         try:
             mcp.run(transport="stdio")
         finally:
@@ -7402,6 +7442,11 @@ def run_server(
 
         state = AppState.from_config(repo_root=working_dir)
         app = create_app(state)
+        # Implements: REQ-o00074-L
+        # Before anything is served: a sentinel still standing here was
+        # written by a process that is gone, and what it says about this
+        # one is nothing.
+        attach_dirty_sentinel(state.shared)
 
         if ttl_minutes > 0:
             from elspais.server.middleware import TTLMiddleware
@@ -7417,7 +7462,7 @@ def run_server(
 
         # Spawner liveness: set for implicitly spawned daemons only (env
         # written by daemon.start_daemon). Explicit starts (manual serve,
-        # viewer, daemon restart) have no spawner and keep TTL-only life.
+        # viewer, elspais daemon) have no spawner and keep TTL-only life.
         # Implements: REQ-o00074-A, REQ-o00074-C
         spawner_pid: int | None = None
         env_spawner = _os.environ.get("_ELSPAIS_SPAWNER_PID")
@@ -7513,8 +7558,30 @@ def run_server(
         # timeout run the same routine before they signal, because they
         # can call off their own exit if the save fails; this one cannot,
         # so it is the backstop rather than the primary.
+        server = _ShutdownAwareServer(uvi_config)
+
+        # Implements: REQ-o00074-I
+        # uvicorn captures the stop signals for the duration of serve(),
+        # and re-raises the one it caught once its own drain is over —
+        # with whatever handler was installed before it started. If that
+        # is the default disposition, the process dies inside serve(),
+        # the call never returns, and the accounting below never runs:
+        # an operator's `kill` would destroy the work the daemon holds.
+        # Standing in front of it with a handler of our own is what lets
+        # serve() return so the work can be accounted for. It also covers
+        # the narrow window before uvicorn captures anything, where the
+        # signal has to reach the server as a request to stop rather than
+        # be swallowed.
+        def _absorb_stop_signal(signum: int, frame: Any) -> None:
+            state.shared.begin_shutdown()
+            server.should_exit = True
+
+        import signal as _signal
+
+        _signal.signal(_signal.SIGTERM, _absorb_stop_signal)
+
         try:
-            anyio.run(_ShutdownAwareServer(uvi_config).serve)
+            anyio.run(server.serve)
         finally:
             trigger = "the server stopped serving requests"
             report_shutdown_outcome(finalize_shutdown(state.shared, trigger), trigger)

@@ -234,6 +234,17 @@ def subcommand_specs() -> dict[str, SubcommandSpec]:
             continue
         base_spec = _spec_for_dataclass(base)
         actions = _nested_actions(base)
+        if len(actions) == 1:
+            # tyro only creates a subcommand for a union, and a union of one
+            # member is that member. A command with a single declared action
+            # therefore has no action word at the command line: the action's
+            # own flags sit directly on the command. Modelling the word as a
+            # token here would bless documentation that exits 2 when run.
+            ((_only_name, only_cls),) = actions.items()
+            action_spec = _spec_for_dataclass(only_cls)
+            base_spec.flags.update(action_spec.flags)
+            base_spec.positional_choices.extend(action_spec.positional_choices)
+            actions = {}
         base_spec.nested_actions = set(actions.keys())
         result[name] = _merged(base_spec)
         for action_name, action_cls in actions.items():

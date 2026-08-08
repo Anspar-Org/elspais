@@ -857,11 +857,14 @@ class McpArgs:
 class DaemonRestartArgs:
     """Restart the background daemon to pick up config file changes."""
 
-    force: bool = False
-    """Restart even if the daemon has unsaved in-memory mutations (discards them)."""
+    discard_changes: bool = False
+    """Throw away the daemon's unsaved in-memory mutations instead of saving them."""
 
     persist: bool = False
     """Persist any unsaved in-memory mutations to disk before restarting."""
+
+    message: str | None = None
+    """Changelog reason recorded with --persist when Active requirements changed."""
 
 
 DaemonAction = Annotated[DaemonRestartArgs, tyro.conf.subcommand("restart")]

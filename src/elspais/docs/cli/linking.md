@@ -166,7 +166,7 @@ def test_hashing():
 
 Indirect coverage is tracked separately from direct coverage. Use `elspais viewer` to see the breakdown.
 
-> **Note:** `elspais link suggest` can recommend which tests should be linked to which requirements by analyzing import chains, function names, and keyword overlap. These are suggestions only -- run `elspais link suggest` to see recommendations, then add explicit links where appropriate.
+> **Note:** `elspais link` can recommend which tests should be linked to which requirements by analyzing import chains, function names, and keyword overlap. These are suggestions only -- run `elspais link` to see recommendations, then add explicit links where appropriate.
 
 ## When to Use Each Approach
 

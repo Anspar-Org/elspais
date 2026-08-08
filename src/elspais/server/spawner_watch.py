@@ -11,7 +11,7 @@ daemon down once every one of them is gone, so orphaned daemons cannot
 accumulate and keep serving answers no client is watching.
 
 Daemons started without client identity (manual ``elspais mcp serve``,
-the viewer, ``elspais daemon restart``) never get a watchdog and keep
+the viewer, ``elspais daemon``) never get a watchdog and keep
 their TTL-only lifetime.
 
 Shutdown decision matrix (``shutdown_decision``):

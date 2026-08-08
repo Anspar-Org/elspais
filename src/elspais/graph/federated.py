@@ -9,7 +9,7 @@ delegating to the appropriate sub-graph based on node ownership.
 from __future__ import annotations
 
 import copy
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -54,6 +54,22 @@ class FederatedMutationLog:
         self._pointers: list[FederatedMutationPointer] = []
         self._repos: dict[str, RepoEntry] = {}
         self._revision = 0
+        self._dirty_observer: Callable[[bool], None] | None = None
+
+    # Implements: REQ-o00074-L
+    def set_dirty_observer(self, observer: Callable[[bool], None] | None) -> None:
+        """Watch the transitions between holding changes and holding none.
+
+        The federation's log is the one a server holds, so this is where
+        the watch belongs; see MutationLog.set_dirty_observer for the
+        contract, which is the same one.
+        """
+        self._dirty_observer = observer
+
+    def _notify_dirty(self, holding: bool) -> None:
+        observer = self._dirty_observer
+        if observer is not None:
+            observer(holding)
 
     @property
     def revision(self) -> int:
@@ -66,15 +82,21 @@ class FederatedMutationLog:
 
     def record(self, repo_name: str, mutation_id: str) -> None:
         """Record a mutation pointer."""
+        was_holding = bool(self._pointers)
         self._pointers.append(FederatedMutationPointer(repo_name, mutation_id))
         self._revision += 1
+        if not was_holding:
+            self._notify_dirty(True)
 
     def pop(self) -> FederatedMutationPointer | None:
         """Remove and return the most recent pointer."""
         if not self._pointers:
             return None
         self._revision += 1
-        return self._pointers.pop()
+        pointer = self._pointers.pop()
+        if not self._pointers:
+            self._notify_dirty(False)
+        return pointer
 
     def iter_entries(self) -> Iterator[MutationEntry]:
         """Yield full MutationEntry objects from sub-graphs in federated order.
@@ -125,12 +147,15 @@ class FederatedMutationLog:
 
     def clear(self) -> None:
         """Clear all pointers and sub-graph logs."""
-        if self._pointers:
+        was_holding = bool(self._pointers)
+        if was_holding:
             self._revision += 1
         self._pointers.clear()
         for entry in self._repos.values():
             if entry.graph:
                 entry.graph.mutation_log.clear()
+        if was_holding:
+            self._notify_dirty(False)
 
     def __len__(self) -> int:
         return len(self._pointers)

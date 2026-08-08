@@ -82,6 +82,12 @@ HISTORY_TIP_FIELD = "if_tip_mutation_id"
 # tests/mcp/test_mcp_http_parity.py so the two suites cannot drift apart.
 HISTORY_ROUTES = ("/api/save", "/api/revert", "/api/reload")
 
+# ``/api/save`` refuses a pending change to an Active requirement until the
+# caller states the changelog reason. These tests are about the tip guard, so
+# they supply one and let the guard be the only thing that can refuse them.
+# ``/api/revert`` and ``/api/reload`` ignore the field.
+CHANGELOG_REASON = "guard test: persist the seeded edit"
+
 
 @dataclass(frozen=True)
 class RouteCase:
@@ -714,7 +720,7 @@ class TestHistoryRoutesRequireTheMutationLogTip:
         _seed_pending_mutation(client, version_of)
         tip = _log_tip(app_state)
 
-        resp = client.post(route, json={HISTORY_TIP_FIELD: tip})
+        resp = client.post(route, json={HISTORY_TIP_FIELD: tip, "message": CHANGELOG_REASON})
 
         assert resp.status_code == 200, f"{route} -> {resp.status_code}: {resp.text}"
         assert resp.json()["success"] is True
@@ -777,7 +783,10 @@ class TestHistoryRouteRejectionEffects:
         """REQ-o00062-N: With the live tip named, the save runs normally."""
         _seed_pending_mutation(client, version_of)
 
-        resp = client.post("/api/save", json={HISTORY_TIP_FIELD: _log_tip(app_state)})
+        resp = client.post(
+            "/api/save",
+            json={HISTORY_TIP_FIELD: _log_tip(app_state), "message": CHANGELOG_REASON},
+        )
 
         assert resp.status_code == 200, resp.text
         assert PENDING_TITLE in (viewer_project / "spec" / "dev-impl.md").read_text()
@@ -877,3 +886,108 @@ class TestAutoRefreshDoesNotDiscardPendingMutations:
 
         assert rebuilt is True
         assert app_state.graph is not graph_before
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# A refused save is not automatically a conflict
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestNotEveryRefusedSaveIsAConflict:
+    """Validates REQ-o00062-O: the rejection shape a caller sees over HTTP is
+    the one MCP produces, and 409 is reserved for the conflict family it names.
+
+    ``/api/save`` used to answer 409 for every refusal, so a caller following
+    the documented conflict recipe -- re-read the tip, retry -- retried
+    forever against a missing changelog reason it was never told to supply,
+    and against a disk that could not be written. The two are told apart now:
+    a conflict stays 409 with its body untouched, a refusal the caller must
+    answer is 400, and a write that failed is 500. The bodies carry a ``code``
+    so the distinction survives a caller that reads the JSON rather than the
+    status line.
+
+    Both surfaces reach disk through ``persist_pending``, so the rule the MCP
+    save tool enforces is the rule enforced here.
+    """
+
+    def test_REQ_o00062_O_stale_tip_is_still_the_conflict_it_was(
+        self, client, app_state, version_of
+    ):
+        """The unification must not have disturbed the guard: same status,
+        same code, same keys, and the pending work untouched."""
+        _seed_pending_mutation(client, version_of)
+        tip = _log_tip(app_state)
+
+        resp = client.post(
+            "/api/save",
+            json={HISTORY_TIP_FIELD: BOGUS_MUTATION_ID, "message": CHANGELOG_REASON},
+        )
+
+        assert resp.status_code == 409, f"{resp.status_code}: {resp.text}"
+        payload = resp.json()
+        assert payload["code"] == "mutation_log_conflict"
+        assert TIP_CONFLICT_KEYS <= set(payload), payload
+        assert payload["current_tip"] == tip
+        assert len(app_state.graph.mutation_log) == 1
+
+    def test_REQ_o00062_O_missing_changelog_reason_is_not_a_conflict(
+        self, client, app_state, version_of
+    ):
+        """Nothing is in conflict: one writer, a live tip, and a rule the
+        caller has simply not answered yet. Retrying the identical request is
+        exactly what a 409 would tell the caller to do, and it cannot work."""
+        _seed_pending_mutation(client, version_of)
+
+        resp = client.post("/api/save", json={HISTORY_TIP_FIELD: _log_tip(app_state)})
+
+        assert resp.status_code == 400, f"{resp.status_code}: {resp.text}"
+        payload = resp.json()
+        assert payload["success"] is False
+        assert payload["code"] == "changelog_message_required"
+        assert "message" in payload["error"], payload
+        assert len(app_state.graph.mutation_log) == 1, "the refused save discarded the work"
+
+    def test_REQ_o00062_O_write_failure_is_not_a_conflict(
+        self, client, app_state, viewer_project, version_of, monkeypatch
+    ):
+        """A real failure on the real path: the renderer raises where it would
+        raise on a full or read-only disk. Nothing is in conflict, the caller
+        has supplied everything asked of it, and the answer says so."""
+        _seed_pending_mutation(client, version_of)
+        before = _spec_snapshot(viewer_project)
+
+        def _explode(*args, **kwargs):
+            raise OSError("read-only file system")
+
+        monkeypatch.setattr("elspais.graph.render.render_save", _explode)
+
+        resp = client.post(
+            "/api/save",
+            json={HISTORY_TIP_FIELD: _log_tip(app_state), "message": CHANGELOG_REASON},
+        )
+
+        assert resp.status_code == 500, f"{resp.status_code}: {resp.text}"
+        payload = resp.json()
+        assert payload["success"] is False
+        assert payload["code"] == "save_failed"
+        assert _spec_snapshot(viewer_project) == before
+        assert (
+            len(app_state.graph.mutation_log) == 1
+        ), "a save that could not write also destroyed the work it was holding"
+
+    def test_REQ_o00062_O_the_save_that_answered_the_rule_succeeds(
+        self, client, app_state, viewer_project, version_of
+    ):
+        """The positive half: with the tip named and the reason given, the
+        save runs through the shared path and reaches disk."""
+        _seed_pending_mutation(client, version_of)
+
+        resp = client.post(
+            "/api/save",
+            json={HISTORY_TIP_FIELD: _log_tip(app_state), "message": CHANGELOG_REASON},
+        )
+
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["success"] is True
+        assert PENDING_TITLE in (viewer_project / "spec" / "dev-impl.md").read_text()
+        assert len(app_state.graph.mutation_log) == 0

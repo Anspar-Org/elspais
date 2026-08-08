@@ -230,6 +230,13 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
 
     atexit.register(lambda: daemon_json.unlink(missing_ok=True))
 
+    # Implements: REQ-o00074-L
+    # This process holds unwritten changes exactly as the daemon does,
+    # and can be killed in exactly the same ways.
+    from elspais.mcp.shared_state import attach_dirty_sentinel
+
+    attach_dirty_sentinel(state.shared)
+
     try:
         import anyio
         import uvicorn
@@ -241,6 +248,22 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
             log_level="warning" if quiet else "info",
         )
         server = uvicorn.Server(uvi_config)
+
+        # Implements: REQ-o00074-I
+        # uvicorn re-raises the stop signal it caught once its drain is
+        # done, under the handler that was in place beforehand. Left as
+        # the default, that kills this process inside serve() and the
+        # work it is holding never reaches the routine below that writes
+        # it. SIGINT is left alone: its default disposition raises
+        # KeyboardInterrupt, which returns through the same path.
+        def _absorb_stop_signal(signum: int, frame: object) -> None:
+            state.shared.begin_shutdown()
+            server.should_exit = True
+
+        import signal as _signal
+
+        _signal.signal(_signal.SIGTERM, _absorb_stop_signal)
+
         anyio.run(server.serve)
     except KeyboardInterrupt:
         if not quiet:
