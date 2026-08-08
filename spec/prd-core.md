@@ -771,7 +771,7 @@ C. The selection of terms for a context SHALL be derived from the graph's record
 
 ### Rationale
 
-Definitions can be authored org-wide while each generated document carries only its own vocabulary: a term defined in the policy repo appears in a consuming repo's glossary because it is used there, without dragging in its unreferenced siblings. Per-entry index eligibility on the write/generation surfaces is the same control at its coarsest granularity; this REQ is the fine-grained rule. The boundary with document tooling holds here: elspais owns the graph, term usage, and *selection* — "which terms belong in this context" is a reachability question over data the graph already holds — while layout, ordering, numbering, and per-sponsor chrome belong to the document tool, which reaches this data through an extensibility seam rather than through elspais's own output formats.
+Definitions can be authored org-wide while each generated document carries only its own vocabulary: a term defined in the policy repo appears in a consuming repo's glossary because it is used there, without dragging in its unreferenced siblings. Per-entry index eligibility on the write/generation surfaces is the same control at its coarsest granularity; this REQ is the fine-grained rule. The boundary with document tooling holds here: elspais owns the graph, term usage, and *selection* — "which terms belong in this context" is a reachability question over data the graph already holds — while layout, ordering, numbering, and per-sponsor chrome belong to the document tool.
 
 ### Changelog
 
