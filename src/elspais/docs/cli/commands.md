@@ -176,6 +176,34 @@ Generates a lighter document for stakeholders:
 - Default title: "Product Requirements Overview"
 - `--max-depth` limits core PRD depth (associates always fully included)
 
+**Federated projects:**
+
+One run from the root repository compiles every repository in the graph into a
+single document. Each spec file is read from its own repository, and Topic
+Index entries for requirements owned by an associate carry a `[<repo-name>]`
+prefix so the reader can tell where a section comes from.
+
+**Figures and completeness:**
+
+Image and Mermaid references resolve against the declaring spec file's own
+directory, then its owning repository's root, then the resource path (every
+repository's root and `spec/` directory) -- so in a federated project each
+file's figures come from its own repo. Percent-encoded references resolve on
+their decoded form; references inside fenced and indented code blocks are left
+alone entirely, and a fence that is never closed is itself reported. A reference no repository
+can supply, a Mermaid source that cannot be rendered, a spec file that cannot
+be found in its owning repository, or a configured associate repository that
+fails to load (each of which takes requirements out of the document) is
+reported on stderr with the locations searched and a remedy. Resources pandoc
+itself could not fetch -- `.webp`, `.pdf`, reference-style links and other
+media outside the compiler's grammar -- are folded into the same report,
+deduplicated so one missing file counts once, and the completion line is
+qualified `(INCOMPLETE: N references omitted -- see warnings above)`. The exit
+code stays `0`: the document is produced, and the degradation is disclosed
+rather than fatal. The one exception is a missing absolute image path, which
+pandoc cannot survive: it is reported by name, then the run fails non-zero. Raw HTML `<img>` tags are **not** supported and cannot be
+reported -- use Markdown image syntax. See `elspais docs pdf`.
+
 ## summary
 
 Generate coverage summary reports.

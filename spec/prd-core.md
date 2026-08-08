@@ -278,8 +278,16 @@ G. The PDF generator SHALL support content derived from a variety of sources and
 
 H. The PDF generator SHALL support inclusion of content from every repository of a federated graph.
 
+I. When a referenced image or diagram cannot be located in any repository of the compiled graph, the compiler SHALL report the reference as written, the spec file declaring it, and the locations searched.
+
+J. When a requirement's source file cannot be read from its owning repository, the compiler SHALL report the omitted file and the repository it was expected in, rather than emitting the document as though that content did not exist.
+
+K. When referenced content was omitted from the compiled document or substituted by a degraded rendering, the completion report SHALL disclose the degradation rather than reporting unqualified success.
+
 ## Changelog
 
+- 2026-08-07 | acc97ca9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-07 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-31/TOOL-32: concretize the REQ-p00019 anti-pattern instance with assertions I (unresolvable asset reference reported), J (unreadable owning-repo source file reported), and K (completion report discloses degradation)
 - 2026-08-01 | 01da5fa4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-08-01 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: declare satisfaction of the REQ-p00019 anti-pattern template; the removed prerequisite-reporting assertion's obligation returns via the template's unactionable-failure class
 - 2026-08-01 | 01da5fa4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -288,7 +296,7 @@ H. The PDF generator SHALL support inclusion of content from every repository of
 - 2026-07-31 | 24f063f6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-04-23 | bfc0cadf | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Spec-to-PDF Compilation* | **Hash**: 01da5fa4
+*End* *Spec-to-PDF Compilation* | **Hash**: acc97ca9
 ---
 
 # REQ-p00015: Complete and Current Reporting

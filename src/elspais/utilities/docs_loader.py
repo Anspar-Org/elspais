@@ -28,6 +28,7 @@ TOPIC_ORDER = [
     "config",
     "commands",
     "checks",
+    "pdf",
     "test-targets",
     "doctor",
     "analysis",

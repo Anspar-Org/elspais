@@ -1,4 +1,5 @@
-# Implements: REQ-p00080-B, REQ-p00080-C, REQ-p00080-D, REQ-p00080-E, REQ-p00080-F, REQ-p00080-H
+# Implements: REQ-p00080-B, REQ-p00080-C, REQ-p00080-D, REQ-p00080-E, REQ-p00080-F
+# Implements: REQ-p00080-H, REQ-p00080-I, REQ-p00080-J, REQ-p00080-K
 """Markdown assembler for PDF compilation.
 
 Uses the graph for file ordering metadata (level, depth), then reads the
@@ -11,7 +12,10 @@ import re
 import shutil
 import subprocess
 from collections import defaultdict
+from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import unquote
 
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind
@@ -76,7 +80,67 @@ _IMAGE_REF_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Opening or closing marker of a fenced code block (``` or ~~~).
+_FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
+
+# A line indented far enough to open or continue an indented code block.
+_INDENTED_CODE_RE = re.compile(r"^(?: {4}|\t)")
+
+# A Markdown list item marker, whose indented continuation lines are list
+# content rather than code.
+_LIST_ITEM_RE = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s)")
+
 log = logging.getLogger(__name__)
+
+
+# Implements: REQ-p00080-I, REQ-p00080-J
+@dataclass(frozen=True)
+class AssemblyDiagnostic:
+    """Referenced content the assembler could not place in the document.
+
+    A compiled document that quietly comes out short an image, a diagram,
+    or an entire repository's spec file is indistinguishable from a
+    correct one. Each such omission is recorded here so the caller can
+    disclose it instead of shipping a silently degraded document.
+    """
+
+    kind: str
+    """What was omitted or could not be analysed: ``image``, ``diagram``,
+    ``source-file``, ``repository``, or ``code-fence``."""
+
+    reference: str
+    """The reference exactly as written in the source, or the file path."""
+
+    source_file: str
+    """Repo-relative spec file declaring the reference; ``""`` when the
+    omitted thing *is* the file."""
+
+    repo: str
+    """Name of the repository the reference was resolved against."""
+
+    searched: tuple[str, ...]
+    """Absolute locations tried, in the order they were tried."""
+
+    cause: str
+    """Why resolution failed."""
+
+    remedy: str
+    """The action available to the caller."""
+
+    def format(self) -> str:
+        """Render the diagnostic as one human-readable block.
+
+        Names the operation, the cause, and the remedial action, so a
+        reader of the compile log can act without re-deriving any of it.
+        """
+        where = f" declared in {self.source_file}" if self.source_file else ""
+        repo = f" [repo: {self.repo}]" if self.repo else ""
+        lines = [f"  {self.kind} reference '{self.reference}'{where}{repo}"]
+        lines.append(f"    cause: {self.cause}")
+        if self.searched:
+            lines.append(f"    searched: {', '.join(self.searched)}")
+        lines.append(f"    remedy: {self.remedy}")
+        return "\n".join(lines)
 
 
 class MarkdownAssembler:
@@ -112,6 +176,71 @@ class MarkdownAssembler:
         self._level_order = order
         self._level_headings = headings
         self._level_prefix_re = prefix_re
+        self._diagnostics: list[AssemblyDiagnostic] = []
+        self._seen_diagnostics: set[tuple[str, str, str]] = set()
+        self._resource_roots: list[Path] | None = None
+
+    # ------------------------------------------------------------------
+    # Degradation reporting
+    # ------------------------------------------------------------------
+
+    # Implements: REQ-p00080-I, REQ-p00080-J
+    def iter_diagnostics(self) -> Iterator[AssemblyDiagnostic]:
+        """Iterate content the assembly could not place, in discovery order."""
+        yield from self._diagnostics
+
+    # Implements: REQ-p00080-K
+    def diagnostic_count(self) -> int:
+        """Number of distinct omissions recorded during assembly."""
+        return len(self._diagnostics)
+
+    def _record_diagnostic(self, diagnostic: AssemblyDiagnostic) -> None:
+        """Record an omission once per (kind, reference, declaring file)."""
+        key = (diagnostic.kind, diagnostic.reference, diagnostic.source_file)
+        if key in self._seen_diagnostics:
+            return
+        self._seen_diagnostics.add(key)
+        self._diagnostics.append(diagnostic)
+
+    # Implements: REQ-p00080-H
+    def resource_roots(self) -> list[Path]:
+        """Directories that may satisfy a relative reference, in search order.
+
+        Each federated repo contributes its root and its ``spec/``
+        directory. This is the single definition of that set: the pdf
+        command hands it to pandoc as ``--resource-path``, and the
+        reference resolvers probe it before declaring a reference
+        unresolvable, so the two surfaces cannot disagree about what
+        "not found" means.
+        """
+        if self._resource_roots is None:
+            roots: list[Path] = []
+            seen: set[Path] = set()
+            for entry in self._graph.iter_repos():
+                for candidate in (entry.repo_root, entry.repo_root / "spec"):
+                    resolved = candidate.resolve()
+                    if resolved not in seen:
+                        seen.add(resolved)
+                        roots.append(resolved)
+            self._resource_roots = roots
+        return list(self._resource_roots)
+
+    def _reachable_via_resource_root(self, reference: str) -> bool:
+        """Whether pandoc's ``--resource-path`` would find this reference.
+
+        Probes the percent-decoded form, which is what pandoc resolves.
+        """
+        decoded = unquote(reference)
+        return any((root / decoded).exists() for root in self.resource_roots())
+
+    def _repo_name_for_root(self, repo_root: Path | None) -> str:
+        """Name the federated repo owning ``repo_root``, best effort."""
+        if repo_root is None:
+            return self._graph.root_repo_name
+        for entry in self._graph.iter_repos():
+            if entry.repo_root == repo_root:
+                return entry.name
+        return self._graph.root_repo_name
 
     def assemble(self) -> str:
         """Assemble the complete Markdown document.
@@ -120,6 +249,8 @@ class MarkdownAssembler:
             Structured Markdown string ready for Pandoc.
         """
         parts: list[str] = []
+
+        self._record_unloadable_repos()
 
         # YAML metadata header for Pandoc
         from elspais.utilities.report_meta import report_metadata
@@ -213,8 +344,11 @@ class MarkdownAssembler:
         ``owning_repo_root`` anchors path resolution to the file's owning
         associate when supplied (cross-repo PDF rendering).
         """
-        resolved = self._resolve_path(file_path, owning_repo_root=owning_repo_root)
+        resolved, searched = self._resolve_path_candidates(
+            file_path, owning_repo_root=owning_repo_root
+        )
         if not resolved or not resolved.exists():
+            self._record_unreadable_source_file(file_path, owning_repo_root, searched)
             return []
 
         source = resolved.read_text(encoding="utf-8")
@@ -223,9 +357,52 @@ class MarkdownAssembler:
         source_lines = source.split("\n")
 
         seen_file_title = False
+        fence: str | None = None
+        indented_code = False
+        prev_blank = True
+        in_list = False
 
         lines: list[str] = ["\\newpage", ""]
         for line in source_lines:
+            # Code blocks pass through byte-for-byte. A reference inside a
+            # code sample is text about a reference, not a reference:
+            # rewriting it corrupts the sample, and reporting it as
+            # unresolvable claims an omission the document never suffered.
+            marker = _FENCE_RE.match(line)
+            if fence is not None:
+                if marker and marker.group(1)[0] == fence[0] and len(marker.group(1)) >= len(fence):
+                    fence = None
+                lines.append(line)
+                continue
+            if marker:
+                fence = marker.group(1)
+                lines.append(line)
+                continue
+
+            blank = not line.strip()
+            indented = _INDENTED_CODE_RE.match(line) is not None
+
+            # A CommonMark indented code block opens on a 4-space (or tab)
+            # indent that follows a blank line and does not continue a
+            # paragraph. List continuation is indented the same way but is
+            # list content, so an open list suppresses the reading.
+            if indented_code:
+                if not blank and not indented:
+                    indented_code = False
+            elif indented and prev_blank and not in_list:
+                indented_code = True
+
+            if not blank:
+                if not indented:
+                    in_list = _LIST_ITEM_RE.match(line) is not None
+                prev_blank = False
+            else:
+                prev_blank = True
+
+            if indented_code:
+                lines.append(line)
+                continue
+
             # Strip horizontal rules (requirement separators)
             if line.strip() == "---":
                 continue
@@ -276,6 +453,28 @@ class MarkdownAssembler:
 
             lines.append(line)
 
+        if fence is not None:
+            # Everything after the unclosed marker was treated as code, so
+            # requirement headings and end markers past that point were
+            # never processed. The document is degraded in a way no
+            # reference-level check can see; say so.
+            # Implements: REQ-p00080-I
+            self._record_diagnostic(
+                AssemblyDiagnostic(
+                    kind="code-fence",
+                    reference=file_path,
+                    source_file=file_path,
+                    repo=self._repo_name_for_root(owning_repo_root),
+                    searched=(),
+                    cause=(
+                        "A code fence is opened and never closed; the rest of "
+                        "the file was treated as code, so any requirement "
+                        "structure after it is not rendered as structure."
+                    ),
+                    remedy="Close the code fence in the spec file.",
+                )
+            )
+
         # Trim trailing blank lines
         while lines and not lines[-1].strip():
             lines.pop()
@@ -314,25 +513,110 @@ class MarkdownAssembler:
         scan of every repo in ``iter_repos()`` so that cross-repo
         references render even when the caller didn't track ownership.
         """
+        resolved, _searched = self._resolve_path_candidates(
+            file_path, owning_repo_root=owning_repo_root
+        )
+        return resolved
+
+    def _resolve_path_candidates(
+        self,
+        file_path: str,
+        owning_repo_root: Path | None = None,
+    ) -> tuple[Path | None, list[Path]]:
+        """Resolve a source path, also returning every location tried.
+
+        Callers that must report a failure need the candidate list, and
+        deriving it twice would let the report drift from the search.
+        """
+        searched: list[Path] = []
         p = Path(file_path)
-        if p.is_absolute() and p.exists():
-            return p
+        if p.is_absolute():
+            searched.append(p)
+            if p.exists():
+                return p, searched
         if owning_repo_root is not None:
             candidate = owning_repo_root / file_path
+            searched.append(candidate)
             if candidate.exists():
-                return candidate
+                return candidate, searched
         # Try relative to root repo
         candidate = self._graph.repo_root / file_path
-        if candidate.exists():
-            return candidate
+        if candidate not in searched:
+            searched.append(candidate)
+            if candidate.exists():
+                return candidate, searched
         # Fall back: search every federated repo (cross-repo file with
         # no ownership context — rare in normal callers but needed for
         # mermaid blocks emitted from preamble-style global text).
         for entry in self._graph.iter_repos():
             candidate = entry.repo_root / file_path
+            if candidate in searched:
+                continue
+            searched.append(candidate)
             if candidate.exists():
-                return candidate
-        return None
+                return candidate, searched
+        return None, searched
+
+    # Implements: REQ-p00080-J
+    def _record_unreadable_source_file(
+        self,
+        file_path: str,
+        owning_repo_root: Path | None,
+        searched: list[Path],
+    ) -> None:
+        """Record a spec file whose content could not be read.
+
+        A file that cannot be located takes every requirement, assertion
+        and rationale it holds out of the document. Dropping a whole
+        repository's content without saying so is the omission
+        REQ-p00080's REQ-p00019 instance prohibits.
+        """
+        self._record_diagnostic(
+            AssemblyDiagnostic(
+                kind="source-file",
+                reference=file_path,
+                source_file="",
+                repo=self._repo_name_for_root(owning_repo_root),
+                searched=tuple(str(p) for p in searched),
+                cause=(
+                    "Spec file not found in its owning repository; every "
+                    "requirement it holds is absent from the document."
+                ),
+                remedy=("Restore the file, or update the requirement's source location."),
+            )
+        )
+
+    # Implements: REQ-p00080-J
+    def _record_unloadable_repos(self) -> None:
+        """Record configured repositories that contributed nothing.
+
+        A federated repository whose configured path does not resolve
+        loads no graph at all, so none of its requirements reach the
+        document and no per-file check can notice: there are no files to
+        fail on. The absent repository is the omission, and it is
+        reported as one.
+        """
+        root_name = self._graph.root_repo_name
+        for entry in self._graph.iter_repos():
+            if entry.name == root_name or entry.graph is not None:
+                continue
+            self._record_diagnostic(
+                AssemblyDiagnostic(
+                    kind="repository",
+                    reference=entry.name,
+                    source_file="",
+                    repo=entry.name,
+                    searched=(str(entry.repo_root),),
+                    cause=(
+                        "Associate repository could not be loaded; none of "
+                        "its requirements are in the document."
+                    ),
+                    remedy=(
+                        "Correct the associate's configured path, or remove "
+                        "the associate from the configuration."
+                    ),
+                )
+            )
 
     # ------------------------------------------------------------------
     # Mermaid diagram resolution
@@ -352,7 +636,10 @@ class MarkdownAssembler:
         3. Replace the reference with the absolute .png path
 
         ``owning_repo_root`` anchors resolution to the source file's
-        owning repo when known (federated cross-repo rendering).
+        owning repo when known (federated cross-repo rendering). A
+        diagram that cannot be located, or that cannot be rendered
+        because ``mmdc`` is absent or failed, is recorded as a
+        diagnostic rather than dropped without a word.
         """
         anchor = owning_repo_root if owning_repo_root is not None else self._graph.repo_root
 
@@ -362,12 +649,22 @@ class MarkdownAssembler:
             suffix = match.group(3)  # )
 
             # Resolve .mmd path relative to the source file's directory
+            decoded = unquote(mmd_path)
             source_dir = Path(source_file).parent
-            mmd_resolved = anchor / source_dir / mmd_path
+            searched: list[Path] = [(anchor / source_dir / decoded).resolve()]
+            mmd_resolved = anchor / source_dir / decoded
             if not mmd_resolved.exists():
                 # Try relative to anchor repo root
-                mmd_resolved = anchor / mmd_path
+                mmd_resolved = anchor / decoded
+                searched.append((anchor / decoded).resolve())
             if not mmd_resolved.exists():
+                self._record_unresolved_reference(
+                    kind="diagram",
+                    reference=mmd_path,
+                    source_file=source_file,
+                    owning_repo_root=owning_repo_root,
+                    searched=searched,
+                )
                 return match.group(0)  # Leave unchanged
 
             png_path = mmd_resolved.with_suffix(".png")
@@ -376,6 +673,23 @@ class MarkdownAssembler:
             if not png_path.exists():
                 png_path = self._generate_mermaid_png(mmd_resolved, png_path)
                 if png_path is None:
+                    self._record_diagnostic(
+                        AssemblyDiagnostic(
+                            kind="diagram",
+                            reference=mmd_path,
+                            source_file=source_file,
+                            repo=self._repo_name_for_root(owning_repo_root),
+                            searched=(str(mmd_resolved),),
+                            cause=(
+                                "Mermaid source found but could not be rendered "
+                                "to an image (mmdc missing or failed)."
+                            ),
+                            remedy=(
+                                "Install the mermaid CLI (mmdc), or commit a "
+                                "pre-rendered .png alongside the .mmd source."
+                            ),
+                        )
+                    )
                     return match.group(0)
 
             return f"{prefix}{png_path}{suffix}"
@@ -406,9 +720,21 @@ class MarkdownAssembler:
         express (and refs relative to spec subdirectories aren't on the
         resource path at all).
 
-        Absolute paths and URLs are left untouched. Unresolved refs are
-        left unchanged so pandoc's ``--resource-path`` fallback (wired
-        in ``pdf_cmd``) still gets a chance to find them.
+        URLs are left untouched. An absolute path is left untouched too,
+        but is reported when it does not exist -- otherwise pandoc aborts
+        with a bare filesystem error that names neither the spec file nor
+        a remedy. A reference reachable only through a resource root is
+        left unchanged, since pandoc's ``--resource-path`` resolves it. A
+        reference reachable from nowhere is left unchanged as well (there
+        is nothing better to write) but is recorded as a diagnostic,
+        because an image that vanishes from the compiled document without
+        a word is the silent omission REQ-p00080's REQ-p00019 instance
+        prohibits.
+
+        Every existence probe uses the percent-decoded reference, because
+        that is what pandoc resolves against; probing the raw text would
+        report a reference pandoc places perfectly well. The reference is
+        still reported and rendered exactly as the author wrote it.
         """
         anchor = owning_repo_root if owning_repo_root is not None else self._graph.repo_root
 
@@ -417,21 +743,86 @@ class MarkdownAssembler:
             img_path = match.group(2)  # relative/path.png
             suffix = match.group(3)  # optional "title" + )
 
-            if "://" in img_path or Path(img_path).is_absolute():
+            if "://" in img_path:
+                return match.group(0)
+
+            decoded = unquote(img_path)
+
+            if Path(decoded).is_absolute():
+                target = Path(decoded)
+                if not target.exists():
+                    self._record_diagnostic(
+                        AssemblyDiagnostic(
+                            kind="image",
+                            reference=img_path,
+                            source_file=source_file,
+                            repo=self._repo_name_for_root(owning_repo_root),
+                            searched=(str(target),),
+                            cause=(
+                                "Absolute image path does not exist; no "
+                                "repository can supply it."
+                            ),
+                            remedy=(
+                                "Correct the path, or make the reference "
+                                "relative to the spec file so it resolves "
+                                "inside the repository."
+                            ),
+                        )
+                    )
                 return match.group(0)
 
             # Resolve relative to the source file's directory first
             source_dir = Path(source_file).parent
-            candidate = (anchor / source_dir / img_path).resolve()
+            searched: list[Path] = [(anchor / source_dir / decoded).resolve()]
+            candidate = searched[0]
             if not candidate.exists():
                 # Then relative to the owning repo root
-                candidate = (anchor / img_path).resolve()
+                candidate = (anchor / decoded).resolve()
+                searched.append(candidate)
             if not candidate.exists():
+                if not self._reachable_via_resource_root(decoded):
+                    self._record_unresolved_reference(
+                        kind="image",
+                        reference=img_path,
+                        source_file=source_file,
+                        owning_repo_root=owning_repo_root,
+                        searched=searched,
+                    )
                 return match.group(0)  # Leave for --resource-path fallback
 
             return f"{prefix}{candidate}{suffix}"
 
         return _IMAGE_REF_RE.sub(_replace, line)
+
+    def _record_unresolved_reference(
+        self,
+        *,
+        kind: str,
+        reference: str,
+        source_file: str,
+        owning_repo_root: Path | None,
+        searched: list[Path],
+    ) -> None:
+        """Record a reference no repository could satisfy."""
+        locations = [str(p) for p in searched]
+        locations.extend(
+            str(root / reference)
+            for root in self.resource_roots()
+            if str(root / reference) not in locations
+        )
+        self._record_diagnostic(
+            AssemblyDiagnostic(
+                kind=kind,
+                reference=reference,
+                source_file=source_file,
+                repo=self._repo_name_for_root(owning_repo_root),
+                searched=tuple(locations),
+                cause="File not found in any repository of the compiled graph.",
+                remedy=(
+                    "Add the file, correct the reference, or remove the reference from the spec."
+                ),
+            )
+        )
 
     @staticmethod
     def _generate_mermaid_png(mmd_path: Path, png_path: Path) -> Path | None:
@@ -707,8 +1098,14 @@ class MarkdownAssembler:
 
     def _topics_from_file(self, file_path: str, owning_repo_root: Path | None = None) -> list[str]:
         """Extract Topics: lines from the pre-requirement section of a file."""
-        resolved = self._resolve_path(file_path, owning_repo_root=owning_repo_root)
+        resolved, searched = self._resolve_path_candidates(
+            file_path, owning_repo_root=owning_repo_root
+        )
         if not resolved or not resolved.exists():
+            # Recorded here too because overview mode can index a file it
+            # never renders. `_record_diagnostic` dedupes, so a file missed
+            # by both passes is still reported once.
+            self._record_unreadable_source_file(file_path, owning_repo_root, searched)
             return []
         text = resolved.read_text(encoding="utf-8")
         topics: list[str] = []
