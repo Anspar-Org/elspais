@@ -429,48 +429,52 @@ A tool that requires a judgement call before use loses to the tool that needs no
 
 **Level**: ops | **Status**: Active | **Implements**: REQ-p00015, REQ-p00060
 
-A background daemon SHALL be bound at start to the session it exists to serve, so that its lifetime can be reasoned about after it has been detached from that session.
+A background daemon SHALL live only as long as some client is using it, and SHALL preserve and account for the work it holds when it stops.
 
 ### Assertions
 
-A. A daemon started implicitly on behalf of a session SHALL record the identity of that session at the moment it is started, so that the daemon can afterwards determine whether the session still exists.
+A. A daemon started implicitly on behalf of a client SHALL record that client's identity at the moment it is started, so that the daemon can afterwards determine whether the client still exists.
 
-B. A recorded session identity SHALL be observable in the state record by which clients locate the daemon.
+B. The client identities a daemon has recorded SHALL be observable in the state record by which clients locate the daemon.
 
-C. A daemon started explicitly rather than on behalf of a session SHALL record no session identity, and its lifetime SHALL remain governed solely by its idle timeout.
+C. A daemon started explicitly rather than on behalf of a client SHALL record no client identity, and its lifetime SHALL remain governed solely by its idle timeout.
 
-D. Session identity SHALL be derived only from evidence available at the moment of starting, and when no session identity can be established the daemon SHALL start with none rather than with an inferred one.
+D. A client identity SHALL be derived only from evidence available at the moment it is recorded, and when no identity can be established the daemon SHALL record none rather than an inferred one.
 
-E. While the session a daemon recorded is no longer present, the daemon SHALL terminate rather than keep serving indefinitely.
+E. A client that begins using a daemon that is already running SHALL be recorded alongside the daemon's existing clients; while any recorded client still exists the daemon SHALL keep serving, and while none of them exists the daemon SHALL terminate rather than keep serving indefinitely.
 
 F. The obligation in assertion E SHALL hold under every idle-timeout configuration, including one in which the idle timeout never expires, and SHALL NOT be discharged by client request traffic.
 
-G. A daemon holding unsaved in-memory changes SHALL NOT terminate before disclosing how many changes are pending and the deadline after which they are lost, and the disclosed count SHALL be the number actually pending.
+G. A daemon holding unsaved in-memory changes SHALL NOT terminate before disclosing how many changes are pending and the deadline at which it will persist them and stop, and the disclosed count SHALL be the number actually pending.
 
-H. A change applied after a daemon observed its recorded session absent SHALL count as evidence that a writer is still using the daemon, and SHALL restart the interval before termination, so that a writer which adopted a running daemon is not treated as absent.
+H. A change applied after a daemon observed every recorded client absent SHALL count as evidence that a writer is still using the daemon, and SHALL restart the interval before termination.
 
-I. A daemon SHALL NOT persist pending changes on its own initiative while terminating; persisting them remains an act a caller requests.
+I. A daemon terminating with no client present SHALL persist the changes it holds rather than discarding them, SHALL record that the daemon itself performed the save rather than a client requesting it, when it did so, how many changes it covered, and the condition that triggered it, and SHALL disclose that record to clients that afterwards work with the affected files.
+
+J. While a client persists pending changes at its own request, any outstanding record of a save the daemon performed on its own SHALL be retired.
+
+K. If a daemon cannot persist the changes it holds, it SHALL report the failure and retain them rather than discarding them, and SHALL NOT treat its termination as complete.
 
 ### Rationale
 
-A daemon is started implicitly to serve one session and is then detached from it, so nothing in the running process can afterwards say whose death should end it. The identity has to be handed over at start or it is unrecoverable, which is why assertion A fixes the moment rather than the means.
+A daemon is started implicitly to serve one client and is then detached from it, so nothing in the running process can afterwards say whose disappearance should end it. The identity has to be handed over at start or it is unrecoverable, which is why assertion A fixes the moment rather than the means.
 
-Assertion C keeps the two ways a daemon comes into existence distinguishable. A daemon a person started deliberately answers to that person, not to whichever shell happened to be nearby; inferring a session for it would make deliberate starts unpredictably mortal. Assertion D is the same caution stated for the implicit path: a guessed identity is worse than none, because none degrades to the existing idle-timeout behaviour while a wrong one attaches the daemon's life to an unrelated process.
+Assertion C keeps the two ways a daemon comes into existence distinguishable. A daemon a person started deliberately answers to that person, not to whichever shell happened to be nearby; inferring a client for it would make deliberate starts unpredictably mortal. Assertion D is the same caution stated for the implicit path: a guessed identity is worse than none, because none degrades to the existing idle-timeout behaviour while a wrong one attaches the daemon's life to an unrelated process.
 
 Assertion B exists because a lifetime rule nobody can inspect cannot be diagnosed. The record that already tells clients where the daemon is is the place an operator will look to ask why one is, or is not, still running.
 
-Assertions E through I govern what the recorded identity is for. Assertion F exists because the two obvious places to hang the check are both wrong: an idle timeout resets on every request, so a client that merely polls holds an abandoned daemon open forever, and an idle timeout can be configured never to expire at all, which would disable the check outright. The obligation is therefore stated against the daemon's own passage of time rather than against its traffic.
+Assertion E states the invariant the whole requirement exists for, and it is stated over clients rather than over the one that happened to start the daemon because a daemon is deliberately shared. It serves several clients at once, and it outlives the client that started it precisely so that a later one can pick it up; a lifetime tied to the starter alone would shut the daemon down underneath somebody who is actively using it. Assertion F exists because the two obvious places to hang the check are both wrong: an idle timeout resets on every request, so a client that merely polls holds an abandoned daemon open forever, and an idle timeout can be configured never to expire at all, which would disable the check outright. The obligation is therefore stated against the daemon's own passage of time rather than against its traffic. Assertion H covers what liveness checks cannot see — a client whose identity could not be established still leaves evidence when it writes — and it does so without reopening the loophole F closes, because reading changes nothing.
 
-Assertions G and I decide the case where termination and pending work collide, and they are the only place this requirement can destroy something. Unsaved in-memory changes exist in no file: a daemon that exits holding them loses work irrecoverably. Persisting them unattended is not the safer answer — writing a caller's source files with no session present converts a lifetime rule into an unrequested edit, and persistence is elsewhere deliberately an explicit, guarded act. Refusing to terminate is not the safer answer either, since it is the original defect restored. What remains is to bound the loss and disclose it, which is what G requires; the honest-count clause is there because a warning that understates the loss is REQ-p00019's silent-substitution failure wearing a warning's clothes.
+Assertions G, I, J and K decide the case where termination and pending work collide. Unsaved in-memory changes exist in no file, so the choice at that moment is between writing them somewhere and destroying them. The costs are not symmetric: the files a daemon would write are under revision control, so an unwanted write is inspected and reverted in one step, while work that is destroyed has to be redone from memory, and sometimes cannot be. Preservation is therefore the default, and the residual cost of preserving — that a file's current form arrived by a route its next reader did not see — is discharged by disclosure rather than by destruction.
 
-Assertion H is what makes that bound tolerable. A daemon outlives the session that started it precisely so a later session can adopt it, and the adopting writer's changes are indistinguishable, from inside the daemon, from the dead session's. Treating an applied change as proof of a live writer distinguishes them without reintroducing the polling loophole assertion F closes, because reading moves nothing.
+What I requires of that disclosure is facts, not a characterisation. The changes themselves were authored deliberately, one at a time, by whoever made them; the only thing that happened without anyone asking is the save. Nor does the absence of a client tell the daemon anything about the work: a client can vanish because it finished, because it crashed, because a network dropped, or because a machine slept, and these are indistinguishable from inside the daemon. Treating disconnection as evidence of intent would be exactly the substitution of a conclusion for an observation that REQ-p00019 prohibits. So the record states who saved, when, how much, and what triggered it, and stops there; a client that receives it has what it needs to decide, and is not told what to conclude. J bounds the disclosure so it does not become permanent noise: once a client has persisted the graph at its own request, the record describes a state that no longer stands, and a notice that never retires is one nobody reads. K covers the one case where preservation is impossible: a daemon that cannot write must not resolve the deadlock by destroying the work instead, since that converts an infrastructure failure into data loss.
+
+Assertion G's honest-count clause is there because a disclosure that understates what is at stake is REQ-p00019's silent-substitution failure wearing a warning's clothes.
 
 ### Changelog
 
-- 2026-08-07 | cc0fd11b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
-- 2026-08-07 | 26acf039 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
-- 2026-08-07 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: author daemon termination and pending-work disclosure invariants
-- 2026-08-07 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: author daemon session-identity invariants
+- 2026-08-08 | 81945155 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-07 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: author background daemon lifetime, client-liveness, and unattended-persistence invariants
 
-*End* *Background Daemon Lifetime* | **Hash**: cc0fd11b
+*End* *Background Daemon Lifetime* | **Hash**: 81945155
 ---

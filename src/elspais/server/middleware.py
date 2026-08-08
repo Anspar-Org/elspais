@@ -57,6 +57,7 @@ class TTLMiddleware(BaseHTTPMiddleware):
         self._ttl_seconds = ttl_minutes * 60
         self._timer: threading.Timer | None = None
         self._lock = threading.Lock()
+        self._shared = None
         self._start_timer()
 
     def _start_timer(self) -> None:
@@ -67,15 +68,24 @@ class TTLMiddleware(BaseHTTPMiddleware):
             self._timer.daemon = True
             self._timer.start()
 
-    @staticmethod
-    def _exit() -> None:
+    def _exit(self) -> None:
         print("\nTTL expired — shutting down.", file=sys.stderr)
+        # Implements: REQ-o00062-O
+        # Raise the refusal flag before the signal: between the signal
+        # and the end of the drain the stack keeps accepting requests,
+        # and a write accepted there is acknowledged and then lost.
+        if self._shared is not None:
+            self._shared.begin_shutdown()
         # sys.exit() only raises SystemExit in the calling thread — it does
         # NOT terminate the process when called from a non-main thread.
         # Use SIGTERM so uvicorn shuts down gracefully.
         os.kill(os.getpid(), signal.SIGTERM)
 
     async def dispatch(self, request: Request, call_next) -> Response:
+        if self._shared is None:
+            app_state = getattr(request.app.state, "app_state", None)
+            if app_state is not None:
+                self._shared = app_state.shared
         self._start_timer()
         return await call_next(request)
 

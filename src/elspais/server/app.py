@@ -22,6 +22,7 @@ from starlette.routing import Mount, Route
 
 from elspais.server.middleware import APIErrorMiddleware, AutoRefreshMiddleware, NoCacheMiddleware
 from elspais.server.routes_api import (
+    api_attach_client,
     api_check_freshness,
     api_code_coverage,
     api_comment_add,
@@ -160,6 +161,7 @@ def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
         Route("/api/spec-files", api_spec_files),
         Route("/api/dirty", api_dirty),
         Route("/api/check-freshness", api_check_freshness),
+        Route("/api/session/attach", api_attach_client, methods=["POST"]),
         # Terms endpoints
         Route("/api/terms", api_terms),
         Route("/api/term/{term_key:path}", api_term),

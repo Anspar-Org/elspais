@@ -81,7 +81,7 @@ from elspais.graph.serialize import (
 )
 from elspais.graph.terms import TermDictionary
 from elspais.mcp.search import ParsedQuery, matches_node, parse_query, score_node
-from elspais.mcp.shared_state import SharedServerState, rebuild_shared_graph
+from elspais.mcp.shared_state import SharedServerState, persist_pending, rebuild_shared_graph
 from elspais.utilities.patterns import build_resolver
 
 # Known schema fields (by alias and Python name) for filtering non-schema keys
@@ -804,13 +804,17 @@ def _search_terms_logic(td: TermDictionary, query: str) -> list[dict[str, Any]]:
     return results
 
 
-def _get_graph_status(graph: FederatedGraph) -> dict[str, Any]:
+def _get_graph_status(
+    graph: FederatedGraph, working_dir: Path | str | None = None
+) -> dict[str, Any]:
     """Get graph status.
 
     REQ-d00060-A: Returns is_stale from metadata.
     REQ-d00060-B: Returns node_counts by calling nodes_by_kind().
     REQ-d00060-D: Returns root_count using graph.root_count().
     REQ-d00060-E: Does NOT iterate full graph for counts.
+    REQ-o00074-I: Reports an outstanding automatic-save record, so the
+    quick status question also answers "how did these files get here".
     """
     # Count nodes by kind using the efficient nodes_by_kind iterator
     node_counts: dict[str, int] = {}
@@ -819,7 +823,7 @@ def _get_graph_status(graph: FederatedGraph) -> dict[str, Any]:
         if count > 0:
             node_counts[kind.value] = count
 
-    return {
+    status = {
         "root_count": graph.root_count(),
         "node_counts": node_counts,
         "total_nodes": graph.node_count(),
@@ -827,6 +831,10 @@ def _get_graph_status(graph: FederatedGraph) -> dict[str, Any]:
         "has_broken_references": graph.has_broken_references(),
         "terms_dirty": _has_dirty_terms(graph),
     }
+    record = _automatic_save_record(working_dir)
+    if record is not None:
+        status["automatic_save"] = record
+    return status
 
 
 def _has_dirty_terms(graph: FederatedGraph) -> bool:
@@ -1724,7 +1732,7 @@ def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dic
         "local_config": local_config_exists,
     }
 
-    return {
+    info: dict[str, Any] = {
         "repo_path": str(working_dir),
         "project_name": project_name,
         "elspais_version": _get_elspais_version(),
@@ -1733,6 +1741,29 @@ def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dic
         "available_details": dict(_WORKSPACE_DETAIL_PROFILES),
         "config_summary": config_summary,
     }
+    # Implements: REQ-o00074-I
+    # Carried on the base profile, not a detail level, so a client that
+    # asks the ordinary orientation question is told how the files it is
+    # about to read reached their current form.
+    record = _automatic_save_record(working_dir)
+    if record is not None:
+        info["automatic_save"] = record
+    return info
+
+
+# Implements: REQ-o00074-I
+def _automatic_save_record(working_dir: Path | str | None) -> dict[str, Any] | None:
+    """The outstanding record of a save the daemon performed, if any.
+
+    Facts only — who saved, when, how many changes, what triggered it.
+    Nothing here says whether the work is finished or wanted; the daemon
+    cannot know that and the reader decides.
+    """
+    if working_dir is None:
+        return None
+    from elspais.mcp.daemon import read_automatic_save
+
+    return read_automatic_save(Path(working_dir))
 
 
 # ── Shared profile helpers ──────────────────────────────────────────────────
@@ -2755,6 +2786,31 @@ def _guard_version(graph: Any, node_id: str, if_version: str) -> dict[str, Any] 
         "hint": (
             "State changed since you read it. Reconcile against current_state "
             "and retry with current_version."
+        ),
+    }
+
+
+# Implements: REQ-o00062-O, REQ-o00074-I
+def _guard_shutdown(state: Any) -> dict[str, Any] | None:
+    """Return a rejection dict if this process is stopping; otherwise None.
+
+    Between the decision to stop and the end of the drain, the HTTP stack
+    keeps accepting requests. A mutation accepted there is guarded,
+    applied, acknowledged to its writer — and then dies with the process,
+    which is the accepted-then-dropped write the version guards exist to
+    make impossible. Refusing it is the only outcome the writer can act
+    on, and it belongs in the same family of rejections callers already
+    handle: same shape, same 409 on the HTTP surface.
+    """
+    if state is None or not getattr(state, "is_shutting_down", False):
+        return None
+    return {
+        "success": False,
+        "code": "server_shutting_down",
+        "error": "The server is shutting down; this change was not applied.",
+        "hint": (
+            "Nothing was changed. Reconnect — a new server will be started on "
+            "demand — and re-apply against the state you read there."
         ),
     }
 
@@ -5680,11 +5736,19 @@ def create_server(
         before another writer's mutate lands is a lost update. Applied to
         every tool that writes to the graph, the mutation log, or disk;
         read tools stay lock-free.
+
+        The shutdown check is taken inside the same lock, because the
+        decision to stop is taken inside it too: outside, a write could
+        pass the check and land after the process had committed to
+        stopping (REQ-o00074-I).
         """
 
         @functools.wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             with _state.write_lock:
+                stopping = _guard_shutdown(_state)
+                if stopping is not None:
+                    return stopping
                 return fn(*args, **kwargs)
 
         return wrapper
@@ -5699,7 +5763,7 @@ def create_server(
 
         Use when: you need a fast overview of project health without running full checks.
         """
-        return _get_graph_status(_state["graph"])
+        return _get_graph_status(_state["graph"], _state.get("working_dir"))
 
     @mcp.tool()
     @_locked
@@ -7054,8 +7118,6 @@ def create_server(
                 (when changelog enforcement is enabled).
         """
         # Implements: REQ-d00132-A, REQ-d00132-B
-        from elspais.graph.render import render_save
-
         graph = _state["graph"]
         if graph is None:
             return {"success": False, "error": "graph not available"}
@@ -7066,54 +7128,7 @@ def create_server(
         if conflict:
             return conflict
 
-        # Check changelog enforcement for Active requirements
-        config = _state.get("config", {})
-        typed_config = _validate_config(config) if isinstance(config, dict) else config
-        changelog_enforce = typed_config.changelog.hash_current
-
-        if changelog_enforce:
-            active_mutated = _get_active_mutated_reqs(graph)
-            if active_mutated and not message:
-                ids = ", ".join(sorted(active_mutated))
-                return {
-                    "success": False,
-                    "error": (
-                        f"Active requirement(s) modified: {ids}. "
-                        "Provide a 'message' parameter with the "
-                        "changelog reason."
-                    ),
-                }
-
-        if save_branch:
-            from elspais.utilities.git import create_safety_branch
-
-            create_safety_branch(_state["working_dir"], "save-mutations")
-
-        from elspais.utilities.patterns import build_resolver as _build_resolver_for_save
-
-        result = render_save(
-            graph,
-            _state["working_dir"],
-            resolver=_build_resolver_for_save(config),
-            write_associates=(
-                config.get("federation", {}).get("write_associates", False)
-                if isinstance(config, dict)
-                else False
-            ),
-        )
-
-        # Add changelog entries for Active requirements after save. Failure
-        # to resolve the author MUST propagate — a successful render with a
-        # missing changelog row breaks attribution.
-        if result.get("success") and changelog_enforce and message:
-            cl_result = _add_changelog_for_active_mutations(
-                graph, _state["working_dir"], config, message
-            )
-            if not cl_result.get("success", True):
-                return {
-                    "success": False,
-                    "error": cl_result.get("error", "Changelog author resolution failed"),
-                }
+        result = persist_pending(_state, message=message, save_branch=save_branch)
 
         # REQ-o00063-F: Refresh graph after file mutations
         if result.get("success"):
@@ -7411,7 +7426,11 @@ def run_server(
             )
 
         if spawner_pid is not None:
-            from elspais.server.spawner_watch import SpawnerWatchdog, pending_snapshot
+            from elspais.server.spawner_watch import (
+                DEFAULT_GRACE_SECONDS,
+                SpawnerWatchdog,
+                pending_snapshot,
+            )
 
             # Implements: REQ-o00074-G, REQ-o00074-H
             # Dereference the holder on every check: the live graph is
@@ -7420,15 +7439,46 @@ def run_server(
             def _pending() -> tuple[int, str | None]:
                 return pending_snapshot(state.graph)
 
+            # Implements: REQ-o00074-I
+            def _automatic_save() -> dict[str, Any]:
+                return persist_pending(
+                    state.shared,
+                    automatic=True,
+                    trigger="no recorded client was running",
+                )
+
             interval = float(_os.environ.get("_ELSPAIS_SPAWNER_CHECK_INTERVAL", "60"))
-            grace = float(_os.environ.get("_ELSPAIS_SPAWNER_GRACE", "300"))
-            SpawnerWatchdog(
+            grace = float(
+                _os.environ.get("_ELSPAIS_SPAWNER_GRACE", str(int(DEFAULT_GRACE_SECONDS)))
+            )
+            watchdog = SpawnerWatchdog(
                 spawner_pid=spawner_pid,
                 pending_fn=_pending,
                 interval_seconds=interval,
                 grace_seconds=grace,
                 lock=state.shared.write_lock,
-            ).start()
+                save_fn=_automatic_save,
+                shutdown_fn=state.shared.begin_shutdown,
+            )
+            # Published so the adoption route can register the clients that
+            # pick this daemon up after its first one is gone.
+            state.shared["watchdog"] = watchdog
+            watchdog.start()
 
         uvi_config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
-        anyio.run(uvicorn.Server(uvi_config).serve)
+
+        # Implements: REQ-o00062-O
+        class _ShutdownAwareServer(uvicorn.Server):
+            """Raise the shutdown flag the moment a stop signal arrives.
+
+            Between the signal and the end of the drain, uvicorn keeps
+            serving requests. A mutation accepted in that window is
+            acknowledged to its writer and then dropped with the process;
+            refusing it instead is the only outcome the writer can act on.
+            """
+
+            def handle_exit(self, sig: int, frame: Any) -> None:
+                state.shared.begin_shutdown()
+                super().handle_exit(sig, frame)
+
+        anyio.run(_ShutdownAwareServer(uvi_config).serve)

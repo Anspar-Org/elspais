@@ -58,7 +58,7 @@
 | REQ-o00071 | MCP Discover Requirements Tool      | ops-mcp.md          | 128366d2 |
 | REQ-o00072 | Domain Deserialization Layer        | ops-architecture.md | 53789928 |
 | REQ-o00073 | MCP Org-Wide Context                | ops-mcp.md          | 346f3031 |
-| REQ-o00074 | Background Daemon Lifetime          | ops-mcp.md          | cc0fd11b |
+| REQ-o00074 | Background Daemon Lifetime          | ops-mcp.md          | 81945155 |
 
 ## DEVELOPMENT
 

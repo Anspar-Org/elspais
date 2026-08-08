@@ -504,11 +504,21 @@ lifetimes.
 
 **Started for a session (implicit).** Any CLI command that needs a graph
 and finds no daemon running starts one on behalf of the session it is
-running in. That daemon exists to serve that session, so it records the
-session's process ID as `spawner_pid` in `.elspais/daemon.json` and shuts
-itself down once that process is gone. This is independent of the idle
+running in. That daemon records the session's process ID as
+`spawner_pid` in `.elspais/daemon.json`, and shuts itself down once no
+client of its is running any more. This is independent of the idle
 timeout: a `cli_ttl` of `-1` disables the timeout but not this, so a
-daemon cannot outlive the session that asked for it.
+daemon cannot outlive every client that ever used it.
+
+**Clients accumulate.** A daemon is shared — it serves several clients at
+once, and it deliberately outlives the session that started it so a later
+one can pick it up. Any command that reuses a running daemon registers
+itself as one of its clients, and the set is published as `client_pids`
+in `.elspais/daemon.json`. The daemon keeps serving while any of them is
+running, so a session that adopted a daemon does not lose it when the
+session that originally started it exits. A client whose identity cannot
+be resolved (the table below) cannot register, and therefore does not
+extend the daemon's life.
 
 The identity is recorded at the moment of the start and never inferred
 afterwards — the daemon is detached from its parent as it starts, so
@@ -538,42 +548,61 @@ lifetime is governed solely by `cli_ttl`, and `daemon.json` carries no
 `spawner_pid` key.
 
 **Termination.** The check runs on the daemon's own clock, about once a
-minute, so a session-bound daemon with nothing pending shuts down at the
-first check after its session is gone rather than the instant it dies.
-Client requests do not enter into it: they reset the idle timeout, not
-this check.
+minute, so a client-bound daemon with nothing pending shuts down at the
+first check after its last client is gone rather than the instant it
+dies. Client requests do not enter into it: they reset the idle timeout,
+not this check.
 
-**Unsaved work.** In-memory mutations are never written on anyone's
-behalf. If a session-bound daemon still holds pending mutations when its
-session dies, it writes a warning to `.elspais/daemon.log` naming how
-many mutations are pending — the real number, taken from the whole
-mutation log — and the deadline after which they go. It then waits a
-bounded grace period (5 minutes), exits **without** saving them, and the
-mutations are **discarded**. They exist in no file and are not
-recoverable afterwards. Saving is deliberately something a caller asks
-for: a watchdog that wrote your spec files with no session attached
-would turn a lifetime rule into an unrequested edit to tracked source,
-at the moment nobody is watching.
+**Unsaved work is saved, not dropped.** If a client-bound daemon still
+holds pending mutations when its last client is gone, it writes to
+`.elspais/daemon.log` naming how many mutations are pending — the real
+number, taken from the whole mutation log — and the deadline. It then
+waits a bounded grace period (30 minutes) and, if nothing has changed by
+then, **saves the pending mutations to disk** and stops.
 
-    session gone, nothing pending    -> shut down at next check
-    session gone, work pending       -> warn to daemon.log, hold for 5 min
-      a mutation arrives in that window -> keep serving, restart the 5 min
-      nothing arrives                   -> exit, work DISCARDED
+Nothing is discarded. Spec files are under revision control, where an
+unwanted write costs one `git diff` and one `git checkout` to undo, while
+work that is destroyed has to be redone from memory and sometimes cannot
+be. If the save itself fails, the daemon keeps the mutations, reports the
+failure, and retries rather than dropping them.
 
-**Adoption restarts the clock.** A daemon outlives its session precisely
-so a later session can attach to it, and from inside the daemon that
-writer's mutations look no different from the dead session's. So a
-mutation applied after the session was seen gone counts as proof that a
-writer is present: the daemon keeps serving and the grace period starts
-again from that mutation. Only applied changes count. Reading — search,
+    last client gone, nothing pending -> shut down at next check
+    last client gone, work pending    -> log the count, hold for 30 min
+      a mutation arrives in that window -> keep serving, restart the 30 min
+      a client attaches in that window  -> keep serving
+      nothing happens                   -> SAVE to disk, record it, stop
+
+**How you find out.** A save the daemon performed is recorded in
+`.elspais/automatic-save.json` and reported to the next client in the
+ordinary metadata it already reads: `get_workspace_info`,
+`get_graph_status`, `/api/dirty` and `/api/check-freshness` all carry an
+`automatic_save` block while one is outstanding. It states who saved
+(the daemon), when, how many mutations it covered, and what triggered it.
+It says nothing about whether that work is finished or wanted — a client
+can disappear because it finished, because it crashed, or because a
+connection dropped, and the daemon cannot tell those apart. You decide;
+it reports.
+
+The record is retired the moment any client saves at its own request
+(`save_mutations` over MCP, Save in the viewer, or
+`elspais daemon restart --persist`). A later automatic save replaces it.
+Committing or reverting the files does not clear it — the daemon is not
+watching your working tree — so save deliberately, or delete the file, if
+you want the notice gone.
+
+**Applied changes restart the clock.** A mutation applied after the last
+client was seen gone counts as proof that a writer is present even when
+that writer could not register: the daemon keeps serving and the grace
+period starts again. Only applied changes count. Reading — search,
 queries, the viewer's polling — moves nothing and never postpones
-termination, so a client that merely polls cannot hold an orphaned
-daemon open.
+termination, so a client that merely polls cannot hold an orphaned daemon
+open.
 
-**What to do about it.** If you have pending in-memory mutations and your
-session may be about to end, save them; do not rely on the daemon to hold
-them. Save with `save_mutations` over MCP, Save in the viewer, or
-`elspais daemon restart --persist`.
+**Writes during shutdown are refused.** Once the daemon has decided to
+stop, mutations are rejected with `server_shutting_down` (HTTP 409 with
+the same body on the viewer's routes) rather than accepted into a
+shutdown that would drop them. A refusal you can see beats an
+acknowledgement that turns out to be a lie.
 
 ## install / uninstall
 

@@ -107,9 +107,18 @@ def _try_daemon(
         # since the daemon captured its config hash. Warn-and-serve if the
         # daemon holds unsaved work; restart if clean.
         from elspais import __version__
-        from elspais.mcp.daemon import _config_hash_stale, get_daemon_info
+        from elspais.mcp.daemon import (
+            _config_hash_stale,
+            ensure_client_registered,
+            get_daemon_info,
+        )
 
         info = get_daemon_info(repo_root)
+        # Implements: REQ-o00074-E
+        # This is the path a session that never starts a daemon takes on
+        # every command, so it is where such a session has to announce
+        # itself; otherwise the daemon watches only whoever started it.
+        ensure_client_registered(info)
         daemon_version = info.get("version") if info else None
         version_mismatch = bool(daemon_version and daemon_version != __version__)
         config_stale = info is not None and _config_hash_stale(info, repo_root)

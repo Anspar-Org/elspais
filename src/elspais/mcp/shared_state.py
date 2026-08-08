@@ -60,6 +60,118 @@ class SharedServerState(dict):
         # process that did not rebuild the daemon's graph would suppress a
         # restart that is genuinely needed.
         self.post_rebuild_hooks: list[Callable[[], None]] = []
+        # Raised the instant this process decides to stop, before the
+        # signal that starts the drain. Every write critical section
+        # checks it under the same lock, so a write arriving after the
+        # decision is refused rather than accepted and then lost with
+        # the process (REQ-o00074-I, REQ-o00062-O).
+        self._shutting_down = threading.Event()
+
+    def begin_shutdown(self) -> None:
+        """Mark this process as shutting down. Irreversible by design."""
+        self._shutting_down.set()
+
+    @property
+    def is_shutting_down(self) -> bool:
+        return self._shutting_down.is_set()
+
+
+# Implements: REQ-d00132-A, REQ-d00132-B, REQ-o00074-I, REQ-o00074-J, REQ-o00074-K
+def persist_pending(
+    state: SharedServerState,
+    message: str | None = None,
+    save_branch: bool = False,
+    automatic: bool = False,
+    trigger: str = "",
+) -> dict[str, Any]:
+    """Write pending in-memory mutations to the spec files. Never raises.
+
+    Callers reach this either because a client asked for a save or
+    because the daemon is stopping with no client left to ask. The two
+    differ in exactly two places: a save the daemon performs itself
+    supplies its own changelog reason (there is no client to prompt),
+    and it leaves a record of who saved, when, how much and why, so a
+    later client can see how the files reached their current form. A
+    client-requested save retires that record instead.
+
+    Failure is reported, never raised: the caller with pending work in
+    hand has to be able to keep it rather than lose it to an exception.
+    """
+    from elspais.graph.render import render_save
+    from elspais.mcp.daemon import clear_automatic_save, record_automatic_save
+    from elspais.mcp.server import (
+        _add_changelog_for_active_mutations,
+        _get_active_mutated_reqs,
+        _validate_config,
+    )
+    from elspais.utilities.patterns import build_resolver
+
+    graph = state.get("graph")
+    if graph is None:
+        return {"success": False, "error": "graph not available"}
+    working_dir = state["working_dir"]
+    config = state.get("config", {})
+
+    pending = len(graph.mutation_log.tail(0))
+
+    typed_config = _validate_config(config) if isinstance(config, dict) else config
+    changelog_enforce = typed_config.changelog.hash_current
+    if changelog_enforce and not message:
+        active_mutated = _get_active_mutated_reqs(graph)
+        if active_mutated:
+            if not automatic:
+                ids = ", ".join(sorted(active_mutated))
+                return {
+                    "success": False,
+                    "error": (
+                        f"Active requirement(s) modified: {ids}. "
+                        "Provide a 'message' parameter with the changelog reason."
+                    ),
+                }
+            # A save the daemon performs has no client to prompt, and
+            # leaving an Active requirement changed on disk with no
+            # changelog row would leave the tree failing its own checks.
+            message = f"Saved automatically by the daemon ({trigger or 'no client present'})"
+
+    if save_branch:
+        from elspais.utilities.git import create_safety_branch
+
+        create_safety_branch(working_dir, "save-mutations")
+
+    try:
+        result = render_save(
+            graph,
+            working_dir,
+            resolver=build_resolver(config),
+            write_associates=(
+                config.get("federation", {}).get("write_associates", False)
+                if isinstance(config, dict)
+                else False
+            ),
+        )
+    except Exception as exc:
+        return {"success": False, "error": f"save failed: {exc!r}"}
+
+    if result.get("success") and changelog_enforce and message:
+        cl_result = _add_changelog_for_active_mutations(graph, working_dir, config, message)
+        if not cl_result.get("success", True):
+            return {
+                "success": False,
+                "error": cl_result.get("error", "Changelog author resolution failed"),
+            }
+
+    if result.get("success"):
+        files = result.get("saved_count") or 0
+        if automatic:
+            record_automatic_save(
+                working_dir,
+                pending,
+                files if isinstance(files, int) else 0,
+                trigger=trigger,
+            )
+        else:
+            clear_automatic_save(working_dir)
+    return result
 
 
 # Implements: REQ-p00004-J, REQ-p00004-O, REQ-p00015-F, REQ-d00205-B

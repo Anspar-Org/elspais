@@ -155,17 +155,30 @@ file timestamps sees nothing -- yet the graph every surface reads has
 already changed.
 
 That also means pending work lives only in the daemon process, and the
-daemon has a lifetime of its own. One that a CLI command auto-started on
-behalf of a session shuts down once that session is gone; if it is
-holding pending mutations it warns to `.elspais/daemon.log`, waits a
-bounded grace period (5 minutes), and then exits and **discards** them.
-They are in no file and are not recoverable. An applied mutation during
-that window is read as a writer that has adopted the daemon and restarts
-the grace period, but reads never do — so an agent that mutates, goes
-quiet, and lets its session end loses the work. Call
-`save_mutations(if_tip_mutation_id=<tip>)` before your session ends
-rather than leaving pending work in the daemon. See
-`docs("commands")` for the full lifetime rules.
+daemon has a lifetime of its own. One that a CLI command auto-started
+keeps serving while any of its clients is running, and shuts down once
+none of them is. If it is holding pending mutations when that happens it
+logs the count to `.elspais/daemon.log`, waits a bounded grace period
+(30 minutes), and then **saves** them to disk and stops — nothing is
+discarded. An applied mutation during that window restarts the grace
+period; reads never do.
+
+A save the daemon performed is recorded, and the record reaches you in
+the metadata you already read: `get_workspace_info` and
+`get_graph_status` carry an `automatic_save` block while one is
+outstanding, as do `/api/dirty` and `/api/check-freshness`. It states who
+saved, when, how many mutations, and what triggered it — and nothing
+else. It is not a verdict on the work: a client can vanish because it
+finished, crashed, or lost its connection, and nothing in the daemon can
+distinguish those. Read the diff and decide. Saving deliberately
+(`save_mutations(if_tip_mutation_id=<tip>)`) retires the record, and is
+still the right habit before your session ends. See `docs("commands")`
+for the full lifetime rules.
+
+Once a daemon has decided to stop, further mutations are refused with
+`server_shutting_down` (HTTP 409, same body, on the viewer's routes)
+rather than accepted into a shutdown that would drop them. Treat it like
+any other rejection: nothing was applied, so reconnect and re-apply.
 
 `/api/check-freshness` therefore reports two independent signals:
 

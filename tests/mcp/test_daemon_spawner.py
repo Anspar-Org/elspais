@@ -1,22 +1,30 @@
-# Verifies: REQ-o00074-A+B+C+D+E+G+H+I
+# Verifies: REQ-o00074-A+B+C+D+E+G+H+I+J+K
 """Daemon lifetime tests, verifying REQ-o00074 (Background Daemon Lifetime).
 
-A daemon started on behalf of a session is bound to that session at the
+A daemon started on behalf of a client is bound to that client at the
 moment it starts: the identity is resolved from evidence available then
 (D), handed to the spawned process (A), recorded in the state record
 clients read to find the daemon (B), and withheld entirely when the start
-was explicit rather than session-driven (C).
+was explicit rather than client-driven (C).
 
-Once the recorded session is gone the daemon terminates (E), discloses
-any pending unsaved work honestly before doing so (G), treats a newly
-applied change as proof that a writer adopted it and restarts the
-interval (H), and never writes those pending changes to disk on its own
-initiative (I).
+The daemon is shared, so its lifetime follows its *clients* rather than
+the one process that happened to start it: a client adopting a running
+daemon joins the recorded set, the daemon keeps serving while any of them
+exists, and terminates once none does (E). Before terminating it
+discloses how much unsaved work it holds and when it will act (G), treats
+a newly applied change as proof that a writer is still present and
+restarts the interval (H), persists that work rather than discarding it
+and records the facts of the save for the next client (I), retires that
+record when a client saves at its own request (J), and keeps the work
+rather than dropping it when the save itself fails (K).
 
-Unit-level only: process liveness is faked (``alive_fn``) so the
-decision matrix and watchdog transitions are exercised deterministically.
-A subprocess-based e2e companion, including the idle-timeout independence
-of assertion F, lives in tests/e2e/test_e2e_special.py.
+Unit-level only: process liveness is faked (``alive_fn``) and the clock
+is a counter, so the decision matrix and the watchdog transitions are
+exercised deterministically with no sleeping. Assertion F -- that the
+obligation holds under every idle-timeout configuration and is not
+discharged by client request traffic -- is a property of the running
+process's timeout wiring and is covered by the subprocess-based
+companions in tests/e2e/test_e2e_special.py.
 """
 
 from __future__ import annotations
@@ -31,12 +39,20 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from elspais.server.spawner_watch import (
+    DEFAULT_GRACE_SECONDS,
     Decision,
     SpawnerWatchdog,
     pending_snapshot,
     pid_alive,
     shutdown_decision,
 )
+
+# Words that would characterise the work rather than report the facts of
+# the save. REQ-o00074-I's disclosure states who saved, when, how much,
+# and what triggered it, and stops there: a client can vanish because it
+# finished, crashed, or lost its connection, and the daemon cannot tell
+# those apart, so it must not hand the reader a conclusion.
+JUDGEMENT_WORDS = ("abandoned", "orphaned", "provisional", "unconfirmed")
 
 # ---------------------------------------------------------------------------
 # Shared scaffolding
@@ -54,6 +70,11 @@ class _Clock:
 class _ScriptedChecks:
     """Scripted liveness results and pending snapshots, one entry per check.
 
+    Usable only for a watchdog with exactly ONE recorded client: the check
+    calls ``alive_fn`` once per recorded pid, and this scaffolding uses
+    that single call as the boundary between one logical check and the
+    next. Multi-client tests drive liveness from a pid->bool map instead.
+
     One check reads the pending state more than once: outside the writers'
     lock for the activity comparison, and again inside the lock immediately
     before deciding. A scripted entry is therefore either a single
@@ -69,8 +90,6 @@ class _ScriptedChecks:
         self._reads: list = []
 
     def alive(self, pid: int) -> bool:
-        # alive_fn is called exactly once at the top of check_once, so it
-        # marks the boundary between one logical check and the next.
         entry = next(self._checks, None)
         if entry is None:
             self._reads = []
@@ -88,10 +107,20 @@ class _ScriptedChecks:
         return self._reads[0]
 
 
-def _watchdog(alive_results, pending_snapshots, clock, grace=300.0, lock=None):
-    """Build a watchdog driven by a scripted check sequence.
+def _watchdog(
+    alive_results,
+    pending_snapshots,
+    clock,
+    grace=300.0,
+    lock=None,
+    save_fn=None,
+    shutdown_fn=None,
+):
+    """Build a single-client watchdog driven by a scripted check sequence.
 
-    See ``_ScriptedChecks`` for the shape of ``pending_snapshots``.
+    See ``_ScriptedChecks`` for the shape of ``pending_snapshots``. The
+    default ``save_fn`` succeeds, so an expired grace reaches EXIT_SAVE;
+    tests for the failure branch pass their own.
     """
     script = _ScriptedChecks(alive_results, pending_snapshots)
     exits: list[str] = []
@@ -105,50 +134,74 @@ def _watchdog(alive_results, pending_snapshots, clock, grace=300.0, lock=None):
         exit_fn=lambda: exits.append("exit"),
         clock=clock,
         lock=lock,
+        save_fn=save_fn if save_fn is not None else (lambda: {"success": True, "saved_count": 1}),
+        shutdown_fn=shutdown_fn,
+    )
+    return wd, exits
+
+
+def _map_watchdog(alive_map, clock, *, pending=(0, 5), grace=300.0, save_fn=None):
+    """Watchdog whose liveness comes from a mutable ``{pid: bool}`` map.
+
+    The scripted scaffolding above assumes one ``alive_fn`` call per check;
+    a watchdog with several recorded clients calls it once per client, and
+    ``attach_client`` calls it again at attach time. A map answers any
+    number of calls consistently.
+    """
+    exits: list[str] = []
+    wd = SpawnerWatchdog(
+        spawner_pid=4321,
+        pending_fn=lambda: pending,
+        interval_seconds=0.01,
+        grace_seconds=grace,
+        alive_fn=lambda pid: alive_map.get(pid, False),
+        exit_fn=lambda: exits.append("exit"),
+        clock=clock,
+        save_fn=save_fn if save_fn is not None else (lambda: {"success": True, "saved_count": 1}),
     )
     return wd, exits
 
 
 # ---------------------------------------------------------------------------
-# Termination while the recorded session is absent
+# Lifetime follows the client set, not the process that started the daemon
 # ---------------------------------------------------------------------------
 
 
-class TestAbsentSessionTerminatesDaemon:
-    """Validates REQ-o00074-E: while the session a daemon recorded is no longer
-    present, the daemon terminates rather than keep serving indefinitely -- and,
-    symmetrically, keeps serving while that session is still present.
+class TestAbsentClientsTerminateDaemon:
+    """Validates REQ-o00074-E: while any recorded client still exists the daemon
+    keeps serving, and while none of them exists it terminates rather than keep
+    serving indefinitely.
     """
 
     @pytest.mark.parametrize(
-        ("spawner_pid", "alive", "count", "grace_expired", "expected"),
+        ("has_clients", "any_alive", "count", "grace_expired", "expected"),
         [
-            # No spawner identity (manual/explicit start): always keep,
-            # regardless of everything else — TTL-only behavior preserved.
-            (None, False, 0, True, Decision.KEEP),
-            (None, False, 5, True, Decision.KEEP),
-            (None, True, 0, False, Decision.KEEP),
-            # Spawner alive: keep, dirty or clean.
-            (1234, True, 0, False, Decision.KEEP),
-            (1234, True, 7, True, Decision.KEEP),
-            # Spawner dead + clean: exit immediately.
-            (1234, False, 0, False, Decision.EXIT_CLEAN),
-            (1234, False, 0, True, Decision.EXIT_CLEAN),
-            # Spawner dead + dirty: bounded grace, then discard-exit.
-            (1234, False, 3, False, Decision.WAIT_GRACE),
-            (1234, False, 3, True, Decision.EXIT_DISCARD),
+            # No client identity recorded (explicit start): always keep,
+            # regardless of everything else -- TTL-only behavior preserved.
+            (False, False, 0, True, Decision.KEEP),
+            (False, False, 5, True, Decision.KEEP),
+            (False, True, 0, False, Decision.KEEP),
+            # A client is alive: keep, dirty or clean.
+            (True, True, 0, False, Decision.KEEP),
+            (True, True, 7, True, Decision.KEEP),
+            # No client alive + clean: exit immediately.
+            (True, False, 0, False, Decision.EXIT_CLEAN),
+            (True, False, 0, True, Decision.EXIT_CLEAN),
+            # No client alive + dirty: bounded grace, then save-and-exit.
+            (True, False, 3, False, Decision.WAIT_GRACE),
+            (True, False, 3, True, Decision.EXIT_SAVE),
             # Unknown mutation count is treated as dirty (conservative).
-            (1234, False, None, False, Decision.WAIT_GRACE),
-            (1234, False, None, True, Decision.EXIT_DISCARD),
+            (True, False, None, False, Decision.WAIT_GRACE),
+            (True, False, None, True, Decision.EXIT_SAVE),
         ],
     )
     def test_REQ_o00074_E_shutdown_decision_matrix(
-        self, spawner_pid, alive, count, grace_expired, expected
+        self, has_clients, any_alive, count, grace_expired, expected
     ):
         assert (
             shutdown_decision(
-                spawner_pid=spawner_pid,
-                spawner_alive=alive,
+                has_clients=has_clients,
+                any_client_alive=any_alive,
                 mutation_count=count,
                 grace_expired=grace_expired,
             )
@@ -167,22 +220,22 @@ class TestAbsentSessionTerminatesDaemon:
         assert pid_alive(0) is False
         assert pid_alive(-1) is False
 
-    def test_REQ_o00074_E_live_session_keeps_daemon(self):
-        """The negative case: a present session is never terminated."""
+    def test_REQ_o00074_E_live_client_keeps_daemon(self):
+        """The negative case: a present client is never terminated."""
         clock = _Clock()
         wd, exits = _watchdog([True], iter(()), clock)
         assert wd.check_once() is Decision.KEEP
         assert exits == []
 
-    def test_REQ_o00074_E_absent_session_with_no_pending_work_exits(self, capsys):
+    def test_REQ_o00074_E_absent_client_with_no_pending_work_exits(self, capsys):
         clock = _Clock()
         wd, exits = _watchdog([False], [(0, None)], clock)
         assert wd.check_once() is Decision.EXIT_CLEAN
         assert exits == ["exit"]
         assert "shutting down" in capsys.readouterr().err
 
-    def test_REQ_o00074_E_session_seen_present_again_resets_grace(self):
-        """A session seen alive again resets the dirty-grace clock."""
+    def test_REQ_o00074_E_client_seen_present_again_resets_grace(self):
+        """A client seen alive again resets the dirty-grace clock."""
         clock = _Clock()
         wd, exits = _watchdog(
             [False, True, False, False],
@@ -199,11 +252,110 @@ class TestAbsentSessionTerminatesDaemon:
         assert exits == []
 
 
+class TestAdoptingClientsJoinTheRecordedSet:
+    """Validates REQ-o00074-E: a client that begins using an already-running
+    daemon is recorded alongside its existing clients, so the daemon does not
+    stop underneath the client actually using it -- and, crucially, the daemon
+    still terminates once every recorded client, adopted ones included, is gone.
+    """
+
+    def test_REQ_o00074_E_attach_records_a_live_client(self):
+        clock = _Clock()
+        wd, _ = _map_watchdog({4321: True, 999: True}, clock)
+
+        assert wd.attach_client(999) is True
+        assert wd.clients() == [999, 4321]
+
+    @pytest.mark.parametrize("pid", [0, 1, -3])
+    def test_REQ_o00074_E_attach_refuses_pids_that_name_no_client(self, pid):
+        """0 and negatives are not process identities; 1 is init, whose death
+        never comes, so watching it is a daemon that never terminates."""
+        clock = _Clock()
+        wd, _ = _map_watchdog({4321: True}, clock)
+
+        assert wd.attach_client(pid) is False
+        assert wd.clients() == [4321]
+
+    def test_REQ_o00074_E_attach_refuses_a_dead_client(self):
+        clock = _Clock()
+        alive = {4321: True, 777: False}
+        wd, _ = _map_watchdog(alive, clock)
+
+        assert wd.attach_client(777) is False
+        assert wd.clients() == [4321]
+
+    def test_REQ_o00074_E_live_adopted_client_keeps_a_daemon_whose_spawner_died(self):
+        """The daemon outlives the client that started it, by design."""
+        clock = _Clock()
+        alive = {4321: True, 999: True}
+        wd, exits = _map_watchdog(alive, clock, pending=(2, "m1"), grace=300.0)
+
+        assert wd.attach_client(999) is True
+        alive[4321] = False  # the original spawner is gone
+
+        # Well past every grace deadline, the daemon keeps serving.
+        for offset in (0, 500, 1000, 2000, 5000):
+            clock.now = 1000.0 + offset
+            assert (
+                wd.check_once() is Decision.KEEP
+            ), f"daemon stopped underneath a live client at t+{offset}"
+        assert exits == []
+        assert wd.clients() == [999], "dead spawner was not pruned from the client set"
+
+    def test_REQ_o00074_E_daemon_with_dead_spawner_and_dead_adopted_clients_terminates(
+        self, capsys
+    ):
+        """The negative case the positive one above cannot prove.
+
+        A daemon that has been adopted must still die once the adopters die.
+        The client set is reached through the pruning path -- a real attach
+        followed by that client's death -- rather than starting empty, so a
+        watchdog that recorded adopters but never re-checked them would fail
+        here.
+        """
+        clock = _Clock()
+        alive = {4321: True, 999: True}
+        wd, exits = _map_watchdog(alive, clock, pending=(0, "m1"))
+
+        assert wd.attach_client(999) is True
+        assert wd.clients() == [999, 4321]
+
+        # The spawner exits first; the adopter keeps the daemon serving.
+        alive[4321] = False
+        assert wd.check_once() is Decision.KEEP
+        assert wd.clients() == [999]
+        assert exits == []
+
+        # Now the adopter goes too. Nobody is left using the daemon.
+        alive[999] = False
+        clock.now += 100
+        assert (
+            wd.check_once() is Decision.EXIT_CLEAN
+        ), "daemon kept serving with every recorded client gone"
+        assert exits == ["exit"]
+        assert "shutting down" in capsys.readouterr().err
+
+    def test_REQ_o00074_E_dead_clients_are_pruned_while_a_live_one_remains(self):
+        """The published set stays an honest answer to 'who is using this'."""
+        clock = _Clock()
+        alive = {4321: True, 111: True, 222: True}
+        wd, _ = _map_watchdog(alive, clock)
+
+        assert wd.attach_client(111) is True
+        assert wd.attach_client(222) is True
+        assert wd.clients() == [111, 222, 4321]
+
+        alive[111] = False
+        alive[4321] = False
+        assert wd.check_once() is Decision.KEEP
+        assert wd.clients() == [222]
+
+
 class TestWatchdogSurvivesAFailedCheck:
     """Validates REQ-o00074-E: the obligation to terminate survives a check that
     fails. A check raising (a rebuild mid-flight, a transient OS error) must
     cost one interval, not the guard: a dead watchdog thread is silent, and the
-    daemon it stopped watching outlives its session forever.
+    daemon it stopped watching outlives its clients forever.
     """
 
     def test_REQ_o00074_E_failed_check_costs_one_interval_not_the_watchdog(self, request):
@@ -242,7 +394,7 @@ class TestWatchdogSurvivesAFailedCheck:
 
         # And a later check still reaches -- and acts on -- a decision.
         state["alive"] = False
-        _wait_for(lambda: exits == ["exit"], "the watchdog to terminate once the session is gone")
+        _wait_for(lambda: exits == ["exit"], "the watchdog to terminate once its clients are gone")
 
 
 # ---------------------------------------------------------------------------
@@ -253,10 +405,10 @@ class TestWatchdogSurvivesAFailedCheck:
 class TestPendingWorkIsDisclosed:
     """Validates REQ-o00074-G: a daemon holding unsaved in-memory changes does
     not terminate before disclosing how many changes are pending and the
-    deadline after which they are lost.
+    deadline at which it will persist them and stop.
     """
 
-    def test_REQ_o00074_G_dirty_daemon_waits_then_discards(self, capsys):
+    def test_REQ_o00074_G_dirty_daemon_waits_then_saves(self, capsys):
         clock = _Clock()
         wd, exits = _watchdog(
             [False, False, False],
@@ -265,27 +417,26 @@ class TestPendingWorkIsDisclosed:
             grace=300.0,
         )
 
-        # First check after death: warn, extend, do not exit.
+        # First check with no client: disclose, extend, do not exit.
         assert wd.check_once() is Decision.WAIT_GRACE
         assert exits == []
         err = capsys.readouterr().err
-        assert "WARNING" in err
-        assert "2" in err
-        assert "DISCARDED" in err  # loss risk visible in the log
+        assert "2" in err, f"pending count not disclosed: {err!r}"
+        assert "300" in err, f"deadline not disclosed: {err!r}"
 
-        # Still inside grace: waits again, but warns only once.
+        # Still inside grace: waits again, but discloses only once.
         clock.now += 100
         assert wd.check_once() is Decision.WAIT_GRACE
         assert exits == []
-        assert "WARNING" not in capsys.readouterr().err
+        assert capsys.readouterr().err == ""
 
-        # Grace expired: exit without saving, loudly.
+        # Grace expired: save, then exit.
         clock.now += 300
-        assert wd.check_once() is Decision.EXIT_DISCARD
+        assert wd.check_once() is Decision.EXIT_SAVE
         assert exits == ["exit"]
         err = capsys.readouterr().err
-        assert "WARNING" in err
-        assert "discarded" in err
+        assert "Saved" in err
+        assert "2" in err
 
     def test_REQ_o00074_G_unknown_pending_count_treated_as_dirty(self):
         clock = _Clock()
@@ -316,15 +467,28 @@ class TestPendingWorkIsDisclosed:
         assert "7" in err, f"pending count not disclosed: {err!r}"
         assert "180" in err, f"deadline not disclosed: {err!r}"
 
+    def test_REQ_o00074_G_default_grace_is_sized_for_a_thinking_client(self):
+        """The deadline a daemon discloses is its own default, and that default
+        has to outlast the quiet stretches a reasoning client routinely takes
+        between mutations. A shell-prompt-sized grace would make the disclosed
+        deadline a promise to save work the writer had not finished."""
+        wd = SpawnerWatchdog(spawner_pid=4321, pending_fn=lambda: (0, None))
+
+        assert wd._grace == DEFAULT_GRACE_SECONDS
+        assert DEFAULT_GRACE_SECONDS >= 1800.0, (
+            "the grace period is shorter than the quiet stretch a reasoning "
+            "client routinely takes between mutations"
+        )
+
 
 class TestTerminationDecidesUnderTheWritersLock:
     """Validates REQ-o00074-G: the count a termination acts on is the count at
     the moment of terminating, read while writers are excluded -- so a change
     accepted (and acknowledged to its writer) after the first read cannot be
-    destroyed by a decision taken from the stale read.
+    acted on from the stale read.
     """
 
-    def test_REQ_o00074_G_write_landing_after_the_clean_read_is_not_discarded(self, capsys):
+    def test_REQ_o00074_G_write_landing_after_the_clean_read_is_not_lost(self, capsys):
         """A clean read then a write, before the exit: the daemon keeps serving."""
         clock = _Clock()
         # One check: outside the lock the log looks clean at revision 5;
@@ -336,7 +500,7 @@ class TestTerminationDecidesUnderTheWritersLock:
         assert "shutting down" not in capsys.readouterr().err
 
     def test_REQ_o00074_G_write_landing_in_the_gap_outranks_an_expired_grace(self, capsys):
-        """An expired countdown does not license discarding a just-landed write."""
+        """An expired countdown does not license acting on the stale read."""
         clock = _Clock()
         wd, exits = _watchdog(
             [False, False],
@@ -350,7 +514,7 @@ class TestTerminationDecidesUnderTheWritersLock:
 
         clock.now = 1400.0  # past the deadline
         assert wd.check_once() is Decision.KEEP
-        assert exits == [], "expired grace discarded a mutation that landed after the read"
+        assert exits == [], "expired grace acted on a read a later mutation had overtaken"
 
     def test_REQ_o00074_G_decision_is_taken_while_holding_the_writers_lock(self):
         """The terminate decision is bracketed by the lock the writers take."""
@@ -416,8 +580,8 @@ class TestPendingCountIsHonest:
 
 
 class TestAppliedChangeProvesWriterPresent:
-    """Validates REQ-o00074-H: a change applied after the daemon observed its
-    recorded session absent counts as evidence a writer is still using the
+    """Validates REQ-o00074-H: a change applied after the daemon observed every
+    recorded client absent counts as evidence a writer is still using the
     daemon and restarts the interval before termination -- while traffic that
     changes nothing does not.
     """
@@ -431,7 +595,7 @@ class TestAppliedChangeProvesWriterPresent:
             grace=300.0,
         )
 
-        # t=1000: session absent, work pending. Token recorded, not activity.
+        # t=1000: no client, work pending. Token recorded, not activity.
         assert wd.check_once() is Decision.WAIT_GRACE
         capsys.readouterr()
 
@@ -444,12 +608,12 @@ class TestAppliedChangeProvesWriterPresent:
         clock.now = 1350.0
         assert wd.check_once() is Decision.WAIT_GRACE
         assert exits == [], "adopted writer's daemon was terminated on the stale deadline"
-        assert "WARNING" in capsys.readouterr().err, "one-shot warning was not re-armed"
+        assert "pending" in capsys.readouterr().err, "one-shot disclosure was not re-armed"
 
         # t=1701: past every candidate restart anchor. The reset is bounded,
         # not an immortality bug.
         clock.now = 1701.0
-        assert wd.check_once() is Decision.EXIT_DISCARD
+        assert wd.check_once() is Decision.EXIT_SAVE
         assert exits == ["exit"]
 
     def test_REQ_o00074_H_unchanged_token_does_not_restart_the_interval(self):
@@ -465,8 +629,8 @@ class TestAppliedChangeProvesWriterPresent:
         assert exits == []
 
         clock.now = 1300.0
-        assert wd.check_once() is Decision.EXIT_DISCARD
-        assert exits == ["exit"], "polling kept an orphaned daemon alive past its deadline"
+        assert wd.check_once() is Decision.EXIT_SAVE
+        assert exits == ["exit"], "polling kept a clientless daemon alive past its deadline"
 
 
 class TestUndoneWorkStillCountsAsActivity:
@@ -521,7 +685,7 @@ class TestUndoneWorkStillCountsAsActivity:
             clock=clock,
         )
 
-        # t=1000: session absent, one mutation pending. Baseline token.
+        # t=1000: no client, one mutation pending. Baseline token.
         assert wd.check_once() is Decision.WAIT_GRACE
 
         # The writer keeps working in apply-then-undo cycles, well past the
@@ -540,54 +704,306 @@ class TestUndoneWorkStillCountsAsActivity:
 
 
 # ---------------------------------------------------------------------------
-# Termination never persists on the daemon's own initiative
+# Termination preserves the work, and says so in facts
 # ---------------------------------------------------------------------------
 
 
-class TestTerminationDoesNotPersist:
-    """Validates REQ-o00074-I: a daemon does not persist pending changes on its
-    own initiative while terminating; persisting them remains an act a caller
-    requests.
+class TestTerminationPersistsPendingWork:
+    """Validates REQ-o00074-I: a daemon terminating with no client present
+    persists the changes it holds rather than discarding them, and raises the
+    write-refusal flag before signalling the process so nothing is accepted
+    into a drain that would drop it.
     """
 
-    def test_REQ_o00074_I_discard_exit_writes_no_spec_files(
-        self, mutable_graph, canonical_federated_graph, hht_like_fixture
-    ):
-        fg = canonical_federated_graph
-        fg.update_title("REQ-p00002", "Data Privacy (unsaved)")
+    def test_REQ_o00074_I_expired_grace_saves_before_exiting(self, capsys):
+        clock = _Clock()
+        events: list[str] = []
+        wd, exits = _watchdog(
+            [False, False],
+            [(3, "m1"), (3, "m1")],
+            clock,
+            grace=300.0,
+            save_fn=lambda: (events.append("save"), {"success": True, "saved_count": 2})[1],
+            shutdown_fn=lambda: events.append("flag"),
+        )
 
-        spec_files = sorted((hht_like_fixture / "spec").rglob("*.md"))
-        assert spec_files, "fixture spec tree is empty"
-        before = {p: p.stat().st_mtime_ns for p in spec_files}
+        assert wd.check_once() is Decision.WAIT_GRACE
+        assert events == [], "the daemon saved before its deadline"
+        capsys.readouterr()
 
+        clock.now += 400
+        assert wd.check_once() is Decision.EXIT_SAVE
+        assert exits == ["exit"]
+        # The save happens first (there is work to keep), then the refusal
+        # flag, then the signal -- a write arriving after the decision is
+        # refused rather than accepted and dropped.
+        assert events == ["save", "flag"], f"save/flag ordering wrong: {events}"
+
+    def test_REQ_o00074_I_clean_exit_raises_the_refusal_flag_before_signalling(self):
+        clock = _Clock()
+        events: list[str] = []
+        wd = SpawnerWatchdog(
+            spawner_pid=4321,
+            pending_fn=lambda: (0, "m0"),
+            grace_seconds=300.0,
+            alive_fn=lambda pid: False,
+            exit_fn=lambda: events.append("exit"),
+            clock=clock,
+            shutdown_fn=lambda: events.append("flag"),
+        )
+
+        assert wd.check_once() is Decision.EXIT_CLEAN
+        assert events == ["flag", "exit"], f"flag was not raised before the signal: {events}"
+
+    def test_REQ_o00074_I_no_save_path_configured_is_a_failure_not_a_discard(self, capsys):
+        """A watchdog with nowhere to save must not resolve the deadlock by
+        exiting anyway: that is the discard the requirement forbids."""
         clock = _Clock()
         exits: list[str] = []
         wd = SpawnerWatchdog(
             spawner_pid=4321,
-            pending_fn=lambda: pending_snapshot(fg),
-            grace_seconds=300.0,
+            pending_fn=lambda: (4, "m1"),
+            grace_seconds=0.0,
             alive_fn=lambda pid: False,
             exit_fn=lambda: exits.append("exit"),
             clock=clock,
         )
 
+        assert wd.check_once() is Decision.SAVE_FAILED
+        assert exits == [], "daemon exited holding work it never persisted"
+
+
+class TestAutomaticSaveRecordStatesFactsOnly:
+    """Validates REQ-o00074-I: the daemon records that it performed the save
+    itself, when, how many changes it covered, and what triggered it -- and
+    nothing that characterises the work. A client can vanish because it
+    finished, crashed, or lost its connection, and the daemon cannot tell those
+    apart, so a record that judged the work would be a conclusion substituted
+    for an observation.
+    """
+
+    def test_REQ_o00074_I_record_carries_exactly_the_facts(self, tmp_path):
+        from elspais.mcp.daemon import read_automatic_save, record_automatic_save
+
+        record_automatic_save(
+            tmp_path, mutation_count=4, files_written=2, trigger="no recorded client was running"
+        )
+        record = read_automatic_save(tmp_path)
+
+        assert record is not None
+        assert set(record) == {
+            "saved_by",
+            "saved_at",
+            "mutation_count",
+            "files_written",
+            "trigger",
+            "version",
+        }, f"record fields drifted from the facts the requirement names: {sorted(record)}"
+        assert record["saved_by"] == "daemon"
+        assert record["mutation_count"] == 4
+        assert record["files_written"] == 2
+        assert record["trigger"] == "no recorded client was running"
+
+    def test_REQ_o00074_I_record_characterises_nothing(self, tmp_path):
+        """No field name and no field value passes a judgement on the work."""
+        from elspais.mcp.daemon import read_automatic_save, record_automatic_save
+
+        record_automatic_save(
+            tmp_path, mutation_count=1, files_written=1, trigger="no recorded client was running"
+        )
+        record = read_automatic_save(tmp_path)
+        assert record is not None
+
+        haystack = " ".join([*record.keys(), *(v for v in record.values() if isinstance(v, str))])
+        found = [w for w in JUDGEMENT_WORDS if w in haystack.lower()]
+        assert not found, (
+            f"the automatic-save record characterises the work ({found}); it must state "
+            "who saved, when, how much, and what triggered it, and let the reader conclude"
+        )
+
+    def test_REQ_o00074_I_absent_record_reads_as_none(self, tmp_path):
+        from elspais.mcp.daemon import read_automatic_save
+
+        assert read_automatic_save(tmp_path) is None
+
+    @pytest.mark.parametrize(
+        "surface",
+        ["graph_status", "workspace_info"],
+    )
+    def test_REQ_o00074_I_record_is_disclosed_to_later_clients(
+        self, tmp_path, canonical_federated_graph, surface
+    ):
+        """A client working with the affected files is told without asking."""
+        from elspais.mcp.daemon import record_automatic_save
+        from elspais.mcp.server import _build_base_workspace_info, _get_graph_status
+
+        def read():
+            if surface == "graph_status":
+                return _get_graph_status(canonical_federated_graph, tmp_path)
+            return _build_base_workspace_info(tmp_path, {})
+
+        assert "automatic_save" not in read(), "record surfaced with nothing recorded"
+
+        record_automatic_save(tmp_path, mutation_count=3, files_written=1, trigger="t")
+        disclosed = read().get("automatic_save")
+
+        assert disclosed is not None, f"{surface} did not disclose the automatic save"
+        assert disclosed["saved_by"] == "daemon"
+        assert disclosed["mutation_count"] == 3
+
+
+class TestClientRequestedSaveRetiresTheRecord:
+    """Validates REQ-o00074-J: while a client persists pending changes at its own
+    request, any outstanding record of a save the daemon performed is retired --
+    it describes a state that no longer stands, and a notice that never retires
+    is one nobody reads.
+    """
+
+    def test_REQ_o00074_J_clear_retires_the_record(self, tmp_path):
+        from elspais.mcp.daemon import (
+            clear_automatic_save,
+            read_automatic_save,
+            record_automatic_save,
+        )
+
+        record_automatic_save(tmp_path, mutation_count=1, files_written=1, trigger="t")
+        assert read_automatic_save(tmp_path) is not None
+
+        clear_automatic_save(tmp_path)
+        assert read_automatic_save(tmp_path) is None
+
+    def test_REQ_o00074_J_clearing_an_absent_record_is_not_an_error(self, tmp_path):
+        from elspais.mcp.daemon import clear_automatic_save
+
+        clear_automatic_save(tmp_path)  # must not raise
+
+
+class TestPersistPendingRecordsAndRetires:
+    """Validates REQ-o00074-I, REQ-o00074-J on the one save path both surfaces
+    use: a save the daemon performs leaves the record on disk beside the files
+    it wrote, and the next client-requested save takes it away.
+    """
+
+    @pytest.fixture
+    def project(self, tmp_path):
+        import shutil
+        from pathlib import Path
+
+        src = Path(__file__).parent.parent / "fixtures" / "hht-like"
+        dest = tmp_path / "project"
+        shutil.copytree(src, dest)
+        return dest
+
+    def test_REQ_o00074_I_automatic_save_writes_the_record_beside_the_files(self, project):
+        from elspais.mcp.daemon import read_automatic_save
+        from elspais.mcp.shared_state import persist_pending
+        from elspais.server.state import AppState
+
+        state = AppState.from_config(repo_root=project)
+        state.graph.update_title("REQ-p00001", "User Authentication (daemon-saved)")
+
+        result = persist_pending(
+            state.shared, automatic=True, trigger="no recorded client was running"
+        )
+
+        assert result.get("success"), result
+        record = read_automatic_save(project)
+        assert record is not None, "an automatic save left no record for the next client"
+        assert record["saved_by"] == "daemon"
+        assert record["mutation_count"] == 1
+        assert record["trigger"] == "no recorded client was running"
+        assert (
+            "daemon-saved" in (project / "spec" / "prd-core.md").read_text()
+        ), "the daemon's save did not reach disk"
+
+    def test_REQ_o00074_J_client_requested_save_retires_the_record(self, project):
+        from elspais.mcp.daemon import read_automatic_save
+        from elspais.mcp.shared_state import persist_pending
+        from elspais.server.state import AppState
+
+        state = AppState.from_config(repo_root=project)
+        state.graph.update_title("REQ-p00001", "User Authentication (daemon-saved)")
+        assert persist_pending(state.shared, automatic=True, trigger="t").get("success")
+        assert read_automatic_save(project) is not None
+
+        state.graph.update_title("REQ-p00001", "User Authentication (client-saved)")
+        # A client-requested save on an Active requirement supplies its own
+        # changelog reason; only the daemon's own save writes one for itself.
+        assert persist_pending(state.shared, message="client asked for this").get("success")
+
+        assert (
+            read_automatic_save(project) is None
+        ), "a client-requested save left the daemon's record standing"
+
+
+class TestFailedSaveRetainsTheWork:
+    """Validates REQ-o00074-K: a daemon that cannot persist what it holds reports
+    the failure and keeps the work rather than discarding it, and does not treat
+    its termination as complete -- it stays up and tries again.
+    """
+
+    @pytest.mark.parametrize(
+        ("save_fn", "how"),
+        [
+            (lambda: {"success": False, "error": "disk full"}, "reported failure"),
+            (lambda: (_ for _ in ()).throw(OSError("read-only file system")), "raised"),
+        ],
+        ids=["reported-failure", "raised"],
+    )
+    def test_REQ_o00074_K_failed_save_does_not_exit(self, capsys, save_fn, how):
+        clock = _Clock()
+        flags: list[str] = []
+        wd, exits = _watchdog(
+            [False, False],
+            [(5, "m1"), (5, "m1")],
+            clock,
+            grace=300.0,
+            save_fn=save_fn,
+            shutdown_fn=lambda: flags.append("flag"),
+        )
+
+        assert wd.check_once() is Decision.WAIT_GRACE
+        capsys.readouterr()
+
+        clock.now += 400
+        assert wd.check_once() is Decision.SAVE_FAILED, f"a save that {how} was treated as done"
+        assert exits == [], "daemon exited after a failed save, destroying the work it held"
+        assert flags == [], "daemon refused writes after a save it did not complete"
+        err = capsys.readouterr().err
+        assert "FAILED" in err
+        assert "retained" in err
+
+    def test_REQ_o00074_K_daemon_retries_at_the_next_interval_and_then_exits(self, capsys):
+        clock = _Clock()
+        outcomes = [{"success": False, "error": "disk full"}, {"success": True, "saved_count": 1}]
+        wd, exits = _watchdog(
+            [False, False, False],
+            [(5, "m1"), (5, "m1"), (5, "m1")],
+            clock,
+            grace=300.0,
+            save_fn=lambda: outcomes.pop(0),
+        )
+
         assert wd.check_once() is Decision.WAIT_GRACE
         clock.now += 400
-        assert wd.check_once() is Decision.EXIT_DISCARD
-        assert exits == ["exit"]
+        assert wd.check_once() is Decision.SAVE_FAILED
+        assert exits == []
+        capsys.readouterr()
 
-        after = {p: p.stat().st_mtime_ns for p in spec_files}
-        assert after == before, "terminating daemon wrote spec files no caller asked it to write"
+        clock.now += 10
+        assert wd.check_once() is Decision.EXIT_SAVE, "the daemon never retried the failed save"
+        assert exits == ["exit"]
+        assert "Saved" in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------------------
-# Session identity: resolution, recording, and the explicit-start exemption
+# Client identity: resolution, recording, and the explicit-start exemption
 # ---------------------------------------------------------------------------
 
 
 class TestSpawnerIdentityResolution:
-    """Validates REQ-o00074-D: session identity is derived only from evidence
-    available at the moment of starting, and when no session identity can be
+    """Validates REQ-o00074-D: client identity is derived only from evidence
+    available at the moment of starting, and when no identity can be
     established the daemon starts with none rather than with an inferred one.
     """
 
@@ -638,9 +1054,9 @@ class TestSpawnerIdentityResolution:
 
 class TestUnusableSpawnerIdentityIsRefused:
     """Validates REQ-o00074-D: a handed-over PID at or below the floor the
-    resolver applies names no session -- pid 1 is init, whose death never comes,
+    resolver applies names no client -- pid 1 is init, whose death never comes,
     and 0/negative are not process identities at all. The daemon starts with no
-    session identity rather than watching one, which is the TTL-only behavior
+    client identity rather than watching one, which is the TTL-only behavior
     the requirement asks for when no identity can be established.
     """
 
@@ -684,10 +1100,10 @@ class TestUnusableSpawnerIdentityIsRefused:
         assert self._spawner_pids_watched(monkeypatch, tmp_path, "5555") == [5555]
 
 
-class TestImplicitStartRecordsSession:
-    """Validates REQ-o00074-A: a daemon started implicitly on behalf of a
-    session records the identity of that session at the moment it is started,
-    so it can afterwards determine whether the session still exists.
+class TestImplicitStartRecordsClient:
+    """Validates REQ-o00074-A: a daemon started implicitly on behalf of a client
+    records that client's identity at the moment it is started, so it can
+    afterwards determine whether the client still exists.
     """
 
     def test_REQ_o00074_A_start_daemon_passes_spawner_env(self, tmp_path):
@@ -709,7 +1125,7 @@ class TestImplicitStartRecordsSession:
         assert popen_calls[0]["env"]["_ELSPAIS_SPAWNER_PID"] == "9876"
 
     def test_REQ_o00074_A_ensure_daemon_resolves_spawner(self, tmp_path):
-        """The implicit CLI spawn path ties the daemon to the resolved session."""
+        """The implicit CLI spawn path ties the daemon to the resolved client."""
         from elspais.mcp.daemon import ensure_daemon
 
         captured = {}
@@ -729,9 +1145,71 @@ class TestImplicitStartRecordsSession:
         assert captured["spawner_pid"] == 4242
 
 
-class TestSpawnerIdentityIsObservable:
-    """Validates REQ-o00074-B: a recorded session identity is observable in the
-    state record by which clients locate the daemon (``.elspais/daemon.json``).
+class TestReusingClientAnnouncesItself:
+    """Validates REQ-o00074-E: a client that begins using a daemon that is
+    already running says so, rather than leaving the daemon watching only the
+    client that started it and stopping underneath this one.
+    """
+
+    def test_REQ_o00074_E_ensure_daemon_attaches_on_the_reuse_path(self, tmp_path):
+        from elspais.mcp.daemon import ensure_daemon
+
+        info = {"port": 12345, "version": None}
+        attached: list = []
+
+        with (
+            patch("elspais.mcp.daemon.get_daemon_info", return_value=info),
+            patch("elspais.mcp.daemon._config_hash_stale", return_value=False),
+            patch("elspais.mcp.daemon.resolve_spawner_pid", return_value=4242),
+            patch(
+                "elspais.mcp.daemon.attach_client",
+                side_effect=lambda i, pid: attached.append((i, pid)),
+            ),
+        ):
+            assert ensure_daemon(tmp_path) == 12345
+
+        assert attached == [(info, 4242)], "reusing a running daemon did not register the client"
+
+    def test_REQ_o00074_E_attach_client_posts_the_pid_to_the_daemon(self):
+        """The wire call names the client and reports what the daemon answered."""
+        from elspais.mcp import daemon
+
+        captured = {}
+
+        class _Resp:
+            def read(self):
+                return json.dumps({"attached": True, "clients": [111, 4321]}).encode()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        def fake_urlopen(req, timeout=None):
+            captured["url"] = req.full_url
+            captured["body"] = json.loads(req.data.decode())
+            return _Resp()
+
+        with patch("elspais.mcp.daemon.urlopen", side_effect=fake_urlopen):
+            assert daemon.attach_client({"port": 9999}, 111) is True
+
+        assert captured["url"].endswith("/api/session/attach")
+        assert captured["body"] == {"pid": 111}
+
+    def test_REQ_o00074_E_attach_client_without_an_identity_is_a_no_op(self):
+        """No identity to record leaves the daemon's lifetime exactly as it was."""
+        from elspais.mcp import daemon
+
+        with patch("elspais.mcp.daemon.urlopen", side_effect=AssertionError("must not call")):
+            assert daemon.attach_client({"port": 9999}, None) is False
+            assert daemon.attach_client({}, 111) is False
+
+
+class TestClientSetIsObservable:
+    """Validates REQ-o00074-B: the client identities a daemon has recorded are
+    observable in the state record by which clients locate it
+    (``.elspais/daemon.json``).
     """
 
     def test_REQ_o00074_B_write_daemon_json_records_spawner_pid(self, tmp_path):
@@ -740,21 +1218,42 @@ class TestSpawnerIdentityIsObservable:
         path = write_daemon_json(
             repo_root=tmp_path, pid=111, port=222, server_type="daemon", spawner_pid=333
         )
-        assert json.loads(path.read_text())["spawner_pid"] == 333
+        info = json.loads(path.read_text())
+        assert info["spawner_pid"] == 333
+        assert info["client_pids"] == [333], "the initial client set is not published"
+
+    def test_REQ_o00074_B_record_daemon_clients_republishes_the_whole_set(self, tmp_path):
+        from elspais.mcp.daemon import record_daemon_clients, write_daemon_json
+
+        write_daemon_json(
+            repo_root=tmp_path, pid=111, port=222, server_type="daemon", spawner_pid=333
+        )
+        record_daemon_clients(tmp_path, [777, 333])
+
+        info = json.loads((tmp_path / ".elspais" / "daemon.json").read_text())
+        assert info["client_pids"] == [333, 777], "an adopted client is not observable"
+
+    def test_REQ_o00074_B_record_daemon_clients_without_a_record_is_a_no_op(self, tmp_path):
+        from elspais.mcp.daemon import record_daemon_clients
+
+        record_daemon_clients(tmp_path, [1, 2])  # must not raise or create a file
+        assert not (tmp_path / ".elspais" / "daemon.json").exists()
 
 
-class TestExplicitStartRecordsNoSession:
+class TestExplicitStartRecordsNoClient:
     """Validates REQ-o00074-C: a daemon started explicitly rather than on behalf
-    of a session records no session identity, and its lifetime remains governed
+    of a client records no client identity, and its lifetime remains governed
     solely by its idle timeout.
     """
 
-    def test_REQ_o00074_C_write_daemon_json_omits_spawner_pid_when_absent(self, tmp_path):
-        """Explicit starts (viewer, manual serve) record no spawner identity."""
+    def test_REQ_o00074_C_write_daemon_json_omits_client_identity_when_absent(self, tmp_path):
+        """Explicit starts (viewer, manual serve) record no client identity."""
         from elspais.mcp.daemon import write_daemon_json
 
         path = write_daemon_json(repo_root=tmp_path, pid=111, port=222, server_type="viewer")
-        assert "spawner_pid" not in json.loads(path.read_text())
+        info = json.loads(path.read_text())
+        assert "spawner_pid" not in info
+        assert "client_pids" not in info
 
     def test_REQ_o00074_C_start_daemon_without_spawner_scrubs_env(self, tmp_path, monkeypatch):
         """Explicit starts must not inherit a stale spawner PID from the env."""
@@ -777,7 +1276,7 @@ class TestExplicitStartRecordsNoSession:
         assert "_ELSPAIS_SPAWNER_PID" not in popen_calls[0]["env"]
 
     def test_REQ_o00074_C_restart_daemon_spawns_without_spawner(self, tmp_path):
-        """`elspais daemon restart` is an explicit start: no session tie."""
+        """`elspais daemon restart` is an explicit start: no client tie."""
         from elspais.mcp.daemon import restart_daemon
 
         captured = {}

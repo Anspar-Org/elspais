@@ -148,6 +148,9 @@ HISTORY_ROUTES = {"/api/save", "/api/revert", "/api/reload"}
 # Every entry needs a reason; an unlisted new POST route fails the tripwire.
 EXEMPT_POST_ROUTES = {
     "/api/shutdown",  # process lifecycle; touches no graph state
+    "/api/session/attach",  # process lifetime only: records that a client is
+    # using this daemon (REQ-o00074-E). Reads and writes no graph state and no
+    # mutation-log entry, so there is no version for a caller to name.
     "/api/comment/add",  # append-only comment store, its own JSONL files
     "/api/comment/reply",  # (comments are an annotation layer, not the graph)
     "/api/comment/resolve",

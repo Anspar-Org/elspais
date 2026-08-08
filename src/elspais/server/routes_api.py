@@ -10,6 +10,7 @@ State is accessed via ``request.app.state.app_state`` (an AppState instance).
 from __future__ import annotations
 
 import functools
+import json
 import time
 from datetime import date as date_type
 from pathlib import Path
@@ -31,6 +32,7 @@ from elspais.graph.GraphNode import make_file_id
 from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.mcp.server import (
     _attach_version,
+    _automatic_save_record,
     _get_assertion_code_map,
     _get_assertion_refines_map,
     _get_assertion_test_map,
@@ -41,6 +43,7 @@ from elspais.mcp.server import (
     _get_node,
     _get_requirement,
     _guard_mutation_tip,
+    _guard_shutdown,
     _guard_version,
     _mutate_add_assertion,
     _mutate_add_edge,
@@ -85,12 +88,19 @@ def _serialized_write(handler: Any) -> Any:
     lock is a ``threading.RLock`` and must never be held across a genuine
     await (another handler blocking on acquire would freeze the event loop
     the holder needs to resume).
+
+    A server that has decided to stop refuses writes here rather than
+    accepting them into a drain that will discard them, and it refuses
+    with the same body the MCP surface returns (REQ-o00062-O).
     """
 
     @functools.wraps(handler)
     async def wrapper(request: Request) -> JSONResponse:
         await request.body()
         with _st(request).shared.write_lock:
+            stopping = _guard_shutdown(_st(request).shared)
+            if stopping is not None:
+                return JSONResponse(stopping, status_code=409)
             return await handler(request)
 
     return wrapper
@@ -477,7 +487,7 @@ async def api_status(request: Request) -> JSONResponse:
     from elspais import __version__
 
     state = _st(request)
-    result = _get_graph_status(state.graph)
+    result = _get_graph_status(state.graph, state.repo_root)
     result["version"] = __version__
     # Implements: REQ-d00206-C
     # Include federation repo metadata from iter_repos().
@@ -1118,6 +1128,45 @@ async def api_spec_files(request: Request) -> JSONResponse:
     return JSONResponse({"files": files})
 
 
+# Implements: REQ-o00074-E, REQ-o00074-B
+async def api_attach_client(request: Request) -> JSONResponse:
+    """POST /api/session/attach - Register a client now using this daemon.
+
+    A daemon is shared and deliberately outlives the client that started
+    it, so a client that picks up a running one has to say so or the
+    daemon will stop underneath it.
+    """
+    state = _st(request)
+    try:
+        data = json.loads(await request.body() or b"{}")
+    except (json.JSONDecodeError, ValueError):
+        return JSONResponse({"attached": False, "error": "invalid JSON body"}, status_code=400)
+    try:
+        pid = int(data.get("pid", 0))
+    except (TypeError, ValueError):
+        pid = 0
+
+    watchdog = state.shared.get("watchdog")
+    if watchdog is None:
+        # An explicitly started server has no client-bound lifetime at
+        # all, so there is nothing for a client to attach to. Reported,
+        # not silently accepted.
+        return JSONResponse(
+            {
+                "attached": False,
+                "reason": "this server's lifetime is not bound to its clients",
+                "clients": [],
+            }
+        )
+    attached = watchdog.attach_client(pid)
+    clients = watchdog.clients()
+    if attached:
+        from elspais.mcp.daemon import record_daemon_clients
+
+        record_daemon_clients(state.repo_root, clients)
+    return JSONResponse({"attached": attached, "clients": clients})
+
+
 async def api_dirty(request: Request) -> JSONResponse:
     """GET /api/dirty - Check if graph has unsaved mutations."""
     state = _st(request)
@@ -1127,13 +1176,16 @@ async def api_dirty(request: Request) -> JSONResponse:
     # tail(0) snapshots the whole log -- never iterate the live list while
     # other writers may be appending to (or undoing from) it.
     entries = state.graph.mutation_log.tail(0)
-    return JSONResponse(
-        {
-            "dirty": bool(entries),
-            "mutation_count": len(entries),
-            "tip": entries[-1].id if entries else None,
-        }
-    )
+    body: dict[str, Any] = {
+        "dirty": bool(entries),
+        "mutation_count": len(entries),
+        "tip": entries[-1].id if entries else None,
+    }
+    # Implements: REQ-o00074-I
+    record = _automatic_save_record(state.repo_root)
+    if record is not None:
+        body["automatic_save"] = record
+    return JSONResponse(body)
 
 
 async def api_check_freshness(request: Request) -> JSONResponse:
@@ -1171,6 +1223,10 @@ async def api_check_freshness(request: Request) -> JSONResponse:
             # graph. In-memory mutations touch no file, so mtime staleness
             # alone can never reveal them. "" means nothing pending.
             "mutation_tip": log.get("current_tip", ""),
+            # Implements: REQ-o00074-I
+            # The poll every client already runs, so a save the daemon
+            # performed reaches the next client without it having to ask.
+            "automatic_save": _automatic_save_record(state.repo_root),
         }
     )
 
@@ -2034,6 +2090,10 @@ async def api_save(request: Request) -> JSONResponse:
     status_code = 200 if result.get("success") else 409
     if result.get("success"):
         state.build_time = time.time()
+        # Implements: REQ-o00074-J
+        from elspais.mcp.daemon import clear_automatic_save
+
+        clear_automatic_save(state.repo_root)
     return JSONResponse(result, status_code=status_code)
 
 

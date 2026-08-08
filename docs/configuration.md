@@ -33,22 +33,28 @@ stats = ""
 #    0: never auto-launch daemon from CLI (manual start only)
 #   <0: auto-start daemon that never times out
 #
-# Spawner liveness: a daemon auto-started on behalf of a session records
-# that session's PID as `spawner_pid` in .elspais/daemon.json and exits
-# shortly after the session ends, even when cli_ttl < 0 — orphaned daemons
-# do not accumulate. The session is identified at the moment of the start
-# (the daemon is detached, so it cannot be recovered afterwards), in this
-# order: the ELSPAIS_SPAWNER_PID env var, then the nearest ancestor process
-# named `claude` when CLAUDECODE is set, then the controlling-terminal
-# session leader if it has a tty (an interactive shell qualifies; a batch
-# or CI shell does not). The last two steps read /proc and a POSIX session
-# id, so where those are unavailable only the env var can resolve. When
-# none resolve, no identity is recorded and cli_ttl is the only limit. If
-# the daemon holds unsaved in-memory mutations when its session dies, it
-# logs a warning to .elspais/daemon.log, waits a bounded grace period
-# (5 minutes), then exits WITHOUT saving; nothing is persisted silently.
-# Explicitly started servers (`elspais daemon restart`, `elspais mcp
-# serve`, the viewer) are never session-tied and keep TTL-only behavior.
+# Client liveness: a daemon auto-started on behalf of a session records
+# that session's PID as `spawner_pid` in .elspais/daemon.json, and every
+# later session that reuses the daemon is added to `client_pids`. It exits
+# shortly after the last of them is gone, even when cli_ttl < 0 — orphaned
+# daemons do not accumulate, and a daemon somebody is still using is not
+# shut down under them. A client is identified at the moment it is
+# recorded (the daemon is detached, so it cannot be recovered afterwards),
+# in this order: the ELSPAIS_SPAWNER_PID env var, then the nearest ancestor
+# process named `claude` when CLAUDECODE is set, then the
+# controlling-terminal session leader if it has a tty (an interactive
+# shell qualifies; a batch or CI shell does not). The last two steps read
+# /proc and a POSIX session id, so where those are unavailable only the
+# env var can resolve. When none resolve, no identity is recorded and
+# cli_ttl is the only limit. If the daemon holds unsaved in-memory
+# mutations when its last client is gone, it logs the count to
+# .elspais/daemon.log, waits a bounded grace period (30 minutes), then
+# SAVES them to disk and stops — nothing is discarded. The save is
+# recorded in .elspais/automatic-save.json and reported to the next client
+# in the ordinary workspace/status metadata; a client-requested save
+# retires the record. Explicitly started servers (`elspais daemon
+# restart`, `elspais mcp serve`, the viewer) are never client-tied and
+# keep TTL-only behavior.
 cli_ttl = 30
 
 #──────────────────────────────────────────────────────────────────────────────

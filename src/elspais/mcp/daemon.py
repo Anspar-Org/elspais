@@ -217,8 +217,28 @@ def write_daemon_json(
     # Implements: REQ-o00074-B, REQ-o00074-C
     if spawner_pid is not None:
         info["spawner_pid"] = spawner_pid
+        info["client_pids"] = [spawner_pid]
     daemon_json.write_text(json.dumps(info))
     return daemon_json
+
+
+# Implements: REQ-o00074-B
+def record_daemon_clients(repo_root: Path, client_pids: list[int]) -> None:
+    """Publish the daemon's current client set in its state record.
+
+    A lifetime rule nobody can inspect cannot be diagnosed, and the set
+    grows as clients pick the daemon up, so publishing only the first one
+    would answer a question nobody is asking by the time it matters.
+    """
+    path = _daemon_json_path(repo_root)
+    if not path.exists():
+        return
+    try:
+        info = json.loads(path.read_text())
+        info["client_pids"] = sorted(client_pids)
+        path.write_text(json.dumps(info))
+    except (json.JSONDecodeError, OSError) as exc:
+        print(f"warning: could not publish the daemon's client set: {exc}", file=sys.stderr)
 
 
 # Implements: REQ-p00004-J
@@ -253,6 +273,80 @@ def _daemon_dir(repo_root: Path) -> Path:
 
 def _daemon_json_path(repo_root: Path) -> Path:
     return _daemon_dir(repo_root) / "daemon.json"
+
+
+def _automatic_save_path(repo_root: Path) -> Path:
+    """Record of a save the daemon performed itself.
+
+    A sibling of daemon.json rather than a key inside it: daemon.json
+    describes the process that is running now and is removed when that
+    process stops, while this record has to outlive the daemon that
+    wrote it — its whole purpose is to reach the *next* client.
+    """
+    return _daemon_dir(repo_root) / "automatic-save.json"
+
+
+# Implements: REQ-o00074-I
+def record_automatic_save(
+    repo_root: Path,
+    mutation_count: int | None,
+    files_written: int = 0,
+    trigger: str = "",
+) -> None:
+    """Record a save the daemon performed rather than a client requesting it.
+
+    The record carries facts only — who saved, when, how much, and what
+    condition triggered it. It says nothing about whether the work is
+    finished, wanted, or trustworthy: a client can disappear because it
+    completed, crashed, or lost its connection, and those are
+    indistinguishable from here. The reader draws the conclusion.
+
+    Best effort: a daemon that cannot write this record has already
+    written the files, and failing the save afterwards would be worse
+    than an unrecorded one. The failure is printed instead.
+    """
+    from elspais import __version__
+
+    record = {
+        "saved_by": "daemon",
+        "saved_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "mutation_count": mutation_count,
+        "files_written": files_written,
+        "trigger": trigger,
+        "version": __version__,
+    }
+    path = _automatic_save_path(repo_root)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(record))
+    except OSError as exc:
+        print(f"warning: could not record the automatic save: {exc}", file=sys.stderr)
+
+
+# Implements: REQ-o00074-I
+def read_automatic_save(repo_root: Path) -> dict | None:
+    """Return the outstanding automatic-save record, or None."""
+    path = _automatic_save_path(repo_root)
+    if not path.is_file():
+        return None
+    try:
+        record = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+    return record if isinstance(record, dict) else None
+
+
+# Implements: REQ-o00074-J
+def clear_automatic_save(repo_root: Path) -> None:
+    """Retire the record once a client saves at its own request.
+
+    From that point the record describes a state that no longer stands,
+    and a notice that never retires is one nobody reads.
+    """
+    try:
+        _automatic_save_path(repo_root).unlink(missing_ok=True)
+    except OSError as exc:
+        print(f"warning: could not retire the automatic-save record: {exc}", file=sys.stderr)
 
 
 def get_daemon_info(repo_root: Path) -> dict | None:
@@ -413,6 +507,57 @@ def get_daemon_mutation_count(info: dict) -> int | None:
     return None
 
 
+# Implements: REQ-o00074-E
+def attach_client(info: dict, pid: int | None) -> bool:
+    """Tell a running daemon that this session is now one of its clients.
+
+    Best effort by design: a daemon too old to know the call, or a
+    session whose identity could not be established, leaves the daemon's
+    lifetime exactly as it was rather than failing the command the
+    caller actually asked for.
+    """
+    import json as _json
+    from urllib.request import Request as _Request
+
+    port = info.get("port")
+    if not port or not pid:
+        return False
+    req = _Request(
+        f"http://127.0.0.1:{port}/api/session/attach",
+        data=_json.dumps({"pid": pid}).encode(),
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urlopen(req, timeout=3) as resp:
+            return bool(_json.loads(resp.read().decode()).get("attached"))
+    except (URLError, OSError, ValueError):
+        return False
+
+
+# Implements: REQ-o00074-E
+def ensure_client_registered(info: dict | None) -> bool:
+    """Register this session as a client of a daemon it did not start.
+
+    Called on every path that reuses a running daemon, not only the one
+    that considers starting a fresh one: a session that only ever picks
+    up somebody else's daemon is the case the rule exists for, and it is
+    also the one that never reaches the start path.
+
+    Skips the call when the daemon's published client set already names
+    this session, so the cost is one round-trip per session rather than
+    one per command.
+    """
+    if not info:
+        return False
+    pid = resolve_spawner_pid()
+    if not pid:
+        return False
+    if pid in (info.get("client_pids") or []):
+        return True
+    return attach_client(info, pid)
+
+
 def save_daemon_mutations(info: dict) -> dict:
     """Ask the daemon to persist pending mutations to disk.
 
@@ -557,6 +702,12 @@ def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
             stop_daemon(repo_root)
             # Fall through to start a fresh daemon
         else:
+            # Implements: REQ-o00074-E
+            # Reusing a daemon somebody else started makes this session
+            # one of its clients. Say so, or the daemon goes on watching
+            # only the client that started it and stops underneath this
+            # one when that client exits.
+            ensure_client_registered(info)
             return info["port"]
 
     if ttl_minutes is None:
