@@ -7394,6 +7394,10 @@ def run_server(
                 spawner_pid = int(env_spawner)
             except ValueError:
                 spawner_pid = None
+            # Same floor the resolver applies: 1 is init, which never
+            # dies, so watching it is a daemon that never terminates.
+            if spawner_pid is not None and spawner_pid <= 1:
+                spawner_pid = None
 
         if daemon_json:
             from elspais.mcp.daemon import write_daemon_json
@@ -7423,6 +7427,7 @@ def run_server(
                 pending_fn=_pending,
                 interval_seconds=interval,
                 grace_seconds=grace,
+                lock=state.shared.write_lock,
             ).start()
 
         uvi_config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")

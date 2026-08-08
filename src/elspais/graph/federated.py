@@ -53,6 +53,12 @@ class FederatedMutationLog:
     def __init__(self) -> None:
         self._pointers: list[FederatedMutationPointer] = []
         self._repos: dict[str, RepoEntry] = {}
+        self._revision = 0
+
+    @property
+    def revision(self) -> int:
+        """Monotonic count of changes to this log; see MutationLog.revision."""
+        return self._revision
 
     def _bind_repos(self, repos: dict[str, RepoEntry]) -> None:
         """Bind repo lookup for resolving pointers."""
@@ -61,10 +67,14 @@ class FederatedMutationLog:
     def record(self, repo_name: str, mutation_id: str) -> None:
         """Record a mutation pointer."""
         self._pointers.append(FederatedMutationPointer(repo_name, mutation_id))
+        self._revision += 1
 
     def pop(self) -> FederatedMutationPointer | None:
         """Remove and return the most recent pointer."""
-        return self._pointers.pop() if self._pointers else None
+        if not self._pointers:
+            return None
+        self._revision += 1
+        return self._pointers.pop()
 
     def iter_entries(self) -> Iterator[MutationEntry]:
         """Yield full MutationEntry objects from sub-graphs in federated order.
@@ -115,6 +125,8 @@ class FederatedMutationLog:
 
     def clear(self) -> None:
         """Clear all pointers and sub-graph logs."""
+        if self._pointers:
+            self._revision += 1
         self._pointers.clear()
         for entry in self._repos.values():
             if entry.graph:

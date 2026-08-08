@@ -44,6 +44,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext
 from typing import Any
 
 DEFAULT_CHECK_INTERVAL_SECONDS = 60.0
@@ -55,20 +56,22 @@ _UNOBSERVED = object()
 
 
 # Implements: REQ-o00074-G, REQ-o00074-H
-def pending_snapshot(graph: Any) -> tuple[int, str | None]:
+def pending_snapshot(graph: Any) -> tuple[int, object]:
     """Return (pending mutation count, activity token) from one snapshot.
 
     The count is the number of pending unsaved mutations, so a warning
     about losing them states the real figure; a windowed query would cap
-    the answer at the window size. The token is the mutation-log tip,
-    which moves only when a change is applied or reversed — the same
-    identity the history-level guards use.
+    the answer at the window size.
+
+    The token is the log's monotonic revision, not its tip: an append
+    followed by an undo restores the previous tip exactly, so a writer
+    working steadily in that pattern would read as idle.
 
     ``tail(0)`` snapshots the whole log; never iterate the live list
     while other writers may be appending to it.
     """
-    entries = graph.mutation_log.tail(0)
-    return len(entries), (entries[-1].id if entries else None)
+    log = graph.mutation_log
+    return len(log.tail(0)), log.revision
 
 
 def pid_alive(pid: int) -> bool:
@@ -148,15 +151,17 @@ class SpawnerWatchdog:
     def __init__(
         self,
         spawner_pid: int,
-        pending_fn: Callable[[], tuple[int, str | None]],
+        pending_fn: Callable[[], tuple[int, object]],
         interval_seconds: float = DEFAULT_CHECK_INTERVAL_SECONDS,
         grace_seconds: float = DEFAULT_GRACE_SECONDS,
         alive_fn: Callable[[int], bool] = pid_alive,
         exit_fn: Callable[[], None] = _default_exit,
         clock: Callable[[], float] = time.monotonic,
+        lock: AbstractContextManager[Any] | None = None,
     ) -> None:
         self._spawner_pid = spawner_pid
         self._pending_fn = pending_fn
+        self._lock = lock if lock is not None else nullcontext()
         self._interval = interval_seconds
         self._grace = grace_seconds
         self._alive_fn = alive_fn
@@ -168,17 +173,28 @@ class SpawnerWatchdog:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
+    def _pending(self) -> tuple[int | None, object]:
+        """Read pending count and activity token; unknown reads as dirty."""
+        try:
+            return self._pending_fn()
+        except Exception:
+            return None, self._last_token
+
     def check_once(self) -> Decision:
-        """Evaluate the decision matrix once and act on the outcome."""
+        """Evaluate the decision matrix once and act on the outcome.
+
+        Implements: REQ-o00074-G
+
+        The decision to terminate is taken while holding the writers'
+        lock, and the pending state is re-read inside it. Deciding from
+        a snapshot taken outside the lock let a mutation be accepted --
+        and acknowledged to its writer -- between the read and the exit,
+        which terminated the daemon holding work it had just reported as
+        absent.
+        """
         alive = self._alive_fn(self._spawner_pid)
 
-        count: int | None
-        token: object
-        try:
-            count, token = self._pending_fn()
-        except Exception:
-            # Unknown -> treated as dirty, and no claim about activity.
-            count, token = None, self._last_token
+        count, token = self._pending()
 
         if alive:
             self._dead_since = None
@@ -189,10 +205,10 @@ class SpawnerWatchdog:
         now = self._clock()
 
         # Implements: REQ-o00074-H
-        # A tip that moved since the previous check is a writer that
+        # A token that moved since the previous check is a writer that
         # adopted this daemon after its spawner died. Keep serving and
         # restart the countdown; the first token seen is a baseline, not
-        # activity. Reads never move the tip, so polling cannot reach here.
+        # activity. Reads never move it, so polling cannot reach here.
         moved = self._last_token is not _UNOBSERVED and token != self._last_token
         self._last_token = token
         if moved:
@@ -204,13 +220,31 @@ class SpawnerWatchdog:
             self._dead_since = now
 
         grace_expired = (now - self._dead_since) >= self._grace
-        decision = shutdown_decision(
-            spawner_pid=self._spawner_pid,
-            spawner_alive=False,
-            mutation_count=count,
-            grace_expired=grace_expired,
-        )
 
+        with self._lock:
+            # Re-read under the lock: no writer can be mid-mutation now,
+            # so this count is the one the exit acts on. A token that
+            # moved between the two reads is a writer that got its
+            # mutation in during the gap; that is activity, and it
+            # outranks an expired countdown.
+            recheck_count, recheck_token = self._pending()
+            moved_in_gap = recheck_token != token
+            count, token = recheck_count, recheck_token
+            self._last_token = token
+            if moved_in_gap:
+                self._dead_since = now
+                self._warned_grace = False
+                return Decision.KEEP
+            decision = shutdown_decision(
+                spawner_pid=self._spawner_pid,
+                spawner_alive=False,
+                mutation_count=count,
+                grace_expired=grace_expired,
+            )
+            return self._act(decision, count)
+
+    def _act(self, decision: Decision, count: int | None) -> Decision:
+        """Emit the disclosure the decision requires and exit if it says so."""
         # Implements: REQ-o00074-E, REQ-o00074-G, REQ-o00074-I
         if decision is Decision.EXIT_CLEAN:
             print(
@@ -252,7 +286,17 @@ class SpawnerWatchdog:
 
         def _loop() -> None:
             while not self._stop.wait(self._interval):
-                decision = self.check_once()
+                try:
+                    decision = self.check_once()
+                except Exception as exc:  # never let the guard die silently
+                    print(
+                        f"WARNING: spawner watchdog check failed ({exc!r}); "
+                        "retrying at the next interval. If this repeats, the "
+                        "daemon may outlive its session.",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    continue
                 if decision in (Decision.EXIT_CLEAN, Decision.EXIT_DISCARD):
                     return
 

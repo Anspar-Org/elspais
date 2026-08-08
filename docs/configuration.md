@@ -41,13 +41,14 @@ stats = ""
 # order: the ELSPAIS_SPAWNER_PID env var, then the nearest ancestor process
 # named `claude` when CLAUDECODE is set, then the controlling-terminal
 # session leader if it has a tty (an interactive shell qualifies; a batch
-# or CI shell does not). When none resolve, no identity is recorded and
-# cli_ttl is the only limit. If the daemon holds
-# unsaved in-memory mutations when its session dies, it logs a warning to
-# .elspais/daemon.log, waits a bounded grace period (5 minutes), then exits
-# WITHOUT saving; nothing is persisted silently. Explicitly started servers
-# (`elspais daemon restart`, `elspais mcp serve`, the viewer) are never
-# session-tied and keep TTL-only behavior.
+# or CI shell does not). The last two steps read /proc and a POSIX session
+# id, so where those are unavailable only the env var can resolve. When
+# none resolve, no identity is recorded and cli_ttl is the only limit. If
+# the daemon holds unsaved in-memory mutations when its session dies, it
+# logs a warning to .elspais/daemon.log, waits a bounded grace period
+# (5 minutes), then exits WITHOUT saving; nothing is persisted silently.
+# Explicitly started servers (`elspais daemon restart`, `elspais mcp
+# serve`, the viewer) are never session-tied and keep TTL-only behavior.
 cli_ttl = 30
 
 #──────────────────────────────────────────────────────────────────────────────

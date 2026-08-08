@@ -99,6 +99,18 @@ class MutationLog:
     def __init__(self) -> None:
         """Initialize an empty mutation log."""
         self._entries: list[MutationEntry] = []
+        self._revision = 0
+
+    @property
+    def revision(self) -> int:
+        """Monotonic count of changes to this log.
+
+        Advances on every append, undo and clear, and never repeats. The
+        tip id cannot serve this purpose: an append followed by an undo
+        restores the previous tip exactly, so two logs with the same tip
+        may have had activity between them.
+        """
+        return self._revision
 
     def append(self, entry: MutationEntry) -> None:
         """Append a mutation entry to the log.
@@ -107,6 +119,7 @@ class MutationLog:
             entry: The mutation record to append.
         """
         self._entries.append(entry)
+        self._revision += 1
 
     def iter_entries(self) -> Iterator[MutationEntry]:
         """Iterate over all entries in chronological order.
@@ -176,10 +189,15 @@ class MutationLog:
         Returns:
             The removed entry, or None if log is empty.
         """
-        return self._entries.pop() if self._entries else None
+        if not self._entries:
+            return None
+        self._revision += 1
+        return self._entries.pop()
 
     def clear(self) -> None:
         """Clear all entries from the log."""
+        if self._entries:
+            self._revision += 1
         self._entries.clear()
 
 

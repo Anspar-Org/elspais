@@ -527,8 +527,10 @@ there is nothing left to infer from. It is resolved in this order:
         v
     no identity recorded -> idle timeout is the only limit
 
-A guessed identity would be worse than none, so when nothing resolves the
-daemon simply keeps its `cli_ttl` lifetime.
+The last two steps read `/proc` and a POSIX session id, so where those are
+unavailable only the environment variable can resolve. A guessed identity
+would be worse than none, so when nothing resolves the daemon simply keeps
+its `cli_ttl` lifetime.
 
 **Started deliberately (explicit).** `elspais daemon restart`, a manual
 `elspais mcp serve`, and the viewer record no session at all. Their

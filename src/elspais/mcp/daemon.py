@@ -81,6 +81,9 @@ def resolve_spawner_pid() -> int | None:
          it is a real interactive session (has a tty). An interactive
          shell qualifies; batch/CI/tool shells do not.
 
+    Steps 2 and 3 read ``/proc`` and a POSIX session id, so on platforms
+    without them only the explicit declaration in step 1 resolves.
+
     Returns None when no session identity can be established — the
     daemon then keeps its TTL-only lifetime (current behavior).
     """
@@ -99,7 +102,8 @@ def resolve_spawner_pid() -> int | None:
 
     try:
         sid = os.getsid(0)
-    except OSError:
+    except (OSError, AttributeError):
+        # No session concept on this platform: no identity to record.
         return None
     if sid > 1 and sid != os.getpid() and _session_leader_has_tty(sid):
         return sid

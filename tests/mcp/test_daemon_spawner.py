@@ -25,13 +25,15 @@ import json
 import os
 import subprocess
 import sys
-from unittest.mock import patch
+import time
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from elspais.server.spawner_watch import (
     Decision,
     SpawnerWatchdog,
+    pending_snapshot,
     pid_alive,
     shutdown_decision,
 )
@@ -49,36 +51,62 @@ class _Clock:
         return self.now
 
 
-def _watchdog(alive_results, pending_snapshots, clock, grace=300.0):
-    """Build a watchdog with scripted liveness/pending-snapshot sequences.
+class _ScriptedChecks:
+    """Scripted liveness results and pending snapshots, one entry per check.
 
-    ``pending_snapshots`` yields ``(pending_count, activity_token)`` pairs:
-    one snapshot per check, so the count and the token can never disagree.
+    One check reads the pending state more than once: outside the writers'
+    lock for the activity comparison, and again inside the lock immediately
+    before deciding. A scripted entry is therefore either a single
+    ``(pending_count, activity_token)`` snapshot -- served to every read in
+    that check, so count and token can never disagree -- or a *list* of
+    snapshots, handed out in order, which scripts a state that changed
+    between two reads of the same check.
     """
-    alive_iter = iter(alive_results)
-    pending_iter = iter(pending_snapshots)
+
+    def __init__(self, alive_results, pending_snapshots) -> None:
+        self._alive = iter(alive_results)
+        self._checks = iter(pending_snapshots)
+        self._reads: list = []
+
+    def alive(self, pid: int) -> bool:
+        # alive_fn is called exactly once at the top of check_once, so it
+        # marks the boundary between one logical check and the next.
+        entry = next(self._checks, None)
+        if entry is None:
+            self._reads = []
+        elif isinstance(entry, list):
+            self._reads = list(entry)
+        else:
+            self._reads = [entry]
+        return next(self._alive)
+
+    def pending(self):
+        if not self._reads:
+            raise RuntimeError("no pending snapshot scripted for this check")
+        if len(self._reads) > 1:
+            return self._reads.pop(0)
+        return self._reads[0]
+
+
+def _watchdog(alive_results, pending_snapshots, clock, grace=300.0, lock=None):
+    """Build a watchdog driven by a scripted check sequence.
+
+    See ``_ScriptedChecks`` for the shape of ``pending_snapshots``.
+    """
+    script = _ScriptedChecks(alive_results, pending_snapshots)
     exits: list[str] = []
 
     wd = SpawnerWatchdog(
         spawner_pid=4321,
-        pending_fn=lambda: next(pending_iter),
+        pending_fn=script.pending,
         interval_seconds=0.01,
         grace_seconds=grace,
-        alive_fn=lambda pid: next(alive_iter),
+        alive_fn=script.alive,
         exit_fn=lambda: exits.append("exit"),
         clock=clock,
+        lock=lock,
     )
     return wd, exits
-
-
-def _live_pending_fn(graph):
-    """Snapshot a real graph's pending mutations the way the daemon must."""
-
-    def _snapshot() -> tuple[int, str | None]:
-        entries = graph.mutation_log.tail(0)
-        return len(entries), (entries[-1].id if entries else None)
-
-    return _snapshot
 
 
 # ---------------------------------------------------------------------------
@@ -171,6 +199,52 @@ class TestAbsentSessionTerminatesDaemon:
         assert exits == []
 
 
+class TestWatchdogSurvivesAFailedCheck:
+    """Validates REQ-o00074-E: the obligation to terminate survives a check that
+    fails. A check raising (a rebuild mid-flight, a transient OS error) must
+    cost one interval, not the guard: a dead watchdog thread is silent, and the
+    daemon it stopped watching outlives its session forever.
+    """
+
+    def test_REQ_o00074_E_failed_check_costs_one_interval_not_the_watchdog(self, request):
+        calls: list[str] = []
+        exits: list[str] = []
+        state = {"alive": True}
+
+        def alive_fn(pid: int) -> bool:
+            calls.append("check")
+            if len(calls) == 1:
+                raise OSError("transient failure on the first check")
+            return state["alive"]
+
+        wd = SpawnerWatchdog(
+            spawner_pid=4321,
+            pending_fn=lambda: (0, 5),
+            interval_seconds=0.01,
+            grace_seconds=0.0,
+            alive_fn=alive_fn,
+            exit_fn=lambda: exits.append("exit"),
+        )
+        request.addfinalizer(wd.stop)
+        wd.start()
+
+        def _wait_for(predicate, what):
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline:
+                if predicate():
+                    return
+                time.sleep(0.005)
+            pytest.fail(f"timed out waiting for {what} (checks={len(calls)}, exits={exits})")
+
+        # The thread kept checking after the raise.
+        _wait_for(lambda: len(calls) >= 3, "the watchdog to check again after a failed check")
+        assert exits == []
+
+        # And a later check still reaches -- and acts on -- a decision.
+        state["alive"] = False
+        _wait_for(lambda: exits == ["exit"], "the watchdog to terminate once the session is gone")
+
+
 # ---------------------------------------------------------------------------
 # Disclosure of pending work before termination
 # ---------------------------------------------------------------------------
@@ -243,6 +317,73 @@ class TestPendingWorkIsDisclosed:
         assert "180" in err, f"deadline not disclosed: {err!r}"
 
 
+class TestTerminationDecidesUnderTheWritersLock:
+    """Validates REQ-o00074-G: the count a termination acts on is the count at
+    the moment of terminating, read while writers are excluded -- so a change
+    accepted (and acknowledged to its writer) after the first read cannot be
+    destroyed by a decision taken from the stale read.
+    """
+
+    def test_REQ_o00074_G_write_landing_after_the_clean_read_is_not_discarded(self, capsys):
+        """A clean read then a write, before the exit: the daemon keeps serving."""
+        clock = _Clock()
+        # One check: outside the lock the log looks clean at revision 5;
+        # inside it, a writer has landed one mutation and moved it to 6.
+        wd, exits = _watchdog([False], [[(0, 5), (1, 6)]], clock)
+
+        assert wd.check_once() is Decision.KEEP
+        assert exits == [], "daemon terminated holding a mutation it had just acknowledged"
+        assert "shutting down" not in capsys.readouterr().err
+
+    def test_REQ_o00074_G_write_landing_in_the_gap_outranks_an_expired_grace(self, capsys):
+        """An expired countdown does not license discarding a just-landed write."""
+        clock = _Clock()
+        wd, exits = _watchdog(
+            [False, False],
+            [(1, 5), [(1, 5), (2, 6)]],
+            clock,
+            grace=300.0,
+        )
+
+        assert wd.check_once() is Decision.WAIT_GRACE  # t=1000, deadline 1300
+        capsys.readouterr()
+
+        clock.now = 1400.0  # past the deadline
+        assert wd.check_once() is Decision.KEEP
+        assert exits == [], "expired grace discarded a mutation that landed after the read"
+
+    def test_REQ_o00074_G_decision_is_taken_while_holding_the_writers_lock(self):
+        """The terminate decision is bracketed by the lock the writers take."""
+        events: list[str] = []
+
+        class _RecordingLock:
+            def __enter__(self):
+                events.append("enter")
+                return self
+
+            def __exit__(self, *exc):
+                events.append("exit")
+                return False
+
+        clock = _Clock()
+        wd = SpawnerWatchdog(
+            spawner_pid=4321,
+            pending_fn=lambda: (0, 5),
+            grace_seconds=300.0,
+            alive_fn=lambda pid: False,
+            exit_fn=lambda: events.append("terminate"),
+            clock=clock,
+            lock=_RecordingLock(),
+        )
+
+        assert wd.check_once() is Decision.EXIT_CLEAN
+        assert events == [
+            "enter",
+            "terminate",
+            "exit",
+        ], f"terminate decision was not taken inside the writers' lock: {events}"
+
+
 class TestPendingCountIsHonest:
     """Validates REQ-o00074-G: the disclosed count is the number actually
     pending, not a figure capped by how the daemon happens to query its log.
@@ -251,18 +392,22 @@ class TestPendingCountIsHonest:
     def test_REQ_o00074_G_snapshot_counts_every_pending_mutation(
         self, mutable_graph, canonical_federated_graph
     ):
-        # Imported lazily: the daemon's pending-count source is a named
-        # helper so both the watchdog and this test read the same answer.
-        from elspais.server.spawner_watch import pending_snapshot
-
+        # The daemon's pending-count source is a named helper so both the
+        # watchdog and this test read the same answer.
         fg = canonical_federated_graph
         assert fg.mutation_log.tail(0) == [], "fixture must start with no pending mutations"
 
-        entries = [fg.update_title("REQ-p00001", f"User Authentication {i}") for i in range(5)]
+        before_count, before_token = pending_snapshot(fg)
+        assert before_count == 0
+
+        for i in range(5):
+            fg.update_title("REQ-p00001", f"User Authentication {i}")
 
         count, token = pending_snapshot(fg)
-        assert count == 5
-        assert token == entries[-1].id
+        assert count == 5, "disclosed count is not the number actually pending"
+        # The token is the log's revision, not its tip: five appends moved
+        # it five times, and it is comparable across checks.
+        assert token == before_token + 5
 
 
 # ---------------------------------------------------------------------------
@@ -324,6 +469,76 @@ class TestAppliedChangeProvesWriterPresent:
         assert exits == ["exit"], "polling kept an orphaned daemon alive past its deadline"
 
 
+class TestUndoneWorkStillCountsAsActivity:
+    """Validates REQ-o00074-H: a writer working in apply-then-undo cycles is
+    still a writer. The log's tip returns to exactly where it was after such a
+    pair, so an activity token derived from the tip reports that writer as
+    absent and terminates a daemon somebody is actively using.
+    """
+
+    def test_REQ_o00074_H_apply_then_undo_moves_the_activity_token(
+        self, mutable_graph, canonical_federated_graph
+    ):
+        fg = canonical_federated_graph
+        assert fg.mutation_log.tail(0) == [], "fixture must start with no pending mutations"
+
+        fg.update_title("REQ-p00001", "User Authentication (kept)")
+        count_before, token_before = pending_snapshot(fg)
+        tip_before = fg.mutation_log.tail(0)[-1].id
+
+        fg.update_title("REQ-p00002", "Data Privacy (transient)")
+        fg.undo_last()
+
+        count_after, token_after = pending_snapshot(fg)
+        assert count_after == count_before, "apply+undo did not restore the pending count"
+        assert (
+            fg.mutation_log.tail(0)[-1].id == tip_before
+        ), "apply+undo did not restore the log tip -- the test no longer poses the problem"
+        assert token_after != token_before, (
+            "activity token did not move across an apply+undo pair: a writer working "
+            "in that pattern reads as idle"
+        )
+
+        fg.undo_last()  # leave the log as the fixture handed it over
+        assert fg.mutation_log.tail(0) == []
+
+    def test_REQ_o00074_H_writer_undoing_between_checks_is_judged_active(
+        self, mutable_graph, canonical_federated_graph
+    ):
+        """Applying and undoing between every check keeps the daemon serving."""
+        fg = canonical_federated_graph
+        baseline = len(fg.mutation_log.tail(0))
+        fg.update_title("REQ-p00001", "User Authentication (pending)")
+
+        clock = _Clock()
+        exits: list[str] = []
+        wd = SpawnerWatchdog(
+            spawner_pid=4321,
+            pending_fn=lambda: pending_snapshot(fg),
+            grace_seconds=300.0,
+            alive_fn=lambda pid: False,
+            exit_fn=lambda: exits.append("exit"),
+            clock=clock,
+        )
+
+        # t=1000: session absent, one mutation pending. Baseline token.
+        assert wd.check_once() is Decision.WAIT_GRACE
+
+        # The writer keeps working in apply-then-undo cycles, well past the
+        # grace deadline the first check anchored.
+        for offset in (200, 400, 600, 800):
+            fg.update_title("REQ-p00002", f"Data Privacy (draft {offset})")
+            fg.undo_last()
+            clock.now = 1000.0 + offset
+            assert (
+                wd.check_once() is Decision.KEEP
+            ), "a writer applying and undoing between checks was judged idle"
+        assert exits == []
+
+        fg.undo_last()  # leave the log as the fixture handed it over
+        assert len(fg.mutation_log.tail(0)) == baseline
+
+
 # ---------------------------------------------------------------------------
 # Termination never persists on the daemon's own initiative
 # ---------------------------------------------------------------------------
@@ -349,7 +564,7 @@ class TestTerminationDoesNotPersist:
         exits: list[str] = []
         wd = SpawnerWatchdog(
             spawner_pid=4321,
-            pending_fn=_live_pending_fn(fg),
+            pending_fn=lambda: pending_snapshot(fg),
             grace_seconds=300.0,
             alive_fn=lambda pid: False,
             exit_fn=lambda: exits.append("exit"),
@@ -419,6 +634,54 @@ class TestSpawnerIdentityResolution:
             patch("elspais.mcp.daemon._session_leader_has_tty", return_value=True),
         ):
             assert daemon.resolve_spawner_pid() == 7777
+
+
+class TestUnusableSpawnerIdentityIsRefused:
+    """Validates REQ-o00074-D: a handed-over PID at or below the floor the
+    resolver applies names no session -- pid 1 is init, whose death never comes,
+    and 0/negative are not process identities at all. The daemon starts with no
+    session identity rather than watching one, which is the TTL-only behavior
+    the requirement asks for when no identity can be established.
+    """
+
+    def _spawner_pids_watched(self, monkeypatch, tmp_path, env_value):
+        """Run the daemon's startup path and report the PIDs it set a watch on."""
+        from elspais.mcp import server as mcp_server
+
+        monkeypatch.delenv("_ELSPAIS_DAEMON_JSON", raising=False)
+        monkeypatch.setenv("_ELSPAIS_SPAWNER_PID", env_value)
+
+        watched: list[int] = []
+
+        class _StubWatchdog:
+            def __init__(self, spawner_pid, **kwargs):
+                watched.append(spawner_pid)
+
+            def start(self):
+                pass
+
+        with (
+            patch("elspais.server.state.AppState.from_config", return_value=MagicMock()),
+            patch("elspais.server.app.create_app", return_value=MagicMock()),
+            patch("elspais.server.spawner_watch.SpawnerWatchdog", _StubWatchdog),
+            patch("uvicorn.Config", return_value=MagicMock()),
+            patch("uvicorn.Server", return_value=MagicMock()),
+            patch("anyio.run"),
+        ):
+            mcp_server.run_server(working_dir=tmp_path, transport="streamable-http", port=59999)
+        return watched
+
+    @pytest.mark.parametrize("value", ["1", "0", "-3", "not-a-pid"])
+    def test_REQ_o00074_D_unusable_spawner_pid_starts_no_watchdog(
+        self, monkeypatch, tmp_path, value
+    ):
+        assert (
+            self._spawner_pids_watched(monkeypatch, tmp_path, value) == []
+        ), f"daemon watched a pid it cannot learn anything from: {value!r}"
+
+    def test_REQ_o00074_D_real_spawner_pid_is_watched(self, monkeypatch, tmp_path):
+        """The control: a usable identity does produce a watch on that pid."""
+        assert self._spawner_pids_watched(monkeypatch, tmp_path, "5555") == [5555]
 
 
 class TestImplicitStartRecordsSession:
