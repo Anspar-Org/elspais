@@ -878,21 +878,27 @@ class TestClientRequestedSaveRetiresTheRecord:
         clear_automatic_save(tmp_path)  # must not raise
 
 
+@pytest.fixture
+def hht_project(tmp_path):
+    """A throwaway copy of the hht-like fixture the save paths may write to."""
+    import shutil
+    from pathlib import Path
+
+    src = Path(__file__).parent.parent / "fixtures" / "hht-like"
+    dest = tmp_path / "project"
+    shutil.copytree(src, dest)
+    return dest
+
+
 class TestPersistPendingRecordsAndRetires:
-    """Validates REQ-o00074-I, REQ-o00074-J on the one save path both surfaces
-    use: a save the daemon performs leaves the record on disk beside the files
+    """Validates REQ-o00074-I, REQ-o00074-J on the save path the MCP surface
+    uses: a save the daemon performs leaves the record on disk beside the files
     it wrote, and the next client-requested save takes it away.
     """
 
     @pytest.fixture
-    def project(self, tmp_path):
-        import shutil
-        from pathlib import Path
-
-        src = Path(__file__).parent.parent / "fixtures" / "hht-like"
-        dest = tmp_path / "project"
-        shutil.copytree(src, dest)
-        return dest
+    def project(self, hht_project):
+        return hht_project
 
     def test_REQ_o00074_I_automatic_save_writes_the_record_beside_the_files(self, project):
         from elspais.mcp.daemon import read_automatic_save
@@ -934,6 +940,92 @@ class TestPersistPendingRecordsAndRetires:
         assert (
             read_automatic_save(project) is None
         ), "a client-requested save left the daemon's record standing"
+
+
+class TestViewerSaveRetiresTheRecord:
+    """Validates REQ-o00074-J: while a client persists pending changes at its own
+    request, any outstanding record of a save the daemon performed is retired --
+    on the viewer's HTTP save route as well as on the MCP one.
+
+    The two routes do not share a save implementation: ``/api/save`` calls the
+    renderer directly rather than going through the shared persist path, so the
+    retirement is a separate step there. Covering only the MCP path would leave
+    a viewer user reading a notice about a save that its own save superseded.
+    """
+
+    @pytest.fixture
+    def client_and_project(self, hht_project):
+        from starlette.testclient import TestClient
+
+        from elspais.server.app import create_app
+        from elspais.server.state import AppState
+
+        state = AppState.from_config(repo_root=hht_project)
+        return TestClient(create_app(state=state, mount_mcp=False)), state, hht_project
+
+    def test_REQ_o00074_J_viewer_save_retires_the_daemons_record(self, client_and_project):
+        from elspais.graph import render
+        from elspais.mcp.daemon import record_automatic_save
+
+        client, state, project = client_and_project
+
+        # A daemon saved unattended at some earlier point, and said so.
+        record_automatic_save(
+            project, mutation_count=2, files_written=1, trigger="no recorded client was running"
+        )
+        record_path = project / ".elspais" / "automatic-save.json"
+        assert record_path.is_file()
+        assert (
+            client.get("/api/dirty").json().get("automatic_save") is not None
+        ), "the record was not being disclosed, so its retirement proves nothing"
+
+        # This client applies its own change and asks for it to be persisted.
+        node = state.graph.find_by_id("REQ-p00001")
+        resp = client.post(
+            "/api/mutate/title",
+            json={
+                "node_id": "REQ-p00001",
+                "new_title": "User Authentication (viewer-saved)",
+                "if_version": render.node_version(node),
+            },
+        )
+        assert resp.status_code == 200, resp.text
+
+        dirty = client.get("/api/dirty").json()
+        assert dirty["mutation_count"] == 1
+        resp = client.post("/api/save", json={"if_tip_mutation_id": dirty["tip"]})
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["success"] is True
+        assert (
+            "viewer-saved" in (project / "spec" / "prd-core.md").read_text()
+        ), "the save did not reach disk, so there was nothing to retire the record for"
+
+        # The record now describes a state that no longer stands.
+        assert (
+            not record_path.exists()
+        ), "a client-requested save over HTTP left the daemon's record standing on disk"
+        assert (
+            "automatic_save" not in client.get("/api/dirty").json()
+        ), "/api/dirty still discloses a retired record"
+        assert (
+            client.get("/api/check-freshness").json().get("automatic_save") is None
+        ), "/api/check-freshness still discloses a retired record"
+
+    def test_REQ_o00074_J_a_failed_viewer_save_retires_nothing(self, client_and_project):
+        """The retirement follows a save that happened. A rejected one leaves
+        the record standing, because the state it describes still stands."""
+        from elspais.mcp.daemon import record_automatic_save
+
+        client, state, project = client_and_project
+
+        record_automatic_save(project, mutation_count=2, files_written=1, trigger="t")
+        record_path = project / ".elspais" / "automatic-save.json"
+
+        # A tip the caller cannot have seen: the save is refused.
+        resp = client.post("/api/save", json={"if_tip_mutation_id": "f" * 32})
+
+        assert resp.status_code == 409, resp.text
+        assert record_path.is_file(), "a refused save retired a record it never superseded"
 
 
 class TestFailedSaveRetainsTheWork:
