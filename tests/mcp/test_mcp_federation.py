@@ -186,15 +186,15 @@ class TestRefreshGraphSyncsConfig:
     """Validates REQ-d00205-B: refresh_graph() syncs _state config."""
 
     def test_REQ_d00205_B_refresh_graph_syncs_config_after_rebuild(self, tmp_path):
-        """After non-path refresh, _state['config'] is synced from rebuilt graph.
+        """A rebuild publishes the rebuilt graph's root repo config.
 
-        Validates REQ-d00205-B: When refresh_graph() is called WITHOUT a path
-        argument, _state['config'] must still be updated from the rebuilt
-        FederatedGraph's root repo config. Currently the handler only updates
-        _state['config'] when a path is provided, leaving it stale otherwise.
+        Validates REQ-d00205-B: a refresh that is not given a path must still
+        leave the holder's config equal to the rebuilt FederatedGraph's root
+        repo config, so every surface reading through the holder sees what was
+        just loaded from disk rather than a stale copy.
         """
         pytest.importorskip("mcp")
-        from elspais.mcp.server import _refresh_graph
+        from elspais.mcp.shared_state import SharedServerState, rebuild_shared_graph
 
         # Create a config that will change between builds
         config_file = tmp_path / ".elspais.toml"
@@ -205,20 +205,20 @@ class TestRefreshGraphSyncsConfig:
         # Change the config on disk before refresh
         config_file.write_text('[project]\nname = "UpdatedName"\nnamespace = "UP"\n')
 
-        result, new_graph = _refresh_graph(tmp_path)
+        state = SharedServerState({"working_dir": tmp_path})
+        result = rebuild_shared_graph(state)
         assert result["success"] is True
 
-        # The handler should sync _state["config"] from the rebuilt graph.
-        # Verify the rebuilt graph carries the updated config.
+        # The rebuilt graph carries the updated config.
+        new_graph = state["graph"]
         root_entry = next(new_graph.iter_repos())
         assert root_entry.config is not None
+        assert root_entry.config.get("project", {}).get("name") == "UpdatedName"
 
-        # The result dict should include the new config so the handler
-        # can sync _state["config"]. This is the missing feature.
-        assert "config" in result, (
-            "_refresh_graph() must return config in its result dict "
-            "so the handler can sync _state['config'] after non-path rebuilds"
-        )
+        # The holder's config IS that root repo config, not merely reported.
+        assert result["config"] is not None
+        assert state["config"] is result["config"]
+        assert state["config"] is root_entry.config
 
 
 # ─────────────────────────────────────────────────────────────────────────────

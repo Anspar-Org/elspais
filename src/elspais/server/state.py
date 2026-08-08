@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from elspais.mcp.shared_state import SharedServerState
+from elspais.mcp.shared_state import SharedServerState, rebuild_shared_graph
 
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
@@ -80,6 +80,14 @@ class AppState:
         self._mtimes: dict[str, float] = {}
         self._last_stale_check = 0.0
         self.snapshot_mtimes()
+        # Change-detection state that lives outside the holder — this object's
+        # mtime snapshot, and the config fingerprint recorded for the server
+        # this object belongs to. Every rebuild must bring both forward,
+        # including one reached through an MCP tool that knows nothing about
+        # this object; registering them as hooks is what makes that true of
+        # the one rebuild routine instead of each caller (REQ-p00004-O).
+        self.shared.post_rebuild_hooks.append(self.snapshot_mtimes)
+        self.shared.post_rebuild_hooks.append(self._refresh_daemon_config_hash)
         # Per-repo detached HEAD tracking (for rewind)
         self._repo_detached: dict[str, DetachedState] = {}
 
@@ -183,6 +191,26 @@ class AppState:
                 except OSError:
                     pass
 
+    # Implements: REQ-p00004-O
+    def _refresh_daemon_config_hash(self) -> None:
+        """Bring the recorded config fingerprint forward after a rebuild.
+
+        The rebuild re-read configuration from disk, so the fingerprint a CLI
+        staleness check compares against must move with it or the CLI tears
+        down a server that is already serving exactly that configuration.
+
+        This is registered as a hook rather than performed by the rebuild
+        routine so that it happens only for the process that actually owns the
+        record — the one serving the graph the daemon file describes. A
+        different process rebuilding its own private graph in the same
+        repository must not stamp this record: a fingerprint that is falsely
+        current suppresses a restart that is needed, which is worse than the
+        needless restart a stale one costs.
+        """
+        from elspais.mcp.daemon import refresh_daemon_config_hash
+
+        refresh_daemon_config_hash(self.repo_root)
+
     def _config_files(self) -> list[Path]:
         """Config files whose edits must trigger a graph rebuild."""
         return [
@@ -234,8 +262,17 @@ class AppState:
                 return True
         return False
 
+    # Implements: REQ-p00015-F, REQ-p00015-B
     def ensure_fresh(self) -> bool:
-        """Rebuild graph if files changed. Returns True if rebuilt.
+        """Rebuild graph if files changed.
+
+        Returns True only when a rebuild completed and the new graph is the
+        one now being served. A rebuild that was skipped (throttled, pending
+        mutations, nothing stale) and a rebuild that was attempted and failed
+        both return False: the caller must never be told an effect occurred
+        that is not present in the served graph (REQ-p00015-F). A failure is
+        reported with its cause on stderr rather than being swallowed
+        (REQ-p00015-B).
 
         Throttled to at most one mtime check per second.
 
@@ -269,34 +306,23 @@ class AppState:
                     f"warning: auto-refresh rebuild failed, keeping old graph: {exc}",
                     file=sys.stderr,
                 )
-        return True
+                return False
+            return True
 
-    # Implements: REQ-p00004-J
+    # Implements: REQ-p00004-J, REQ-p00004-O, REQ-p00015-F
     def _rebuild(self) -> None:
-        """Rebuild graph from disk and swap it into the shared holder.
+        """Rebuild the graph from disk through the one shared rebuild routine.
 
-        The swap is serialized under the shared write lock so no writer can
-        pass a guard against the old graph while the new one is being
-        installed. MCP tools see the new graph immediately — they read
-        through the same holder.
+        This object owns no rebuild logic of its own. ``rebuild_shared_graph``
+        re-reads config, publishes config and graph together under the shared
+        write lock, and runs the post-rebuild hooks — this object's mtime
+        re-snapshot and its daemon-fingerprint sync among them. It is the same
+        routine the explicit reload surfaces reach, so every path leaves
+        identical state behind it.
+
+        Raises on failure so ``ensure_fresh()`` keeps serving the previous
+        graph and reports honestly that no rebuild happened.
         """
-        from elspais.config import get_config
-        from elspais.graph.factory import build_graph
-
-        with self.shared.write_lock:
-            self.config = get_config(start_path=self.repo_root, quiet=True)
-            self.graph = build_graph(
-                config=self.config,
-                repo_root=self.repo_root,
-            )
-            self.graph.load_comments()
-            self.build_time = time.time()
-            self.snapshot_mtimes()
-        # Config was re-read from disk — sync daemon.json's config_hash so
-        # CLI staleness checks don't restart an already-fresh server.
-        try:
-            from elspais.mcp.daemon import refresh_daemon_config_hash
-
-            refresh_daemon_config_hash(self.repo_root)
-        except Exception:
-            pass  # Best effort — a failed refresh only risks an extra restart
+        result = rebuild_shared_graph(self.shared)
+        if not result.get("success"):
+            raise RuntimeError(result.get("message", "graph rebuild failed"))

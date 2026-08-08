@@ -49,7 +49,8 @@ Get current graph health and statistics.
 Force rebuild the graph from spec files.
 
   Parameters:
-    full (bool)              If true, clear all caches before rebuild
+    full (bool)              Accepted for compatibility; every rebuild is
+                             full, as no cache is retained between builds
     path (str)               Switch to a different project directory first
     force (bool)             If true, discard unsaved mutations and refresh
     if_tip_mutation_id (str) The mutation-log tip; required when force=true
@@ -59,6 +60,10 @@ Force rebuild the graph from spec files.
     success       Whether rebuild succeeded
     message       Status message
     node_count    New total node count
+
+A configuration that cannot be parsed publishes nothing: `success` is false,
+`message` begins `CONFIG ERROR:`, and the graph already being served stays
+live.
 
 ### Requirement Search & Navigation
 

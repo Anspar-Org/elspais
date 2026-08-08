@@ -2039,8 +2039,9 @@ async def api_save(request: Request) -> JSONResponse:
 
 @_serialized_write
 async def api_revert(request: Request) -> JSONResponse:
+    # Implements: REQ-p00004-J, REQ-p00004-O
     """POST /api/revert - Revert all unsaved mutations by rebuilding from disk."""
-    from elspais.graph.factory import build_graph
+    from elspais.mcp.shared_state import rebuild_shared_graph
 
     state = _st(request)
     # REQ-o00062-N: discarding affects every writer's pending work — the
@@ -2050,12 +2051,11 @@ async def api_revert(request: Request) -> JSONResponse:
     if conflict is not None:
         return conflict
     try:
-        new_graph = build_graph(
-            config=state.config,
-            repo_root=state.repo_root,
-        )
-        state.graph = new_graph
-        state.build_time = time.time()
+        result = rebuild_shared_graph(state.shared)
+        if not result.get("success"):
+            return JSONResponse(
+                {"success": False, "error": result.get("message", "")}, status_code=500
+            )
         return JSONResponse({"success": True, "message": "Graph reverted from disk"})
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -2063,10 +2063,9 @@ async def api_revert(request: Request) -> JSONResponse:
 
 @_serialized_write
 async def api_reload(request: Request) -> JSONResponse:
-    # Implements: REQ-p00004-J
+    # Implements: REQ-p00004-J, REQ-p00004-O
     """POST /api/reload - Reload graph from disk with fresh config."""
-    from elspais.config import get_config
-    from elspais.graph.factory import build_graph
+    from elspais.mcp.shared_state import rebuild_shared_graph
 
     state = _st(request)
     # REQ-o00062-N: a reload discards pending mutations exactly like revert
@@ -2075,18 +2074,11 @@ async def api_reload(request: Request) -> JSONResponse:
     if conflict is not None:
         return conflict
     try:
-        # Same config path as AppState._rebuild(): includes .elspais.local.toml
-        # and environment overlays, not just the base .elspais.toml.
-        state.config = get_config(start_path=state.repo_root, quiet=True)
-
-        new_graph = build_graph(
-            config=state.config,
-            repo_root=state.repo_root,
-        )
-        if hasattr(new_graph, "load_comments"):
-            new_graph.load_comments()
-        state.graph = new_graph
-        state.build_time = time.time()
+        result = rebuild_shared_graph(state.shared)
+        if not result.get("success"):
+            return JSONResponse(
+                {"success": False, "error": result.get("message", "")}, status_code=500
+            )
         return JSONResponse({"success": True, "message": "Graph reloaded from disk"})
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)

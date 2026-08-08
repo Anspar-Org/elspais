@@ -1,4 +1,4 @@
-# Implements: REQ-p00080-A, REQ-p00080-C
+# Implements: REQ-p00080-A, REQ-p00080-C, REQ-p00080-K
 """Pandoc PDF renderer.
 
 Invokes pandoc as a subprocess to convert assembled Markdown to PDF.
@@ -6,10 +6,15 @@ Invokes pandoc as a subprocess to convert assembled Markdown to PDF.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+# Pandoc reports a resource it could not fetch on stderr and still exits
+# successfully, replacing the image with its alt text.
+_UNFETCHED_RE = re.compile(r"Could not fetch resource (.+?): replacing")
 
 
 def _find_bundled_template() -> Path:
@@ -24,6 +29,7 @@ def render_pdf(
     template: Path | None = None,
     cover: Path | None = None,
     resource_paths: list[Path] | None = None,
+    unfetched: list[str] | None = None,
 ) -> int:
     """Render Markdown content to PDF via pandoc.
 
@@ -37,6 +43,11 @@ def render_pdf(
             relative image references. Required when assembled markdown
             references images by relative path -- pandoc would otherwise
             resolve them against the tempfile's directory in `/tmp/`.
+        unfetched: Collector extended with the name of every resource
+            pandoc reported it could not fetch. Pandoc drops such a
+            resource and still exits successfully, so a caller that
+            reports on document completeness cannot learn about the
+            omission from the return code alone.
 
     Returns:
         0 on success, non-zero on failure.
@@ -100,11 +111,33 @@ def render_pdf(
             env=env,
         )
 
+        stderr = result.stderr or ""
+
+        # Pandoc drops an unfetchable image and still exits 0, so the
+        # omission is only visible here. Surface it to the caller.
+        # Implements: REQ-p00080-K
+        if unfetched is not None:
+            for match in _UNFETCHED_RE.finditer(stderr):
+                name = match.group(1).strip()
+                if name not in unfetched:
+                    unfetched.append(name)
+
         if result.returncode != 0:
+            # The whole stream matters when the run failed: the cause is
+            # usually in the engine's output, not pandoc's own lines.
+            if stderr:
+                print(stderr.rstrip("\n"), file=sys.stderr)
             print("Error: pandoc failed.", file=sys.stderr)
-            if result.stderr:
-                print(result.stderr, file=sys.stderr)
             return result.returncode
+
+        # On success, echo only pandoc's own diagnostics. The LaTeX engine
+        # narrates font substitution at length on a healthy run, and
+        # burying the one line that reports a dropped image in sixty lines
+        # of font chatter discloses nothing.
+        # Implements: REQ-p00080-K
+        for line in stderr.splitlines():
+            if line.startswith("[WARNING]") or line.startswith("[ERROR]"):
+                print(line, file=sys.stderr)
 
         return 0
 

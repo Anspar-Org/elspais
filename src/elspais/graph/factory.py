@@ -265,9 +265,16 @@ def _run_prescan_command(
 ) -> dict[str, list[dict]] | None:
     """Run an external prescan command to discover test structure.
 
-    The command receives test file paths on stdin (one per line) and
-    outputs a JSON array on stdout with the standardized schema:
+    The command receives test file paths on stdin (one per line, repo-relative)
+    and outputs a JSON array on stdout with the standardized schema:
     [{"file": "...", "function": "...", "class": "...|null", "line": N}, ...]
+
+    Each record's ``file`` may be repo-relative (the form handed in on stdin)
+    or absolute; both resolve against the scanned file, because every
+    relative key returned here is aliased to its absolute form by the caller.
+    Files the command reports on are attributed from its records; every other
+    scanned test file keeps built-in attribution, so a command may cover one
+    file type and leave the rest alone.
 
     Args:
         command: Shell command to run.

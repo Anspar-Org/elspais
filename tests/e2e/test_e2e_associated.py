@@ -17,12 +17,15 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 
 import pytest
 
 from .conftest import (
     ensure_fixture_daemon,
     load_associated_fixture,
+    requires_pandoc,
+    requires_xelatex,
     run_elspais,
 )
 from .helpers import (
@@ -928,3 +931,424 @@ class TestFederationMCPGuard:
         assert (
             resp.get("success") is True
         ), f"expected success with write_associates=true, got {resp!r}"
+
+
+# ---------------------------------------------------------------------------
+# Test: PDF media fidelity across a federated graph
+# Unique layout (spec subdirectories + image assets) — keeps per-class build.
+# ---------------------------------------------------------------------------
+
+
+def _write_png(path, size=64):
+    """Write a small real RGB PNG so pdfimages can see it in the output."""
+    import struct
+    import zlib
+
+    def chunk(tag, data):
+        return (
+            struct.pack(">I", len(data))
+            + tag
+            + data
+            + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+        )
+
+    rows = b"".join(
+        b"\x00" + b"".join(bytes([(x * 4) % 256, (y * 4) % 256, 128]) for x in range(size))
+        for y in range(size)
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(rows))
+        + chunk(b"IEND", b"")
+    )
+
+
+def _image_rows(pdf_path):
+    """Return (raw_listing, [(width, height), ...]) for images embedded in a PDF.
+
+    ``pdfimages -list`` prints two header lines followed by one row per
+    embedded object; only rows whose ``type`` column is ``image`` are
+    real pictures (alpha channels arrive as separate ``smask`` rows).
+    """
+    listing = subprocess.run(
+        ["pdfimages", "-list", str(pdf_path)],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    sizes = []
+    for row in listing.splitlines()[2:]:
+        cols = row.split()
+        if len(cols) < 5 or cols[2] != "image":
+            continue
+        sizes.append((int(cols[3]), int(cols[4])))
+    return listing, sizes
+
+
+requires_pdfimages = pytest.mark.skipif(
+    shutil.which("pdfimages") is None,
+    reason="pdfimages not found — install poppler-utils to inspect embedded PDF images",
+)
+
+requires_pdftotext = pytest.mark.skipif(
+    shutil.which("pdftotext") is None,
+    reason="pdftotext not found — install poppler-utils to extract compiled PDF text",
+)
+
+
+def _pdf_text(pdf_path):
+    """Return the PDF's text with all whitespace runs collapsed to one space.
+
+    ``pdftotext`` breaks lines wherever the typeset page did, so a phrase
+    that reads as one sentence in the source arrives split across lines.
+    Normalising first is what makes substring matching mean anything.
+    """
+    import re as _re
+
+    raw = subprocess.run(
+        ["pdftotext", str(pdf_path), "-"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return _re.sub(r"\s+", " ", raw)
+
+
+# Distinctive rationale text: short words only, so LaTeX cannot hyphenate a
+# token apart and defeat the substring match after whitespace normalisation.
+CORE_RATIONALE_MARKER = "Core spec rationale marker alpha kilo nine."
+ASSOC_RATIONALE_MARKER = "Assoc spec rationale marker delta zulu seven."
+
+# Pixel dimensions distinguish which repo an image was resolved from.
+CORE_IMAGE_PX = 64
+ASSOC_IMAGE_PX = 48
+DECOY_IMAGE_PX = 24
+
+
+class TestPdfMediaFidelity:
+    """Validates REQ-p00080-G: the PDF generator carries content derived from a
+    variety of sources and media types — here, raster images referenced from
+    spec files in both the root repo and an associate repo, resolved per
+    declaring file rather than through a single global resource path.
+
+    Validates REQ-p00080-I: an image reference that no repository of the
+    compiled graph can satisfy is reported with the reference as written, the
+    declaring spec file, and the locations searched.
+
+    Validates REQ-p00080-K: when content was omitted, the completion report
+    discloses the degradation instead of reporting unqualified success.
+    """
+
+    @pytest.fixture(scope="class")
+    @staticmethod
+    def federated_pdf_project(tmp_path_factory):
+        """Core + associate, each referencing an image from a spec subdirectory.
+
+        The associate's image lives at the same repo-relative path as a
+        decoy of different dimensions in the core repo, so the compiled
+        output shows which repo the reference was anchored to.
+        """
+        base = tmp_path_factory.mktemp("pdf_media")
+        core_root = base / "core"
+        assoc_root = base / "assoc"
+
+        core_cfg = base_config(name="pdf-core", associated_enabled=True)
+        core_cfg["associates"] = {"paths": ["../assoc"]}
+        build_project(
+            core_root,
+            core_cfg,
+            spec_files={
+                "spec/sub/prd-core.md": [
+                    Requirement(
+                        "REQ-p00001",
+                        "Core Imagery",
+                        "PRD",
+                        body="Core diagram below.\n\n![core diagram](images/core.png)\n",
+                        assertions=[("A", "The system SHALL render core imagery.")],
+                        rationale=CORE_RATIONALE_MARKER,
+                    ),
+                ],
+            },
+        )
+        _write_png(core_root / "spec" / "sub" / "images" / "core.png", CORE_IMAGE_PX)
+        # Decoy: same repo-relative path the associate's spec uses, different size.
+        _write_png(core_root / "spec" / "sub" / "images" / "assoc.png", DECOY_IMAGE_PX)
+
+        build_associate(
+            assoc_root,
+            "assoc",
+            "ASC",
+            "../core",
+            config_overrides={"project": {"namespace": "ASC"}},
+            spec_files={
+                "spec/sub/prd-assoc.md": [
+                    Requirement(
+                        "ASC-p00001",
+                        "Associate Imagery",
+                        "PRD",
+                        body="Associate diagram below.\n\n![assoc diagram](images/assoc.png)\n",
+                        assertions=[("A", "The associate SHALL render its own imagery.")],
+                        rationale=ASSOC_RATIONALE_MARKER,
+                    ),
+                ],
+            },
+            init_git=True,
+        )
+        _write_png(assoc_root / "spec" / "sub" / "images" / "assoc.png", ASSOC_IMAGE_PX)
+
+        return core_root
+
+    @pytest.fixture(scope="class")
+    @staticmethod
+    def federated_pdf(federated_pdf_project, tmp_path_factory):
+        """Compile the federated project to PDF once for the whole class."""
+        out = tmp_path_factory.mktemp("pdf_media_out") / "federated.pdf"
+        result = run_elspais("pdf", "--output", str(out), cwd=federated_pdf_project)
+        return result, out
+
+    @pytest.fixture(scope="class")
+    @staticmethod
+    def missing_image_project(tmp_path_factory):
+        """A project whose spec references an image that exists nowhere."""
+        root = tmp_path_factory.mktemp("pdf_missing") / "core"
+        build_project(
+            root,
+            base_config(name="pdf-missing"),
+            spec_files={
+                "spec/sub/prd-missing.md": [
+                    Requirement(
+                        "REQ-p00001",
+                        "Missing Art",
+                        "PRD",
+                        body="Diagram below.\n\n![absent](images/nope.png)\n",
+                        assertions=[("A", "The system SHALL report absent art.")],
+                    ),
+                ],
+            },
+        )
+        return root
+
+    @pytest.fixture(scope="class")
+    @staticmethod
+    def missing_image_pdf(missing_image_project, tmp_path_factory):
+        """Compile the missing-reference project to PDF once for the class."""
+        out = tmp_path_factory.mktemp("pdf_missing_out") / "missing.pdf"
+        result = run_elspais("pdf", "--output", str(out), cwd=missing_image_project)
+        return result, out
+
+    @pytest.fixture(scope="class")
+    @staticmethod
+    def unfetchable_media_project(tmp_path_factory):
+        """A project referencing a media type only pandoc can adjudicate.
+
+        ``.webp`` is outside the assembler's own image-reference grammar, so
+        the assembler records nothing at all for this document. The only
+        witness that the picture is missing is pandoc's own stderr, which it
+        emits while still exiting successfully.
+        """
+        root = tmp_path_factory.mktemp("pdf_webp") / "core"
+        build_project(
+            root,
+            base_config(name="pdf-webp"),
+            spec_files={
+                "spec/sub/prd-webp.md": [
+                    Requirement(
+                        "REQ-p00001",
+                        "Modern Art",
+                        "PRD",
+                        body="Diagram below.\n\n![absent](images/nope.webp)\n",
+                        assertions=[("A", "The system SHALL report absent modern art.")],
+                    ),
+                ],
+            },
+        )
+        return root
+
+    @pytest.fixture(scope="class")
+    @staticmethod
+    def unfetchable_media_pdf(unfetchable_media_project, tmp_path_factory):
+        """Compile the unfetchable-media project to PDF once for the class."""
+        out = tmp_path_factory.mktemp("pdf_webp_out") / "webp.pdf"
+        result = run_elspais("pdf", "--output", str(out), cwd=unfetchable_media_project)
+        return result, out
+
+    # Verifies: REQ-p00080-K
+    @requires_pandoc
+    @requires_xelatex
+    def test_REQ_p00080_K_pandoc_reported_omission_reaches_the_completion_line(
+        self, unfetchable_media_pdf
+    ):
+        """A reference only the typesetter can notice still qualifies the verdict.
+
+        Every other test of this path substitutes a fake pandoc, so the exact
+        stderr wording the parser depends on is asserted against a string the
+        test itself wrote. If pandoc's phrasing drifts, those tests stay green
+        while the omission stops being counted and the document is reported as
+        an unqualified success. This one runs the real binary end to end: the
+        compile succeeds, pandoc names the resource it could not fetch, and
+        that omission reaches the completion line.
+        """
+        result, out = unfetchable_media_pdf
+        print(f"\n--- elspais pdf stdout ---\n{result.stdout}")
+        print(f"--- elspais pdf stderr ---\n{result.stderr}")
+
+        assert result.returncode == 0, f"pdf failed: {result.stderr}"
+        assert out.exists(), "PDF file was not created"
+
+        assert "nope.webp" in result.stderr, (
+            f"the resource pandoc could not fetch was not named on stderr: " f"{result.stderr}"
+        )
+        assert "PDF written to" in result.stdout, f"no completion line: {result.stdout}"
+        assert "INCOMPLETE" in result.stdout, (
+            f"a reference pandoc dropped was not folded into the completion "
+            f"line, so the document was reported as an unqualified success: "
+            f"{result.stdout}"
+        )
+
+    # Verifies: REQ-p00080-G
+    @requires_pandoc
+    @requires_xelatex
+    @requires_pdfimages
+    def test_REQ_p00080_G_referenced_image_appears_in_compiled_pdf(self, federated_pdf):
+        result, out = federated_pdf
+        assert result.returncode == 0, f"pdf failed: {result.stderr}"
+        assert out.exists(), "PDF file was not created"
+
+        listing, sizes = _image_rows(out)
+        print(f"\npdfimages -list {out}:\n{listing}")
+
+        assert (CORE_IMAGE_PX, CORE_IMAGE_PX) in sizes, (
+            f"root-repo image ({CORE_IMAGE_PX}x{CORE_IMAGE_PX}) missing from the "
+            f"compiled PDF; embedded images were {sizes}"
+        )
+        # One image per repo — a dropped reference changes this count.
+        assert len(sizes) == 2, f"expected exactly 2 embedded images, got {sizes}"
+
+    # Verifies: REQ-p00080-G
+    @requires_pandoc
+    @requires_xelatex
+    @requires_pdfimages
+    def test_REQ_p00080_G_associate_repo_image_appears_in_compiled_pdf(self, federated_pdf):
+        result, out = federated_pdf
+        assert result.returncode == 0, f"pdf failed: {result.stderr}"
+
+        listing, sizes = _image_rows(out)
+        print(f"\npdfimages -list {out}:\n{listing}")
+
+        assert (ASSOC_IMAGE_PX, ASSOC_IMAGE_PX) in sizes, (
+            f"associate-repo image ({ASSOC_IMAGE_PX}x{ASSOC_IMAGE_PX}) missing from "
+            f"the compiled PDF; embedded images were {sizes}"
+        )
+        # The core repo holds a same-named decoy at the same relative path.
+        # Its dimensions appearing instead would mean the reference resolved
+        # against the root repo rather than the declaring file's own repo.
+        assert (DECOY_IMAGE_PX, DECOY_IMAGE_PX) not in sizes, (
+            f"root-repo decoy ({DECOY_IMAGE_PX}x{DECOY_IMAGE_PX}) was embedded — the "
+            f"associate's reference was not anchored to its own repo; images were {sizes}"
+        )
+        assert len(sizes) == 2, f"expected exactly 2 embedded images, got {sizes}"
+
+    # Verifies: REQ-p00080-I
+    @requires_pandoc
+    @requires_xelatex
+    def test_REQ_p00080_I_missing_image_reported_on_stderr(
+        self, missing_image_project, missing_image_pdf
+    ):
+        result, _out = missing_image_pdf
+        assert result.returncode == 0, f"pdf failed: {result.stderr}"
+
+        stderr = result.stderr
+        assert "images/nope.png" in stderr, f"reference as written not reported: {stderr}"
+        assert "spec/sub/prd-missing.md" in stderr, f"declaring file not reported: {stderr}"
+
+        expected = str(missing_image_project / "spec" / "sub" / "images" / "nope.png")
+        assert expected in stderr, f"searched location {expected} not reported: {stderr}"
+
+    # Verifies: REQ-p00080-K
+    @requires_pandoc
+    @requires_xelatex
+    def test_REQ_p00080_K_completion_line_discloses_incomplete_output(
+        self, missing_image_pdf, federated_pdf
+    ):
+        degraded, _degraded_out = missing_image_pdf
+        assert degraded.returncode == 0, f"pdf failed: {degraded.stderr}"
+        assert "PDF written to" in degraded.stdout, f"no completion line: {degraded.stdout}"
+        assert "INCOMPLETE" in degraded.stdout, (
+            f"completion line reported unqualified success despite an omitted "
+            f"reference: {degraded.stdout}"
+        )
+
+        complete, _complete_out = federated_pdf
+        assert complete.returncode == 0, f"pdf failed: {complete.stderr}"
+        assert "PDF written to" in complete.stdout, f"no completion line: {complete.stdout}"
+        assert (
+            "INCOMPLETE" not in complete.stdout
+        ), f"a document missing nothing was reported as degraded: {complete.stdout}"
+
+    # Verifies: REQ-p00080-H
+    @requires_pandoc
+    @requires_xelatex
+    @requires_pdftotext
+    def test_REQ_p00080_H_associate_requirement_text_appears_in_compiled_pdf(self, federated_pdf):
+        """One compile from the ROOT repo carries the ASSOCIATE's prose.
+
+        A federated document that renders only the host repo's spec files is
+        indistinguishable from a complete one to anyone who wasn't told what
+        was federated in. The associate's assertion AND its rationale must
+        both survive the round trip, alongside the root repo's own content.
+        """
+        result, out = federated_pdf
+        assert result.returncode == 0, f"pdf failed: {result.stderr}"
+        assert out.exists(), "PDF file was not created"
+
+        text = _pdf_text(out)
+        print(f"\npdftotext {out} (normalised):\n{text}")
+
+        assert (
+            "The associate SHALL render its own imagery." in text
+        ), "associate requirement's assertion text missing from the compiled PDF"
+        assert (
+            "rationale marker delta zulu seven" in text
+        ), "associate requirement's rationale missing from the compiled PDF"
+        # The root repo's own content is still there — federation adds, not replaces.
+        assert (
+            "The system SHALL render core imagery." in text
+        ), "root repo's assertion text missing from the compiled PDF"
+        assert (
+            "rationale marker alpha kilo nine" in text
+        ), "root repo's rationale missing from the compiled PDF"
+
+    # Verifies: REQ-p00080-D
+    @requires_pandoc
+    @requires_xelatex
+    @requires_pdftotext
+    def test_REQ_p00080_D_topic_index_annotates_cross_repo_entries_in_compiled_pdf(
+        self, federated_pdf
+    ):
+        """The [<associate>] annotation survives typesetting into the PDF.
+
+        The Topic Index is where a reader learns which repo a requirement
+        came from; an annotation that only exists in the intermediate
+        markdown tells that reader nothing.
+        """
+        result, out = federated_pdf
+        assert result.returncode == 0, f"pdf failed: {result.stderr}"
+
+        text = _pdf_text(out)
+        index_marker = "Topic Index"
+        assert index_marker in text, f"no Topic Index in the compiled PDF: {text}"
+        index_text = text[text.rindex(index_marker) :]
+        print(f"\npdftotext {out} — Topic Index section (normalised):\n{index_text}")
+
+        assert "[assoc] ASC-p00001" in index_text, (
+            f"associate entry not annotated with its repo name in the compiled "
+            f"Topic Index: {index_text}"
+        )
+        assert (
+            "REQ-p00001" in index_text
+        ), f"root repo entry missing from the compiled Topic Index: {index_text}"
+        assert (
+            "[pdf-core] REQ-p00001" not in index_text
+        ), f"host repo entry must render bare, not annotated: {index_text}"

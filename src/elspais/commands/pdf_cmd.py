@@ -1,4 +1,4 @@
-# Implements: REQ-p00080-A, REQ-p00080-E, REQ-p00080-F
+# Implements: REQ-p00080-A, REQ-p00080-E, REQ-p00080-F, REQ-p00080-I, REQ-p00080-J, REQ-p00080-K
 """
 elspais.commands.pdf_cmd - Compile spec files into a PDF document.
 
@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import shutil
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 
 
@@ -75,30 +76,71 @@ def run(args: argparse.Namespace) -> int:
     )
     markdown_content = assembler.assemble()
 
+    # Content the assembler could not place. Reported before the verdict
+    # so the operator reads the cause ahead of the qualified success line.
+    # Implements: REQ-p00080-I, REQ-p00080-J
+    diagnostics = list(assembler.iter_diagnostics())
+    _report_omissions(len(diagnostics), (d.format() for d in diagnostics))
+
     # Invoke Pandoc to produce PDF
     output_path = getattr(args, "output", None) or Path("spec-output.pdf")
     template = getattr(args, "template", None)
 
     from elspais.pdf.renderer import render_pdf
 
-    resource_paths: list[Path] = []
-    seen: set[Path] = set()
-    for entry in graph.iter_repos():
-        for candidate in (entry.repo_root, entry.repo_root / "spec"):
-            resolved = candidate.resolve()
-            if resolved not in seen:
-                seen.add(resolved)
-                resource_paths.append(resolved)
-
+    # Pandoc drops references the assembler never saw -- media types
+    # outside its reference grammar, reference-style links -- and still
+    # exits 0. Those omissions are as real as the ones found here.
+    unfetched: list[str] = []
     rc = render_pdf(
         markdown_content,
         output_path=Path(output_path),
         engine=engine,
         template=template,
         cover=cover,
-        resource_paths=resource_paths,
+        resource_paths=assembler.resource_roots(),
+        unfetched=unfetched,
+    )
+
+    # A reference the assembler already named will also be named by
+    # pandoc; count it once.
+    known = {d.reference for d in diagnostics}
+    extra = [name for name in unfetched if name not in known]
+    _report_omissions(
+        len(extra),
+        (
+            f"  pandoc could not fetch '{name}'\n"
+            f"    cause: The resource was not found on the resource path.\n"
+            f"    remedy: Add the file, correct the reference, or remove the "
+            f"reference from the spec."
+            for name in extra
+        ),
     )
 
     if rc == 0:
-        print(f"PDF written to {output_path}")
+        # A document missing content it was asked to carry is not an
+        # unqualified success, and must not be reported as one.
+        # Implements: REQ-p00080-K
+        omitted = len(diagnostics) + len(extra)
+        if omitted:
+            noun = "reference" if omitted == 1 else "references"
+            print(
+                f"PDF written to {output_path} "
+                f"(INCOMPLETE: {omitted} {noun} omitted -- see warnings above)"
+            )
+        else:
+            print(f"PDF written to {output_path}")
     return rc
+
+
+def _report_omissions(count: int, blocks: Iterable[str]) -> None:
+    """Print a heading and one block per omission, or nothing."""
+    if not count:
+        return
+    noun = "reference" if count == 1 else "references"
+    print(
+        f"Warning: {count} {noun} could not be placed in the document.",
+        file=sys.stderr,
+    )
+    for block in blocks:
+        print(block, file=sys.stderr)

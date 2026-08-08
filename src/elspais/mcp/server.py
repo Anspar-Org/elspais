@@ -43,7 +43,6 @@ from __future__ import annotations
 
 import functools
 import re
-import time as _time
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
@@ -82,7 +81,7 @@ from elspais.graph.serialize import (
 )
 from elspais.graph.terms import TermDictionary
 from elspais.mcp.search import ParsedQuery, matches_node, parse_query, score_node
-from elspais.mcp.shared_state import SharedServerState
+from elspais.mcp.shared_state import SharedServerState, rebuild_shared_graph
 from elspais.utilities.patterns import build_resolver
 
 # Known schema fields (by alias and Python name) for filtering non-schema keys
@@ -916,52 +915,6 @@ def _add_changelog_for_active_mutations(
         add_changelog_entry(file_path, req_id, entry)
         added += 1
     return {"success": True, "added": added}
-
-
-def _refresh_graph(
-    repo_root: Path,
-    full: bool = False,
-) -> tuple[dict[str, Any], FederatedGraph]:
-    """Rebuild the graph from spec files.
-
-    REQ-o00060-B: Forces graph rebuild.
-
-    Args:
-        repo_root: Repository root path.
-        full: If True, clear all caches before rebuild.
-
-    Returns:
-        Tuple of (result dict, new TraceGraph).
-    """
-    # Build fresh graph
-    try:
-        new_graph = build_graph(repo_root=repo_root)
-    except (ValueError, Exception) as e:
-        error_msg = str(e)
-        if ".elspais.toml" in error_msg:
-            # Config parse error — return a descriptive error, not a stack trace
-            from elspais.graph.federated import FederatedGraph
-
-            return {
-                "success": False,
-                "message": f"CONFIG ERROR: {error_msg}",
-                "node_count": 0,
-            }, FederatedGraph.empty(name="<unconfigured>")
-        raise
-
-    # REQ-d00205-B: Extract root config from rebuilt graph for handler to sync.
-    root_config = None
-    for entry in new_graph.iter_repos():
-        if entry.config is not None:
-            root_config = entry.config
-            break
-
-    return {
-        "success": True,
-        "message": "Graph refreshed successfully",
-        "node_count": new_graph.node_count(),
-        "config": root_config,
-    }, new_graph
 
 
 def _matches_query(
@@ -4698,8 +4651,7 @@ def _apply_link_impl(
         }
 
     # Refresh graph after file modification
-    _, new_graph = _refresh_graph(working_dir)
-    state["graph"] = new_graph
+    rebuild_shared_graph(state)
 
     return {
         "success": True,
@@ -5755,8 +5707,13 @@ def create_server(
         Use when: spec files were edited outside of mutation tools, or after
         switching branches. Required after manual file edits to see changes.
 
+        If the configuration on disk cannot be parsed, nothing is published:
+        the result is success=False with a message beginning "CONFIG ERROR:",
+        and the graph already being served stays live.
+
         Args:
-            full: If True, clear all caches before rebuild.
+            full: Accepted for compatibility; every rebuild is full, since no
+                cache is retained between builds.
             path: Switch to a different project directory before rebuilding.
             force: If True, discard unsaved mutations and refresh anyway.
             if_tip_mutation_id: The mutation-log tip as you last saw it.
@@ -5781,22 +5738,23 @@ def create_server(
             if conflict:
                 return conflict
 
+        previous_dir = _state["working_dir"]
         if path:
             new_dir = Path(path).resolve()
             if not new_dir.is_dir():
                 return {"success": False, "message": f"Directory not found: {path}"}
             _state["working_dir"] = new_dir
-            _state["config"] = get_config(start_path=new_dir, quiet=True)
 
-        result, new_graph = _refresh_graph(
-            _state["working_dir"],
-            full=full,
-        )
-        _state["graph"] = new_graph
-        _state["build_time"] = _time.time()
-        # REQ-d00205-B: Sync config from rebuilt graph's root repo
-        if result.get("config") is not None:
-            _state["config"] = result["config"]
+        # The one rebuild routine: it re-reads config, publishes config and
+        # graph together, and brings the change-detection state forward
+        # (REQ-p00004-J/O, REQ-d00205-B).
+        result = rebuild_shared_graph(_state, full=full)
+        if not result.get("success"):
+            # The rebuild published nothing, so the graph and config still
+            # describe the previous directory. Leaving working_dir pointing at
+            # the new one would answer every later read from one project while
+            # targeting another (REQ-p00015-F).
+            _state["working_dir"] = previous_dir
         result["working_dir"] = str(_state["working_dir"])
         return result
 
@@ -7005,11 +6963,7 @@ def create_server(
         )
         # REQ-o00063-F: Refresh graph after file mutations
         if result.get("success"):
-            new_result, new_graph = _refresh_graph(
-                _state["working_dir"],
-            )
-            _state["graph"] = new_graph
-            _state["build_time"] = _time.time()
+            rebuild_shared_graph(_state)
         return _reattach_version_after_rebuild(_state["graph"], result, req_id)
 
     @mcp.tool()
@@ -7036,11 +6990,7 @@ def create_server(
         result = _move_requirement(_state["working_dir"], req_id, target_file, save_branch)
         # REQ-o00063-F: Refresh graph after file mutations
         if result.get("success"):
-            new_result, new_graph = _refresh_graph(
-                _state["working_dir"],
-            )
-            _state["graph"] = new_graph
-            _state["build_time"] = _time.time()
+            rebuild_shared_graph(_state)
         return _reattach_version_after_rebuild(_state["graph"], result, req_id)
 
     @mcp.tool()
@@ -7061,11 +7011,7 @@ def create_server(
         result = _restore_from_safety_branch(_state["working_dir"], branch_name)
         # REQ-o00063-F: Refresh graph after file mutations
         if result.get("success"):
-            new_result, new_graph = _refresh_graph(
-                _state["working_dir"],
-            )
-            _state["graph"] = new_graph
-            _state["build_time"] = _time.time()
+            rebuild_shared_graph(_state)
         return result
 
     @mcp.tool()
@@ -7164,11 +7110,7 @@ def create_server(
 
         # REQ-o00063-F: Refresh graph after file mutations
         if result.get("success"):
-            new_result, new_graph = _refresh_graph(
-                _state["working_dir"],
-            )
-            _state["graph"] = new_graph
-            _state["build_time"] = _time.time()
+            rebuild_shared_graph(_state)
 
         return result
 

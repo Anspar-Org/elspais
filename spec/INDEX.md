@@ -13,7 +13,7 @@
 | REQ-p00001 | Requirements Management Tool                     | prd-core.md     | 2d10975a |
 | REQ-p00002 | Requirements Validation                          | prd-core.md     | c8440f64 |
 | REQ-p00003 | Traceability Matrix Generation                   | prd-core.md     | 3121ad66 |
-| REQ-p00004 | Change Detection and Auditability                | prd-core.md     | 7930cf78 |
+| REQ-p00004 | Change Detection and Auditability                | prd-core.md     | b7e19864 |
 | REQ-p00005 | Multi-Repository Requirements                    | prd-features.md | de05471c |
 | REQ-p00006 | Interactive Traceability Viewer                  | prd-features.md | 185217a3 |
 | REQ-p00013 | Automated Testing                                | prd-core.md     | 4318202c |
@@ -26,7 +26,7 @@
 | REQ-p00050 | Unified Graph Architecture                       | prd-features.md | 46ac5f6a |
 | REQ-p00060 | MCP Server for AI-Driven Requirements Management | prd-features.md | a729a853 |
 | REQ-p00061 | Requirement Decomposition Rules                  | prd-core.md     | 462c146e |
-| REQ-p00080 | Spec-to-PDF Compilation                          | prd-core.md     | 01da5fa4 |
+| REQ-p00080 | Spec-to-PDF Compilation                          | prd-core.md     | acc97ca9 |
 | REQ-p00081 | Org-Wide Requirement Visibility                  | prd-features.md | 17fa4417 |
 | REQ-p00082 | Federated Authority and Verdict Scoping          | prd-features.md | a8311d6c |
 
@@ -172,6 +172,7 @@
 | REQ-d00263 | Scoped Term Binding                                           | prd-core.md             | d13a3c53 |
 | REQ-d00264 | Usage-Driven Glossary Selection                               | prd-core.md             | 12f529a3 |
 | REQ-d00266 | Mechanical Style Checks                                       | dev-cli.md              | 084c17a0 |
+| REQ-d00267 | Viewer Pending-Work Indicator Truth                           | prd-features.md         | c1be85e3 |
 
 ## User Journeys
 

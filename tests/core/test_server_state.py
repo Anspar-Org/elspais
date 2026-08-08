@@ -1,4 +1,4 @@
-# Verifies: REQ-d00010
+# Verifies: REQ-d00010, REQ-p00004-O, REQ-p00015-B, REQ-p00015-F, REQ-p00015-G
 """Tests for server state management and auto-refresh."""
 import time
 from pathlib import Path
@@ -25,6 +25,11 @@ rank = 3
 letter = "d"
 implements = ["dev", "ops", "prd"]
 """
+
+
+# tomlkit rejects the bare newline inside the unterminated string, and the
+# config loader wraps the parse error with the offending file's path.
+_BROKEN_CONFIG = '[project]\nname = "unterminated\n'
 
 
 def _make_repo(tmp_path: Path) -> Path:
@@ -199,6 +204,124 @@ class TestAppState:
 
         state = AppState.from_config(repo_root=tmp_path)
         assert tmp_path in state.allowed_roots
+
+
+class TestEnsureFreshHonestRebuildReport:
+    """Validates REQ-p00015-F: ensure_fresh() records a rebuild as applied only
+    when the rebuilt graph is what the state actually serves afterwards.
+
+    Validates REQ-p00015-B: when the rebuild does not happen, the state reports
+    the unapplied rebuild and its cause on stderr.
+
+    A rebuild that raises leaves the previous graph in place. Reporting that
+    rebuild to the caller as done is phantom success: the caller is told the
+    served graph came from disk when it did not. The same defect one level
+    down is a partially-applied rebuild -- the freshly read on-disk config
+    recorded in the holder while the graph beside it was built from the old
+    one.
+    """
+
+    REBUILD_CAUSE = "probe-cause-disk-vanished"
+
+    @staticmethod
+    def _stale_state(tmp_path):
+        """An AppState whose spec file changed on disk since the last build."""
+        from elspais.server.state import AppState
+
+        _make_repo(tmp_path)
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        spec_file = spec_dir / "test.md"
+        spec_file.write_text("# REQ-001\nTitle\n")
+
+        state = AppState.from_config(repo_root=tmp_path)
+        time.sleep(0.05)
+        spec_file.write_text("# REQ-001\nNew title\n")
+        # Reset throttle so ensure_fresh() actually checks.
+        state._last_stale_check = 0.0
+        assert state.is_stale(), "fixture must present a genuinely stale state"
+        return state
+
+    def _break_rebuild(self, state, monkeypatch):
+        """Make _rebuild() raise with a distinctive, greppable cause."""
+
+        def _raise() -> None:
+            raise RuntimeError(self.REBUILD_CAUSE)
+
+        monkeypatch.setattr(state, "_rebuild", _raise)
+
+    def test_REQ_p00015_F_failed_rebuild_is_not_reported_as_rebuilt(self, tmp_path, monkeypatch):
+        """A rebuild that raised must not be returned as a rebuild that happened."""
+        state = self._stale_state(tmp_path)
+        self._break_rebuild(state, monkeypatch)
+
+        assert state.ensure_fresh() is False, "ensure_fresh() reported a rebuild it did not perform"
+
+    def test_REQ_p00015_F_failed_rebuild_keeps_serving_the_previous_graph(
+        self, tmp_path, monkeypatch
+    ):
+        """The record's destination -- the served graph -- must be untouched."""
+        state = self._stale_state(tmp_path)
+        graph_before = state.graph
+        build_time_before = state.build_time
+        self._break_rebuild(state, monkeypatch)
+
+        state.ensure_fresh()
+
+        assert state.graph is graph_before, "failed rebuild swapped the served graph"
+        assert state.build_time == build_time_before, "failed rebuild advanced the build clock"
+
+    def test_REQ_p00015_B_failed_rebuild_reports_the_cause(self, tmp_path, monkeypatch, capsys):
+        """The unapplied rebuild and its cause reach stderr."""
+        state = self._stale_state(tmp_path)
+        self._break_rebuild(state, monkeypatch)
+
+        state.ensure_fresh()
+
+        err = capsys.readouterr().err
+        assert "rebuild" in err, f"failure report does not name the operation: {err!r}"
+        assert self.REBUILD_CAUSE in err, f"failure report does not carry the cause: {err!r}"
+
+    def test_REQ_p00015_F_failed_rebuild_does_not_record_the_new_config(
+        self, tmp_path, monkeypatch
+    ):
+        """A rebuild that dies mid-way must not record its config half.
+
+        The config in the shared holder names the configuration the served
+        graph was built from. Swapping in the newly read on-disk config while
+        the old graph is still served records a change that is not present at
+        the destination the record names.
+        """
+        state = self._stale_state(tmp_path)
+        assert state.config["project"]["name"] == "test"
+
+        # New config on disk, and a build that cannot complete against it.
+        (tmp_path / ".elspais.toml").write_text(
+            _MINIMAL_CONFIG.replace('name = "test"', 'name = "renamed-on-disk"')
+        )
+        state._last_stale_check = 0.0
+
+        def _raise(*args, **kwargs):
+            raise RuntimeError(self.REBUILD_CAUSE)
+
+        monkeypatch.setattr("elspais.graph.factory.build_graph", _raise)
+
+        state.ensure_fresh()
+
+        assert state.config["project"]["name"] == "test", (
+            "failed rebuild recorded the new on-disk config while still "
+            "serving the graph built from the old one"
+        )
+
+    def test_REQ_p00015_F_successful_rebuild_is_reported_as_rebuilt(self, tmp_path):
+        """A rebuild that completed is still reported -- honesty cuts both ways."""
+        state = self._stale_state(tmp_path)
+        graph_before = state.graph
+        build_time_before = state.build_time
+
+        assert state.ensure_fresh() is True
+        assert state.graph is not graph_before
+        assert state.build_time > build_time_before
 
 
 class TestSharedStateWithMcpServer:
@@ -455,3 +578,351 @@ class TestPerRepoDetachedState:
         state.repo_root = tmp_path
         state._repo_detached = {}
         return state
+
+
+class TestMcpRefreshAbsorbsChangeDetectionState:
+    """Validates REQ-p00004-O: MCP ``refresh_graph`` is a reload from disk and
+    must bring the change-detection state held for the reloaded content into
+    agreement with it.
+
+    The MCP tools and the viewer share one holder, so an MCP refresh that
+    leaves the viewer's mtime snapshot and daemon.json's config hash behind
+    makes the viewer rebuild the same files a second time and makes the CLI
+    restart a daemon that is already current.
+    """
+
+    SPEC_REQ = """\
+### REQ-p00001: Refresh Freshness Probe
+
+**Level**: PRD | **Status**: Active
+
+The system SHALL absorb its own reloads.
+
+## Assertions
+
+A. The system SHALL leave no staleness a completed reload already absorbed.
+
+*End* *Refresh Freshness Probe* | **Hash**: 00000000
+"""
+
+    def _project(self, tmp_path):
+        """A real repo plus an AppState and the MCP tools over its holder."""
+        import pytest as _pytest
+
+        _pytest.importorskip("mcp")
+        from elspais.mcp.server import create_server
+        from elspais.server.state import AppState
+
+        _make_repo(tmp_path)
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        spec_file = spec_dir / "core.md"
+        spec_file.write_text(self.SPEC_REQ)
+
+        state = AppState.from_config(repo_root=tmp_path)
+        server = create_server(graph=state.graph, working_dir=tmp_path, shared_state=state.shared)
+        tools = {name: tool.fn for name, tool in server._tool_manager._tools.items()}
+        return state, tools, spec_file
+
+    def test_REQ_p00004_O_mcp_refresh_leaves_no_redundant_rebuild(self, tmp_path):
+        """After MCP refresh_graph absorbs a disk change, the viewer's next
+        freshness check must not find that same change still outstanding."""
+        state, tools, spec_file = self._project(tmp_path)
+
+        time.sleep(0.05)
+        spec_file.write_text(self.SPEC_REQ.replace("SHALL absorb", "SHALL always absorb"))
+
+        result = tools["refresh_graph"]()
+        assert result.get("success") is True, result
+        build_time_after_refresh = state.build_time
+
+        state._last_stale_check = 0.0
+        rebuilt = state.ensure_fresh()
+
+        assert rebuilt is False, (
+            "the freshness check after a completed MCP refresh reported the "
+            "change the refresh already absorbed, and rebuilt a second time"
+        )
+        assert (
+            state.build_time == build_time_after_refresh
+        ), "build_time moved after the refresh with nothing changed on disk"
+
+    def test_REQ_p00004_O_mcp_refresh_syncs_daemon_config_hash(self, tmp_path):
+        """A refresh that re-read an edited config must leave daemon.json's
+        config_hash agreeing with that config, with no later request needed."""
+        import json
+
+        from elspais.mcp.daemon import compute_config_hash
+
+        state, tools, _spec_file = self._project(tmp_path)
+        config_path = tmp_path / ".elspais.toml"
+
+        daemon_json = tmp_path / ".elspais" / "daemon.json"
+        daemon_json.parent.mkdir(parents=True, exist_ok=True)
+        daemon_json.write_text(
+            json.dumps(
+                {
+                    "pid": 1,
+                    "port": 5000,
+                    "repo_root": str(tmp_path),
+                    "started_at": "2026-01-01T00:00:00",
+                    "version": "0.0.0",
+                    "config_hash": compute_config_hash(config_path),
+                    "type": "daemon",
+                }
+            )
+        )
+
+        time.sleep(0.05)
+        config_path.write_text(_MINIMAL_CONFIG.replace('name = "test"', 'name = "renamed-on-disk"'))
+        assert json.loads(daemon_json.read_text())["config_hash"] != compute_config_hash(
+            config_path
+        ), "fixture must present a genuinely stale recorded config hash"
+
+        result = tools["refresh_graph"]()
+        assert result.get("success") is True, result
+
+        assert json.loads(daemon_json.read_text())["config_hash"] == compute_config_hash(
+            config_path
+        ), "daemon.json still records the config the refresh replaced"
+
+
+class TestPostRebuildHookFailureDoesNotRetractTheRebuild:
+    """Validates REQ-p00015-F: a rebuild is recorded as applied whenever the
+    rebuilt graph is what the state serves afterwards -- including when a
+    post-rebuild hook then fails.
+
+    The hooks run after config, graph and build_time are published, so by the
+    time one of them raises, the new graph IS what every reader dereferences.
+    Reporting that rebuild as not-done is the mirror image of phantom success:
+    a phantom failure, telling the caller the served graph came from the
+    previous build when it did not. The state that a failing hook could not
+    bring forward is a separate, lesser problem.
+
+    Validates REQ-p00015-B: the hook failure is reported with its cause on
+    stderr rather than being swallowed.
+    """
+
+    HOOK_CAUSE = "probe-cause-hook-refused"
+
+    @staticmethod
+    def _stale_state(tmp_path):
+        """An AppState whose spec file changed on disk since the last build."""
+        from elspais.server.state import AppState
+
+        _make_repo(tmp_path)
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        spec_file = spec_dir / "test.md"
+        spec_file.write_text("# REQ-001\nTitle\n")
+
+        state = AppState.from_config(repo_root=tmp_path)
+        time.sleep(0.05)
+        spec_file.write_text("# REQ-001\nNew title\n")
+        state._last_stale_check = 0.0
+        assert state.is_stale(), "fixture must present a genuinely stale state"
+        return state
+
+    def _break_a_hook(self, state):
+        """Register a failing post-rebuild hook after the real ones."""
+
+        def _raise() -> None:
+            raise RuntimeError(self.HOOK_CAUSE)
+
+        state.shared.post_rebuild_hooks.append(_raise)
+
+    # Verifies: REQ-p00015-F
+    def test_REQ_p00015_F_failing_hook_does_not_retract_the_rebuild(self, tmp_path, capsys):
+        """The swap the readers can already see must be reported as having
+        happened, and the served graph must be the newly built one."""
+        state = self._stale_state(tmp_path)
+        graph_before = state.graph
+        build_time_before = state.build_time
+        self._break_a_hook(state)
+
+        rebuilt = state.ensure_fresh()
+
+        assert rebuilt is True, (
+            "a hook failure after publication retracted a rebuild that is "
+            "already visible to every reader"
+        )
+        assert state.graph is not graph_before, "the served graph was not swapped"
+        assert state.shared["graph"] is state.graph
+        assert state.build_time > build_time_before, "the build clock did not move"
+
+    # Verifies: REQ-p00015-B
+    def test_REQ_p00015_B_failing_hook_reports_its_cause(self, tmp_path, capsys):
+        """The hook that could not bring its state forward is named on stderr."""
+        state = self._stale_state(tmp_path)
+        self._break_a_hook(state)
+
+        state.ensure_fresh()
+
+        err = capsys.readouterr().err
+        assert "post-rebuild hook" in err, f"report does not name the operation: {err!r}"
+        assert self.HOOK_CAUSE in err, f"report does not carry the cause: {err!r}"
+
+    # Verifies: REQ-p00015-F
+    def test_REQ_p00015_F_hooks_before_the_failing_one_still_ran(self, tmp_path, capsys):
+        """A hook that raises must not cost the hooks already brought forward.
+
+        ``snapshot_mtimes`` runs before the failing hook. If the exception
+        escaped the loop, the freshness check would still see the absorbed
+        change outstanding and rebuild the same content a second time.
+        """
+        state = self._stale_state(tmp_path)
+        self._break_a_hook(state)
+
+        assert state.ensure_fresh() is True
+
+        state._last_stale_check = 0.0
+        assert state.ensure_fresh() is False, (
+            "the change the completed rebuild absorbed is still reported as "
+            "outstanding, so its mtime re-snapshot was lost"
+        )
+
+
+class TestDaemonFingerprintIsStampedOnlyByItsOwner:
+    """Validates REQ-p00004-O: the recorded config fingerprint is brought
+    forward by the process that serves the graph the daemon record describes,
+    and by no other.
+
+    The sync is a hook the owning ``AppState`` registers, not a step of the
+    shared rebuild routine, so a process holding a private graph of its own --
+    a stdio MCP server built by ``create_server()`` -- rebuilds in the same
+    repository without touching another server's record.
+
+    Validates REQ-p00015-G: a fingerprint stamped by a process that did not
+    rebuild the daemon's graph reads as current when it is not, suppressing
+    the disclosure that the running server serves a superseded configuration.
+    """
+
+    @staticmethod
+    def _project_with_daemon_record(tmp_path):
+        """A repo plus a daemon.json whose config_hash matches disk."""
+        import json
+
+        from elspais.mcp.daemon import compute_config_hash
+
+        _make_repo(tmp_path)
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        (spec_dir / "core.md").write_text("# REQ-001\nTitle\n")
+
+        config_path = tmp_path / ".elspais.toml"
+        daemon_json = tmp_path / ".elspais" / "daemon.json"
+        daemon_json.parent.mkdir(parents=True, exist_ok=True)
+        daemon_json.write_text(
+            json.dumps(
+                {
+                    "pid": 1,
+                    "port": 5000,
+                    "repo_root": str(tmp_path),
+                    "started_at": "2026-01-01T00:00:00",
+                    "version": "0.0.0",
+                    "config_hash": compute_config_hash(config_path),
+                    "type": "daemon",
+                }
+            )
+        )
+        return config_path, daemon_json
+
+    @staticmethod
+    def _edit_config(config_path, daemon_json):
+        """Move the config on disk past the recorded fingerprint."""
+        import json
+
+        from elspais.mcp.daemon import compute_config_hash
+
+        recorded = json.loads(daemon_json.read_text())["config_hash"]
+        time.sleep(0.05)
+        config_path.write_text(_MINIMAL_CONFIG.replace('name = "test"', 'name = "renamed-on-disk"'))
+        assert recorded != compute_config_hash(
+            config_path
+        ), "fixture must present a genuinely stale recorded config hash"
+        return recorded
+
+    # Verifies: REQ-p00004-O, REQ-p00015-G
+    def test_REQ_p00004_O_hookless_holder_leaves_the_record_alone(self, tmp_path):
+        """A bare holder -- what a stdio MCP server carries -- must not stamp
+        a daemon record it does not own."""
+        import json
+
+        from elspais.mcp.shared_state import SharedServerState, rebuild_shared_graph
+
+        config_path, daemon_json = self._project_with_daemon_record(tmp_path)
+        recorded = self._edit_config(config_path, daemon_json)
+
+        holder = SharedServerState({"working_dir": tmp_path})
+        assert holder.post_rebuild_hooks == []
+        result = rebuild_shared_graph(holder)
+
+        # Without this the test cannot tell "no hook" from "no rebuild":
+        # a rebuild that failed would also leave the record untouched.
+        assert result["success"] is True, result
+        assert holder["graph"] is not None
+
+        assert json.loads(daemon_json.read_text())["config_hash"] == recorded, (
+            "a process that rebuilt only its own private graph stamped another "
+            "server's freshness record as current"
+        )
+
+    # Verifies: REQ-p00004-O
+    def test_REQ_p00004_O_the_owning_appstate_does_stamp_the_record(self, tmp_path):
+        """The positive counterpart: the process that owns the record brings
+        it forward through the very same rebuild routine."""
+        import json
+
+        from elspais.mcp.daemon import compute_config_hash
+        from elspais.mcp.shared_state import rebuild_shared_graph
+        from elspais.server.state import AppState
+
+        config_path, daemon_json = self._project_with_daemon_record(tmp_path)
+        state = AppState.from_config(repo_root=tmp_path)
+        self._edit_config(config_path, daemon_json)
+
+        result = rebuild_shared_graph(state.shared)
+        assert result["success"] is True, result
+
+        assert json.loads(daemon_json.read_text())["config_hash"] == compute_config_hash(
+            config_path
+        ), "the server that owns the record left it describing the config it replaced"
+
+
+class TestEnsureFreshReportsTheRoutinesFailureMessage:
+    """Validates REQ-p00015-B: when the rebuild routine declines to publish,
+    the message it gives for declining is what reaches the operator.
+
+    A rebuild can fail without raising: an unparseable configuration is
+    reported as an ordinary unsuccessful result carrying ``CONFIG ERROR:`` and
+    the offending file. That result must be converted into the same visible,
+    caused report as an exception, or the one failure mode an operator can
+    actually fix is the one that surfaces without a reason.
+    """
+
+    # Verifies: REQ-p00015-B, REQ-p00015-F
+    def test_REQ_p00015_B_unparseable_on_disk_config_reports_its_cause(self, tmp_path, capsys):
+        """The routine's own CONFIG ERROR message reaches stderr intact."""
+        from elspais.server.state import AppState
+
+        _make_repo(tmp_path)
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        (spec_dir / "core.md").write_text("# REQ-001\nTitle\n")
+
+        state = AppState.from_config(repo_root=tmp_path)
+        graph_before = state.graph
+
+        time.sleep(0.05)
+        (tmp_path / ".elspais.toml").write_text(_BROKEN_CONFIG)
+        state._last_stale_check = 0.0
+        assert state.is_stale(), "fixture must present a genuinely stale state"
+
+        rebuilt = state.ensure_fresh()
+
+        assert rebuilt is False, "a rebuild that published nothing was reported as done"
+        assert state.graph is graph_before, "the previous graph stopped being served"
+
+        err = capsys.readouterr().err
+        assert "CONFIG ERROR:" in err, f"report does not carry the routine's reason: {err!r}"
+        assert ".elspais.toml" in err, f"report does not name the offending file: {err!r}"
