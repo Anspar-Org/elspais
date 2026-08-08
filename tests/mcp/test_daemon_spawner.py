@@ -1011,7 +1011,7 @@ class TestViewerSaveRetiresTheRecord:
             client.get("/api/check-freshness").json().get("automatic_save") is None
         ), "/api/check-freshness still discloses a retired record"
 
-    def test_REQ_o00074_J_a_failed_viewer_save_retires_nothing(self, client_and_project):
+    def test_REQ_o00074_J_refused_viewer_save_retires_nothing(self, client_and_project):
         """The retirement follows a save that happened. A rejected one leaves
         the record standing, because the state it describes still stands."""
         from elspais.mcp.daemon import record_automatic_save
