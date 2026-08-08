@@ -853,3 +853,45 @@ A. `elspais fix` SHALL be idempotent: running the command twice in succession on
 - 2026-05-04 | 8a92207b | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Fix Command Idempotency* | **Hash**: 2b421222
+
+# REQ-p00083: Durability of Uncommitted Work
+
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00001
+**Satisfies**: REQ-p00019
+
+## Rationale
+
+Applied but unpersisted work exists in no file, so every ending of the process holding it is a choice between writing it somewhere and destroying it. The costs are not symmetric: the files the tool would write are under revision control, where an unwanted write is inspected and reverted in one step, while destroyed work has to be redone from memory and sometimes cannot be. Preservation is therefore the default, and the residual cost of preserving — that a file's current form arrived by a route its next reader did not see — is discharged by disclosure rather than by destruction.
+
+Preservation is a default rather than a rule because it rests on an absence: nobody has said what the work is worth. An instruction to discard supplies exactly the statement that was missing, which is why assertion B honours it — a default that cannot be overridden is not a default. The instruction covers only the work that existed when it was given, because work that arrived afterwards was never in view of whoever gave it.
+
+Assertion A binds only where the tool is still executing at the moment the work would go. An ending that destroys the process without it executing anything is outside assertion A by construction, and is covered by assertion F, which discloses the loss rather than preventing it. Narrowing that exposure — journaling each change as it is applied, or replicating applied work to a second location — is a further obligation this requirement neither states nor precludes. A requirement that stated it would oblige either a write-ahead record on every mutation or a persist on every mutation, and the second would dissolve the deliberate save step and complicate the undo history without reaching safety, since work held in one place is work that one failure removes.
+
+Assertion F is bounded to what an account written before the fact it records can honestly contain: that work was held and not written. Building it to seem capable of more would mean keeping every change as it is made, which is the larger obligation named above and is not this one. What assertion F buys is that a loss is known to have happened; a user told nothing concludes nothing was lost.
+
+Assertions B and G are a pair. "Only the work that existed when the instruction was given" is achievable only if no further work can arrive after the instruction, so the refusal in G is what makes B's scope true rather than approximately true. Assertion H bounds the disclosure so it does not become permanent noise: once the affected content has been persisted at a request, the record describes a state that no longer stands, and a notice that never retires is one nobody reads.
+
+## Assertions
+
+A. Whenever the tool executes the ending of a process holding work that has been applied but not persisted, the tool SHALL persist that work rather than destroy it, unless it has been instructed to discard it.
+
+B. An instruction to discard applied work SHALL be honoured, and SHALL cover only the work that existed when the instruction was given.
+
+C. Where the tool persists work under assertion A, it SHALL record that it did so on its own initiative rather than at a request, and SHALL disclose that record to the next party that works with the affected content.
+
+D. If the tool cannot persist work it holds under assertion A, it SHALL report the failure and retain the work rather than discarding it.
+
+E. That applied work exists only in a running process's memory SHALL be recorded outside that process before the work is acknowledged to whoever applied it.
+
+F. When work is lost to an ending the tool does not execute, the tool SHALL disclose that a loss occurred at the earliest point it can, and SHALL NOT present that disclosure as an account of what was lost.
+
+G. The tool SHALL NOT accept work into a process that has already decided to end, and SHALL report the refusal to whoever offered it.
+
+H. A record disclosed under assertion C SHALL be retired once the affected content has been persisted at a party's own request, so that what the tool discloses describes a state that still stands.
+
+## Changelog
+
+- 2026-08-08 | 80cf3ca1 | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: author uncommitted-work durability invariants
+- 2026-08-08 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: author uncommitted-work durability invariants
+
+*End* *Durability of Uncommitted Work* | **Hash**: 80cf3ca1

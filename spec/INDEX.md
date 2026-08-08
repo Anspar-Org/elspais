@@ -29,6 +29,7 @@
 | REQ-p00080 | Spec-to-PDF Compilation                          | prd-core.md     | acc97ca9 |
 | REQ-p00081 | Org-Wide Requirement Visibility                  | prd-features.md | 17fa4417 |
 | REQ-p00082 | Federated Authority and Verdict Scoping          | prd-features.md | a8311d6c |
+| REQ-p00083 | Durability of Uncommitted Work                   | prd-core.md     | 80cf3ca1 |
 
 ### elspais
 
@@ -37,6 +38,7 @@
 | REQ-p00015::REQ-p00019 | Truthful Reporting and Error Discipline |      | b2a947fb |
 | REQ-p00080::REQ-p00019 | Truthful Reporting and Error Discipline |      | b2a947fb |
 | REQ-p00081::REQ-p00019 | Truthful Reporting and Error Discipline |      | b2a947fb |
+| REQ-p00083::REQ-p00019 | Truthful Reporting and Error Discipline |      | b2a947fb |
 
 ## OPERATIONS
 
