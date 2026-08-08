@@ -93,6 +93,11 @@ traceability_matrix.html
 .elspais/daemon.*
 **/.elspais/daemon.*
 
+# Record of a save the daemon performed itself: local process state that
+# describes this checkout's working tree, not something to share.
+.elspais/automatic-save.json
+**/.elspais/automatic-save.json
+
 # Ephemeral planning/workflow docs
 MASTER_PLAN*.md
 *_TASK_*.md
