@@ -8,7 +8,7 @@ providing an auditable record of review activity alongside specification changes
 
 ## Scope
 
-- Viewer-only feature (future: CLI `checks` integration)
+- Authored and read in the viewer; the CLI exposes `elspais comments compact`
 - Edit Mode required (comments are git-committed artifacts)
 - Flat reply threads, per-target anchoring
 - Append-only event storage in JSONL files

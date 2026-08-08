@@ -6,7 +6,7 @@
 
 - There is ONE main graph data structure; DO NOT create parallel data structures.
 - There is ONE config system; DO NOT parse configuration separately.
-- DO NOT change the structure of Graph, GraphTrace, or GraphBuilder.
+- DO NOT change the structure of Graph, TraceGraph, or GraphBuilder.
 - DO NOT violate existing encapsulation.
 - DO NOT consult git history for context.
 
