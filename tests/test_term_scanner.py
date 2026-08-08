@@ -154,6 +154,28 @@ def test_REQ_d00236_D_yml_hash_comment():
     assert ("YML comment", 1) in result
 
 
+@pytest.mark.parametrize("ext", [".tf", ".tfvars", ".hcl"])
+def test_REQ_d00236_D_terraform_hash_comments(ext):
+    """Terraform/HCL sources are hash-comment languages.
+
+    Both a file-leading annotation comment and an indented comment nested inside
+    a resource block are extracted, with the same result a shell script would
+    give for byte-identical input.
+    """
+    source = (
+        "# Implements: REQ-p00001\n"
+        'resource "aws_s3_bucket" "logs" {\n'
+        '  bucket = "audit-logs"\n'
+        "  # Bucket holds audit evidence\n"
+        "}\n"
+    )
+    result = extract_comments(source, ext)
+    assert ("Implements: REQ-p00001", 1) in result
+    assert ("Bucket holds audit evidence", 4) in result
+    # Parity with an already-supported hash-comment language on identical input.
+    assert result == extract_comments(source, ".sh")
+
+
 # -- REQ-d00236-E: Dash-comment languages --------------------------------------
 
 

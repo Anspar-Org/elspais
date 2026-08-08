@@ -142,7 +142,7 @@
 | REQ-d00233 | Comment Inline Threads and Comment Mode                       | prd-features.md         | fd4019ef |
 | REQ-d00234 | Lost Comments Card                                            | prd-features.md         | 0bd322d3 |
 | REQ-d00235 | Comment Compaction CLI                                        | prd-features.md         | 69df1fbc |
-| REQ-d00236 | Comment Extraction Utilities                                  | prd-core.md             | 2e5b4960 |
+| REQ-d00236 | Comment Extraction Utilities                                  | prd-core.md             | 683718c0 |
 | REQ-d00237 | Term Reference Scanner Core                                   | prd-core.md             | 637ac760 |
 | REQ-d00238 | Graph-Wide Term Scan                                          | prd-core.md             | b14edde9 |
 | REQ-d00239 | Federated Graph Term Scanner Pass                             | prd-core.md             | e27abfeb |

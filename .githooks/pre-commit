@@ -34,6 +34,35 @@ unset GIT_COMMITTER_NAME
 unset GIT_COMMITTER_EMAIL
 unset GIT_COMMITTER_DATE
 
+# =====================================================
+# 0. Resolve the CLI this tree means
+# =====================================================
+# The stages below invoke `elspais` and `pytest` by name. If PATH resolves
+# them to a global install (pipx, ~/.local/bin) or another worktree's venv,
+# the hook validates that software instead of this tree — and `elspais fix`
+# run from a different version rewrites every hash in this repo's own spec
+# estate. Prefer the worktree's venv when its code is this tree's code, and
+# say so when it is not, so the mismatch is visible rather than silent.
+# pre-push carries the same guard for the e2e stage.
+
+HOOK_REPO_ROOT=$(git rev-parse --show-toplevel)
+
+hook_cli_src() {
+    _bin=$(command -v elspais 2>/dev/null) || return 1
+    _py=$(head -1 "$_bin" 2>/dev/null | sed 's|^#!||')
+    [ -x "$_py" ] || return 1
+    "$_py" -c 'import elspais,os;print(os.path.realpath(os.path.dirname(elspais.__file__)))' 2>/dev/null
+}
+
+HOOK_REPO_SRC=$(cd "$HOOK_REPO_ROOT" && python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "src/elspais")
+
+if [ "$(hook_cli_src)" != "$HOOK_REPO_SRC" ] && [ -x "$HOOK_REPO_ROOT/.venv/bin/elspais" ]; then
+    PATH="$HOOK_REPO_ROOT/.venv/bin:$PATH"
+    export PATH
+fi
+
+HOOK_CLI_SRC=$(hook_cli_src)
+
 # Colors for output
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
@@ -181,6 +210,24 @@ fi
 # =====================================================
 
 if command -v elspais &> /dev/null; then
+    # `elspais fix` rewrites this repo's spec estate in place, and the hashes
+    # it writes are the ones its own version computes. Running a different
+    # version against elspais's own spec tree rewrites every hash in it, which
+    # reads as an authored change and is laborious to unpick. A CLI that is not
+    # this tree cannot be trusted with that write.
+    if [ "$HOOK_CLI_SRC" != "$HOOK_REPO_SRC" ]; then
+        echo -e "${RED}ERROR: elspais on PATH is ${HOOK_CLI_SRC:-<not importable>},${NC}"
+        echo -e "${RED}       not this tree ($HOOK_REPO_SRC).${NC}"
+        echo ""
+        echo "'elspais fix' from another version would rewrite every hash in"
+        echo "this repo's spec estate. Refusing to run it."
+        echo ""
+        echo "To fix, create a venv for this worktree:"
+        echo "  python3 -m venv .venv && .venv/bin/pip install -e \".[all,mcp,dev]\""
+        echo "This hook prefers \$REPO_ROOT/.venv/bin automatically once it exists."
+        exit 1
+    fi
+
     echo -e "${BLUE}Running elspais fix...${NC}"
     if elspais fix 2>&1; then
         # Stage any regenerated files (tolerated failure: paths may not exist yet)

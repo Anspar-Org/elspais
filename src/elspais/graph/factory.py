@@ -378,6 +378,9 @@ DEFAULT_CODE_PATTERNS = [
     "*.kt",
     "*.css",
     "*.scss",
+    "*.tf",
+    "*.tfvars",
+    "*.hcl",
 ]
 
 
