@@ -370,6 +370,7 @@ Read the user guide.
   `assertions`     Writing testable assertions
   `traceability`   Linking to code and tests
   `linking`        Code and test linking details
+  `satisfies`      Cross-cutting templates
   `validation`     Running validation
   `git`            Change detection
   `config`         Configuration reference
