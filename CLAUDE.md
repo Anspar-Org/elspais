@@ -79,7 +79,7 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 
 | Language | Comment Style | Marker Example |
 |----------|--------------|----------------|
-| Python, Shell, Ruby, YAML | `#` | `# elspais: expected-broken-links 3` |
+| Python, Shell, Ruby, YAML, Terraform/HCL | `#` | `# elspais: expected-broken-links 3` |
 | JavaScript, TypeScript, Java, C, Go, Rust | `//` | `// elspais: expected-broken-links 3` |
 | SQL, Lua, Ada | `--` | `-- elspais: expected-broken-links 3` |
 | HTML, XML | `<!-- -->` | `<!-- elspais: expected-broken-links 3 -->` |

@@ -32,6 +32,9 @@ _HASH_LANGS: frozenset[str] = frozenset(
         ".bash",
         ".yaml",
         ".yml",
+        ".tf",
+        ".tfvars",
+        ".hcl",
     }
 )
 

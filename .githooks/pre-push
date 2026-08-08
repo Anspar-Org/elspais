@@ -207,8 +207,13 @@ e2e_cli_src() {
     [ -x "$_py" ] || return 1
     "$_py" -c 'import elspais,os;print(os.path.realpath(os.path.dirname(elspais.__file__)))' 2>/dev/null
 }
-E2E_REPO_SRC=$(cd "$REPO_ROOT" && python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "src/elspais")
-E2E_ENV_SRC=$(e2e_cli_src)
+# `set -e` is in force and `VAR=$(fn)` adopts the function's exit status, so an
+# unset fallback aborts the whole hook when `elspais` is not installed — before
+# the secret scan or the documentation check get to run. Not finding the CLI is
+# a fact this stage already knows how to report; it is not fatal.
+E2E_REPO_SRC=$(cd "$REPO_ROOT" && python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "src/elspais") \
+    || E2E_REPO_SRC="$REPO_ROOT/src/elspais"
+E2E_ENV_SRC=$(e2e_cli_src) || E2E_ENV_SRC=""
 
 # The venv in the worktree is the binary this tree's e2e tests mean. Prefer it
 # automatically rather than making every developer remember the PATH dance.

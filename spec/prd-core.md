@@ -615,7 +615,7 @@ B. For Python files (`.py`), the extractor SHALL use `tokenize` to extract `#` l
 
 C. For slash-comment languages (`.js`, `.ts`, `.jsx`, `.tsx`, `.java`, `.c`, `.h`, `.cpp`, `.go`, `.rs`, `.dart`), the extractor SHALL extract `//` line comments and `/* */` block comments.
 
-D. For hash-comment languages (`.rb`, `.sh`, `.bash`, `.yaml`, `.yml`), the extractor SHALL extract `#` line comments.
+D. For hash-comment languages (`.rb`, `.sh`, `.bash`, `.yaml`, `.yml`, `.tf`, `.tfvars`, `.hcl`), the extractor SHALL extract `#` line comments.
 
 E. For dash-comment languages (`.sql`, `.lua`), the extractor SHALL extract `--` line comments.
 
@@ -625,11 +625,13 @@ G. For file extensions with no known comment style, `extract_comments()` SHALL r
 
 ### Changelog
 
+- 2026-08-08 | 683718c0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-08 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-57: Terraform/HCL extensions join the hash-comment languages (D)
 - 2026-07-31 | 2e5b4960 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 499123f1 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 499123f1 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Comment Extraction Utilities* | **Hash**: 2e5b4960
+*End* *Comment Extraction Utilities* | **Hash**: 683718c0
 
 ## REQ-d00237: Term Reference Scanner Core
 

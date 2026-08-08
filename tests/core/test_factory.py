@@ -1,4 +1,5 @@
 # Verifies: REQ-d00054-A
+# Verifies: REQ-d00128-A, REQ-d00128-D, REQ-p00003-B
 # Validates REQ-d00055-D, REQ-o00061-B
 """Tests for graph factory build_graph() — code directory scanning and coverage annotation.
 
@@ -9,8 +10,11 @@ Also verifies that build_graph() annotates coverage metrics on requirement nodes
 
 from pathlib import Path
 
+import pytest
+
 from elspais.graph import NodeKind
 from elspais.graph.factory import build_graph
+from elspais.graph.relations import EdgeKind
 
 
 def _write_spec(spec_dir: Path, req_id: str = "REQ-p00001", title: str = "Test Req") -> None:
@@ -271,6 +275,100 @@ directories = ["does_not_exist"]
 
         code_nodes = list(graph.nodes_by_kind(NodeKind.CODE))
         assert len(code_nodes) == 0, "Non-existent code directory should produce zero CODE nodes"
+
+
+def _build_graph_for_annotated_file(tmp_path: Path, filename: str):
+    """Build a graph over a src/ dir holding one annotated file with the given name.
+
+    Config sets no `file_patterns`, so DEFAULT_CODE_PATTERNS decides whether the
+    file is scanned at all.
+    """
+    config_file = tmp_path / ".elspais.toml"
+    config_file.write_text(
+        """\
+[project]
+name = "test-default-code-patterns"
+namespace = "REQ"
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = ["src"]
+""",
+        encoding="utf-8",
+    )
+    _write_spec(tmp_path / "spec")
+    _write_code_file(tmp_path / "src" / filename)
+
+    return build_graph(
+        config_path=config_file,
+        repo_root=tmp_path,
+        scan_tests=False,
+    )
+
+
+class TestDefaultCodePatternFileTypes:
+    """Every extension in DEFAULT_CODE_PATTERNS produces the same graph shape.
+
+    Terraform/HCL sources carry `# Implements:` annotations exactly as shell
+    scripts do, so an annotated `.tf` must land in the graph with the same
+    FILE / CODE / IMPLEMENTS structure a `.sh` file gets. `.sh` is the control:
+    it was scanned before Terraform support existed, so any divergence between
+    the parametrized cases is a Terraform-specific regression.
+    """
+
+    @pytest.mark.parametrize("ext", ["sh", "tf", "tfvars", "hcl"])
+    def test_REQ_d00128_A_annotated_hash_comment_file_yields_same_shape(
+        self, tmp_path: Path, ext: str
+    ) -> None:
+        """A hash-comment source file in a code directory produces a FILE node, a
+        CODE node it CONTAINS, and an IMPLEMENTS edge to the requirement."""
+        graph = _build_graph_for_annotated_file(tmp_path, f"infra.{ext}")
+
+        # REQ-d00128-A: FILE node with file:<repo-relative-path> ID
+        file_node = graph.find_by_id(f"file:src/infra.{ext}")
+        assert file_node is not None, f".{ext} file should produce a FILE node"
+        assert file_node.get_field("relative_path") == f"src/infra.{ext}"
+
+        # REQ-d00128-D: FILE CONTAINS exactly one CODE node
+        contained_code = [
+            c
+            for c in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
+            if c.kind == NodeKind.CODE
+        ]
+        assert len(contained_code) == 1, (
+            f"Expected exactly one CODE node contained by src/infra.{ext}, "
+            f"got: {[c.id for c in contained_code]}"
+        )
+        code_node = contained_code[0]
+
+        # The CODE node is reachable from the graph's CODE index, not just the FILE.
+        assert code_node.id in {n.id for n in graph.nodes_by_kind(NodeKind.CODE)}
+
+        # REQ-p00003-B: the `Implements:` annotation becomes an IMPLEMENTS edge
+        implements_edges = [
+            e for e in code_node.iter_incoming_edges() if e.kind == EdgeKind.IMPLEMENTS
+        ]
+        assert (
+            len(implements_edges) == 1
+        ), f".{ext} annotation should produce one IMPLEMENTS edge, got {len(implements_edges)}"
+        implementing_parents = {
+            p.id for p in code_node.iter_parents(edge_kinds={EdgeKind.IMPLEMENTS})
+        }
+        assert implementing_parents == {"REQ-p00001"}
+
+    def test_REQ_d00128_A_extension_outside_default_patterns_is_not_scanned(
+        self, tmp_path: Path
+    ) -> None:
+        """An identically annotated file whose extension is not in
+        DEFAULT_CODE_PATTERNS produces no FILE or CODE node — so the parametrized
+        cases above are evidence about the pattern list, not about any file being
+        picked up regardless of name."""
+        graph = _build_graph_for_annotated_file(tmp_path, "infra.tfstate")
+
+        assert graph.find_by_id("file:src/infra.tfstate") is None
+        assert list(graph.nodes_by_kind(NodeKind.CODE)) == []
 
 
 class TestBuildGraphCoverageAnnotation:
