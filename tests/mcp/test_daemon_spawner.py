@@ -1,5 +1,5 @@
-# Verifies: REQ-o00074-A+B+C+D
-"""Daemon session-identity tests, verifying REQ-o00074 (Background Daemon Lifetime).
+# Verifies: REQ-o00074-A+B+C+D+E+G+H+I
+"""Daemon lifetime tests, verifying REQ-o00074 (Background Daemon Lifetime).
 
 A daemon started on behalf of a session is bound to that session at the
 moment it starts: the identity is resolved from evidence available then
@@ -7,9 +7,16 @@ moment it starts: the identity is resolved from evidence available then
 clients read to find the daemon (B), and withheld entirely when the start
 was explicit rather than session-driven (C).
 
+Once the recorded session is gone the daemon terminates (E), discloses
+any pending unsaved work honestly before doing so (G), treats a newly
+applied change as proof that a writer adopted it and restarts the
+interval (H), and never writes those pending changes to disk on its own
+initiative (I).
+
 Unit-level only: process liveness is faked (``alive_fn``) so the
 decision matrix and watchdog transitions are exercised deterministically.
-A subprocess-based e2e companion lives in tests/e2e/test_e2e_special.py.
+A subprocess-based e2e companion, including the idle-timeout independence
+of assertion F, lives in tests/e2e/test_e2e_special.py.
 """
 
 from __future__ import annotations
@@ -30,66 +37,7 @@ from elspais.server.spawner_watch import (
 )
 
 # ---------------------------------------------------------------------------
-# shutdown_decision: full matrix (spawner identity x alive x dirty x grace)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    ("spawner_pid", "alive", "count", "grace_expired", "expected"),
-    [
-        # No spawner identity (manual/explicit start): always keep,
-        # regardless of everything else — TTL-only behavior preserved.
-        (None, False, 0, True, Decision.KEEP),
-        (None, False, 5, True, Decision.KEEP),
-        (None, True, 0, False, Decision.KEEP),
-        # Spawner alive: keep, dirty or clean.
-        (1234, True, 0, False, Decision.KEEP),
-        (1234, True, 7, True, Decision.KEEP),
-        # Spawner dead + clean: exit immediately.
-        (1234, False, 0, False, Decision.EXIT_CLEAN),
-        (1234, False, 0, True, Decision.EXIT_CLEAN),
-        # Spawner dead + dirty: bounded grace, then discard-exit.
-        (1234, False, 3, False, Decision.WAIT_GRACE),
-        (1234, False, 3, True, Decision.EXIT_DISCARD),
-        # Unknown mutation count is treated as dirty (conservative).
-        (1234, False, None, False, Decision.WAIT_GRACE),
-        (1234, False, None, True, Decision.EXIT_DISCARD),
-    ],
-)
-def test_shutdown_decision_matrix(spawner_pid, alive, count, grace_expired, expected):
-    assert (
-        shutdown_decision(
-            spawner_pid=spawner_pid,
-            spawner_alive=alive,
-            mutation_count=count,
-            grace_expired=grace_expired,
-        )
-        is expected
-    )
-
-
-# ---------------------------------------------------------------------------
-# pid_alive
-# ---------------------------------------------------------------------------
-
-
-def test_pid_alive_own_process():
-    assert pid_alive(os.getpid()) is True
-
-
-def test_pid_alive_exited_process():
-    proc = subprocess.Popen([sys.executable, "-c", "pass"])
-    proc.wait()
-    assert pid_alive(proc.pid) is False
-
-
-def test_pid_alive_invalid_pids():
-    assert pid_alive(0) is False
-    assert pid_alive(-1) is False
-
-
-# ---------------------------------------------------------------------------
-# SpawnerWatchdog.check_once transitions
+# Shared scaffolding
 # ---------------------------------------------------------------------------
 
 
@@ -101,15 +49,19 @@ class _Clock:
         return self.now
 
 
-def _watchdog(alive_results, counts, clock, grace=300.0):
-    """Build a watchdog with scripted liveness/count sequences."""
+def _watchdog(alive_results, pending_snapshots, clock, grace=300.0):
+    """Build a watchdog with scripted liveness/pending-snapshot sequences.
+
+    ``pending_snapshots`` yields ``(pending_count, activity_token)`` pairs:
+    one snapshot per check, so the count and the token can never disagree.
+    """
     alive_iter = iter(alive_results)
-    count_iter = iter(counts)
+    pending_iter = iter(pending_snapshots)
     exits: list[str] = []
 
     wd = SpawnerWatchdog(
         spawner_pid=4321,
-        mutation_count_fn=lambda: next(count_iter),
+        pending_fn=lambda: next(pending_iter),
         interval_seconds=0.01,
         grace_seconds=grace,
         alive_fn=lambda pid: next(alive_iter),
@@ -119,79 +71,298 @@ def _watchdog(alive_results, counts, clock, grace=300.0):
     return wd, exits
 
 
-def test_watchdog_alive_keeps(capsys):
-    clock = _Clock()
-    wd, exits = _watchdog([True], iter(()), clock)
-    assert wd.check_once() is Decision.KEEP
-    assert exits == []
+def _live_pending_fn(graph):
+    """Snapshot a real graph's pending mutations the way the daemon must."""
+
+    def _snapshot() -> tuple[int, str | None]:
+        entries = graph.mutation_log.tail(0)
+        return len(entries), (entries[-1].id if entries else None)
+
+    return _snapshot
 
 
-def test_watchdog_dead_clean_exits(capsys):
-    clock = _Clock()
-    wd, exits = _watchdog([False], [0], clock)
-    assert wd.check_once() is Decision.EXIT_CLEAN
-    assert exits == ["exit"]
-    err = capsys.readouterr().err
-    assert "shutting down" in err
+# ---------------------------------------------------------------------------
+# Termination while the recorded session is absent
+# ---------------------------------------------------------------------------
 
 
-def test_watchdog_dead_dirty_waits_then_discards(capsys):
-    clock = _Clock()
-    wd, exits = _watchdog([False, False, False], [2, 2, 2], clock, grace=300.0)
+class TestAbsentSessionTerminatesDaemon:
+    """Validates REQ-o00074-E: while the session a daemon recorded is no longer
+    present, the daemon terminates rather than keep serving indefinitely -- and,
+    symmetrically, keeps serving while that session is still present.
+    """
 
-    # First check after death: warn, extend, do not exit.
-    assert wd.check_once() is Decision.WAIT_GRACE
-    assert exits == []
-    err = capsys.readouterr().err
-    assert "WARNING" in err
-    assert "2" in err
-    assert "DISCARDED" in err  # loss risk visible in the log
-
-    # Still inside grace: waits again, but warns only once.
-    clock.now += 100
-    assert wd.check_once() is Decision.WAIT_GRACE
-    assert exits == []
-    assert "WARNING" not in capsys.readouterr().err
-
-    # Grace expired: exit without saving, loudly.
-    clock.now += 300
-    assert wd.check_once() is Decision.EXIT_DISCARD
-    assert exits == ["exit"]
-    err = capsys.readouterr().err
-    assert "WARNING" in err
-    assert "discarded" in err
-
-
-def test_watchdog_spawner_recovery_resets_grace():
-    """A spawner seen alive again resets the dirty-grace clock."""
-    clock = _Clock()
-    wd, exits = _watchdog([False, True, False, False], [1, 1, 1], clock, grace=300.0)
-
-    assert wd.check_once() is Decision.WAIT_GRACE  # dead at t=1000
-    clock.now += 200
-    assert wd.check_once() is Decision.KEEP  # alive again -> reset
-    clock.now += 200  # t=1400; without reset, grace would have expired
-    assert wd.check_once() is Decision.WAIT_GRACE
-    assert exits == []
-
-
-def test_watchdog_mutation_count_error_treated_as_dirty():
-    clock = _Clock()
-
-    def boom():
-        raise RuntimeError("graph unavailable")
-
-    exits: list[str] = []
-    wd = SpawnerWatchdog(
-        spawner_pid=4321,
-        mutation_count_fn=boom,
-        grace_seconds=300.0,
-        alive_fn=lambda pid: False,
-        exit_fn=lambda: exits.append("exit"),
-        clock=clock,
+    @pytest.mark.parametrize(
+        ("spawner_pid", "alive", "count", "grace_expired", "expected"),
+        [
+            # No spawner identity (manual/explicit start): always keep,
+            # regardless of everything else — TTL-only behavior preserved.
+            (None, False, 0, True, Decision.KEEP),
+            (None, False, 5, True, Decision.KEEP),
+            (None, True, 0, False, Decision.KEEP),
+            # Spawner alive: keep, dirty or clean.
+            (1234, True, 0, False, Decision.KEEP),
+            (1234, True, 7, True, Decision.KEEP),
+            # Spawner dead + clean: exit immediately.
+            (1234, False, 0, False, Decision.EXIT_CLEAN),
+            (1234, False, 0, True, Decision.EXIT_CLEAN),
+            # Spawner dead + dirty: bounded grace, then discard-exit.
+            (1234, False, 3, False, Decision.WAIT_GRACE),
+            (1234, False, 3, True, Decision.EXIT_DISCARD),
+            # Unknown mutation count is treated as dirty (conservative).
+            (1234, False, None, False, Decision.WAIT_GRACE),
+            (1234, False, None, True, Decision.EXIT_DISCARD),
+        ],
     )
-    assert wd.check_once() is Decision.WAIT_GRACE
-    assert exits == []
+    def test_REQ_o00074_E_shutdown_decision_matrix(
+        self, spawner_pid, alive, count, grace_expired, expected
+    ):
+        assert (
+            shutdown_decision(
+                spawner_pid=spawner_pid,
+                spawner_alive=alive,
+                mutation_count=count,
+                grace_expired=grace_expired,
+            )
+            is expected
+        )
+
+    def test_REQ_o00074_E_pid_alive_own_process(self):
+        assert pid_alive(os.getpid()) is True
+
+    def test_REQ_o00074_E_pid_alive_exited_process(self):
+        proc = subprocess.Popen([sys.executable, "-c", "pass"])
+        proc.wait()
+        assert pid_alive(proc.pid) is False
+
+    def test_REQ_o00074_E_pid_alive_invalid_pids(self):
+        assert pid_alive(0) is False
+        assert pid_alive(-1) is False
+
+    def test_REQ_o00074_E_live_session_keeps_daemon(self):
+        """The negative case: a present session is never terminated."""
+        clock = _Clock()
+        wd, exits = _watchdog([True], iter(()), clock)
+        assert wd.check_once() is Decision.KEEP
+        assert exits == []
+
+    def test_REQ_o00074_E_absent_session_with_no_pending_work_exits(self, capsys):
+        clock = _Clock()
+        wd, exits = _watchdog([False], [(0, None)], clock)
+        assert wd.check_once() is Decision.EXIT_CLEAN
+        assert exits == ["exit"]
+        assert "shutting down" in capsys.readouterr().err
+
+    def test_REQ_o00074_E_session_seen_present_again_resets_grace(self):
+        """A session seen alive again resets the dirty-grace clock."""
+        clock = _Clock()
+        wd, exits = _watchdog(
+            [False, True, False, False],
+            [(1, "m1"), (1, "m1"), (1, "m1")],
+            clock,
+            grace=300.0,
+        )
+
+        assert wd.check_once() is Decision.WAIT_GRACE  # dead at t=1000
+        clock.now += 200
+        assert wd.check_once() is Decision.KEEP  # alive again -> reset
+        clock.now += 200  # t=1400; without reset, grace would have expired
+        assert wd.check_once() is Decision.WAIT_GRACE
+        assert exits == []
+
+
+# ---------------------------------------------------------------------------
+# Disclosure of pending work before termination
+# ---------------------------------------------------------------------------
+
+
+class TestPendingWorkIsDisclosed:
+    """Validates REQ-o00074-G: a daemon holding unsaved in-memory changes does
+    not terminate before disclosing how many changes are pending and the
+    deadline after which they are lost.
+    """
+
+    def test_REQ_o00074_G_dirty_daemon_waits_then_discards(self, capsys):
+        clock = _Clock()
+        wd, exits = _watchdog(
+            [False, False, False],
+            [(2, "m1"), (2, "m1"), (2, "m1")],
+            clock,
+            grace=300.0,
+        )
+
+        # First check after death: warn, extend, do not exit.
+        assert wd.check_once() is Decision.WAIT_GRACE
+        assert exits == []
+        err = capsys.readouterr().err
+        assert "WARNING" in err
+        assert "2" in err
+        assert "DISCARDED" in err  # loss risk visible in the log
+
+        # Still inside grace: waits again, but warns only once.
+        clock.now += 100
+        assert wd.check_once() is Decision.WAIT_GRACE
+        assert exits == []
+        assert "WARNING" not in capsys.readouterr().err
+
+        # Grace expired: exit without saving, loudly.
+        clock.now += 300
+        assert wd.check_once() is Decision.EXIT_DISCARD
+        assert exits == ["exit"]
+        err = capsys.readouterr().err
+        assert "WARNING" in err
+        assert "discarded" in err
+
+    def test_REQ_o00074_G_unknown_pending_count_treated_as_dirty(self):
+        clock = _Clock()
+
+        def boom():
+            raise RuntimeError("graph unavailable")
+
+        exits: list[str] = []
+        wd = SpawnerWatchdog(
+            spawner_pid=4321,
+            pending_fn=boom,
+            grace_seconds=300.0,
+            alive_fn=lambda pid: False,
+            exit_fn=lambda: exits.append("exit"),
+            clock=clock,
+        )
+        assert wd.check_once() is Decision.WAIT_GRACE
+        assert exits == []
+
+    def test_REQ_o00074_G_warning_states_pending_count_and_deadline(self, capsys):
+        """The disclosure names both quantities the requirement asks for."""
+        clock = _Clock()
+        wd, exits = _watchdog([False], [(7, "m7")], clock, grace=180.0)
+
+        assert wd.check_once() is Decision.WAIT_GRACE
+        assert exits == []
+        err = capsys.readouterr().err
+        assert "7" in err, f"pending count not disclosed: {err!r}"
+        assert "180" in err, f"deadline not disclosed: {err!r}"
+
+
+class TestPendingCountIsHonest:
+    """Validates REQ-o00074-G: the disclosed count is the number actually
+    pending, not a figure capped by how the daemon happens to query its log.
+    """
+
+    def test_REQ_o00074_G_snapshot_counts_every_pending_mutation(
+        self, mutable_graph, canonical_federated_graph
+    ):
+        # Imported lazily: the daemon's pending-count source is a named
+        # helper so both the watchdog and this test read the same answer.
+        from elspais.server.spawner_watch import pending_snapshot
+
+        fg = canonical_federated_graph
+        assert fg.mutation_log.tail(0) == [], "fixture must start with no pending mutations"
+
+        entries = [fg.update_title("REQ-p00001", f"User Authentication {i}") for i in range(5)]
+
+        count, token = pending_snapshot(fg)
+        assert count == 5
+        assert token == entries[-1].id
+
+
+# ---------------------------------------------------------------------------
+# An applied change proves a writer is still present
+# ---------------------------------------------------------------------------
+
+
+class TestAppliedChangeProvesWriterPresent:
+    """Validates REQ-o00074-H: a change applied after the daemon observed its
+    recorded session absent counts as evidence a writer is still using the
+    daemon and restarts the interval before termination -- while traffic that
+    changes nothing does not.
+    """
+
+    def test_REQ_o00074_H_applied_change_restarts_the_interval(self, capsys):
+        clock = _Clock()
+        wd, exits = _watchdog(
+            [False, False, False, False],
+            [(2, "m1"), (3, "m2"), (3, "m2"), (3, "m2")],
+            clock,
+            grace=300.0,
+        )
+
+        # t=1000: session absent, work pending. Token recorded, not activity.
+        assert wd.check_once() is Decision.WAIT_GRACE
+        capsys.readouterr()
+
+        # t=1100: a writer adopted the daemon and applied a change.
+        clock.now = 1100.0
+        assert wd.check_once() is Decision.KEEP
+        assert exits == []
+
+        # t=1350: past the original 1000+300 deadline. Still serving.
+        clock.now = 1350.0
+        assert wd.check_once() is Decision.WAIT_GRACE
+        assert exits == [], "adopted writer's daemon was terminated on the stale deadline"
+        assert "WARNING" in capsys.readouterr().err, "one-shot warning was not re-armed"
+
+        # t=1701: past every candidate restart anchor. The reset is bounded,
+        # not an immortality bug.
+        clock.now = 1701.0
+        assert wd.check_once() is Decision.EXIT_DISCARD
+        assert exits == ["exit"]
+
+    def test_REQ_o00074_H_unchanged_token_does_not_restart_the_interval(self):
+        """A pure reader polling the daemon moves nothing and saves nothing."""
+        clock = _Clock()
+        wd, exits = _watchdog([False] * 4, [(2, "m1")] * 4, clock, grace=300.0)
+
+        assert wd.check_once() is Decision.WAIT_GRACE  # t=1000
+        clock.now = 1100.0
+        assert wd.check_once() is Decision.WAIT_GRACE
+        clock.now = 1200.0
+        assert wd.check_once() is Decision.WAIT_GRACE
+        assert exits == []
+
+        clock.now = 1300.0
+        assert wd.check_once() is Decision.EXIT_DISCARD
+        assert exits == ["exit"], "polling kept an orphaned daemon alive past its deadline"
+
+
+# ---------------------------------------------------------------------------
+# Termination never persists on the daemon's own initiative
+# ---------------------------------------------------------------------------
+
+
+class TestTerminationDoesNotPersist:
+    """Validates REQ-o00074-I: a daemon does not persist pending changes on its
+    own initiative while terminating; persisting them remains an act a caller
+    requests.
+    """
+
+    def test_REQ_o00074_I_discard_exit_writes_no_spec_files(
+        self, mutable_graph, canonical_federated_graph, hht_like_fixture
+    ):
+        fg = canonical_federated_graph
+        fg.update_title("REQ-p00002", "Data Privacy (unsaved)")
+
+        spec_files = sorted((hht_like_fixture / "spec").rglob("*.md"))
+        assert spec_files, "fixture spec tree is empty"
+        before = {p: p.stat().st_mtime_ns for p in spec_files}
+
+        clock = _Clock()
+        exits: list[str] = []
+        wd = SpawnerWatchdog(
+            spawner_pid=4321,
+            pending_fn=_live_pending_fn(fg),
+            grace_seconds=300.0,
+            alive_fn=lambda pid: False,
+            exit_fn=lambda: exits.append("exit"),
+            clock=clock,
+        )
+
+        assert wd.check_once() is Decision.WAIT_GRACE
+        clock.now += 400
+        assert wd.check_once() is Decision.EXIT_DISCARD
+        assert exits == ["exit"]
+
+        after = {p: p.stat().st_mtime_ns for p in spec_files}
+        assert after == before, "terminating daemon wrote spec files no caller asked it to write"
 
 
 # ---------------------------------------------------------------------------

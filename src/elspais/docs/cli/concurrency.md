@@ -154,6 +154,19 @@ MCP tools changes no file. Nothing on disk moves, and a client watching
 file timestamps sees nothing -- yet the graph every surface reads has
 already changed.
 
+That also means pending work lives only in the daemon process, and the
+daemon has a lifetime of its own. One that a CLI command auto-started on
+behalf of a session shuts down once that session is gone; if it is
+holding pending mutations it warns to `.elspais/daemon.log`, waits a
+bounded grace period (5 minutes), and then exits and **discards** them.
+They are in no file and are not recoverable. An applied mutation during
+that window is read as a writer that has adopted the daemon and restarts
+the grace period, but reads never do — so an agent that mutates, goes
+quiet, and lets its session end loses the work. Call
+`save_mutations(if_tip_mutation_id=<tip>)` before your session ends
+rather than leaving pending work in the daemon. See
+`docs("commands")` for the full lifetime rules.
+
 `/api/check-freshness` therefore reports two independent signals:
 
 - `stale` (with `stale_files`) -- spec files changed **on disk**, e.g. a

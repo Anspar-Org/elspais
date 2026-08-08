@@ -441,6 +441,16 @@ C. A daemon started explicitly rather than on behalf of a session SHALL record n
 
 D. Session identity SHALL be derived only from evidence available at the moment of starting, and when no session identity can be established the daemon SHALL start with none rather than with an inferred one.
 
+E. While the session a daemon recorded is no longer present, the daemon SHALL terminate rather than keep serving indefinitely.
+
+F. The obligation in assertion E SHALL hold under every idle-timeout configuration, including one in which the idle timeout never expires, and SHALL NOT be discharged by client request traffic.
+
+G. A daemon holding unsaved in-memory changes SHALL NOT terminate before disclosing how many changes are pending and the deadline after which they are lost, and the disclosed count SHALL be the number actually pending.
+
+H. A change applied after a daemon observed its recorded session absent SHALL count as evidence that a writer is still using the daemon, and SHALL restart the interval before termination, so that a writer which adopted a running daemon is not treated as absent.
+
+I. A daemon SHALL NOT persist pending changes on its own initiative while terminating; persisting them remains an act a caller requests.
+
 ### Rationale
 
 A daemon is started implicitly to serve one session and is then detached from it, so nothing in the running process can afterwards say whose death should end it. The identity has to be handed over at start or it is unrecoverable, which is why assertion A fixes the moment rather than the means.
@@ -449,12 +459,18 @@ Assertion C keeps the two ways a daemon comes into existence distinguishable. A 
 
 Assertion B exists because a lifetime rule nobody can inspect cannot be diagnosed. The record that already tells clients where the daemon is is the place an operator will look to ask why one is, or is not, still running.
 
-Recording an identity arms nothing. Termination and the treatment of pending work are the subject of this requirement's remaining assertions.
+Assertions E through I govern what the recorded identity is for. Assertion F exists because the two obvious places to hang the check are both wrong: an idle timeout resets on every request, so a client that merely polls holds an abandoned daemon open forever, and an idle timeout can be configured never to expire at all, which would disable the check outright. The obligation is therefore stated against the daemon's own passage of time rather than against its traffic.
+
+Assertions G and I decide the case where termination and pending work collide, and they are the only place this requirement can destroy something. Unsaved in-memory changes exist in no file: a daemon that exits holding them loses work irrecoverably. Persisting them unattended is not the safer answer — writing a caller's source files with no session present converts a lifetime rule into an unrequested edit, and persistence is elsewhere deliberately an explicit, guarded act. Refusing to terminate is not the safer answer either, since it is the original defect restored. What remains is to bound the loss and disclose it, which is what G requires; the honest-count clause is there because a warning that understates the loss is REQ-p00019's silent-substitution failure wearing a warning's clothes.
+
+Assertion H is what makes that bound tolerable. A daemon outlives the session that started it precisely so a later session can adopt it, and the adopting writer's changes are indistinguishable, from inside the daemon, from the dead session's. Treating an applied change as proof of a live writer distinguishes them without reintroducing the polling loophole assertion F closes, because reading moves nothing.
 
 ### Changelog
 
+- 2026-08-07 | cc0fd11b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-07 | 26acf039 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-07 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: author daemon termination and pending-work disclosure invariants
 - 2026-08-07 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: author daemon session-identity invariants
 
-*End* *Background Daemon Lifetime* | **Hash**: 26acf039
+*End* *Background Daemon Lifetime* | **Hash**: cc0fd11b
 ---

@@ -7407,18 +7407,20 @@ def run_server(
             )
 
         if spawner_pid is not None:
-            from elspais.server.spawner_watch import SpawnerWatchdog
+            from elspais.server.spawner_watch import SpawnerWatchdog, pending_snapshot
 
-            def _unsaved_mutation_count() -> int | None:
-                log = _get_mutation_log(state.graph, limit=1)
-                count = log.get("count")
-                return count if isinstance(count, int) else None
+            # Implements: REQ-o00074-G, REQ-o00074-H
+            # Dereference the holder on every check: the live graph is
+            # swapped on rebuild, so a cached object would count and
+            # fingerprint a log nobody is writing to any more.
+            def _pending() -> tuple[int, str | None]:
+                return pending_snapshot(state.graph)
 
             interval = float(_os.environ.get("_ELSPAIS_SPAWNER_CHECK_INTERVAL", "60"))
             grace = float(_os.environ.get("_ELSPAIS_SPAWNER_GRACE", "300"))
             SpawnerWatchdog(
                 spawner_pid=spawner_pid,
-                mutation_count_fn=_unsaved_mutation_count,
+                pending_fn=_pending,
                 interval_seconds=interval,
                 grace_seconds=grace,
             ).start()

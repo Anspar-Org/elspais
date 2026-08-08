@@ -620,7 +620,7 @@ class TestDaemonConfigStaleRestart:
 # ---------------------------------------------------------------------------
 # Daemon session identity: bound at start, or withheld on explicit starts
 # ---------------------------------------------------------------------------
-# Verifies: REQ-o00074-A+C
+# Verifies: REQ-o00074-A+C+E+F
 
 
 class TestDaemonSpawnerLiveness:
@@ -630,6 +630,12 @@ class TestDaemonSpawnerLiveness:
 
     Validates REQ-o00074-C: a daemon started explicitly records no session
     identity and keeps idle-timeout-only lifetime.
+
+    Validates REQ-o00074-E: once the recorded session is gone the daemon
+    terminates rather than keep serving indefinitely.
+
+    Validates REQ-o00074-F: that obligation holds under every idle-timeout
+    configuration, including one in which the idle timeout never expires.
 
     Deterministic: the "session" is a subprocess we control and kill; the
     daemon's check interval is shortened via the internal env knob.
@@ -753,4 +759,86 @@ class TestDaemonSpawnerLiveness:
                 try:
                     os.kill(json.loads(daemon_json.read_text())["pid"], 15)
                 except (OSError, ValueError, KeyError):
+                    pass
+
+    def test_REQ_o00074_F_daemon_exits_with_idle_timeout_disabled(self, tmp_path):
+        """Validates REQ-o00074-F: the termination obligation holds under every
+        idle-timeout configuration, including one in which the idle timeout
+        never expires (``cli_ttl < 0``), and is not discharged by client request
+        traffic. The check must hang off the daemon's own passage of time, not
+        off a timeout a project can switch off or a client can keep resetting."""
+        import os
+        import sys
+        import time
+        import urllib.error
+        import urllib.request
+
+        from tests.e2e.helpers import Requirement, base_config, build_project
+
+        config = base_config(name="no-ttl-spawner-project")
+        config["cli_ttl"] = -1  # daemon never times out on idleness
+
+        build_project(
+            tmp_path,
+            config,
+            spec_files={
+                "spec/prd.md": [
+                    Requirement(
+                        "REQ-p00001",
+                        "Feature One",
+                        "PRD",
+                        assertions=[("A", "The system SHALL do one thing.")],
+                    )
+                ]
+            },
+        )
+
+        spawner = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+        daemon_pid = None
+        try:
+            result = run_elspais(
+                "summary",
+                cwd=tmp_path,
+                env={
+                    "ELSPAIS_SPAWNER_PID": str(spawner.pid),
+                    "_ELSPAIS_SPAWNER_CHECK_INTERVAL": "0.3",
+                },
+            )
+            assert result.returncode == 0, result.stderr
+
+            daemon_json = tmp_path / ".elspais" / "daemon.json"
+            assert daemon_json.exists(), "daemon should have auto-started with cli_ttl=-1"
+            info = json.loads(daemon_json.read_text())
+            assert info["spawner_pid"] == spawner.pid
+            daemon_pid = info["pid"]
+            dirty_url = f"http://127.0.0.1:{info['port']}/api/dirty"
+
+            spawner.kill()
+            spawner.wait()
+
+            deadline = time.time() + 20
+            while time.time() < deadline:
+                try:
+                    os.kill(daemon_pid, 0)
+                except ProcessLookupError:
+                    break  # daemon exited
+                # A client that keeps talking to the daemon must not keep it
+                # alive: read traffic is not evidence a writer is present.
+                try:
+                    urllib.request.urlopen(dirty_url, timeout=2).read()
+                except (urllib.error.URLError, OSError):
+                    pass  # daemon shutting down mid-poll is the expected end
+                time.sleep(0.3)
+            else:
+                raise AssertionError(
+                    "daemon with a never-expiring idle timeout survived its "
+                    "spawner's death under continuous client traffic: "
+                    + (tmp_path / ".elspais" / "daemon.log").read_text()[-1000:]
+                )
+        finally:
+            spawner.kill()
+            if daemon_pid is not None:
+                try:
+                    os.kill(daemon_pid, 15)
+                except OSError:
                     pass
