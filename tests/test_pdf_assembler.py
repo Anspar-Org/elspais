@@ -1033,8 +1033,9 @@ class TestUnresolvableAssetDiagnostics:
     def test_REQ_p00080_I_unresolvable_mermaid_diagram_is_reported(self, tmp_path):
         """An unresolvable .mmd reference is reported with kind 'diagram'.
 
-        ``_resolve_mermaid_images`` currently returns the match unchanged
-        and records nothing, so the diagram vanishes without a trace.
+        A diagram whose source cannot be located leaves the document with
+        nothing in its place, so the reference is named rather than
+        dropped.
         """
         asm, root = _image_asm(tmp_path)
         (root / "spec").mkdir()
@@ -1386,8 +1387,8 @@ class TestFencedCodeBlockReferences:
     failures of the same obligation -- what the compiler reports and renders
     must correspond to what it actually did.
 
-    Indented (four-space) code blocks are out of scope; fences alone are
-    recognised.
+    Indented (four-space) code blocks carry the same exemption; they are
+    covered by ``TestIndentedCodeBlockReferences``.
     """
 
     # Verifies: REQ-p00080-I
@@ -1642,4 +1643,314 @@ class TestUnloadableRepositoryDiagnostics:
         assert repo_diags == [], (
             f"a healthy federation must report no missing repository: "
             f"{[d.reference for d in repo_diags]}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Unterminated fenced code blocks (REQ-p00080-I)
+# ---------------------------------------------------------------------------
+
+
+class TestUnterminatedCodeFenceDiagnostics:
+    """Validates REQ-p00080-I: a spec file whose code fence is never closed is
+    reported, because from the opening fence onward the compiler stops
+    analysing the file and can no longer say what it did or did not place.
+
+    Fence tracking makes every line after an unclosed ``` pass through
+    untouched to end of file: the ``*End*`` footer, later requirement
+    headings, and every image reference in the runaway region are neither
+    processed nor judged. The document still compiles, so nothing downstream
+    notices — headings inside the region simply reappear as numbered sections
+    and references there are never checked. A region the compiler cannot
+    analyse is exactly the thing it must name rather than pass over in
+    silence.
+    """
+
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_unterminated_fence_is_reported(self, tmp_path):
+        """A file opening a fence it never closes yields exactly one
+        ``code-fence`` diagnostic naming that file, and still renders.
+        """
+        asm, root = _image_asm(tmp_path)
+        (root / "spec").mkdir()
+        (root / "spec" / "doc.md").write_text(
+            "# Doc\n"
+            "\n"
+            "Prose before the sample.\n"
+            "\n"
+            "```markdown\n"
+            "a sample line\n"
+            "\n"
+            "PROSE AFTER THE RUNAWAY FENCE\n",
+            encoding="utf-8",
+        )
+
+        joined = "\n".join(asm._render_file("spec/doc.md"))
+
+        fence_diags = [d for d in asm.iter_diagnostics() if d.kind == "code-fence"]
+        assert len(fence_diags) == 1, (
+            f"an unterminated fence must be reported exactly once; "
+            f"diagnostics were {[(d.kind, d.reference) for d in asm.iter_diagnostics()]}"
+        )
+        diag = fence_diags[0]
+        assert diag.reference == "spec/doc.md", (
+            f"the diagnostic must name the spec file holding the unclosed "
+            f"fence: {diag.reference!r}"
+        )
+        assert (
+            diag.source_file == "spec/doc.md"
+        ), f"the declaring file is the same file: {diag.source_file!r}"
+        assert diag.cause, "the diagnostic must state why the region is unanalysable"
+        assert diag.remedy, "the diagnostic must state the action available"
+
+        # Degraded, not aborted: the file still renders.
+        assert (
+            "PROSE AFTER THE RUNAWAY FENCE" in joined
+        ), f"an unterminated fence must not cost the rest of the file: {joined!r}"
+
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_balanced_fences_report_nothing(self, tmp_path):
+        """Regression guard: a file whose fences all close is not reported."""
+        asm, root = _image_asm(tmp_path)
+        (root / "spec").mkdir()
+        (root / "spec" / "doc.md").write_text(
+            "# Doc\n"
+            "\n"
+            "```markdown\n"
+            "first sample\n"
+            "```\n"
+            "\n"
+            "Between the samples.\n"
+            "\n"
+            "~~~text\n"
+            "second sample\n"
+            "~~~\n",
+            encoding="utf-8",
+        )
+
+        asm._render_file("spec/doc.md")
+
+        fence_diags = [d for d in asm.iter_diagnostics() if d.kind == "code-fence"]
+        assert fence_diags == [], (
+            f"a file whose fences are all closed must report nothing: "
+            f"{[d.reference for d in fence_diags]}"
+        )
+
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_unterminated_tilde_fence_is_reported(self, tmp_path):
+        """``~~~`` left open is reported exactly as ``` left open is."""
+        asm, root = _image_asm(tmp_path)
+        (root / "spec").mkdir()
+        (root / "spec" / "doc.md").write_text(
+            "# Doc\n"
+            "\n"
+            "Prose before the sample.\n"
+            "\n"
+            "~~~text\n"
+            "a sample line\n"
+            "\n"
+            "PROSE AFTER THE RUNAWAY FENCE\n",
+            encoding="utf-8",
+        )
+
+        joined = "\n".join(asm._render_file("spec/doc.md"))
+
+        fence_diags = [d for d in asm.iter_diagnostics() if d.kind == "code-fence"]
+        assert len(fence_diags) == 1, (
+            f"an unterminated ~~~ fence must be reported exactly once; "
+            f"diagnostics were {[(d.kind, d.reference) for d in asm.iter_diagnostics()]}"
+        )
+        assert fence_diags[0].reference == "spec/doc.md"
+        assert "PROSE AFTER THE RUNAWAY FENCE" in joined
+
+
+# ---------------------------------------------------------------------------
+# Indented code blocks (REQ-p00080-I)
+# ---------------------------------------------------------------------------
+
+
+class TestIndentedCodeBlockReferences:
+    """Validates REQ-p00080-I: an image reference inside a four-space indented
+    code block is a sample of markdown, not a reference the document ever
+    intended to place, and must be neither rewritten nor reported.
+
+    CommonMark gives indented blocks the same verbatim standing as fenced
+    ones, and pandoc typesets them the same way — it never tries to fetch
+    anything named inside one. Treating them as live references costs twice,
+    exactly as it does for fences: a sample naming a file that does not exist
+    earns a report of an omission that never happened, and a sample naming one
+    that does exist is rewritten to an absolute path from the author's
+    machine, so the line the reader was meant to copy is not the line they are
+    shown.
+
+    The boundary matters as much as the exemption. A block begins only on a
+    4+-space line following a blank line, runs through blank lines, and ends
+    at the first non-blank line indented less than four; a 4-space
+    continuation under a list item is list content, not code. Suppressing more
+    than that would silence genuine omissions in ordinary prose, which is the
+    same failure in the other direction.
+    """
+
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_missing_reference_in_indented_block_is_not_reported(self, tmp_path):
+        """A sample naming a file that does not exist is neither reported nor
+        altered -- the indented line survives byte-for-byte.
+        """
+        asm, root = _image_asm(tmp_path)
+        (root / "spec").mkdir()
+        sample = "    ![example](path/to/your-image.png)"
+        (root / "spec" / "doc.md").write_text(
+            f"# Doc\n\nEmbed an image like this:\n\n{sample}\n",
+            encoding="utf-8",
+        )
+
+        lines = asm._render_file("spec/doc.md")
+
+        assert asm.diagnostic_count() == 0, (
+            f"a markdown sample inside an indented code block was reported as "
+            f"an omitted reference: {[d.reference for d in asm.iter_diagnostics()]}"
+        )
+        assert sample in lines, (
+            f"the indented sample line must survive verbatim; rendered output " f"was {lines!r}"
+        )
+
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_indent_suppresses_rewrite_while_prose_still_rewrites(self, tmp_path):
+        """The same resolving reference is rewritten in prose and left alone in
+        an indented block.
+
+        Both halves are asserted together so that indent detection cannot be
+        satisfied by simply not rewriting anything.
+        """
+        asm, root = _image_asm(tmp_path)
+        (root / "spec" / "img").mkdir(parents=True)
+        img = root / "spec" / "img" / "real.png"
+        img.write_bytes(b"\x89PNG")
+        (root / "spec" / "doc.md").write_text(
+            "# Doc\n"
+            "\n"
+            "![real](img/real.png)\n"
+            "\n"
+            "Write it like this:\n"
+            "\n"
+            "    ![real](img/real.png)\n",
+            encoding="utf-8",
+        )
+
+        lines = asm._render_file("spec/doc.md")
+
+        assert f"![real]({img.resolve()})" in lines, (
+            f"the prose reference must still be rewritten to an absolute " f"path: {lines!r}"
+        )
+        assert "    ![real](img/real.png)" in lines, (
+            f"the indented sample must keep the relative path the author " f"wrote: {lines!r}"
+        )
+        assert asm.diagnostic_count() == 0
+
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_tab_indented_block_behaves_like_four_spaces(self, tmp_path):
+        """A tab opens an indented block exactly as four spaces do."""
+        asm, root = _image_asm(tmp_path)
+        (root / "spec").mkdir()
+        sample = "\t![example](path/to/your-image.png)"
+        (root / "spec" / "doc.md").write_text(
+            f"# Doc\n\nEmbed an image like this:\n\n{sample}\n",
+            encoding="utf-8",
+        )
+
+        lines = asm._render_file("spec/doc.md")
+
+        assert asm.diagnostic_count() == 0, (
+            f"a markdown sample inside a tab-indented code block was reported "
+            f"as an omitted reference: {[d.reference for d in asm.iter_diagnostics()]}"
+        )
+        assert sample in lines, f"the tab-indented sample line must survive verbatim: {lines!r}"
+
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_reference_after_indented_block_is_still_reported(self, tmp_path):
+        """The block ends at the first unindented line, so a genuine omission
+        after it is still judged.
+
+        Blank lines inside the block do not end it; the unindented prose line
+        does. Without this, "recognise indented blocks" could be satisfied by
+        suppressing everything after the first indent -- silencing every real
+        omission in the remainder of the file.
+        """
+        asm, root = _image_asm(tmp_path)
+        (root / "spec").mkdir()
+        (root / "spec" / "doc.md").write_text(
+            "# Doc\n"
+            "\n"
+            "Write it like this:\n"
+            "\n"
+            "    ![one](missing/one.png)\n"
+            "\n"
+            "    ![two](missing/two.png)\n"
+            "\n"
+            "![three](missing/three.png)\n",
+            encoding="utf-8",
+        )
+
+        asm._render_file("spec/doc.md")
+
+        refs = [d.reference for d in asm.iter_diagnostics()]
+        assert (
+            "missing/one.png" not in refs
+        ), f"a reference inside the indented block was reported: {refs!r}"
+        assert "missing/two.png" not in refs, (
+            f"the indented block must continue across a blank line, so the "
+            f"second sample is still inside it: {refs!r}"
+        )
+        assert "missing/three.png" in refs, (
+            f"the indented block must end at the first unindented line, so "
+            f"the prose reference after it is still judged: {refs!r}"
+        )
+
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_list_continuation_is_not_treated_as_code(self, tmp_path):
+        """A 4-space continuation under a ``- `` item is list content.
+
+        Under a list item whose content indent is two columns, four spaces is
+        an ordinary continuation paragraph, not a code block. A reference
+        there is live, and an omission there is a real one.
+        """
+        asm, root = _image_asm(tmp_path)
+        (root / "spec").mkdir()
+        (root / "spec" / "doc.md").write_text(
+            "# Doc\n" "\n" "- first item\n" "\n" "    ![gone](missing/list.png)\n",
+            encoding="utf-8",
+        )
+
+        asm._render_file("spec/doc.md")
+
+        refs = [d.reference for d in asm.iter_diagnostics()]
+        assert "missing/list.png" in refs, (
+            f"a reference in a list-item continuation is live content, not a "
+            f"code sample, and its omission must still be reported: {refs!r}"
+        )
+
+    # Verifies: REQ-p00080-I
+    def test_REQ_p00080_I_indented_paragraph_continuation_is_not_code(self, tmp_path):
+        """An indented line that does not follow a blank line continues the
+        paragraph and is not a code block.
+
+        CommonMark forbids an indented code block from interrupting a
+        paragraph, so this reference is ordinary prose and a real omission.
+        """
+        asm, root = _image_asm(tmp_path)
+        (root / "spec").mkdir()
+        (root / "spec" / "doc.md").write_text(
+            "# Doc\n"
+            "\n"
+            "This sentence runs on to the next line\n"
+            "    ![gone](missing/lazy.png)\n",
+            encoding="utf-8",
+        )
+
+        asm._render_file("spec/doc.md")
+
+        refs = [d.reference for d in asm.iter_diagnostics()]
+        assert "missing/lazy.png" in refs, (
+            f"an indented line continuing a paragraph is prose, not a code "
+            f"block, and its omission must still be reported: {refs!r}"
         )

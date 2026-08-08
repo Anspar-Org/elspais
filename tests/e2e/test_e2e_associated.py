@@ -1138,6 +1138,75 @@ class TestPdfMediaFidelity:
         result = run_elspais("pdf", "--output", str(out), cwd=missing_image_project)
         return result, out
 
+    @pytest.fixture(scope="class")
+    @staticmethod
+    def unfetchable_media_project(tmp_path_factory):
+        """A project referencing a media type only pandoc can adjudicate.
+
+        ``.webp`` is outside the assembler's own image-reference grammar, so
+        the assembler records nothing at all for this document. The only
+        witness that the picture is missing is pandoc's own stderr, which it
+        emits while still exiting successfully.
+        """
+        root = tmp_path_factory.mktemp("pdf_webp") / "core"
+        build_project(
+            root,
+            base_config(name="pdf-webp"),
+            spec_files={
+                "spec/sub/prd-webp.md": [
+                    Requirement(
+                        "REQ-p00001",
+                        "Modern Art",
+                        "PRD",
+                        body="Diagram below.\n\n![absent](images/nope.webp)\n",
+                        assertions=[("A", "The system SHALL report absent modern art.")],
+                    ),
+                ],
+            },
+        )
+        return root
+
+    @pytest.fixture(scope="class")
+    @staticmethod
+    def unfetchable_media_pdf(unfetchable_media_project, tmp_path_factory):
+        """Compile the unfetchable-media project to PDF once for the class."""
+        out = tmp_path_factory.mktemp("pdf_webp_out") / "webp.pdf"
+        result = run_elspais("pdf", "--output", str(out), cwd=unfetchable_media_project)
+        return result, out
+
+    # Verifies: REQ-p00080-K
+    @requires_pandoc
+    @requires_xelatex
+    def test_REQ_p00080_K_pandoc_reported_omission_reaches_the_completion_line(
+        self, unfetchable_media_pdf
+    ):
+        """A reference only the typesetter can notice still qualifies the verdict.
+
+        Every other test of this path substitutes a fake pandoc, so the exact
+        stderr wording the parser depends on is asserted against a string the
+        test itself wrote. If pandoc's phrasing drifts, those tests stay green
+        while the omission stops being counted and the document is reported as
+        an unqualified success. This one runs the real binary end to end: the
+        compile succeeds, pandoc names the resource it could not fetch, and
+        that omission reaches the completion line.
+        """
+        result, out = unfetchable_media_pdf
+        print(f"\n--- elspais pdf stdout ---\n{result.stdout}")
+        print(f"--- elspais pdf stderr ---\n{result.stderr}")
+
+        assert result.returncode == 0, f"pdf failed: {result.stderr}"
+        assert out.exists(), "PDF file was not created"
+
+        assert "nope.webp" in result.stderr, (
+            f"the resource pandoc could not fetch was not named on stderr: " f"{result.stderr}"
+        )
+        assert "PDF written to" in result.stdout, f"no completion line: {result.stdout}"
+        assert "INCOMPLETE" in result.stdout, (
+            f"a reference pandoc dropped was not folded into the completion "
+            f"line, so the document was reported as an unqualified success: "
+            f"{result.stdout}"
+        )
+
     # Verifies: REQ-p00080-G
     @requires_pandoc
     @requires_xelatex

@@ -83,6 +83,13 @@ _IMAGE_REF_RE = re.compile(
 # Opening or closing marker of a fenced code block (``` or ~~~).
 _FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
 
+# A line indented far enough to open or continue an indented code block.
+_INDENTED_CODE_RE = re.compile(r"^(?: {4}|\t)")
+
+# A Markdown list item marker, whose indented continuation lines are list
+# content rather than code.
+_LIST_ITEM_RE = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s)")
+
 log = logging.getLogger(__name__)
 
 
@@ -98,8 +105,8 @@ class AssemblyDiagnostic:
     """
 
     kind: str
-    """What was omitted: ``image``, ``diagram``, ``source-file``, or
-    ``repository``."""
+    """What was omitted or could not be analysed: ``image``, ``diagram``,
+    ``source-file``, ``repository``, or ``code-fence``."""
 
     reference: str
     """The reference exactly as written in the source, or the file path."""
@@ -351,13 +358,16 @@ class MarkdownAssembler:
 
         seen_file_title = False
         fence: str | None = None
+        indented_code = False
+        prev_blank = True
+        in_list = False
 
         lines: list[str] = ["\\newpage", ""]
         for line in source_lines:
-            # Fenced code blocks pass through byte-for-byte. A reference
-            # inside a code sample is text about a reference, not a
-            # reference: rewriting it corrupts the sample, and reporting
-            # it as unresolvable is a false alarm.
+            # Code blocks pass through byte-for-byte. A reference inside a
+            # code sample is text about a reference, not a reference:
+            # rewriting it corrupts the sample, and reporting it as
+            # unresolvable claims an omission the document never suffered.
             marker = _FENCE_RE.match(line)
             if fence is not None:
                 if marker and marker.group(1)[0] == fence[0] and len(marker.group(1)) >= len(fence):
@@ -366,6 +376,30 @@ class MarkdownAssembler:
                 continue
             if marker:
                 fence = marker.group(1)
+                lines.append(line)
+                continue
+
+            blank = not line.strip()
+            indented = _INDENTED_CODE_RE.match(line) is not None
+
+            # A CommonMark indented code block opens on a 4-space (or tab)
+            # indent that follows a blank line and does not continue a
+            # paragraph. List continuation is indented the same way but is
+            # list content, so an open list suppresses the reading.
+            if indented_code:
+                if not blank and not indented:
+                    indented_code = False
+            elif indented and prev_blank and not in_list:
+                indented_code = True
+
+            if not blank:
+                if not indented:
+                    in_list = _LIST_ITEM_RE.match(line) is not None
+                prev_blank = False
+            else:
+                prev_blank = True
+
+            if indented_code:
                 lines.append(line)
                 continue
 
@@ -418,6 +452,28 @@ class MarkdownAssembler:
                 lines.append("")
 
             lines.append(line)
+
+        if fence is not None:
+            # Everything after the unclosed marker was treated as code, so
+            # requirement headings and end markers past that point were
+            # never processed. The document is degraded in a way no
+            # reference-level check can see; say so.
+            # Implements: REQ-p00080-I
+            self._record_diagnostic(
+                AssemblyDiagnostic(
+                    kind="code-fence",
+                    reference=file_path,
+                    source_file=file_path,
+                    repo=self._repo_name_for_root(owning_repo_root),
+                    searched=(),
+                    cause=(
+                        "A code fence is opened and never closed; the rest of "
+                        "the file was treated as code, so any requirement "
+                        "structure after it is not rendered as structure."
+                    ),
+                    remedy="Close the code fence in the spec file.",
+                )
+            )
 
         # Trim trailing blank lines
         while lines and not lines[-1].strip():
@@ -763,7 +819,7 @@ class MarkdownAssembler:
                 searched=tuple(locations),
                 cause="File not found in any repository of the compiled graph.",
                 remedy=(
-                    "Add the file, correct the reference, or remove the " "reference from the spec."
+                    "Add the file, correct the reference, or remove the reference from the spec."
                 ),
             )
         )

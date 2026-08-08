@@ -110,10 +110,15 @@ tildes -- is left completely alone: it is not rewritten, so a Markdown sample
 showing image syntax appears in the PDF verbatim, and it is not reported,
 because a sample is text about a reference rather than a reference.
 
-Only fenced blocks are recognised. An indented (four-space) code block is not:
-a reference inside one is still treated as live, so it is rewritten when it
-resolves and reported when it does not. Fence a code sample that contains image
-syntax.
+An indented (four-space or tab) code block carries the same exemption. It is
+recognised the way Markdown defines it: an indented line that follows a blank
+line and does not continue a paragraph. Indented continuation lines under a
+list item are list content, not code, and references there stay live.
+
+A code fence that is opened and never closed makes the rest of the file read as
+code, so requirement structure after it is not rendered as structure. That is
+reported as a `code-fence` reference naming the spec file, and counts toward
+`INCOMPLETE:`.
 
 ### Media types outside the reference grammar
 
