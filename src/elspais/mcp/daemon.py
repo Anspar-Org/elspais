@@ -67,6 +67,7 @@ def _session_leader_has_tty(sid: int) -> bool:
         return False
 
 
+# Implements: REQ-o00074-A, REQ-o00074-D
 def resolve_spawner_pid() -> int | None:
     """Identify the session on whose behalf a daemon is being auto-started.
 
@@ -209,6 +210,7 @@ def write_daemon_json(
         "config_hash": config_hash,
         "type": server_type,
     }
+    # Implements: REQ-o00074-B, REQ-o00074-C
     if spawner_pid is not None:
         info["spawner_pid"] = spawner_pid
     daemon_json.write_text(json.dumps(info))
@@ -313,6 +315,7 @@ def start_daemon(
         str(serve_ttl),
     ]
 
+    # Implements: REQ-o00074-A, REQ-o00074-C
     child_env = {**os.environ, "_ELSPAIS_DAEMON_JSON": str(daemon_json)}
     if spawner_pid is not None:
         child_env[_SPAWNER_ENV] = str(spawner_pid)

@@ -121,6 +121,9 @@ Use `--no-daemon` to force a local graph build (~2-4s).
     cli_ttl = 0      # never auto-launch (manual start only)
     cli_ttl = -1     # auto-start daemon, never timeout
 
+A daemon auto-started this way also ends when the session it was started
+for ends, whatever `cli_ttl` says — see "Daemon lifetime" below.
+
 ## viewer
 
 Interactive traceability viewer (live server or static HTML). The viewer
@@ -470,6 +473,74 @@ MCP (Model Context Protocol) server commands.
 **Options for serve:**
 
   `--transport {stdio,sse,streamable-http}`  Transport type (default: stdio)
+
+## daemon
+
+Manage the background daemon. One daemon per repository serves both the
+CLI and MCP agents.
+
+  $ elspais daemon restart             # Re-read .elspais.toml, fresh graph
+  $ elspais daemon restart --persist   # Save pending mutations first
+  $ elspais daemon restart --force     # Discard pending mutations
+
+**Options:**
+
+  `--persist`  Save unsaved in-memory mutations before restarting
+  `--force`    Restart anyway, discarding unsaved in-memory mutations
+
+A restart refuses to run while the daemon holds unsaved in-memory
+mutations unless one of those two flags says what to do with them.
+`--persist` and `--force` are mutually exclusive.
+
+**Lifetime:** a daemon started this way is an explicit start — it records
+no session and lives by `cli_ttl` alone. A daemon that a CLI command
+auto-started lives only as long as the session it was started for (see
+"Daemon lifetime" below).
+
+## Daemon lifetime
+
+A daemon is started one of two ways, and the two have different
+lifetimes.
+
+**Started for a session (implicit).** Any CLI command that needs a graph
+and finds no daemon running starts one on behalf of the session it is
+running in. That daemon exists to serve that session, so it records the
+session's process ID as `spawner_pid` in `.elspais/daemon.json` and shuts
+itself down once that process is gone. This is independent of the idle
+timeout: a `cli_ttl` of `-1` disables the timeout but not this, so a
+daemon cannot outlive the session that asked for it.
+
+The identity is recorded at the moment of the start and never inferred
+afterwards — the daemon is detached from its parent as it starts, so
+there is nothing left to infer from. It is resolved in this order:
+
+    ELSPAIS_SPAWNER_PID     an explicit declaration by a session or IDE
+        |                   (always decisive; an unusable value means
+        |                    "no identity", not "keep looking")
+        v
+    nearest ancestor named 'claude', when CLAUDECODE is set
+        |
+        v
+    the controlling-terminal session leader, if it has a tty
+        |                   (an interactive shell qualifies; a batch or
+        |                    CI shell has no tty and does not)
+        v
+    no identity recorded -> idle timeout is the only limit
+
+A guessed identity would be worse than none, so when nothing resolves the
+daemon simply keeps its `cli_ttl` lifetime.
+
+**Started deliberately (explicit).** `elspais daemon restart`, a manual
+`elspais mcp serve`, and the viewer record no session at all. Their
+lifetime is governed solely by `cli_ttl`, and `daemon.json` carries no
+`spawner_pid` key.
+
+**Unsaved work.** In-memory mutations are never written on anyone's
+behalf. If a session-bound daemon still holds pending mutations when its
+session dies, it writes a warning to `.elspais/daemon.log`, waits a
+bounded grace period (5 minutes), and then exits **without** saving them.
+To keep that work, save it before ending the session — `save_mutations`
+over MCP, Save in the viewer, or `elspais daemon restart --persist`.
 
 ## install / uninstall
 

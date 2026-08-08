@@ -868,7 +868,11 @@ DaemonAction = Annotated[DaemonRestartArgs, tyro.conf.subcommand("restart")]
 
 @dataclasses.dataclass
 class DaemonArgs:
-    """Manage the background daemon (MCP + CLI share one daemon per repo)."""
+    """Manage the background daemon (MCP + CLI share one daemon per repo).
+
+    A daemon restarted here is tied to no session and lives by cli_ttl
+    alone; one a CLI command auto-started ends with that session.
+    """
 
     action: tyro.conf.OmitSubcommandPrefixes[tyro.conf.OmitArgPrefixes[DaemonAction]] = (
         dataclasses.field(default_factory=DaemonRestartArgs)

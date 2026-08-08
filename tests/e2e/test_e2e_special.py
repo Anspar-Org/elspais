@@ -618,20 +618,24 @@ class TestDaemonConfigStaleRestart:
 
 
 # ---------------------------------------------------------------------------
-# TOOL-12: daemons must not outlive the session that spawned them
+# Daemon session identity: bound at start, or withheld on explicit starts
 # ---------------------------------------------------------------------------
+# Verifies: REQ-o00074-A+C
 
 
 class TestDaemonSpawnerLiveness:
-    """Verifies REQ-p00015-E: an implicitly spawned daemon exits after its
-    spawning session dies, instead of surviving as an orphan that could
-    keep serving values no session is refreshing.
+    """Validates REQ-o00074-A: a daemon started implicitly on behalf of a
+    session records that session's identity at the moment it starts, so it can
+    afterwards determine whether the session still exists.
+
+    Validates REQ-o00074-C: a daemon started explicitly records no session
+    identity and keeps idle-timeout-only lifetime.
 
     Deterministic: the "session" is a subprocess we control and kill; the
     daemon's check interval is shortened via the internal env knob.
     """
 
-    def test_daemon_exits_after_spawner_dies(self, tmp_path):
+    def test_REQ_o00074_A_daemon_exits_after_spawner_dies(self, tmp_path):
         import os
         import sys
         import time
@@ -704,7 +708,7 @@ class TestDaemonSpawnerLiveness:
                 except OSError:
                     pass
 
-    def test_explicit_restart_records_no_spawner(self, tmp_path):
+    def test_REQ_o00074_C_explicit_restart_records_no_spawner(self, tmp_path):
         """`elspais daemon restart` is an explicit start: the daemon keeps
         TTL-only lifetime and records no spawner identity, even when the
         environment declares one."""

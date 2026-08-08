@@ -33,10 +33,16 @@ stats = ""
 #    0: never auto-launch daemon from CLI (manual start only)
 #   <0: auto-start daemon that never times out
 #
-# Spawner liveness: a daemon auto-started on behalf of a session (a Claude
-# Code session, an IDE declaring itself via the ELSPAIS_SPAWNER_PID env var,
-# or an interactive shell) also exits shortly after that session ends, even
-# when cli_ttl < 0 — orphaned daemons do not accumulate. If the daemon holds
+# Spawner liveness: a daemon auto-started on behalf of a session records
+# that session's PID as `spawner_pid` in .elspais/daemon.json and exits
+# shortly after the session ends, even when cli_ttl < 0 — orphaned daemons
+# do not accumulate. The session is identified at the moment of the start
+# (the daemon is detached, so it cannot be recovered afterwards), in this
+# order: the ELSPAIS_SPAWNER_PID env var, then the nearest ancestor process
+# named `claude` when CLAUDECODE is set, then the controlling-terminal
+# session leader if it has a tty (an interactive shell qualifies; a batch
+# or CI shell does not). When none resolve, no identity is recorded and
+# cli_ttl is the only limit. If the daemon holds
 # unsaved in-memory mutations when its session dies, it logs a warning to
 # .elspais/daemon.log, waits a bounded grace period (5 minutes), then exits
 # WITHOUT saving; nothing is persisted silently. Explicitly started servers
@@ -489,7 +495,9 @@ ELSPAIS_SCANNING_SKIP='["node_modules", ".git"]'
 Reserved (never treated as config overrides): `ELSPAIS_VERSION`
 (min-CLI-version pin) and `ELSPAIS_SPAWNER_PID` (a session/IDE declares
 itself the spawner of implicitly auto-started daemons, tying the daemon's
-lifetime to that process — see the `cli_ttl` comment above).
+lifetime to that process — see the `cli_ttl` comment above). A set
+`ELSPAIS_SPAWNER_PID` is decisive: a value that is not a usable PID means
+"no session identity", not "fall back to the other checks".
 
 ## Minimal Configuration Examples
 

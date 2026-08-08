@@ -7386,6 +7386,7 @@ def run_server(
         # Spawner liveness: set for implicitly spawned daemons only (env
         # written by daemon.start_daemon). Explicit starts (manual serve,
         # viewer, daemon restart) have no spawner and keep TTL-only life.
+        # Implements: REQ-o00074-A, REQ-o00074-C
         spawner_pid: int | None = None
         env_spawner = _os.environ.get("_ELSPAIS_SPAWNER_PID")
         if env_spawner:

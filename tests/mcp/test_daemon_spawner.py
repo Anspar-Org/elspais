@@ -1,11 +1,11 @@
-# Verifies: REQ-p00015-E
-"""Spawner-liveness tests: daemons must not outlive the session that spawned them.
+# Verifies: REQ-o00074-A+B+C+D
+"""Daemon session-identity tests, verifying REQ-o00074 (Background Daemon Lifetime).
 
-Anchored to REQ-p00015-E (stale-value serving): an orphaned daemon whose
-spawning session is gone keeps serving values nobody is refreshing;
-reaping it prevents that stale-serving window. The fit is the
-prevention aspect — process lifetime itself is implementation-territory
-resource hygiene, deliberately unspecified.
+A daemon started on behalf of a session is bound to that session at the
+moment it starts: the identity is resolved from evidence available then
+(D), handed to the spawned process (A), recorded in the state record
+clients read to find the daemon (B), and withheld entirely when the start
+was explicit rather than session-driven (C).
 
 Unit-level only: process liveness is faked (``alive_fn``) so the
 decision matrix and watchdog transitions are exercised deterministically.
@@ -195,158 +195,169 @@ def test_watchdog_mutation_count_error_treated_as_dirty():
 
 
 # ---------------------------------------------------------------------------
-# resolve_spawner_pid
+# Session identity: resolution, recording, and the explicit-start exemption
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_spawner_env_override(monkeypatch):
-    from elspais.mcp import daemon
+class TestSpawnerIdentityResolution:
+    """Validates REQ-o00074-D: session identity is derived only from evidence
+    available at the moment of starting, and when no session identity can be
+    established the daemon starts with none rather than with an inferred one.
+    """
 
-    monkeypatch.setenv("ELSPAIS_SPAWNER_PID", "5555")
-    assert daemon.resolve_spawner_pid() == 5555
+    def test_REQ_o00074_D_env_override(self, monkeypatch):
+        from elspais.mcp import daemon
 
+        monkeypatch.setenv("ELSPAIS_SPAWNER_PID", "5555")
+        assert daemon.resolve_spawner_pid() == 5555
 
-@pytest.mark.parametrize("value", ["not-a-pid", "0", "1", "-3"])
-def test_resolve_spawner_env_override_invalid(monkeypatch, value):
-    from elspais.mcp import daemon
+    @pytest.mark.parametrize("value", ["not-a-pid", "0", "1", "-3"])
+    def test_REQ_o00074_D_env_override_invalid(self, monkeypatch, value):
+        from elspais.mcp import daemon
 
-    monkeypatch.setenv("ELSPAIS_SPAWNER_PID", value)
-    assert daemon.resolve_spawner_pid() is None
-
-
-def test_resolve_spawner_claude_ancestor(monkeypatch):
-    from elspais.mcp import daemon
-
-    monkeypatch.delenv("ELSPAIS_SPAWNER_PID", raising=False)
-    monkeypatch.setenv("CLAUDECODE", "1")
-    with patch(
-        "elspais.mcp.daemon._iter_proc_ancestors",
-        return_value=iter([(200, "zsh"), (300, "claude"), (400, "zsh")]),
-    ):
-        assert daemon.resolve_spawner_pid() == 300
-
-
-def test_resolve_spawner_no_session_identity(monkeypatch):
-    """No env override, no Claude session, no tty -> None (TTL-only)."""
-    from elspais.mcp import daemon
-
-    monkeypatch.delenv("ELSPAIS_SPAWNER_PID", raising=False)
-    monkeypatch.delenv("CLAUDECODE", raising=False)
-    with patch("elspais.mcp.daemon._session_leader_has_tty", return_value=False):
+        monkeypatch.setenv("ELSPAIS_SPAWNER_PID", value)
         assert daemon.resolve_spawner_pid() is None
 
+    def test_REQ_o00074_D_claude_ancestor(self, monkeypatch):
+        from elspais.mcp import daemon
 
-def test_resolve_spawner_interactive_session_leader(monkeypatch):
-    from elspais.mcp import daemon
+        monkeypatch.delenv("ELSPAIS_SPAWNER_PID", raising=False)
+        monkeypatch.setenv("CLAUDECODE", "1")
+        with patch(
+            "elspais.mcp.daemon._iter_proc_ancestors",
+            return_value=iter([(200, "zsh"), (300, "claude"), (400, "zsh")]),
+        ):
+            assert daemon.resolve_spawner_pid() == 300
 
-    monkeypatch.delenv("ELSPAIS_SPAWNER_PID", raising=False)
-    monkeypatch.delenv("CLAUDECODE", raising=False)
-    with (
-        patch("elspais.mcp.daemon.os.getsid", return_value=7777),
-        patch("elspais.mcp.daemon._session_leader_has_tty", return_value=True),
-    ):
-        assert daemon.resolve_spawner_pid() == 7777
+    def test_REQ_o00074_D_no_session_identity(self, monkeypatch):
+        """No env override, no Claude session, no tty -> None (TTL-only)."""
+        from elspais.mcp import daemon
 
+        monkeypatch.delenv("ELSPAIS_SPAWNER_PID", raising=False)
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        with patch("elspais.mcp.daemon._session_leader_has_tty", return_value=False):
+            assert daemon.resolve_spawner_pid() is None
 
-# ---------------------------------------------------------------------------
-# Spawner identity plumbing: daemon.json, spawn env, ensure_daemon
-# ---------------------------------------------------------------------------
+    def test_REQ_o00074_D_interactive_session_leader(self, monkeypatch):
+        from elspais.mcp import daemon
 
-
-def test_write_daemon_json_records_spawner_pid(tmp_path):
-    from elspais.mcp.daemon import write_daemon_json
-
-    path = write_daemon_json(
-        repo_root=tmp_path, pid=111, port=222, server_type="daemon", spawner_pid=333
-    )
-    assert json.loads(path.read_text())["spawner_pid"] == 333
-
-
-def test_write_daemon_json_omits_spawner_pid_when_absent(tmp_path):
-    """Explicit starts (viewer, manual serve) record no spawner identity."""
-    from elspais.mcp.daemon import write_daemon_json
-
-    path = write_daemon_json(repo_root=tmp_path, pid=111, port=222, server_type="viewer")
-    assert "spawner_pid" not in json.loads(path.read_text())
+        monkeypatch.delenv("ELSPAIS_SPAWNER_PID", raising=False)
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        with (
+            patch("elspais.mcp.daemon.os.getsid", return_value=7777),
+            patch("elspais.mcp.daemon._session_leader_has_tty", return_value=True),
+        ):
+            assert daemon.resolve_spawner_pid() == 7777
 
 
-def test_start_daemon_passes_spawner_env(tmp_path):
-    from elspais.mcp.daemon import start_daemon
+class TestImplicitStartRecordsSession:
+    """Validates REQ-o00074-A: a daemon started implicitly on behalf of a
+    session records the identity of that session at the moment it is started,
+    so it can afterwards determine whether the session still exists.
+    """
 
-    popen_calls = []
+    def test_REQ_o00074_A_start_daemon_passes_spawner_env(self, tmp_path):
+        from elspais.mcp.daemon import start_daemon
 
-    with (
-        patch("elspais.mcp.daemon.stop_daemon"),
-        patch(
-            "elspais.mcp.daemon.subprocess.Popen",
-            side_effect=lambda *a, **kw: popen_calls.append(kw),
-        ),
-        patch("elspais.mcp.daemon.time.time", side_effect=[0, 20, 20]),  # force timeout
-    ):
-        with pytest.raises(RuntimeError):
-            start_daemon(tmp_path, ttl_minutes=1, spawner_pid=9876)
+        popen_calls = []
 
-    assert popen_calls[0]["env"]["_ELSPAIS_SPAWNER_PID"] == "9876"
+        with (
+            patch("elspais.mcp.daemon.stop_daemon"),
+            patch(
+                "elspais.mcp.daemon.subprocess.Popen",
+                side_effect=lambda *a, **kw: popen_calls.append(kw),
+            ),
+            patch("elspais.mcp.daemon.time.time", side_effect=[0, 20, 20]),  # force timeout
+        ):
+            with pytest.raises(RuntimeError):
+                start_daemon(tmp_path, ttl_minutes=1, spawner_pid=9876)
 
+        assert popen_calls[0]["env"]["_ELSPAIS_SPAWNER_PID"] == "9876"
 
-def test_start_daemon_without_spawner_scrubs_env(tmp_path, monkeypatch):
-    """Explicit starts must not inherit a stale spawner PID from the env."""
-    from elspais.mcp.daemon import start_daemon
+    def test_REQ_o00074_A_ensure_daemon_resolves_spawner(self, tmp_path):
+        """The implicit CLI spawn path ties the daemon to the resolved session."""
+        from elspais.mcp.daemon import ensure_daemon
 
-    monkeypatch.setenv("_ELSPAIS_SPAWNER_PID", "1212")
-    popen_calls = []
+        captured = {}
 
-    with (
-        patch("elspais.mcp.daemon.stop_daemon"),
-        patch(
-            "elspais.mcp.daemon.subprocess.Popen",
-            side_effect=lambda *a, **kw: popen_calls.append(kw),
-        ),
-        patch("elspais.mcp.daemon.time.time", side_effect=[0, 20, 20]),
-    ):
-        with pytest.raises(RuntimeError):
-            start_daemon(tmp_path, ttl_minutes=1)
+        def fake_start(repo_root, ttl_minutes, spawner_pid=None):
+            captured["spawner_pid"] = spawner_pid
+            return 12000
 
-    assert "_ELSPAIS_SPAWNER_PID" not in popen_calls[0]["env"]
+        with (
+            patch("elspais.mcp.daemon.get_daemon_info", return_value=None),
+            patch("elspais.mcp.daemon.get_cli_ttl", return_value=30),
+            patch("elspais.mcp.daemon.resolve_spawner_pid", return_value=4242),
+            patch("elspais.mcp.daemon.start_daemon", side_effect=fake_start),
+        ):
+            assert ensure_daemon(tmp_path) == 12000
 
-
-def test_ensure_daemon_resolves_spawner(tmp_path):
-    """The implicit CLI spawn path ties the daemon to the resolved session."""
-    from elspais.mcp.daemon import ensure_daemon
-
-    captured = {}
-
-    def fake_start(repo_root, ttl_minutes, spawner_pid=None):
-        captured["spawner_pid"] = spawner_pid
-        return 12000
-
-    with (
-        patch("elspais.mcp.daemon.get_daemon_info", return_value=None),
-        patch("elspais.mcp.daemon.get_cli_ttl", return_value=30),
-        patch("elspais.mcp.daemon.resolve_spawner_pid", return_value=4242),
-        patch("elspais.mcp.daemon.start_daemon", side_effect=fake_start),
-    ):
-        assert ensure_daemon(tmp_path) == 12000
-
-    assert captured["spawner_pid"] == 4242
+        assert captured["spawner_pid"] == 4242
 
 
-def test_restart_daemon_spawns_without_spawner(tmp_path):
-    """`elspais daemon restart` is an explicit start: no session tie."""
-    from elspais.mcp.daemon import restart_daemon
+class TestSpawnerIdentityIsObservable:
+    """Validates REQ-o00074-B: a recorded session identity is observable in the
+    state record by which clients locate the daemon (``.elspais/daemon.json``).
+    """
 
-    captured = {}
+    def test_REQ_o00074_B_write_daemon_json_records_spawner_pid(self, tmp_path):
+        from elspais.mcp.daemon import write_daemon_json
 
-    def fake_start(repo_root, ttl_minutes, spawner_pid=None):
-        captured["spawner_pid"] = spawner_pid
-        return 12001
+        path = write_daemon_json(
+            repo_root=tmp_path, pid=111, port=222, server_type="daemon", spawner_pid=333
+        )
+        assert json.loads(path.read_text())["spawner_pid"] == 333
 
-    with (
-        patch("elspais.mcp.daemon.get_daemon_info", return_value=None),
-        patch("elspais.mcp.daemon.get_cli_ttl", return_value=30),
-        patch("elspais.mcp.daemon.start_daemon", side_effect=fake_start),
-    ):
-        result = restart_daemon(tmp_path)
 
-    assert result["success"] is True
-    assert captured["spawner_pid"] is None
+class TestExplicitStartRecordsNoSession:
+    """Validates REQ-o00074-C: a daemon started explicitly rather than on behalf
+    of a session records no session identity, and its lifetime remains governed
+    solely by its idle timeout.
+    """
+
+    def test_REQ_o00074_C_write_daemon_json_omits_spawner_pid_when_absent(self, tmp_path):
+        """Explicit starts (viewer, manual serve) record no spawner identity."""
+        from elspais.mcp.daemon import write_daemon_json
+
+        path = write_daemon_json(repo_root=tmp_path, pid=111, port=222, server_type="viewer")
+        assert "spawner_pid" not in json.loads(path.read_text())
+
+    def test_REQ_o00074_C_start_daemon_without_spawner_scrubs_env(self, tmp_path, monkeypatch):
+        """Explicit starts must not inherit a stale spawner PID from the env."""
+        from elspais.mcp.daemon import start_daemon
+
+        monkeypatch.setenv("_ELSPAIS_SPAWNER_PID", "1212")
+        popen_calls = []
+
+        with (
+            patch("elspais.mcp.daemon.stop_daemon"),
+            patch(
+                "elspais.mcp.daemon.subprocess.Popen",
+                side_effect=lambda *a, **kw: popen_calls.append(kw),
+            ),
+            patch("elspais.mcp.daemon.time.time", side_effect=[0, 20, 20]),
+        ):
+            with pytest.raises(RuntimeError):
+                start_daemon(tmp_path, ttl_minutes=1)
+
+        assert "_ELSPAIS_SPAWNER_PID" not in popen_calls[0]["env"]
+
+    def test_REQ_o00074_C_restart_daemon_spawns_without_spawner(self, tmp_path):
+        """`elspais daemon restart` is an explicit start: no session tie."""
+        from elspais.mcp.daemon import restart_daemon
+
+        captured = {}
+
+        def fake_start(repo_root, ttl_minutes, spawner_pid=None):
+            captured["spawner_pid"] = spawner_pid
+            return 12001
+
+        with (
+            patch("elspais.mcp.daemon.get_daemon_info", return_value=None),
+            patch("elspais.mcp.daemon.get_cli_ttl", return_value=30),
+            patch("elspais.mcp.daemon.start_daemon", side_effect=fake_start),
+        ):
+            result = restart_daemon(tmp_path)
+
+        assert result["success"] is True
+        assert captured["spawner_pid"] is None

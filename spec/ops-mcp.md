@@ -424,3 +424,37 @@ A tool that requires a judgement call before use loses to the tool that needs no
 
 *End* *MCP Org-Wide Context* | **Hash**: 346f3031
 ---
+
+## REQ-o00074: Background Daemon Lifetime
+
+**Level**: ops | **Status**: Active | **Implements**: REQ-p00015, REQ-p00060
+
+A background daemon SHALL be bound at start to the session it exists to serve, so that its lifetime can be reasoned about after it has been detached from that session.
+
+### Assertions
+
+A. A daemon started implicitly on behalf of a session SHALL record the identity of that session at the moment it is started, so that the daemon can afterwards determine whether the session still exists.
+
+B. A recorded session identity SHALL be observable in the state record by which clients locate the daemon.
+
+C. A daemon started explicitly rather than on behalf of a session SHALL record no session identity, and its lifetime SHALL remain governed solely by its idle timeout.
+
+D. Session identity SHALL be derived only from evidence available at the moment of starting, and when no session identity can be established the daemon SHALL start with none rather than with an inferred one.
+
+### Rationale
+
+A daemon is started implicitly to serve one session and is then detached from it, so nothing in the running process can afterwards say whose death should end it. The identity has to be handed over at start or it is unrecoverable, which is why assertion A fixes the moment rather than the means.
+
+Assertion C keeps the two ways a daemon comes into existence distinguishable. A daemon a person started deliberately answers to that person, not to whichever shell happened to be nearby; inferring a session for it would make deliberate starts unpredictably mortal. Assertion D is the same caution stated for the implicit path: a guessed identity is worse than none, because none degrades to the existing idle-timeout behaviour while a wrong one attaches the daemon's life to an unrelated process.
+
+Assertion B exists because a lifetime rule nobody can inspect cannot be diagnosed. The record that already tells clients where the daemon is is the place an operator will look to ask why one is, or is not, still running.
+
+Recording an identity arms nothing. Termination and the treatment of pending work are the subject of this requirement's remaining assertions.
+
+### Changelog
+
+- 2026-08-07 | 26acf039 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-07 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: author daemon session-identity invariants
+
+*End* *Background Daemon Lifetime* | **Hash**: 26acf039
+---
