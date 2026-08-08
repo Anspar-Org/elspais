@@ -301,7 +301,8 @@ dir = ""
 # upstream repo may target template assertions directly (Implements:,
 # Verifies:); that evidence is "cross-cutting" -- it applies to every
 # satisfier of the template via the INSTANCE edges, so coverage flows
-# automatically without per-instance re-implementation.
+# automatically without per-instance re-implementation. See
+# `elspais docs satisfies` for the full pattern and validation matrix.
 #
 # Associates also enable top-down `Integrates: <ASSOCIATE-REQ>` references:
 # a consumer requirement declares that its implementation is provided by a

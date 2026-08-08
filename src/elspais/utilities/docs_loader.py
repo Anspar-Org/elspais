@@ -23,6 +23,7 @@ TOPIC_ORDER = [
     "authoring",
     "traceability",
     "linking",
+    "satisfies",
     "validation",
     "git",
     "config",

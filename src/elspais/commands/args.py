@@ -650,6 +650,7 @@ DOCS_TOPICS = Literal[
     "authoring",
     "traceability",
     "linking",
+    "satisfies",
     "validation",
     "git",
     "config",
