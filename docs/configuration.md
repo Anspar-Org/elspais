@@ -8,9 +8,8 @@ elspais looks for configuration in this order:
 
 1. `--config PATH` flag (explicit path)
 2. `.elspais.toml` in current directory
-3. `.elspais.toml` in git root
-4. `~/.config/elspais/config.toml` (user defaults)
-5. Built-in defaults
+3. `.elspais.toml` in any parent directory, up to and including the git root
+4. Built-in defaults
 
 For **git worktrees**, elspais detects the canonical (main) repository
 root and uses it when resolving relative associate paths. This means
@@ -20,10 +19,10 @@ main repo, not the worktree location.
 ## Complete Configuration Reference
 
 ```toml
-# .elspais.toml - Full configuration reference (v3)
+# .elspais.toml - Full configuration reference (v4)
 
-# Config schema version (defaults to 3)
-version = 3
+# Config schema version (defaults to 4)
+version = 4
 
 # MCP tool usage statistics file path (optional, or set ELSPAIS_STATS env var)
 stats = ""
@@ -62,7 +61,9 @@ cli_ttl = 30
 #──────────────────────────────────────────────────────────────────────────────
 
 [project]
-# Project namespace (used as the ID prefix, e.g. "REQ" -> REQ-p00001)
+# Project namespace (REQUIRED; non-empty; used as the ID prefix,
+# e.g. "REQ" -> REQ-p00001). load_config() rejects configs that omit this
+# field or leave it blank.
 namespace = "REQ"
 
 # Project name (REQUIRED; non-empty; used in reports). load_config() rejects
@@ -300,8 +301,7 @@ dir = ""
 # upstream repo may target template assertions directly (Implements:,
 # Verifies:); that evidence is "cross-cutting" -- it applies to every
 # satisfier of the template via the INSTANCE edges, so coverage flows
-# automatically without per-instance re-implementation. See
-# `elspais docs satisfies` for the full pattern and validation matrix.
+# automatically without per-instance re-implementation.
 #
 # Associates also enable top-down `Integrates: <ASSOCIATE-REQ>` references:
 # a consumer requirement declares that its implementation is provided by a
@@ -426,9 +426,8 @@ no_assertions_severity = "warning"
 # (Implements:, Verifies:, Validates:). null = use check default ("warning")
 # no_traceability_severity = "warning"
 
-# Allowed status values
-allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
-# content_rules = []               # Additional content validation rules
+# The set of accepted status values is the union of the status_roles lists
+# below; there is no separate allowed_statuses key.
 
 # Status role classification -- determines behavior in metrics and viewer
 # Each role controls how requirements with that status are treated:
@@ -439,8 +438,8 @@ allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
 [rules.format.status_roles]
 active = ["Active"]
 provisional = ["Draft", "Proposed"]
-aspirational = ["Roadmap", "Future"]
-retired = ["Deprecated", "Superseded"]
+aspirational = ["Roadmap", "Future", "Idea"]
+retired = ["Deprecated", "Superseded", "Rejected"]
 
 #──────────────────────────────────────────────────────────────────────────────
 # CHANGELOG
@@ -513,12 +512,14 @@ lifetime to that process — see the `cli_ttl` comment above). A set
 ```toml
 [project]
 name = "my-project"
+namespace = "REQ"
 ```
 
 ### Custom Levels
 
 ```toml
 [project]
+name = "my-project"
 namespace = "PROJ"
 
 [levels.epic]
@@ -545,6 +546,7 @@ implements = ["task", "story", "epic"]
 ```toml
 [project]
 name = "core-platform"
+namespace = "REQ"
 
 [associates.callisto]
 path = "../callisto"
@@ -558,6 +560,10 @@ namespace = "PHX"
 ### Type-Prefix Style Requirements
 
 ```toml
+[project]
+name = "my-project"
+namespace = "REQ"
+
 [id-patterns]
 canonical = "{level.letter}-{component}"
 
@@ -585,6 +591,7 @@ digits = 5
 
 ```toml
 [project]
+name = "my-project"
 namespace = "PROJ"
 
 [id-patterns]

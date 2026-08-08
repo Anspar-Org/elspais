@@ -95,18 +95,31 @@ Create `.elspais.toml` in your repository root (or run `elspais init`):
 ```toml
 [project]
 name = "my-project"
-type = "core"
+namespace = "REQ"
 
-[directories]
-spec = "spec"
-code = ["src"]
+[levels.prd]
+rank = 1
+letter = "p"
+implements = ["prd"]
 
-[patterns]
-prefix = "REQ"
-id_template = "{prefix}-{type}{id}"
+[levels.ops]
+rank = 2
+letter = "o"
+implements = ["ops", "prd"]
 
-[rules.hierarchy]
-allowed_implements = ["dev -> ops, prd", "ops -> prd"]
+[levels.dev]
+rank = 3
+letter = "d"
+implements = ["dev", "ops", "prd"]
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = ["src"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
 
 [rules.format]
 require_hash = true
@@ -145,7 +158,7 @@ elspais docs           Built-in user guide
 elspais example        Requirement format examples
 ```
 
-Run `elspais <command> --help` for detailed usage. See [docs/cli/commands.md](docs/cli/commands.md) for full documentation.
+Run `elspais <command> --help` for detailed usage. See [src/elspais/docs/cli/commands.md](src/elspais/docs/cli/commands.md) for full documentation.
 
 ## Development
 

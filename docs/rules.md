@@ -8,46 +8,37 @@ elspais validates requirements against configurable rules organized into categor
 |----------|-------------|---------|
 | `hierarchy` | Requirement relationship rules | Enabled |
 | `format` | Structure and content rules | Enabled |
-| `traceability` | Code-to-requirement linking | Enabled |
-| `naming` | Title and naming conventions | Enabled |
+| `coverage` | Per-dimension coverage severity | Enabled |
+| `references` | Severity of references to non-active requirements | Enabled |
 
 ## Hierarchy Rules
 
 Control how requirements can reference each other.
 
-### `allowed_implements`
+### Which levels may implement which
 
-Defines valid "Implements" relationships:
-
-```toml
-[rules.hierarchy]
-allowed_implements = [
-    "dev -> ops, prd",   # DEV can implement OPS or PRD
-    "ops -> prd",        # OPS can implement only PRD
-    "prd -> prd",        # PRD can implement other PRD
-]
-```text
-
-**Syntax:** `"source_type -> target_type1, target_type2"`
-
-**What's forbidden:**
-
-- Anything not explicitly listed
-- `prd -> dev` (PRD cannot implement DEV)
-- `prd -> ops` (PRD cannot implement OPS)
-
-### Permissive Example
-
-Allow same-level implementations:
+Allowed "Implements" relationships are not a rule setting. Each level declares
+its own `implements` list in its `[levels.<name>]` section:
 
 ```toml
-[rules.hierarchy]
-allowed_implements = [
-    "dev -> dev, ops, prd",  # DEV can implement anything
-    "ops -> ops, prd",       # OPS can implement OPS or PRD
-    "prd -> prd",            # PRD can implement PRD
-]
+[levels.prd]
+rank = 1
+letter = "p"
+implements = ["prd"]        # PRD can implement other PRD
+
+[levels.ops]
+rank = 2
+letter = "o"
+implements = ["ops", "prd"] # OPS can implement OPS or PRD
+
+[levels.dev]
+rank = 3
+letter = "d"
+implements = ["dev", "ops", "prd"]  # DEV can implement anything
 ```text
+
+**What's forbidden:** anything not listed. With the configuration above,
+`prd -> dev` and `prd -> ops` are both rejected.
 
 ### `allow_circular`
 
@@ -142,65 +133,6 @@ A. The system SHALL do something.
 B. The system SHALL do another thing.
 ```text
 
-### `acceptance_criteria` (v0.9.0+)
-
-Control handling of legacy Acceptance Criteria format:
-
-```toml
-[rules.format]
-acceptance_criteria = "warn"  # "allow" | "warn" | "error"
-```text
-
-- `allow`: Silently accept old format
-- `warn`: Log a warning but continue
-- `error`: Fail validation
-
-### `require_shall` (v0.9.0+)
-
-Require SHALL keyword in assertion text:
-
-```toml
-[rules.format]
-require_shall = true
-```text
-
-### `labels_sequential` (v0.9.0+)
-
-Require assertion labels to be sequential (A, B, C... not A, C, D):
-
-```toml
-[rules.format]
-labels_sequential = true
-```text
-
-### `labels_unique` (v0.9.0+)
-
-Forbid duplicate assertion labels:
-
-```toml
-[rules.format]
-labels_unique = true
-```text
-
-### `placeholder_values` (v0.9.0+)
-
-Values indicating removed/deprecated assertions (to maintain label sequence):
-
-```toml
-[rules.format]
-placeholder_values = ["obsolete", "removed", "deprecated", "N/A", "n/a", "-", "reserved"]
-```text
-
-Example of a placeholder assertion:
-
-```markdown
-## Assertions
-
-A. The system SHALL do something.
-B. Removed.
-C. The system SHALL do another thing.
-```text
-
 ### `require_status`
 
 Require Status field in header:
@@ -208,7 +140,12 @@ Require Status field in header:
 ```toml
 [rules.format]
 require_status = true
-allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
+
+[rules.format.status_roles]
+active = ["Active"]
+provisional = ["Draft", "Proposed"]
+aspirational = ["Roadmap", "Future", "Idea"]
+retired = ["Deprecated", "Superseded", "Rejected"]
 ```text
 
 Expects:
@@ -217,27 +154,27 @@ Expects:
 **Level**: Dev | **Status**: Active
 ```text
 
-Violation `format.status_valid` is raised when status is not in `allowed_statuses`.
+The set of accepted statuses is the union of the `status_roles` lists. The
+`spec.format_rules` check fails when a status is not among them.
 
-### `assertion_label` (v0.9.0+)
+### Assertion labels
 
-Assertion labels must match the configured pattern (`label_style` in `[patterns.assertions]`):
-
-Violation `format.assertion_label` is raised for invalid label formats:
+Assertion labels must match the configured pattern (`label_style` in
+`[id-patterns.assertions]`). A malformed label fails `spec.format_rules`:
 
 ```text
-❌ ERROR [format.assertion_label] REQ-d00001
+❌ ERROR [spec.format_rules] REQ-d00001
    Invalid assertion label format: 1A
 ```text
 
 ## Hash Rules
 
-### `hash.mismatch`
+### `spec.hash_integrity`
 
 When a requirement has a hash footer, the hash is verified against the content. A mismatch indicates the requirement was modified without updating the hash.
 
 ```text
-⚠️ WARNING [hash.mismatch] REQ-d00001
+⚠️ WARNING [spec.hash_integrity] REQ-d00001
    Hash mismatch: expected a1b2c3d4, found x9y8z7w6
 ```text
 
@@ -245,25 +182,23 @@ Fix with: `elspais fix REQ-d00001`
 
 ## Link Rules
 
-### `link.broken`
+### `spec.broken_references`
 
 Implements references must point to existing requirements. This rule validates that referenced requirement IDs exist.
 
 ```text
-❌ ERROR [link.broken] REQ-d00001
+❌ ERROR [spec.broken_references] REQ-d00001
    Implements reference not found: p99999
 ```text
 
-For associated repositories, use `--core-repo` to validate cross-repo references.
-
 ## ID Rules
 
-### `id.duplicate` (v0.9.2+)
+### `spec.no_duplicates`
 
 Detects when the same requirement ID appears multiple times across specification files. The parser keeps the first occurrence and ignores duplicates, surfacing a warning that becomes an error during validation.
 
 ```text
-❌ ERROR [id.duplicate] REQ-d00001
+❌ ERROR [spec.no_duplicates] REQ-d00001
    Duplicate requirement ID (first seen in spec/dev-impl.md:42)
    File: spec/dev-other.md:15
 ```text
@@ -274,63 +209,6 @@ Detects when the same requirement ID appears multiple times across specification
 - Remove the duplicate if it was created by mistake
 
 This rule cannot be disabled as duplicate IDs cause ambiguous references.
-
-## Traceability Rules
-
-Control code-to-requirement linking.
-
-### `require_code_link`
-
-Require DEV requirements to have at least one code reference:
-
-```toml
-[rules.traceability]
-require_code_link = true
-```text
-
-elspais scans code for patterns like:
-
-```python
-# IMPLEMENTS: REQ-d00001
-```text
-
-### `scan_for_orphans`
-
-Warn about REQ IDs in code that have no matching spec:
-
-```toml
-[rules.traceability]
-scan_for_orphans = true
-```text
-
-Detects:
-
-```python
-# IMPLEMENTS: REQ-d99999  # Warning: No such requirement
-```text
-
-## Naming Rules
-
-Control requirement titles.
-
-### `title_min_length` / `title_max_length`
-
-Enforce title length:
-
-```toml
-[rules.naming]
-title_min_length = 10
-title_max_length = 100
-```text
-
-### `title_pattern`
-
-Require titles to match a pattern:
-
-```toml
-[rules.naming]
-title_pattern = "^[A-Z].*"  # Must start with capital letter
-```text
 
 ## Rule Violations
 
@@ -345,25 +223,21 @@ Violations are reported with severity levels:
 ### Example Output
 
 ```text
-❌ ERROR [hierarchy.circular] REQ-d00001
+❌ ERROR [spec.no_cycles] REQ-d00001
    Circular dependency detected: d00001 -> d00002 -> d00001
    File: spec/dev-impl.md:42
 
-❌ ERROR [link.broken] REQ-d00005
+❌ ERROR [spec.broken_references] REQ-d00005
    Implements reference not found: p99999
    File: spec/dev-impl.md:120
 
-⚠️ WARNING [hierarchy.orphan] REQ-d00010
+⚠️ WARNING [spec.structural_orphans] REQ-d00010
    DEV requirement has no Implements reference
    File: spec/dev-orphan.md:1
 
-⚠️ WARNING [hash.mismatch] REQ-p00003
+⚠️ WARNING [spec.hash_integrity] REQ-p00003
    Hash mismatch: expected a1b2c3d4, found x9y8z7w6
    File: spec/prd-core.md:156
-
-ℹ️ INFO [naming.title_pattern] REQ-o00007
-   Title doesn't start with capital letter
-   File: spec/ops-deploy.md:78
 ```text
 
 ## Custom Rules (Future)
@@ -412,20 +286,12 @@ allow_structural_orphans = true  # Allow experimental requirements
 require_rationale = false  # Not required during development
 ```text
 
-## Disabling Rules
+## Relaxing Rules
 
-Disable entire categories:
-
-```toml
-[rules]
-hierarchy = true
-format = true
-traceability = false  # Disable traceability checks
-naming = false        # Disable naming checks
-```text
-
-Or suppress expected issues with inline comments in spec files.
-```text
+Rule categories are sub-tables, not on/off switches — there is no boolean that
+disables a whole category. Relax individual settings instead (for example
+`allow_structural_orphans = true`, or `require_rationale = false`), or suppress
+expected issues with inline comments in spec files.
 
 ## Best Practices
 
