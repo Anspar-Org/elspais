@@ -246,6 +246,15 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
         if not quiet:
             print("\nServer stopped.", file=sys.stderr)
     finally:
+        # Implements: REQ-o00074-I
+        # This process serves the same mutation routes as the daemon and
+        # can therefore be holding unsaved changes when it stops. It runs
+        # the same shutdown routine, for the same reason and by the same
+        # rules, rather than a second one written to look like it.
+        from elspais.mcp.shared_state import finalize_shutdown, report_shutdown_outcome
+
+        _trigger = "the server stopped serving requests"
+        report_shutdown_outcome(finalize_shutdown(state.shared, _trigger), _trigger)
         daemon_json.unlink(missing_ok=True)
 
     return 0

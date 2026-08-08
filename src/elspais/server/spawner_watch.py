@@ -28,13 +28,17 @@ last check is proof a writer is present even when its identity was never
 resolvable, so the daemon keeps serving and the grace clock restarts.
 Reads move nothing, so a polling client still cannot hold an orphan open.
 
-Pending work is never destroyed at the deadline. The daemon persists it
-and records who saved, when, how much, and what triggered it, so a later
-client can see how the files reached their current form (REQ-o00074-I).
-The record states those facts and nothing else: a client can disappear
-because it finished, crashed, or lost its connection, and nothing here
-can tell those apart, so no conclusion about the work is drawn on the
-reader's behalf.
+Pending work is never destroyed at the deadline. This module does not
+persist it itself: both exiting decisions hand over to the process's one
+shutdown routine (``finalize_shutdown`` in ``mcp/shared_state.py``),
+which every other way of stopping runs too, so the daemon behaves the
+same whether its clients went away, its idle timeout expired, or
+somebody signalled it. That routine records who saved, when, how much,
+and what triggered it, so a later client can see how the files reached
+their current form (REQ-o00074-I). The record states those facts and
+nothing else: a client can disappear because it finished, crashed, or
+lost its connection, and nothing here can tell those apart, so no
+conclusion about the work is drawn on the reader's behalf.
 
 Preservation is the default because the costs are asymmetric — the files
 are under revision control, where an unwanted write costs one command to
@@ -171,8 +175,7 @@ class SpawnerWatchdog:
         exit_fn: Callable[[], None] = _default_exit,
         clock: Callable[[], float] = time.monotonic,
         lock: AbstractContextManager[Any] | None = None,
-        save_fn: Callable[[], dict[str, Any]] | None = None,
-        shutdown_fn: Callable[[], None] | None = None,
+        stop_fn: Callable[[], dict[str, Any]] | None = None,
     ) -> None:
         self._clients: set[int] = {spawner_pid}
         self._clients_lock = threading.Lock()
@@ -182,8 +185,7 @@ class SpawnerWatchdog:
         self._grace = grace_seconds
         self._alive_fn = alive_fn
         self._exit_fn = exit_fn
-        self._save_fn = save_fn
-        self._shutdown_fn = shutdown_fn
+        self._stop_fn = stop_fn
         self._clock = clock
         self._dead_since: float | None = None
         self._warned_grace = False
@@ -299,19 +301,25 @@ class SpawnerWatchdog:
 
         Implements: REQ-o00074-E, REQ-o00074-G, REQ-o00074-I, REQ-o00074-K
 
-        Runs under the writers' lock. Both exiting branches raise the
-        shutdown flag before signalling the process, so a write that
-        arrives after the decision is refused rather than accepted and
-        then dropped by the drain.
+        Runs under the writers' lock. Neither exiting branch decides for
+        itself what happens to the work: both hand over to the process's
+        one shutdown routine, which persists whatever is pending, raises
+        the refusal flag so a later write cannot be accepted into a drain
+        that would drop it, and reports whether it succeeded. Only then
+        is the process signalled. A routine that could not persist has
+        kept the work, so the daemon stays up and tries again.
         """
         if decision is Decision.EXIT_CLEAN:
+            outcome = self._run_stop_routine()
+            if not outcome.get("success"):
+                self._report_stop_failure(count, outcome)
+                return Decision.SAVE_FAILED
             print(
                 "No recorded client is running and no unsaved mutations are "
                 "pending — shutting down.",
                 file=sys.stderr,
                 flush=True,
             )
-            self._begin_shutdown()
             self._exit_fn()
         elif decision is Decision.WAIT_GRACE:
             if not self._warned_grace:
@@ -327,21 +335,12 @@ class SpawnerWatchdog:
                     flush=True,
                 )
         elif decision is Decision.EXIT_SAVE:
-            result = self._automatic_save(count)
-            if not result.get("success"):
+            outcome = self._run_stop_routine()
+            if not outcome.get("success"):
                 # Retaining unsaved work beats destroying it, so the
                 # daemon stays up and tries again rather than resolving
                 # the deadlock by dropping the mutations.
-                print(
-                    "No recorded client is running and the grace period "
-                    f"expired. Saving "
-                    f"{count if count is not None else 'an unknown number of'} "
-                    f"pending mutation(s) FAILED: {result.get('error')}. The "
-                    "mutations are retained; the daemon stays up and retries "
-                    "at the next interval.",
-                    file=sys.stderr,
-                    flush=True,
-                )
+                self._report_stop_failure(count, outcome)
                 self._warned_grace = False
                 return Decision.SAVE_FAILED
             print(
@@ -353,22 +352,49 @@ class SpawnerWatchdog:
                 file=sys.stderr,
                 flush=True,
             )
-            self._begin_shutdown()
             self._exit_fn()
         return decision
 
-    def _begin_shutdown(self) -> None:
-        if self._shutdown_fn is not None:
-            self._shutdown_fn()
+    def _run_stop_routine(self) -> dict[str, Any]:
+        """Hand over to the process's shutdown routine; never raise.
 
-    def _automatic_save(self, count: int | None) -> dict[str, Any]:
-        """Persist pending work, reporting failure rather than raising."""
-        if self._save_fn is None:
-            return {"success": False, "error": "no save path configured"}
+        A watchdog with no routine wired to it refuses to exit rather
+        than exiting on its own: the whole point of routing through one
+        routine is that nothing terminates without the work being
+        accounted for, and a missing wire must fail that way round.
+        """
+        if self._stop_fn is None:
+            return {"success": False, "error": "no shutdown routine configured"}
         try:
-            return self._save_fn()
+            return self._stop_fn()
         except Exception as exc:
             return {"success": False, "error": repr(exc)}
+
+    def _report_stop_failure(self, count: int | None, outcome: dict[str, Any]) -> None:
+        """Say what actually happened, not what usually happens.
+
+        A clean stop reached this because the routine could not run at
+        all, not because a save of anything failed; naming a grace period
+        it never entered, and a count of zero it never tried to write,
+        would send the reader looking in the wrong place.
+        """
+        if count == 0:
+            print(
+                "No recorded client is running and nothing is pending, but the "
+                f"daemon could not stop: {outcome.get('error')}. It stays up and "
+                "retries at the next interval.",
+                file=sys.stderr,
+                flush=True,
+            )
+            return
+        print(
+            "No recorded client is running and the grace period expired. Saving "
+            f"{count if count is not None else 'an unknown number of'} pending "
+            f"mutation(s) FAILED: {outcome.get('error')}. The mutations are "
+            "retained; the daemon stays up and retries at the next interval.",
+            file=sys.stderr,
+            flush=True,
+        )
 
     def start(self) -> None:
         """Start the background watchdog thread."""

@@ -1,5 +1,13 @@
-# Verifies: REQ-o00074-I, REQ-o00074-K, REQ-o00062-O
-"""Writes are refused once the process has decided to stop.
+# Verifies: REQ-o00074-I+J+K, REQ-o00062-O
+"""Stopping the daemon: the work is accounted for, and writes are refused.
+
+Two halves of one decision. A process that decides to stop must first do
+something with the changes it holds, and must then stop accepting more.
+Both halves belong to one routine (``finalize_shutdown``) that every stop
+path runs -- the client-liveness deadline, the idle timeout, and the
+fall-through after the server stops serving, which is where an external
+signal lands -- so the guarantee is a property of the process rather than
+of whichever exit somebody remembered to write a save into.
 
 A daemon that has decided to terminate keeps a live HTTP stack and live
 MCP worker threads until the drain finishes. A mutation accepted in that
@@ -9,10 +17,13 @@ guards exist to make impossible, and it is exactly what REQ-o00074-I's
 "persist rather than discard" would otherwise be undone by: the daemon
 saves what it holds and then swallows whatever arrives next.
 
-Refusal is therefore raised at the moment of the decision, inside the
-same critical section that takes it, on BOTH surfaces -- and with the
-same body, because REQ-o00062-O's parity claim is about preconditions
-and rejection shape, not merely about which routes exist.
+Refusal is therefore raised inside the same critical section that takes
+the decision, on BOTH surfaces -- and with the same body, because
+REQ-o00062-O's parity claim is about preconditions and rejection shape,
+not merely about which routes exist. Within that section it is raised
+*after* the save rather than before it: the check is taken under the same
+lock either way, so raising it early buys nothing, and raising it late
+leaves a failed save recoverable by a client that can still ask for one.
 
 The suite lives here rather than in test_mcp_http_parity.py because its
 fixtures bind ``working_dir`` to the shared ``hht-like`` fixture
@@ -83,6 +94,25 @@ def _version(app_state, node_id: str) -> str:
     return render.node_version(node)
 
 
+def _spec_file(app_state, project: Path, node_id: str) -> Path:
+    """The on-disk file the node renders into."""
+    node = app_state.graph.find_by_id(node_id)
+    assert node is not None, f"fixture node {node_id!r} missing"
+    file_node = node.file_node()
+    assert file_node is not None, f"{node_id} has no FILE ancestor"
+    return project / file_node.get_field("relative_path")
+
+
+def _apply_title(client, app_state, title: str) -> None:
+    """Apply one in-memory mutation through the ordinary write route."""
+    resp = client.post(
+        "/api/mutate/title",
+        json={"node_id": REQ, "new_title": title, "if_version": _version(app_state, REQ)},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["success"] is True
+
+
 class TestShutdownFlagIsRaisedByEveryStopPath:
     """Validates REQ-o00074-I: the decision to stop raises the write-refusal
     flag before the signal that starts the drain, whichever path takes it.
@@ -111,9 +141,8 @@ class TestShutdownFlagIsRaisedByEveryStopPath:
         )
 
         shared = SharedServerState()
-        mw = TTLMiddleware(app=lambda *a: None, ttl_minutes=60)
+        mw = TTLMiddleware(app=lambda *a: None, ttl_minutes=60, shared=shared)
         mw._timer.cancel()
-        mw._shared = shared
 
         mw._exit()
 
@@ -281,3 +310,295 @@ class TestEveryWriteSurfaceTakesTheGuard:
         # The hint has to tell the caller its work is intact and how to
         # get it applied; a bare code leaves it guessing whether to retry.
         assert "Nothing was changed" in rejection["hint"]
+
+
+# ---------------------------------------------------------------------------
+# One routine accounts for the work, whatever prompted the stop
+# ---------------------------------------------------------------------------
+
+
+class TestOneRoutineAccountsForTheWorkOnEveryStopPath:
+    """Validates REQ-o00074-I: a daemon that stops while holding unsaved changes
+    persists them rather than discarding them, whatever prompted it to stop, and
+    records that it saved them itself, when, how many, and what triggered it.
+
+    The stop paths differ only in what they pass as the trigger. They all reach
+    ``finalize_shutdown``, so the guarantee is a property of the process rather
+    than of the one exit somebody thought to write a save into: the
+    client-liveness deadline, the idle timeout, and the fall-through after the
+    server stops serving, which is where an external signal lands.
+    """
+
+    # Verifies: REQ-o00074-I
+    def test_REQ_o00074_I_pending_work_reaches_disk_and_is_recorded(
+        self, app_state, client, project
+    ):
+        from elspais.mcp.daemon import read_automatic_save
+        from elspais.mcp.shared_state import finalize_shutdown
+
+        spec = _spec_file(app_state, project, REQ)
+        title = "Persisted by the stopping daemon"
+        _apply_title(client, app_state, title)
+        assert title not in spec.read_text(), "the mutation reached disk before the stop"
+
+        outcome = finalize_shutdown(app_state.shared, trigger="the idle timeout expired")
+
+        assert outcome["success"] is True, outcome
+        assert outcome["finalized"] is True
+        assert outcome["pending"] >= 1
+        assert outcome["saved"] is True
+        assert title in spec.read_text(), "the daemon stopped holding work it never wrote"
+
+        record = read_automatic_save(project)
+        assert record is not None, "the daemon saved but left no record of having done so"
+        assert record["saved_by"] == "daemon"
+        assert record["trigger"] == "the idle timeout expired"
+        assert record["mutation_count"] == outcome["pending"]
+
+    # Verifies: REQ-o00074-I
+    def test_REQ_o00074_I_the_refusal_flag_is_raised_only_once_the_work_is_safe(
+        self, app_state, client, monkeypatch
+    ):
+        """Raised last, not first. A failed save must leave the process able to
+        accept a client's own save, which a flag raised up front would forbid.
+        """
+        from elspais.mcp import shared_state
+
+        real = shared_state.persist_pending
+        seen: list[bool] = []
+
+        def _watching(state, *args, **kwargs):
+            seen.append(state.is_shutting_down)
+            return real(state, *args, **kwargs)
+
+        monkeypatch.setattr(shared_state, "persist_pending", _watching)
+        _apply_title(client, app_state, "Written before the stop")
+
+        outcome = shared_state.finalize_shutdown(app_state.shared, trigger="t")
+
+        assert outcome["saved"] is True, outcome
+        assert seen == [False], f"the flag was already up when the save ran: {seen}"
+        assert app_state.shared.is_shutting_down is True, "the stop never refused later writes"
+
+    # Verifies: REQ-o00074-I
+    def test_REQ_o00074_I_repeat_stop_does_not_save_a_second_time(
+        self, app_state, client, monkeypatch
+    ):
+        """Two stop paths can run in one process -- the watchdog decides to stop
+        and then the post-serve fall-through runs. The second must not re-save,
+        which would overwrite the record with a count of zero."""
+        from elspais.mcp import shared_state
+        from elspais.mcp.daemon import read_automatic_save
+
+        real = shared_state.persist_pending
+        calls: list[str] = []
+
+        def _counting(state, *args, **kwargs):
+            calls.append(kwargs.get("trigger", ""))
+            return real(state, *args, **kwargs)
+
+        monkeypatch.setattr(shared_state, "persist_pending", _counting)
+        _apply_title(client, app_state, "Written before the stop")
+
+        first = shared_state.finalize_shutdown(app_state.shared, trigger="the first trigger")
+        second = shared_state.finalize_shutdown(app_state.shared, trigger="the second trigger")
+
+        assert first["finalized"] is True
+        assert second["finalized"] is False, "a repeat stop reported itself as the one that acted"
+        assert second["saved"] is False
+        assert calls == ["the first trigger"], f"the work was saved more than once: {calls}"
+        assert read_automatic_save(app_state.shared["working_dir"])["trigger"] == (
+            "the first trigger"
+        ), "the repeat stop rewrote the record of the save that actually happened"
+
+    # Verifies: REQ-o00074-I
+    def test_REQ_o00074_I_an_external_signal_saves_even_though_the_flag_is_up(
+        self, app_state, client, project
+    ):
+        """The external-stop path in full: the signal handler raises the refusal
+        flag on the event loop (it cannot take the write lock there without
+        hanging), and the save happens afterwards on the main thread. A routine
+        that treated a raised flag as "already handled" would drop every
+        signalled daemon's work."""
+        from elspais.mcp.shared_state import finalize_shutdown
+
+        spec = _spec_file(app_state, project, REQ)
+        title = "Held when the signal arrived"
+        _apply_title(client, app_state, title)
+
+        app_state.shared.begin_shutdown()  # what handle_exit does, and all it does
+        assert app_state.shared.is_shutting_down is True
+        assert (
+            app_state.shared.shutdown_finalized is False
+        ), "raising the refusal flag was mistaken for having accounted for the work"
+
+        outcome = finalize_shutdown(app_state.shared, trigger="the server stopped serving requests")
+
+        assert outcome["saved"] is True, outcome
+        assert title in spec.read_text(), "a signalled daemon discarded the work it held"
+
+    # Verifies: REQ-o00074-I
+    def test_REQ_o00074_I_stopping_with_nothing_pending_writes_no_record(self, app_state, project):
+        """A stop is not itself a save. With nothing pending there is nothing to
+        write and nothing to disclose, so the next client is told about no save
+        that never happened."""
+        from elspais.mcp.shared_state import finalize_shutdown
+
+        record_path = project / ".elspais" / "automatic-save.json"
+        assert not record_path.exists()
+
+        outcome = finalize_shutdown(app_state.shared, trigger="the idle timeout expired")
+
+        assert outcome["success"] is True
+        assert outcome["pending"] == 0
+        assert outcome["saved"] is False, "a stop with nothing pending performed a save"
+        assert (
+            not record_path.exists()
+        ), "a stop that saved nothing announced a save to the next client"
+
+    # Verifies: REQ-o00074-J
+    def test_REQ_o00074_J_stopping_with_nothing_pending_retires_no_record(self, app_state, project):
+        """A record from an earlier automatic save survives a stop that saved
+        nothing. Only a save a client asked for retires one, because that is the
+        event which makes what the record describes no longer stand."""
+        from elspais.mcp.daemon import record_automatic_save
+        from elspais.mcp.shared_state import finalize_shutdown
+
+        record_automatic_save(project, mutation_count=7, files_written=2, trigger="an earlier stop")
+        record_path = project / ".elspais" / "automatic-save.json"
+        before = record_path.read_bytes()
+
+        outcome = finalize_shutdown(app_state.shared, trigger="the server stopped serving requests")
+
+        assert outcome["saved"] is False
+        assert (
+            record_path.read_bytes() == before
+        ), "a stop that saved nothing rewrote or retired a record it did not supersede"
+
+
+class TestAFailedStopKeepsTheWorkAndTheProcess:
+    """Validates REQ-o00074-K: a stop whose save fails keeps the work rather than
+    dropping it, leaves the process usable so a client can still save through it,
+    and is retried by the next stop path rather than treated as done.
+    """
+
+    # Verifies: REQ-o00074-K
+    def test_REQ_o00074_K_failed_save_leaves_the_work_reachable_and_retries(
+        self, app_state, client, project, monkeypatch
+    ):
+        from elspais.mcp import shared_state
+
+        spec = _spec_file(app_state, project, REQ)
+        title = "Survives a failed stop"
+        _apply_title(client, app_state, title)
+        pending_before = len(app_state.graph.mutation_log.tail(0))
+
+        real = shared_state.persist_pending
+        monkeypatch.setattr(
+            shared_state,
+            "persist_pending",
+            lambda *a, **k: {"success": False, "error": "read-only file system"},
+        )
+
+        failed = shared_state.finalize_shutdown(
+            app_state.shared, trigger="the idle timeout expired"
+        )
+
+        assert failed["success"] is False
+        assert failed["finalized"] is False
+        assert "read-only file system" in failed["error"]
+        assert (
+            app_state.shared.is_shutting_down is False
+        ), "a failed save refused the client saves that were the way out of it"
+        assert app_state.shared.shutdown_finalized is False
+        assert (
+            len(app_state.graph.mutation_log.tail(0)) == pending_before
+        ), "a failed save dropped the work it could not write"
+        assert title not in spec.read_text()
+
+        # The next stop path tries again, and succeeds.
+        monkeypatch.setattr(shared_state, "persist_pending", real)
+        retried = shared_state.finalize_shutdown(
+            app_state.shared, trigger="the server stopped serving requests"
+        )
+
+        assert retried["success"] is True, retried
+        assert retried["saved"] is True
+        assert title in spec.read_text(), "the retry never wrote the work it retained"
+        assert app_state.shared.is_shutting_down is True
+
+
+class TestIdleTimeoutStopsThroughTheSameRoutine:
+    """Validates REQ-o00074-I and REQ-o00074-K: the idle timeout is a stop like
+    any other. An agent that applies a change and then reasons for half an hour
+    sends no requests the whole time, so this is the common way a daemon holding
+    unsaved work stops -- it persists before it signals, and declines to stop at
+    all if it could not.
+    """
+
+    @pytest.fixture
+    def no_signals(self, monkeypatch):
+        """Capture the SIGTERM instead of sending it to the pytest process."""
+        signals: list[int] = []
+        monkeypatch.setattr(
+            "elspais.server.middleware.os.kill",
+            lambda pid, sig: signals.append(sig),
+        )
+        return signals
+
+    @pytest.fixture
+    def middleware(self, app_state):
+        from elspais.server.middleware import TTLMiddleware
+
+        mw = TTLMiddleware(app=lambda *a: None, ttl_minutes=60, shared=app_state.shared)
+        yield mw
+        if mw._timer is not None:
+            mw._timer.cancel()
+
+    # Verifies: REQ-o00074-I
+    def test_REQ_o00074_I_idle_timeout_persists_before_it_signals(
+        self, app_state, client, project, middleware, no_signals
+    ):
+        import signal as signal_module
+
+        from elspais.mcp.daemon import read_automatic_save
+
+        spec = _spec_file(app_state, project, REQ)
+        title = "Applied, then the client went quiet"
+        _apply_title(client, app_state, title)
+
+        middleware._exit()
+
+        assert title in spec.read_text(), "the idle timeout stopped a daemon holding unsaved work"
+        record = read_automatic_save(project)
+        assert record is not None
+        assert (
+            record["trigger"] == "the idle timeout expired"
+        ), f"the idle timeout did not record what triggered it: {record}"
+        assert app_state.shared.is_shutting_down is True
+        assert no_signals == [signal_module.SIGTERM], f"signals: {no_signals}"
+
+    # Verifies: REQ-o00074-K
+    def test_REQ_o00074_K_idle_timeout_that_cannot_save_waits_instead_of_stopping(
+        self, app_state, client, project, middleware, no_signals, monkeypatch
+    ):
+        from elspais.mcp import shared_state
+
+        spec = _spec_file(app_state, project, REQ)
+        title = "Applied, and the disk said no"
+        _apply_title(client, app_state, title)
+        monkeypatch.setattr(
+            shared_state,
+            "persist_pending",
+            lambda *a, **k: {"success": False, "error": "disk full"},
+        )
+        armed = middleware._timer
+
+        middleware._exit()
+
+        assert no_signals == [], "the daemon signalled itself while still holding unwritten work"
+        assert app_state.shared.is_shutting_down is False
+        assert title not in spec.read_text()
+        assert not (project / ".elspais" / "automatic-save.json").exists()
+        assert middleware._timer is not armed, "the timer was not restarted, so nothing retries"
+        assert middleware._timer.is_alive()

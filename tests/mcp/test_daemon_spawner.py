@@ -107,20 +107,32 @@ class _ScriptedChecks:
         return self._reads[0]
 
 
+def _ok_stop():
+    """The shape ``finalize_shutdown`` returns when it accounted for the work."""
+    return {
+        "success": True,
+        "finalized": True,
+        "pending": 1,
+        "saved": True,
+        "files_written": 1,
+    }
+
+
 def _watchdog(
     alive_results,
     pending_snapshots,
     clock,
     grace=300.0,
     lock=None,
-    save_fn=None,
-    shutdown_fn=None,
+    stop_fn=None,
 ):
     """Build a single-client watchdog driven by a scripted check sequence.
 
     See ``_ScriptedChecks`` for the shape of ``pending_snapshots``. The
-    default ``save_fn`` succeeds, so an expired grace reaches EXIT_SAVE;
-    tests for the failure branch pass their own.
+    watchdog no longer decides what happens to the work: it hands over to
+    the process's one shutdown routine, which is what ``stop_fn`` stands
+    in for here. The default succeeds, so an expired grace reaches
+    EXIT_SAVE; tests for the failure branch pass their own.
     """
     script = _ScriptedChecks(alive_results, pending_snapshots)
     exits: list[str] = []
@@ -134,13 +146,12 @@ def _watchdog(
         exit_fn=lambda: exits.append("exit"),
         clock=clock,
         lock=lock,
-        save_fn=save_fn if save_fn is not None else (lambda: {"success": True, "saved_count": 1}),
-        shutdown_fn=shutdown_fn,
+        stop_fn=stop_fn if stop_fn is not None else _ok_stop,
     )
     return wd, exits
 
 
-def _map_watchdog(alive_map, clock, *, pending=(0, 5), grace=300.0, save_fn=None):
+def _map_watchdog(alive_map, clock, *, pending=(0, 5), grace=300.0, stop_fn=None):
     """Watchdog whose liveness comes from a mutable ``{pid: bool}`` map.
 
     The scripted scaffolding above assumes one ``alive_fn`` call per check;
@@ -157,7 +168,7 @@ def _map_watchdog(alive_map, clock, *, pending=(0, 5), grace=300.0, save_fn=None
         alive_fn=lambda pid: alive_map.get(pid, False),
         exit_fn=lambda: exits.append("exit"),
         clock=clock,
-        save_fn=save_fn if save_fn is not None else (lambda: {"success": True, "saved_count": 1}),
+        stop_fn=stop_fn if stop_fn is not None else _ok_stop,
     )
     return wd, exits
 
@@ -376,6 +387,7 @@ class TestWatchdogSurvivesAFailedCheck:
             grace_seconds=0.0,
             alive_fn=alive_fn,
             exit_fn=lambda: exits.append("exit"),
+            stop_fn=_ok_stop,
         )
         request.addfinalizer(wd.stop)
         wd.start()
@@ -538,11 +550,16 @@ class TestTerminationDecidesUnderTheWritersLock:
             exit_fn=lambda: events.append("terminate"),
             clock=clock,
             lock=_RecordingLock(),
+            stop_fn=lambda: (events.append("stop"), _ok_stop())[1],
         )
 
         assert wd.check_once() is Decision.EXIT_CLEAN
+        # The shutdown routine runs inside the same bracket: a writer that
+        # slipped in between the count and the save would be acknowledged
+        # and then lost.
         assert events == [
             "enter",
+            "stop",
             "terminate",
             "exit",
         ], f"terminate decision was not taken inside the writers' lock: {events}"
@@ -710,12 +727,14 @@ class TestUndoneWorkStillCountsAsActivity:
 
 class TestTerminationPersistsPendingWork:
     """Validates REQ-o00074-I: a daemon terminating with no client present
-    persists the changes it holds rather than discarding them, and raises the
-    write-refusal flag before signalling the process so nothing is accepted
-    into a drain that would drop it.
+    persists the changes it holds rather than discarding them. The watchdog
+    decides only *that* the daemon stops; what happens to the work is handed
+    to the process's one shutdown routine, which every other way of stopping
+    runs too, and the process is signalled only once that routine reports it
+    accounted for the work.
     """
 
-    def test_REQ_o00074_I_expired_grace_saves_before_exiting(self, capsys):
+    def test_REQ_o00074_I_expired_grace_stops_through_the_shutdown_routine(self, capsys):
         clock = _Clock()
         events: list[str] = []
         wd, exits = _watchdog(
@@ -723,23 +742,24 @@ class TestTerminationPersistsPendingWork:
             [(3, "m1"), (3, "m1")],
             clock,
             grace=300.0,
-            save_fn=lambda: (events.append("save"), {"success": True, "saved_count": 2})[1],
-            shutdown_fn=lambda: events.append("flag"),
+            stop_fn=lambda: (events.append("stop"), _ok_stop())[1],
         )
 
         assert wd.check_once() is Decision.WAIT_GRACE
-        assert events == [], "the daemon saved before its deadline"
+        assert events == [], "the daemon stopped before its deadline"
         capsys.readouterr()
 
         clock.now += 400
         assert wd.check_once() is Decision.EXIT_SAVE
         assert exits == ["exit"]
-        # The save happens first (there is work to keep), then the refusal
-        # flag, then the signal -- a write arriving after the decision is
-        # refused rather than accepted and dropped.
-        assert events == ["save", "flag"], f"save/flag ordering wrong: {events}"
+        # The routine runs first and the signal follows it -- never the
+        # other way round, which would signal a process still holding
+        # unaccounted work.
+        assert events == ["stop"], f"the shutdown routine did not run: {events}"
 
-    def test_REQ_o00074_I_clean_exit_raises_the_refusal_flag_before_signalling(self):
+    def test_REQ_o00074_I_clean_exit_stops_through_the_routine_before_signalling(self):
+        """Even with nothing pending the exit goes through the same routine:
+        the count the watchdog saw is not the authority on what is held."""
         clock = _Clock()
         events: list[str] = []
         wd = SpawnerWatchdog(
@@ -749,20 +769,29 @@ class TestTerminationPersistsPendingWork:
             alive_fn=lambda pid: False,
             exit_fn=lambda: events.append("exit"),
             clock=clock,
-            shutdown_fn=lambda: events.append("flag"),
+            stop_fn=lambda: (events.append("stop"), _ok_stop())[1],
         )
 
         assert wd.check_once() is Decision.EXIT_CLEAN
-        assert events == ["flag", "exit"], f"flag was not raised before the signal: {events}"
+        assert events == ["stop", "exit"], f"the routine did not precede the signal: {events}"
 
-    def test_REQ_o00074_I_no_save_path_configured_is_a_failure_not_a_discard(self, capsys):
-        """A watchdog with nowhere to save must not resolve the deadlock by
-        exiting anyway: that is the discard the requirement forbids."""
+    @pytest.mark.parametrize(
+        "pending",
+        [(4, "m1"), (0, "m0")],
+        ids=["work-pending", "nothing-pending"],
+    )
+    def test_REQ_o00074_I_no_shutdown_routine_configured_is_a_failure_not_a_discard(
+        self, capsys, pending
+    ):
+        """A watchdog with no routine wired to it must not resolve the deadlock
+        by exiting anyway: that is the discard the requirement forbids. It holds
+        on the clean branch too -- the watchdog's own count is a snapshot, not
+        proof that nothing is held."""
         clock = _Clock()
         exits: list[str] = []
         wd = SpawnerWatchdog(
             spawner_pid=4321,
-            pending_fn=lambda: (4, "m1"),
+            pending_fn=lambda: pending,
             grace_seconds=0.0,
             alive_fn=lambda pid: False,
             exit_fn=lambda: exits.append("exit"),
@@ -1035,23 +1064,21 @@ class TestFailedSaveRetainsTheWork:
     """
 
     @pytest.mark.parametrize(
-        ("save_fn", "how"),
+        ("stop_fn", "how"),
         [
             (lambda: {"success": False, "error": "disk full"}, "reported failure"),
             (lambda: (_ for _ in ()).throw(OSError("read-only file system")), "raised"),
         ],
         ids=["reported-failure", "raised"],
     )
-    def test_REQ_o00074_K_failed_save_does_not_exit(self, capsys, save_fn, how):
+    def test_REQ_o00074_K_failed_save_does_not_exit(self, capsys, stop_fn, how):
         clock = _Clock()
-        flags: list[str] = []
         wd, exits = _watchdog(
             [False, False],
             [(5, "m1"), (5, "m1")],
             clock,
             grace=300.0,
-            save_fn=save_fn,
-            shutdown_fn=lambda: flags.append("flag"),
+            stop_fn=stop_fn,
         )
 
         assert wd.check_once() is Decision.WAIT_GRACE
@@ -1060,20 +1087,19 @@ class TestFailedSaveRetainsTheWork:
         clock.now += 400
         assert wd.check_once() is Decision.SAVE_FAILED, f"a save that {how} was treated as done"
         assert exits == [], "daemon exited after a failed save, destroying the work it held"
-        assert flags == [], "daemon refused writes after a save it did not complete"
         err = capsys.readouterr().err
         assert "FAILED" in err
         assert "retained" in err
 
     def test_REQ_o00074_K_daemon_retries_at_the_next_interval_and_then_exits(self, capsys):
         clock = _Clock()
-        outcomes = [{"success": False, "error": "disk full"}, {"success": True, "saved_count": 1}]
+        outcomes = [{"success": False, "error": "disk full"}, _ok_stop()]
         wd, exits = _watchdog(
             [False, False, False],
             [(5, "m1"), (5, "m1"), (5, "m1")],
             clock,
             grace=300.0,
-            save_fn=lambda: outcomes.pop(0),
+            stop_fn=lambda: outcomes.pop(0),
         )
 
         assert wd.check_once() is Decision.WAIT_GRACE

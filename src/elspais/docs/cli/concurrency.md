@@ -163,6 +163,12 @@ logs the count to `.elspais/daemon.log`, waits a bounded grace period
 discarded. An applied mutation during that window restarts the grace
 period; reads never do.
 
+That deadline is not the only way the process ends, and none of the
+others discards either. A daemon that stops because its idle timeout
+expired, or because something outside it signalled it, persists what it
+is holding first and leaves the same record. Whatever prompts the stop,
+work you applied and never saved is on disk afterwards rather than gone.
+
 A save the daemon performed is recorded, and the record reaches you in
 the metadata you already read: `get_workspace_info` and
 `get_graph_status` carry an `automatic_save` block while one is

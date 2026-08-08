@@ -81,7 +81,13 @@ from elspais.graph.serialize import (
 )
 from elspais.graph.terms import TermDictionary
 from elspais.mcp.search import ParsedQuery, matches_node, parse_query, score_node
-from elspais.mcp.shared_state import SharedServerState, persist_pending, rebuild_shared_graph
+from elspais.mcp.shared_state import (
+    SharedServerState,
+    finalize_shutdown,
+    persist_pending,
+    rebuild_shared_graph,
+    report_shutdown_outcome,
+)
 from elspais.utilities.patterns import build_resolver
 
 # Known schema fields (by alias and Python name) for filtering non-schema keys
@@ -7389,7 +7395,7 @@ def run_server(
         if ttl_minutes > 0:
             from elspais.server.middleware import TTLMiddleware
 
-            app.add_middleware(TTLMiddleware, ttl_minutes=ttl_minutes)
+            app.add_middleware(TTLMiddleware, ttl_minutes=ttl_minutes, shared=state.shared)
 
         # Resolve ephemeral port if port=0
         if port == 0:
@@ -7440,10 +7446,12 @@ def run_server(
                 return pending_snapshot(state.graph)
 
             # Implements: REQ-o00074-I
-            def _automatic_save() -> dict[str, Any]:
-                return persist_pending(
+            # The watchdog does not save or raise the shutdown flag
+            # itself; it decides *that* the daemon stops and hands over
+            # to the one routine every stop path runs.
+            def _stop() -> dict[str, Any]:
+                return finalize_shutdown(
                     state.shared,
-                    automatic=True,
                     trigger="no recorded client was running",
                 )
 
@@ -7457,8 +7465,7 @@ def run_server(
                 interval_seconds=interval,
                 grace_seconds=grace,
                 lock=state.shared.write_lock,
-                save_fn=_automatic_save,
-                shutdown_fn=state.shared.begin_shutdown,
+                stop_fn=_stop,
             )
             # Published so the adoption route can register the clients that
             # pick this daemon up after its first one is gone.
@@ -7475,10 +7482,28 @@ def run_server(
             serving requests. A mutation accepted in that window is
             acknowledged to its writer and then dropped with the process;
             refusing it instead is the only outcome the writer can act on.
+
+            Only the flag is raised here. This runs on the event loop
+            thread, and a write handler suspended at an await while
+            holding the write lock could never resume to release it, so
+            waiting for that lock here would hang the process instead of
+            saving anything. The work is accounted for below, on the main
+            thread, once the loop has stopped.
             """
 
             def handle_exit(self, sig: int, frame: Any) -> None:
                 state.shared.begin_shutdown()
                 super().handle_exit(sig, frame)
 
-        anyio.run(_ShutdownAwareServer(uvi_config).serve)
+        # Implements: REQ-o00074-I
+        # The fall-through every stop path reaches, including the ones
+        # nothing in this process initiated: an operator's signal, a
+        # container stop, a supervisor restart. The watchdog and the idle
+        # timeout run the same routine before they signal, because they
+        # can call off their own exit if the save fails; this one cannot,
+        # so it is the backstop rather than the primary.
+        try:
+            anyio.run(_ShutdownAwareServer(uvi_config).serve)
+        finally:
+            trigger = "the server stopped serving requests"
+            report_shutdown_outcome(finalize_shutdown(state.shared, trigger), trigger)

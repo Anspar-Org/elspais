@@ -573,6 +573,24 @@ failure, and retries rather than dropping them.
       a client attaches in that window  -> keep serving
       nothing happens                   -> SAVE to disk, record it, stop
 
+**Every way of stopping saves.** The grace deadline above is not the only
+way a daemon stops, and the others hold the same work. An idle timeout
+firing while a client is alive but quiet, and an external stop — `elspais
+daemon restart`, a `kill`, a container shutting down — both persist
+pending mutations and leave the same record before the process ends.
+Going quiet is not the same as going away, and being told to stop says
+nothing about what the daemon happens to be holding:
+
+    idle timeout expires, work pending -> SAVE to disk, record it, stop
+    stop signal arrives, work pending  -> SAVE to disk, record it, stop
+    stopping with nothing pending      -> stop, and write no record
+
+If the save fails on either of the first two, the mutations are kept.
+The idle timeout then declines to stop and waits out another idle period,
+because the daemon can still be asked to save; an external stop cannot be
+declined, so there the failure is reported and the work is lost with the
+process.
+
 **How you find out.** A save the daemon performed is recorded in
 `.elspais/automatic-save.json` and reported to the next client in the
 ordinary metadata it already reads: `get_workspace_info`,

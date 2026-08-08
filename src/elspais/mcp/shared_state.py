@@ -66,6 +66,11 @@ class SharedServerState(dict):
         # decision is refused rather than accepted and then lost with
         # the process (REQ-o00074-I, REQ-o00062-O).
         self._shutting_down = threading.Event()
+        # Raised once the process has finished accounting for the work it
+        # holds. Distinct from the refusal flag above: refusals begin the
+        # moment a stop is decided, while this says the final persist has
+        # already run, so a later stop path does not repeat it.
+        self._shutdown_finalized = False
 
     def begin_shutdown(self) -> None:
         """Mark this process as shutting down. Irreversible by design."""
@@ -74,6 +79,118 @@ class SharedServerState(dict):
     @property
     def is_shutting_down(self) -> bool:
         return self._shutting_down.is_set()
+
+    @property
+    def shutdown_finalized(self) -> bool:
+        """True once the work this process held has been accounted for."""
+        return self._shutdown_finalized
+
+
+# Implements: REQ-o00074-G, REQ-o00074-I, REQ-o00074-K
+def finalize_shutdown(state: SharedServerState, trigger: str) -> dict[str, Any]:
+    """Account for the work this process holds, then commit it to stopping.
+
+    Every way the process can stop runs this and nothing else: the
+    client-liveness deadline, the idle timeout, and the fall-through
+    after the server stops serving, which is where an external stop
+    signal arrives. A process holding unsaved changes therefore persists
+    them whatever prompted it to stop, rather than only on the one path
+    somebody thought to write a save into.
+
+    Ordering. The whole routine runs under ``write_lock``, so a writer
+    that had already passed the refusal check is finished before the
+    count is taken and its change is inside the save, while a writer
+    arriving later blocks here and then meets the refusal flag this
+    routine raises before it releases the lock. That is why the flag is
+    raised last rather than first: the check is taken under the same
+    lock, so raising it early buys nothing, and raising it late leaves a
+    failed save recoverable.
+
+    Failure. If the changes cannot be written they are kept, the flag is
+    not raised, and nothing is marked finalized — the process stays
+    usable, a client can still save through it, and the next stop path
+    tries again. Reported, never raised: a caller holding the only copy
+    of somebody's work has to be able to keep it.
+
+    Args:
+        state: The process-wide holder.
+        trigger: The condition that prompted the stop, stated as an
+            observation. It is recorded verbatim for the next client.
+
+    Returns:
+        ``{"success", "finalized", "pending", "saved", "files_written"}``,
+        plus ``"error"`` when the save failed. ``finalized`` is False on a
+        repeat call, which is how a caller tells "already accounted for"
+        from "just accounted for".
+    """
+    with state.write_lock:
+        if state._shutdown_finalized:
+            # What the first call found is not this call's to report, and
+            # a zero here would be a number nobody measured.
+            return {
+                "success": True,
+                "finalized": False,
+                "pending": None,
+                "saved": False,
+                "files_written": 0,
+            }
+
+        graph = state.get("graph")
+        pending: int | None
+        try:
+            pending = len(graph.mutation_log.tail(0)) if graph is not None else 0
+        except Exception:
+            # Never assume work we cannot count is absent; attempt the
+            # save and let it report what it did.
+            pending = None
+
+        result: dict[str, Any] = {}
+        saved = False
+        if pending is None or pending > 0:
+            result = persist_pending(state, automatic=True, trigger=trigger)
+            if not result.get("success"):
+                return {
+                    "success": False,
+                    "finalized": False,
+                    "pending": pending,
+                    "saved": False,
+                    "files_written": 0,
+                    "error": result.get("error", "save failed"),
+                }
+            saved = True
+
+        state._shutdown_finalized = True
+        state.begin_shutdown()
+        return {
+            "success": True,
+            "finalized": True,
+            "pending": pending,
+            "saved": saved,
+            "files_written": result.get("saved_count") or 0,
+        }
+
+
+def report_shutdown_outcome(outcome: dict[str, Any], trigger: str) -> None:
+    """Print what the shutdown routine did, for whoever is watching stderr."""
+    pending = outcome.get("pending")
+    if not outcome.get("success"):
+        print(
+            f"Stopping because {trigger}: saving "
+            f"{pending if pending is not None else 'an unknown number of'} "
+            f"pending mutation(s) FAILED: {outcome.get('error')}. The mutations "
+            "are retained in memory and the process is still serving.",
+            file=sys.stderr,
+            flush=True,
+        )
+    elif outcome.get("saved"):
+        print(
+            f"Stopping because {trigger}: saved {pending} pending "
+            f"mutation(s) to {outcome.get('files_written')} file(s). The save was "
+            "performed by the daemon, not requested by a client; that is recorded "
+            "for the next client to read.",
+            file=sys.stderr,
+            flush=True,
+        )
 
 
 # Implements: REQ-d00132-A, REQ-d00132-B, REQ-o00074-I, REQ-o00074-J, REQ-o00074-K
