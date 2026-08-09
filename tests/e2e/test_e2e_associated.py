@@ -21,6 +21,8 @@ import subprocess
 
 import pytest
 
+from tests.federation_repos import make_repo
+
 from .conftest import (
     ensure_fixture_daemon,
     load_associated_fixture,
@@ -1352,3 +1354,324 @@ class TestPdfMediaFidelity:
         assert (
             "[pdf-core] REQ-p00001" not in index_text
         ), f"host repo entry must render bare, not annotated: {index_text}"
+
+
+# ---------------------------------------------------------------------------
+# Test: what a federation member contributes does not depend on how it was
+#       reached — and what it does depend on (the member set)
+# ---------------------------------------------------------------------------
+
+
+def _req_block(req_id, title, *, implements=None, assertions=()):
+    """Render one requirement block for a fixture spec file."""
+    head = f"## {req_id}: {title}\n\n**Status**: active"
+    if implements:
+        head += f"\n\n**Implements**: {implements}"
+    if assertions:
+        body = "\n\n## Assertions\n\n" + "".join(
+            f"{label}. The system SHALL {text}.\n\n" for label, text in assertions
+        )
+    else:
+        body = "\n\nThe system shall do a thing.\n\n"
+    return head + body + "*End*\n"
+
+
+def _add_spec(repo, text):
+    """Add a committed spec file to a repo built by `make_repo`."""
+    (repo / "spec" / "extra.md").write_text(text, encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=T", "commit", "-m", "extra"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    )
+
+
+# `d` carries every observable at once: intra-repo coverage (d00002 covers one
+# of d00003's two assertions), a cross-repo reference that resolves (d00004 ->
+# BBB-d00001), a dangling reference in its own namespace (hard), and a
+# reference into a namespace no federation member claims (presumed foreign).
+_D_SPEC = (
+    _req_block("DDD-d00003", "Target", assertions=[("A", "be covered"), ("B", "be uncovered")])
+    + _req_block("DDD-d00002", "Coverer", implements="DDD-d00003-A", assertions=[("A", "cover")])
+    + _req_block("DDD-d00004", "Cross repo", implements="BBB-d00001")
+    + _req_block("DDD-d00005", "Dangling local", implements="DDD-d99999")
+    + _req_block("DDD-d00006", "Dangling foreign", implements="ZZZ-d00001")
+)
+
+
+def _observe(entry_root):
+    """Build a federation from `entry_root` and reduce it to per-member observables.
+
+    Keyed by the member's directory name rather than its federation name:
+    the name a converged repo is filed under is the declaration key of
+    whichever chain reached it first, so keying by name would compare
+    federations by an attribute that is itself path-dependent.
+    """
+    from pathlib import Path
+
+    from elspais.config import get_config
+    from elspais.graph.factory import build_graph
+    from elspais.graph.GraphNode import NodeKind
+
+    fed = build_graph(config=get_config(None, entry_root, quiet=True), repo_root=entry_root)
+    observed = {}
+    for entry in fed.iter_repos():
+        graph = entry.graph
+        assert graph is not None, f"{entry.name} failed to build: {entry.error}"
+        coverage = {}
+        for node in graph.iter_by_kind(NodeKind.REQUIREMENT):
+            rollup = node.get_metric("rollup_metrics")
+            coverage[node.id] = (
+                rollup.total_assertions,
+                rollup.implemented.direct,
+                rollup.implemented.indirect,
+            )
+        observed[Path(entry.repo_root).resolve().name] = {
+            "reqs": sorted(node.id for node in graph.iter_by_kind(NodeKind.REQUIREMENT)),
+            "broken": sorted(
+                (br.source_id, br.target_id, str(br.edge_kind), bool(br.presumed_foreign))
+                for br in graph.broken_references()
+            ),
+            "coverage": coverage,
+        }
+    return observed
+
+
+def _make_diamond(base, *, both_branches, swapped):
+    """A declares b and c; b declares d; c declares d only when `both_branches`."""
+    base.mkdir(parents=True)
+    d = make_repo(base, "d", namespace="DDD", req_id="DDD-d00001")
+    _add_spec(d, _D_SPEC)
+    make_repo(
+        base,
+        "b",
+        namespace="BBB",
+        req_id="BBB-d00001",
+        associates={"d": "../d"},
+        associate_namespaces={"d": "DDD"},
+    )
+    make_repo(
+        base,
+        "c",
+        namespace="CCC",
+        req_id="CCC-d00001",
+        associates=({"d": "../d"} if both_branches else None),
+        associate_namespaces={"d": "DDD"},
+    )
+    declarations = {"c": "../c", "b": "../b"} if swapped else {"b": "../b", "c": "../c"}
+    return make_repo(
+        base,
+        "a",
+        namespace="AAA",
+        req_id="AAA-d00001",
+        associates=declarations,
+        associate_namespaces={"b": "BBB", "c": "CCC"},
+    )
+
+
+def _make_chain(base):
+    """a -> b -> c, with b referencing up into a and c referencing up into b."""
+    base.mkdir(parents=True)
+    c = make_repo(base, "c", namespace="CCC", req_id="CCC-d00001")
+    _add_spec(
+        c,
+        _req_block("CCC-d00003", "Target", assertions=[("A", "be covered"), ("B", "be uncovered")])
+        + _req_block("CCC-d00004", "Coverer", implements="CCC-d00003-A")
+        + _req_block("CCC-d00002", "Up one", implements="BBB-d00001")
+        + _req_block("CCC-d00005", "Absent from a present member", implements="BBB-d99999"),
+    )
+    b = make_repo(
+        base,
+        "b",
+        namespace="BBB",
+        req_id="BBB-d00001",
+        associates={"c": "../c"},
+        associate_namespaces={"c": "CCC"},
+    )
+    _add_spec(
+        b,
+        _req_block("BBB-d00003", "Target", assertions=[("A", "be covered"), ("B", "be uncovered")])
+        + _req_block("BBB-d00004", "Coverer", implements="BBB-d00003-A")
+        + _req_block("BBB-d00002", "Up chain", implements="AAA-d00001"),
+    )
+    a = make_repo(
+        base,
+        "a",
+        namespace="AAA",
+        req_id="AAA-d00001",
+        associates={"b": "../b"},
+        associate_namespaces={"b": "BBB"},
+    )
+    return a, b
+
+
+class TestFederationContributionInvariance:
+    """A member's contribution against declaration topology and entry point.
+
+    Every fixture here is a throwaway federation in `tmp_path`; none of
+    them touch the module's shared `project` fixture.
+    """
+
+    # Verifies: REQ-d00202-F
+    def test_diamond_member_contributes_identically_through_either_branch(self, tmp_path):
+        """`d` contributes the same thing reached through one branch or two.
+
+        The diamond is the case where convergence could plausibly change
+        what a member contributes: `d` is declared twice, and the walk is
+        depth-first, so which branch reaches it first is decided by the
+        declaration order in `a`'s config.
+        """
+        through_both = _observe(_make_diamond(tmp_path / "both", both_branches=True, swapped=False))
+        swapped = _observe(_make_diamond(tmp_path / "swapped", both_branches=True, swapped=True))
+        one_branch = _observe(_make_diamond(tmp_path / "one", both_branches=False, swapped=False))
+
+        assert sorted(through_both) == ["a", "b", "c", "d"]
+        assert sorted(swapped) == ["a", "b", "c", "d"]
+        assert sorted(one_branch) == ["a", "b", "c", "d"]
+
+        # Non-vacuity: `d`'s observables carry a resolved cross-repo
+        # reference, both broken-reference classifications, and partial
+        # coverage — so an equality below is comparing something.
+        d_both = through_both["d"]
+        assert d_both["reqs"] == [
+            "DDD-d00001",
+            "DDD-d00002",
+            "DDD-d00003",
+            "DDD-d00004",
+            "DDD-d00005",
+            "DDD-d00006",
+        ]
+        assert d_both["broken"] == [
+            ("DDD-d00005", "DDD-d99999", "implements", False),
+            ("DDD-d00006", "ZZZ-d00001", "implements", True),
+        ], f"unexpected broken references for d: {d_both['broken']}"
+        assert d_both["coverage"]["DDD-d00003"] == (2, 1.0, 1.0)
+
+        assert swapped["d"] == d_both, (
+            f"reversing the declaration order in a's config changed d's "
+            f"contribution: {swapped['d']} vs {d_both}"
+        )
+        assert one_branch["d"] == d_both, (
+            f"reaching d through one branch instead of two changed its "
+            f"contribution: {one_branch['d']} vs {d_both}"
+        )
+
+    # Verifies: REQ-d00202-D, REQ-d00203-B
+    def test_same_member_set_reached_flat_or_transitively_is_one_federation(self, tmp_path):
+        """{a,b,c,d} declared flat by `a` equals the same set reached down a chain.
+
+        Two entry points cannot have equal reachable sets — each would have
+        to reach the other, which is a declaration cycle — so this is the
+        realizable form of "same members, different declaration paths":
+        one entry point, the members reached directly or transitively.
+        """
+        nested_base = tmp_path / "nested"
+        nested_base.mkdir()
+        d = make_repo(nested_base, "d", namespace="DDD", req_id="DDD-d00001")
+        _add_spec(d, _D_SPEC)
+        make_repo(
+            nested_base,
+            "c",
+            namespace="CCC",
+            req_id="CCC-d00001",
+            associates={"d": "../d"},
+            associate_namespaces={"d": "DDD"},
+        )
+        make_repo(
+            nested_base,
+            "b",
+            namespace="BBB",
+            req_id="BBB-d00001",
+            associates={"c": "../c"},
+            associate_namespaces={"c": "CCC"},
+        )
+        nested_entry = make_repo(
+            nested_base,
+            "a",
+            namespace="AAA",
+            req_id="AAA-d00001",
+            associates={"b": "../b"},
+            associate_namespaces={"b": "BBB"},
+        )
+
+        flat_base = tmp_path / "flat"
+        flat_base.mkdir()
+        flat_d = make_repo(flat_base, "d", namespace="DDD", req_id="DDD-d00001")
+        _add_spec(flat_d, _D_SPEC)
+        make_repo(flat_base, "c", namespace="CCC", req_id="CCC-d00001")
+        make_repo(flat_base, "b", namespace="BBB", req_id="BBB-d00001")
+        flat_entry = make_repo(
+            flat_base,
+            "a",
+            namespace="AAA",
+            req_id="AAA-d00001",
+            associates={"b": "../b", "c": "../c", "d": "../d"},
+            associate_namespaces={"b": "BBB", "c": "CCC", "d": "DDD"},
+        )
+
+        nested = _observe(nested_entry)
+        flat = _observe(flat_entry)
+
+        members = sorted(nested)
+        expected_members = ["a", "b", "c", "d"]
+        assert (
+            members == expected_members
+        ), f"a -> b -> c -> d did not federate every member transitively: {members}"
+        assert nested["d"]["coverage"]["DDD-d00003"] == (2, 1.0, 1.0)
+        assert nested == flat, (
+            f"a member reached down a chain contributes differently from the "
+            f"same member declared directly: {nested} vs {flat}"
+        )
+
+    # Verifies: REQ-d00202-D, REQ-d00203-B
+    def test_entry_point_changes_the_member_set_not_a_member_contribution(self, tmp_path):
+        """In a -> b -> c, entering at `a` or at `b` is compared on {b, c}.
+
+        The entry point decides which repositories are members, and that
+        is the one thing a member's contribution does depend on: `b`'s
+        reference up into `a` resolves when `a` is a member and is a
+        broken reference when it is not.  Everything else about `b` and
+        `c` — their requirement IDs and their coverage rollups — is the
+        same from either entry point.
+        """
+        entry_a, entry_b = _make_chain(tmp_path / "chain")
+
+        from_a = _observe(entry_a)
+        from_b = _observe(entry_b)
+
+        assert sorted(from_a) == ["a", "b", "c"]
+        assert sorted(from_b) == ["b", "c"], (
+            f"entering at b must reach b and c only — declarations are "
+            f"directed, so a is not reachable from b: {sorted(from_b)}"
+        )
+
+        for member in ("b", "c"):
+            assert from_a[member]["reqs"] == from_b[member]["reqs"], (
+                f"{member} contributed different requirement IDs from the two "
+                f"entry points: {from_a[member]['reqs']} vs {from_b[member]['reqs']}"
+            )
+            assert from_a[member]["coverage"] == from_b[member]["coverage"], (
+                f"{member}'s coverage rollups differ between entry points: "
+                f"{from_a[member]['coverage']} vs {from_b[member]['coverage']}"
+            )
+
+        # c's references only ever point at members present under both
+        # entry points, so its broken-reference set does not move.
+        c_broken = [("CCC-d00005", "BBB-d99999", "implements", True)]
+        assert from_a["c"]["broken"] == c_broken, f"{from_a['c']['broken']}"
+        assert from_b["c"]["broken"] == c_broken, f"{from_b['c']['broken']}"
+
+        # b's does: BBB-d00002 -> AAA-d00001 resolves against a member
+        # under one entry point and is presumed foreign under the other.
+        assert from_a["b"]["broken"] == [], (
+            f"b's reference into a should resolve when a is a federation "
+            f"member: {from_a['b']['broken']}"
+        )
+        assert from_b["b"]["broken"] == [
+            ("BBB-d00002", "AAA-d00001", "implements", True),
+        ], (
+            f"b's reference into a should be a presumed-foreign broken "
+            f"reference when a is outside the federation: {from_b['b']['broken']}"
+        )

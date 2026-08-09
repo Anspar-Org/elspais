@@ -80,9 +80,9 @@ The config system SHALL parse `[associates.<name>]` sections from `.elspais.toml
 
 ### Assertions
 
-A. `get_associates_config(config)` SHALL read `[associates]` sections and return a `dict[str, dict]` mapping associate name to `{path: str, git: str | None}`.
+A. A repository's associate declarations SHALL be read from its `[associates]` sections, each declaration yielding the associate's name together with its path, its namespace, and its git remote.
 
-B. The `path` field SHALL be required for each associate. The `git` field SHALL be optional (for clone assistance).
+B. A declaration SHALL require a path and a namespace. The git remote SHALL be optional and SHALL serve clone assistance only.
 
 C. When no `[associates]` section exists in config, `get_associates_config()` SHALL return an empty dict.
 
@@ -98,12 +98,17 @@ H. When two federated repositories both claim the same requirement ID, the build
 
 I. When scanning directories for candidate associates, a directory whose elspais configuration fails to parse or validate SHALL be skipped without aborting the scan, and each skip SHALL be reported with the directory path and the reason. Directories without an elspais configuration are not candidates and need no report.
 
+J. When two distinct repositories would enter one federation under the same declared name, the build SHALL fail with an error naming both repository paths and the declaration chain that reached each.
+
 ### Rationale
 
-Associates are declared in `.elspais.toml` using a structured TOML section. Each associate specifies a relative filesystem path and optional git remote URL. Transitivity (assertion D) is what makes symmetric or chained repo arrangements usable from any repository rather than only from the root, and what allows federating an org-policy repository reachable through a chain. Directed cycles remain a genuine error because dependency direction drives resolution order; diamonds are convergence, not cycles, and the git-origin identity rule (assertion G) is what makes the two distinguishable. Disjoint ID spaces (assertion H) are required because a shared ID would make resolution ambiguous — federating repositories must use non-overlapping ID patterns.
+Associates are declared in `.elspais.toml` using a structured TOML section. Each associate specifies a relative filesystem path, a namespace, and an optional git remote URL. Transitive resolution (assertion D) is what lets the tool work from any repository in a dependency chain rather than from the root alone, and it is what allows an org-policy repository reachable only through a chain to be federated at all. Directed cycles are a genuine error because dependency direction drives resolution order; diamonds are convergence, not cycles, and the git-origin identity rule (assertion G) is what makes the two distinguishable. Disjoint ID spaces (assertion H) are a precondition of federation rather than a preference: a reference resolves to a repository by asking which one claims the identifier, so two claimants make the answer arbitrary.
+
+Name uniqueness (assertion J) becomes an obligation only once declarations from several repositories are combined. A single declaration table cannot collide with itself, so under root-only resolution uniqueness was guaranteed by TOML's own syntax. A federation keys repositories by name, so two repositories arriving under one name would leave only the later of them reachable — the earlier repository's requirements would resolve against the wrong configuration and its graph would never be read at all. Failing is the honest outcome because the alternative is a silent partial federation.
 
 ### Changelog
 
+- 2026-08-08 | b599e6ec | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | 9b0f1733 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | 2a648c8e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | 1bc0e4b5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -113,7 +118,7 @@ Associates are declared in `.elspais.toml` using a structured TOML section. Each
 - 2026-05-11 | 479dcbb8 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 479dcbb8 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Associates Config Loading* | **Hash**: 9b0f1733
+*End* *Associates Config Loading* | **Hash**: b599e6ec
 ---
 
 ## REQ-d00203: Multi-Repo Build Pipeline

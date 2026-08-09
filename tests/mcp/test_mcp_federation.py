@@ -17,6 +17,7 @@ from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph, RepoEntry
 from elspais.graph.relations import EdgeKind
+from tests.federation_repos import make_repo
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -295,3 +296,82 @@ class TestGlobalOpsUseRootConfig:
         # Project name and prefix must come from root config, not associate
         assert result["project_name"] == "MainProject"
         assert result["config_summary"]["prefix"] == "MAIN"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Verifies: REQ-d00202-D, REQ-d00203-B — one federation, one member list
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestWorkspaceInfoAssociatesAgreeWithFederation:
+    """One tool, one membership answer, whether or not a graph is in hand."""
+
+    def test_associates_and_federation_repos_agree(self):
+        """The associates block is the federation's repos less the root.
+
+        Verifies: REQ-d00202-D
+        """
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_workspace_info
+
+        root_graph = _make_simple_graph("REQ-p00001", "Root", "PRD", Path("/repo/root"))
+        entries = [
+            RepoEntry(name="root", graph=root_graph, config=_make_config(), repo_root=Path("/r")),
+            RepoEntry(
+                name="direct",
+                graph=_make_simple_graph("REQ-a00001", "Direct", "OPS", Path("/repo/direct")),
+                config=_make_config(),
+                repo_root=Path("/repo/direct"),
+            ),
+            RepoEntry(
+                name="transitive",
+                graph=_make_simple_graph("REQ-b00001", "Transitive", "OPS", Path("/repo/deep")),
+                config=_make_config(),
+                repo_root=Path("/repo/deep"),
+            ),
+        ]
+        fed = FederatedGraph(entries, root_repo="root")
+
+        result = _get_workspace_info(
+            Path("/r"), config=_make_config(), graph=fed, detail="worktree"
+        )
+
+        associates = result["associates"]
+        names = {a["name"] for a in associates["associates"]}
+        assert names == {"direct", "transitive"}
+        assert associates["count"] == len(result["federation"]["repos"]) - 1
+        assert {a["path"] for a in associates["associates"]} == {"/repo/direct", "/repo/deep"}
+
+    def test_associates_without_graph_include_transitive_members(self, tmp_path: Path):
+        """Without a graph, membership still comes from the whole federation.
+
+        Verifies: REQ-d00203-B
+        """
+        pytest.importorskip("mcp")
+        from elspais.config import get_config
+        from elspais.mcp.server import _get_workspace_info
+
+        make_repo(tmp_path, "leaf", namespace="LEAF", req_id="LEAF-d00001")
+        make_repo(
+            tmp_path,
+            "mid",
+            namespace="MID",
+            associates={"leaf": "../leaf"},
+            associate_namespaces={"leaf": "LEAF"},
+            req_id="MID-d00001",
+        )
+        root = make_repo(
+            tmp_path,
+            "root",
+            namespace="ROOT",
+            associates={"mid": "../mid"},
+            associate_namespaces={"mid": "MID"},
+            req_id="ROOT-d00001",
+        )
+
+        config = get_config(config_path=root / ".elspais.toml", quiet=True)
+        result = _get_workspace_info(root, config=config, graph=None, detail="worktree")
+
+        associates = result["associates"]
+        assert {a["name"] for a in associates["associates"]} == {"mid", "leaf"}
+        assert associates["count"] == 2

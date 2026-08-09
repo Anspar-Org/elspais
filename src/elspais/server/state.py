@@ -26,29 +26,25 @@ class DetachedState:
     originating_head: str
 
 
-def _compute_allowed_roots(repo_root: Path, config: dict[str, Any]) -> list[Path]:
+def _compute_allowed_roots(repo_root: Path, graph: FederatedGraph) -> list[Path]:
     """Derive the list of filesystem roots allowed for file serving.
 
-    Includes the main repo root plus the root of each configured associate repo.
-    Associate repo roots are found by walking up from each associate spec directory
-    to locate the nearest ``.elspais.toml`` marker.
+    The federation being served is the authority on which roots are legitimate:
+    every repository in it owns nodes the viewer must be able to open, whether
+    the invoking repo named it directly or an associate's own declarations
+    reached it. A repository that failed to load is included too — its root is
+    where its files would be, and gating on load success would turn a build
+    diagnostic into a silent access denial.
     """
     repo_resolved = repo_root.resolve()
     allowed: list[Path] = [repo_resolved]
-    try:
-        from elspais.associates import get_associate_spec_directories
-
-        spec_dirs, _ = get_associate_spec_directories(config, repo_root)
-        for spec_dir in spec_dirs:
-            candidate = spec_dir.resolve()
-            while candidate != candidate.parent:
-                if (candidate / ".elspais.toml").exists():
-                    if candidate not in allowed:
-                        allowed.append(candidate)
-                    break
-                candidate = candidate.parent
-    except Exception:
-        pass  # Associates not configured; repo root is the only allowed dir
+    iter_repos = getattr(graph, "iter_repos", None)
+    if iter_repos is None:
+        return allowed
+    for entry in iter_repos():
+        candidate = Path(entry.repo_root).resolve()
+        if candidate not in allowed:
+            allowed.append(candidate)
     return allowed
 
 
@@ -76,7 +72,7 @@ class AppState:
             }
         )
         self.repo_root = repo_root
-        self.allowed_roots = allowed_roots or _compute_allowed_roots(repo_root, config)
+        self._allowed_roots_override = allowed_roots
         self._mtimes: dict[str, float] = {}
         self._last_stale_check = 0.0
         self.snapshot_mtimes()
@@ -98,6 +94,19 @@ class AppState:
     @graph.setter
     def graph(self, value: FederatedGraph) -> None:
         self.shared["graph"] = value
+
+    @property
+    def allowed_roots(self) -> list[Path]:
+        """Filesystem roots this server may serve files from.
+
+        Derived from the live graph on each read rather than recorded at
+        construction: a rebuild can bring new repositories into the federation,
+        and an allowlist frozen at startup would refuse the files those
+        repositories own. An explicitly supplied list is honoured verbatim.
+        """
+        if self._allowed_roots_override is not None:
+            return self._allowed_roots_override
+        return _compute_allowed_roots(self.repo_root, self.graph)
 
     @property
     def build_time(self) -> float:

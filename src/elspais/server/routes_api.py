@@ -515,7 +515,7 @@ async def api_status(request: Request) -> JSONResponse:
     except Exception:
         typed = ElspaisConfig.model_validate({})
     result["levels"] = build_levels(typed)
-    result["namespaces"] = build_namespaces(typed)
+    result["namespaces"] = build_namespaces(typed, state.graph)
     result["statuses"] = build_statuses(typed)
 
     return JSONResponse(result)
@@ -733,7 +733,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
         _typed_cfg = ElspaisConfig.model_validate(state.config)
     except Exception:
         _typed_cfg = ElspaisConfig.model_validate({})
-    ns_catalog: dict[str, dict] = {n["code"]: n for n in build_namespaces(_typed_cfg)}
+    ns_catalog: dict[str, dict] = {n["code"]: n for n in build_namespaces(_typed_cfg, g)}
 
     # Cache resolvers per repo. Keyed by namespace string (stable across the
     # request) rather than `id(cfg)` (object ids can be reused by Python after

@@ -1704,16 +1704,33 @@ def run_term_checks(
     ]
 
 
-# Implements: REQ-d00202-A
+# Implements: REQ-d00202-A+D+I, REQ-d00203-C
 def check_associate_paths(
     config: dict[str, Any],
     repo_root: Path,
 ) -> HealthCheck:
-    """Validate that configured associate paths exist and contain spec files."""
-    from elspais.config import get_associates_config
+    """Validate that every federated repository loads and contains spec files.
 
-    associates = get_associates_config(config)
-    if not associates:
+    The subject is the whole federation, not only the repositories this
+    one names: a repository reached through an associate's own
+    declarations contributes to the same graph, so its problems are this
+    project's problems and have to be visible from here.
+    """
+    from elspais.associates import discover_associate_from_path
+    from elspais.graph.federation_plan import plan_federation_or_error
+
+    plan, plan_error = plan_federation_or_error(config, repo_root)
+    if plan_error is not None:
+        return HealthCheck(
+            name="config.associate_paths",
+            passed=False,
+            message="Federation membership could not be resolved",
+            category="spec",
+            findings=[HealthFinding(message=plan_error)],
+        )
+
+    members = plan[1:]
+    if not members:
         return HealthCheck(
             name="config.associate_paths",
             passed=True,
@@ -1723,41 +1740,44 @@ def check_associate_paths(
         )
 
     findings: list[HealthFinding] = []
-    for assoc_name, assoc_info in associates.items():
-        path_str = assoc_info["path"]
-        p = Path(path_str)
-        if not p.is_absolute():
-            p = repo_root / p
-        if not p.exists():
+    for member in members:
+        via = " -> ".join(member.declaration_path)
+        if member.error is not None:
             findings.append(
                 HealthFinding(
-                    message=f"Associate '{assoc_name}' path does not exist: {path_str}",
-                    node_id=assoc_name,
+                    message=f"Associate '{member.name}' (declared via {via}): {member.error}",
+                    node_id=member.name,
                 )
             )
-        else:
-            from elspais.associates import discover_associate_from_path
+            continue
 
-            disc_result = discover_associate_from_path(p)
-            if isinstance(disc_result, str):
-                findings.append(
-                    HealthFinding(
-                        message=f"Associate '{assoc_name}' is misconfigured: {disc_result}",
-                        node_id=assoc_name,
-                    )
+        # The planner answers whether a configuration could be loaded for
+        # this directory; it does not answer whether the directory is
+        # itself an elspais repository, which is what discovery decides.
+        disc_result = discover_associate_from_path(member.repo_root)
+        if isinstance(disc_result, str):
+            findings.append(
+                HealthFinding(
+                    message=(
+                        f"Associate '{member.name}' (declared via {via}) "
+                        f"is misconfigured: {disc_result}"
+                    ),
+                    node_id=member.name,
                 )
-            else:
-                assoc_spec_dir = p / disc_result.spec_path
-                if not assoc_spec_dir.exists() or not any(assoc_spec_dir.glob("*.md")):
-                    findings.append(
-                        HealthFinding(
-                            message=(
-                                f"Associate '{assoc_name}' has no spec files"
-                                f" in {disc_result.spec_path}"
-                            ),
-                            node_id=assoc_name,
-                        )
-                    )
+            )
+            continue
+
+        assoc_spec_dir = member.repo_root / disc_result.spec_path
+        if not assoc_spec_dir.exists() or not any(assoc_spec_dir.glob("*.md")):
+            findings.append(
+                HealthFinding(
+                    message=(
+                        f"Associate '{member.name}' (declared via {via}) has no spec files"
+                        f" in {disc_result.spec_path}"
+                    ),
+                    node_id=member.name,
+                )
+            )
 
     if findings:
         return HealthCheck(
@@ -1770,7 +1790,7 @@ def check_associate_paths(
     return HealthCheck(
         name="config.associate_paths",
         passed=True,
-        message=f"All {len(associates)} associate path(s) valid",
+        message=f"All {len(members)} federated repository path(s) valid",
         category="spec",
     )
 

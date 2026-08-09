@@ -1004,7 +1004,6 @@ __all__ = [
     "_try_parse_numeric",
     "_try_parse_env_value",
     "get_associates_config",
-    "validate_no_transitive_associates",
 ]
 
 
@@ -1039,6 +1038,7 @@ def get_associates_config(
             result[name] = {
                 "path": entry["path"],
                 "namespace": entry.get("namespace", ""),
+                "git": entry.get("git"),
             }
 
     # Support legacy [associates] paths = ["../repo"] format
@@ -1059,34 +1059,6 @@ def get_associates_config(
                     }
 
     return result
-
-
-# Implements: REQ-d00202-D
-def validate_no_transitive_associates(
-    associate_name: str, associate_config: dict[str, Any]
-) -> None:
-    """Check that an associate does not declare its own associates.
-
-    Only the root repo may declare [associates]. If an associate's config
-    contains an [associates] section, raise FederationError.
-
-    Args:
-        associate_name: Name of the associate being validated.
-        associate_config: The associate's loaded config dict.
-
-    Raises:
-        FederationError: If the associate declares its own associates.
-    """
-    from elspais.graph.federated import FederationError
-
-    # Use get_associates_config to check for NEW-format [associates.<name>] entries
-    # (not the legacy associates.paths list from the old sponsor system)
-    new_format_associates = get_associates_config(associate_config)
-    if new_format_associates:
-        raise FederationError(
-            f"Associate '{associate_name}' declares its own associates "
-            f"-- only the root repo may declare associates."
-        )
 
 
 def get_status_roles(config: dict[str, Any]):

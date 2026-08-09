@@ -1903,25 +1903,49 @@ def _build_coverage_stats(graph: FederatedGraph | None, config: dict[str, Any]) 
 
 
 def _build_associates_info(
-    config: dict[str, Any], working_dir: Path, include_paths: bool = False
+    config: dict[str, Any],
+    working_dir: Path,
+    include_paths: bool = False,
+    graph: FederatedGraph | None = None,
 ) -> dict[str, Any]:
-    """Build associates info from [associates] TOML config."""
-    try:
-        from elspais.config import get_associates_config
+    """Build associates info: every federation member except the root.
 
-        assoc_map = get_associates_config(config)
+    Membership comes from the built graph when there is one and from
+    ``plan_federation()`` otherwise, so this answer and the
+    ``federation.repos`` block of the same tool describe one federation:
+    a repository reached through an associate's own declarations is
+    listed here too, and the count is the repo count less the root.
+    """
+    members: list[tuple[str, Path, str | None]] = []
+    try:
+        if graph is not None:
+            root_name = graph.root_repo_name
+            members = [
+                (entry.name, entry.repo_root, entry.error)
+                for entry in graph.iter_repos()
+                if entry.name != root_name
+            ]
+        else:
+            from elspais.graph.federation_plan import plan_federation
+
+            members = [
+                (planned.name, planned.repo_root, planned.error)
+                for planned in plan_federation(config, working_dir)[1:]
+            ]
     except Exception:
         return {"count": 0, "associates": [], "config_file": None}
 
     result = []
-    for name, entry in assoc_map.items():
+    for name, repo_root, error in members:
         info: dict[str, Any] = {
             "name": name,
             "code": name,
             "enabled": True,
         }
+        if error:
+            info["error"] = error
         if include_paths:
-            info["path"] = entry.get("path", "")
+            info["path"] = str(repo_root)
             info["local_path"] = None
             info["spec_path"] = "spec"
         result.append(info)
@@ -2001,7 +2025,9 @@ def _workspace_profile_coverage(
     result["detail"] = "coverage"
 
     result["coverage_stats"] = _build_coverage_stats(graph, config)
-    result["associates"] = _build_associates_info(config, working_dir, include_paths=False)
+    result["associates"] = _build_associates_info(
+        config, working_dir, include_paths=False, graph=graph
+    )
 
     return result
 
@@ -2034,7 +2060,9 @@ def _workspace_profile_retrofit(
         "result_files": [t.results for t in typed_config.scanning.test.targets if t.results],
     }
 
-    result["associates"] = _build_associates_info(config, working_dir, include_paths=False)
+    result["associates"] = _build_associates_info(
+        config, working_dir, include_paths=False, graph=graph
+    )
 
     return result
 
@@ -2074,7 +2102,9 @@ def _workspace_profile_worktree(
     result["id_patterns"] = _build_id_patterns(config)
     result["hierarchy_rules"] = _build_hierarchy_rules(config)
     typed_config = _validate_config(config) if isinstance(config, dict) else config
-    result["associates"] = _build_associates_info(config, working_dir, include_paths=True)
+    result["associates"] = _build_associates_info(
+        config, working_dir, include_paths=True, graph=graph
+    )
     result["config_summary"]["spec_directories"] = typed_config.scanning.spec.directories
 
     return result
@@ -2122,7 +2152,9 @@ def _workspace_profile_all(
     result["change_metrics"] = _build_change_metrics(graph)
 
     # Associates with full paths
-    result["associates"] = _build_associates_info(config, working_dir, include_paths=True)
+    result["associates"] = _build_associates_info(
+        config, working_dir, include_paths=True, graph=graph
+    )
 
     return result
 

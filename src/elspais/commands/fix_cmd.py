@@ -817,6 +817,35 @@ def _select_terms_dictionary(graph, include_associates: bool):
     return getattr(graph, "terms", None)
 
 
+def _foreign_namespaces(graph) -> set[str]:
+    """Return the REQ-id namespaces of every federation member but the root.
+
+    Federation membership is transitive, so the repositories whose term
+    references must be dropped from a primary-only artifact are not the
+    ones the root's ``[associates]`` table names -- they are every member
+    the built graph carries. Each namespace is derived exactly as the
+    federated term scan derives ``TermRef.namespace`` (the repo's own
+    ``[project].namespace``, falling back to its federation name), so the
+    values compare equal to what the references carry.
+
+    A namespace equal to the root's own is never foreign: two repos may
+    legitimately share one, and the root's references belong in its own
+    index. Implements: REQ-d00253-C
+    """
+    if not hasattr(graph, "iter_repos"):
+        return set()
+    root_name = getattr(graph, "root_repo_name", None)
+    root_ns = ""
+    namespaces: set[str] = set()
+    for entry in graph.iter_repos():
+        namespace = (entry.config or {}).get("project", {}).get("namespace", "") or entry.name
+        if entry.name == root_name:
+            root_ns = namespace
+        else:
+            namespaces.add(namespace)
+    return {ns for ns in namespaces if ns and ns != root_ns}
+
+
 # Implements: REQ-d00225-B
 def _fix_terms(args: argparse.Namespace, dry_run: bool) -> None:
     """Generate glossary and term index if terms are defined."""
@@ -859,11 +888,7 @@ def _fix_terms(args: argparse.Namespace, dry_run: bool) -> None:
     # manifests don't surface associate-namespace sections. Implements: REQ-d00253-C
     ref_filter = None
     if not include_assoc:
-        assoc_ns = {
-            a.get("namespace")
-            for a in config.get("associates", {}).values()
-            if isinstance(a, dict) and a.get("namespace")
-        }
+        assoc_ns = _foreign_namespaces(graph)
         if assoc_ns:
 
             def ref_filter(ref, _assoc_ns=assoc_ns):

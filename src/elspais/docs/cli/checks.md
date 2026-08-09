@@ -29,7 +29,7 @@ Configuration checks always run as part of traceability verification. For focuse
 | `config.pattern_tokens` | Validates pattern template tokens |
 | `config.hierarchy_rules` | Checks hierarchy rules consistency |
 | `config.paths_exist` | Verifies spec directories exist |
-| `config.associate_paths` | Validates that configured `[associates]` paths exist and contain spec files; severity: error |
+| `config.associate_paths` | Validates that every federated repository — those declared here and those reached through an associate's own `[associates]` declarations — loads and contains spec files, reporting each failure with its path and reason; severity: error |
 | `config.no_requirements` | Flags when no requirements are found (likely config issue); severity: warning |
 | `docs.config_drift` | Compares config schema sections against `docs/configuration.md`; reports undocumented and stale sections (runs in `elspais doctor`) |
 

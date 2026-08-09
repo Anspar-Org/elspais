@@ -155,8 +155,19 @@ def resolve_client_pid() -> int | None:
 def compute_config_hash(config_path: Path) -> str:
     """Compute a hash of all config files that affect the graph.
 
-    Hashes the main .elspais.toml, .elspais.local.toml (if present),
-    and any associate repo .elspais.toml files referenced in [associates].
+    Covers every repository in the federation, not only the ones the
+    invoking repository names directly: membership is resolved with
+    ``plan_federation()``, so a repository reached through an associate's
+    own declarations is hashed too.  That matters most when such a
+    repository changes its *own* ``[associates]`` table, because then
+    federation membership itself has moved and a server holding the old
+    graph is stale.
+
+    Each member contributes its resolved path plus the bytes of its
+    ``.elspais.toml`` and ``.elspais.local.toml`` when those exist.  A
+    member that could not be loaded still contributes its path, so a
+    repository going from missing or unparseable to valid registers as a
+    change.
 
     Returns:
         16-char hex digest (first 8 bytes of SHA-256).
@@ -165,30 +176,35 @@ def compute_config_hash(config_path: Path) -> str:
 
     h = hashlib.sha256()
 
-    # Main config
-    if config_path.is_file():
-        h.update(config_path.read_bytes())
+    def _absorb(repo_root: Path) -> None:
+        # Length-delimit every field: concatenated variable-length blobs
+        # are ambiguous, and one file's tail could otherwise stand in for
+        # the next file's head.
+        h.update(str(repo_root).encode("utf-8", "surrogateescape"))
+        h.update(b"\0")
+        for filename in (".elspais.toml", ".elspais.local.toml"):
+            path = repo_root / filename
+            content = path.read_bytes() if path.is_file() else b""
+            h.update(str(len(content)).encode())
+            h.update(b"\0")
+            h.update(content)
+            h.update(b"\0")
 
-    # Local overrides
-    local_path = config_path.parent / ".elspais.local.toml"
-    if local_path.is_file():
-        h.update(local_path.read_bytes())
+    # Resolved so that two spellings of one directory hash alike; the
+    # planner resolves member paths the same way.
+    repo_root = config_path.parent.resolve()
+    # The root repo is hashed unconditionally, so a federation that
+    # cannot be planned at all still tracks edits to the config in hand.
+    _absorb(repo_root)
 
-    # Associate configs: parse merged config to find associate paths
     try:
-        from elspais.config import get_associates_config, get_config
+        from elspais.config import get_config
+        from elspais.graph.federation_plan import plan_federation
 
         merged = get_config(config_path=config_path)
-        repo_root = config_path.parent
-        associates = get_associates_config(merged, repo_root=repo_root)
-        for _name, info in sorted(associates.items()):
-            assoc_path = (repo_root / info["path"]).resolve()
-            assoc_toml = assoc_path / ".elspais.toml"
-            if assoc_toml.is_file():
-                h.update(assoc_toml.read_bytes())
-            assoc_local = assoc_path / ".elspais.local.toml"
-            if assoc_local.is_file():
-                h.update(assoc_local.read_bytes())
+        members = plan_federation(merged, repo_root)
+        for member in sorted(members[1:], key=lambda m: str(m.repo_root)):
+            _absorb(member.repo_root)
     except Exception:
         pass  # Best effort - don't fail daemon start on parse errors
 

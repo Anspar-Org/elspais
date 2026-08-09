@@ -19,7 +19,7 @@ from starlette.testclient import TestClient
 
 from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
-from elspais.graph.federated import FederatedGraph
+from elspais.graph.federated import FederatedGraph, RepoEntry
 from elspais.graph.GraphNode import FileType
 from elspais.graph.relations import EdgeKind
 from elspais.server.app import create_app
@@ -1130,8 +1130,24 @@ class TestGetFileContent:
         graph._index[node.id] = node
         graph._roots.append(node)
 
+        # The federation itself is the authority on which roots may be served,
+        # so the associate is a member of it. A member whose graph could not be
+        # built still owns the directory its files live in.
+        federated = FederatedGraph(
+            [
+                RepoEntry(name="test", graph=graph, config=config, repo_root=main_repo),
+                RepoEntry(
+                    name="assoc",
+                    graph=None,
+                    config=None,
+                    repo_root=assoc_repo,
+                    error="graph not built in this fixture",
+                ),
+            ],
+            root_repo="test",
+        )
         state = AppState(
-            graph=FederatedGraph.from_single(graph, config, main_repo),
+            graph=federated,
             repo_root=main_repo,
             config=config,
         )

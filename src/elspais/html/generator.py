@@ -723,7 +723,7 @@ class HTMLGenerator:
         except Exception:
             typed_cfg = ElspaisConfig.model_validate({})
         levels_ctx = build_levels(typed_cfg)
-        namespaces_ctx = build_namespaces(typed_cfg)
+        namespaces_ctx = build_namespaces(typed_cfg, self.graph)
         statuses_ctx = build_statuses(typed_cfg, candidates=sorted(statuses))
 
         # Render template

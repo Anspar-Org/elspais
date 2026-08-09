@@ -2,7 +2,7 @@
 """Tests for multi-repo federation building in factory.build_graph().
 
 Validates REQ-d00203-A: build_graph() builds separate TraceGraphs per repo
-Validates REQ-d00203-B: Transitive associates are rejected with FederationError
+Validates REQ-d00203-B: An associate's own declarations join the federation
 Validates REQ-d00203-C: Missing associate path creates error-state RepoEntry (soft fail)
 Validates REQ-d00203-D: strict=True raises on missing associate
 Validates REQ-d00203-E: FederatedGraph root repo is the invoking repo, not an associate
@@ -160,7 +160,7 @@ def missing_assoc_repo(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def transitive_repos(tmp_path: Path) -> dict[str, Path]:
-    """Create repos where the associate itself declares associates (forbidden).
+    """Create a three-deep declaration chain: root -> middle -> leaf.
 
     Layout::
 
@@ -169,7 +169,7 @@ def transitive_repos(tmp_path: Path) -> dict[str, Path]:
                 .elspais.toml   (declares [associates.middle])
                 spec/dev.md
             middle/
-                .elspais.toml   (declares [associates.leaf] -- illegal)
+                .elspais.toml   (declares [associates.leaf])
                 spec/ops.md
             leaf/
                 .elspais.toml
@@ -189,7 +189,7 @@ def transitive_repos(tmp_path: Path) -> dict[str, Path]:
         level="PRD",
     )
 
-    # middle (illegally declares its own associate)
+    # middle (declares its own associate)
     _write_config(
         middle_dir,
         extra={"associates": {"leaf": {"path": "../leaf", "namespace": "REQ"}}},
@@ -227,7 +227,7 @@ class TestFederationBuild:
     """Tests for multi-repo federation building via build_graph().
 
     Validates REQ-d00203-A: Separate graphs per repo
-    Validates REQ-d00203-B: Transitive associates rejected
+    Validates REQ-d00203-B: An associate's own declarations join the federation
     Validates REQ-d00203-C: Missing associate soft-fails
     Validates REQ-d00203-D: strict raises on missing associate
     Validates REQ-d00203-E: Root repo identity
@@ -311,19 +311,30 @@ class TestFederationBuild:
             f"got {fed.repo_root}"
         )
 
-    def test_REQ_d00203_B_transitive_associates_rejected(
+    # Verifies: REQ-d00203-B, REQ-d00202-D
+    def test_REQ_d00203_B_transitive_associates_resolved(
         self, transitive_repos: dict[str, Path]
     ) -> None:
-        """Associate declares its own [associates] section.
-        build_graph() should raise FederationError."""
-        root_dir = transitive_repos["root"]
+        """A repo reached only through an intermediate joins the federation.
 
-        with pytest.raises(FederationError):
-            build_graph(
-                repo_root=root_dir,
-                scan_code=False,
-                scan_tests=False,
-            )
+        root declares middle; middle declares leaf. leaf is named nowhere
+        in root's config, so a federation that only reads the root's own
+        declarations would be missing it entirely.
+        """
+        fed = build_graph(
+            repo_root=transitive_repos["root"],
+            scan_code=False,
+            scan_tests=False,
+        )
+
+        roots = {entry.repo_root for entry in fed.iter_repos()}
+        assert roots == {
+            transitive_repos["root"],
+            transitive_repos["middle"],
+            transitive_repos["leaf"],
+        }
+        # The leaf's requirement resolves from the root's entry point.
+        assert fed.find_by_id("REQ-p00001") is not None
 
 
 # ---------------------------------------------------------------------------

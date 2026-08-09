@@ -923,69 +923,55 @@ def build_graph(
     annotate_coverage(graph, credit)
 
     # Implements: REQ-d00203-A+B+C+D+E
-    # Build associate repos if [associates] config is present
+    # Build every repository the declarations reach, not only those the
+    # root names directly (REQ-d00202-D).
     if _build_associates:
-        from elspais.config import get_associates_config, validate_no_transitive_associates
-        from elspais.graph.federated import FederationError, RepoEntry
+        from elspais.config import get_associates_config
+        from elspais.graph.federated import RepoEntry
+        from elspais.graph.federation_plan import plan_federation
 
-        associates_config = get_associates_config(config, repo_root=repo_root)
-        if associates_config:
-            entries: list[RepoEntry] = []
-            host_name = config["project"]["name"]
-            # Root repo entry
-            entries.append(
+        if get_associates_config(config, repo_root=repo_root):
+            plan = plan_federation(config, repo_root, strict=strict)
+            host_name = plan[0].name
+            entries: list[RepoEntry] = [
                 RepoEntry(
                     name=host_name,
                     graph=graph,
                     config=config,
                     repo_root=repo_root,
                 )
-            )
-            for assoc_name, assoc_info in associates_config.items():
-                assoc_path = (repo_root / assoc_info["path"]).resolve()
-                git_origin = assoc_info.get("git")
-
-                if not assoc_path.exists():
-                    # Implements: REQ-d00203-C, REQ-d00203-D
-                    if strict:
-                        raise FederationError(
-                            f"Associate '{assoc_name}' path does not exist: {assoc_path}"
-                        )
+            ]
+            for member in plan[1:]:
+                if member.config is None:
+                    # Implements: REQ-d00202-I, REQ-d00203-C, REQ-d00203-D
                     entries.append(
                         RepoEntry(
-                            name=assoc_name,
+                            name=member.name,
                             graph=None,
                             config=None,
-                            repo_root=assoc_path,
-                            git_origin=git_origin,
-                            error=f"Path does not exist: {assoc_path}",
+                            repo_root=member.repo_root,
+                            git_origin=member.git_origin,
+                            error=member.error,
                         )
                     )
                     continue
 
-                # Load associate's config
-                assoc_config = get_config(None, assoc_path)
-
-                # Implements: REQ-d00203-B
-                validate_no_transitive_associates(assoc_name, assoc_config)
-
-                # Build associate's graph (no recursive associate building)
-                assoc_fg = build_graph(
-                    config=assoc_config,
-                    repo_root=assoc_path,
+                # The plan already resolved this member's own declarations,
+                # so each graph is built for itself alone.
+                member_fg = build_graph(
+                    config=member.config,
+                    repo_root=member.repo_root,
                     scan_code=scan_code,
                     scan_tests=scan_tests,
                     _build_associates=False,
                 )
-                # Extract the TraceGraph from the federation-of-one
-                assoc_graph = list(assoc_fg.iter_repos())[0].graph
                 entries.append(
                     RepoEntry(
-                        name=assoc_name,
-                        graph=assoc_graph,
-                        config=assoc_config,
-                        repo_root=assoc_path,
-                        git_origin=git_origin,
+                        name=member.name,
+                        graph=list(member_fg.iter_repos())[0].graph,
+                        config=member.config,
+                        repo_root=member.repo_root,
+                        git_origin=member.git_origin,
                     )
                 )
 

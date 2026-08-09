@@ -112,7 +112,7 @@
 | REQ-d00134 | Comprehensive Mutation Round-Trip Scenario Test               | dev-graph-file-nodes.md | 6c865949 |
 | REQ-d00200 | FederatedGraph Read-Only Delegation                           | dev-graph-federation.md | 06b84d97 |
 | REQ-d00201 | FederatedGraph Mutation Delegation                            | dev-graph-federation.md | 85081cae |
-| REQ-d00202 | Associates Config Loading                                     | dev-graph-federation.md | 9b0f1733 |
+| REQ-d00202 | Associates Config Loading                                     | dev-graph-federation.md | b599e6ec |
 | REQ-d00203 | Multi-Repo Build Pipeline                                     | dev-graph-federation.md | 957568b6 |
 | REQ-d00204 | Per-Repo Health Check Delegation                              | dev-graph-federation.md | 7e0f5586 |
 | REQ-d00205 | MCP Federation Support                                        | dev-mcp-tools.md        | 42c7a840 |

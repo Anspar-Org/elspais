@@ -11,21 +11,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from elspais.config.schema import ElspaisConfig
-
-_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
-    ElspaisConfig.model_fields.keys()
-)
-
-
-def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
-    """Validate a config dict into ElspaisConfig, stripping non-schema keys."""
-    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
-    assoc = filtered.get("associates")
-    if isinstance(assoc, dict) and "paths" in assoc:
-        filtered.pop("associates", None)
-    return ElspaisConfig.model_validate(filtered)
-
 
 @dataclass
 class Associate:
@@ -54,39 +39,46 @@ def get_associate_spec_directories(
     base_path: Path | None = None,
 ) -> tuple[list[Path], list[str]]:
     """
-    Get all associate spec directories from configuration.
+    Get the spec directory of every federation member other than the caller.
 
-    Loads named associates from [associates.<name>] config sections.
+    Membership comes from ``plan_federation()``, the single authority on
+    which repositories a federation contains, so a repository reached only
+    through an associate's own declarations is covered here exactly like one
+    the invoking config names directly.
 
     Args:
         config: Main elspais configuration dictionary
         base_path: Base path to resolve relative paths (defaults to cwd)
 
     Returns:
-        Tuple of (spec_dirs, errors). errors contains messages for any
-        configured associate paths that could not be resolved.
+        Tuple of (spec_dirs, errors). errors carries a message for every
+        federation member that could not be loaded or whose spec directory
+        is missing, and for a declaration set that cannot be resolved at all
+        (a cycle, or two repositories federated under one name).
     """
-    # Implements: REQ-p00005-F
+    # Implements: REQ-p00005-F, REQ-d00202-D
     if base_path is None:
         base_path = Path.cwd()
 
-    spec_dirs = []
+    from elspais.graph.federation_plan import plan_federation_or_error
+
+    spec_dirs: list[Path] = []
     errors: list[str] = []
 
-    # 0. Resolve associates from typed config
-    typed_config = _validate_config(config)
+    # This is a scan with an error channel, so a declaration set that cannot be
+    # walked at all is reported through it rather than raised at every caller.
+    plan, plan_error = plan_federation_or_error(config, base_path)
+    if plan_error is not None:
+        return [], [plan_error]
 
-    # 1. Path-based loading from [associates] config (new format: named entries)
-    for _assoc_name, assoc_entry in typed_config.associates.items():
-        repo_path = Path(assoc_entry.path)
-        if not repo_path.is_absolute():
-            repo_path = base_path / repo_path
-        result = discover_associate_from_path(repo_path)
-        if isinstance(result, str):
-            errors.append(result)
+    # Element 0 is the invoking repository, which is not an associate of itself.
+    for member in plan[1:]:
+        if member.config is None:
+            errors.append(member.error or f"Associate could not be loaded: {member.repo_root}")
             continue
-        spec_dir = repo_path / result.spec_path
-        if spec_dir.exists() and spec_dir.is_dir():
+        directories = member.config.get("scanning", {}).get("spec", {}).get("directories", [])
+        spec_dir = member.repo_root / (directories[0] if directories else "spec")
+        if spec_dir.is_dir():
             spec_dirs.append(spec_dir)
         else:
             errors.append(f"Spec directory not found: {spec_dir}")
