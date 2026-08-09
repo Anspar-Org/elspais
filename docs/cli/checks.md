@@ -7,7 +7,7 @@ Verify requirements traceability and configuration.
     elspais checks [--spec] [--code] [--tests] [--terms]
                    [--run-tests [--fail-fast]] [--targets NAME ...]
                    [--format text|markdown|json|junit|sarif]
-                   [--status STATUS ...]
+                   [--treat-active STATUS ...] [--only-status STATUS ...]
                    [--lenient] [--include-passing-details]
                    [-o PATH]
 

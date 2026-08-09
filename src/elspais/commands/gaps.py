@@ -361,17 +361,12 @@ def render_section(
         Tuple of (rendered output string, exit code).
         Exit code is always 0 (gap sections are informational).
     """
-    from elspais.commands.health import (
-        _only_status_flags,
-        _resolve_exclude_status,
-        apply_only_status,
-    )
+    from elspais.commands.health import resolve_status_exclusions
 
     if gap_types is None:
         gap_types = _ALL_GAP_TYPES
 
-    exclude_status = _resolve_exclude_status(args, config=config or {})
-    exclude_status = apply_only_status(exclude_status, graph, _only_status_flags(args))
+    exclude_status = resolve_status_exclusions(args, config, graph)
     data = collect_gaps(graph, exclude_status, config=config)
 
     fmt = getattr(args, "format", "text")
@@ -461,11 +456,7 @@ def compute_gaps(graph: FederatedGraph, config: dict, params: dict[str, str]) ->
     """
     import argparse as _argparse
 
-    from elspais.commands.health import (
-        _only_status_flags,
-        _resolve_exclude_status,
-        apply_only_status,
-    )
+    from elspais.commands.health import resolve_status_exclusions
 
     fake_args = _argparse.Namespace()
     treat_str = params.get("treat_active", None)
@@ -473,8 +464,7 @@ def compute_gaps(graph: FederatedGraph, config: dict, params: dict[str, str]) ->
     only_str = params.get("only_status", None)
     fake_args.only_status = only_str.split(",") if only_str else None
 
-    exclude_status = _resolve_exclude_status(fake_args, config=config)
-    exclude_status = apply_only_status(exclude_status, graph, _only_status_flags(fake_args))
+    exclude_status = resolve_status_exclusions(fake_args, config, graph)
     data = collect_gaps(graph, exclude_status, config=config)
 
     def _serialize_gap_list(gt: str) -> list:

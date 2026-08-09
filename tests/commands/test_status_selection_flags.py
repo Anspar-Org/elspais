@@ -157,6 +157,116 @@ def built(project):
         os.chdir(old_cwd)
 
 
+# A second project, needed because the shared fixture above deliberately runs
+# with code scanning off. This one enables [scanning.code] and ships a source
+# file whose `Implements:` reference points at the DRAFT requirement, which is
+# what the reference-status checks flag.
+CODE_CONFIG_TOML = """\
+version = 3
+
+[project]
+name = "test"
+namespace = "REQ"
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = ["src"]
+file_patterns = ["*.py"]
+
+[changelog]
+hash_current = false
+"""
+
+CODE_ACTIVE_ID = "REQ-p00001"
+CODE_DRAFT_ID = "REQ-p00002"
+
+CODE_SPEC_MD = """\
+# REQ-p00001: Active Requirement
+
+**Level**: PRD | **Status**: Active | **Implements**: -
+
+Body text.
+
+## Assertions
+
+A. The system shall do the active thing.
+
+*End* *Active Requirement*
+---
+
+# REQ-p00002: Draft Requirement
+
+**Level**: PRD | **Status**: Draft | **Implements**: -
+
+Body text.
+
+## Assertions
+
+A. The system shall do the draft thing.
+
+*End* *Draft Requirement*
+---
+"""
+
+CODE_PY = """\
+# Implements: REQ-p00002-A
+def draft_thing():
+    return True
+"""
+
+
+@pytest.fixture
+def code_built(tmp_path):
+    """(graph, config) for a project with code scanning ON.
+
+    The scanned source file references the DRAFT requirement, so the
+    ``code.provisional_references`` check has something to find.
+    """
+    from elspais.config import get_config
+    from elspais.graph.factory import build_graph
+
+    root = tmp_path / "code_project"
+    root.mkdir(parents=True, exist_ok=True)
+    (root / ".elspais.toml").write_text(CODE_CONFIG_TOML)
+    spec_dir = root / "spec"
+    spec_dir.mkdir()
+    (spec_dir / "requirements.md").write_text(CODE_SPEC_MD)
+    src_dir = root / "src"
+    src_dir.mkdir()
+    (src_dir / "module.py").write_text(CODE_PY)
+
+    old_cwd = os.getcwd()
+    os.chdir(root)
+    try:
+        config = get_config(root / ".elspais.toml")
+        graph = build_graph(
+            config=config,
+            spec_dirs=[spec_dir],
+            config_path=root / ".elspais.toml",
+            repo_root=root,
+            scan_code=True,
+            scan_tests=False,
+        )
+        yield graph, config
+    finally:
+        os.chdir(old_cwd)
+
+
+def _uncovered_ids(result: dict) -> set[str]:
+    """Requirement IDs listed as uncovered in a compute_gaps result."""
+    return {entry[0] for entry in result["uncovered"]}
+
+
+def _check_by_name(checks, name: str):
+    """The single HealthCheck carrying ``name``, or an explicit failure."""
+    for check in checks:
+        if check.name == name:
+            return check
+    raise AssertionError(f"no {name!r} check produced; got {[c.name for c in checks]}")
+
+
 def _implemented_counts(graph, config, params: dict[str, str]) -> tuple[int, float]:
     """Run the checks compute path and return the Implemented dimension's
     (requirement count, assertion count) — the counted denominator.
@@ -334,4 +444,128 @@ class TestCoverageStatusSelectors:
         assert widened != narrowed, (
             "treat_active and only_status point in opposite directions and must not "
             f"produce the same counted set; both gave {widened}"
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Regression: an explicit selection REPLACES the role-derived baseline
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestOnlyStatusReplacesTheBaseline:
+    """Pins that ``--only-status`` governs outright rather than being unioned
+    with the role-derived exclusion baseline.
+    """
+
+    def test_only_status_selects_a_normally_excluded_status(self, built):
+        """Pins the defect where ``--only-status`` was UNIONED with the
+        role-derived exclusion baseline. Because the role system already
+        excludes provisional and retired statuses, naming one of them
+        selected nothing at all -- ``gaps --only-status Draft`` returned an
+        empty report.
+
+        If the union returns, the Draft selection excludes Draft again
+        (provisional role) and the Deprecated selection excludes Deprecated
+        again (retired role), so the uncovered listing is empty and BOTH
+        presence assertions below fail. The two statuses are excluded by two
+        different role paths, so neither can mask a regression in the other.
+        """
+        from elspais.commands.gaps import compute_gaps
+
+        graph, config = built
+
+        draft_only = _uncovered_ids(compute_gaps(graph, config, {"only_status": "Draft"}))
+        assert DRAFT_ID in draft_only, (
+            "only_status=Draft must select the Draft requirement even though the role "
+            f"baseline excludes provisional statuses; uncovered was {sorted(draft_only)}"
+        )
+        assert ACTIVE_ID not in draft_only, (
+            "only_status=Draft must NOT report the Active requirement -- the selection "
+            f"narrows to exactly the named status; uncovered was {sorted(draft_only)}"
+        )
+
+        deprecated_only = _uncovered_ids(compute_gaps(graph, config, {"only_status": "Deprecated"}))
+        assert DEPRECATED_ID in deprecated_only, (
+            "only_status=Deprecated must select the Deprecated requirement even though "
+            "the role baseline excludes retired statuses; uncovered was "
+            f"{sorted(deprecated_only)}"
+        )
+        assert ACTIVE_ID not in deprecated_only, (
+            "only_status=Deprecated must NOT report the Active requirement; uncovered "
+            f"was {sorted(deprecated_only)}"
+        )
+
+    def test_no_selection_keeps_the_role_baseline(self, built):
+        """Pins the opposite failure mode of the same fix: replacing the
+        baseline must happen ONLY when a selection is present.
+
+        With no ``only_status``, the role-derived baseline still governs, so
+        the provisional Draft and retired Deprecated requirements stay out of
+        the report. If the replacement ever leaked into the no-selection path
+        (returning an empty exclusion set unconditionally), Draft and
+        Deprecated would join the listing and this equality fails.
+        """
+        from elspais.commands.gaps import compute_gaps
+
+        graph, config = built
+
+        default_ids = _uncovered_ids(compute_gaps(graph, config, {}))
+
+        assert default_ids == {ACTIVE_ID}, (
+            "with no selection the role baseline must still exclude the provisional "
+            "Draft and retired Deprecated requirements, leaving the Active one alone; "
+            f"uncovered was {sorted(default_ids)}"
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Regression: the selection reaches the reference-status checks
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestOnlyStatusScopesReferenceChecks:
+    """Pins that an explicit selection scopes the code/test reference checks,
+    not just the coverage counts.
+    """
+
+    def test_only_status_scopes_the_reference_checks(self, code_built):
+        """Pins the defect where the selection never reached
+        ``_check_status_references``, which decided eligibility purely by
+        membership in ``exclude_status``. ``checks --only-status Active``
+        therefore still reported findings about code referencing Draft
+        requirements -- content outside the requested selection.
+
+        The first half (no selection, check FAILS) proves the fixture really
+        scanned the code file and linked it to the Draft requirement, so the
+        second half cannot pass vacuously. If the ``only_status`` argument
+        stops being threaded from ``run_code_checks`` into
+        ``_check_status_references``, or the status-membership skip inside it
+        is removed, the second call flags the Draft reference again and the
+        ``passed`` assertion fails.
+        """
+        import argparse
+
+        from elspais.commands.health import _resolve_exclude_status, run_code_checks
+
+        graph, config = code_built
+        baseline = _resolve_exclude_status(argparse.Namespace(), config=config)
+
+        default_checks = run_code_checks(graph, exclude_status=baseline, config=config)
+        provisional = _check_by_name(default_checks, "code.provisional_references")
+        assert not provisional.passed, (
+            "with no selection the check must flag the code reference to the Draft "
+            f"requirement; message was {provisional.message!r}"
+        )
+        assert any(
+            CODE_DRAFT_ID in f.message for f in provisional.findings
+        ), f"the finding must name {CODE_DRAFT_ID}; findings were {provisional.findings}"
+
+        scoped_checks = run_code_checks(
+            graph, exclude_status=baseline, config=config, only_status={"Active"}
+        )
+        scoped = _check_by_name(scoped_checks, "code.provisional_references")
+        assert scoped.passed, (
+            "only_status={'Active'} puts the Draft requirement outside the selection, so "
+            "a reference to it must not be reported; message was "
+            f"{scoped.message!r}, findings {scoped.findings}"
         )
