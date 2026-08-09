@@ -428,13 +428,13 @@ class TestAmbiguityRejection:
 
 
 # ---------------------------------------------------------------------------
-# REQ-d00251-G: helper centralization
+# REQ-d00268-A: helper centralization
 # ---------------------------------------------------------------------------
 
 
 class TestComponentRegexHelper:
     def test_helper_is_importable_from_utilities_patterns(self):
-        # Verifies: REQ-d00251-G
+        # Verifies: REQ-d00268-A
         from elspais.utilities import patterns as patterns_mod
 
         assert hasattr(
@@ -455,7 +455,7 @@ class TestComponentRegexHelper:
         ],
     )
     def test_helper_returns_matching_regex_per_style(self, style, probe, expected):
-        # Verifies: REQ-d00251-G
+        # Verifies: REQ-d00268-A
         import re as _re
 
         from elspais.utilities.patterns import ComponentFormat, component_regex
@@ -469,7 +469,7 @@ class TestComponentRegexHelper:
         )
 
     def test_helper_returns_numeric_regex(self):
-        # Verifies: REQ-d00251-G
+        # Verifies: REQ-d00268-A
         import re as _re
 
         from elspais.utilities.patterns import ComponentFormat, component_regex
@@ -480,7 +480,7 @@ class TestComponentRegexHelper:
         assert _re.fullmatch(regex_str, "abc") is None
 
     def test_helper_returns_user_pattern_for_regex_style(self):
-        # Verifies: REQ-d00251-G
+        # Verifies: REQ-d00268-A
         import re as _re
 
         from elspais.utilities.patterns import ComponentFormat, component_regex
@@ -491,7 +491,7 @@ class TestComponentRegexHelper:
         assert _re.fullmatch(regex_str, "foo") is None
 
     def test_helper_is_sole_authority_no_inline_dispatch_in_lark(self):
-        # Verifies: REQ-d00251-G
+        # Verifies: REQ-d00268-A
         # The lark grammar must call component_regex(), not duplicate the
         # style dispatch. Detect duplication via grep on the source file.
         import inspect

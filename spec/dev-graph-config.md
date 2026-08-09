@@ -209,7 +209,7 @@ E. `AssertionConfig` SHALL include a `separator` field (str, default `"-"`) used
 
 F. Ambiguous combinations SHALL be rejected at config validation time: `style = "snake_case"` with `separator = "_"` plus a non-uppercase `label_style`; `style = "kebab-case"` with `separator = "-"` plus a non-uppercase `label_style`. The error message SHALL suggest changing `separator` to a non-overlapping character.
 
-G. A single helper in `utilities/patterns.py` SHALL resolve a `ComponentFormat` to its regex string. The helper SHALL be the sole authority used by both the `IdResolver` regex compiler (`utilities/patterns.py`) and the lark grammar pattern builder (`graph/parsers/lark/__init__.py`); no other component-style dispatch SHALL exist in the codebase.
+G. [Removed - superseded by REQ-d00268, which extends single-authority derivation from the component sub-pattern to the whole identifier grammar]
 
 H. An *Assertion* label series SHALL be one of two ordered alphabets: `uppercase`, running A to Z; and `numeric`, running 0 upward. Each SHALL have a first label, a successor for every label but its last, and a last label beyond which the series does not extend.
 
@@ -218,10 +218,43 @@ I. An *Assertion* label series configured as `alphanumeric` SHALL run 0 to 9 and
 ### Changelog
 
 - 2026-08-10 | e4e4a5fc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-08 | 427d0f5f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 7857498c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | e04a4e37 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | e04a4e37 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize term forms, update hash
 - 2026-05-11 | - | - | Developer (<dev@example.com>) | Initial authoring: introduce explicit case-style vocabulary and configurable assertion separator.
 
 *End* *Component Style Vocabulary and Assertion Separator* | **Hash**: e4e4a5fc
+---
+
+## REQ-d00268: Single-Authority Identifier Grammar Derivation
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+A repository's identifier grammar is derived in one place. The canonical identifier pattern, the component sub-pattern, the *Assertion* label pattern, the boundary between component and *Assertion* suffix, and the expansion of a multi-*Assertion* reference all come from one authority reading that repository's identifier configuration, so that every surface which recognises, parses, or expands an identifier answers for exactly the same set of strings.
+
+### Assertions
+
+A. One derivation authority SHALL produce, from a repository's identifier configuration, every regex fragment of that repository's identifier grammar: the canonical identifier pattern, the component sub-pattern, the *Assertion* label pattern, the boundary between the component and the *Assertion* suffix, and the pattern that expands a multi-*Assertion* reference.
+
+B. The derivation authority SHALL expose every fragment it produces through its public interface, and a consumer SHALL obtain a fragment only through that interface.
+
+C. A surface that recognises, parses, or expands an identifier SHALL derive its patterns from the derivation authority rather than compose them.
+
+D. For a given identifier configuration, every surface that recognises an identifier SHALL recognise the same set of strings as an identifier, including the surface that decides which repository of a federation claims an identifier.
+
+E. The derivation authority SHALL derive a repository's identifier grammar from that repository's own identifier configuration, so that a process holding several repositories at once applies each repository's grammar only to that repository.
+
+### Rationale
+
+Federation puts several repositories, each with its own identifier configuration, in one process at once. A surface that treats an identifier as recognised while another treats it as foreign produces a broken reference whose reported severity depends on which surface was asked, and the opportunities for that disagreement grow with every repository a dependency chain pulls in. D is therefore the load-bearing assertion: A, B and C are the structure that makes it hold, and E is what keeps single-authority derivation from collapsing into single configuration — federated repositories occupy disjoint identifier spaces and keep their own configurations.
+
+The governed surfaces are the identifier resolver, the lark grammar builder that recognises identifiers in spec and code, the reference matcher that expands multi-*Assertion* targets, and the federation claim probe that splits a hard broken reference from a presumed-foreign one. B exists because a fragment reachable only as a private internal is an interface by accident: consumers that reach for one are as coupled as consumers that copy it, and neither survives a change to the derivation. The single-authority rule for the component sub-pattern alone is folded into A rather than kept alongside it, so one rule covers the whole grammar.
+
+### Changelog
+
+- 2026-08-08 | 2e02bcf7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-08-09 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: single-authority derivation for the whole identifier grammar
+
+*End* *Single-Authority Identifier Grammar Derivation* | **Hash**: 2e02bcf7
 ---

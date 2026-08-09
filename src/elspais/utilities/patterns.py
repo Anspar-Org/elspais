@@ -81,7 +81,7 @@ class AssertionFormat:
     separator: str = "-"
 
 
-# Implements: REQ-d00251-G
+# Implements: REQ-d00268-A
 def component_regex(component: ComponentFormat) -> str:
     """Resolve a ComponentFormat to its regex string.
 
