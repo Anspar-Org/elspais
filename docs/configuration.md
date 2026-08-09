@@ -134,7 +134,23 @@ leading_zeros = true
 label_style = "uppercase"  # "uppercase" [A-Z], "numeric" [00-99], "alphanumeric" [0-Z], "numeric_1based" [1-99]
 max_count = 26             # Maximum assertions per requirement
 # zero_pad = false         # Pad numeric labels with zeros
+# separator = "-"          # Character between requirement ID and first label (REQ-p00001-A)
 # multi_separator = "+"    # Separator for multi-assertion syntax (A+B+C)
+```
+
+These two characters are the only accepted way to cite an assertion, and they
+apply identically wherever a reference may appear -- a requirement's metadata
+line, a code or test comment, a journey.
+
+`/` is the form authors most often reach for when it is not the configured
+separator, so it is detected in every context: with the settings above,
+`Implements: REQ-p00001/A` is reported as a broken reference rather than
+quietly read as a whole-requirement reference (which would credit every
+assertion of `REQ-p00001`, not just `A`). Configure `separator = "/"` if that
+is the form your authors should write. On a requirement's metadata line, any
+malformed reference is reported, not just this one.
+
+```toml
 
 #──────────────────────────────────────────────────────────────────────────────
 # SCANNING - Unified file scanning configuration

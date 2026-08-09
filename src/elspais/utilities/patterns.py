@@ -314,6 +314,16 @@ class IdResolver:
         multi = re.escape(af.multi_separator)
         return rf"(?:{sep}(?P<assertions>{label_pat}(?:{multi}{label_pat})*))?"
 
+    @property
+    def assertion_label_pattern(self) -> str:
+        """Regex matching one assertion label under the configured style.
+
+        Public counterpart of the suffix builder's label class, for callers
+        that compose their own reference regex (reference extraction) and
+        must recognize labels exactly as ``parse()`` does.
+        """
+        return self._assertion_label_regex_str()
+
     def _assertion_label_regex_str(self) -> str:
         """Get regex for a single assertion label."""
         af = self.config.assertions

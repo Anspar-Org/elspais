@@ -656,7 +656,7 @@ class TestTraceLegendGating:
     marker in its verified cell, and never for the UAT dimension (which
     doesn't render a verified column at all)."""
 
-    # Verifies: REQ-d00254-I/J
+    # Verifies: REQ-d00254-I+J
     def test_legend_present_when_marker_rendered(self, two_target_project):
         from elspais.commands.trace import format_markdown
 
@@ -666,7 +666,7 @@ class TestTraceLegendGating:
         assert "(baseline)" in _verified_cell(out, "REQ-d00002")
         assert "> Legend:" in out
 
-    # Verifies: REQ-d00254-I/J
+    # Verifies: REQ-d00254-I+J
     def test_legend_absent_on_full_run(self, two_target_project):
         from elspais.commands.trace import format_markdown
 
@@ -675,7 +675,7 @@ class TestTraceLegendGating:
 
         assert "> Legend:" not in out
 
-    # Verifies: REQ-d00254-I/J
+    # Verifies: REQ-d00254-I+J
     def test_legend_absent_on_uat_dimension(self, two_target_project):
         from elspais.commands.trace import _UAT_COLUMNS, ReportPreset, format_markdown
 
