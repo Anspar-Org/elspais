@@ -43,6 +43,7 @@ import ast
 import dataclasses
 import re
 import typing
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -547,8 +548,86 @@ def _scan_string(
 # ---------------------------------------------------------------------------
 
 
-SRC_ROOT = Path(__file__).resolve().parent.parent / "src" / "elspais"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+SRC_ROOT = REPO_ROOT / "src" / "elspais"
 DOCS_ROOT = SRC_ROOT / "docs"
+
+# The repository-facing command reference is canonical (see CLAUDE.md); the
+# packaged copy under src/ ships to users. Both describe the CLI as it is, so
+# both are held to it. Design notes and roadmaps under docs/ are deliberately
+# excluded: they discuss invocations that are proposed rather than shipped,
+# and holding a dated plan to today's flags would force it to be rewritten
+# every time the CLI moves.
+REPO_DOCS_CLI_ROOT = REPO_ROOT / "docs" / "cli"
+
+# A synopsis block wraps one invocation over several lines:
+#
+#     elspais checks [--spec] [--code]
+#                    [--only-status STATUS ...]
+#
+# Only the first line carries the command, so a flag on a continuation line
+# belongs to no command and was never checked -- which is exactly how a
+# removed flag survived in a synopsis. A continuation is an indented line
+# opening with a bracketed or dashed option; it is scanned as though the
+# block's command were prefixed to it, and reported against its OWN line.
+_CONTINUATION_RE = re.compile(r"^\s+(?=[\[-])")
+_COMMAND_PREFIX_RE = re.compile(r"\belspais\s+([a-z][a-z0-9-]*)")
+
+
+# A synopsis marks optional arguments with brackets -- `[--only-status STATUS]`.
+# The flag matcher requires a bare `--flag`, so a bracketed one matches nothing
+# and every option in a synopsis went unchecked, on continuation lines and on
+# the command line itself alike. Bracketed flag NAMES are validated here;
+# their values are deliberately left alone, being placeholders (`STATUS`,
+# `PATH`) and alternations (`text|json`) rather than real arguments.
+_SYNOPSIS_FLAG_RE = re.compile(r"\[(-{1,2}[a-zA-Z][a-zA-Z0-9-]*)")
+
+
+def _iter_doc_lines(text: str) -> Iterator[tuple[int, str, str | None]]:
+    """Yield (lineno, scannable_text, owning_command) for a markdown file.
+
+    Lines naming `elspais` are yielded unchanged. Continuation lines of a
+    synopsis block are yielded with the block's command prefixed, so options
+    carried on them are attributed to the command that owns them and are
+    reported against their own line.
+    """
+    current_cmd: str | None = None
+    for lineno, line in enumerate(text.split("\n"), 1):
+        if "elspais" in line:
+            m = _COMMAND_PREFIX_RE.search(line)
+            current_cmd = m.group(1) if m else None
+            yield lineno, line, current_cmd
+            continue
+        if current_cmd and _CONTINUATION_RE.match(line):
+            yield lineno, f"elspais {current_cmd} {line.strip()}", current_cmd
+            continue
+        # Any other line ends the block: a synopsis is contiguous.
+        current_cmd = None
+
+
+def _scan_synopsis_flags(
+    line: str,
+    cmd: str | None,
+    lineno: int,
+    file: str,
+    specs: dict[str, SubcommandSpec],
+) -> list[Finding]:
+    """Report bracketed synopsis flags the named command does not accept."""
+    if not cmd or cmd not in specs:
+        return []
+    known = specs[cmd].flags
+    return [
+        Finding(
+            file=file,
+            line=lineno,
+            subcommand=cmd,
+            kind="flag",
+            token=flag,
+            context=line.strip()[:72],
+        )
+        for flag in _SYNOPSIS_FLAG_RE.findall(line)
+        if flag not in known
+    ]
 
 
 def _format_failure(findings: list[Finding], header: str) -> str:
@@ -589,19 +668,21 @@ def test_all_elspais_strings_in_python_source_use_real_flags(
 def test_all_elspais_strings_in_markdown_docs_use_real_flags(
     subcommand_specs: dict[str, SubcommandSpec],
 ) -> None:
-    """Every `elspais <cmd> ...` example in docs/**/*.md must use real
-    flags, real action names, and valid Literal positional choices.
+    """Every `elspais <cmd> ...` example in the packaged and repository
+    command references must use real flags, real action names, and valid
+    Literal positional choices -- including options carried on the
+    continuation lines of a multi-line synopsis.
     """
     assert DOCS_ROOT.is_dir(), f"Docs root missing: {DOCS_ROOT}"
+    assert REPO_DOCS_CLI_ROOT.is_dir(), f"Docs root missing: {REPO_DOCS_CLI_ROOT}"
 
     all_findings: list[Finding] = []
-    for md_file in DOCS_ROOT.rglob("*.md"):
-        rel = md_file.relative_to(SRC_ROOT.parent.parent)
+    for md_file in [*DOCS_ROOT.rglob("*.md"), *REPO_DOCS_CLI_ROOT.rglob("*.md")]:
+        rel = md_file.relative_to(REPO_ROOT)
         text = md_file.read_text(encoding="utf-8")
-        for lineno, line in enumerate(text.split("\n"), 1):
-            if "elspais" not in line:
-                continue
+        for lineno, line, cmd in _iter_doc_lines(text):
             all_findings.extend(_scan_string(line, lineno, str(rel), subcommand_specs))
+            all_findings.extend(_scan_synopsis_flags(line, cmd, lineno, str(rel), subcommand_specs))
 
     if all_findings:
         pytest.fail(
