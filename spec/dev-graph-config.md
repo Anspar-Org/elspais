@@ -207,7 +207,7 @@ D. Rejection of the legacy values `named` and `alphanumeric` SHALL produce a fix
 
 E. `AssertionConfig` SHALL include a `separator` field (str, default `"-"`) used (with `re.escape`) as the boundary between the component and the optional *Assertion* suffix in the canonical regex.
 
-F. Ambiguous combinations SHALL be rejected at config validation time: `style = "snake_case"` with `separator = "_"` plus a non-uppercase `label_style`; `style = "kebab-case"` with `separator = "-"` plus a non-uppercase `label_style`. The error message SHALL suggest changing `separator` to a non-overlapping character.
+F. The *Assertion* separator SHALL NOT be a character that can legally appear in a component or in an *Assertion* label. A configuration that violates this SHALL be rejected at validation time, naming the offending character, the style that makes it legal, and a non-overlapping character to use instead.
 
 G. [Removed - superseded by REQ-d00268, which extends single-authority derivation from the component sub-pattern to the whole identifier grammar]
 
@@ -215,9 +215,20 @@ H. An *Assertion* label series SHALL be one of two ordered alphabets: `uppercase
 
 I. An *Assertion* label series configured as `alphanumeric` SHALL run 0 to 9 and then A to Z, giving thirty-six labels in that order.
 
+J. The multi-*Assertion* separator SHALL NOT be a character that can legally appear in an *Assertion* label.
+
+### Rationale
+
+An identifier is read left to right, so every boundary inside it has to be findable without knowing what follows. A separator drawn from the characters a component may itself contain destroys that boundary: the component absorbs the separator and the label after it, and the reference resolves to a different requirement rather than failing. The result is a wrong answer, not an error, which is why this is rejected at validation time rather than warned about later.
+
+Restricting the rule to the punctuation a style happens to use internally would leave the same trap open elsewhere — a digit separator under a numeric component, a letter separator under a camelCase one. F and J are therefore stated over the whole legal character set of the part each separator bounds, which is derivable from the style and needs no enumeration here.
+
+Uppercase *Assertion* labels do make a lowercase component mechanically unambiguous, and that exception was previously how an overlapping separator was tolerated. It is a subtlety every reader has to re-derive, and it silently changes which requirement a mis-cased reference names, so the tolerance is not worth its cost.
+
 ### Changelog
 
 - 2026-08-10 | e4e4a5fc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-08 | 7a2823ed | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-08 | 427d0f5f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 7857498c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | e04a4e37 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth

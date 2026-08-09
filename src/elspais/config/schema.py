@@ -101,8 +101,35 @@ class AssociatedPatternConfig(_StrictModel):
     separator: str = "-"
 
 
-_AMBIGUOUS_LABEL_STYLES = {"numeric", "numeric_1based", "alphanumeric"}
-_STYLE_INTERNAL_SEP = {"snake_case": "_", "kebab-case": "-"}
+def _legal_chars(pattern: str) -> set[str]:
+    """The printable characters ``pattern`` can match at some position.
+
+    Probed rather than parsed: a component style may be an arbitrary
+    user-supplied regex, so the set is discovered by asking the pattern
+    itself which characters it accepts.
+    """
+    import re as _re
+
+    compiled = _re.compile(pattern)
+    legal: set[str] = set()
+    for code in range(0x21, 0x7F):
+        char = chr(code)
+        # A character is legal in this part if it can appear anywhere a
+        # match extends over -- leading, interior, or trailing.
+        for probe in (char, f"a{char}", f"a{char}b", f"{char}a"):
+            m = compiled.match(probe)
+            if m and char in m.group(0):
+                legal.add(char)
+                break
+    return legal
+
+
+_LABEL_STYLE_PATTERNS = {
+    "uppercase": r"[A-Z]",
+    "numeric": r"[0-9]{1,2}",
+    "alphanumeric": r"[0-9A-Z]",
+    "numeric_1based": r"[1-9][0-9]?",
+}
 
 
 # Implements: REQ-d00212-G, REQ-d00251-C, REQ-d00251-F
@@ -123,22 +150,50 @@ class IdPatternsConfig(_StrictModel):
                 'component.style = "regex" requires a non-empty `pattern` field.\n'
                 'Example: pattern = "[A-Z][a-zA-Z0-9]+"'
             )
-        # REQ-d00251-F: snake/kebab with a separator equal to their internal
-        # separator is ambiguous unless labels are uppercase-only.
-        internal_sep = _STYLE_INTERNAL_SEP.get(self.component.style)
-        if (
-            internal_sep is not None
-            and self.assertions.separator == internal_sep
-            and self.assertions.label_style in _AMBIGUOUS_LABEL_STYLES
-        ):
+        # REQ-d00251-F+H: a separator drawn from the characters the part
+        # before it may itself contain is absorbed by that part, taking the
+        # label with it -- the reference then resolves to a different
+        # requirement instead of failing.
+        from elspais.utilities.patterns import ComponentFormat, component_regex
+
+        component_pattern = component_regex(
+            ComponentFormat(
+                style=self.component.style,
+                digits=self.component.digits,
+                leading_zeros=self.component.leading_zeros,
+                pattern=self.component.pattern,
+            )
+        )
+        label_pattern = _LABEL_STYLE_PATTERNS.get(self.assertions.label_style, r"[A-Z]")
+        component_chars = _legal_chars(component_pattern)
+        label_chars = _legal_chars(label_pattern)
+
+        def _suggest(taken: set[str]) -> str:
+            for candidate in ("/", ":", ".", "#", "|", "~"):
+                if candidate not in taken:
+                    return candidate
+            return "/"
+
+        sep_taken = component_chars | label_chars
+        if self.assertions.separator in sep_taken:
+            where = "a component" if self.assertions.separator in component_chars else "a label"
             raise ValueError(
-                f'Ambiguous configuration: style "{self.component.style}" uses '
-                f'"{internal_sep}" inside component names, and assertions.separator '
-                f'is also "{internal_sep}" while label_style is '
-                f'"{self.assertions.label_style}" (non-uppercase).\n'
-                "Pick a different `assertions.separator` "
-                '(e.g. ":") so the parser can tell where the component ends '
-                "and the assertion label begins."
+                f'assertions.separator is "{self.assertions.separator}", which can '
+                f"legally appear in {where} under "
+                f'component.style = "{self.component.style}" / '
+                f'label_style = "{self.assertions.label_style}".\n'
+                f"The component would absorb the separator and the label after it, so "
+                f"the reference would resolve to a different requirement rather than "
+                f"fail.\n"
+                f'Use a character neither can contain, e.g. "{_suggest(sep_taken)}".'
+            )
+        if self.assertions.multi_separator in label_chars:
+            raise ValueError(
+                f'assertions.multi_separator is "{self.assertions.multi_separator}", '
+                f"which can legally appear in a label under label_style = "
+                f'"{self.assertions.label_style}".\n'
+                f"Two labels would run together with no findable boundary.\n"
+                f'Use a character a label cannot contain, e.g. "{_suggest(label_chars)}".'
             )
         return self
 

@@ -133,13 +133,15 @@ def _make_project(
 
 # Shared matrix of (separator, multi_separator, ref, expected assertion
 # labels) reused by the CODE/TEST ``Verifies:`` test below and the journey
-# ``Validates:`` tests further down.
+# ``Validates:`` tests further down. The project's component style is
+# kebab-case, so every separator here is a character a component cannot
+# contain.
 _SEPARATOR_COMBINATIONS = [
-    ("-", "+", "REQ-p-widget-A+C", ["A", "C"]),
-    ("/", "+", "REQ-p-widget/A+C", ["A", "C"]),  # currently drops suffix
+    ("/", "+", "REQ-p-widget/A+C", ["A", "C"]),
     ("/", "/", "REQ-p-widget/A/C", ["A", "C"]),
     (":", "+", "REQ-p-widget:A+C", ["A", "C"]),
-    ("-", ",", "REQ-p-widget-A,C", ["A", "C"]),
+    (".", "+", "REQ-p-widget.A+C", ["A", "C"]),
+    (":", ",", "REQ-p-widget:A,C", ["A", "C"]),
 ]
 
 

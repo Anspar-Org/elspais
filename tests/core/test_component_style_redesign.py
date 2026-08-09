@@ -11,6 +11,8 @@ the assertion it exercises.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from pydantic import ValidationError
 
@@ -64,6 +66,7 @@ def _elspais_config_payload(
     style: str,
     pattern: str | None = None,
     separator: str | None = None,
+    multi_separator: str | None = None,
     label_style: str = "uppercase",
 ) -> dict:
     """Build a minimal payload for ``ElspaisConfig.model_validate``."""
@@ -73,6 +76,8 @@ def _elspais_config_payload(
     assertions: dict = {"label_style": label_style}
     if separator is not None:
         assertions["separator"] = separator
+    if multi_separator is not None:
+        assertions["multi_separator"] = multi_separator
     return {
         "id-patterns": {
             "component": component,
@@ -96,7 +101,9 @@ class TestStyleVocabulary:
             ("camelCase", {}),
             ("PascalCase", {}),
             ("snake_case", {}),
-            ("kebab-case", {}),
+            # "-" cannot bound a kebab-case component, so this style is
+            # exercised with a separator it does not overlap.
+            ("kebab-case", {"separator": "/"}),
             ("regex", {"pattern": "[A-Z][a-z]+"}),
         ],
     )
@@ -372,14 +379,14 @@ class TestConfigurableAssertionSeparator:
         assert pid.component == "action-dispatch"
         assert pid.assertions == ["1", "2", "3"]
 
-    def test_default_dash_separator_still_works(self):
+    def test_default_dash_separator_under_a_non_overlapping_style(self):
         # Verifies: REQ-d00251-E
-        # Backward compatibility: kebab + "-" separator + uppercase labels
-        # remains the supported case.
-        r = _build_resolver(style="kebab-case", separator="-", label_style="uppercase")
-        pid = r.parse("EVS-PRD-action-dispatch-A")
+        # "-" is the default separator and stays usable under any component
+        # style that cannot itself contain "-".
+        r = _build_resolver(style="camelCase", separator="-", label_style="uppercase")
+        pid = r.parse("EVS-PRD-actionDispatch-A")
         assert pid is not None
-        assert pid.component == "action-dispatch"
+        assert pid.component == "actionDispatch"
         assert pid.assertions == ["A"]
 
 
@@ -388,40 +395,116 @@ class TestConfigurableAssertionSeparator:
 # ---------------------------------------------------------------------------
 
 
+# (component style, separator, label_style, component pattern). Each entry
+# names a separator drawn from the alphabet of the part it is meant to
+# bound: the component swallows it along with the label behind it, or two
+# labels run together.
 AMBIGUOUS_COMBOS = [
-    ("snake_case", "_", "numeric"),
-    ("snake_case", "_", "numeric_1based"),
-    ("snake_case", "_", "alphanumeric"),
-    ("kebab-case", "-", "numeric"),
-    ("kebab-case", "-", "numeric_1based"),
-    ("kebab-case", "-", "alphanumeric"),
+    ("snake_case", "_", "numeric", None),
+    ("snake_case", "_", "numeric_1based", None),
+    ("snake_case", "_", "alphanumeric", None),
+    ("snake_case", "_", "uppercase", None),
+    ("kebab-case", "-", "numeric", None),
+    ("kebab-case", "-", "numeric_1based", None),
+    ("kebab-case", "-", "alphanumeric", None),
+    ("kebab-case", "-", "uppercase", None),
+    # The overlap is not confined to the punctuation a case style uses
+    # internally: digits and letters are component characters too.
+    ("numeric", "5", "uppercase", None),
+    ("camelCase", "x", "uppercase", None),
+    # A custom component pattern is read the same way, by asking the
+    # pattern itself which characters it admits.
+    ("regex", ".", "uppercase", "[A-Z.]+"),
+    # The label's own alphabet is the other half of the rule.
+    ("numeric", "A", "uppercase", None),
+    ("numeric", "3", "numeric", None),
 ]
 
 UNAMBIGUOUS_COMBOS = [
-    ("snake_case", "_", "uppercase"),
-    ("kebab-case", "-", "uppercase"),
-    ("snake_case", ":", "numeric"),
-    ("kebab-case", ":", "numeric"),
+    ("numeric", "-", "uppercase", None),
+    ("snake_case", "-", "uppercase", None),
+    ("camelCase", "-", "uppercase", None),
+    ("kebab-case", "/", "uppercase", None),
+    ("snake_case", ":", "numeric", None),
+    ("kebab-case", ":", "numeric", None),
+    ("regex", "/", "uppercase", "[A-Z.]+"),
 ]
+
+# (label_style, multi_separator) pairs where the multi-separator is itself a
+# legal label character, so a two-label reference has no findable boundary.
+COLLIDING_MULTI_SEPARATORS = [
+    ("uppercase", "A"),
+    ("numeric", "7"),
+    ("numeric_1based", "3"),
+    ("alphanumeric", "B"),
+]
+
+_SUGGESTION_RE = re.compile(r'e\.g\. "(.)"')
+
+
+def _suggested_replacement(msg: str) -> str:
+    """The replacement character the rejection message offers."""
+    match = _SUGGESTION_RE.search(msg)
+    assert match is not None, f"Rejection must suggest a replacement character. msg={msg}"
+    return match.group(1)
 
 
 class TestAmbiguityRejection:
-    @pytest.mark.parametrize("style,separator,label_style", AMBIGUOUS_COMBOS)
-    def test_ambiguous_combos_rejected(self, style, separator, label_style):
+    @pytest.mark.parametrize("style,separator,label_style,pattern", AMBIGUOUS_COMBOS)
+    def test_ambiguous_combos_rejected(self, style, separator, label_style, pattern):
         # Verifies: REQ-d00251-F
-        payload = _elspais_config_payload(style=style, separator=separator, label_style=label_style)
+        payload = _elspais_config_payload(
+            style=style, pattern=pattern, separator=separator, label_style=label_style
+        )
         with pytest.raises(ValidationError) as excinfo:
             ElspaisConfig.model_validate(payload)
-        # Per REQ-d00251-F: the error must suggest changing `separator` to a
-        # non-overlapping character — i.e. mention `separator` and either
-        # the style or label_style values being conflicted.
         msg = str(excinfo.value)
-        assert "separator" in msg, f"Ambiguity error must mention `separator`. msg={msg}"
+        assert "separator" in msg, f"Rejection must name the offending field. msg={msg}"
+        assert (
+            f'"{separator}"' in msg
+        ), f"Rejection must name the character {separator!r}. msg={msg}"
+        assert (
+            style in msg and label_style in msg
+        ), f"Rejection must name the styles that make {separator!r} legal. msg={msg}"
 
-    @pytest.mark.parametrize("style,separator,label_style", UNAMBIGUOUS_COMBOS)
-    def test_unambiguous_combos_load(self, style, separator, label_style):
+        # The suggested replacement has to actually clear the conflict.
+        suggestion = _suggested_replacement(msg)
+        assert suggestion != separator
+        ElspaisConfig.model_validate(
+            _elspais_config_payload(
+                style=style, pattern=pattern, separator=suggestion, label_style=label_style
+            )
+        )
+
+    @pytest.mark.parametrize("label_style,multi_separator", COLLIDING_MULTI_SEPARATORS)
+    def test_multi_separator_inside_label_alphabet_rejected(self, label_style, multi_separator):
+        # Verifies: REQ-d00251-H
+        payload = _elspais_config_payload(
+            style="numeric", label_style=label_style, multi_separator=multi_separator
+        )
+        with pytest.raises(ValidationError) as excinfo:
+            ElspaisConfig.model_validate(payload)
+        msg = str(excinfo.value)
+        assert "multi_separator" in msg, f"Rejection must name the offending field. msg={msg}"
+        assert (
+            f'"{multi_separator}"' in msg
+        ), f"Rejection must name the character {multi_separator!r}. msg={msg}"
+        assert label_style in msg, f"Rejection must name the label style. msg={msg}"
+
+        suggestion = _suggested_replacement(msg)
+        assert suggestion != multi_separator
+        ElspaisConfig.model_validate(
+            _elspais_config_payload(
+                style="numeric", label_style=label_style, multi_separator=suggestion
+            )
+        )
+
+    @pytest.mark.parametrize("style,separator,label_style,pattern", UNAMBIGUOUS_COMBOS)
+    def test_unambiguous_combos_load(self, style, separator, label_style, pattern):
         # Verifies: REQ-d00251-F
-        payload = _elspais_config_payload(style=style, separator=separator, label_style=label_style)
+        payload = _elspais_config_payload(
+            style=style, pattern=pattern, separator=separator, label_style=label_style
+        )
         cfg = ElspaisConfig.model_validate(payload)
         assert cfg.id_patterns.component.style == style
         assert cfg.id_patterns.assertions.label_style == label_style

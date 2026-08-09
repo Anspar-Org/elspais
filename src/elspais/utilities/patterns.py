@@ -100,12 +100,23 @@ class IdGrammar:
     multi_separator: str
 
 
-def component_regex(component: ComponentFormat) -> str:
+# Each case-style's own internal punctuation. A notation that cannot spell it
+# substitutes its own character for it, so it is a parameter rather than a
+# literal inside the pattern.
+STYLE_INTERNAL_SEPARATOR = {"snake_case": "_", "kebab-case": "-"}
+
+
+def component_regex(component: ComponentFormat, internal_separator: str | None = None) -> str:
     """Resolve a ComponentFormat to its regex string.
 
-    Sole authority for the style → regex mapping. Both ``IdResolver`` and
-    the lark grammar pattern builder call this — no other code path may
+    Sole authority for the style → regex mapping. No other code path may
     contain a component-style dispatch.
+
+    Args:
+        internal_separator: Spell a case-style's internal punctuation with
+            this character instead of its own. A Python test name can write
+            ``data-export`` only as ``data_export``, and a pattern still
+            demanding the hyphen would match nothing.
     """
     style = component.style
     if style == "numeric":
@@ -116,10 +127,9 @@ def component_regex(component: ComponentFormat) -> str:
         return r"[a-z][a-zA-Z0-9]+"
     if style == "PascalCase":
         return r"[A-Z][a-zA-Z0-9]+"
-    if style == "snake_case":
-        return r"[a-z][a-z0-9]*(?:_[a-z0-9]+)*"
-    if style == "kebab-case":
-        return r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*"
+    if style in ("snake_case", "kebab-case"):
+        sep = re.escape(internal_separator or STYLE_INTERNAL_SEPARATOR[style])
+        return rf"[a-z][a-z0-9]*(?:{sep}[a-z0-9]+)*"
     if style == "regex":
         return component.pattern or r"[A-Za-z][A-Za-z0-9]+"
     # Defensive: schema validation already rejects unknown values, but
@@ -246,6 +256,7 @@ class IdResolver:
                     self._reverse_aliases[alias_name] = {}
                 self._reverse_aliases[alias_name][alias_value] = type_code
 
+        self._ci_forms: list[tuple[str, re.Pattern, str | None]] | None = None
         # Compile all forms: list of (form_name, compiled_regex, type_alias_name_or_None)
         # type_alias_name is the TypeDef alias name used in the template (e.g., "letter")
         self._forms: list[tuple[str, re.Pattern, str | None]] = []
@@ -384,7 +395,7 @@ class IdResolver:
         alias_values = self.all_type_alias_values()
         level = "|".join(re.escape(v) for v in alias_values) if alias_values else "[a-z]"
 
-        component = component_regex(cfg.component)
+        component = component_regex(cfg.component, internal_separator=separator)
         if cfg.component.style in ("camelCase", "PascalCase", "snake_case", "kebab-case"):
             # A case-style says case is what distinguishes a component from
             # anything else, so the fragment stays case-sensitive even when a
@@ -759,19 +770,103 @@ class IdResolver:
                 values.add(code)
         return sorted(values)
 
+    def _case_insensitive_forms(self) -> list[tuple[str, re.Pattern, str | None]]:
+        """The compiled forms again, ignoring case. Built once, on demand."""
+        if self._ci_forms is None:
+            self._ci_forms = [
+                (name, re.compile(regex.pattern, regex.flags | re.IGNORECASE), alias)
+                for name, regex, alias in self._forms
+            ]
+        return self._ci_forms
+
+    # Implements: REQ-d00268-D
+    def _canonicalize_case(self, cleaned: str) -> str | None:
+        """Rewrite a reference's level code and *Assertion* labels to canonical case.
+
+        A reference is recognised case-insensitively but parsed case-sensitively,
+        so without this a mis-cased label reads as an identifier no repository
+        claims -- reported as foreign rather than as the typo it is.
+
+        The component is deliberately not touched. Under a case-style its case
+        is its identity, so a mis-cased component is a different component, not
+        the same one spelled differently, and it stays unresolved.
+        """
+        for _form_name, regex, alias_used in self._case_insensitive_forms():
+            m = regex.match(cleaned)
+            if not m:
+                continue
+            groups = m.groupdict()
+
+            component = groups.get("component", "")
+            if component and not re.fullmatch(component_regex(self.config.component), component):
+                return None
+
+            raw_type = groups.get("type", "")
+            type_code = raw_type
+            if alias_used and alias_used in self._reverse_aliases:
+                by_lower = {k.lower(): v for k, v in self._reverse_aliases[alias_used].items()}
+                type_code = by_lower.get(raw_type.lower(), raw_type)
+            if not type_code and self.config.types:
+                type_code = next(iter(self.config.types))
+            if type_code not in self.config.types:
+                return None
+
+            af = self.config.assertions
+            labels = [
+                label.upper() if af.label_style in ("uppercase", "alphanumeric") else label
+                for label in (groups.get("assertions") or "").split(af.multi_separator)
+                if label
+            ]
+            return self.render_canonical(
+                ParsedId(
+                    namespace=self.config.namespace,
+                    type_code=type_code,
+                    component=component,
+                    assertions=labels,
+                    fqn="",
+                )
+            )
+        return None
+
+    def _fold_notation(self, raw_ref: str) -> str:
+        """Rewrite an alternate notation onto the configured punctuation.
+
+        A reference embedded in a Python identifier can spell every boundary
+        only as ``_``. Folding restores the configured characters: the
+        *Assertion* separator where a label follows, and the component's own
+        punctuation everywhere else.
+        """
+        if "_" not in raw_ref:
+            return raw_ref
+        internal = STYLE_INTERNAL_SEPARATOR.get(self.config.component.style, "-")
+        sep = self.config.assertions.separator
+        all_internal = raw_ref.replace("_", internal)
+        if self.parse(all_internal) is not None:
+            # Every underscore was the component's own punctuation.
+            return all_internal
+        # No label boundary found in the component's own punctuation, so the
+        # trailing group is a label: fold the last boundary to the separator.
+        head, _, tail = raw_ref.rpartition("_")
+        if head and tail:
+            return head.replace("_", internal) + sep + tail
+        return raw_ref.replace("_", internal)
+
     def normalize_ref(self, raw_ref: str) -> str:
         """Normalize a raw reference string to canonical form.
 
-        Handles underscore-to-dash conversion and prefix case normalization.
-        Returns the cleaned (dash-normalized, case-fixed) form even if
-        it doesn't match any known canonical pattern.
+        Handles underscore-to-dash conversion and case normalization of every
+        part whose case the grammar does not treat as significant. Returns the
+        cleaned form even if it doesn't match any known canonical pattern, so
+        an unresolvable reference stays visible rather than disappearing.
         """
-        cleaned = raw_ref.replace("_", "-")
+        cleaned = self._fold_notation(raw_ref)
         # Fix namespace case before parsing (parse() is case-sensitive)
         prefix = self.config.namespace
         if cleaned.lower().startswith(prefix.lower() + "-"):
             cleaned = prefix + cleaned[len(prefix) :]
         result = self.to_canonical(cleaned)
+        if result is None:
+            result = self._canonicalize_case(cleaned)
         return result if result is not None else cleaned
 
     def build_instance_id(self, prefix: str, template_id: str) -> str:

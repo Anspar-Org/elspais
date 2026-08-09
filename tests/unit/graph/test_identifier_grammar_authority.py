@@ -63,6 +63,11 @@ SNAKE_DASH = _config(
     assertions={"separator": "-"},
 )
 
+KEBAB_DASH = _config(
+    canonical="{namespace}-{level.letter}-{component}",
+    component={"style": "kebab-case", "digits": 0, "leading_zeros": False},
+)
+
 
 # ---------------------------------------------------------------------------
 # The matcher and the resolver answer for the same strings.
@@ -310,3 +315,137 @@ def test_claim_probe_refuses_what_the_resolver_rejects(
     assert resolver is not None
     assert not resolver.is_local_id(probe), "probe must be one the owning resolver rejects"
     assert federation._claim_for(probe) is None
+
+
+# ---------------------------------------------------------------------------
+# Normalization settles the case the matcher reads tolerantly.
+# ---------------------------------------------------------------------------
+#
+# The reference matcher recognises an identifier without regard to case, so a
+# mis-cased reference reaches normalization. Whatever normalization hands on is
+# then parsed case-sensitively. Every part whose case the grammar does not
+# treat as significant -- the namespace, the level code, the assertion labels
+# -- is therefore settled here, or the reference arrives at the resolver as a
+# string no repository claims and a local typo is reported as belonging to
+# another repository.
+#
+# The component is the exception. Under a case-style its case is its identity,
+# so a mis-cased component names a different component and must stay
+# unresolved. Note KEBAB_DASH is not exercised with a lowercase assertion
+# label: with a kebab-case component and "-" separating the labels, "-a" is
+# absorbed by the component, which is the separate ambiguity REQ-d00251-F
+# governs.
+
+NUMERIC = _config()
+
+
+def _matcher_recognises(resolver: IdResolver, text: str) -> bool:
+    """Whether a reference matcher would pick ``text`` out of a source file.
+
+    Two notations are rendered from the one grammar, and text is read
+    tolerantly of case in both, so a reference the matcher hands to
+    normalization may be spelled either way.
+    """
+    if resolver.multi_assertion_reference_regex().fullmatch(text) is not None:
+        return True
+    underscore = _reference_regex(resolver.grammar(separator="_"))
+    return re.fullmatch(underscore.pattern, text, re.IGNORECASE) is not None
+
+
+@pytest.mark.parametrize(
+    "config, raw, expected, local",
+    [
+        # Numeric component, "letter" level alias, uppercase labels.
+        (NUMERIC, "REQ-d00001-a", "REQ-d00001-A", True),  # label case
+        (NUMERIC, "req-D00001-A", "REQ-d00001-A", True),  # namespace and level case
+        (NUMERIC, "REQ_d00001_a", "REQ-d00001-A", True),  # underscore notation
+        (NUMERIC, "REQ-d00001-a+b", "REQ-d00001-A+B", True),  # multi-assertion
+        (NUMERIC, "XXX-d00001-a", "XXX-d00001-a", False),  # foreign namespace
+        # kebab-case component: the component's own case is load-bearing.
+        (KEBAB_DASH, "REQ-p-widget-A", "REQ-p-widget-A", True),
+        (KEBAB_DASH, "REQ-p-Widget-A", "REQ-p-Widget-A", False),
+    ],
+)
+def test_normalize_ref_settles_case_the_grammar_does_not_own(
+    config: dict, raw: str, expected: str, local: bool
+) -> None:
+    # Verifies: REQ-d00268-D
+    resolver = build_resolver(config)
+
+    normalized = resolver.normalize_ref(raw)
+
+    assert normalized == expected
+    assert resolver.is_local_id(normalized) is local
+
+
+@pytest.mark.parametrize(
+    "variant",
+    [
+        "REQ-d00001-A",  # already canonical
+        "REQ-d00001-a",
+        "req-d00001-a",
+        "REQ-D00001-A",
+        "rEq-D00001-a",
+        "REQ_d00001_a",  # underscore notation, as a test function name spells it
+        "req_D00001_A",
+    ],
+)
+def test_matcher_and_resolver_agree_after_normalization(variant: str) -> None:
+    # Verifies: REQ-d00268-D
+    """Whatever the matcher recognises, the resolver claims once normalized.
+
+    The matcher compiles case-insensitively and the resolver parses
+    case-sensitively. Normalization is the only place that difference can be
+    reconciled, so a string the matcher recognises must survive it as one the
+    resolver accepts. Otherwise the two surfaces answer for different sets of
+    strings and the severity of a broken reference depends on which was asked.
+    """
+    resolver = build_resolver(NUMERIC)
+    assert _matcher_recognises(resolver, variant), (
+        f"{variant!r} is not a case variant the matcher recognises, so it cannot "
+        f"test the agreement"
+    )
+
+    normalized = resolver.normalize_ref(variant)
+
+    assert resolver.is_local_id(normalized), (
+        f"the matcher recognises {variant!r} but the resolver refuses its "
+        f"normalized form {normalized!r}, so a local typo is reported as a "
+        f"reference belonging to another repository"
+    )
+
+
+@pytest.mark.parametrize(
+    "config, raw",
+    [
+        # A case-style component's case is its identity: this names a
+        # component that does not exist, not "widget" spelled differently.
+        (KEBAB_DASH, "REQ-p-Widget-A"),
+        # Another repository's namespace: not this resolver's to rewrite.
+        (NUMERIC, "XXX-d00001-a"),
+    ],
+)
+def test_normalize_ref_leaves_what_it_cannot_claim_untouched(config: dict, raw: str) -> None:
+    # Verifies: REQ-d00268-D
+    resolver = build_resolver(config)
+
+    normalized = resolver.normalize_ref(raw)
+
+    assert normalized == raw, "an unclaimable reference is passed through, not rewritten"
+    assert not resolver.is_local_id(normalized), "and it stays unresolved"
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("REQ-d00001-a+b+c", "REQ-d00001-A+B+C"),
+        ("REQ-d00001-A+b+C", "REQ-d00001-A+B+C"),
+        ("REQ-d00001-a+B+c", "REQ-d00001-A+B+C"),
+    ],
+)
+def test_every_assertion_label_is_canonicalized(raw: str, expected: str) -> None:
+    # Verifies: REQ-d00268-D
+    """A multi-assertion reference is a list of labels, each one settled."""
+    resolver = build_resolver(NUMERIC)
+
+    assert resolver.normalize_ref(raw) == expected
