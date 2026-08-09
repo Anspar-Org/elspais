@@ -44,7 +44,7 @@
  │   ├── diff.py                 # Diff utilities                                                            
 
  ├── commands/                   # CLI IMPLEMENTATIONS (thin wrappers)                                       
- │   ├── validate.py             # elspais validate                                                          
+ │   ├── report.py               # elspais checks                                                            
  │   ├── trace.py                # elspais trace                                                             
  │   ├── analyze.py              # elspais analyze                                                           
  │   ├── fix_cmd.py              # elspais fix                                                              

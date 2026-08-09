@@ -56,7 +56,7 @@ Runs before pushing with PR-aware blocking behavior:
 | Python quality | Full ruff + black check on src/ | `ruff`, `black` |
 | Markdown linting | markdownlint on changed .md files | `markdownlint` |
 | Secret detection | Scans for leaked secrets | `gitleaks` |
-| Fixture validation | Runs elspais validate on fixtures | - |
+| Fixture validation | Runs elspais checks on fixtures | - |
 | Full test suite | pytest tests/ | `pytest` |
 
 ## Required Tools

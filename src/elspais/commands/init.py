@@ -37,7 +37,7 @@ Delete this file after reviewing the structure.
 - **Rationale**: Optional explanation section (non-normative)
 - **Footer**: `*End* *Title* | **Hash**: XXXXXXXX` - hash computed by `elspais fix`
 
-Run `elspais format` for more templates and `elspais validate` to check this file.
+Run `elspais format` for more templates and `elspais checks` to check this file.
 
 *End* *Example Requirement Title* | **Hash**: 00000000
 """
@@ -128,7 +128,7 @@ def create_template_requirement(args: argparse.Namespace) -> int:
     print("Next steps:")
     print("  1. Review the example to understand the format")
     print("  2. Delete or rename it when creating real requirements")
-    print("  3. Run `elspais validate` to check format compliance")
+    print("  3. Run `elspais checks` to check format compliance")
     print("  4. Run `elspais fix` to compute content hashes")
 
     return 0

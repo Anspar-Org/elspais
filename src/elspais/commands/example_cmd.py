@@ -203,7 +203,7 @@ A. The system SHALL <do something>.
 3. **Hash** - Auto-computed with `elspais fix`
 4. **Sequential labels** - A, B, C... don't skip letters
 
-Run `elspais validate` to check format compliance.
+Run `elspais checks` to check format compliance.
 """
 
 

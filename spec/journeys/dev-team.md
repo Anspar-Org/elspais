@@ -17,10 +17,10 @@ Validates: REQ-p00001, REQ-p00002, REQ-p00004
 2. She opens the existing PRD spec file and reads REQ-p00012 to understand what the feature needs to accomplish.
 3. She creates a new file `spec/dev-reporting.md` and writes a DEV requirement header with `Implements: REQ-p00012`.
 4. She writes the Assertions section with specific, testable obligations using prescriptive language.
-5. She runs `elspais validate` to check the requirement format.
-6. The validator reports errors: missing hash and a malformed status field.
+5. She runs `elspais checks` to check the requirement format.
+6. The checks report errors: missing hash and a malformed status field.
 7. She fixes the status field and runs `elspais fix REQ-d00042` to generate the content hash.
-8. She re-runs `elspais validate` and confirms all checks pass.
+8. She re-runs `elspais checks` and confirms all checks pass.
 9. She commits the new requirement file to her feature branch.
 
 ## Expected Outcome
@@ -47,7 +47,7 @@ Validates: REQ-p00001, REQ-p00050, REQ-p00060
 5. She asks the assistant to show the full details of REQ-p00003 including its assertions and child requirements.
 6. She asks the assistant to draft a new DEV requirement implementing REQ-p00003, covering API token validation.
 7. The assistant creates the requirement in the correct format with assertions, implements reference, and placeholder hash.
-8. Sarah reviews the draft, adjusts the wording, and runs `elspais validate` to confirm correctness.
+8. Sarah reviews the draft, adjusts the wording, and runs `elspais checks` to confirm correctness.
 
 ## Expected Outcome
 
