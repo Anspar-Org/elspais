@@ -34,7 +34,9 @@ stats = ""
 #
 # Client liveness: a daemon auto-started on behalf of a session records
 # that session's PID as `client_pid` in .elspais/daemon.json, and every
-# later session that reuses the daemon is added to `client_pids`. It exits
+# later session that reuses the daemon is added to the `clients` list,
+# where each entry names the kind of handle it is (`pid`, or `session`
+# for a client present only as a stream it holds open). It exits
 # shortly after the last of them is gone, even when cli_ttl < 0 — orphaned
 # daemons do not accumulate, and a daemon somebody is still using is not
 # shut down under them. A client is identified at the moment it is

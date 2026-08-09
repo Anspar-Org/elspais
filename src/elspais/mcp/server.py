@@ -7511,6 +7511,16 @@ def run_server(
                     trigger="no recorded client was running",
                 )
 
+            # Implements: REQ-o00074-A, REQ-o00074-E
+            # A client that supplies no process identifier can still be
+            # holding a stream open, and that is a handle of the same
+            # kind. Looked up on each check rather than captured, so the
+            # order in which the app and the watchdog are built does not
+            # decide whether the handle is seen at all.
+            def _sessions_held() -> bool:
+                tracker = state.shared.get("session_tracker")
+                return bool(tracker is not None and tracker.held())
+
             interval = float(_os.environ.get("_ELSPAIS_CLIENT_CHECK_INTERVAL", "60"))
             grace = float(_os.environ.get("_ELSPAIS_CLIENT_GRACE", str(int(DEFAULT_GRACE_SECONDS))))
             watchdog = ClientWatchdog(
@@ -7520,6 +7530,7 @@ def run_server(
                 grace_seconds=grace,
                 lock=state.shared.write_lock,
                 stop_fn=_stop,
+                extra_liveness_fn=_sessions_held,
             )
             # Published so the adoption route can register the clients that
             # pick this daemon up after its first one is gone.

@@ -28,6 +28,15 @@ pytestmark = [
 ]
 
 
+def _recorded_pids(info: dict) -> list[int]:
+    """Process-id client handles published in a daemon's state record.
+
+    The record describes each handle by kind, because a client can be
+    present as a held stream rather than as a process id (REQ-o00074-B).
+    """
+    return sorted(c["id"] for c in (info.get("clients") or []) if c.get("kind") == "pid")
+
+
 # ---------------------------------------------------------------------------
 # From test_cli_commands.py::TestInit
 # ---------------------------------------------------------------------------
@@ -695,7 +704,7 @@ class TestDaemonClientLiveness:
             assert info["client_pid"] == client.pid
             # REQ-o00074-B: the recorded client set, not just the starter,
             # is what an operator reads to ask why the daemon is still up.
-            assert info["client_pids"] == [client.pid]
+            assert _recorded_pids(info) == [client.pid]
             daemon_pid = info["pid"]
             os.kill(daemon_pid, 0)  # daemon alive while client alive
 
@@ -921,7 +930,7 @@ class TestDaemonClientLiveness:
 
             info = json.loads(daemon_json.read_text())
             assert info["pid"] == daemon_pid, "the second client restarted the daemon"
-            assert sorted(info["client_pids"]) == sorted(
+            assert _recorded_pids(info) == sorted(
                 [starter.pid, adopter.pid]
             ), f"the adopting client was not published in the state record: {info}"
 
@@ -1117,7 +1126,7 @@ class TestDaemonClientLiveness:
 
             info = json.loads(daemon_json.read_text())
             assert info["pid"] == daemon_pid, "the second invocation restarted the daemon"
-            assert sorted(info["client_pids"]) == sorted(
+            assert _recorded_pids(info) == sorted(
                 [starter.pid, adopter.pid]
             ), f"the CLI reused the daemon without becoming one of its clients: {info}"
         finally:

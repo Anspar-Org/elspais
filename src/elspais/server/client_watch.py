@@ -176,6 +176,7 @@ class ClientWatchdog:
         clock: Callable[[], float] = time.monotonic,
         lock: AbstractContextManager[Any] | None = None,
         stop_fn: Callable[[], dict[str, Any]] | None = None,
+        extra_liveness_fn: Callable[[], bool] | None = None,
     ) -> None:
         self._clients: set[int] = {client_pid}
         self._clients_lock = threading.Lock()
@@ -186,6 +187,7 @@ class ClientWatchdog:
         self._alive_fn = alive_fn
         self._exit_fn = exit_fn
         self._stop_fn = stop_fn
+        self._extra_liveness_fn = extra_liveness_fn
         self._clock = clock
         self._dead_since: float | None = None
         self._warned_grace = False
@@ -220,7 +222,26 @@ class ClientWatchdog:
 
         Pruning keeps the recorded set an honest answer to "who is using
         this daemon", which assertion B publishes.
+
+        A held stream counts as a client without being a recorded pid: it
+        is a handle of a different kind, not an exception to the rule
+        (REQ-o00074-A). A source that cannot answer has said nothing
+        about whether a client is there, so its failure is reported and
+        the daemon kept — terminating on the strength of a broken
+        instrument would end a daemon no evidence says is unused.
         """
+        if self._extra_liveness_fn is not None:
+            try:
+                if self._extra_liveness_fn():
+                    return True
+            except Exception as exc:
+                print(
+                    f"WARNING: a client-liveness source could not be read ({exc!r}); "
+                    "treating this check as inconclusive and keeping the daemon.",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                return True
         with self._clients_lock:
             live = {pid for pid in self._clients if self._alive_fn(pid)}
             self._clients = live if live else self._clients

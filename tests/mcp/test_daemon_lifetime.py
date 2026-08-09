@@ -361,6 +361,59 @@ class TestAdoptingClientsJoinTheRecordedSet:
         assert wd.clients() == [222]
 
 
+class TestHeldSessionIsAClient:
+    """Validates REQ-o00074-A and REQ-o00074-E: a client can be present as a
+    held stream rather than as a process identifier, and a handle of that kind
+    binds the daemon's lifetime exactly as a recorded pid does — it keeps the
+    daemon while it lasts, and lets it go once it is gone.
+    """
+
+    def test_REQ_o00074_E_held_session_keeps_the_daemon(self):
+        """Validates REQ-o00074-E: a client present only as a held stream is
+        a client, so the daemon keeps serving while it is held even though
+        every recorded process id is gone."""
+        held = {"open": True}
+        exits: list[str] = []
+
+        def _exit() -> None:
+            if held["open"]:
+                pytest.fail("terminated while a session was held")
+            exits.append("exit")
+
+        wd = ClientWatchdog(
+            client_pid=4242,
+            pending_fn=lambda: (0, 0),
+            alive_fn=lambda pid: False,
+            exit_fn=_exit,
+            stop_fn=_ok_stop,
+            extra_liveness_fn=lambda: held["open"],
+        )
+        assert wd.check_once() is Decision.KEEP
+        held["open"] = False
+        assert wd.check_once() is Decision.EXIT_CLEAN
+        assert exits == ["exit"]
+
+    def test_REQ_o00074_E_broken_liveness_source_does_not_read_as_no_clients(self, capsys):
+        """Validates REQ-o00074-E: a liveness source that cannot answer has
+        said nothing about whether a client is there. Reading its failure as
+        'nobody is using this daemon' would terminate a daemon on the strength
+        of a broken instrument, so the check keeps the daemon and reports."""
+
+        def _boom() -> bool:
+            raise RuntimeError("tracker unavailable")
+
+        wd = ClientWatchdog(
+            client_pid=4242,
+            pending_fn=lambda: (0, 0),
+            alive_fn=lambda pid: False,
+            exit_fn=lambda: pytest.fail("terminated on a failed liveness check"),
+            stop_fn=_ok_stop,
+            extra_liveness_fn=_boom,
+        )
+        assert wd.check_once() is Decision.KEEP
+        assert "tracker unavailable" in capsys.readouterr().err
+
+
 class TestWatchdogSurvivesAFailedCheck:
     """Validates REQ-o00074-E: the obligation to terminate survives a check that
     fails. A check raising (a rebuild mid-flight, a transient OS error) must
@@ -1378,7 +1431,9 @@ class TestClientSetIsObservable:
         )
         info = json.loads(path.read_text())
         assert info["client_pid"] == 333
-        assert info["client_pids"] == [333], "the initial client set is not published"
+        assert info["clients"] == [
+            {"kind": "pid", "id": 333}
+        ], "the initial client set is not published, or not by kind of handle"
 
     def test_REQ_o00074_B_record_daemon_clients_republishes_the_whole_set(self, tmp_path):
         from elspais.mcp.daemon import record_daemon_clients, write_daemon_json
@@ -1389,7 +1444,26 @@ class TestClientSetIsObservable:
         record_daemon_clients(tmp_path, [777, 333])
 
         info = json.loads((tmp_path / ".elspais" / "daemon.json").read_text())
-        assert info["client_pids"] == [333, 777], "an adopted client is not observable"
+        assert info["clients"] == [
+            {"kind": "pid", "id": 333},
+            {"kind": "pid", "id": 777},
+        ], "an adopted client is not observable"
+
+    def test_REQ_o00074_B_held_sessions_are_published_as_their_own_kind(self, tmp_path):
+        """A client present only as a held stream is watched, and a record
+        that could only hold process ids would leave it invisible."""
+        from elspais.mcp.daemon import record_daemon_clients, write_daemon_json
+
+        write_daemon_json(
+            repo_root=tmp_path, pid=111, port=222, server_type="daemon", client_pid=333
+        )
+        record_daemon_clients(tmp_path, [333], held=2)
+
+        info = json.loads((tmp_path / ".elspais" / "daemon.json").read_text())
+        assert info["clients"] == [
+            {"kind": "pid", "id": 333},
+            {"kind": "session", "count": 2},
+        ]
 
     def test_REQ_o00074_B_record_daemon_clients_without_a_record_is_a_no_op(self, tmp_path):
         from elspais.mcp.daemon import record_daemon_clients
@@ -1411,7 +1485,7 @@ class TestExplicitStartRecordsNoClient:
         path = write_daemon_json(repo_root=tmp_path, pid=111, port=222, server_type="viewer")
         info = json.loads(path.read_text())
         assert "client_pid" not in info
-        assert "client_pids" not in info
+        assert "clients" not in info
 
     def test_REQ_o00074_C_start_daemon_without_client_scrubs_env(self, tmp_path, monkeypatch):
         """Explicit starts must not inherit a stale client PID from the env."""

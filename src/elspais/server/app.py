@@ -249,7 +249,16 @@ def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
             # /mcp/mcp while the documented /mcp answered 404.
             mcp.settings.streamable_http_path = "/"
             mcp_app = mcp.streamable_http_app()
-            routes.append(Mount("/mcp", app=mcp_app))
+            # Implements: REQ-o00074-A
+            # A client that holds a server-to-client stream open is present
+            # in a way the daemon can observe without its cooperation, which
+            # is what a client handle has to be. Published on the holder so
+            # the client watchdog can read it as a second liveness source.
+            from elspais.server.session_track import HeldSessionTracker
+
+            tracker = HeldSessionTracker()
+            state.shared["session_tracker"] = tracker
+            routes.append(Mount("/mcp", app=tracker.asgi(mcp_app)))
         except Exception as exc:
             # Tolerated failure (visible, never silent): the server still
             # serves the viewer, but a missing MCP surface must be reported.

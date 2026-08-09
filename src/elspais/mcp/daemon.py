@@ -258,25 +258,35 @@ def write_daemon_json(
     # Implements: REQ-o00074-B, REQ-o00074-C
     if client_pid is not None:
         info["client_pid"] = client_pid
-        info["client_pids"] = [client_pid]
+        # A list of process ids cannot answer "who is this daemon watching"
+        # once a handle may be a held stream instead. Each entry says what
+        # kind of handle it is.
+        info["clients"] = [{"kind": "pid", "id": client_pid}]
     daemon_json.write_text(json.dumps(info))
     return daemon_json
 
 
 # Implements: REQ-o00074-B
-def record_daemon_clients(repo_root: Path, client_pids: list[int]) -> None:
+def record_daemon_clients(repo_root: Path, client_pids: list[int], held: int = 0) -> None:
     """Publish the daemon's current client set in its state record.
 
     A lifetime rule nobody can inspect cannot be diagnosed, and the set
     grows as clients pick the daemon up, so publishing only the first one
     would answer a question nobody is asking by the time it matters.
+
+    Each entry names the kind of handle it is, because a client can be
+    present as a held stream rather than as a process id, and a record
+    that can only hold process ids leaves such a client watched and
+    invisible.
     """
     path = _daemon_json_path(repo_root)
     if not path.exists():
         return
     try:
         info = json.loads(path.read_text())
-        info["client_pids"] = sorted(client_pids)
+        info["clients"] = [{"kind": "pid", "id": p} for p in sorted(client_pids)] + (
+            [{"kind": "session", "count": held}] if held else []
+        )
         path.write_text(json.dumps(info))
     except (json.JSONDecodeError, OSError) as exc:
         print(f"warning: could not publish the daemon's client set: {exc}", file=sys.stderr)
@@ -778,7 +788,11 @@ def ensure_client_registered(repo_root: Path, info: dict | None) -> bool:
         )
         notify_unbound_lifetime(repo_root, reason)
         return False
-    if pid in (info.get("client_pids") or []):
+    # Read tolerantly: an absent key means "not recorded", so a record
+    # written by a differently-versioned process costs one wasted attach
+    # round-trip rather than a missed registration.
+    recorded = {c.get("id") for c in (info.get("clients") or []) if c.get("kind") == "pid"}
+    if pid in recorded:
         return True
     return attach_client(info, pid)
 

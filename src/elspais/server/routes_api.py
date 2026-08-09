@@ -1161,11 +1161,13 @@ async def api_attach_client(request: Request) -> JSONResponse:
         )
     attached = watchdog.attach_client(pid)
     clients = watchdog.clients()
+    tracker = state.shared.get("session_tracker")
+    held = tracker.held() if tracker is not None else 0
     if attached:
         from elspais.mcp.daemon import record_daemon_clients
 
-        record_daemon_clients(state.repo_root, clients)
-    return JSONResponse({"attached": attached, "clients": clients})
+        record_daemon_clients(state.repo_root, clients, held)
+    return JSONResponse({"attached": attached, "clients": clients, "held_sessions": held})
 
 
 async def api_dirty(request: Request) -> JSONResponse:

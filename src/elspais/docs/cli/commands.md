@@ -529,12 +529,16 @@ daemon cannot outlive every client that ever used it.
 **Clients accumulate.** A daemon is shared — it serves several clients at
 once, and it deliberately outlives the session that started it so a later
 one can pick it up. Any command that reuses a running daemon registers
-itself as one of its clients, and the set is published as `client_pids`
-in `.elspais/daemon.json`. The daemon keeps serving while any of them is
-running, so a session that adopted a daemon does not lose it when the
-session that originally started it exits. A client whose identity cannot
-be resolved (the table below) cannot register, and therefore does not
-extend the daemon's life.
+itself as one of its clients, and the set is published as `clients` in
+`.elspais/daemon.json`. Each entry says what kind of handle it is: a
+`pid`, or a `session` count for clients present only as a stream they
+hold open — an agent connected over MCP that supplies no process ID is
+watched through the connection instead. The daemon keeps serving while
+any of them is running, so a session that adopted a daemon does not lose
+it when the session that originally started it exits. A client with
+neither handle — no resolvable identity (the table below) and no held
+stream — cannot register, and therefore does not extend the daemon's
+life.
 
 The identity is recorded at the moment of the start and never inferred
 afterwards — the daemon is detached from its parent as it starts, so
