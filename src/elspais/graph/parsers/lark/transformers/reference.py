@@ -420,6 +420,7 @@ class ReferenceTransformer:
             self.resolver.config.namespace,
             self.resolver.config.assertions.multi_separator,
             self.resolver.config.assertions.separator,
+            label_pattern=self.resolver.assertion_label_pattern,
         )
         refs = []
         for m in pattern.finditer(text):

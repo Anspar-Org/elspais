@@ -63,7 +63,11 @@ CHANGELOG_HEADER_PATTERN = re.compile(r"^## Changelog\s*$", re.MULTILINE)
 
 
 def build_multi_assertion_pattern(
-    prefix: str, multi_sep: str | None, separator: str | None = None
+    prefix: str,
+    multi_sep: str | None,
+    separator: str | None = None,
+    *,
+    label_pattern: str | None = None,
 ) -> re.Pattern[str]:
     """Compile the regex for a REQ-id with optional multi-assertion suffix.
 
@@ -88,6 +92,24 @@ def build_multi_assertion_pattern(
     cannot contain it, so it stops at the true end of the requirement ID --
     an explicit ``separator + label`` group must be appended to avoid
     silently dropping the assertion suffix (CUR-1568 Task 13).
+
+    ``label_pattern`` is the regex for a single assertion label under the
+    configured label style (``IdResolver.assertion_label_pattern``). Passing
+    it opts the caller into off-config residue matching: a requirement ID
+    written with ``/`` where ``/`` is *not* the configured separator matches
+    as one token, residue included, so the reference fails to resolve and is
+    reported rather than silently truncated to a whole-requirement reference
+    that credits every assertion. Reference-resolving callers pass it; the
+    contract is that one acceptance rule governs every context a reference
+    may appear in, spec metadata line included.
+
+    Only ``/`` is treated as residue: ``-`` and ``_`` are already inside the
+    id blob and cannot be told apart from a component's own punctuation,
+    ``:`` is reserved out of every pattern element and would collide with
+    heading syntax, and a generic label class would swallow file extensions
+    under the case-insensitive match. The residue must end on a token
+    boundary, so a path-shaped tail (``spec/REQ-x/Appendix.md``) is left
+    alone rather than reported as a bad assertion label.
     """
     if not multi_sep:
         multi_sep = "+"
@@ -104,5 +126,8 @@ def build_multi_assertion_pattern(
         sep_esc = re.escape(separator)
         suffix = rf"(?:{sep_esc}{label_class}(?:{multi_esc}{label_class})*)?"
         pattern = rf"{re.escape(prefix)}[-_]{id_blob}{suffix}"
+
+    if label_pattern and separator != "/":
+        pattern += rf"(?:/{label_pattern}(?:{multi_esc}{label_pattern})*(?![A-Za-z0-9]))?"
 
     return re.compile(pattern, re.IGNORECASE)

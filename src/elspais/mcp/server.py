@@ -1780,18 +1780,25 @@ def _build_assertion_format(config: dict[str, Any]) -> dict[str, Any]:
     digits = id_patterns.component.digits
     example_num = "0" * (digits - 1) + "1"
 
-    # Read multi-assertion separator from id-patterns assertions (default: "+")
+    # Read the assertion separators from id-patterns assertions. Both examples
+    # are rendered with the configured characters: an agent handed a hardcoded
+    # "-A" in a repo configured for "/A" writes references this repo does not
+    # accept, and an off-separator reference is a broken reference, not an
+    # alternate spelling.
+    sep = assertions.separator or "-"
     ma_sep = assertions.multi_separator or "+"
+    example_req = f"{namespace}-{first_type_letter}{example_num}"
 
     return {
         "label_style": assertions.label_style,
         "max_count": assertions.max_count,
-        "example": f"{namespace}-{first_type_letter}{example_num}-A",
+        "separator": sep,
+        "example": f"{example_req}{sep}A",
         "multi_assertion_syntax": (
-            f"{namespace}-{first_type_letter}{example_num}-A{ma_sep}B{ma_sep}C expands to "
-            f"{namespace}-{first_type_letter}{example_num}-A, "
-            f"{namespace}-{first_type_letter}{example_num}-B, "
-            f"{namespace}-{first_type_letter}{example_num}-C"
+            f"{example_req}{sep}A{ma_sep}B{ma_sep}C expands to "
+            f"{example_req}{sep}A, "
+            f"{example_req}{sep}B, "
+            f"{example_req}{sep}C"
         ),
     }
 

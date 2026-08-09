@@ -352,7 +352,12 @@ class FileDispatcher:
         prefix = self._resolver.config.namespace
         multi_sep = self._resolver.config.assertions.multi_separator
         assertion_sep = self._resolver.config.assertions.separator
-        multi_assertion_pattern = build_multi_assertion_pattern(prefix, multi_sep, assertion_sep)
+        multi_assertion_pattern = build_multi_assertion_pattern(
+            prefix,
+            multi_sep,
+            assertion_sep,
+            label_pattern=self._resolver.assertion_label_pattern,
+        )
         for child in tree.children:
             if not hasattr(child, "data"):
                 continue
