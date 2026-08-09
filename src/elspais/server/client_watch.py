@@ -2,7 +2,7 @@
 """Client-liveness watchdog for the background daemon.
 
 A daemon spawned implicitly to serve a CLI/session records the spawning
-client's PID (passed via the ``_ELSPAIS_SPAWNER_PID`` env var, since
+client's PID (passed via the ``_ELSPAIS_CLIENT_PID`` env var, since
 ``start_new_session=True`` reparents the daemon to PID 1). A client that
 later adopts the running daemon registers itself too, so the watchdog
 tracks a *set* of client PIDs rather than only the process that happened
@@ -157,7 +157,7 @@ def _default_exit() -> None:
     os.kill(os.getpid(), signal.SIGTERM)
 
 
-class SpawnerWatchdog:
+class ClientWatchdog:
     """Low-frequency background check that some client is still alive.
 
     Independent of HTTP traffic (and of TTLMiddleware, which is absent
@@ -167,7 +167,7 @@ class SpawnerWatchdog:
 
     def __init__(
         self,
-        spawner_pid: int,
+        client_pid: int,
         pending_fn: Callable[[], tuple[int, object]],
         interval_seconds: float = DEFAULT_CHECK_INTERVAL_SECONDS,
         grace_seconds: float = DEFAULT_GRACE_SECONDS,
@@ -177,7 +177,7 @@ class SpawnerWatchdog:
         lock: AbstractContextManager[Any] | None = None,
         stop_fn: Callable[[], dict[str, Any]] | None = None,
     ) -> None:
-        self._clients: set[int] = {spawner_pid}
+        self._clients: set[int] = {client_pid}
         self._clients_lock = threading.Lock()
         self._pending_fn = pending_fn
         self._lock = lock if lock is not None else nullcontext()
@@ -417,7 +417,7 @@ class SpawnerWatchdog:
                 if decision in (Decision.EXIT_CLEAN, Decision.EXIT_SAVE):
                     return
 
-        self._thread = threading.Thread(target=_loop, name="elspais-spawner-watchdog", daemon=True)
+        self._thread = threading.Thread(target=_loop, name="elspais-client-watchdog", daemon=True)
         self._thread.start()
 
     def stop(self) -> None:

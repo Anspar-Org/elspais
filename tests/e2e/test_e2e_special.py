@@ -623,7 +623,7 @@ class TestDaemonConfigStaleRestart:
 # Verifies: REQ-o00074-A+B+C+E+F+I
 
 
-class TestDaemonSpawnerLiveness:
+class TestDaemonClientLiveness:
     """Validates REQ-o00074-A: a daemon started implicitly on behalf of a
     client records that client's identity at the moment it starts, so it can
     afterwards determine whether the client still exists.
@@ -651,7 +651,7 @@ class TestDaemonSpawnerLiveness:
     starts at all.
     """
 
-    def test_REQ_o00074_A_daemon_exits_after_spawner_dies(self, tmp_path):
+    def test_REQ_o00074_A_daemon_exits_after_client_dies(self, tmp_path):
         import os
         import sys
         import time
@@ -660,7 +660,7 @@ class TestDaemonSpawnerLiveness:
 
         build_project(
             tmp_path,
-            base_config(name="spawner-liveness-project"),
+            base_config(name="client-liveness-project"),
             spec_files={
                 "spec/prd.md": [
                     Requirement(
@@ -674,17 +674,17 @@ class TestDaemonSpawnerLiveness:
         )
 
         # Fake session process: long-lived until we kill it.
-        spawner = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+        client = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
         daemon_pid = None
         try:
             # Implicit daemon spawn via the CLI reuse path, declaring the
-            # fake session as spawner.
+            # fake session as client.
             result = run_elspais(
                 "summary",
                 cwd=tmp_path,
                 env={
-                    "ELSPAIS_SPAWNER_PID": str(spawner.pid),
-                    "_ELSPAIS_SPAWNER_CHECK_INTERVAL": "0.3",
+                    "ELSPAIS_CLIENT_PID": str(client.pid),
+                    "_ELSPAIS_CLIENT_CHECK_INTERVAL": "0.3",
                 },
             )
             assert result.returncode == 0, result.stderr
@@ -692,17 +692,17 @@ class TestDaemonSpawnerLiveness:
             daemon_json = tmp_path / ".elspais" / "daemon.json"
             assert daemon_json.exists(), "daemon should have auto-started"
             info = json.loads(daemon_json.read_text())
-            assert info["spawner_pid"] == spawner.pid
+            assert info["client_pid"] == client.pid
             # REQ-o00074-B: the recorded client set, not just the starter,
             # is what an operator reads to ask why the daemon is still up.
-            assert info["client_pids"] == [spawner.pid]
+            assert info["client_pids"] == [client.pid]
             daemon_pid = info["pid"]
-            os.kill(daemon_pid, 0)  # daemon alive while spawner alive
+            os.kill(daemon_pid, 0)  # daemon alive while client alive
 
             # Kill the session; the daemon must notice and exit cleanly
             # (no unsaved mutations -> no grace period).
-            spawner.kill()
-            spawner.wait()
+            client.kill()
+            client.wait()
 
             deadline = time.time() + 20
             while time.time() < deadline:
@@ -713,23 +713,23 @@ class TestDaemonSpawnerLiveness:
                 time.sleep(0.3)
             else:
                 raise AssertionError(
-                    "daemon survived its spawner's death: "
+                    "daemon survived its client's death: "
                     + (tmp_path / ".elspais" / "daemon.log").read_text()[-1000:]
                 )
 
             log = (tmp_path / ".elspais" / "daemon.log").read_text()
             assert "shutting down" in log
         finally:
-            spawner.kill()
+            client.kill()
             if daemon_pid is not None:
                 try:
                     os.kill(daemon_pid, 15)
                 except OSError:
                     pass
 
-    def test_REQ_o00074_C_explicit_restart_records_no_spawner(self, tmp_path):
+    def test_REQ_o00074_C_explicit_restart_records_no_client(self, tmp_path):
         """`elspais daemon restart` is an explicit start: the daemon keeps
-        TTL-only lifetime and records no spawner identity, even when the
+        TTL-only lifetime and records no client identity, even when the
         environment declares one."""
         import os
         import time
@@ -756,13 +756,13 @@ class TestDaemonSpawnerLiveness:
             result = run_elspais(
                 "daemon",  # defaults to the restart action
                 cwd=tmp_path,
-                env={"ELSPAIS_SPAWNER_PID": str(os.getpid())},
+                env={"ELSPAIS_CLIENT_PID": str(os.getpid())},
             )
             assert result.returncode == 0, result.stderr
             assert daemon_json.exists()
             info = json.loads(daemon_json.read_text())
             assert (
-                "spawner_pid" not in info
+                "client_pid" not in info
             ), f"explicitly restarted daemon must not be session-tied: {info}"
             # And it stays up: no watchdog is running.
             time.sleep(1.5)
@@ -788,7 +788,7 @@ class TestDaemonSpawnerLiveness:
 
         from tests.e2e.helpers import Requirement, base_config, build_project
 
-        config = base_config(name="no-ttl-spawner-project")
+        config = base_config(name="no-ttl-client-project")
         config["cli_ttl"] = -1  # daemon never times out on idleness
 
         build_project(
@@ -806,15 +806,15 @@ class TestDaemonSpawnerLiveness:
             },
         )
 
-        spawner = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+        client = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
         daemon_pid = None
         try:
             result = run_elspais(
                 "summary",
                 cwd=tmp_path,
                 env={
-                    "ELSPAIS_SPAWNER_PID": str(spawner.pid),
-                    "_ELSPAIS_SPAWNER_CHECK_INTERVAL": "0.3",
+                    "ELSPAIS_CLIENT_PID": str(client.pid),
+                    "_ELSPAIS_CLIENT_CHECK_INTERVAL": "0.3",
                 },
             )
             assert result.returncode == 0, result.stderr
@@ -822,12 +822,12 @@ class TestDaemonSpawnerLiveness:
             daemon_json = tmp_path / ".elspais" / "daemon.json"
             assert daemon_json.exists(), "daemon should have auto-started with cli_ttl=-1"
             info = json.loads(daemon_json.read_text())
-            assert info["spawner_pid"] == spawner.pid
+            assert info["client_pid"] == client.pid
             daemon_pid = info["pid"]
             dirty_url = f"http://127.0.0.1:{info['port']}/api/dirty"
 
-            spawner.kill()
-            spawner.wait()
+            client.kill()
+            client.wait()
 
             deadline = time.time() + 20
             while time.time() < deadline:
@@ -845,11 +845,11 @@ class TestDaemonSpawnerLiveness:
             else:
                 raise AssertionError(
                     "daemon with a never-expiring idle timeout survived its "
-                    "spawner's death under continuous client traffic: "
+                    "client's death under continuous client traffic: "
                     + (tmp_path / ".elspais" / "daemon.log").read_text()[-1000:]
                 )
         finally:
-            spawner.kill()
+            client.kill()
             if daemon_pid is not None:
                 try:
                     os.kill(daemon_pid, 15)
@@ -897,8 +897,8 @@ class TestDaemonSpawnerLiveness:
                 "summary",
                 cwd=tmp_path,
                 env={
-                    "ELSPAIS_SPAWNER_PID": str(starter.pid),
-                    "_ELSPAIS_SPAWNER_CHECK_INTERVAL": "0.3",
+                    "ELSPAIS_CLIENT_PID": str(starter.pid),
+                    "_ELSPAIS_CLIENT_CHECK_INTERVAL": "0.3",
                 },
             )
             assert result.returncode == 0, result.stderr
@@ -985,16 +985,16 @@ class TestDaemonSpawnerLiveness:
             },
         )
 
-        spawner = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+        client = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
         daemon_pid = None
         try:
             result = run_elspais(
                 "summary",
                 cwd=tmp_path,
                 env={
-                    "ELSPAIS_SPAWNER_PID": str(spawner.pid),
-                    "_ELSPAIS_SPAWNER_CHECK_INTERVAL": "0.3",
-                    "_ELSPAIS_SPAWNER_GRACE": "1",
+                    "ELSPAIS_CLIENT_PID": str(client.pid),
+                    "_ELSPAIS_CLIENT_CHECK_INTERVAL": "0.3",
+                    "_ELSPAIS_CLIENT_GRACE": "1",
                 },
             )
             assert result.returncode == 0, result.stderr
@@ -1028,8 +1028,8 @@ class TestDaemonSpawnerLiveness:
 
             # The writer disappears. No further writes: a change applied after
             # this point would restart the countdown (REQ-o00074-H).
-            spawner.kill()
-            spawner.wait()
+            client.kill()
+            client.wait()
 
             deadline = time.time() + 30
             while time.time() < deadline:
@@ -1059,7 +1059,7 @@ class TestDaemonSpawnerLiveness:
             assert record["files_written"] >= 1
             assert record["trigger"], "the record does not say what triggered the save"
         finally:
-            spawner.kill()
+            client.kill()
             if daemon_pid is not None:
                 try:
                     os.kill(daemon_pid, 15)
@@ -1102,7 +1102,7 @@ class TestDaemonSpawnerLiveness:
             result = run_elspais(
                 "summary",
                 cwd=tmp_path,
-                env={"ELSPAIS_SPAWNER_PID": str(starter.pid)},
+                env={"ELSPAIS_CLIENT_PID": str(starter.pid)},
             )
             assert result.returncode == 0, result.stderr
             assert daemon_json.exists(), "daemon should have auto-started"
@@ -1111,7 +1111,7 @@ class TestDaemonSpawnerLiveness:
             result = run_elspais(
                 "summary",
                 cwd=tmp_path,
-                env={"ELSPAIS_SPAWNER_PID": str(adopter.pid)},
+                env={"ELSPAIS_CLIENT_PID": str(adopter.pid)},
             )
             assert result.returncode == 0, result.stderr
 
@@ -1157,12 +1157,12 @@ def _daemon_project(tmp_path, name: str):
     return tmp_path / "spec" / "prd.md"
 
 
-def _start_daemon_for(tmp_path, spawner_pid: int) -> dict:
+def _start_daemon_for(tmp_path, client_pid: int) -> dict:
     """Auto-start a daemon on behalf of a fake session and return its record."""
     result = run_elspais(
         "summary",
         cwd=tmp_path,
-        env={"ELSPAIS_SPAWNER_PID": str(spawner_pid)},
+        env={"ELSPAIS_CLIENT_PID": str(client_pid)},
     )
     assert result.returncode == 0, result.stderr
     daemon_json = tmp_path / ".elspais" / "daemon.json"
@@ -1220,10 +1220,10 @@ class TestStoppingALiveDaemonAccountsForItsWork:
         import sys
 
         spec = _daemon_project(tmp_path, "discard-project")
-        spawner = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+        client = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
         daemon_pid = None
         try:
-            info = _start_daemon_for(tmp_path, spawner.pid)
+            info = _start_daemon_for(tmp_path, client.pid)
             daemon_pid = info["pid"]
             title = "Feature One Thrown Away"
             _apply_pending_title(info, title)
@@ -1248,7 +1248,7 @@ class TestStoppingALiveDaemonAccountsForItsWork:
             )
             daemon_pid = json.loads((tmp_path / ".elspais" / "daemon.json").read_text())["pid"]
         finally:
-            spawner.kill()
+            client.kill()
             if daemon_pid is not None:
                 try:
                     os.kill(daemon_pid, 15)
@@ -1264,10 +1264,10 @@ class TestStoppingALiveDaemonAccountsForItsWork:
         import urllib.request
 
         spec = _daemon_project(tmp_path, "plain-stop-project")
-        spawner = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+        client = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
         daemon_pid = None
         try:
-            info = _start_daemon_for(tmp_path, spawner.pid)
+            info = _start_daemon_for(tmp_path, client.pid)
             daemon_pid = info["pid"]
             title = "Feature One Saved By A Plain Stop"
             _apply_pending_title(info, title)
@@ -1290,7 +1290,7 @@ class TestStoppingALiveDaemonAccountsForItsWork:
             assert record["mutation_count"] == 1
             assert not (tmp_path / ".elspais" / "unsaved-changes").exists()
         finally:
-            spawner.kill()
+            client.kill()
             if daemon_pid is not None:
                 try:
                     os.kill(daemon_pid, 15)
@@ -1306,10 +1306,10 @@ class TestStoppingALiveDaemonAccountsForItsWork:
         import sys
 
         spec = _daemon_project(tmp_path, "signalled-save-project")
-        spawner = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+        client = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
         daemon_pid = None
         try:
-            info = _start_daemon_for(tmp_path, spawner.pid)
+            info = _start_daemon_for(tmp_path, client.pid)
             daemon_pid = info["pid"]
             title = "Feature One Saved On The Way Out"
             _apply_pending_title(info, title)
@@ -1333,7 +1333,7 @@ class TestStoppingALiveDaemonAccountsForItsWork:
                 tmp_path / ".elspais" / "unsaved-changes"
             ).exists(), "the work is on disk and the record still says it is held in memory"
         finally:
-            spawner.kill()
+            client.kill()
             if daemon_pid is not None:
                 try:
                     os.kill(daemon_pid, 15)
@@ -1353,11 +1353,11 @@ class TestStoppingALiveDaemonAccountsForItsWork:
         spec = _daemon_project(tmp_path, "lost-changes-project")
         sentinel = tmp_path / ".elspais" / "unsaved-changes"
         finding = tmp_path / ".elspais" / "lost-changes"
-        first_spawner = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
-        second_spawner = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+        first_client = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+        second_client = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
         daemon_pid = None
         try:
-            info = _start_daemon_for(tmp_path, first_spawner.pid)
+            info = _start_daemon_for(tmp_path, first_client.pid)
             daemon_pid = info["pid"]
             assert not sentinel.exists(), "a daemon holding nothing claimed to hold work"
             title = "Feature One Lost To A Kill"
@@ -1373,7 +1373,7 @@ class TestStoppingALiveDaemonAccountsForItsWork:
             assert title not in spec.read_text(), "the work reached disk, so nothing was lost"
 
             # The next server starts and finds what the dead one left.
-            info = _start_daemon_for(tmp_path, second_spawner.pid)
+            info = _start_daemon_for(tmp_path, second_client.pid)
             daemon_pid = info["pid"]
 
             assert finding.exists(), "the successor discarded the finding rather than recording it"
@@ -1407,8 +1407,8 @@ class TestStoppingALiveDaemonAccountsForItsWork:
             assert not finding.exists(), "a notice about a superseded tree is still being shown"
             assert not sentinel.exists()
         finally:
-            first_spawner.kill()
-            second_spawner.kill()
+            first_client.kill()
+            second_client.kill()
             if daemon_pid is not None:
                 try:
                     os.kill(daemon_pid, 15)

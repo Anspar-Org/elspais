@@ -548,9 +548,10 @@ def _try_parse_env_value(value: str) -> Any:
 # Env vars reserved by the tool itself — must NOT be treated as config overrides.
 # ELSPAIS_VERSION is the min-CLI-version pin consumed by utilities/version_check.py;
 # it would otherwise collide with the config's top-level `version` (schema format int).
-# ELSPAIS_SPAWNER_PID is the spawner-identity declaration consumed by
-# mcp/daemon.py (resolve_spawner_pid); there is no `spawner` config section.
-_RESERVED_ENV_VARS = frozenset({"ELSPAIS_VERSION", "ELSPAIS_SPAWNER_PID"})
+# ELSPAIS_CLIENT_PID (and its former name ELSPAIS_SPAWNER_PID, still
+# honoured) is the client-identity declaration consumed by mcp/daemon.py
+# (resolve_client_pid); there is no `client` config section.
+_RESERVED_ENV_VARS = frozenset({"ELSPAIS_VERSION", "ELSPAIS_CLIENT_PID", "ELSPAIS_SPAWNER_PID"})
 
 
 def _apply_env_overrides(config: dict[str, Any]) -> dict[str, Any]:

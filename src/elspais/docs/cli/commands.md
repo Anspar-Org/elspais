@@ -521,7 +521,7 @@ lifetimes.
 **Started for a session (implicit).** Any CLI command that needs a graph
 and finds no daemon running starts one on behalf of the session it is
 running in. That daemon records the session's process ID as
-`spawner_pid` in `.elspais/daemon.json`, and shuts itself down once no
+`client_pid` in `.elspais/daemon.json`, and shuts itself down once no
 client of its is running any more. This is independent of the idle
 timeout: a `cli_ttl` of `-1` disables the timeout but not this, so a
 daemon cannot outlive every client that ever used it.
@@ -540,9 +540,10 @@ The identity is recorded at the moment of the start and never inferred
 afterwards — the daemon is detached from its parent as it starts, so
 there is nothing left to infer from. It is resolved in this order:
 
-    ELSPAIS_SPAWNER_PID     an explicit declaration by a session or IDE
-        |                   (always decisive; an unusable value means
-        |                    "no identity", not "keep looking")
+    ELSPAIS_CLIENT_PID      an explicit declaration by a session or IDE
+        |                   (or its former name ELSPAIS_SPAWNER_PID,
+        |                    still honoured; always decisive; an unusable
+        |                    value means "no identity", not "keep looking")
         v
     nearest ancestor named 'claude', when CLAUDECODE is set
         |
@@ -561,7 +562,7 @@ its `cli_ttl` lifetime.
 **Started deliberately (explicit).** `elspais daemon`, a manual
 `elspais mcp serve`, and the viewer record no session at all. Their
 lifetime is governed solely by `cli_ttl`, and `daemon.json` carries no
-`spawner_pid` key.
+`client_pid` key.
 
 **Termination.** The check runs on the daemon's own clock, about once a
 minute, so a client-bound daemon with nothing pending shuts down at the

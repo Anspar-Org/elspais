@@ -33,13 +33,13 @@ stats = ""
 #   <0: auto-start daemon that never times out
 #
 # Client liveness: a daemon auto-started on behalf of a session records
-# that session's PID as `spawner_pid` in .elspais/daemon.json, and every
+# that session's PID as `client_pid` in .elspais/daemon.json, and every
 # later session that reuses the daemon is added to `client_pids`. It exits
 # shortly after the last of them is gone, even when cli_ttl < 0 — orphaned
 # daemons do not accumulate, and a daemon somebody is still using is not
 # shut down under them. A client is identified at the moment it is
 # recorded (the daemon is detached, so it cannot be recovered afterwards),
-# in this order: the ELSPAIS_SPAWNER_PID env var, then the nearest ancestor
+# in this order: the ELSPAIS_CLIENT_PID env var, then the nearest ancestor
 # process named `claude` when CLAUDECODE is set, then the
 # controlling-terminal session leader if it has a tty (an interactive
 # shell qualifies; a batch or CI shell does not). The last two steps read
@@ -502,11 +502,12 @@ ELSPAIS_SCANNING_SKIP='["node_modules", ".git"]'
 ```
 
 Reserved (never treated as config overrides): `ELSPAIS_VERSION`
-(min-CLI-version pin) and `ELSPAIS_SPAWNER_PID` (a session/IDE declares
-itself the spawner of implicitly auto-started daemons, tying the daemon's
+(min-CLI-version pin) and `ELSPAIS_CLIENT_PID` (a session/IDE declares
+itself the client of implicitly auto-started daemons, tying the daemon's
 lifetime to that process — see the `cli_ttl` comment above). A set
-`ELSPAIS_SPAWNER_PID` is decisive: a value that is not a usable PID means
-"no session identity", not "fall back to the other checks".
+`ELSPAIS_CLIENT_PID` is decisive: a value that is not a usable PID means
+"no session identity", not "fall back to the other checks". The former
+name, `ELSPAIS_SPAWNER_PID`, is still honoured for callers that set it.
 
 ## Minimal Configuration Examples
 

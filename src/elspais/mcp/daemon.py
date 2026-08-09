@@ -19,14 +19,23 @@ from urllib.request import urlopen
 
 _DEFAULT_TTL = 30  # minutes
 
-# Env var carrying the spawner's PID into the detached daemon process
+# Env var carrying the client's PID into the detached daemon process
 # (start_new_session=True reparents the daemon to PID 1, so the parent
-# chain cannot identify the spawner after the fact).
-_SPAWNER_ENV = "_ELSPAIS_SPAWNER_PID"
+# chain cannot identify the client after the fact).
+_CLIENT_ENV = "_ELSPAIS_CLIENT_PID"
 
-# Public override: a session/IDE can declare itself the spawner so that
+# Public override: a session/IDE can declare itself the client so that
 # implicitly started daemons are reaped when it exits.
-SPAWNER_OVERRIDE_ENV = "ELSPAIS_SPAWNER_PID"
+CLIENT_OVERRIDE_ENV = "ELSPAIS_CLIENT_PID"
+
+# Former name of the public override, still honoured so existing callers
+# keep working.
+_LEGACY_OVERRIDE_ENV = "ELSPAIS_SPAWNER_PID"
+
+# Sentinel returned by ``_declared_client_pid`` for a declaration that is
+# present but not a usable handle (unparsable, non-positive, or already
+# dead).
+_UNUSABLE = "unusable"
 
 
 def _iter_proc_ancestors(pid: int | None = None):
@@ -67,13 +76,49 @@ def _session_leader_has_tty(sid: int) -> bool:
         return False
 
 
+def _declared_client_pid() -> int | str | None:
+    """Read the caller's declared client handle.
+
+    Three distinct answers: the pid; ``_UNUSABLE`` when a declaration is
+    present but is not a handle whose disappearance can be observed; and
+    None when nothing is declared. A declaration that could not be used is
+    a fact its author needs told (REQ-o00074-N), and an absent one is not,
+    so the two cannot share an answer.
+
+    A declared pid that is already dead is unusable rather than usable.
+    Recording it would bind the daemon to a process that has gone, so the
+    daemon would reap itself at its next check — an outcome the caller
+    would read as the daemon failing rather than as its declaration being
+    stale.
+
+    The former variable name is read so callers that set it keep working.
+    """
+    for name in (CLIENT_OVERRIDE_ENV, _LEGACY_OVERRIDE_ENV):
+        raw = os.environ.get(name)
+        if not raw:
+            continue
+        try:
+            pid = int(raw)
+        except ValueError:
+            return _UNUSABLE
+        if pid <= 1:
+            return _UNUSABLE
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            return _UNUSABLE
+        return pid
+    return None
+
+
 # Implements: REQ-o00074-A, REQ-o00074-D
-def resolve_spawner_pid() -> int | None:
+def resolve_client_pid() -> int | None:
     """Identify the session on whose behalf a daemon is being auto-started.
 
     Resolution order:
-      1. ``ELSPAIS_SPAWNER_PID`` env var — explicit declaration by the
-         session/IDE (also the deterministic hook for tests).
+      1. ``ELSPAIS_CLIENT_PID`` env var (or its former name, still
+         honoured) — explicit declaration by the session/IDE (also the
+         deterministic hook for tests).
       2. Inside a Claude Code session (``CLAUDECODE`` env set): the
          nearest ancestor process named ``claude`` (the session process;
          intermediate tool shells are ephemeral).
@@ -87,13 +132,9 @@ def resolve_spawner_pid() -> int | None:
     Returns None when no session identity can be established — the
     daemon then keeps its TTL-only lifetime (current behavior).
     """
-    override = os.environ.get(SPAWNER_OVERRIDE_ENV)
-    if override:
-        try:
-            pid = int(override)
-        except ValueError:
-            pid = 0
-        return pid if pid > 1 else None
+    declared = _declared_client_pid()
+    if declared is not None:
+        return declared if isinstance(declared, int) else None
 
     if os.environ.get("CLAUDECODE"):
         for pid, comm in _iter_proc_ancestors():
@@ -178,7 +219,7 @@ def write_daemon_json(
     pid: int,
     port: int,
     server_type: str = "daemon",
-    spawner_pid: int | None = None,
+    client_pid: int | None = None,
 ) -> Path:
     """Write daemon.json state file for a running server.
 
@@ -190,7 +231,7 @@ def write_daemon_json(
         pid: Process ID of the server.
         port: Port the server is listening on.
         server_type: "daemon" or "viewer".
-        spawner_pid: PID of the session the daemon was implicitly
+        client_pid: PID of the session the daemon was implicitly
             spawned for, or None for explicitly started servers
             (TTL-only lifetime).
 
@@ -215,9 +256,9 @@ def write_daemon_json(
         "type": server_type,
     }
     # Implements: REQ-o00074-B, REQ-o00074-C
-    if spawner_pid is not None:
-        info["spawner_pid"] = spawner_pid
-        info["client_pids"] = [spawner_pid]
+    if client_pid is not None:
+        info["client_pid"] = client_pid
+        info["client_pids"] = [client_pid]
     daemon_json.write_text(json.dumps(info))
     return daemon_json
 
@@ -474,7 +515,7 @@ def get_daemon_info(repo_root: Path) -> dict | None:
 def start_daemon(
     repo_root: Path,
     ttl_minutes: int = _DEFAULT_TTL,
-    spawner_pid: int | None = None,
+    client_pid: int | None = None,
 ) -> int:
     """Start a background MCP server and return its port.
 
@@ -486,7 +527,7 @@ def start_daemon(
         ttl_minutes: >0 = exit after N minutes idle.
                      <0 = run forever (no timeout).
                       0 = should not be called (caller should check).
-        spawner_pid: PID of the session this daemon serves. When set,
+        client_pid: PID of the session this daemon serves. When set,
             the daemon watches it and shuts down after the session
             exits. None (explicit starts) keeps TTL-only lifetime.
     """
@@ -527,10 +568,10 @@ def start_daemon(
 
     # Implements: REQ-o00074-A, REQ-o00074-C
     child_env = {**os.environ, "_ELSPAIS_DAEMON_JSON": str(daemon_json)}
-    if spawner_pid is not None:
-        child_env[_SPAWNER_ENV] = str(spawner_pid)
+    if client_pid is not None:
+        child_env[_CLIENT_ENV] = str(client_pid)
     else:
-        child_env.pop(_SPAWNER_ENV, None)
+        child_env.pop(_CLIENT_ENV, None)
 
     with open(log_path, "w") as log_file:
         subprocess.Popen(
@@ -662,7 +703,7 @@ def ensure_client_registered(info: dict | None) -> bool:
     """
     if not info:
         return False
-    pid = resolve_spawner_pid()
+    pid = resolve_client_pid()
     if not pid:
         return False
     if pid in (info.get("client_pids") or []):
@@ -951,9 +992,9 @@ def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
     # Implicit spawn on behalf of a CLI/session: tie the daemon's
     # lifetime to that session so it cannot outlive it. Explicit starts
     # (elspais daemon, manual mcp serve, viewer) do not pass a
-    # spawner and keep TTL-only behavior.
+    # client and keep TTL-only behavior.
     return start_daemon(
         repo_root,
         ttl_minutes=ttl_minutes,
-        spawner_pid=resolve_spawner_pid(),
+        client_pid=resolve_client_pid(),
     )

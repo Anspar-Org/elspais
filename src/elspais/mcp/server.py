@@ -7460,21 +7460,21 @@ def run_server(
                 s.bind(("127.0.0.1", 0))
                 port = s.getsockname()[1]
 
-        # Spawner liveness: set for implicitly spawned daemons only (env
+        # Client liveness: set for implicitly spawned daemons only (env
         # written by daemon.start_daemon). Explicit starts (manual serve,
-        # viewer, elspais daemon) have no spawner and keep TTL-only life.
+        # viewer, elspais daemon) have no client and keep TTL-only life.
         # Implements: REQ-o00074-A, REQ-o00074-C
-        spawner_pid: int | None = None
-        env_spawner = _os.environ.get("_ELSPAIS_SPAWNER_PID")
-        if env_spawner:
+        client_pid: int | None = None
+        env_client = _os.environ.get("_ELSPAIS_CLIENT_PID")
+        if env_client:
             try:
-                spawner_pid = int(env_spawner)
+                client_pid = int(env_client)
             except ValueError:
-                spawner_pid = None
+                client_pid = None
             # Same floor the resolver applies: 1 is init, which never
             # dies, so watching it is a daemon that never terminates.
-            if spawner_pid is not None and spawner_pid <= 1:
-                spawner_pid = None
+            if client_pid is not None and client_pid <= 1:
+                client_pid = None
 
         if daemon_json:
             from elspais.mcp.daemon import write_daemon_json
@@ -7484,13 +7484,13 @@ def run_server(
                 pid=_os.getpid(),
                 port=port,
                 server_type="daemon",
-                spawner_pid=spawner_pid,
+                client_pid=client_pid,
             )
 
-        if spawner_pid is not None:
-            from elspais.server.spawner_watch import (
+        if client_pid is not None:
+            from elspais.server.client_watch import (
                 DEFAULT_GRACE_SECONDS,
-                SpawnerWatchdog,
+                ClientWatchdog,
                 pending_snapshot,
             )
 
@@ -7511,12 +7511,10 @@ def run_server(
                     trigger="no recorded client was running",
                 )
 
-            interval = float(_os.environ.get("_ELSPAIS_SPAWNER_CHECK_INTERVAL", "60"))
-            grace = float(
-                _os.environ.get("_ELSPAIS_SPAWNER_GRACE", str(int(DEFAULT_GRACE_SECONDS)))
-            )
-            watchdog = SpawnerWatchdog(
-                spawner_pid=spawner_pid,
+            interval = float(_os.environ.get("_ELSPAIS_CLIENT_CHECK_INTERVAL", "60"))
+            grace = float(_os.environ.get("_ELSPAIS_CLIENT_GRACE", str(int(DEFAULT_GRACE_SECONDS))))
+            watchdog = ClientWatchdog(
+                client_pid=client_pid,
                 pending_fn=_pending,
                 interval_seconds=interval,
                 grace_seconds=grace,

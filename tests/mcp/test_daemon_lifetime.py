@@ -38,10 +38,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from elspais.server.spawner_watch import (
+from elspais.server.client_watch import (
     DEFAULT_GRACE_SECONDS,
+    ClientWatchdog,
     Decision,
-    SpawnerWatchdog,
     pending_snapshot,
     pid_alive,
     shutdown_decision,
@@ -137,8 +137,8 @@ def _watchdog(
     script = _ScriptedChecks(alive_results, pending_snapshots)
     exits: list[str] = []
 
-    wd = SpawnerWatchdog(
-        spawner_pid=4321,
+    wd = ClientWatchdog(
+        client_pid=4321,
         pending_fn=script.pending,
         interval_seconds=0.01,
         grace_seconds=grace,
@@ -160,8 +160,8 @@ def _map_watchdog(alive_map, clock, *, pending=(0, 5), grace=300.0, stop_fn=None
     number of calls consistently.
     """
     exits: list[str] = []
-    wd = SpawnerWatchdog(
-        spawner_pid=4321,
+    wd = ClientWatchdog(
+        client_pid=4321,
         pending_fn=lambda: pending,
         interval_seconds=0.01,
         grace_seconds=grace,
@@ -295,14 +295,14 @@ class TestAdoptingClientsJoinTheRecordedSet:
         assert wd.attach_client(777) is False
         assert wd.clients() == [4321]
 
-    def test_REQ_o00074_E_live_adopted_client_keeps_a_daemon_whose_spawner_died(self):
+    def test_REQ_o00074_E_live_adopted_client_keeps_a_daemon_whose_client_died(self):
         """The daemon outlives the client that started it, by design."""
         clock = _Clock()
         alive = {4321: True, 999: True}
         wd, exits = _map_watchdog(alive, clock, pending=(2, "m1"), grace=300.0)
 
         assert wd.attach_client(999) is True
-        alive[4321] = False  # the original spawner is gone
+        alive[4321] = False  # the original client is gone
 
         # Well past every grace deadline, the daemon keeps serving.
         for offset in (0, 500, 1000, 2000, 5000):
@@ -311,11 +311,9 @@ class TestAdoptingClientsJoinTheRecordedSet:
                 wd.check_once() is Decision.KEEP
             ), f"daemon stopped underneath a live client at t+{offset}"
         assert exits == []
-        assert wd.clients() == [999], "dead spawner was not pruned from the client set"
+        assert wd.clients() == [999], "dead client was not pruned from the client set"
 
-    def test_REQ_o00074_E_daemon_with_dead_spawner_and_dead_adopted_clients_terminates(
-        self, capsys
-    ):
+    def test_REQ_o00074_E_daemon_with_dead_client_and_dead_adopted_clients_terminates(self, capsys):
         """The negative case the positive one above cannot prove.
 
         A daemon that has been adopted must still die once the adopters die.
@@ -331,7 +329,7 @@ class TestAdoptingClientsJoinTheRecordedSet:
         assert wd.attach_client(999) is True
         assert wd.clients() == [999, 4321]
 
-        # The spawner exits first; the adopter keeps the daemon serving.
+        # The client exits first; the adopter keeps the daemon serving.
         alive[4321] = False
         assert wd.check_once() is Decision.KEEP
         assert wd.clients() == [999]
@@ -380,8 +378,8 @@ class TestWatchdogSurvivesAFailedCheck:
                 raise OSError("transient failure on the first check")
             return state["alive"]
 
-        wd = SpawnerWatchdog(
-            spawner_pid=4321,
+        wd = ClientWatchdog(
+            client_pid=4321,
             pending_fn=lambda: (0, 5),
             interval_seconds=0.01,
             grace_seconds=0.0,
@@ -457,8 +455,8 @@ class TestPendingWorkIsDisclosed:
             raise RuntimeError("graph unavailable")
 
         exits: list[str] = []
-        wd = SpawnerWatchdog(
-            spawner_pid=4321,
+        wd = ClientWatchdog(
+            client_pid=4321,
             pending_fn=boom,
             grace_seconds=300.0,
             alive_fn=lambda pid: False,
@@ -484,7 +482,7 @@ class TestPendingWorkIsDisclosed:
         has to outlast the quiet stretches a reasoning client routinely takes
         between mutations. A shell-prompt-sized grace would make the disclosed
         deadline a promise to save work the writer had not finished."""
-        wd = SpawnerWatchdog(spawner_pid=4321, pending_fn=lambda: (0, None))
+        wd = ClientWatchdog(client_pid=4321, pending_fn=lambda: (0, None))
 
         assert wd._grace == DEFAULT_GRACE_SECONDS
         assert DEFAULT_GRACE_SECONDS >= 1800.0, (
@@ -542,8 +540,8 @@ class TestTerminationDecidesUnderTheWritersLock:
                 return False
 
         clock = _Clock()
-        wd = SpawnerWatchdog(
-            spawner_pid=4321,
+        wd = ClientWatchdog(
+            client_pid=4321,
             pending_fn=lambda: (0, 5),
             grace_seconds=300.0,
             alive_fn=lambda pid: False,
@@ -693,8 +691,8 @@ class TestUndoneWorkStillCountsAsActivity:
 
         clock = _Clock()
         exits: list[str] = []
-        wd = SpawnerWatchdog(
-            spawner_pid=4321,
+        wd = ClientWatchdog(
+            client_pid=4321,
             pending_fn=lambda: pending_snapshot(fg),
             grace_seconds=300.0,
             alive_fn=lambda pid: False,
@@ -762,8 +760,8 @@ class TestTerminationPersistsPendingWork:
         the count the watchdog saw is not the authority on what is held."""
         clock = _Clock()
         events: list[str] = []
-        wd = SpawnerWatchdog(
-            spawner_pid=4321,
+        wd = ClientWatchdog(
+            client_pid=4321,
             pending_fn=lambda: (0, "m0"),
             grace_seconds=300.0,
             alive_fn=lambda pid: False,
@@ -789,8 +787,8 @@ class TestTerminationPersistsPendingWork:
         proof that nothing is held."""
         clock = _Clock()
         exits: list[str] = []
-        wd = SpawnerWatchdog(
-            spawner_pid=4321,
+        wd = ClientWatchdog(
+            client_pid=4321,
             pending_fn=lambda: pending,
             grace_seconds=0.0,
             alive_fn=lambda pid: False,
@@ -1123,7 +1121,7 @@ class TestFailedSaveRetainsTheWork:
 # ---------------------------------------------------------------------------
 
 
-class TestSpawnerIdentityResolution:
+class TestClientIdentityResolution:
     """Validates REQ-o00074-D: client identity is derived only from evidence
     available at the moment of starting, and when no identity can be
     established the daemon starts with none rather than with an inferred one.
@@ -1132,49 +1130,49 @@ class TestSpawnerIdentityResolution:
     def test_REQ_o00074_D_env_override(self, monkeypatch):
         from elspais.mcp import daemon
 
-        monkeypatch.setenv("ELSPAIS_SPAWNER_PID", "5555")
-        assert daemon.resolve_spawner_pid() == 5555
+        monkeypatch.setenv("ELSPAIS_CLIENT_PID", str(os.getpid()))
+        assert daemon.resolve_client_pid() == os.getpid()
 
     @pytest.mark.parametrize("value", ["not-a-pid", "0", "1", "-3"])
     def test_REQ_o00074_D_env_override_invalid(self, monkeypatch, value):
         from elspais.mcp import daemon
 
-        monkeypatch.setenv("ELSPAIS_SPAWNER_PID", value)
-        assert daemon.resolve_spawner_pid() is None
+        monkeypatch.setenv("ELSPAIS_CLIENT_PID", value)
+        assert daemon.resolve_client_pid() is None
 
     def test_REQ_o00074_D_claude_ancestor(self, monkeypatch):
         from elspais.mcp import daemon
 
-        monkeypatch.delenv("ELSPAIS_SPAWNER_PID", raising=False)
+        monkeypatch.delenv("ELSPAIS_CLIENT_PID", raising=False)
         monkeypatch.setenv("CLAUDECODE", "1")
         with patch(
             "elspais.mcp.daemon._iter_proc_ancestors",
             return_value=iter([(200, "zsh"), (300, "claude"), (400, "zsh")]),
         ):
-            assert daemon.resolve_spawner_pid() == 300
+            assert daemon.resolve_client_pid() == 300
 
     def test_REQ_o00074_D_no_session_identity(self, monkeypatch):
         """No env override, no Claude session, no tty -> None (TTL-only)."""
         from elspais.mcp import daemon
 
-        monkeypatch.delenv("ELSPAIS_SPAWNER_PID", raising=False)
+        monkeypatch.delenv("ELSPAIS_CLIENT_PID", raising=False)
         monkeypatch.delenv("CLAUDECODE", raising=False)
         with patch("elspais.mcp.daemon._session_leader_has_tty", return_value=False):
-            assert daemon.resolve_spawner_pid() is None
+            assert daemon.resolve_client_pid() is None
 
     def test_REQ_o00074_D_interactive_session_leader(self, monkeypatch):
         from elspais.mcp import daemon
 
-        monkeypatch.delenv("ELSPAIS_SPAWNER_PID", raising=False)
+        monkeypatch.delenv("ELSPAIS_CLIENT_PID", raising=False)
         monkeypatch.delenv("CLAUDECODE", raising=False)
         with (
             patch("elspais.mcp.daemon.os.getsid", return_value=7777),
             patch("elspais.mcp.daemon._session_leader_has_tty", return_value=True),
         ):
-            assert daemon.resolve_spawner_pid() == 7777
+            assert daemon.resolve_client_pid() == 7777
 
 
-class TestUnusableSpawnerIdentityIsRefused:
+class TestUnusableClientIdentityIsRefused:
     """Validates REQ-o00074-D: a handed-over PID at or below the floor the
     resolver applies names no client -- pid 1 is init, whose death never comes,
     and 0/negative are not process identities at all. The daemon starts with no
@@ -1182,18 +1180,18 @@ class TestUnusableSpawnerIdentityIsRefused:
     the requirement asks for when no identity can be established.
     """
 
-    def _spawner_pids_watched(self, monkeypatch, tmp_path, env_value):
+    def _client_pids_watched(self, monkeypatch, tmp_path, env_value):
         """Run the daemon's startup path and report the PIDs it set a watch on."""
         from elspais.mcp import server as mcp_server
 
         monkeypatch.delenv("_ELSPAIS_DAEMON_JSON", raising=False)
-        monkeypatch.setenv("_ELSPAIS_SPAWNER_PID", env_value)
+        monkeypatch.setenv("_ELSPAIS_CLIENT_PID", env_value)
 
         watched: list[int] = []
 
         class _StubWatchdog:
-            def __init__(self, spawner_pid, **kwargs):
-                watched.append(spawner_pid)
+            def __init__(self, client_pid, **kwargs):
+                watched.append(client_pid)
 
             def start(self):
                 pass
@@ -1201,7 +1199,7 @@ class TestUnusableSpawnerIdentityIsRefused:
         with (
             patch("elspais.server.state.AppState.from_config", return_value=MagicMock()),
             patch("elspais.server.app.create_app", return_value=MagicMock()),
-            patch("elspais.server.spawner_watch.SpawnerWatchdog", _StubWatchdog),
+            patch("elspais.server.client_watch.ClientWatchdog", _StubWatchdog),
             patch("uvicorn.Config", return_value=MagicMock()),
             patch("uvicorn.Server", return_value=MagicMock()),
             patch("anyio.run"),
@@ -1210,16 +1208,16 @@ class TestUnusableSpawnerIdentityIsRefused:
         return watched
 
     @pytest.mark.parametrize("value", ["1", "0", "-3", "not-a-pid"])
-    def test_REQ_o00074_D_unusable_spawner_pid_starts_no_watchdog(
+    def test_REQ_o00074_D_unusable_client_pid_starts_no_watchdog(
         self, monkeypatch, tmp_path, value
     ):
         assert (
-            self._spawner_pids_watched(monkeypatch, tmp_path, value) == []
+            self._client_pids_watched(monkeypatch, tmp_path, value) == []
         ), f"daemon watched a pid it cannot learn anything from: {value!r}"
 
-    def test_REQ_o00074_D_real_spawner_pid_is_watched(self, monkeypatch, tmp_path):
+    def test_REQ_o00074_D_real_client_pid_is_watched(self, monkeypatch, tmp_path):
         """The control: a usable identity does produce a watch on that pid."""
-        assert self._spawner_pids_watched(monkeypatch, tmp_path, "5555") == [5555]
+        assert self._client_pids_watched(monkeypatch, tmp_path, "5555") == [5555]
 
 
 class TestImplicitStartRecordsClient:
@@ -1228,7 +1226,7 @@ class TestImplicitStartRecordsClient:
     afterwards determine whether the client still exists.
     """
 
-    def test_REQ_o00074_A_start_daemon_passes_spawner_env(self, tmp_path):
+    def test_REQ_o00074_A_start_daemon_passes_client_env(self, tmp_path):
         from elspais.mcp.daemon import start_daemon
 
         popen_calls = []
@@ -1242,29 +1240,29 @@ class TestImplicitStartRecordsClient:
             patch("elspais.mcp.daemon.time.time", side_effect=[0, 20, 20]),  # force timeout
         ):
             with pytest.raises(RuntimeError):
-                start_daemon(tmp_path, ttl_minutes=1, spawner_pid=9876)
+                start_daemon(tmp_path, ttl_minutes=1, client_pid=9876)
 
-        assert popen_calls[0]["env"]["_ELSPAIS_SPAWNER_PID"] == "9876"
+        assert popen_calls[0]["env"]["_ELSPAIS_CLIENT_PID"] == "9876"
 
-    def test_REQ_o00074_A_ensure_daemon_resolves_spawner(self, tmp_path):
+    def test_REQ_o00074_A_ensure_daemon_resolves_client(self, tmp_path):
         """The implicit CLI spawn path ties the daemon to the resolved client."""
         from elspais.mcp.daemon import ensure_daemon
 
         captured = {}
 
-        def fake_start(repo_root, ttl_minutes, spawner_pid=None):
-            captured["spawner_pid"] = spawner_pid
+        def fake_start(repo_root, ttl_minutes, client_pid=None):
+            captured["client_pid"] = client_pid
             return 12000
 
         with (
             patch("elspais.mcp.daemon.get_daemon_info", return_value=None),
             patch("elspais.mcp.daemon.get_cli_ttl", return_value=30),
-            patch("elspais.mcp.daemon.resolve_spawner_pid", return_value=4242),
+            patch("elspais.mcp.daemon.resolve_client_pid", return_value=4242),
             patch("elspais.mcp.daemon.start_daemon", side_effect=fake_start),
         ):
             assert ensure_daemon(tmp_path) == 12000
 
-        assert captured["spawner_pid"] == 4242
+        assert captured["client_pid"] == 4242
 
 
 class TestReusingClientAnnouncesItself:
@@ -1282,7 +1280,7 @@ class TestReusingClientAnnouncesItself:
         with (
             patch("elspais.mcp.daemon.get_daemon_info", return_value=info),
             patch("elspais.mcp.daemon._config_hash_stale", return_value=False),
-            patch("elspais.mcp.daemon.resolve_spawner_pid", return_value=4242),
+            patch("elspais.mcp.daemon.resolve_client_pid", return_value=4242),
             patch(
                 "elspais.mcp.daemon.attach_client",
                 side_effect=lambda i, pid: attached.append((i, pid)),
@@ -1334,21 +1332,21 @@ class TestClientSetIsObservable:
     (``.elspais/daemon.json``).
     """
 
-    def test_REQ_o00074_B_write_daemon_json_records_spawner_pid(self, tmp_path):
+    def test_REQ_o00074_B_write_daemon_json_records_client_pid(self, tmp_path):
         from elspais.mcp.daemon import write_daemon_json
 
         path = write_daemon_json(
-            repo_root=tmp_path, pid=111, port=222, server_type="daemon", spawner_pid=333
+            repo_root=tmp_path, pid=111, port=222, server_type="daemon", client_pid=333
         )
         info = json.loads(path.read_text())
-        assert info["spawner_pid"] == 333
+        assert info["client_pid"] == 333
         assert info["client_pids"] == [333], "the initial client set is not published"
 
     def test_REQ_o00074_B_record_daemon_clients_republishes_the_whole_set(self, tmp_path):
         from elspais.mcp.daemon import record_daemon_clients, write_daemon_json
 
         write_daemon_json(
-            repo_root=tmp_path, pid=111, port=222, server_type="daemon", spawner_pid=333
+            repo_root=tmp_path, pid=111, port=222, server_type="daemon", client_pid=333
         )
         record_daemon_clients(tmp_path, [777, 333])
 
@@ -1374,14 +1372,14 @@ class TestExplicitStartRecordsNoClient:
 
         path = write_daemon_json(repo_root=tmp_path, pid=111, port=222, server_type="viewer")
         info = json.loads(path.read_text())
-        assert "spawner_pid" not in info
+        assert "client_pid" not in info
         assert "client_pids" not in info
 
-    def test_REQ_o00074_C_start_daemon_without_spawner_scrubs_env(self, tmp_path, monkeypatch):
-        """Explicit starts must not inherit a stale spawner PID from the env."""
+    def test_REQ_o00074_C_start_daemon_without_client_scrubs_env(self, tmp_path, monkeypatch):
+        """Explicit starts must not inherit a stale client PID from the env."""
         from elspais.mcp.daemon import start_daemon
 
-        monkeypatch.setenv("_ELSPAIS_SPAWNER_PID", "1212")
+        monkeypatch.setenv("_ELSPAIS_CLIENT_PID", "1212")
         popen_calls = []
 
         with (
@@ -1395,16 +1393,16 @@ class TestExplicitStartRecordsNoClient:
             with pytest.raises(RuntimeError):
                 start_daemon(tmp_path, ttl_minutes=1)
 
-        assert "_ELSPAIS_SPAWNER_PID" not in popen_calls[0]["env"]
+        assert "_ELSPAIS_CLIENT_PID" not in popen_calls[0]["env"]
 
-    def test_REQ_o00074_C_restart_daemon_spawns_without_spawner(self, tmp_path):
+    def test_REQ_o00074_C_restart_daemon_spawns_without_client(self, tmp_path):
         """`elspais daemon restart` is an explicit start: no client tie."""
         from elspais.mcp.daemon import restart_daemon
 
         captured = {}
 
-        def fake_start(repo_root, ttl_minutes, spawner_pid=None):
-            captured["spawner_pid"] = spawner_pid
+        def fake_start(repo_root, ttl_minutes, client_pid=None):
+            captured["client_pid"] = client_pid
             return 12001
 
         with (
@@ -1415,7 +1413,7 @@ class TestExplicitStartRecordsNoClient:
             result = restart_daemon(tmp_path)
 
         assert result["success"] is True
-        assert captured["spawner_pid"] is None
+        assert captured["client_pid"] is None
 
 
 class TestRestartSaysWhatBecomesOfTheWork:
