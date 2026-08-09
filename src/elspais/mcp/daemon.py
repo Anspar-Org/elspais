@@ -533,16 +533,7 @@ def start_daemon(
     """
     # Stop any existing server before overwriting daemon.json.
     # Without this, the old server becomes an undiscoverable orphan.
-    #
-    # And wait for it to be gone before starting its replacement. A
-    # stopping daemon is still saving what it holds, and its sentinel is
-    # still standing; a successor that boots first would read that
-    # sentinel as evidence of a process that died holding work, which is
-    # a loss that is not happening (REQ-o00074-L).
-    outgoing = get_daemon_info(repo_root)
     stop_daemon(repo_root)
-    if outgoing is not None:
-        wait_for_daemon_exit(outgoing)
 
     daemon_json = _daemon_json_path(repo_root)
     daemon_json.parent.mkdir(parents=True, exist_ok=True)
@@ -610,15 +601,39 @@ def start_daemon(
     raise RuntimeError("Daemon started but not responding to HTTP")
 
 
-def stop_daemon(repo_root: Path) -> bool:
-    """Stop a running daemon. Returns True if stopped."""
+# Implements: REQ-o00075-B, REQ-o00075-E
+def stop_daemon(repo_root: Path, wait: bool = True, timeout: float = 20.0) -> bool:
+    """Stop a running daemon. True once it is gone.
+
+    The record is unlinked last, and only once the process it describes
+    has exited. Removing it first left a window in which a daemon was
+    serving and undiscoverable: a concurrent command found nothing and
+    started a second process for the same working tree, and a successor
+    booting into that window read the predecessor's dirty sentinel as
+    evidence of a process that died holding work, which is a loss that is
+    not happening.
+
+    A daemon persists what it holds on the way out, so the wait covers a
+    save rather than a signal handler.
+
+    Returns False when the process did not exit, leaving the record in
+    place because it still describes something a client would reach.
+    """
     info = get_daemon_info(repo_root)
     if info is None:
         return False
     try:
         os.kill(info["pid"], signal.SIGTERM)
     except OSError:
-        pass
+        pass  # already gone; fall through and clear the record
+    if wait and not wait_for_daemon_exit(info, timeout=timeout):
+        print(
+            f"warning: the daemon (pid {info['pid']}) did not stop within "
+            f"{timeout:.0f}s. Its state record is left in place because it is "
+            "still serving.",
+            file=sys.stderr,
+        )
+        return False
     _daemon_json_path(repo_root).unlink(missing_ok=True)
     return True
 
@@ -896,6 +911,7 @@ def restart_daemon(
     # mutation applied just after it would otherwise be stopped over with
     # an ordinary signal and saved, which is the opposite of what was
     # asked for. The daemon decides against the log it holds.
+    stopped = False
     if discard_changes:
         stop_result = request_daemon_stop(info, discard_changes=True)
         if not stop_result.get("success"):
@@ -908,7 +924,23 @@ def restart_daemon(
                 "code": stop_result.get("code"),
                 "mutation_count": get_daemon_mutation_count(info),
             }
-        wait_for_daemon_exit(info)
+        if not wait_for_daemon_exit(info):
+            return {
+                "success": False,
+                "error": (
+                    "Cannot restart — the daemon accepted the discard but did "
+                    "not exit. It is still serving, and starting a second one "
+                    "for this working tree would split the graph between two "
+                    "processes."
+                ),
+            }
+        # The daemon is confirmed gone here, so the record is unlinked now
+        # rather than by the stop_daemon() call below. That call reads
+        # through get_daemon_info(), which would see the pid already dead
+        # and quietly clear the record as stale -- indistinguishable, from
+        # stop_daemon()'s own view, from nothing having been running.
+        _daemon_json_path(repo_root).unlink(missing_ok=True)
+        stopped = True
     else:
         # Daemon is running — check for unsaved work.
         count = get_daemon_mutation_count(info)
@@ -937,7 +969,15 @@ def restart_daemon(
                 }
 
     # At this point we're committed to restart.
-    stop_daemon(repo_root)
+    if not stopped and not stop_daemon(repo_root):
+        return {
+            "success": False,
+            "error": (
+                "Cannot restart — the running daemon did not stop. It is still "
+                "serving, and starting a second one for this working tree would "
+                "split the graph between two processes."
+            ),
+        }
 
     if ttl_minutes is None:
         ttl_minutes = get_cli_ttl(repo_root)
@@ -968,10 +1008,16 @@ def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
 
         daemon_version = info.get("version")
         if daemon_version and daemon_version != __version__:
-            stop_daemon(repo_root)
+            if not stop_daemon(repo_root):
+                # It is still serving. An out-of-date daemon answering is
+                # better than two daemons answering differently.
+                return info["port"]
             # Fall through to start a fresh daemon
         elif _config_hash_stale(info, repo_root):
-            stop_daemon(repo_root)
+            if not stop_daemon(repo_root):
+                # It is still serving. An out-of-date daemon answering is
+                # better than two daemons answering differently.
+                return info["port"]
             # Fall through to start a fresh daemon
         else:
             # Implements: REQ-o00074-E

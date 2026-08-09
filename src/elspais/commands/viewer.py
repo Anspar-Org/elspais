@@ -212,11 +212,25 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
 
     from elspais.mcp.daemon import (
         _daemon_json_path,
+        get_daemon_info,
         stop_daemon,
         write_daemon_json,
     )
 
-    stop_daemon(repo_root)  # Kill any existing server for this project
+    # Kill any existing server for this project. stop_daemon() returning
+    # False also means "nothing was running" (the common case), so only
+    # treat it as a refusal when a record existed to begin with -- writing
+    # our own record over a daemon that is still serving would make it an
+    # undiscoverable second process for this working tree.
+    existing = get_daemon_info(repo_root)
+    if existing is not None and not stop_daemon(repo_root):
+        print(
+            f"Could not stop the daemon (pid {existing['pid']}) already "
+            "serving this project; it is still running. Not starting a "
+            "second server for the same working tree.",
+            file=sys.stderr,
+        )
+        return 1
     write_daemon_json(
         repo_root=repo_root,
         pid=os.getpid(),
