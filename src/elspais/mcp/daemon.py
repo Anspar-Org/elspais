@@ -316,6 +316,46 @@ def _daemon_json_path(repo_root: Path) -> Path:
     return _daemon_dir(repo_root) / "daemon.json"
 
 
+def _client_notice_path(repo_root: Path) -> Path:
+    """Marker that the unbound-lifetime notice has been given.
+
+    Scoped to the daemon it describes: removed when a daemon starts, so a
+    client meeting a different daemon is told about that one. Named under
+    the daemon.* prefix so the existing ignore rule covers it.
+    """
+    return _daemon_dir(repo_root) / "daemon.client-notice"
+
+
+# Implements: REQ-o00074-N
+def notify_unbound_lifetime(repo_root: Path, reason: str) -> bool:
+    """Say once that this daemon's lifetime is not bound to this client.
+
+    The condition is not an error and the command is not refused: a tool
+    whose operations require a background process fails whenever that
+    process cannot be bound (REQ-o00075-G). What the client is owed is the
+    fact and the remedy, which is also the only route by which a harness
+    author discovers the declaration exists.
+
+    Returns True when it printed.
+    """
+    marker = _client_notice_path(repo_root)
+    if marker.exists():
+        return False
+    print(
+        f"note: {reason}, so this daemon's lifetime is not bound to this "
+        "session — it will stop when its recorded clients do, or when its "
+        "idle timeout expires. To bind it, export ELSPAIS_CLIENT_PID with "
+        "the process id of the session or job this work belongs to.",
+        file=sys.stderr,
+    )
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.touch()
+    except OSError:
+        pass  # printing once more beats failing the command
+    return True
+
+
 def _automatic_save_path(repo_root: Path) -> Path:
     """Record of a save the daemon performed itself.
 
@@ -535,6 +575,12 @@ def start_daemon(
     # Without this, the old server becomes an undiscoverable orphan.
     stop_daemon(repo_root)
 
+    # Implements: REQ-o00074-N
+    # A fresh daemon is a fresh account of its own client set, so it
+    # discloses on its own account rather than being silenced by what a
+    # predecessor already told this repo root.
+    _client_notice_path(repo_root).unlink(missing_ok=True)
+
     daemon_json = _daemon_json_path(repo_root)
     daemon_json.parent.mkdir(parents=True, exist_ok=True)
 
@@ -703,8 +749,8 @@ def attach_client(info: dict, pid: int | None) -> bool:
         return False
 
 
-# Implements: REQ-o00074-E
-def ensure_client_registered(info: dict | None) -> bool:
+# Implements: REQ-o00074-E, REQ-o00074-N
+def ensure_client_registered(repo_root: Path, info: dict | None) -> bool:
     """Register this session as a client of a daemon it did not start.
 
     Called on every path that reuses a running daemon, not only the one
@@ -715,11 +761,22 @@ def ensure_client_registered(info: dict | None) -> bool:
     Skips the call when the daemon's published client set already names
     this session, so the cost is one round-trip per session rather than
     one per command.
+
+    ``repo_root`` keys the unbound-lifetime notice: both call sites already
+    hold it, and a notice keyed on a path read back out of the record would
+    be keyed on whatever the record happened to say rather than on the
+    daemon this session is actually reusing.
     """
     if not info:
         return False
     pid = resolve_client_pid()
     if not pid:
+        reason = (
+            "the declared client handle could not be used"
+            if _declared_client_pid() == _UNUSABLE
+            else "no client handle could be derived from this session"
+        )
+        notify_unbound_lifetime(repo_root, reason)
         return False
     if pid in (info.get("client_pids") or []):
         return True
@@ -1014,7 +1071,7 @@ def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
                 # session is about to use it in place of the fresh one it
                 # could not start, so it registers as a client the same
                 # way the reuse path below does.
-                ensure_client_registered(info)
+                ensure_client_registered(repo_root, info)
                 return info["port"]
             # Fall through to start a fresh daemon
         elif _config_hash_stale(info, repo_root):
@@ -1024,7 +1081,7 @@ def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
                 # session is about to use it in place of the fresh one it
                 # could not start, so it registers as a client the same
                 # way the reuse path below does.
-                ensure_client_registered(info)
+                ensure_client_registered(repo_root, info)
                 return info["port"]
             # Fall through to start a fresh daemon
         else:
@@ -1033,7 +1090,7 @@ def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
             # one of its clients. Say so, or the daemon goes on watching
             # only the client that started it and stops underneath this
             # one when that client exits.
-            ensure_client_registered(info)
+            ensure_client_registered(repo_root, info)
             return info["port"]
 
     if ttl_minutes is None:
@@ -1047,8 +1104,12 @@ def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
     # lifetime to that session so it cannot outlive it. Explicit starts
     # (elspais daemon, manual mcp serve, viewer) do not pass a
     # client and keep TTL-only behavior.
+    client_pid = resolve_client_pid()
+    if client_pid is None:
+        # Implements: REQ-o00074-N
+        notify_unbound_lifetime(repo_root, "no client handle could be derived from this session")
     return start_daemon(
         repo_root,
         ttl_minutes=ttl_minutes,
-        client_pid=resolve_client_pid(),
+        client_pid=client_pid,
     )

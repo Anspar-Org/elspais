@@ -118,7 +118,7 @@ def _try_daemon(
         # This is the path a session that never starts a daemon takes on
         # every command, so it is where such a session has to announce
         # itself; otherwise the daemon watches only whoever started it.
-        ensure_client_registered(info)
+        ensure_client_registered(repo_root, info)
         daemon_version = info.get("version") if info else None
         version_mismatch = bool(daemon_version and daemon_version != __version__)
         config_stale = info is not None and _config_hash_stale(info, repo_root)

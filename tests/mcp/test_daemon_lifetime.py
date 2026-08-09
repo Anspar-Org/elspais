@@ -1142,6 +1142,16 @@ class TestClientIdentityResolution:
         monkeypatch.setenv("ELSPAIS_CLIENT_PID", value)
         assert daemon.resolve_client_pid() is None
 
+    def test_REQ_o00074_D_legacy_env_override(self, monkeypatch):
+        """Validates REQ-o00074-D: the former variable name, ``ELSPAIS_SPAWNER_PID``,
+        still resolves a client handle when set on its own -- callers that set it
+        before the rename to ``ELSPAIS_CLIENT_PID`` keep working."""
+        from elspais.mcp import daemon
+
+        monkeypatch.delenv("ELSPAIS_CLIENT_PID", raising=False)
+        monkeypatch.setenv("ELSPAIS_SPAWNER_PID", str(os.getpid()))
+        assert daemon.resolve_client_pid() == os.getpid()
+
     def test_REQ_o00074_D_claude_ancestor(self, monkeypatch):
         from elspais.mcp import daemon
 
@@ -1220,6 +1230,32 @@ class TestUnusableClientIdentityIsRefused:
     def test_REQ_o00074_D_real_client_pid_is_watched(self, monkeypatch, tmp_path):
         """The control: a usable identity does produce a watch on that pid."""
         assert self._client_pids_watched(monkeypatch, tmp_path, "5555") == [5555]
+
+    def test_REQ_o00074_D_already_dead_declared_pid_is_unusable(self, monkeypatch):
+        """A well-formed but already-dead declared pid is unusable, decisively:
+        ``_declared_client_pid`` reports ``_UNUSABLE`` rather than falling through
+        to the Claude-ancestor or tty-session rungs, and ``resolve_client_pid``
+        reports ``None`` rather than recording a handle that names a process
+        already gone. Recording it would bind the daemon to a process the very
+        next liveness check would find dead, reaping the daemon at once -- an
+        outcome its author would read as the daemon failing rather than as its
+        own declaration being stale."""
+        from elspais.mcp import daemon
+
+        proc = subprocess.Popen([sys.executable, "-c", "pass"])
+        proc.wait()
+        dead_pid = proc.pid
+
+        monkeypatch.delenv("ELSPAIS_CLIENT_PID", raising=False)
+        monkeypatch.setenv("ELSPAIS_SPAWNER_PID", str(dead_pid))
+
+        assert daemon._declared_client_pid() == daemon._UNUSABLE
+        with patch(
+            "elspais.mcp.daemon._iter_proc_ancestors",
+            side_effect=AssertionError("must not fall through to the claude-ancestor rung"),
+        ):
+            monkeypatch.setenv("CLAUDECODE", "1")
+            assert daemon.resolve_client_pid() is None
 
 
 class TestImplicitStartRecordsClient:
