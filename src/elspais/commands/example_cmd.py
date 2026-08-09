@@ -323,5 +323,5 @@ def show_full_spec(args: argparse.Namespace) -> int:
         print(f"  - {spec_path}")
         print(f"  - {alt_path}")
         print()
-        print("Use `elspais format requirement` for a template instead.")
+        print("Use `elspais example requirement` for a template instead.")
         return 1

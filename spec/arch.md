@@ -46,7 +46,6 @@
  ├── commands/                   # CLI IMPLEMENTATIONS (thin wrappers)                                       
  │   ├── report.py               # elspais checks                                                            
  │   ├── trace.py                # elspais trace                                                             
- │   ├── analyze.py              # elspais analyze                                                           
  │   ├── fix_cmd.py              # elspais fix                                                              
  │   ├── changed.py              # elspais changed                                                           
  │   ├── index.py                # elspais index                                                             

@@ -37,7 +37,7 @@ Delete this file after reviewing the structure.
 - **Rationale**: Optional explanation section (non-normative)
 - **Footer**: `*End* *Title* | **Hash**: XXXXXXXX` - hash computed by `elspais fix`
 
-Run `elspais format` for more templates and `elspais checks` to check this file.
+Run `elspais example` for more templates and `elspais checks` to check this file.
 
 *End* *Example Requirement Title* | **Hash**: 00000000
 """

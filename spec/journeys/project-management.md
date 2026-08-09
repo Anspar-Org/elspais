@@ -18,7 +18,7 @@ Validates: REQ-p00003, REQ-p00004, REQ-p00006
 3. She expands the hierarchy for REQ-p00005 to see all OPS and DEV children.
 4. She runs `elspais changed` to see which spec files have been modified during the sprint.
 5. She cross-references the changed requirements with the sprint plan to confirm progress.
-6. She runs `elspais analyze orphans` to check for any requirements that lost their parent link during refactoring.
+6. She runs `elspais checks --spec` to check for any requirements that lost their parent link during refactoring.
 7. She finds one orphaned requirement and notifies the developer to fix the implements reference.
 8. She generates an HTML report with `elspais trace --format html -o sprint-review.html` for the sprint review meeting.
 
