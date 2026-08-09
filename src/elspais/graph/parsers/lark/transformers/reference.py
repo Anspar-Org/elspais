@@ -39,9 +39,6 @@ from elspais.graph.parsers.patterns import (
 from elspais.graph.parsers.patterns import (
     KEYWORD_PATTERN as _KEYWORD_RE,
 )
-from elspais.graph.parsers.patterns import (
-    build_multi_assertion_pattern,
-)
 
 if TYPE_CHECKING:
     from elspais.utilities.patterns import IdResolver
@@ -358,24 +355,17 @@ class ReferenceTransformer:
         # Test names use underscores: def test_foo_REQ_p00001_A
         # We need to match the ID part (REQ_p00001) and optional assertion
         # suffix (_A) but stop before lowercase continuation (_validates).
-        prefix = self.resolver.config.namespace
-        type_codes = self.resolver.all_type_alias_values()
-        if type_codes:
-            type_pattern = f"(?:{'|'.join(re.escape(t) for t in type_codes)})"
-        else:
-            type_pattern = r"[a-z]"
-        comp = self.resolver.config.component
-        if comp.style == "numeric":
-            id_number = rf"\d{{{comp.digits}}}"
-        else:
-            id_number = r"[A-Za-z0-9]+"
+        # Same grammar, underscore notation (REQ-d00268-C).
+        g = self.resolver.grammar(separator="_")
 
-        # Assertion: uppercase letter NOT followed by lowercase (to avoid
-        # matching _validates as assertion V)
-        assertion_pat = r"(?:_[A-Z](?![a-z]))+"
+        # A trailing lowercase run continues the function name rather than
+        # labelling an assertion, so `test_REQ_p00001_validates` must not read
+        # its `_v` as a label. The guard belongs to this notation, not to the
+        # grammar: only here can a label abut prose.
+        assertion_pat = rf"(?:{g.assertion_separator}{g.assertion_label}(?![a-z]))+"
 
         full_pattern = re.compile(
-            rf"(?P<ref>{re.escape(prefix)}_{type_pattern}{id_number}" rf"(?:{assertion_pat})?)",
+            rf"(?P<ref>{g.identifier}(?:{assertion_pat})?)",
             re.IGNORECASE,
         )
         match = full_pattern.search(text)
@@ -416,12 +406,7 @@ class ReferenceTransformer:
         ids (whole journeys and addressable steps) so that ``Verifies:``
         annotations may target either kind.
         """
-        pattern = build_multi_assertion_pattern(
-            self.resolver.config.namespace,
-            self.resolver.config.assertions.multi_separator,
-            self.resolver.config.assertions.separator,
-            label_pattern=self.resolver.assertion_label_pattern,
-        )
+        pattern = self.resolver.multi_assertion_reference_regex()
         refs = []
         for m in pattern.finditer(text):
             ref = self.resolver.normalize_ref(m.group(0))

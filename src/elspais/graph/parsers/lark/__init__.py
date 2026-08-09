@@ -24,8 +24,6 @@ from typing import TYPE_CHECKING
 
 from lark import Lark
 
-from elspais.utilities.patterns import component_regex
-
 if TYPE_CHECKING:
     from elspais.utilities.patterns import IdResolver
 
@@ -53,63 +51,20 @@ class GrammarFactory:
     # ------------------------------------------------------------------
 
     def _build_tokens(self) -> dict[str, str]:
-        """Build substitution tokens from the resolver."""
-        r = self._resolver
-        cfg = r.config
-
-        # Namespace: literal string, e.g. "REQ"
-        namespace = re.escape(cfg.namespace)
-
-        # Type pattern: alternation of alias values (e.g. "p|o|d")
-        type_values = r.all_type_alias_values()
-        if type_values:
-            type_pattern = "|".join(re.escape(v) for v in type_values)
-        else:
-            type_pattern = "[a-z]"
-
-        # Component/digits pattern — single authority (REQ-d00268-A)
-        digits_pattern = component_regex(cfg.component)
-
-        # Assertion label
-        assertion_label = r._assertion_label_regex_str()
-
-        # Assertion separator (between component and label) and multi-assertion separator
-        assertion_sep = re.escape(cfg.assertions.separator)
-        multi_sep = re.escape(cfg.assertions.multi_separator)
-
-        # Build __ID_PATTERN__ from canonical template.
-        # Strategy: split canonical into literal segments and placeholders,
-        # escape the literals, then join with regex fragments.
-        canonical = cfg.canonical_template
-        placeholders = {
-            "{namespace}": namespace,
-            "{component}": digits_pattern,
-            "{level}": f"(?:{type_pattern})",
-        }
-        # {type} -> alternation of canonical type codes
-        all_type_codes = list(r.config.types.keys())
-        if all_type_codes:
-            placeholders["{type}"] = "(?:" + "|".join(re.escape(t) for t in all_type_codes) + ")"
-        # {level.X} or {type.X} -> alternation of alias values
-        for m in re.finditer(r"\{(?:type|level)\.(\w+)\}", canonical):
-            alias_name = m.group(1)
-            alias_vals = r._reverse_aliases.get(alias_name, {})
-            if alias_vals:
-                val_alt = "|".join(re.escape(v) for v in alias_vals)
-                placeholders[m.group(0)] = f"(?:{val_alt})"
-
-        # Split on placeholders, escape literal parts, reassemble
-        parts = re.split(r"(\{[^}]+\})", canonical)
-        id_pattern = "".join(placeholders[p] if p in placeholders else re.escape(p) for p in parts)
+        """Build substitution tokens from the resolver's identifier grammar."""
+        # Every fragment comes from the one derivation authority (REQ-d00268-C),
+        # so the grammar this parser recognises and the identifiers the resolver
+        # accepts cannot drift apart.
+        g = self._resolver.grammar()
 
         tokens: dict[str, str] = {
-            "__NAMESPACE__": namespace,
-            "__TYPE_PATTERN__": type_pattern,
-            "__DIGITS_PATTERN__": digits_pattern,
-            "__ID_PATTERN__": id_pattern,
-            "__ASSERTION_LABEL__": assertion_label,
-            "__ASSERTION_SEP__": assertion_sep,
-            "__MULTI_SEP__": multi_sep,
+            "__NAMESPACE__": g.namespace,
+            "__TYPE_PATTERN__": g.level,
+            "__DIGITS_PATTERN__": g.component,
+            "__ID_PATTERN__": g.identifier,
+            "__ASSERTION_LABEL__": g.assertion_label,
+            "__ASSERTION_SEP__": g.assertion_separator,
+            "__MULTI_SEP__": g.multi_separator,
         }
 
         # Reference grammar tokens (comment styles + keywords)
@@ -340,24 +295,13 @@ class FileDispatcher:
         parser = self._get_ref_parser()
         tree = parser.parse(content)
 
-        from elspais.graph.parsers.patterns import (
-            KEYWORD_PATTERN,
-            build_multi_assertion_pattern,
-        )
+        from elspais.graph.parsers.patterns import KEYWORD_PATTERN
 
         file_default_verifies: list[str] = []
         expected_broken_count = 0
         import re as _re
 
-        prefix = self._resolver.config.namespace
-        multi_sep = self._resolver.config.assertions.multi_separator
-        assertion_sep = self._resolver.config.assertions.separator
-        multi_assertion_pattern = build_multi_assertion_pattern(
-            prefix,
-            multi_sep,
-            assertion_sep,
-            label_pattern=self._resolver.assertion_label_pattern,
-        )
+        multi_assertion_pattern = self._resolver.multi_assertion_reference_regex()
         for child in tree.children:
             if not hasattr(child, "data"):
                 continue

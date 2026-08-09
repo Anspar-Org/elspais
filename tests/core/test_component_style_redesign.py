@@ -491,22 +491,20 @@ class TestComponentRegexHelper:
         assert _re.fullmatch(regex_str, "foo") is None
 
     def test_helper_is_sole_authority_no_inline_dispatch_in_lark(self):
-        # Verifies: REQ-d00268-A
-        # The lark grammar must call component_regex(), not duplicate the
-        # style dispatch. Detect duplication via grep on the source file.
+        # Verifies: REQ-d00268-A, REQ-d00268-C
+        # The lark grammar takes its component fragment from the derivation
+        # authority rather than dispatching on the configured style itself.
         import inspect
 
         from elspais.graph.parsers import lark as lark_mod
 
         src = inspect.getsource(lark_mod)
-        # The forbidden patterns are the per-style if/elif chain literals.
-        # If the helper is used, these literal strings shouldn't appear.
+        # The per-style if/elif chain literals; their absence is the sign
+        # that the dispatch has not been copied here.
         forbidden_literals = [
-            'comp.style == "named"',
-            'comp.style == "alphanumeric"',
+            "comp.style ==",
+            "component.style ==",
         ]
         offenders = [lit for lit in forbidden_literals if lit in src]
         assert not offenders, f"lark parser still contains inline style dispatch: {offenders}"
-        assert (
-            "component_regex" in src
-        ), "lark parser should call component_regex() from utilities.patterns"
+        assert ".grammar(" in src, "lark parser should take its fragments from IdResolver.grammar()"

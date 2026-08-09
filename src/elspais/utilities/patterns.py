@@ -82,6 +82,24 @@ class AssertionFormat:
 
 
 # Implements: REQ-d00268-A
+@dataclass(frozen=True)
+class IdGrammar:
+    """The regex fragments of one repository's identifier grammar.
+
+    Uncompiled and unanchored, so a consumer can embed a fragment in a
+    larger grammar without reconstructing it. Produced only by
+    ``IdResolver.grammar()``.
+    """
+
+    namespace: str
+    level: str
+    component: str
+    identifier: str
+    assertion_label: str
+    assertion_separator: str
+    multi_separator: str
+
+
 def component_regex(component: ComponentFormat) -> str:
     """Resolve a ComponentFormat to its regex string.
 
@@ -176,7 +194,10 @@ class IdPatternConfig:
             max_count=raw_assert.get("max_count", 26),
             zero_pad=raw_assert.get("zero_pad", False),
             separator=raw_assert.get("separator", "-"),
-            multi_separator=raw_assert.get("multi_separator", "+"),
+            # An empty or absent multi-separator falls back to "+": every
+            # surface derives its grammar from this value, and an empty one
+            # dissolves the boundary between two assertion labels.
+            multi_separator=raw_assert.get("multi_separator") or "+",
         )
 
         # Parse output forms
@@ -337,6 +358,89 @@ class IdResolver:
         elif style == "numeric_1based":
             return r"[0-9]{2}" if af.zero_pad else r"[1-9][0-9]?"
         return r"[A-Z]"
+
+    # Implements: REQ-d00268-A+B
+    def grammar(self, separator: str | None = None) -> IdGrammar:
+        """The regex fragments of this repository's identifier grammar.
+
+        Every consumer that has to recognise, parse or expand an identifier
+        takes its patterns from here, so a repository's configuration is
+        interpreted once and the surfaces cannot drift apart.  The fragments
+        are uncompiled and unanchored so a caller can embed them in a larger
+        grammar; the compiled, anchored forms are ``canonical_regex`` and
+        ``search_regex``.
+
+        Args:
+            separator: Render the same grammar with this character wherever
+                the identifier's own punctuation appears.  Test function
+                names spell ``REQ-d00001-A`` as ``REQ_d00001_A``; that is one
+                grammar in two notations, not two grammars, so the notation
+                is a parameter here rather than a second derivation
+                elsewhere.
+        """
+        cfg = self.config
+        namespace = re.escape(cfg.namespace)
+
+        alias_values = self.all_type_alias_values()
+        level = "|".join(re.escape(v) for v in alias_values) if alias_values else "[a-z]"
+
+        component = component_regex(cfg.component)
+        if cfg.component.style in ("camelCase", "PascalCase", "snake_case", "kebab-case"):
+            # A case-style says case is what distinguishes a component from
+            # anything else, so the fragment stays case-sensitive even when a
+            # consumer embeds it in a case-insensitive pattern. Without this a
+            # kebab component swallows the uppercase assertion label that
+            # follows it, and `REQ-p-widget-A+C` loses its second label.
+            component = f"(?-i:{component})"
+
+        placeholders = {
+            "{namespace}": namespace,
+            "{component}": component,
+            "{level}": f"(?:{level})",
+        }
+        type_codes = list(cfg.types.keys())
+        if type_codes:
+            placeholders["{type}"] = "(?:" + "|".join(re.escape(t) for t in type_codes) + ")"
+        for match in re.finditer(r"\{(?:type|level)\.(\w+)\}", cfg.canonical_template):
+            alias_vals = self._reverse_aliases.get(match.group(1), {})
+            if alias_vals:
+                placeholders[match.group(0)] = (
+                    "(?:" + "|".join(re.escape(v) for v in alias_vals) + ")"
+                )
+
+        def _literal(segment: str) -> str:
+            if separator is None:
+                return re.escape(segment)
+            return re.escape("".join(separator if c in "-_" else c for c in segment))
+
+        parts = re.split(r"(\{[^}]+\})", cfg.canonical_template)
+        identifier = "".join(placeholders[p] if p in placeholders else _literal(p) for p in parts)
+
+        assertion_separator = re.escape(
+            separator if separator is not None else cfg.assertions.separator
+        )
+        return IdGrammar(
+            namespace=namespace,
+            level=level,
+            component=component,
+            identifier=identifier,
+            assertion_label=self._assertion_label_regex_str(),
+            assertion_separator=assertion_separator,
+            multi_separator=re.escape(cfg.assertions.multi_separator),
+        )
+
+    # Implements: REQ-d00268-A
+    def multi_assertion_reference_regex(self) -> re.Pattern[str]:
+        """Compile the pattern matching an identifier with its assertion suffix.
+
+        Matches ``REQ-d00001`` and ``REQ-d00001-A+B`` alike, so a reference
+        naming several *Assertion* labels is captured whole rather than
+        truncated at the first label.
+        """
+        g = self.grammar()
+        label = g.assertion_label
+        suffix = rf"(?:{g.assertion_separator}{label}(?:{g.multi_separator}{label})*)?"
+        return re.compile(f"{g.identifier}{suffix}", re.IGNORECASE)
 
     def parse(self, raw_id: str) -> ParsedId | None:
         """Try all compiled forms. Returns ParsedId with canonical type_code.

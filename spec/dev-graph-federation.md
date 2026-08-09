@@ -104,6 +104,8 @@ J. When two distinct repositories would enter one federation under the same decl
 
 Associates are declared in `.elspais.toml` using a structured TOML section. Each associate specifies a relative filesystem path, a namespace, and an optional git remote URL. Transitive resolution (assertion D) is what lets the tool work from any repository in a dependency chain rather than from the root alone, and it is what allows an org-policy repository reachable only through a chain to be federated at all. Directed cycles are a genuine error because dependency direction drives resolution order; diamonds are convergence, not cycles, and the git-origin identity rule (assertion G) is what makes the two distinguishable. Disjoint ID spaces (assertion H) are a precondition of federation rather than a preference: a reference resolves to a repository by asking which one claims the identifier, so two claimants make the answer arbitrary.
 
+A repository declares everything it directly needs in order to resolve on its own, without regard to what its associates happen to declare. Redundancy between those declarations is therefore expected rather than exceptional, and assertion F is what makes it harmless: a repository reached both directly and through a chain resolves to one entry, so declaring it twice is idempotent. Pruning a declaration because some other repository already reaches it would couple the two configurations and break the pruned repository's own invocations.
+
 Name uniqueness (assertion J) becomes an obligation only once declarations from several repositories are combined. A single declaration table cannot collide with itself, so under root-only resolution uniqueness was guaranteed by TOML's own syntax. A federation keys repositories by name, so two repositories arriving under one name would leave only the later of them reachable — the earlier repository's requirements would resolve against the wrong configuration and its graph would never be read at all. Failing is the honest outcome because the alternative is a silent partial federation.
 
 ### Changelog
@@ -362,3 +364,42 @@ Reference repositories exist so cross-cutting obligations resolve and surface (R
 - 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: author federation role model
 
 *End* *Federation Role Model* | **Hash**: fb8db8a9
+---
+
+## REQ-d00269: Cross-Repository Coverage Credit
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00005
+
+Evidence recorded in one repository of a federation credits the requirement it names in another. A federated view reports the coverage its declared *Traceability* edges justify, whichever repository each end of an edge lives in.
+
+### Assertions
+
+A. Coverage SHALL be computed after every cross-repository *Traceability* edge has been wired, so that no coverage number depends on the order in which a federation was assembled.
+
+B. A cross-repository *Traceability* edge SHALL carry the same shape as the equivalent same-repository edge, including the *Assertion* labels the reference targets, so that one coverage computation reads both.
+
+C. An identifier owned by any repository in a federation SHALL be recognised in the code and test annotations of every repository in that federation.
+
+D. A *Traceability* reference whose target identifier cannot be resolved SHALL be recorded as a broken reference, whatever kind of file it appears in.
+
+### Rationale
+
+Cross-repository credit is what multi-repository *Traceability* is for: a sponsor repository's tests verifying a platform requirement is the ordinary case, not an exotic one. The obligations here are separated because each fails independently and each fails silently. Computing coverage before the federation is wired starves the computation of the very edges that cross repositories (A). Wiring those edges in a shape the coverage computation does not read starves it a second time, so ordering alone is not sufficient (B). Refusing to recognise a foreign identifier in a code or test comment drops the evidence before any edge exists at all (C), which bites hardest because annotating code and tests is where cross-repository evidence is most naturally authored.
+
+D is the diagnostic floor beneath C. A reference the tool cannot resolve is a fact about the estate that its author needs to see; discarding it silently is worse than reporting it broken, because a requirement with no evidence and a requirement whose evidence was thrown away read identically in every report.
+
+The complementary negative rule — that federation membership alone credits nothing — belongs to the federation role model and is not restated here. Together the two bound the behaviour from both sides: coverage crosses a boundary exactly where a *Traceability* edge crosses it, and nowhere else.
+
+Coverage computed over a wired federation is idempotent, so a surface may recompute without double-counting.
+
+A concurrency version is derived from a node's content and its outgoing *Traceability* edges, so normalizing a cross-repository edge onto the owning requirement per B brings that edge into the requirement's version. That is the correct outcome and not a side effect to be engineered away: a version guards against a writer modifying state it has not seen, and within one federated view that edge is state a writer can add. Each federated view answers for its own membership, so the same requirement legitimately carries different versions in two federations that reach it — versions are compared only against the graph that issued them, never between them.
+
+### Changelog
+
+- 2026-08-08 | bd05142f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-08 | bc8f5d09 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-08 | bd05142f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-08-09 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: cross-repository coverage credit
+
+*End* *Cross-Repository Coverage Credit* | **Hash**: bd05142f
+---

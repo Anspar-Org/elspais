@@ -37,6 +37,9 @@
 - REQ-d00252-B
 - REQ-d00252-G
 - REQ-d00261-E
+- REQ-d00269-A
+- REQ-d00269-B
+- REQ-d00269-D
 - REQ-d00128-I
 - REQ-d00131-L
 - REQ-d00133-B
@@ -56,6 +59,8 @@
 - REQ-d00069:section:1
 - REQ-d00070:section:1
 - REQ-d00261:section:1
+- REQ-d00269:section:0
+- REQ-d00269:section:1
 - REQ-d00126:section:0
 - rem:spec/dev-traceview-review.md:3
 - REQ-d00010:section:0
