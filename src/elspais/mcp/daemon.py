@@ -371,7 +371,7 @@ def _remove_sentinel(path: Path, what: str) -> None:
         print(f"warning: could not clear the record that {what}: {exc}", file=sys.stderr)
 
 
-# Implements: REQ-o00074-L
+# Implements: REQ-p00083-E
 def mark_unsaved_changes(repo_root: Path) -> None:
     """Record that changes are being held unwritten, before they are acknowledged."""
     _touch_sentinel(_unsaved_changes_path(repo_root), "changes are being held unwritten")
@@ -394,7 +394,7 @@ def has_lost_changes(repo_root: Path) -> bool:
     return _lost_changes_path(repo_root).exists()
 
 
-# Implements: REQ-o00074-L
+# Implements: REQ-o00074-J
 def clear_lost_changes(repo_root: Path) -> None:
     """Retire the finding once a client has written the tree at its own request."""
     _remove_sentinel(_lost_changes_path(repo_root), "an earlier process died holding changes")
@@ -430,7 +430,7 @@ def adopt_inherited_sentinel(repo_root: Path) -> bool:
     return True
 
 
-# Implements: REQ-o00074-I
+# Implements: REQ-p00083-C
 def record_automatic_save(
     repo_root: Path,
     mutation_count: int | None,
@@ -467,7 +467,7 @@ def record_automatic_save(
         print(f"warning: could not record the automatic save: {exc}", file=sys.stderr)
 
 
-# Implements: REQ-o00074-I
+# Implements: REQ-p00083-C
 def read_automatic_save(repo_root: Path) -> dict | None:
     """Return the outstanding automatic-save record, or None."""
     path = _automatic_save_path(repo_root)
@@ -480,7 +480,7 @@ def read_automatic_save(repo_root: Path) -> dict | None:
     return record if isinstance(record, dict) else None
 
 
-# Implements: REQ-o00074-J
+# Implements: REQ-p00083-H
 def clear_automatic_save(repo_root: Path) -> None:
     """Retire the record once a client saves at its own request.
 

@@ -102,7 +102,7 @@ class MutationLog:
         self._revision = 0
         self._dirty_observer: Callable[[bool], None] | None = None
 
-    # Implements: REQ-o00074-L
+    # Implements: REQ-p00083-E
     def set_dirty_observer(self, observer: Callable[[bool], None] | None) -> None:
         """Watch the transitions between holding changes and holding none.
 

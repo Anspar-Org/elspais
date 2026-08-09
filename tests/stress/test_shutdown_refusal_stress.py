@@ -1,11 +1,11 @@
-# Verifies: REQ-o00074-I, REQ-o00062-O
+# Verifies: REQ-p00083-G, REQ-o00062-O
 """A writer racing the daemon's decision to stop.
 
 Between the decision to stop and the end of the drain, the HTTP stack and
 the MCP worker threads keep accepting requests. A mutation accepted in
 that window is guarded, applied, acknowledged to its writer -- and then
 dies with the process. The whole point of persisting rather than
-discarding pending work (REQ-o00074-I) is undone if the daemon goes on
+discarding pending work (REQ-p00083-A) is undone if the daemon goes on
 swallowing writes it will never keep.
 
 The invariant this battery asserts is not a timing window but the
@@ -94,7 +94,7 @@ def dying_daemon(tmp_path_factory):
 
 
 class TestWritesRacingTheShutdownDecision:
-    """Verifies REQ-o00074-I: a write that arrives after the daemon has decided
+    """Verifies REQ-p00083-G: a write that arrives after the daemon has decided
     to stop is refused, never acknowledged and then lost with the process; and
     REQ-o00062-O: the refusal a writer receives has the shape callers already
     handle.

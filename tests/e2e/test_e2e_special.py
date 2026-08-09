@@ -1133,7 +1133,7 @@ class TestDaemonClientLiveness:
 # ---------------------------------------------------------------------------
 # Stopping a live daemon: what becomes of the work it holds
 # ---------------------------------------------------------------------------
-# Verifies: REQ-o00074-I+L
+# Verifies: REQ-o00074-I+L, REQ-p00083-A+E+F
 
 
 def _daemon_project(tmp_path, name: str):
@@ -1204,15 +1204,16 @@ def _await_exit(pid: int, seconds: float = 30.0) -> bool:
 
 
 class TestStoppingALiveDaemonAccountsForItsWork:
-    """Validates REQ-o00074-I: a live daemon told to discard the work it holds
-    drops it, and one stopped by any other route writes it. Only a real process
-    can show this: the instruction, the decision and the write all happen after
-    the CLI that asked has returned, and the evidence is what is on disk
-    afterwards.
+    """Validates REQ-p00083-A and REQ-p00083-B: a live daemon told to discard the
+    work it holds drops it, and one stopped by any other route writes it. Only a
+    real process can show this: the instruction, the decision and the write all
+    happen after the CLI that asked has returned, and the evidence is what is on
+    disk afterwards.
 
-    Validates REQ-o00074-L: a process killed outright leaves the record that it
-    was holding unwritten changes, and the next server turns that record into a
-    finding about the process that is gone rather than a claim about itself.
+    Validates REQ-o00074-L, REQ-p00083-E, REQ-p00083-F: a process killed outright
+    leaves the record that it was holding unwritten changes, and the next server
+    turns that record into a finding about the process that is gone rather than a
+    claim about itself, and discloses it.
     """
 
     def test_REQ_o00074_I_the_instructed_discard_keeps_the_work_off_disk(self, tmp_path):
@@ -1417,7 +1418,7 @@ class TestStoppingALiveDaemonAccountsForItsWork:
 
 
 class TestTheRestartSurfaceOffersTheTwoAnswers:
-    """Validates REQ-o00074-I: the command line is where an operator says what
+    """Validates REQ-p00083-A and REQ-p00083-B: the command line is where an operator says what
     becomes of the work, so the two answers have to be reachable from it -- and
     the flag that used to mean "restart anyway, the daemon saves it for you"
     must not still be accepted under its old name, now that the name means the

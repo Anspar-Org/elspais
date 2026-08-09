@@ -820,7 +820,7 @@ def _get_graph_status(
     REQ-d00060-B: Returns node_counts by calling nodes_by_kind().
     REQ-d00060-D: Returns root_count using graph.root_count().
     REQ-d00060-E: Does NOT iterate full graph for counts.
-    REQ-o00074-I: Reports an outstanding automatic-save record, so the
+    REQ-p00083-C: Reports an outstanding automatic-save record, so the
     quick status question also answers "how did these files get here".
     """
     # Count nodes by kind using the efficient nodes_by_kind iterator
@@ -1751,21 +1751,21 @@ def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dic
         "available_details": dict(_WORKSPACE_DETAIL_PROFILES),
         "config_summary": config_summary,
     }
-    # Implements: REQ-o00074-I
+    # Implements: REQ-p00083-C
     # Carried on the base profile, not a detail level, so a client that
     # asks the ordinary orientation question is told how the files it is
     # about to read reached their current form.
     record = _automatic_save_record(working_dir)
     if record is not None:
         info["automatic_save"] = record
-    # Implements: REQ-o00074-L
+    # Implements: REQ-p00083-F
     notice = _lost_changes_notice(working_dir)
     if notice is not None:
         info["lost_changes"] = notice
     return info
 
 
-# Implements: REQ-o00074-I
+# Implements: REQ-p00083-C
 def _automatic_save_record(working_dir: Path | str | None) -> dict[str, Any] | None:
     """The outstanding record of a save the daemon performed, if any.
 
@@ -1780,7 +1780,7 @@ def _automatic_save_record(working_dir: Path | str | None) -> dict[str, Any] | N
     return read_automatic_save(Path(working_dir))
 
 
-# Implements: REQ-o00074-L
+# Implements: REQ-p00083-F
 def _lost_changes_notice(working_dir: Path | str | None) -> dict[str, Any] | None:
     """Present while a process is known to have died holding unwritten changes.
 
@@ -2829,7 +2829,7 @@ def _guard_version(graph: Any, node_id: str, if_version: str) -> dict[str, Any] 
     }
 
 
-# Implements: REQ-o00062-O, REQ-o00074-I
+# Implements: REQ-o00062-O, REQ-p00083-G
 def _guard_shutdown(state: Any) -> dict[str, Any] | None:
     """Return a rejection dict if this process is stopping; otherwise None.
 
@@ -5779,7 +5779,7 @@ def create_server(
         The shutdown check is taken inside the same lock, because the
         decision to stop is taken inside it too: outside, a write could
         pass the check and land after the process had committed to
-        stopping (REQ-o00074-I).
+        stopping (REQ-p00083-G).
         """
 
         @functools.wraps(fn)
@@ -7407,7 +7407,7 @@ def run_server(
         daemon_json = Path(env_dj)
 
     if transport == "stdio":
-        # Implements: REQ-o00074-I
+        # Implements: REQ-p00083-A
         # A stdio server holds its own graph and its own pending
         # mutations, and it ends when its client's pipe closes rather
         # than by any decision of its own. Hold the holder so the same
@@ -7442,7 +7442,7 @@ def run_server(
 
         state = AppState.from_config(repo_root=working_dir)
         app = create_app(state)
-        # Implements: REQ-o00074-L
+        # Implements: REQ-p00083-E
         # Before anything is served: a sentinel still standing here was
         # written by a process that is gone, and what it says about this
         # one is nothing.
@@ -7501,7 +7501,7 @@ def run_server(
             def _pending() -> tuple[int, str | None]:
                 return pending_snapshot(state.graph)
 
-            # Implements: REQ-o00074-I
+            # Implements: REQ-p00083-A
             # The watchdog does not save or raise the shutdown flag
             # itself; it decides *that* the daemon stops and hands over
             # to the one routine every stop path runs.
@@ -7549,7 +7549,7 @@ def run_server(
                 state.shared.begin_shutdown()
                 super().handle_exit(sig, frame)
 
-        # Implements: REQ-o00074-I
+        # Implements: REQ-p00083-A
         # The fall-through every stop path reaches, including the ones
         # nothing in this process initiated: an operator's signal, a
         # container stop, a supervisor restart. The watchdog and the idle
@@ -7558,7 +7558,7 @@ def run_server(
         # so it is the backstop rather than the primary.
         server = _ShutdownAwareServer(uvi_config)
 
-        # Implements: REQ-o00074-I
+        # Implements: REQ-p00083-A
         # uvicorn captures the stop signals for the duration of serve(),
         # and re-raises the one it caught once its own drain is over —
         # with whatever handler was installed before it started. If that

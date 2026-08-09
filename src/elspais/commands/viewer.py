@@ -230,7 +230,7 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
 
     atexit.register(lambda: daemon_json.unlink(missing_ok=True))
 
-    # Implements: REQ-o00074-L
+    # Implements: REQ-p00083-E
     # This process holds unwritten changes exactly as the daemon does,
     # and can be killed in exactly the same ways.
     from elspais.mcp.shared_state import attach_dirty_sentinel
@@ -249,7 +249,7 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
         )
         server = uvicorn.Server(uvi_config)
 
-        # Implements: REQ-o00074-I
+        # Implements: REQ-p00083-A
         # uvicorn re-raises the stop signal it caught once its drain is
         # done, under the handler that was in place beforehand. Left as
         # the default, that kills this process inside serve() and the
@@ -269,7 +269,7 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
         if not quiet:
             print("\nServer stopped.", file=sys.stderr)
     finally:
-        # Implements: REQ-o00074-I
+        # Implements: REQ-p00083-A
         # This process serves the same mutation routes as the daemon and
         # can therefore be holding unsaved changes when it stops. It runs
         # the same shutdown routine, for the same reason and by the same

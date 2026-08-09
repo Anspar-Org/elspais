@@ -80,7 +80,7 @@ class TTLMiddleware(BaseHTTPMiddleware):
             self._timer.daemon = True
             self._timer.start()
 
-    # Implements: REQ-o00062-O, REQ-o00074-I, REQ-o00074-K
+    # Implements: REQ-o00062-O, REQ-p00083-A, REQ-p00083-D
     def _exit(self) -> None:
         from elspais.mcp.shared_state import finalize_shutdown, report_shutdown_outcome
 

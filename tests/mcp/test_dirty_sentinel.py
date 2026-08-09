@@ -1,4 +1,4 @@
-# Verifies: REQ-o00074-L
+# Verifies: REQ-o00074-L, REQ-p00083-E+F
 """The record, outside a server's memory, that it is holding unwritten changes.
 
 Unsaved in-memory mutations exist in no file. A process killed outright
@@ -121,7 +121,7 @@ def driver(request):
 
 
 class TestTheLogAnnouncesOnlyTheTransitions:
-    """Validates REQ-o00074-L: what is recorded outside the process is the
+    """Validates REQ-p00083-E: what is recorded outside the process is the
     *fact* of holding unwritten work, which starts once and ends once. The log
     therefore announces the clean->dirty and dirty->clean crossings and nothing
     in between -- a per-mutation announcement would rewrite the record on every
@@ -184,9 +184,10 @@ class TestTheLogAnnouncesOnlyTheTransitions:
 
 
 class TestTheSentinelTracksWhatTheServerHolds:
-    """Validates REQ-o00074-L: while a server holds unwritten changes the
-    sentinel is present, and it is present at no other time -- so a reader
-    outside the process learns exactly whether work is at stake.
+    """Validates REQ-o00074-L, REQ-p00083-E, REQ-p00083-B: while a server holds
+    unwritten changes the sentinel is present, and it is present at no other
+    time -- so a reader outside the process learns exactly whether work is at
+    stake.
     """
 
     @pytest.fixture
@@ -313,10 +314,12 @@ class TestTheSentinelTracksWhatTheServerHolds:
 
 
 class TestASentinelLeftBehindBecomesAFindingAboutItsWriter:
-    """Validates REQ-o00074-L: a sentinel still standing when a server starts
-    was written by a process that no longer exists, and it must not be readable
-    as a statement about the starting one. It is converted to the record that
-    says what is actually known, so presence keeps meaning "held now".
+    """Validates REQ-o00074-L, REQ-o00074-J, REQ-p00083-F: a sentinel still
+    standing when a server starts was written by a process that no longer
+    exists, and it must not be readable as a statement about the starting one.
+    It is converted to the record that says what is actually known, so
+    presence keeps meaning "held now", is disclosed to later clients, and is
+    retired once a client persists at its own request.
     """
 
     def test_REQ_o00074_L_adoption_converts_the_inherited_record(self, tmp_path):

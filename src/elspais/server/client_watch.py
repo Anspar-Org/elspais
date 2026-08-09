@@ -35,7 +35,7 @@ which every other way of stopping runs too, so the daemon behaves the
 same whether its clients went away, its idle timeout expired, or
 somebody signalled it. That routine records who saved, when, how much,
 and what triggered it, so a later client can see how the files reached
-their current form (REQ-o00074-I). The record states those facts and
+their current form (REQ-p00083-C). The record states those facts and
 nothing else: a client can disappear because it finished, crashed, or
 lost its connection, and nothing here can tell those apart, so no
 conclusion about the work is drawn on the reader's behalf.
@@ -44,7 +44,7 @@ Preservation is the default because the costs are asymmetric — the files
 are under revision control, where an unwanted write costs one command to
 inspect and revert, while discarded work has to be redone from memory
 and sometimes cannot be. If the save itself fails, the work is retained
-and retried rather than dropped (REQ-o00074-K).
+and retried rather than dropped (REQ-p00083-D).
 """
 
 from __future__ import annotations
@@ -299,7 +299,7 @@ class ClientWatchdog:
     def _act(self, decision: Decision, count: int | None) -> Decision:
         """Emit the disclosure the decision requires and exit if it says so.
 
-        Implements: REQ-o00074-E, REQ-o00074-G, REQ-o00074-I, REQ-o00074-K
+        Implements: REQ-o00074-E, REQ-o00074-M, REQ-p00083-A, REQ-p00083-D
 
         Runs under the writers' lock. Neither exiting branch decides for
         itself what happens to the work: both hand over to the process's

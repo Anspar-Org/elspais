@@ -1182,11 +1182,11 @@ async def api_dirty(request: Request) -> JSONResponse:
         "mutation_count": len(entries),
         "tip": entries[-1].id if entries else None,
     }
-    # Implements: REQ-o00074-I
+    # Implements: REQ-p00083-C
     record = _automatic_save_record(state.repo_root)
     if record is not None:
         body["automatic_save"] = record
-    # Implements: REQ-o00074-L
+    # Implements: REQ-p00083-F
     notice = _lost_changes_notice(state.repo_root)
     if notice is not None:
         body["lost_changes"] = notice
@@ -1228,11 +1228,11 @@ async def api_check_freshness(request: Request) -> JSONResponse:
             # graph. In-memory mutations touch no file, so mtime staleness
             # alone can never reveal them. "" means nothing pending.
             "mutation_tip": log.get("current_tip", ""),
-            # Implements: REQ-o00074-I
+            # Implements: REQ-p00083-C
             # The poll every client already runs, so a save the daemon
             # performed reaches the next client without it having to ask.
             "automatic_save": _automatic_save_record(state.repo_root),
-            # Implements: REQ-o00074-L
+            # Implements: REQ-p00083-F
             # Same poll, same reason: a process that died holding changes
             # reaches the next client without it having to ask.
             "lost_changes": _lost_changes_notice(state.repo_root),
@@ -2048,7 +2048,7 @@ async def api_mutate_undo(request: Request) -> JSONResponse:
 # ─────────────────────────────────────────────────────────────────
 
 
-# Implements: REQ-o00074-I, REQ-o00074-K
+# Implements: REQ-p00083-A, REQ-p00083-B, REQ-p00083-D
 async def api_shutdown(request: Request) -> JSONResponse:
     """POST /api/shutdown - Stop the server, accounting for the work it holds.
 
@@ -2074,7 +2074,7 @@ async def api_shutdown(request: Request) -> JSONResponse:
     written.
 
     The accounting runs here, before the signal, so that a save which
-    fails can call the stop off (REQ-o00074-K): the caller is told, the
+    fails can call the stop off (REQ-p00083-D): the caller is told, the
     process stays up, and the work is still in it.
     """
     import os
@@ -2189,7 +2189,7 @@ async def api_save(request: Request) -> JSONResponse:
     because the caller has to supply something, and a write that failed
     is 500, because retrying the same request is not the answer.
     """
-    # Implements: REQ-d00132-A, REQ-o00074-J
+    # Implements: REQ-d00132-A, REQ-p00083-H
     from elspais.mcp.shared_state import persist_pending
 
     state = _st(request)

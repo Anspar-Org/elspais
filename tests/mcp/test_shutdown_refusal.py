@@ -1,4 +1,4 @@
-# Verifies: REQ-o00074-I+J+K, REQ-o00062-O
+# Verifies: REQ-o00074-I+J+K, REQ-p00083-A+B+D+G+H, REQ-o00062-O
 """Stopping the daemon: the work is accounted for, and writes are refused.
 
 Two halves of one decision. A process that decides to stop must first do
@@ -13,7 +13,7 @@ A daemon that has decided to terminate keeps a live HTTP stack and live
 MCP worker threads until the drain finishes. A mutation accepted in that
 window is guarded, applied, acknowledged to its writer -- and then dies
 with the process. That is the accepted-then-dropped write the version
-guards exist to make impossible, and it is exactly what REQ-o00074-I's
+guards exist to make impossible, and it is exactly what REQ-p00083-A's
 "persist rather than discard" would otherwise be undone by: the daemon
 saves what it holds and then swallows whatever arrives next.
 
@@ -114,7 +114,7 @@ def _apply_title(client, app_state, title: str) -> None:
 
 
 class TestShutdownFlagIsRaisedByEveryStopPath:
-    """Validates REQ-o00074-I: the decision to stop raises the write-refusal
+    """Validates REQ-p00083-G: the decision to stop raises the write-refusal
     flag before the signal that starts the drain, whichever path takes it.
     """
 
@@ -151,7 +151,7 @@ class TestShutdownFlagIsRaisedByEveryStopPath:
 
 
 class TestBothSurfacesRefuseWritesAfterTheDecision:
-    """Validates REQ-o00074-I and REQ-o00062-O: once the process has decided to
+    """Validates REQ-p00083-G and REQ-o00062-O: once the process has decided to
     stop, a mutation is refused rather than accepted into a drain that will
     discard it -- and the two surfaces refuse it identically.
     """
@@ -273,7 +273,7 @@ class TestBothSurfacesRefuseWritesAfterTheDecision:
 
 
 class TestEveryWriteSurfaceTakesTheGuard:
-    """Validates REQ-o00062-O: the refusal is a property of the shared write
+    """Validates REQ-o00062-O, REQ-p00083-G: the refusal is a property of the shared write
     critical section, not of the handful of routes somebody remembered. Both
     surfaces reach it through one helper pair, so a new write tool or route
     that joins the lock joins the refusal with it.
@@ -318,8 +318,9 @@ class TestEveryWriteSurfaceTakesTheGuard:
 
 
 class TestOneRoutineAccountsForTheWorkOnEveryStopPath:
-    """Validates REQ-o00074-I: a daemon that stops while holding unsaved changes
-    persists them rather than discarding them, whatever prompted it to stop, and
+    """Validates REQ-o00074-I, REQ-p00083-A, REQ-p00083-C: a daemon that stops
+    while holding unsaved changes persists them rather than discarding them,
+    whatever prompted it to stop, and
     records that it saved them itself, when, how many, and what triggered it.
 
     The stop paths differ only in what they pass as the trigger. They all reach
@@ -329,7 +330,7 @@ class TestOneRoutineAccountsForTheWorkOnEveryStopPath:
     server stops serving, which is where an external signal lands.
     """
 
-    # Verifies: REQ-o00074-I
+    # Verifies: REQ-p00083-A, REQ-p00083-C
     def test_REQ_o00074_I_pending_work_reaches_disk_and_is_recorded(
         self, app_state, client, project
     ):
@@ -355,7 +356,7 @@ class TestOneRoutineAccountsForTheWorkOnEveryStopPath:
         assert record["trigger"] == "the idle timeout expired"
         assert record["mutation_count"] == outcome["pending"]
 
-    # Verifies: REQ-o00074-I
+    # Verifies: REQ-p00083-A, REQ-p00083-G
     def test_REQ_o00074_I_the_refusal_flag_is_raised_only_once_the_work_is_safe(
         self, app_state, client, monkeypatch
     ):
@@ -380,7 +381,7 @@ class TestOneRoutineAccountsForTheWorkOnEveryStopPath:
         assert seen == [False], f"the flag was already up when the save ran: {seen}"
         assert app_state.shared.is_shutting_down is True, "the stop never refused later writes"
 
-    # Verifies: REQ-o00074-I
+    # Verifies: REQ-p00083-A, REQ-p00083-C
     def test_REQ_o00074_I_repeat_stop_does_not_save_a_second_time(
         self, app_state, client, monkeypatch
     ):
@@ -411,7 +412,7 @@ class TestOneRoutineAccountsForTheWorkOnEveryStopPath:
             "the first trigger"
         ), "the repeat stop rewrote the record of the save that actually happened"
 
-    # Verifies: REQ-o00074-I
+    # Verifies: REQ-p00083-A, REQ-p00083-G
     def test_REQ_o00074_I_an_external_signal_saves_even_though_the_flag_is_up(
         self, app_state, client, project
     ):
@@ -437,7 +438,7 @@ class TestOneRoutineAccountsForTheWorkOnEveryStopPath:
         assert outcome["saved"] is True, outcome
         assert title in spec.read_text(), "a signalled daemon discarded the work it held"
 
-    # Verifies: REQ-o00074-I
+    # Verifies: REQ-p00083-A, REQ-p00083-C
     def test_REQ_o00074_I_stopping_with_nothing_pending_writes_no_record(self, app_state, project):
         """A stop is not itself a save. With nothing pending there is nothing to
         write and nothing to disclose, so the next client is told about no save
@@ -456,7 +457,7 @@ class TestOneRoutineAccountsForTheWorkOnEveryStopPath:
             not record_path.exists()
         ), "a stop that saved nothing announced a save to the next client"
 
-    # Verifies: REQ-o00074-J
+    # Verifies: REQ-p00083-H
     def test_REQ_o00074_J_stopping_with_nothing_pending_retires_no_record(self, app_state, project):
         """A record from an earlier automatic save survives a stop that saved
         nothing. Only a save a client asked for retires one, because that is the
@@ -477,12 +478,12 @@ class TestOneRoutineAccountsForTheWorkOnEveryStopPath:
 
 
 class TestAFailedStopKeepsTheWorkAndTheProcess:
-    """Validates REQ-o00074-K: a stop whose save fails keeps the work rather than
+    """Validates REQ-p00083-D: a stop whose save fails keeps the work rather than
     dropping it, leaves the process usable so a client can still save through it,
     and is retried by the next stop path rather than treated as done.
     """
 
-    # Verifies: REQ-o00074-K
+    # Verifies: REQ-p00083-D
     def test_REQ_o00074_K_failed_save_leaves_the_work_reachable_and_retries(
         self, app_state, client, project, monkeypatch
     ):
@@ -529,7 +530,7 @@ class TestAFailedStopKeepsTheWorkAndTheProcess:
 
 
 class TestIdleTimeoutStopsThroughTheSameRoutine:
-    """Validates REQ-o00074-I and REQ-o00074-K: the idle timeout is a stop like
+    """Validates REQ-p00083-A and REQ-p00083-D: the idle timeout is a stop like
     any other. An agent that applies a change and then reasons for half an hour
     sends no requests the whole time, so this is the common way a daemon holding
     unsaved work stops -- it persists before it signals, and declines to stop at
@@ -555,7 +556,7 @@ class TestIdleTimeoutStopsThroughTheSameRoutine:
         if mw._timer is not None:
             mw._timer.cancel()
 
-    # Verifies: REQ-o00074-I
+    # Verifies: REQ-p00083-A
     def test_REQ_o00074_I_idle_timeout_persists_before_it_signals(
         self, app_state, client, project, middleware, no_signals
     ):
@@ -578,7 +579,7 @@ class TestIdleTimeoutStopsThroughTheSameRoutine:
         assert app_state.shared.is_shutting_down is True
         assert no_signals == [signal_module.SIGTERM], f"signals: {no_signals}"
 
-    # Verifies: REQ-o00074-K
+    # Verifies: REQ-p00083-D
     def test_REQ_o00074_K_idle_timeout_that_cannot_save_waits_instead_of_stopping(
         self, app_state, client, project, middleware, no_signals, monkeypatch
     ):
@@ -645,7 +646,7 @@ def _tip(client) -> str:
 
 
 class TestAnInstructedDiscardIsHonoured:
-    """Validates REQ-o00074-I: preservation is what happens when nobody has
+    """Validates REQ-p00083-B: preservation is what happens when nobody has
     said what the work is worth. An operator who says "throw it away" has
     supplied the statement that was missing, and the work is dropped.
 

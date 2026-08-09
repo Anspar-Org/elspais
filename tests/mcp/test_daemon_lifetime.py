@@ -1,4 +1,4 @@
-# Verifies: REQ-o00074-A+B+C+D+E+G+H+I+J+K
+# Verifies: REQ-o00074-A+B+C+D+E+G+H+I+J+K+M, REQ-p00083-A+C+D+H
 """Daemon lifetime tests, verifying REQ-o00074 (Background Daemon Lifetime).
 
 A daemon started on behalf of a client is bound to that client at the
@@ -11,12 +11,13 @@ The daemon is shared, so its lifetime follows its *clients* rather than
 the one process that happened to start it: a client adopting a running
 daemon joins the recorded set, the daemon keeps serving while any of them
 exists, and terminates once none does (E). Before terminating it
-discloses how much unsaved work it holds and when it will act (G), treats
+discloses how much unsaved work it holds and when it will act (M), treats
 a newly applied change as proof that a writer is still present and
 restarts the interval (H), persists that work rather than discarding it
-and records the facts of the save for the next client (I), retires that
-record when a client saves at its own request (J), and keeps the work
-rather than dropping it when the save itself fails (K).
+and records the facts of the save for the next client (REQ-p00083-A,
+REQ-p00083-C), retires that record when a client saves at its own request
+(REQ-p00083-H), and keeps the work rather than dropping it when the save
+itself fails (REQ-p00083-D).
 
 Unit-level only: process liveness is faked (``alive_fn``) and the clock
 is a counter, so the decision matrix and the watchdog transitions are
@@ -48,7 +49,7 @@ from elspais.server.client_watch import (
 )
 
 # Words that would characterise the work rather than report the facts of
-# the save. REQ-o00074-I's disclosure states who saved, when, how much,
+# the save. REQ-p00083-C's disclosure states who saved, when, how much,
 # and what triggered it, and stops there: a client can vanish because it
 # finished, crashed, or lost its connection, and the daemon cannot tell
 # those apart, so it must not hand the reader a conclusion.
@@ -724,8 +725,8 @@ class TestUndoneWorkStillCountsAsActivity:
 
 
 class TestTerminationPersistsPendingWork:
-    """Validates REQ-o00074-I: a daemon terminating with no client present
-    persists the changes it holds rather than discarding them. The watchdog
+    """Validates REQ-o00074-I, REQ-p00083-A: a daemon terminating with no client
+    present persists the changes it holds rather than discarding them. The watchdog
     decides only *that* the daemon stops; what happens to the work is handed
     to the process's one shutdown routine, which every other way of stopping
     runs too, and the process is signalled only once that routine reports it
@@ -801,7 +802,7 @@ class TestTerminationPersistsPendingWork:
 
 
 class TestAutomaticSaveRecordStatesFactsOnly:
-    """Validates REQ-o00074-I: the daemon records that it performed the save
+    """Validates REQ-o00074-I, REQ-p00083-C: the daemon records that it performed the save
     itself, when, how many changes it covered, and what triggered it -- and
     nothing that characterises the work. A client can vanish because it
     finished, crashed, or lost its connection, and the daemon cannot tell those
@@ -880,7 +881,7 @@ class TestAutomaticSaveRecordStatesFactsOnly:
 
 
 class TestClientRequestedSaveRetiresTheRecord:
-    """Validates REQ-o00074-J: while a client persists pending changes at its own
+    """Validates REQ-p00083-H: while a client persists pending changes at its own
     request, any outstanding record of a save the daemon performed is retired --
     it describes a state that no longer stands, and a notice that never retires
     is one nobody reads.
@@ -918,9 +919,10 @@ def hht_project(tmp_path):
 
 
 class TestPersistPendingRecordsAndRetires:
-    """Validates REQ-o00074-I, REQ-o00074-J on the save path the MCP surface
-    uses: a save the daemon performs leaves the record on disk beside the files
-    it wrote, and the next client-requested save takes it away.
+    """Validates REQ-o00074-I, REQ-p00083-A, REQ-p00083-C, REQ-p00083-H on the
+    save path the MCP surface uses: a save the daemon performs leaves the record
+    on disk beside the files it wrote, and the next client-requested save takes
+    it away.
     """
 
     @pytest.fixture
@@ -970,7 +972,7 @@ class TestPersistPendingRecordsAndRetires:
 
 
 class TestViewerSaveRetiresTheRecord:
-    """Validates REQ-o00074-J: while a client persists pending changes at its own
+    """Validates REQ-p00083-H: while a client persists pending changes at its own
     request, any outstanding record of a save the daemon performed is retired --
     on the viewer's HTTP save route as well as on the MCP one.
 
@@ -1060,7 +1062,7 @@ class TestViewerSaveRetiresTheRecord:
 
 
 class TestFailedSaveRetainsTheWork:
-    """Validates REQ-o00074-K: a daemon that cannot persist what it holds reports
+    """Validates REQ-p00083-D: a daemon that cannot persist what it holds reports
     the failure and keeps the work rather than discarding it, and does not treat
     its termination as complete -- it stays up and tries again.
     """
@@ -1417,7 +1419,7 @@ class TestExplicitStartRecordsNoClient:
 
 
 class TestRestartSaysWhatBecomesOfTheWork:
-    """Validates REQ-o00074-I: a restart holding unsaved work refuses until the
+    """Validates REQ-p00083-A, REQ-p00083-B: a restart holding unsaved work refuses until the
     caller says what is to become of it, and the two answers are exclusive.
 
     ``--persist`` saves it here, where a changelog reason can be supplied;

@@ -64,7 +64,7 @@ class SharedServerState(dict):
         # signal that starts the drain. Every write critical section
         # checks it under the same lock, so a write arriving after the
         # decision is refused rather than accepted and then lost with
-        # the process (REQ-o00074-I, REQ-o00062-O).
+        # the process (REQ-o00062-O, REQ-p00083-G).
         self._shutting_down = threading.Event()
         # Raised once the process has finished accounting for the work it
         # holds. Distinct from the refusal flag above: refusals begin the
@@ -74,7 +74,7 @@ class SharedServerState(dict):
         # Raised when a client stopping this process has said what is to
         # become of the work it holds. Preserving that work is what
         # happens when nobody has said; an instruction to drop it is the
-        # statement that was otherwise missing (REQ-o00074-I).
+        # statement that was otherwise missing (REQ-p00083-B).
         self._discard_requested = False
 
     def begin_shutdown(self) -> None:
@@ -107,7 +107,7 @@ class SharedServerState(dict):
         return self._shutdown_finalized
 
 
-# Implements: REQ-o00074-G, REQ-o00074-I, REQ-o00074-K
+# Implements: REQ-o00074-G, REQ-p00083-A, REQ-p00083-D
 def finalize_shutdown(state: SharedServerState, trigger: str) -> dict[str, Any]:
     """Account for the work this process holds, then commit it to stopping.
 
@@ -211,7 +211,7 @@ def finalize_shutdown(state: SharedServerState, trigger: str) -> dict[str, Any]:
         }
 
 
-# Implements: REQ-o00074-L
+# Implements: REQ-p00083-E
 def attach_dirty_sentinel(state: SharedServerState) -> bool:
     """Make this process's unwritten changes visible from outside it.
 
@@ -293,7 +293,7 @@ def report_shutdown_outcome(outcome: dict[str, Any], trigger: str) -> None:
         )
 
 
-# Implements: REQ-d00132-A, REQ-d00132-B, REQ-o00074-I, REQ-o00074-J, REQ-o00074-K
+# Implements: REQ-d00132-A, REQ-d00132-B, REQ-p00083-A, REQ-p00083-C, REQ-p00083-H
 def persist_pending(
     state: SharedServerState,
     message: str | None = None,
@@ -399,7 +399,7 @@ def persist_pending(
             # The tree on disk is now one a client wrote deliberately, so
             # an older finding about a process that died holding changes
             # has been overtaken: it described the tree the client has
-            # just replaced (REQ-o00074-L).
+            # just replaced (REQ-o00074-J).
             clear_lost_changes(working_dir)
     return result
 
