@@ -486,3 +486,44 @@ Assertion G's honest-count clause is there because a disclosure that understates
 
 *End* *Background Daemon Lifetime* | **Hash**: 1c2cc1cf
 ---
+
+## REQ-o00075: Shared Graph Daemon
+
+**Level**: ops | **Status**: Active | **Implements**: REQ-p00050
+
+The tool SHALL be able to serve a working tree's graph from a process shared by the clients working in that tree.
+
+### Assertions
+
+A. The tool SHALL be able to serve a working tree's graph from a process that outlives the individual commands and sessions that use it.
+
+B. Such a process SHALL be scoped to one working tree: at most one SHALL serve a given working tree at a time, so that every writer in that tree acts on one graph and no writer acts on a graph another writer cannot see.
+
+C. Separate working trees SHALL be served independently, each by its own process holding its own graph, whether or not they belong to the same repository.
+
+D. Such a process SHALL serve several clients at once, and a client SHALL be able to begin using a process that another client started.
+
+E. A client SHALL be able to locate the process serving the working tree it is operating in, without prior arrangement; a process SHALL be discoverable for as long as it is serving, and what a client locates SHALL describe the process it would reach.
+
+F. Such a process SHALL be startable either implicitly, on behalf of a client that needs it, or explicitly by an operator, and which of the two brought it into existence SHALL remain determinable for as long as it runs.
+
+G. Every operation the tool offers SHALL remain available when no such process is running or its use is declined.
+
+### Rationale
+
+Rebuilding the graph once per command is the cost this process exists to amortise, and holding one graph is also what makes guarding concurrent writers meaningful at all — those guards are REQ-o00062's subject and are not restated here.
+
+The unit of exclusivity is the working tree, not the repository. A worktree holds its own branch and its own unpersisted work, so two trees are two graphs: a shared process would answer one tree's questions from another tree's files, and would hold one tree's uncommitted work under the other's identity. Assertion C states that isolation affirmatively rather than by silence, because it is the property a future shared-baseline optimisation must be reconciled against — sharing derived read-only state across trees is compatible with C, sharing the mutable graph is not. The redundant-parse cost of one process per tree is accepted where the federation rules record it, and is not re-argued here.
+
+Assertion G keeps the process an accelerator rather than a dependency: a tool whose correctness requires a background process fails whenever that process cannot start, and every path served by the daemon has a path that does not need it.
+
+Assertion F fixes only that the origin stays determinable. The consequence — that the two origins carry different lifetimes — is REQ-o00074's subject.
+
+REQ-p00005-F obliges associate paths to resolve from the canonical, non-worktree repository root so cross-repository paths stay valid when working from a worktree. That governs where a path points, not what a process serves. The two roots answer different questions, and keying a serving process on the canonical root would collapse the isolation assertion C requires.
+
+### Changelog
+
+- 2026-08-08 | 1fd622fe | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: introduce the shared per-working-tree graph daemon
+- 2026-08-08 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: introduce the shared per-working-tree graph daemon
+
+*End* *Shared Graph Daemon* | **Hash**: 1fd622fe
