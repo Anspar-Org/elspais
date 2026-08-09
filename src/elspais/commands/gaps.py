@@ -361,12 +361,17 @@ def render_section(
         Tuple of (rendered output string, exit code).
         Exit code is always 0 (gap sections are informational).
     """
-    from elspais.commands.health import _resolve_exclude_status
+    from elspais.commands.health import (
+        _only_status_flags,
+        _resolve_exclude_status,
+        apply_only_status,
+    )
 
     if gap_types is None:
         gap_types = _ALL_GAP_TYPES
 
     exclude_status = _resolve_exclude_status(args, config=config or {})
+    exclude_status = apply_only_status(exclude_status, graph, _only_status_flags(args))
     data = collect_gaps(graph, exclude_status, config=config)
 
     fmt = getattr(args, "format", "text")
@@ -451,17 +456,25 @@ def compute_gaps(graph: FederatedGraph, config: dict, params: dict[str, str]) ->
 
     Params:
         type: Optional gap type filter (uncovered, untested, unvalidated, failing).
-        status: Optional comma-separated statuses to include.
+        treat_active: Optional comma-separated statuses to treat as committed.
+        only_status: Optional comma-separated statuses to restrict the report to.
     """
     import argparse as _argparse
 
-    from elspais.commands.health import _resolve_exclude_status
+    from elspais.commands.health import (
+        _only_status_flags,
+        _resolve_exclude_status,
+        apply_only_status,
+    )
 
     fake_args = _argparse.Namespace()
-    status_str = params.get("status", None)
-    fake_args.status = status_str.split(",") if status_str else None
+    treat_str = params.get("treat_active", None)
+    fake_args.treat_active = treat_str.split(",") if treat_str else None
+    only_str = params.get("only_status", None)
+    fake_args.only_status = only_str.split(",") if only_str else None
 
     exclude_status = _resolve_exclude_status(fake_args, config=config)
+    exclude_status = apply_only_status(exclude_status, graph, _only_status_flags(fake_args))
     data = collect_gaps(graph, exclude_status, config=config)
 
     def _serialize_gap_list(gt: str) -> list:
@@ -510,6 +523,14 @@ def run(args: argparse.Namespace) -> int:
     params: dict[str, str] = {}
     if gap_type:
         params["type"] = gap_type
+    # Status selection has to reach the compute path: this command reaches it
+    # through the engine, so a selection left out of params is silently lost.
+    treat_active = getattr(args, "treat_active", None)
+    if treat_active:
+        params["treat_active"] = ",".join(treat_active)
+    only_status = getattr(args, "only_status", None)
+    if only_status:
+        params["only_status"] = ",".join(only_status)
 
     data = engine_call(
         "/api/run/gaps",

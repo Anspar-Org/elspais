@@ -197,24 +197,22 @@ def compute_errors(
     """Engine-compatible wrapper around collect_errors.
 
     Params:
-        status: Optional comma-separated statuses to narrow the listing to.
+        only_status: Optional comma-separated statuses to restrict the listing to.
     """
+    from elspais.commands.health import apply_only_status
+
     # This command is the drill-down the health report names for format-rule
     # and no-assertion detail, and those checks weigh every requirement
     # whatever its status. So the listing excludes nothing by default —
     # excluding provisional statuses here would report none of what the
-    # summary just counted. ``--status`` then narrows the listing to the
-    # statuses named, which is the only reading left once nothing is
-    # excluded to begin with.
-    status_str = params.get("status", None)
-    raw = status_str.split(",") if status_str else []
-    wanted = {s.strip().title() for s in raw if s.strip()}
+    # summary just counted. There is correspondingly no Active baseline here
+    # for ``--treat-active`` to widen, which is why this command offers only
+    # the restricting option.
+    only_str = params.get("only_status", None)
+    raw = only_str.split(",") if only_str else []
+    only_flags = {s.strip().title() for s in raw if s.strip()}
 
-    if wanted:
-        present = {(n.status or "") for n in graph.nodes_by_kind(NodeKind.REQUIREMENT)}
-        exclude_status = {s for s in present if s.title() not in wanted}
-    else:
-        exclude_status = set()
+    exclude_status = apply_only_status(set(), graph, only_flags)
 
     data = collect_errors(graph, config, exclude_status)
 
@@ -242,9 +240,9 @@ def run(args: argparse.Namespace) -> int:
     spec_dir = getattr(args, "spec_dir", None)
 
     params: dict[str, str] = {}
-    status = getattr(args, "status", None)
-    if status:
-        params["status"] = ",".join(status)
+    only_status = getattr(args, "only_status", None)
+    if only_status:
+        params["only_status"] = ",".join(only_status)
 
     data = engine_call(
         "/api/run/errors",

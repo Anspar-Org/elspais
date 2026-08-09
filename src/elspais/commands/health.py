@@ -2027,9 +2027,36 @@ def run_spec_checks(
 
 
 def _status_flags(args: argparse.Namespace) -> set[str]:
-    """Title-cased set of statuses named via ``--status`` (empty when unset)."""
-    raw: list[str] | None = getattr(args, "status", None)
+    """Title-cased set of statuses named via ``--treat-active`` (empty when unset)."""
+    raw: list[str] | None = getattr(args, "treat_active", None)
     return {s.title() for s in raw} if raw else set()
+
+
+def _only_status_flags(args: argparse.Namespace) -> set[str]:
+    """Title-cased set of statuses named via ``--only-status`` (empty when unset)."""
+    raw: list[str] | None = getattr(args, "only_status", None)
+    return {s.title() for s in raw} if raw else set()
+
+
+def apply_only_status(
+    exclude_status: set[str],
+    graph: FederatedGraph,
+    only_flags: set[str],
+) -> set[str]:
+    """Fold an ``--only-status`` restriction into an exclusion set.
+
+    ``--treat-active`` widens the counted set from the Active baseline;
+    ``--only-status`` restricts a report to exactly the statuses named. The
+    two compose: the restriction is expressed by excluding every status the
+    graph actually carries that was not named, so a caller keeps working in
+    the single exclusion-set vocabulary the collectors already speak.
+    """
+    if not only_flags:
+        return exclude_status
+    from elspais.graph import NodeKind
+
+    present = {(n.status or "") for n in graph.nodes_by_kind(NodeKind.REQUIREMENT)}
+    return set(exclude_status) | {s for s in present if s.title() not in only_flags}
 
 
 def _config_with_status_overlay(
@@ -2063,6 +2090,44 @@ def _config_with_status_overlay(
         key = existing_by_lower.get(flag.lower(), flag)
         entry = dict(statuses.get(key) or {})
         entry["expects_implementation"] = True
+        statuses[key] = entry
+    overlaid["statuses"] = statuses
+    return overlaid
+
+
+def _config_with_only_status_overlay(
+    config: dict[str, Any] | None,
+    only_flags: set[str],
+    graph: FederatedGraph,
+) -> dict[str, Any] | None:
+    """Config overlay restricting coverage counting to ``--only-status`` names.
+
+    Coverage COUNTS do not read the exclusion set — they route through
+    ``status_expects_implementation`` (REQ-d00258-C). So a restriction that
+    only narrowed the exclusion set would leave the counts untouched and the
+    option would appear to do nothing. Expressing the restriction as the same
+    per-call overlay keeps the ONE resolver in charge: every status the graph
+    carries is stamped ``expects_implementation`` according to whether it was
+    named, so counts and the excluded-note continue to agree.
+
+    Composes after ``_config_with_status_overlay``: widening by
+    ``--treat-active`` applies first, then this restricts to the named set.
+    The input config is never mutated.
+    """
+    if not only_flags:
+        return config
+    from elspais.graph import NodeKind
+
+    overlaid = dict(config or {})
+    statuses = dict(overlaid.get("statuses") or {})
+    existing_by_lower = {k.lower(): k for k in statuses if isinstance(k, str)}
+    present = {(n.status or "") for n in graph.nodes_by_kind(NodeKind.REQUIREMENT)}
+    for status_name in present | only_flags:
+        if not status_name:
+            continue
+        key = existing_by_lower.get(status_name.lower(), status_name)
+        entry = dict(statuses.get(key) or {})
+        entry["expects_implementation"] = status_name.title() in only_flags
         statuses[key] = entry
     overlaid["statuses"] = statuses
     return overlaid
@@ -3008,9 +3073,11 @@ def render_section(
     if graph:
         raw_config = config if config else {}
         exclude_status = _resolve_exclude_status(args, config=raw_config)
-        # REQ-d00258-C: --status becomes a coverage-config overlay so dimension
-        # counts AND the excluded-note agree (both read this one overlay).
+        exclude_status = apply_only_status(exclude_status, graph, _only_status_flags(args))
+        # REQ-d00258-C: --treat-active becomes a coverage-config overlay so
+        # dimension counts AND the excluded-note agree (both read this overlay).
         cov_config = _config_with_status_overlay(raw_config, _status_flags(args))
+        cov_config = _config_with_only_status_overlay(cov_config, _only_status_flags(args), graph)
         for check in run_code_checks(graph, exclude_status=exclude_status, config=cov_config):
             report.add(check)
         for check in run_test_checks(graph, exclude_status=exclude_status, config=cov_config):
@@ -3050,12 +3117,16 @@ def compute_checks(
 
     # Build a minimal args namespace for _resolve_exclude_status
     fake_args = argparse.Namespace()
-    status_str = params.get("status", None)
-    fake_args.status = status_str.split(",") if status_str else None
+    treat_str = params.get("treat_active", None)
+    fake_args.treat_active = treat_str.split(",") if treat_str else None
+    only_str = params.get("only_status", None)
+    fake_args.only_status = only_str.split(",") if only_str else None
 
     exclude_status = _resolve_exclude_status(fake_args, config=config)
-    # REQ-d00258-C: --status overlay drives coverage counts + note consistently.
+    exclude_status = apply_only_status(exclude_status, graph, _only_status_flags(fake_args))
+    # REQ-d00258-C: --treat-active overlay drives coverage counts + note consistently.
     cov_config = _config_with_status_overlay(config, _status_flags(fake_args))
+    cov_config = _config_with_only_status_overlay(cov_config, _only_status_flags(fake_args), graph)
 
     # Config checks
     if run_all:
@@ -3216,9 +3287,12 @@ def run(args: argparse.Namespace) -> int:
         params["terms_only"] = "true"
     if getattr(args, "lenient", False):
         params["lenient"] = "true"
-    status_filter = getattr(args, "status", None)
-    if status_filter:
-        params["status"] = ",".join(status_filter)
+    treat_active = getattr(args, "treat_active", None)
+    if treat_active:
+        params["treat_active"] = ",".join(treat_active)
+    only_status = getattr(args, "only_status", None)
+    if only_status:
+        params["only_status"] = ",".join(only_status)
 
     spec_dir = getattr(args, "spec_dir", None)
     # Force fresh build when runners just produced new result files.
@@ -3346,9 +3420,12 @@ def _format_report(
 
     # Build active flags summary from args
     flag_parts: list[str] = []
-    status_list = getattr(args, "status", None)
-    if status_list:
-        flag_parts.append("--status " + " ".join(status_list))
+    treat_active_list = getattr(args, "treat_active", None)
+    if treat_active_list:
+        flag_parts.append("--treat-active " + " ".join(treat_active_list))
+    only_status_list = getattr(args, "only_status", None)
+    if only_status_list:
+        flag_parts.append("--only-status " + " ".join(only_status_list))
     if getattr(args, "lenient", False):
         flag_parts.append("--lenient")
     if getattr(args, "spec_only", False):
