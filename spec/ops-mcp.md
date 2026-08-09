@@ -429,7 +429,7 @@ A tool that requires a judgement call before use loses to the tool that needs no
 
 **Level**: ops | **Status**: Active | **Implements**: REQ-o00075, REQ-p00083
 
-A background daemon SHALL live only as long as some client is using it, and SHALL preserve and account for the work it holds when it stops.
+A background daemon's lifetime SHALL be bounded by the clients using it, and it SHALL preserve and account for the work it holds when it stops.
 
 ### Assertions
 
