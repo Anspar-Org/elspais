@@ -1010,13 +1010,21 @@ def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
         if daemon_version and daemon_version != __version__:
             if not stop_daemon(repo_root):
                 # It is still serving. An out-of-date daemon answering is
-                # better than two daemons answering differently.
+                # better than two daemons answering differently. This
+                # session is about to use it in place of the fresh one it
+                # could not start, so it registers as a client the same
+                # way the reuse path below does.
+                ensure_client_registered(info)
                 return info["port"]
             # Fall through to start a fresh daemon
         elif _config_hash_stale(info, repo_root):
             if not stop_daemon(repo_root):
                 # It is still serving. An out-of-date daemon answering is
-                # better than two daemons answering differently.
+                # better than two daemons answering differently. This
+                # session is about to use it in place of the fresh one it
+                # could not start, so it registers as a client the same
+                # way the reuse path below does.
+                ensure_client_registered(info)
                 return info["port"]
             # Fall through to start a fresh daemon
         else:
