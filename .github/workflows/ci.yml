@@ -230,7 +230,14 @@ jobs:
       - name: Scan for secrets with TruffleHog
         uses: trufflesecurity/trufflehog@main
         with:
-          extra_args: --results=verified,unknown
+          extra_args: --results=verified,unknown --exclude-detectors=lob
+          # Lob (postal-mail API) keys are `test_` followed by exactly 35
+          # characters, which is also the shape of a great many pytest
+          # function names -- 178 in this repo match it exactly. Lob's API
+          # accepts any well-formed test-mode key, so such a name is reported
+          # as a *verified* secret and fails the scan. This project has no Lob
+          # integration and no reason to hold a Lob key, so the detector can
+          # only produce false positives here. Every other detector stays on.
 
       - name: Set up Python
         uses: actions/setup-python@v5
