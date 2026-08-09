@@ -163,7 +163,14 @@ already changed.
 That also means pending work lives only in the daemon process, and the
 daemon has a lifetime of its own. One that a CLI command auto-started
 keeps serving while any of its clients is running, and shuts down once
-none of them is. If it is holding pending mutations when that happens it
+none of them is. A client is a process id it was told about, or an agent
+session holding its MCP connection's stream open — a completed request is
+not enough. When neither can be established for a session, or a declared
+`ELSPAIS_CLIENT_PID` names a process that is already dead, you are told so
+once on stderr, naming `ELSPAIS_CLIENT_PID` as the variable to set; the
+command still runs, and the same daemon does not warn you twice. See
+`docs("commands")` for the resolution order and the recipe for a CI job or
+harness. If it is holding pending mutations when that happens it
 logs the count to `.elspais/daemon.log`, waits a bounded grace period
 (30 minutes), and then **saves** them to disk and stops — nothing is
 discarded. An applied mutation during that window restarts the grace

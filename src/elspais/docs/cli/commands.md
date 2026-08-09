@@ -563,6 +563,33 @@ unavailable only the environment variable can resolve. A guessed identity
 would be worse than none, so when nothing resolves the daemon simply keeps
 its `cli_ttl` lifetime.
 
+**Declare it — don't rely on inference.** `ELSPAIS_CLIENT_PID` is not just
+the first rung of that ladder, it is the thing to set. A CI job, a build
+agent, or any harness that runs several `elspais` commands as part of one
+longer-lived job should export the process id of that job's own long-lived
+process — the runner, the agent, the `make` process — once at setup:
+
+    export ELSPAIS_CLIENT_PID=$$
+
+Every `elspais` command that job runs afterward then inherits a daemon
+whose lifetime matches the job, rather than whichever of the three rungs
+below it happens to land on.
+
+**A held MCP session counts too.** An agent connected over streamable HTTP
+does not need a process id at all: holding the session's GET stream open
+for its lifetime is itself a handle the daemon can observe, so it is
+counted as a client for as long as the connection is held. A completed
+request is not — request traffic never keeps a daemon alive on its own,
+only presence does.
+
+**When nothing binds, you are told once.** If no handle can be derived —
+none of the three rungs resolves — or a declared `ELSPAIS_CLIENT_PID`
+names a process id that is already dead, the daemon is not refused: the
+command still runs, but the first time this happens for a given daemon it
+prints a `note:` to stderr saying the daemon's lifetime is not bound to
+this client and naming `ELSPAIS_CLIENT_PID` as the variable to set. It
+does not repeat for that daemon; the same daemon does not warn you twice.
+
 **Started deliberately (explicit).** `elspais daemon`, a manual
 `elspais mcp serve`, and the viewer record no session at all. Their
 lifetime is governed solely by `cli_ttl`, and `daemon.json` carries no

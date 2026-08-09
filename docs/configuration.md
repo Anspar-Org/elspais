@@ -506,10 +506,17 @@ ELSPAIS_SCANNING_SKIP='["node_modules", ".git"]'
 Reserved (never treated as config overrides): `ELSPAIS_VERSION`
 (min-CLI-version pin) and `ELSPAIS_CLIENT_PID` (a session/IDE declares
 itself the client of implicitly auto-started daemons, tying the daemon's
-lifetime to that process — see the `cli_ttl` comment above). A set
-`ELSPAIS_CLIENT_PID` is decisive: a value that is not a usable PID means
-"no session identity", not "fall back to the other checks". The former
-name, `ELSPAIS_SPAWNER_PID`, is still honoured for callers that set it.
+lifetime to that process — see the `cli_ttl` comment above). The value
+must be a process id, not a label or name: the client-liveness rule needs
+a handle whose disappearance it can observe without the client's
+cooperation, and a process id can be tested by signalling it while an
+arbitrary string cannot — a label never disappears, so it could never end
+the daemon's watch on that client. A set `ELSPAIS_CLIENT_PID` is decisive:
+a value that is not a usable PID (not an integer, or a PID that is
+already dead) means "no session identity", not "fall back to the other
+checks" — and the daemon reports that once on stderr rather than silently
+falling through. The former name, `ELSPAIS_SPAWNER_PID`, is still honoured
+for callers that set it.
 
 ## Minimal Configuration Examples
 
