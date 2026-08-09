@@ -907,13 +907,61 @@ def request_daemon_stop(info: dict, discard_changes: bool = False) -> dict:
         return {"success": False, "error": str(e)}
 
 
+def _reap_if_our_child(pid: int) -> bool:
+    """Collect ``pid`` if it is our own child that has already exited.
+
+    ``waitpid(pid, WNOHANG)`` only succeeds for a direct child; for any
+    other pid it raises, which is exactly the "not ours to reap" case and
+    is swallowed. True means the child was collected (or was already
+    gone); the caller still needs its own liveness check to know which.
+    """
+    try:
+        collected_pid, _status = os.waitpid(pid, os.WNOHANG)
+        return collected_pid == pid
+    except (ChildProcessError, OSError):
+        return False
+
+
+def _proc_is_zombie(pid: int) -> bool:
+    """True if ``/proc/<pid>`` reports process state ``Z`` (zombie).
+
+    Best effort, matching ``_session_leader_has_tty``'s read-and-tolerate
+    style: unreadable or malformed /proc content (missing, permission
+    denied, non-Linux) reports False rather than raising, leaving the
+    caller to fall back to its own liveness check.
+    """
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+        # comm may contain spaces/parens; fields after the last ')' are
+        # position-stable. State is the first field after that.
+        state = stat.rsplit(")", 1)[1].split()[0]
+        return state == "Z"
+    except (OSError, ValueError, IndexError):
+        return False
+
+
 def wait_for_daemon_exit(info: dict, timeout: float = 20.0) -> bool:
-    """Block until the daemon process is gone. True if it went."""
+    """Block until the daemon process is gone. True if it went.
+
+    ``kill(pid, 0)`` alone is not enough: it asks the kernel only whether
+    the pid could be signalled, and a process that has exited but not yet
+    been reaped by its parent -- a zombie -- still answers yes. Every test
+    that spawns a daemon directly is that daemon's parent, and so is any
+    other caller that does the same, so this is not a corner case: without
+    accounting for it, a daemon that died immediately is reported as still
+    serving for the full timeout. Each poll therefore also reaps the pid
+    if it is our own child (harmless if it is not, or if nothing is
+    waiting to be collected) and checks /proc for zombie state, so a
+    reaped-or-reapable exit is seen at once rather than at the deadline.
+    """
     pid = info.get("pid")
     if not pid:
         return True
     deadline = time.time() + timeout
     while time.time() < deadline:
+        _reap_if_our_child(pid)
+        if _proc_is_zombie(pid):
+            return True
         try:
             os.kill(pid, 0)
         except OSError:
