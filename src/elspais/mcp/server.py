@@ -7517,9 +7517,19 @@ def run_server(
             # kind. Looked up on each check rather than captured, so the
             # order in which the app and the watchdog are built does not
             # decide whether the handle is seen at all.
-            def _sessions_held() -> bool:
+            def _sessions_held() -> int:
                 tracker = state.shared.get("session_tracker")
-                return bool(tracker is not None and tracker.held())
+                return tracker.held() if tracker is not None else 0
+
+            # Implements: REQ-o00074-B
+            # Published from the check that computes the composition, so a
+            # client present only as a held stream — which registers
+            # nothing — is still visible to whoever asks why this daemon
+            # is running.
+            def _publish_clients(pids: list[int], held: int) -> None:
+                from elspais.mcp.daemon import record_daemon_clients
+
+                record_daemon_clients(working_dir, pids, held)
 
             interval = float(_os.environ.get("_ELSPAIS_CLIENT_CHECK_INTERVAL", "60"))
             grace = float(_os.environ.get("_ELSPAIS_CLIENT_GRACE", str(int(DEFAULT_GRACE_SECONDS))))
@@ -7531,6 +7541,7 @@ def run_server(
                 lock=state.shared.write_lock,
                 stop_fn=_stop,
                 extra_liveness_fn=_sessions_held,
+                publish_fn=_publish_clients,
             )
             # Published so the adoption route can register the clients that
             # pick this daemon up after its first one is gone.

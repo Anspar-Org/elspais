@@ -176,7 +176,8 @@ class ClientWatchdog:
         clock: Callable[[], float] = time.monotonic,
         lock: AbstractContextManager[Any] | None = None,
         stop_fn: Callable[[], dict[str, Any]] | None = None,
-        extra_liveness_fn: Callable[[], bool] | None = None,
+        extra_liveness_fn: Callable[[], int] | None = None,
+        publish_fn: Callable[[list[int], int], None] | None = None,
     ) -> None:
         self._clients: set[int] = {client_pid}
         self._clients_lock = threading.Lock()
@@ -188,6 +189,8 @@ class ClientWatchdog:
         self._exit_fn = exit_fn
         self._stop_fn = stop_fn
         self._extra_liveness_fn = extra_liveness_fn
+        self._publish_fn = publish_fn
+        self._published: tuple[tuple[int, ...], int] | None = None
         self._clock = clock
         self._dead_since: float | None = None
         self._warned_grace = False
@@ -223,6 +226,10 @@ class ClientWatchdog:
         Pruning keeps the recorded set an honest answer to "who is using
         this daemon", which assertion B publishes.
 
+        Pruning runs first and unconditionally. A held stream keeps the
+        daemon alive, but it says nothing about a pid that has died, and
+        a check that stopped early would republish clients that are gone.
+
         A held stream counts as a client without being a recorded pid: it
         is a handle of a different kind, not an exception to the rule
         (REQ-o00074-A). A source that cannot answer has said nothing
@@ -230,22 +237,66 @@ class ClientWatchdog:
         the daemon kept — terminating on the strength of a broken
         instrument would end a daemon no evidence says is unused.
         """
-        if self._extra_liveness_fn is not None:
-            try:
-                if self._extra_liveness_fn():
-                    return True
-            except Exception as exc:
-                print(
-                    f"WARNING: a client-liveness source could not be read ({exc!r}); "
-                    "treating this check as inconclusive and keeping the daemon.",
-                    file=sys.stderr,
-                    flush=True,
-                )
-                return True
         with self._clients_lock:
             live = {pid for pid in self._clients if self._alive_fn(pid)}
             self._clients = live if live else self._clients
-            return bool(live)
+            pids_alive = bool(live)
+        held = self._held_handles()
+        self._publish(sorted(live), held)
+        return pids_alive or held is None or held > 0
+
+    def _held_handles(self) -> int | None:
+        """How many client handles of another kind are currently held.
+
+        None means the source could not be read: inconclusive, which is
+        neither "some" nor "none". It keeps the daemon and publishes
+        nothing, because a record written from an unreadable instrument
+        would state as fact something nobody observed.
+        """
+        if self._extra_liveness_fn is None:
+            return 0
+        try:
+            return int(self._extra_liveness_fn() or 0)
+        except Exception as exc:
+            print(
+                f"WARNING: a client-liveness source could not be read ({exc!r}); "
+                "treating this check as inconclusive and keeping the daemon.",
+                file=sys.stderr,
+                flush=True,
+            )
+            return None
+
+    # Implements: REQ-o00074-B
+    def _publish(self, pids: list[int], held: int | None) -> None:
+        """Publish the client set this check computed, if it has changed.
+
+        The periodic check is the one place that knows the daemon's true
+        client composition: a client present only as a held stream
+        registers nothing, so a record written on registration alone
+        never mentions it, and the operator asking why the daemon is
+        still running finds no answer for the client keeping it alive.
+
+        Only a changed composition is written. Rewriting an unchanged
+        record every interval is churn under whoever is reading it, and
+        buys no information.
+        """
+        if self._publish_fn is None or held is None:
+            return
+        composition = (tuple(pids), held)
+        if composition == self._published:
+            return
+        try:
+            self._publish_fn(pids, held)
+        except Exception as exc:
+            print(
+                f"WARNING: could not publish the daemon's client set ({exc!r}); "
+                "the daemon's lifetime is unaffected, but its state record "
+                "may not describe the clients it is watching.",
+                file=sys.stderr,
+                flush=True,
+            )
+            return
+        self._published = composition
 
     def _pending(self) -> tuple[int | None, object]:
         """Read pending count and activity token; unknown reads as dirty."""

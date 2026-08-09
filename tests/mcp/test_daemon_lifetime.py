@@ -393,6 +393,72 @@ class TestHeldSessionIsAClient:
         assert wd.check_once() is Decision.EXIT_CLEAN
         assert exits == ["exit"]
 
+    def test_REQ_o00074_B_stream_only_client_reaches_the_state_record(self, tmp_path):
+        """Validates REQ-o00074-B: a client present only as a held stream
+        registers nothing, so a record written on registration alone never
+        mentions it — and an operator asking why the daemon is still running
+        would find no answer for the client keeping it alive. The periodic
+        check computes the composition, so it publishes it."""
+        from elspais.mcp.daemon import record_daemon_clients, write_daemon_json
+
+        write_daemon_json(
+            repo_root=tmp_path, pid=111, port=222, server_type="daemon", client_pid=333
+        )
+        wd = ClientWatchdog(
+            client_pid=333,
+            pending_fn=lambda: (0, 0),
+            alive_fn=lambda pid: False,
+            exit_fn=lambda: pytest.fail("terminated while a session was held"),
+            stop_fn=_ok_stop,
+            extra_liveness_fn=lambda: 1,
+            publish_fn=lambda pids, held: record_daemon_clients(tmp_path, pids, held),
+        )
+        assert wd.check_once() is Decision.KEEP
+
+        info = json.loads((tmp_path / ".elspais" / "daemon.json").read_text())
+        assert info["clients"] == [{"kind": "session", "count": 1}]
+
+    def test_REQ_o00074_B_dead_pids_are_pruned_from_the_published_set_while_held(self):
+        """Validates REQ-o00074-B: a held stream keeps the daemon alive but
+        says nothing about a pid that has died, so the published set must
+        still drop it — a record naming clients that are gone answers the
+        operator's question wrongly."""
+        alive = {333: True}
+        published: list[tuple[list[int], int]] = []
+        wd = ClientWatchdog(
+            client_pid=333,
+            pending_fn=lambda: (0, 0),
+            alive_fn=lambda pid: alive.get(pid, False),
+            exit_fn=lambda: pytest.fail("terminated while a session was held"),
+            stop_fn=_ok_stop,
+            extra_liveness_fn=lambda: 1,
+            publish_fn=lambda pids, held: published.append((pids, held)),
+        )
+        assert wd.check_once() is Decision.KEEP
+        assert published == [([333], 1)]
+
+        alive[333] = False
+        assert wd.check_once() is Decision.KEEP
+        assert published[-1] == ([], 1), "a dead client survived in the published set"
+
+    def test_REQ_o00074_B_unchanged_composition_is_not_republished(self):
+        """Validates REQ-o00074-B: the record is written when it has something
+        new to say. Rewriting it every interval is churn under whoever is
+        reading it and carries no information the last write did not."""
+        published: list[tuple[list[int], int]] = []
+        wd = ClientWatchdog(
+            client_pid=333,
+            pending_fn=lambda: (0, 0),
+            alive_fn=lambda pid: True,
+            exit_fn=lambda: pytest.fail("terminated with a live client"),
+            stop_fn=_ok_stop,
+            extra_liveness_fn=lambda: 0,
+            publish_fn=lambda pids, held: published.append((pids, held)),
+        )
+        for _ in range(4):
+            assert wd.check_once() is Decision.KEEP
+        assert published == [([333], 0)]
+
     def test_REQ_o00074_E_broken_liveness_source_does_not_read_as_no_clients(self, capsys):
         """Validates REQ-o00074-E: a liveness source that cannot answer has
         said nothing about whether a client is there. Reading its failure as
