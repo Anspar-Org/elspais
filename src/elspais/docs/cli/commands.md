@@ -42,13 +42,16 @@ List spec format violations and requirements with no assertions.
   $ elspais errors                     # Show all spec errors
   $ elspais errors --format markdown   # Markdown table
   $ elspais errors --format json       # JSON output
-  $ elspais errors --status Draft      # Include Draft requirements
+  $ elspais errors --status Draft      # Narrow to Draft requirements only
   $ elspais errors -o errors.txt       # Write to file
+
+Every requirement is weighed whatever its status unless `--status` narrows
+the set, so the listing accounts for what `elspais checks` counted.
 
 **Options:**
 
   `--format {text,markdown,json}`  Output format (default: text)
-  `--status STATUS`                Include additional statuses (repeatable)
+  `--status STATUS`                Narrow to the named statuses (repeatable)
   `-o, --output PATH`              Write output to file instead of stdout
 
 Follow-up from `elspais checks` when `spec.format_rules` or `spec.no_assertions` fails.

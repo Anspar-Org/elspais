@@ -551,9 +551,13 @@ you to `elspais errors` for requirement-level detail:
 elspais errors                     # Show all spec errors
 elspais errors --format markdown   # Markdown table output
 elspais errors --format json       # JSON output
-elspais errors --status Draft      # Include Draft requirements
+elspais errors --status Draft      # Narrow to Draft requirements only
 elspais errors -o errors.txt       # Write to file
 ```
+
+With no `--status`, the drill-down weighs every requirement whatever its
+status, so it accounts for exactly what the two checks above counted. Pass
+`--status` to narrow to the statuses you name.
 
 **Example output (text format):**
 
@@ -570,7 +574,7 @@ NO ASSERTIONS (2):
 **Options:**
 
   `--format {text,markdown,json}`  Output format (default: text)
-  `--status STATUS`                Include additional statuses (repeatable)
+  `--status STATUS`                Narrow to the named statuses (repeatable)
   `-o, --output PATH`              Write output to file instead of stdout
 
 **Performance:** Uses daemon-first execution like other drill-down commands.

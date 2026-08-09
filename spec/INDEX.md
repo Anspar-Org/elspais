@@ -102,7 +102,7 @@
 | REQ-d00128 | FILE Node Creation in Build Pipeline                          | dev-graph-file-nodes.md | 02374cc2 |
 | REQ-d00129 | SourceLocation Removal and Consumer Migration                 | dev-graph-file-nodes.md | 6d11df36 |
 | REQ-d00130 | Parameterized Root Iteration and Kind-Based Index Query       | dev-graph-file-nodes.md | 5733741e |
-| REQ-d00131 | Render Protocol for Graph Nodes                               | dev-graph-file-nodes.md | fd882e78 |
+| REQ-d00131 | Render Protocol for Graph Nodes                               | dev-graph-file-nodes.md | e701b585 |
 | REQ-d00132 | Render-Based Save Operation                                   | dev-graph-file-nodes.md | 91068610 |
 | REQ-d00133 | MCP FILE Node Integration                                     | dev-mcp-tools.md        | 08e2973f |
 | REQ-d00134 | Comprehensive Mutation Round-Trip Scenario Test               | dev-graph-file-nodes.md | 6c865949 |

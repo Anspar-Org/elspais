@@ -475,7 +475,11 @@ def _render_requirement(node: GraphNode, resolver: Any | None = None) -> str:
             lines.append(format_changelog_entry(entry))
         lines.append("")
 
-    # Compute hash using configured mode (DRY: utilities/hasher.py)
+    # Compute hash using configured mode (DRY: utilities/hasher.py).
+    # Content with nothing to hash takes the reserved "N/A" sentinel, which no
+    # hash computation can produce, so an End marker distinguishes unhashable
+    # content from content still awaiting its first hash.
+    # Implements: REQ-d00131-P
     hash_mode = node.get_field("hash_mode") or "normalized-text"
     if hash_mode == "full-text":
         body = reconstruct_body_text(node)

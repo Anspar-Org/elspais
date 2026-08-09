@@ -53,7 +53,7 @@ def _abort_if_duplicates(graph) -> int:  # noqa: ANN001
         for fp in files:
             print(f"    - {fp}", file=sys.stderr)
     print(
-        "Resolve the collisions (rename or remove a duplicate definition), " "then re-run.",
+        "Resolve the collisions (rename or remove a duplicate definition), then re-run.",
         file=sys.stderr,
     )
     return 1
@@ -203,11 +203,14 @@ def _detect_fixable(node, hash_mode: str, changelog_enforce: bool) -> list[str]:
             if r != "stale_hash":
                 reasons.append(r)
 
-    # 2. Hash mismatch
+    # 2. Hash mismatch. An absent stored hash is a mismatch too: a freshly
+    #    authored requirement acquires its first hash here, on the same
+    #    footing as one whose hash went stale. Content with nothing to hash
+    #    acquires the reserved sentinel instead (REQ-d00131-P).
     stored = node.hash or ""
     computed = compute_hash_for_node(node, hash_mode)
     effective = computed or "N/A"
-    if stored and stored != effective:
+    if stored != effective:
         reasons.append("hash_mismatch")
 
     # 3. Changelog checks (Active reqs with changelog enforcement only)
@@ -381,7 +384,7 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
     from elspais.config import get_config
     from elspais.graph import NodeKind
     from elspais.graph.factory import build_graph
-    from elspais.graph.render import render_save
+    from elspais.graph.render import compute_hash_for_node, render_save
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
@@ -474,6 +477,12 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
                         seen.add((old_form, new_form))
                         detail = f"canonicalize term {old_form} -> {new_form}"
                         print(line.format(prefix=prefix, node_id=node.id, detail=detail))
+            elif r == "hash_mismatch":
+                # Name the value, not just the condition: a dry run is the
+                # author's chance to see what will be written before it is.
+                will_write = compute_hash_for_node(node, hash_mode) or "N/A"
+                detail = f"hash {node.hash or '(none)'} -> {will_write}"
+                print(line.format(prefix=prefix, node_id=node.id, detail=detail))
             else:
                 detail = _REASON_LABELS.get(r, r)
                 print(line.format(prefix=prefix, node_id=node.id, detail=detail))

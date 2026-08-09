@@ -197,15 +197,25 @@ def compute_errors(
     """Engine-compatible wrapper around collect_errors.
 
     Params:
-        status: Optional comma-separated statuses to include.
+        status: Optional comma-separated statuses to narrow the listing to.
     """
-    from elspais.commands.health import _resolve_exclude_status
-
-    fake_args = argparse.Namespace()
+    # This command is the drill-down the health report names for format-rule
+    # and no-assertion detail, and those checks weigh every requirement
+    # whatever its status. So the listing excludes nothing by default —
+    # excluding provisional statuses here would report none of what the
+    # summary just counted. ``--status`` then narrows the listing to the
+    # statuses named, which is the only reading left once nothing is
+    # excluded to begin with.
     status_str = params.get("status", None)
-    fake_args.status = status_str.split(",") if status_str else None
+    raw = status_str.split(",") if status_str else []
+    wanted = {s.strip().title() for s in raw if s.strip()}
 
-    exclude_status = _resolve_exclude_status(fake_args, config=config)
+    if wanted:
+        present = {(n.status or "") for n in graph.nodes_by_kind(NodeKind.REQUIREMENT)}
+        exclude_status = {s for s in present if s.title() not in wanted}
+    else:
+        exclude_status = set()
+
     data = collect_errors(graph, config, exclude_status)
 
     result: dict[str, Any] = {}
