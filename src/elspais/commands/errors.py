@@ -194,27 +194,13 @@ def _error_data_from_dict(data: dict[str, Any]) -> ErrorData:
 def compute_errors(
     graph: FederatedGraph, config: dict[str, Any], params: dict[str, str]
 ) -> dict[str, Any]:
-    """Engine-compatible wrapper around collect_errors.
-
-    Params:
-        only_status: Optional comma-separated statuses to restrict the listing to.
-    """
-    from elspais.commands.health import apply_only_status
-
+    """Engine-compatible wrapper around collect_errors."""
     # This command is the drill-down the health report names for format-rule
     # and no-assertion detail, and those checks weigh every requirement
-    # whatever its status. So the listing excludes nothing by default —
-    # excluding provisional statuses here would report none of what the
-    # summary just counted. There is correspondingly no Active baseline here
-    # for ``--treat-active`` to widen, which is why this command offers only
-    # the restricting option.
-    only_str = params.get("only_status", None)
-    raw = only_str.split(",") if only_str else []
-    only_flags = {s.strip().title() for s in raw if s.strip()}
-
-    exclude_status = apply_only_status(set(), graph, only_flags)
-
-    data = collect_errors(graph, config, exclude_status)
+    # whatever its status. The listing therefore excludes nothing: excluding
+    # provisional statuses here would report none of what the summary just
+    # counted, which is the disagreement this command exists to resolve.
+    data = collect_errors(graph, config, exclude_status=set())
 
     result: dict[str, Any] = {}
     for et in _ALL_ERROR_TYPES:
@@ -240,9 +226,6 @@ def run(args: argparse.Namespace) -> int:
     spec_dir = getattr(args, "spec_dir", None)
 
     params: dict[str, str] = {}
-    only_status = getattr(args, "only_status", None)
-    if only_status:
-        params["only_status"] = ",".join(only_status)
 
     data = engine_call(
         "/api/run/errors",

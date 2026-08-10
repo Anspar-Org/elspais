@@ -52,9 +52,6 @@ class ChecksArgs:
     treat_active: list[str] | None = None
     """Treat these statuses as committed, counting them alongside Active."""
 
-    only_status: list[str] | None = None
-    """Restrict the report to exactly these statuses."""
-
     include_passing_details: bool = False
     """Show full details for passing checks."""
 
@@ -87,9 +84,6 @@ class GapsArgs:
     treat_active: list[str] | None = None
     """Treat these statuses as committed, counting them alongside Active."""
 
-    only_status: list[str] | None = None
-    """Restrict the report to exactly these statuses."""
-
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
 
@@ -103,9 +97,6 @@ class UncoveredArgs:
 
     treat_active: list[str] | None = None
     """Treat these statuses as committed, counting them alongside Active."""
-
-    only_status: list[str] | None = None
-    """Restrict the report to exactly these statuses."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
@@ -121,9 +112,6 @@ class UntestedArgs:
     treat_active: list[str] | None = None
     """Treat these statuses as committed, counting them alongside Active."""
 
-    only_status: list[str] | None = None
-    """Restrict the report to exactly these statuses."""
-
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
 
@@ -138,9 +126,6 @@ class UnvalidatedArgs:
     treat_active: list[str] | None = None
     """Treat these statuses as committed, counting them alongside Active."""
 
-    only_status: list[str] | None = None
-    """Restrict the report to exactly these statuses."""
-
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
 
@@ -154,9 +139,6 @@ class FailingArgs:
 
     treat_active: list[str] | None = None
     """Treat these statuses as committed, counting them alongside Active."""
-
-    only_status: list[str] | None = None
-    """Restrict the report to exactly these statuses."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
@@ -179,9 +161,6 @@ class ErrorsArgs:
 
     format: Literal["text", "markdown", "json"] = "text"
     """Output format."""
-
-    only_status: list[str] | None = None
-    """Restrict the report to exactly these statuses."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""

@@ -2032,56 +2032,6 @@ def _status_flags(args: argparse.Namespace) -> set[str]:
     return {s.title() for s in raw} if raw else set()
 
 
-def _only_status_flags(args: argparse.Namespace) -> set[str]:
-    """Title-cased set of statuses named via ``--only-status`` (empty when unset)."""
-    raw: list[str] | None = getattr(args, "only_status", None)
-    return {s.title() for s in raw} if raw else set()
-
-
-def apply_only_status(
-    exclude_status: set[str],
-    graph: FederatedGraph,
-    only_flags: set[str],
-) -> set[str]:
-    """Fold an ``--only-status`` restriction into an exclusion set.
-
-    ``--treat-active`` widens the counted set from the Active baseline;
-    ``--only-status`` names the selection outright. The restriction is
-    expressed by excluding every status the graph carries that was not
-    named, so callers keep working in the single exclusion-set vocabulary
-    the collectors already speak.
-
-    The restriction REPLACES the role-derived baseline rather than adding to
-    it. Unioning the two would make a named status unselectable whenever the
-    role system already excluded it — ``--only-status Draft`` would report
-    nothing at all, since Draft is provisional and excluded by default.
-    """
-    if not only_flags:
-        return exclude_status
-    from elspais.graph import NodeKind
-
-    present = {(n.status or "") for n in graph.nodes_by_kind(NodeKind.REQUIREMENT)}
-    return {s for s in present if s.title() not in only_flags}
-
-
-def resolve_status_exclusions(
-    args: argparse.Namespace,
-    config: dict[str, Any] | None,
-    graph: FederatedGraph,
-) -> set[str]:
-    """Resolve the statuses a report excludes, honouring both selectors.
-
-    ONE place decides this so every reporting surface answers the same
-    question identically: an explicit ``--only-status`` selection governs
-    outright, and the role-derived baseline (as widened by
-    ``--treat-active``) applies only in its absence.
-    """
-    only_flags = _only_status_flags(args)
-    if only_flags:
-        return apply_only_status(set(), graph, only_flags)
-    return _resolve_exclude_status(args, config=config or {})
-
-
 def _config_with_status_overlay(
     config: dict[str, Any] | None,
     status_flags: set[str],
@@ -2113,44 +2063,6 @@ def _config_with_status_overlay(
         key = existing_by_lower.get(flag.lower(), flag)
         entry = dict(statuses.get(key) or {})
         entry["expects_implementation"] = True
-        statuses[key] = entry
-    overlaid["statuses"] = statuses
-    return overlaid
-
-
-def _config_with_only_status_overlay(
-    config: dict[str, Any] | None,
-    only_flags: set[str],
-    graph: FederatedGraph,
-) -> dict[str, Any] | None:
-    """Config overlay restricting coverage counting to ``--only-status`` names.
-
-    Coverage COUNTS do not read the exclusion set — they route through
-    ``status_expects_implementation`` (REQ-d00258-C). So a restriction that
-    only narrowed the exclusion set would leave the counts untouched and the
-    option would appear to do nothing. Expressing the restriction as the same
-    per-call overlay keeps the ONE resolver in charge: every status the graph
-    carries is stamped ``expects_implementation`` according to whether it was
-    named, so counts and the excluded-note continue to agree.
-
-    Composes after ``_config_with_status_overlay``: widening by
-    ``--treat-active`` applies first, then this restricts to the named set.
-    The input config is never mutated.
-    """
-    if not only_flags:
-        return config
-    from elspais.graph import NodeKind
-
-    overlaid = dict(config or {})
-    statuses = dict(overlaid.get("statuses") or {})
-    existing_by_lower = {k.lower(): k for k in statuses if isinstance(k, str)}
-    present = {(n.status or "") for n in graph.nodes_by_kind(NodeKind.REQUIREMENT)}
-    for status_name in present | only_flags:
-        if not status_name:
-            continue
-        key = existing_by_lower.get(status_name.lower(), status_name)
-        entry = dict(statuses.get(key) or {})
-        entry["expects_implementation"] = status_name.title() in only_flags
         statuses[key] = entry
     overlaid["statuses"] = statuses
     return overlaid
@@ -2409,7 +2321,6 @@ def _check_status_references(
     role: StatusRole,
     severity: str,
     exclude_status: set[str] | None = None,
-    only_status: set[str] | None = None,
 ) -> HealthCheck:
     """Check for source nodes referencing requirements of a given status role.
 
@@ -2449,11 +2360,6 @@ def _check_status_references(
             if req.kind != NodeKind.REQUIREMENT:
                 continue
             req_status = req.status
-            # An explicit --only-status selection scopes the whole report:
-            # a reference to a requirement outside the selection is not part
-            # of what was asked for, so it is not a finding here either.
-            if only_status and req_status and req_status.title() not in only_status:
-                continue
             # If this status was promoted by --treat-active, skip it
             if exclude_status and req_status and req_status not in exclude_status:
                 continue
@@ -2540,7 +2446,6 @@ def run_code_checks(
     graph: FederatedGraph,
     exclude_status: set[str] | None = None,
     config: dict[str, Any] | None = None,
-    only_status: set[str] | None = None,
 ) -> list[HealthCheck]:
     """Run all code reference health checks."""
     from elspais.graph import NodeKind
@@ -2552,7 +2457,7 @@ def run_code_checks(
         check_code_coverage(graph, exclude_status=exclude_status, config=config),
         check_unlinked_code(graph),
         _check_status_references(
-            graph, NodeKind.CODE, StatusRole.RETIRED, ref_sev.retired, exclude_status, only_status
+            graph, NodeKind.CODE, StatusRole.RETIRED, ref_sev.retired, exclude_status
         ),
         _check_status_references(
             graph,
@@ -2560,7 +2465,6 @@ def run_code_checks(
             StatusRole.PROVISIONAL,
             ref_sev.provisional,
             exclude_status,
-            only_status,
         ),
         _check_status_references(
             graph,
@@ -2568,7 +2472,6 @@ def run_code_checks(
             StatusRole.ASPIRATIONAL,
             ref_sev.aspirational,
             exclude_status,
-            only_status,
         ),
         check_whole_req_only_coverage(graph, config),
     ]
@@ -3042,7 +2945,6 @@ def run_test_checks(
     graph: FederatedGraph,
     exclude_status: set[str] | None = None,
     config: dict | None = None,
-    only_status: set[str] | None = None,
 ) -> list[HealthCheck]:
     """Run all test file health checks."""
     from elspais.graph import NodeKind
@@ -3057,7 +2959,7 @@ def run_test_checks(
         check_test_results(graph, config=config),
         check_test_results_stale(graph),
         _check_status_references(
-            graph, NodeKind.TEST, StatusRole.RETIRED, ref_sev.retired, exclude_status, only_status
+            graph, NodeKind.TEST, StatusRole.RETIRED, ref_sev.retired, exclude_status
         ),
         _check_status_references(
             graph,
@@ -3065,7 +2967,6 @@ def run_test_checks(
             StatusRole.PROVISIONAL,
             ref_sev.provisional,
             exclude_status,
-            only_status,
         ),
         _check_status_references(
             graph,
@@ -3073,7 +2974,6 @@ def run_test_checks(
             StatusRole.ASPIRATIONAL,
             ref_sev.aspirational,
             exclude_status,
-            only_status,
         ),
     ]
 
@@ -3124,19 +3024,13 @@ def render_section(
             report.add(check)
     if graph:
         raw_config = config if config else {}
-        exclude_status = resolve_status_exclusions(args, raw_config, graph)
+        exclude_status = _resolve_exclude_status(args, config=raw_config)
         # REQ-d00258-C: --treat-active becomes a coverage-config overlay so
         # dimension counts AND the excluded-note agree (both read this overlay).
         cov_config = _config_with_status_overlay(raw_config, _status_flags(args))
-        only_flags = _only_status_flags(args)
-        cov_config = _config_with_only_status_overlay(cov_config, only_flags, graph)
-        for check in run_code_checks(
-            graph, exclude_status=exclude_status, config=cov_config, only_status=only_flags
-        ):
+        for check in run_code_checks(graph, exclude_status=exclude_status, config=cov_config):
             report.add(check)
-        for check in run_test_checks(
-            graph, exclude_status=exclude_status, config=cov_config, only_status=only_flags
-        ):
+        for check in run_test_checks(graph, exclude_status=exclude_status, config=cov_config):
             report.add(check)
         for check in run_uat_checks(graph, exclude_status=exclude_status, config=cov_config):
             report.add(check)
@@ -3175,14 +3069,9 @@ def compute_checks(
     fake_args = argparse.Namespace()
     treat_str = params.get("treat_active", None)
     fake_args.treat_active = treat_str.split(",") if treat_str else None
-    only_str = params.get("only_status", None)
-    fake_args.only_status = only_str.split(",") if only_str else None
-
-    exclude_status = resolve_status_exclusions(fake_args, config, graph)
-    only_selection = _only_status_flags(fake_args)
+    exclude_status = _resolve_exclude_status(fake_args, config=config)
     # REQ-d00258-C: --treat-active overlay drives coverage counts + note consistently.
     cov_config = _config_with_status_overlay(config, _status_flags(fake_args))
-    cov_config = _config_with_only_status_overlay(cov_config, only_selection, graph)
 
     # Config checks
     if run_all:
@@ -3211,16 +3100,12 @@ def compute_checks(
 
     # Code checks
     if run_all or code_only:
-        for check in run_code_checks(
-            graph, exclude_status=exclude_status, config=cov_config, only_status=only_selection
-        ):
+        for check in run_code_checks(graph, exclude_status=exclude_status, config=cov_config):
             report.add(check)
 
     # Test checks
     if run_all or tests_only:
-        for check in run_test_checks(
-            graph, exclude_status=exclude_status, config=cov_config, only_status=only_selection
-        ):
+        for check in run_test_checks(graph, exclude_status=exclude_status, config=cov_config):
             report.add(check)
 
     # UAT checks
@@ -3350,9 +3235,6 @@ def run(args: argparse.Namespace) -> int:
     treat_active = getattr(args, "treat_active", None)
     if treat_active:
         params["treat_active"] = ",".join(treat_active)
-    only_status = getattr(args, "only_status", None)
-    if only_status:
-        params["only_status"] = ",".join(only_status)
 
     spec_dir = getattr(args, "spec_dir", None)
     # Force fresh build when runners just produced new result files.
@@ -3483,9 +3365,6 @@ def _format_report(
     treat_active_list = getattr(args, "treat_active", None)
     if treat_active_list:
         flag_parts.append("--treat-active " + " ".join(treat_active_list))
-    only_status_list = getattr(args, "only_status", None)
-    if only_status_list:
-        flag_parts.append("--only-status " + " ".join(only_status_list))
     if getattr(args, "lenient", False):
         flag_parts.append("--lenient")
     if getattr(args, "spec_only", False):

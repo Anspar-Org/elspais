@@ -563,7 +563,7 @@ REPO_DOCS_CLI_ROOT = REPO_ROOT / "docs" / "cli"
 # A synopsis block wraps one invocation over several lines:
 #
 #     elspais checks [--spec] [--code]
-#                    [--only-status STATUS ...]
+#                    [--treat-active STATUS ...]
 #
 # Only the first line carries the command, so a flag on a continuation line
 # belongs to no command and was never checked -- which is exactly how a
@@ -574,7 +574,7 @@ _CONTINUATION_RE = re.compile(r"^\s+(?=[\[-])")
 _COMMAND_PREFIX_RE = re.compile(r"\belspais\s+([a-z][a-z0-9-]*)")
 
 
-# A synopsis marks optional arguments with brackets -- `[--only-status STATUS]`.
+# A synopsis marks optional arguments with brackets -- `[--treat-active STATUS]`.
 # The flag matcher requires a bare `--flag`, so a bracketed one matches nothing
 # and every option in a synopsis went unchecked, on continuation lines and on
 # the command line itself alike. Bracketed flag NAMES are validated here;

@@ -553,13 +553,12 @@ you to `elspais errors` for requirement-level detail:
 elspais errors                     # Show all spec errors
 elspais errors --format markdown   # Markdown table output
 elspais errors --format json       # JSON output
-elspais errors --only-status Draft # Restrict to Draft requirements
 elspais errors -o errors.txt       # Write to file
 ```
 
-With no `--only-status`, the drill-down weighs every requirement whatever its
-status, so it accounts for exactly what the two checks above counted. Pass
-`--only-status` to restrict it to the statuses you name.
+The drill-down weighs every requirement whatever its status, so it accounts for
+exactly what the two checks above counted. It takes no status option: format
+rules bind a requirement whatever its status, so there is no baseline to widen.
 
 **Example output (text format):**
 
@@ -576,7 +575,6 @@ NO ASSERTIONS (2):
 **Options:**
 
   `--format {text,markdown,json}`  Output format (default: text)
-  `--only-status STATUS`           Restrict the listing to these statuses
   `-o, --output PATH`              Write output to file instead of stdout
 
 **Performance:** Uses daemon-first execution like other drill-down commands.
@@ -636,27 +634,9 @@ forces `expects_implementation = true` for `<S>`, so it is exactly equivalent to
 setting `[statuses.<S>] expects_implementation = true` in `.elspais.toml` for the
 duration of the run (and composes with any such config already present).
 
-### Restricting a report instead of widening it
-
-`--treat-active` widens the counted set; `--only-status` restricts a report to
-exactly the statuses named, and is accepted by every reporting command:
-
-```bash
-# The Draft picture alone, with nothing else counted
-elspais checks --only-status Draft
-
-# Format errors for Draft requirements only
-elspais errors --only-status Draft
-```
-
-The two point in opposite directions and are deliberately spelled differently,
-so an invocation says which one it means. `errors` has no Active baseline to
-widen — it weighs every requirement whatever its status — so it offers
-`--only-status` alone.
-
-Both flags accept any configured status name (case-insensitive; the name is
-title-cased before matching). See `elspais docs config` for how status roles are
-configured.
+`--treat-active` accepts any configured status name (case-insensitive; the name
+is title-cased before matching). See `elspais docs config` for how status roles
+are configured.
 
 ## Exit Codes
 
