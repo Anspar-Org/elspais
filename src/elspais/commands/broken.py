@@ -46,7 +46,12 @@ def collect_broken(
 # Rendering
 # =============================================================================
 
-_LABEL = "BROKEN REFERENCES"
+# This command lists every reference that resolves to nothing. The health
+# checks partition the same set -- `spec.broken_references` for a target
+# some configured repository claims, `spec.unclaimed_references` for one no
+# repository claims -- so the listing uses the union's name and leaves
+# "broken" to mean what the check means by it.
+_LABEL = "UNRESOLVED REFERENCES"
 
 
 def render_broken_text(refs: list[BrokenReference]) -> str:
@@ -65,7 +70,7 @@ def render_broken_text(refs: list[BrokenReference]) -> str:
 def render_broken_markdown(refs: list[BrokenReference]) -> str:
     """Render broken references as markdown."""
     if not refs:
-        return f"## {_LABEL}\n\nNo broken references found."
+        return f"## {_LABEL}\n\nNo unresolved references found."
     lines = [
         f"## {_LABEL} ({len(refs)})",
         "",
@@ -216,7 +221,7 @@ def _render_broken_data_text(refs: list[dict[str, Any]]) -> str:
 def _render_broken_data_markdown(refs: list[dict[str, Any]]) -> str:
     """Render broken references from dict data as markdown."""
     if not refs:
-        return f"## {_LABEL}\n\nNo broken references found."
+        return f"## {_LABEL}\n\nNo unresolved references found."
     lines = [
         f"## {_LABEL} ({len(refs)})",
         "",

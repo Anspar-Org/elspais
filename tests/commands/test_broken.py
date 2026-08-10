@@ -152,7 +152,7 @@ class TestRenderBrokenText:
 
     def test_label_present(self) -> None:
         output = render_broken_text([])
-        assert "BROKEN REFERENCES" in output
+        assert "UNRESOLVED REFERENCES" in output
 
     def test_diagnostic_on_own_indented_line(self) -> None:
         # Verifies: REQ-d00085
@@ -188,14 +188,14 @@ class TestRenderBrokenText:
 class TestRenderBrokenMarkdown:
     """Tests for render_broken_markdown()."""
 
-    def test_empty_shows_no_broken(self) -> None:
+    def test_empty_shows_no_unresolved(self) -> None:
         output = render_broken_markdown([])
-        assert "No broken references found" in output
+        assert "No unresolved references found" in output
 
     def test_shows_heading_with_count(self) -> None:
         refs = [_make_ref()]
         output = render_broken_markdown(refs)
-        assert "## BROKEN REFERENCES (1)" in output
+        assert "## UNRESOLVED REFERENCES (1)" in output
 
     def test_table_header(self) -> None:
         refs = [_make_ref()]
@@ -239,6 +239,32 @@ class TestRenderBrokenMarkdown:
 # ---- render_section tests ----
 
 
+class TestListingDistinctFromBrokenCheck:
+    """The listing and the ``spec.broken_references`` check answer different
+    questions, so the listing must not borrow the check's vocabulary."""
+
+    def test_listing_does_not_call_unclaimed_targets_broken(self) -> None:
+        # Verifies: REQ-d00269-F
+        """A target no configured repository claims is listed by the command
+        while ``spec.broken_references`` reports none. The listing must not
+        describe what it shows as broken references, or the two surfaces give
+        contradictory answers to the same question."""
+        from elspais.commands.broken import render_section
+        from elspais.commands.health import check_broken_references
+
+        config = _test_config()
+        graph = _make_graph(_make_ref(target="CAL-d99999", foreign=True))
+
+        check = check_broken_references(graph, config)
+        assert check.passed, "an unclaimed target belongs to spec.unclaimed_references"
+        assert "broken reference" in check.message.lower()
+
+        output, exit_code = render_section(graph, config, _make_args(format="text"))
+        assert exit_code == 1
+        assert "CAL-d99999" in output, "the command still lists the unresolved reference"
+        assert "broken" not in output.lower()
+
+
 class TestRenderSection:
     """Tests for render_section()."""
 
@@ -247,7 +273,7 @@ class TestRenderSection:
 
         graph = _make_graph(_make_ref())
         output, exit_code = render_section(graph, None, _make_args(format="text"))
-        assert "BROKEN REFERENCES" in output
+        assert "UNRESOLVED REFERENCES" in output
         assert "REQ-p00001" in output
 
     def test_markdown_format(self) -> None:

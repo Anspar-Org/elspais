@@ -27,6 +27,13 @@ import subprocess
 import textwrap
 from pathlib import Path
 
+# elspais scans this file as one of its own tests, so a literal ``Verifies:``
+# line in a fixture below would read as an annotation of *this* repository
+# naming an identifier no repository in it owns. Spelling the keyword
+# indirectly keeps the fixture's own file exact while leaving this file's
+# scan honest.
+_VERIFIES = "Verifies"
+
 
 def _write(repo: Path, rel: str, body: str) -> None:
     """Write ``body`` (dedented, stripped, newline-terminated) to ``repo/rel``."""
@@ -275,8 +282,8 @@ def _build_multi(tmp_path: Path):
     _write(
         library,
         "tests/test_lib.py",
-        """
-        # Verifies: LIB-p00002-A
+        f"""
+        # {_VERIFIES}: LIB-p00002-A
         def test_log_invocation():
             assert True
         """,

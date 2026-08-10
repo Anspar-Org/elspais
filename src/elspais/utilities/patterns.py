@@ -12,6 +12,7 @@ Ported from core/patterns.py.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -96,6 +97,7 @@ class IdGrammar:
     component: str
     identifier: str
     assertion_label: str
+    assertion_label_exact: str
     assertion_separator: str
     multi_separator: str
 
@@ -430,12 +432,24 @@ class IdResolver:
         assertion_separator = re.escape(
             separator if separator is not None else cfg.assertions.separator
         )
+
+        assertion_label = self._assertion_label_regex_str()
+        # The same alphabet, written so that it cannot match another case
+        # inside a case-insensitive consumer. A label alphabet that names a
+        # case has one to preserve; a digit alphabet does not.
+        assertion_label_exact = (
+            f"(?-i:{assertion_label})"
+            if cfg.assertions.label_style in ("uppercase", "alphanumeric")
+            else assertion_label
+        )
+
         return IdGrammar(
             namespace=namespace,
             level=level,
             component=component,
             identifier=identifier,
-            assertion_label=self._assertion_label_regex_str(),
+            assertion_label=assertion_label,
+            assertion_label_exact=assertion_label_exact,
             assertion_separator=assertion_separator,
             multi_separator=re.escape(cfg.assertions.multi_separator),
         )
@@ -844,12 +858,25 @@ class IdResolver:
         if self.parse(all_internal) is not None:
             # Every underscore was the component's own punctuation.
             return all_internal
-        # No label boundary found in the component's own punctuation, so the
-        # trailing group is a label: fold the last boundary to the separator.
-        head, _, tail = raw_ref.rpartition("_")
-        if head and tail:
-            return head.replace("_", internal) + sep + tail
-        return raw_ref.replace("_", internal)
+
+        # Otherwise some suffix of the parts are labels. The notation spends
+        # its one punctuation character on every boundary, so the split has to
+        # be found rather than read: take the longest head that parses as a
+        # requirement, and the rest are labels joined by the multi-separator.
+        parts = raw_ref.split("_")
+        multi = self.config.assertions.multi_separator
+        for cut in range(len(parts) - 1, 0, -1):
+            head = internal.join(parts[:cut])
+            labels = parts[cut:]
+            parsed_head = self.parse(head)
+            if parsed_head is None or parsed_head.assertions:
+                # A head that already carries labels is not the boundary --
+                # it would leave the remaining labels stranded behind the
+                # wrong separator.
+                continue
+            if all(self.is_valid_assertion_label(label) for label in labels):
+                return head + sep + multi.join(labels)
+        return all_internal
 
     def normalize_ref(self, raw_ref: str) -> str:
         """Normalize a raw reference string to canonical form.
@@ -900,6 +927,125 @@ class IdResolver:
         if INSTANCE_SEPARATOR not in instance_id:
             return None
         return instance_id.split(INSTANCE_SEPARATOR, 1)[0]
+
+
+# Implements: REQ-d00269-C, REQ-d00268-C+E
+class FederatedIdReader:
+    """Reads the identifiers of every repository in one federation.
+
+    A repository's code and tests routinely name a requirement another
+    member of the same federation owns.  Recognising such a reference needs
+    every member's grammar; normalizing it needs the grammar of the member
+    that *claims* it, because the scanning repository's own resolver would
+    rewrite a foreign identifier under rules that do not govern it.
+
+    Each fragment still comes from one member's own ``IdResolver.grammar()``.
+    This type alternates those fragments and probes the members in order; it
+    never merges configurations, and it derives nothing itself.
+
+    A reader over a single repository produces exactly that repository's own
+    fragments, so a repository built alone is grammatically unchanged.
+    """
+
+    def __init__(self, own: IdResolver, others: Sequence[IdResolver] = ()) -> None:
+        resolvers = [own]
+        seen = {own.config.namespace}
+        for other in others:
+            namespace = other.config.namespace
+            if namespace not in seen:
+                seen.add(namespace)
+                resolvers.append(other)
+        self._resolvers: tuple[IdResolver, ...] = tuple(resolvers)
+        self._ref_regex: re.Pattern[str] | None = None
+
+    @property
+    def own(self) -> IdResolver:
+        """The resolver of the repository being scanned."""
+        return self._resolvers[0]
+
+    @property
+    def resolvers(self) -> tuple[IdResolver, ...]:
+        """Every member's resolver, the scanned repository's first."""
+        return self._resolvers
+
+    @staticmethod
+    def _alternate(fragments: Sequence[str]) -> str:
+        """Join member fragments into one alternation.
+
+        A lone member yields its fragment verbatim, so a repository outside
+        any federation embeds the same pattern text it always did.
+        """
+        if len(fragments) == 1:
+            return fragments[0]
+        return "(?:" + "|".join(fragments) + ")"
+
+    def namespace_pattern(self) -> str:
+        """A pattern matching any member's namespace."""
+        return self._alternate([r.grammar().namespace for r in self._resolvers])
+
+    def identifier_pattern(self) -> str:
+        """A pattern matching any member's canonical identifier."""
+        return self._alternate([r.grammar().identifier for r in self._resolvers])
+
+    def _reference_regex(self) -> re.Pattern[str]:
+        if self._ref_regex is None:
+            self._ref_regex = re.compile(
+                self._alternate(
+                    [r.multi_assertion_reference_regex().pattern for r in self._resolvers]
+                ),
+                re.IGNORECASE,
+            )
+        return self._ref_regex
+
+    def normalize(self, raw_ref: str) -> str:
+        """Normalize *raw_ref* under the grammar of the member that claims it.
+
+        Falls back to the scanned repository's own resolver when no member
+        claims the reference, which keeps an unresolvable reference visible
+        rather than discarding it.
+        """
+        for resolver in self._resolvers:
+            candidate = resolver.normalize_ref(raw_ref)
+            if resolver.is_local_id(candidate):
+                return candidate
+        return self.own.normalize_ref(raw_ref)
+
+    def extract_refs(self, text: str) -> list[str]:
+        """Every member's identifiers named in *text*, in the order written."""
+        refs: list[str] = []
+        for match in self._reference_regex().finditer(text):
+            ref = self.normalize(match.group(0))
+            if ref not in refs:
+                refs.append(ref)
+        return refs
+
+    def extract_underscored_ref(self, text: str) -> str | None:
+        """The first identifier *text* spells in underscore notation, or None.
+
+        A Python test function name can spell every boundary only as ``_``,
+        so each member's grammar is re-rendered in that notation rather than
+        composed a second time.  A trailing lowercase run continues the
+        function name rather than labelling an *Assertion*, so
+        ``test_REQ_p00001_validates`` must not read its ``_v`` as a label.
+
+        Only the first label is read tolerantly of case.  Past it the
+        notation has spent its distinguishing punctuation -- the separator
+        between the component and the labels and the separator between two
+        labels are both ``_`` -- so case is all that is left to tell a second
+        label from the next word of the name, and
+        ``test_REQ_p00001_A_and_so_on`` names one label rather than two.
+        """
+        best: tuple[int, str] | None = None
+        for resolver in self._resolvers:
+            g = resolver.grammar(separator="_")
+            head = rf"(?:{g.assertion_separator}{g.assertion_label}(?![a-z]))"
+            tail = rf"(?:{g.assertion_separator}{g.assertion_label_exact}(?![a-z]))*"
+            suffix = head + tail
+            pattern = re.compile(rf"(?P<ref>{g.identifier}(?:{suffix})?)", re.IGNORECASE)
+            match = pattern.search(text)
+            if match and (best is None or match.start() < best[0]):
+                best = (match.start(), resolver.normalize_ref(match.group("ref")))
+        return best[1] if best else None
 
 
 def build_resolver(config: dict[str, Any]) -> IdResolver:

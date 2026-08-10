@@ -25,7 +25,12 @@ import pytest
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.parsers.lark import GrammarFactory
 from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
-from elspais.utilities.patterns import IdGrammar, IdResolver, build_resolver
+from elspais.utilities.patterns import (
+    FederatedIdReader,
+    IdGrammar,
+    IdResolver,
+    build_resolver,
+)
 from tests.federation_repos import make_repo
 
 
@@ -128,6 +133,7 @@ _SENTINEL = IdGrammar(
     component="[0-9]{4}",
     identifier="ZQX[-_]q[0-9]{4}",
     assertion_label="[A-Z]",
+    assertion_label_exact="(?-i:[A-Z])",
     assertion_separator="[-_]",
     multi_separator=r"\+",
 )
@@ -148,6 +154,7 @@ def test_grammar_fragments_are_reachable_through_the_public_interface() -> None:
         "component",
         "identifier",
         "assertion_label",
+        "assertion_label_exact",
         "assertion_separator",
         "multi_separator",
     ):
@@ -449,3 +456,86 @@ def test_every_assertion_label_is_canonicalized(raw: str, expected: str) -> None
     resolver = build_resolver(NUMERIC)
 
     assert resolver.normalize_ref(raw) == expected
+
+
+# ---------------------------------------------------------------------------
+# A label alphabet that names a case keeps that case wherever it is embedded.
+# ---------------------------------------------------------------------------
+
+
+UPPERCASE_LABELS = _config(assertions={"label_style": "uppercase"})
+ALPHANUMERIC_LABELS = _config(assertions={"label_style": "alphanumeric"})
+NUMERIC_LABELS = _config(assertions={"label_style": "numeric"})
+
+
+@pytest.mark.parametrize(
+    "config, function_name, expected",
+    [
+        # A single lowercase word after a genuine label: the following word
+        # of a function name, not a second label.
+        (UPPERCASE_LABELS, "test_REQ_p00001_A_b_and_more", "REQ-p00001-A"),
+        (UPPERCASE_LABELS, "test_REQ_p00001_A_and_then_some", "REQ-p00001-A"),
+        (UPPERCASE_LABELS, "test_REQ_p00001_validates_something", "REQ-p00001"),
+        # The shape that mints a broken reference out of a test's own name:
+        # a real label followed by a single-letter word.
+        (UPPERCASE_LABELS, "test_REQ_d00269_E_a_demoted_line_survives", "REQ-d00269-E"),
+        # A lowercase *first* label is still a mis-cased label, not a word.
+        (UPPERCASE_LABELS, "test_REQ_p00001_a_lower", "REQ-p00001-A"),
+        # An alphabet that admits digits still names a case for its letters.
+        (ALPHANUMERIC_LABELS, "test_REQ_p00001_A_b_and_more", "REQ-p00001-A"),
+        (ALPHANUMERIC_LABELS, "test_REQ_p00001_3_more", "REQ-p00001-3"),
+        # A lowercase *first* label is a mis-cased label the separator still
+        # marks out, so it is read and canonicalized rather than dropped.
+        (ALPHANUMERIC_LABELS, "test_REQ_p00001_a_lower", "REQ-p00001-A"),
+        # Digits have no case to preserve, so a digit label reads unchanged.
+        (NUMERIC_LABELS, "test_REQ_p00001_2_b_more", "REQ-p00001-2"),
+        (NUMERIC_LABELS, "test_REQ_p00001_a_lower", "REQ-p00001"),
+    ],
+)
+def test_a_test_function_name_yields_an_identifier_the_resolver_accepts(
+    config: dict, function_name: str, expected: str
+) -> None:
+    # Verifies: REQ-d00268-D
+    """What the reader picks out of a name must be one the resolver parses.
+
+    A test function name spells every boundary as an underscore, so the
+    trailing words of the name sit exactly where a label would. Reading one
+    of them as a label produces a string the resolver rejects -- the two
+    surfaces then disagree about what an identifier is, and the disagreement
+    surfaces as a broken reference minted out of a test's own name.
+    """
+    resolver = build_resolver(config)
+    reader = FederatedIdReader(resolver)
+
+    extracted = reader.extract_underscored_ref(function_name)
+
+    assert extracted == expected
+    assert resolver.is_local_id(extracted), (
+        f"the reader picked {extracted!r} out of {function_name!r} but the "
+        f"resolver refuses it, so a test name mints a broken reference to a "
+        f"requirement nothing declares"
+    )
+
+
+def test_case_tolerance_of_a_label_ends_where_the_notation_runs_out() -> None:
+    # Verifies: REQ-d00268-D
+    """Only a second label needs its case to be told from a following word.
+
+    Both notations separate the component from the first label with a
+    character of their own, so a lowercase first label is a mis-cased label
+    and normalization settles it -- in either notation. It is the *second*
+    label that the underscore notation cannot punctuate distinctly, because
+    the separator between two labels is the same ``_``; there case is the
+    only thing left, and reading a following word as a label yields a string
+    the resolver refuses.
+    """
+    resolver = build_resolver(NUMERIC)
+    reader = FederatedIdReader(resolver)
+
+    assert _matcher_recognises(resolver, "req-d00001-a")
+    assert resolver.is_local_id(resolver.normalize_ref("req-d00001-a"))
+
+    assert _matcher_recognises(resolver, "REQ_d00001_a")
+    assert reader.extract_underscored_ref("test_REQ_d00001_a") == "REQ-d00001-A"
+
+    assert reader.extract_underscored_ref("test_REQ_d00001_A_note") == "REQ-d00001-A"

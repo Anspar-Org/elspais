@@ -110,6 +110,34 @@ associate)" section grouping inherited coverage by the owning associate with a
 federation total, and `elspais gaps` lists integrating requirements under
 "Covered via external associate" rather than reporting them as uncovered.
 
+## Annotating code and tests across repositories
+
+An identifier owned by any repository in the federation is recognised in the
+code and test annotations of every repository in it. A sponsor repo's test may
+name a platform requirement directly:
+
+```python
+# Verifies: CAL-d00007-B
+def test_scheduling_window():
+    ...
+```
+
+Each repository keeps its own identifier configuration; the scan simply
+applies every member's grammar and reads the reference under the grammar of
+the repository that owns it. Test function names work the same way in
+underscore notation (`def test_window_CAL_d00007_B()`).
+
+A reference whose target no repository claims is reported as a broken
+reference carrying the text as written, rather than being dropped:
+
+```python
+# Implements: CAL-d99999-A     -> broken reference: CAL-d99999-A
+```
+
+List them with `elspais broken`. A requirement with no evidence and a
+requirement whose evidence could not be resolved otherwise read identically in
+every report.
+
 ## Notes
 
 - Links are stored in `.elspais.local.toml` (gitignored)

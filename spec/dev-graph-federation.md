@@ -382,11 +382,19 @@ C. An identifier owned by any repository in a federation SHALL be recognised in 
 
 D. A *Traceability* reference whose target identifier cannot be resolved SHALL be recorded as a broken reference, whatever kind of file it appears in.
 
+E. A *Traceability* keyword SHALL introduce a reference only where it is the first content of a comment or of a metadata line. The same keyword occurring elsewhere in a line, or within inline-quoted or fenced text, SHALL NOT introduce a reference.
+
+F. Every reference recognised under E whose target resolves to no node SHALL be reported by a dedicated check, at a severity the project configures among informational, warning and failing.
+
 ### Rationale
 
 Cross-repository credit is what multi-repository *Traceability* is for: a sponsor repository's tests verifying a platform requirement is the ordinary case, not an exotic one. The obligations here are separated because each fails independently and each fails silently. Computing coverage before the federation is wired starves the computation of the very edges that cross repositories (A). Wiring those edges in a shape the coverage computation does not read starves it a second time, so ordering alone is not sufficient (B). Refusing to recognise a foreign identifier in a code or test comment drops the evidence before any edge exists at all (C), which bites hardest because annotating code and tests is where cross-repository evidence is most naturally authored.
 
 D is the diagnostic floor beneath C. A reference the tool cannot resolve is a fact about the estate that its author needs to see; discarding it silently is worse than reporting it broken, because a requirement with no evidence and a requirement whose evidence was thrown away read identically in every report.
+
+E is what makes D decidable. A target no repository claims is by definition outside every configured grammar, so nothing about its *shape* can be trusted to say whether it was meant as a reference — guessing from the target invents findings out of prose, and an unrestricted net over this estate produced thirty-five of them from sentences that merely contain a keyword. Position is the property that can be relied on instead: a reference is written where a reference belongs, and prose that discusses one is quoted. That also gives documentation a way to name a keyword without invoking it, which a shape-based rule cannot offer at any strictness.
+
+F exists because the honest report of an unresolvable reference is not always an error. A repository may reference a requirement that a sibling has not authored yet, and the same finding is informational to one project and a build failure to another. Severity is therefore the project's decision, while noticing is not.
 
 The complementary negative rule — that federation membership alone credits nothing — belongs to the federation role model and is not restated here. Together the two bound the behaviour from both sides: coverage crosses a boundary exactly where a *Traceability* edge crosses it, and nowhere else.
 
@@ -396,10 +404,11 @@ A concurrency version is derived from a node's content and its outgoing *Traceab
 
 ### Changelog
 
+- 2026-08-09 | f5855c6e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-08 | bd05142f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-08 | bc8f5d09 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-08 | bd05142f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-08-09 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: cross-repository coverage credit
 
-*End* *Cross-Repository Coverage Credit* | **Hash**: bd05142f
+*End* *Cross-Repository Coverage Credit* | **Hash**: f5855c6e
 ---

@@ -27,7 +27,6 @@ Keyword semantics per file type:
 from __future__ import annotations
 
 import logging
-import re
 from typing import TYPE_CHECKING, Any
 
 from lark import Tree
@@ -41,7 +40,7 @@ from elspais.graph.parsers.patterns import (
 )
 
 if TYPE_CHECKING:
-    from elspais.utilities.patterns import IdResolver
+    from elspais.utilities.patterns import FederatedIdReader, IdResolver
 
 _log = logging.getLogger(__name__)
 
@@ -59,6 +58,12 @@ class ReferenceTransformer:
         file_default_verifies: File-level default verifies (for test files).
         expected_broken_count: From elspais control marker (for test files).
         all_test_funcs: All test functions from pre-scan (for emitting unlinked tests).
+        reader: Reads the identifiers of every repository in this
+            federation, normalizing each under the grammar of the member
+            that claims it.  Defaults to this repository alone.
+        quoted_lines: Line numbers holding quoted text -- the interior of a
+            fenced block.  A keyword there is displayed, not invoked, so the
+            line is left ordinary text however it lexed.
     """
 
     def __init__(
@@ -70,14 +75,20 @@ class ReferenceTransformer:
         expected_broken_count: int = 0,
         all_test_funcs: list[tuple[int, str, str | None]] | None = None,
         source_id: str = "",
+        reader: FederatedIdReader | None = None,
+        quoted_lines: set[int] | None = None,
     ) -> None:
+        from elspais.utilities.patterns import FederatedIdReader as _Reader
+
         self.resolver = resolver
+        self.reader = reader if reader is not None else _Reader(resolver)
         self.content_type = content_type
         self.line_context = line_context or {}
         self.file_default_verifies = file_default_verifies or []
         self.expected_broken_count = expected_broken_count
         self.all_test_funcs = all_test_funcs or []
         self.source_id = source_id
+        self.quoted_lines = quoted_lines or set()
         self.warnings: list[str] = []
 
     def transform(self, tree: Tree) -> list[ParsedContent]:
@@ -100,6 +111,13 @@ class ReferenceTransformer:
             if child.data == "other_line":
                 token = child.children[0]
                 other_lines.append((token.line, str(token)))  # type: ignore[attr-defined]
+                i += 1
+                continue
+
+            # A keyword inside quoted text names a keyword rather than
+            # invoking one, so the line stays ordinary text (REQ-d00269-E).
+            if self._token_line(child) in self.quoted_lines:
+                other_lines.append((self._token_line(child), self._token_text(child)))
                 i += 1
                 continue
 
@@ -193,6 +211,14 @@ class ReferenceTransformer:
                     if pc.parsed_data.get("function_line"):
                         emitted_func_lines.add(pc.parsed_data["function_line"])
                     results.append(pc)
+
+            elif child.data == "unresolved_ref":
+                token = child.children[0]
+                pc = self._handle_unresolved_ref(str(token), token.line)  # type: ignore[attr-defined]
+                if pc:
+                    results.append(pc)
+                else:
+                    other_lines.append((token.line, str(token)))  # type: ignore[attr-defined]
 
             elif child.data == "control_marker":
                 # Already extracted during pre-processing; skip
@@ -298,7 +324,10 @@ class ReferenceTransformer:
 
         refs = self._extract_ids(text)
         if not refs:
-            return None
+            # The line names a target no repository claims. Reporting it as
+            # broken is the diagnostic floor beneath cross-repository
+            # recognition (REQ-d00269-D).
+            return self._handle_unresolved_ref(text, line_num)
 
         func_name, class_name, func_line, func_end_line = self.line_context.get(
             line_num, (None, None, 0, 0)
@@ -342,6 +371,89 @@ class ReferenceTransformer:
         )
 
     # ------------------------------------------------------------------
+    # Unresolvable reference handling
+    # ------------------------------------------------------------------
+
+    # Implements: REQ-d00269-D
+    def _handle_unresolved_ref(self, text: str, line_num: int) -> ParsedContent | None:
+        """Read a reference line the identifier grammar did not open.
+
+        The line is recognised because of where the keyword sits, so the
+        target may be written any way at all -- including with prose ahead of
+        the identifier, as a section banner spells it. Every identifier any
+        federation member owns is looked for in the whole target first, and
+        only a target holding none of them is carried through verbatim, on
+        the same broken-reference channel a misspelled local identifier
+        travels: a requirement with no evidence and a requirement whose
+        evidence was discarded otherwise read alike.
+
+        Returns None when the keyword is not one this kind of file may use,
+        which leaves the line ordinary text exactly as before.
+        """
+        keyword = self._detect_keyword(text)
+        if self.content_type == "test_ref":
+            if keyword != "verifies":
+                return None
+        elif keyword in ("integrates", "refines"):
+            return None
+
+        refs = self._extract_ids(text)
+        if not refs:
+            raw = self._raw_target(text)
+            if not raw:
+                return None
+            refs = [raw]
+
+        func_name, class_name, func_line, func_end_line = self.line_context.get(
+            line_num, (None, None, 0, 0)
+        )
+        if self.content_type == "code_ref":
+            parsed_data: dict[str, Any] = {
+                "implements": refs if keyword == "implements" else [],
+                "verifies": refs if keyword == "verifies" else [],
+                "function_name": func_name,
+                "class_name": class_name,
+                "function_line": func_line,
+                "function_end_line": func_end_line,
+            }
+        else:
+            parsed_data = {
+                "verifies": refs,
+                "function_name": func_name,
+                "class_name": class_name,
+                "function_line": func_line,
+                "file_default_verifies": self.file_default_verifies,
+            }
+            if self.expected_broken_count > 0:
+                parsed_data["expected_broken_count"] = self.expected_broken_count
+
+        return ParsedContent(
+            content_type=self.content_type,
+            start_line=line_num,
+            end_line=line_num,
+            raw_text=text,
+            parsed_data=parsed_data,
+        )
+
+    @staticmethod
+    def _raw_target(text: str) -> str:
+        """The text a reference line names as its target, verbatim.
+
+        Trailing block-comment terminators are not part of what the author
+        wrote as a target, so they are dropped; everything else is kept as
+        written, since the point of reporting it is to show the author the
+        string that could not be resolved.
+        """
+        match = _KEYWORD_RE.search(text)
+        if not match:
+            return ""
+        tail = text[match.end() :].lstrip(": \t")
+        for terminator in ("*/", "-->"):
+            if tail.endswith(terminator):
+                tail = tail[: -len(terminator)]
+        return tail.strip()
+
+    # ------------------------------------------------------------------
     # Test name reference handling
     # ------------------------------------------------------------------
 
@@ -353,26 +465,12 @@ class ReferenceTransformer:
 
         # Extract REQ_xxx from function name (underscored form).
         # Test names use underscores: def test_foo_REQ_p00001_A
-        # We need to match the ID part (REQ_p00001) and optional assertion
-        # suffix (_A) but stop before lowercase continuation (_validates).
-        # Same grammar, underscore notation (REQ-d00268-C).
-        g = self.resolver.grammar(separator="_")
-
-        # A trailing lowercase run continues the function name rather than
-        # labelling an assertion, so `test_REQ_p00001_validates` must not read
-        # its `_v` as a label. The guard belongs to this notation, not to the
-        # grammar: only here can a label abut prose.
-        assertion_pat = rf"(?:{g.assertion_separator}{g.assertion_label}(?![a-z]))+"
-
-        full_pattern = re.compile(
-            rf"(?P<ref>{g.identifier}(?:{assertion_pat})?)",
-            re.IGNORECASE,
-        )
-        match = full_pattern.search(text)
-        if not match:
+        # A test name is a test annotation, so it names an identifier any
+        # federation member owns (REQ-d00269-C).
+        ref = self.reader.extract_underscored_ref(text)
+        if ref is None:
             return None
 
-        ref = self.resolver.normalize_ref(match.group("ref"))
         func_name, class_name, func_line, _func_end = self.line_context.get(
             line_num, (None, None, 0, 0)
         )
@@ -404,14 +502,11 @@ class ReferenceTransformer:
 
         Collects both REQ-style ids (via the namespace pattern) and JNY-style
         ids (whole journeys and addressable steps) so that ``Verifies:``
-        annotations may target either kind.
+        annotations may target either kind.  An identifier any federation
+        member owns is recognised here and normalized by the member that
+        claims it (REQ-d00269-C).
         """
-        pattern = self.resolver.multi_assertion_reference_regex()
-        refs = []
-        for m in pattern.finditer(text):
-            ref = self.resolver.normalize_ref(m.group(0))
-            if ref not in refs:
-                refs.append(ref)
+        refs = self.reader.extract_refs(text)
         for jny_id in _JOURNEY_REF_RE.findall(text):
             if jny_id not in refs:
                 refs.append(jny_id)

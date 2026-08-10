@@ -25,6 +25,8 @@ from typing import TYPE_CHECKING
 from lark import Lark
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from elspais.utilities.patterns import IdResolver
 
 # Directory containing .lark grammar files
@@ -43,25 +45,42 @@ class GrammarFactory:
     # Class-level cache: grammar_hash -> compiled Lark instance
     _cache: dict[str, Lark] = {}
 
-    def __init__(self, resolver: IdResolver) -> None:
+    def __init__(
+        self,
+        resolver: IdResolver,
+        member_resolvers: Sequence[IdResolver] = (),
+    ) -> None:
+        from elspais.utilities.patterns import FederatedIdReader
+
         self._resolver = resolver
+        self._reader = FederatedIdReader(resolver, member_resolvers)
 
     # ------------------------------------------------------------------
     # Token builders (derive regex fragments from IdResolver / config)
     # ------------------------------------------------------------------
 
-    def _build_tokens(self) -> dict[str, str]:
-        """Build substitution tokens from the resolver's identifier grammar."""
+    def _build_tokens(self, federated: bool = False) -> dict[str, str]:
+        """Build substitution tokens from the resolver's identifier grammar.
+
+        Args:
+            federated: Widen the identifier and namespace fragments to every
+                federation member's grammar.  Code and test annotations may
+                name an identifier any member owns (REQ-d00269-C); a spec
+                file declares only identifiers its own repository owns, so
+                its grammar stays narrow.
+        """
         # Every fragment comes from the one derivation authority (REQ-d00268-C),
         # so the grammar this parser recognises and the identifiers the resolver
-        # accepts cannot drift apart.
+        # accepts cannot drift apart.  A federated fragment alternates each
+        # member's own derivation rather than merging configurations
+        # (REQ-d00268-E).
         g = self._resolver.grammar()
 
         tokens: dict[str, str] = {
-            "__NAMESPACE__": g.namespace,
+            "__NAMESPACE__": self._reader.namespace_pattern() if federated else g.namespace,
             "__TYPE_PATTERN__": g.level,
             "__DIGITS_PATTERN__": g.component,
-            "__ID_PATTERN__": g.identifier,
+            "__ID_PATTERN__": self._reader.identifier_pattern() if federated else g.identifier,
             "__ASSERTION_LABEL__": g.assertion_label,
             "__ASSERTION_SEP__": g.assertion_separator,
             "__MULTI_SEP__": g.multi_separator,
@@ -121,7 +140,7 @@ class GrammarFactory:
 
     def get_reference_parser(self) -> Lark:
         """Compile (or retrieve cached) reference grammar parser."""
-        tokens = self._build_tokens()
+        tokens = self._build_tokens(federated=True)
         full_grammar = self._substitute(self._read_grammar("reference.lark"), tokens)
 
         key = self._grammar_hash(full_grammar)
@@ -150,14 +169,22 @@ class FileDispatcher:
 
     Args:
         resolver: IdResolver for ID parsing and normalization.
+        member_resolvers: The resolvers of the other repositories in this
+            federation.  Code and test annotations may name an identifier
+            any member owns, and each such reference is normalized by the
+            member that claims it (REQ-d00269-C).
     """
 
     def __init__(
         self,
         resolver: IdResolver,
+        member_resolvers: Sequence[IdResolver] = (),
     ) -> None:
+        from elspais.utilities.patterns import FederatedIdReader
+
         self._resolver = resolver
-        self._factory = GrammarFactory(resolver)
+        self._reader = FederatedIdReader(resolver, member_resolvers)
+        self._factory = GrammarFactory(resolver, member_resolvers)
         self._req_parser: Lark | None = None
         self._ref_parser: Lark | None = None
 
@@ -180,23 +207,33 @@ class FileDispatcher:
         replaces each line inside a fence with a neutral comment that the
         grammar will match as TEXT/remainder, preserving line count.
         """
-        lines = content.split("\n")
+        fenced = FileDispatcher._fenced_line_numbers(content)
         result: list[str] = []
-        in_fence = False
-        for line in lines:
-            stripped = line.strip()
-            if stripped.startswith("```") and not in_fence:
-                in_fence = True
-                result.append(line)  # keep the opening fence marker as-is
-            elif stripped.startswith("```") and in_fence:
-                in_fence = False
-                result.append(line)  # keep the closing fence marker as-is
-            elif in_fence:
+        for number, line in enumerate(content.split("\n"), start=1):
+            if number in fenced:
                 # Replace with a neutral line that won't match any grammar rule
                 result.append("<!-- fenced -->" if line.strip() else "")
             else:
                 result.append(line)
         return "\n".join(result)
+
+    @staticmethod
+    def _fenced_line_numbers(content: str) -> set[int]:
+        """The 1-based line numbers that sit inside a fenced code block.
+
+        The fence markers themselves are excluded -- they delimit the quoted
+        region rather than belonging to it. Text inside the region is a
+        display of syntax, not an instance of it, so a *Traceability* keyword
+        written there names a keyword instead of invoking one.
+        """
+        fenced: set[int] = set()
+        in_fence = False
+        for number, line in enumerate(content.split("\n"), start=1):
+            if line.strip().startswith("```"):
+                in_fence = not in_fence
+            elif in_fence:
+                fenced.add(number)
+        return fenced
 
     def dispatch_spec(
         self,
@@ -246,6 +283,8 @@ class FileDispatcher:
             "code_ref",
             line_context,
             source_id=file_path,
+            reader=self._reader,
+            quoted_lines=self._fenced_line_numbers(content),
         )
         return transformer.transform(tree)
 
@@ -301,7 +340,6 @@ class FileDispatcher:
         expected_broken_count = 0
         import re as _re
 
-        multi_assertion_pattern = self._resolver.multi_assertion_reference_regex()
         for child in tree.children:
             if not hasattr(child, "data"):
                 continue
@@ -326,8 +364,7 @@ class FileDispatcher:
                         # Silently skip — test fixtures contain cross-type
                         # keywords in string literals
                         continue
-                    for ref_match in multi_assertion_pattern.finditer(text):
-                        ref = self._resolver.normalize_ref(ref_match.group(0))
+                    for ref in self._reader.extract_refs(text):
                         if ref not in file_default_verifies:
                             file_default_verifies.append(ref)
 
@@ -339,6 +376,8 @@ class FileDispatcher:
             expected_broken_count=expected_broken_count,
             all_test_funcs=all_test_funcs,
             source_id=file_path,
+            reader=self._reader,
+            quoted_lines=self._fenced_line_numbers(content),
         )
         return transformer.transform(tree)
 

@@ -16,7 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -660,6 +660,104 @@ def check_structural_orphans(
     )
 
 
+# Implements: REQ-d00269-F
+def _claim_test(graph: FederatedGraph) -> Callable[[str], bool]:
+    """Build the predicate "some configured repository claims this identifier".
+
+    A claimed target that resolves to nothing is a misspelling of an
+    identifier the federation understands. An unclaimed one is a name from
+    outside every configured grammar -- a different kind of finding, and the
+    only kind whose severity a project may choose.
+
+    The federation's resolvers are built once and closed over, so answering
+    the question for a whole estate's worth of references costs one resolver
+    per repository rather than one per reference.
+    """
+    from elspais.graph.parsers.patterns import JNY_ID_PATTERN
+    from elspais.utilities.patterns import build_resolver
+
+    resolvers = []
+    for entry in graph.iter_repos():
+        if entry.config is None:
+            continue
+        try:
+            resolvers.append(build_resolver(entry.config))
+        except Exception:  # pragma: no cover - malformed config is reported elsewhere
+            continue
+
+    def claimed(target_id: str) -> bool:
+        if JNY_ID_PATTERN.fullmatch(target_id.split("/")[0]):
+            return True
+        return any(resolver.is_local_id(target_id) for resolver in resolvers)
+
+    return claimed
+
+
+# Implements: REQ-d00269-F
+def check_unclaimed_references(graph: FederatedGraph, config=None) -> HealthCheck:
+    """Check for references naming a target no configured repository claims.
+
+    Recognition of these references is decided by position -- a *Traceability*
+    keyword opening a comment or a metadata line -- so what follows may be any
+    text at all. Reporting them is what keeps a reference the tool could not
+    read from reading, in every downstream report, exactly like a requirement
+    that was never referenced.
+
+    ``validation.allow_unresolved_cross_repo`` keeps the meaning it has for
+    broken references: a project that has said it does not want to hear about
+    a reference into a repository it has not configured does not hear about it
+    here either.
+    """
+    typed = _validate_config(config or {})
+    claimed = _claim_test(graph)
+    unclaimed = [br for br in graph.broken_references() if not claimed(br.target_id)]
+    if typed.validation.allow_unresolved_cross_repo:
+        unclaimed = [br for br in unclaimed if not br.presumed_foreign]
+
+    severity = typed.rules.references.unclaimed
+
+    if not unclaimed:
+        return HealthCheck(
+            name="spec.unclaimed_references",
+            passed=True,
+            message="No references to unclaimed targets",
+            category="spec",
+        )
+
+    findings = []
+    for br in unclaimed:
+        try:
+            repo_name = graph.repo_for(br.source_id).name
+        except KeyError:
+            repo_name = None
+        findings.append(
+            HealthFinding(
+                message=(
+                    f"Unclaimed reference: {br.source_id} -> {br.target_id} ({br.edge_kind}) "
+                    "-- no configured repository claims this identifier"
+                ),
+                node_id=br.source_id,
+                repo=repo_name,
+            )
+        )
+
+    return HealthCheck(
+        name="spec.unclaimed_references",
+        passed=severity == "ok",
+        message=f"{len(unclaimed)} reference(s) to targets no configured repository claims",
+        category="spec",
+        severity=severity,
+        details={
+            "count": len(unclaimed),
+            "references": [
+                {"source": br.source_id, "target": br.target_id, "kind": br.edge_kind}
+                for br in unclaimed[:20]
+            ],
+        },
+        findings=findings,
+    )
+
+
 # Implements: REQ-d00204-E
 def check_broken_references(graph: FederatedGraph, config=None) -> HealthCheck:
     """Check for edges targeting non-existent nodes.
@@ -671,8 +769,13 @@ def check_broken_references(graph: FederatedGraph, config=None) -> HealthCheck:
     When validation.allow_unresolved_cross_repo is True, broken references
     whose target ID uses a different namespace prefix than the current repo
     are silently suppressed.
+
+    A target no configured repository claims is left to
+    ``spec.unclaimed_references``, whose severity the project chooses; were
+    both checks to report it, that choice would be overridden here.
     """
-    broken = graph.broken_references()
+    claimed = _claim_test(graph)
+    broken = [br for br in graph.broken_references() if claimed(br.target_id)]
 
     suppressed_count = 0
     if config is not None:
@@ -1939,6 +2042,7 @@ def run_spec_checks(
         check_spec_files_parseable(graph),
         check_spec_no_duplicates(graph),
         check_broken_references(graph, config),
+        check_unclaimed_references(graph, config),
         check_spec_hash_integrity(graph),
         check_no_cycles(graph),
     ]
@@ -3442,6 +3546,7 @@ _FOLLOWUP_COMMANDS: dict[str, str] = {
     "spec.refines_resolve": "elspais broken",
     "spec.satisfies_resolve": "elspais broken",
     "spec.broken_references": "elspais broken",
+    "spec.unclaimed_references": "elspais broken",
     "spec.structural_orphans": "elspais checks --spec --format json",
     "spec.hierarchy_levels": "elspais checks --spec --format json",
     "spec.changelog_present": "elspais fix",

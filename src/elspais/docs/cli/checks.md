@@ -43,7 +43,8 @@ Configuration checks always run as part of traceability verification. For focuse
 | `spec.refines_resolve` | All Refines: references resolve |
 | `spec.hierarchy_levels` | Requirements follow hierarchy rules |
 | `spec.structural_orphans` | No nodes without a FILE ancestor (build bugs) |
-| `spec.broken_references` | No edges targeting non-existent nodes |
+| `spec.broken_references` | No edges targeting non-existent nodes, where the target matches a configured ID pattern; severity: error |
+| `spec.unclaimed_references` | No reference names a target that no configured repository claims; default severity: warning |
 | `spec.needs_rewrite` | Flags requirements that will be rewritten on next save (duplicate refs, stale hash); severity: warning |
 | `spec.hash_integrity` | Flags Satisfies-linked requirements for review when their template hash is stale; severity: warning |
 | `spec.changelog_present` | Active requirements must have at least one changelog entry (when `changelog.present = true`); severity: warning |
@@ -182,7 +183,38 @@ active-like status, so `code.provisional_references` and
 retired = "warning"       # info | warning | error
 provisional = "info"      # info | warning | error
 aspirational = "info"     # info | warning | error
+unclaimed = "warning"     # ok | info | warning | error
 ```
+
+#### `spec.unclaimed_references` — Targets Nobody Claims
+
+A reference is recognised by *where* it is written, not by what it names: a
+*Traceability* keyword opening a comment, or opening a metadata line in a
+spec file, introduces a reference, and everything after the colon is its
+target. A target no repository claims is by definition outside every
+configured ID pattern, so its shape says nothing about whether the author
+meant a reference — only its position can, which is why documentation may
+show a keyword inside backticks or a fenced block without invoking one.
+
+The two broken-reference checks split that population by whether any
+configured repository's ID pattern claims the target:
+
+| | `spec.broken_references` | `spec.unclaimed_references` |
+|---|---|---|
+| Target shape | matches a configured ID pattern | matches none |
+| Typical cause | a misspelled or deleted identifier | a sibling repo not yet authored, or prose written after a keyword |
+| Severity | error (fixed) | `[rules.references] unclaimed` |
+
+Two consequences worth knowing. A section banner such as
+`# Verifies: how the parser handles blank lines` is a reference to a target
+named "how the parser handles blank lines" — reword it or move the keyword
+off the front of the comment. And a reference whose target lives in a repo
+you have not configured is reported here rather than discarded, so a
+federation assembled from a partial checkout still tells you what it could
+not read.
+
+**Follow-up:** Run `elspais broken` to list every unresolved reference,
+claimed and unclaimed alike.
 
 ### UAT Checks
 

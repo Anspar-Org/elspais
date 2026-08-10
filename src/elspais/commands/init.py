@@ -317,13 +317,16 @@ _FIELD_COMMENTS: dict[str, str] = {
     "rules.coverage.status_words.yields": "Label for passing dimension",
     "rules.coverage.status_words.validates": "Label for UAT-covered dimension",
     "rules.coverage.status_words.validated": "Label for UAT-passed dimension",
-    "rules.references": "Severity for code/test references to non-active requirements",
+    "rules.references": "Severity for the reference checks",
     "rules.references.retired": ('"ok" | "info" | "warning" | "error" — refs to retired REQs'),
     "rules.references.provisional": (
         '"ok" | "info" | "warning" | "error" — refs to provisional REQs'
     ),
     "rules.references.aspirational": (
         '"ok" | "info" | "warning" | "error" — refs to aspirational REQs'
+    ),
+    "rules.references.unclaimed": (
+        '"ok" | "info" | "warning" | "error" — refs to targets no repo claims'
     ),
     # --- [changelog] ---
     "changelog": "Changelog enforcement for requirement changes",

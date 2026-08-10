@@ -18,6 +18,7 @@ from typing import Any
 
 from elspais.config import (
     IgnoreConfig,
+    get_associates_config,
     get_code_directories,
     get_config,
     get_ignore_config,
@@ -27,12 +28,13 @@ from elspais.config.schema import ElspaisConfig
 from elspais.graph.builder import GraphBuilder
 from elspais.graph.deserializer import DomainFile
 from elspais.graph.federated import FederatedGraph
+from elspais.graph.federation_plan import PlannedRepo, plan_federation
 from elspais.graph.GraphNode import FileType, GraphNode, NodeKind, make_file_id
 from elspais.graph.parsers import ParserRegistry
 from elspais.graph.parsers.journey import JourneyParser
 from elspais.graph.parsers.lark import FileDispatcher
 from elspais.graph.parsers.remainder import RemainderParser
-from elspais.utilities.patterns import build_resolver
+from elspais.utilities.patterns import IdResolver, build_resolver
 
 _log = logging.getLogger(__name__)
 
@@ -522,6 +524,7 @@ def build_graph(
     _build_associates: bool = True,
     captured_results: dict[str, str] | None = None,
     fresh_targets: set[str] | None = None,
+    federation_resolvers: list[IdResolver] | None = None,
 ) -> FederatedGraph:
     """Build a FederatedGraph from spec directories.
 
@@ -550,6 +553,12 @@ def build_graph(
             ingested for a target NOT in this set is tagged ``carried=True``.
             When None (the default), no target is considered carried. Stashed
             on the returned FederatedGraph as ``render_fresh_targets``.
+        federation_resolvers: Every federation member's ``IdResolver``,
+            supplied when this build is one member of a federation already
+            planned by its host. Each member's own grammar still comes from
+            its own configuration; sharing the set is what lets a member's
+            code and tests name the identifiers its siblings own. Resolved
+            here from the declarations when not supplied.
 
     Returns:
         FederatedGraph wrapping one or more TraceGraph instances.
@@ -578,9 +587,26 @@ def build_graph(
     # 3. Create default resolver
     default_resolver = build_resolver(config)
 
+    # Implements: REQ-d00269-C
+    # Membership is settled before any file is scanned: an identifier owned
+    # by any member has to be recognised in this repository's code and test
+    # annotations, and a scanner cannot recognise a grammar it has not been
+    # given.  The plan is resolved from configuration alone and reused for
+    # the associate builds below rather than walked a second time.
+    plan: list[PlannedRepo] | None = None
+    if federation_resolvers is None:
+        federation_resolvers = [default_resolver]
+        if _build_associates and get_associates_config(config, repo_root=repo_root):
+            plan = plan_federation(config, repo_root, strict=strict)
+            federation_resolvers.extend(
+                build_resolver(member.config) for member in plan[1:] if member.config is not None
+            )
+    own_namespace = default_resolver.config.namespace
+    member_resolvers = [r for r in federation_resolvers if r.config.namespace != own_namespace]
+
     # Implements: REQ-d00128-G
     # Lark FileDispatcher for code and test files
-    default_dispatcher = FileDispatcher(default_resolver)
+    default_dispatcher = FileDispatcher(default_resolver, member_resolvers)
 
     # 4. Build graph from all spec directories
     hash_mode = typed_config.validation.hash_mode
@@ -926,12 +952,9 @@ def build_graph(
     # Build every repository the declarations reach, not only those the
     # root names directly (REQ-d00202-D).
     if _build_associates:
-        from elspais.config import get_associates_config
         from elspais.graph.federated import RepoEntry
-        from elspais.graph.federation_plan import plan_federation
 
-        if get_associates_config(config, repo_root=repo_root):
-            plan = plan_federation(config, repo_root, strict=strict)
+        if plan is not None:
             host_name = plan[0].name
             entries: list[RepoEntry] = [
                 RepoEntry(
@@ -964,6 +987,7 @@ def build_graph(
                     scan_code=scan_code,
                     scan_tests=scan_tests,
                     _build_associates=False,
+                    federation_resolvers=federation_resolvers,
                 )
                 entries.append(
                     RepoEntry(

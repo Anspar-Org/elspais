@@ -277,11 +277,19 @@ class CoverageConfig(_StrictModel):
 
 
 class ReferenceSeverityConfig(_StrictModel):
-    """Severity levels for status-based reference checks."""
+    """Severity levels for the reference checks.
+
+    ``unclaimed`` governs references whose target no configured repository
+    claims. Noticing one is not the project's decision, but how loudly is:
+    a repository may legitimately reference a requirement a sibling has not
+    authored yet, and the same finding is advisory to one project and a
+    build failure to another.
+    """
 
     retired: str = "warning"
     provisional: str = "info"
     aspirational: str = "info"
+    unclaimed: str = "info"
 
 
 class RulesConfig(_StrictModel):

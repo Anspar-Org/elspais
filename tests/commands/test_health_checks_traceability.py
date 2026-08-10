@@ -9,11 +9,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from elspais.commands.health import (
     HealthFinding,
     check_broken_references,
     check_no_cycles,
     check_structural_orphans,
+    check_unclaimed_references,
     check_unlinked_code,
     check_unlinked_tests,
     run_code_checks,
@@ -24,6 +27,7 @@ from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph, RepoEntry
 from elspais.graph.GraphNode import FileType, GraphNode, NodeKind
 from elspais.graph.relations import EdgeKind
+from tests.federation_repos import make_repo
 
 from ..core.graph_test_helpers import (
     build_graph,
@@ -447,7 +451,11 @@ class TestCheckBrokenReferences:
             ),
         ]
 
-        check = check_broken_references(_wrap(graph))
+        # A claimed target -- a misspelling of an identifier this repository's
+        # grammar describes -- is this check's population; the full default
+        # config is what makes ``REQ-`` identifiers claimed.
+        config = _claimed_config()
+        check = check_broken_references(_wrap(graph, config), config)
         assert not check.passed
         assert check.severity == "error"  # REQ-d00204-E: within-repo broken refs are errors
         assert check.name == "spec.broken_references"
@@ -467,7 +475,8 @@ class TestCheckBrokenReferences:
             ),
         ]
 
-        check = check_broken_references(_wrap(graph))
+        config = _claimed_config()
+        check = check_broken_references(_wrap(graph, config), config)
         assert not check.passed
         finding = check.findings[0]
         assert isinstance(finding, HealthFinding)
@@ -484,6 +493,11 @@ class TestCheckBrokenReferences:
         ``[associates]`` table combined with a mis-styled reference
         suffix caused genuinely-local broken references to be silently
         suppressed as "cross-repo".
+
+        No configured repository claims ``HHT-``, so the reference is
+        reported by ``spec.unclaimed_references`` (REQ-d00269-F) rather
+        than by ``spec.broken_references``; what this guard forbids --
+        silent suppression -- is unchanged by which check speaks.
         """
         from elspais.graph.mutations import BrokenReference
 
@@ -496,9 +510,10 @@ class TestCheckBrokenReferences:
 
         # Pass config to _wrap so FederatedGraph annotates presumed_foreign during init
         fed = _wrap(graph, config)
-        check = check_broken_references(fed, config)
+        check = check_unclaimed_references(fed, config)
         assert not check.passed
-        assert "suppressed" not in check.message
+        assert any("HHT-p00001" in f.message for f in check.findings)
+        assert "suppressed" not in check_broken_references(fed, config).message
 
     # Verifies: REQ-d00252-G
     def test_REQ_d00085_allow_unresolved_cross_repo_suppresses_with_real_associate(
@@ -552,7 +567,12 @@ class TestCheckBrokenReferences:
         assert not check.passed
 
     def test_REQ_d00085_allow_unresolved_cross_repo_default_false(self) -> None:
-        """Without the config flag, foreign-namespace broken refs are still reported."""
+        """Without the config flag, foreign-namespace broken refs are still reported.
+
+        A namespace no configured repository claims is reported by
+        ``spec.unclaimed_references`` (REQ-d00269-F); the point held here
+        is that the default configuration reports it at all.
+        """
         from elspais.graph.mutations import BrokenReference
 
         graph = TraceGraph()
@@ -561,8 +581,146 @@ class TestCheckBrokenReferences:
         ]
         config = config_defaults()
 
-        check = check_broken_references(_wrap(graph, config))
+        check = check_unclaimed_references(_wrap(graph, config), config)
         assert not check.passed
+        assert any("HHT-p00001" in f.message for f in check.findings)
+
+
+# =============================================================================
+# Unclaimed References
+# =============================================================================
+
+
+def _claimed_config(**overrides: object) -> dict:
+    """A full default config naming this repo, so ``REQ-`` ids are claimed."""
+    config = _merge_configs(config_defaults(), dict(overrides))
+    config["project"] = {"name": "test", "namespace": "REQ"}
+    return config
+
+
+# Verifies: REQ-d00269-F
+class TestCheckUnclaimedReferences:
+    """Tests for check_unclaimed_references() — the dedicated check.
+
+    A reference recognised by position may name anything at all, so a
+    target no configured repository claims is reported separately from a
+    misspelling of an identifier the federation understands, at a
+    severity the project chooses.
+    """
+
+    def test_REQ_d00269_F_unclaimed_target_in_code_is_reported_once(self, tmp_path) -> None:
+        """A real on-disk scan: one finding, naming the unreadable target.
+
+        The reference sits in canonical position, so position recognises
+        it; its lowercase namespace is claimed by no configured grammar,
+        so only this check may speak for it.
+        """
+        from elspais.graph.factory import build_graph
+
+        repo = make_repo(tmp_path, "solo", namespace="REQ", req_id="REQ-d00001")
+        (repo / "src").mkdir()
+        (repo / "src" / "impl.py").write_text(
+            "# Implements: widget-42\ndef impl():\n    pass\n", encoding="utf-8"
+        )
+
+        federated = build_graph(repo_root=repo)
+        unclaimed = check_unclaimed_references(federated)
+
+        assert not unclaimed.passed
+        assert unclaimed.name == "spec.unclaimed_references"
+        assert unclaimed.category == "spec"
+        assert len(unclaimed.findings) == 1
+        assert "widget-42" in unclaimed.findings[0].message
+
+        # The two checks partition the population: neither double-reports.
+        broken = check_broken_references(federated)
+        assert not any("widget-42" in f.message for f in broken.findings)
+        assert broken.passed
+
+    def test_REQ_d00269_F_claimed_target_stays_with_broken_references(self) -> None:
+        """A misspelt local identifier is a broken reference, not an unclaimed one."""
+        from elspais.graph.mutations import BrokenReference
+
+        graph = TraceGraph()
+        graph._broken_references = [
+            BrokenReference(source_id="REQ-d00001", target_id="REQ-p99999", edge_kind="implements"),
+        ]
+        config = _claimed_config()
+        fed = _wrap(graph, config)
+
+        broken = check_broken_references(fed, config)
+        unclaimed = check_unclaimed_references(fed, config)
+
+        assert not broken.passed
+        assert any("REQ-p99999" in f.message for f in broken.findings)
+        assert unclaimed.passed
+        assert unclaimed.findings == []
+
+    @pytest.mark.parametrize("configured", ["info", "warning", "error"])
+    def test_REQ_d00269_F_severity_follows_configuration(self, configured: str) -> None:
+        """Noticing is not the project's decision; how loudly is."""
+        from elspais.graph.mutations import BrokenReference
+
+        graph = TraceGraph()
+        graph._broken_references = [
+            BrokenReference(source_id="REQ-d00001", target_id="widget-42", edge_kind="implements"),
+        ]
+        config = _claimed_config(rules={"references": {"unclaimed": configured}})
+
+        check = check_unclaimed_references(_wrap(graph, config), config)
+
+        assert not check.passed
+        assert check.severity == configured
+
+    @pytest.mark.parametrize("allow_unresolved", [True, False])
+    def test_REQ_d00269_F_allow_unresolved_cross_repo_silences_foreign_targets(
+        self, allow_unresolved: bool
+    ) -> None:
+        """A project that asked not to hear about references into unconfigured
+        repositories does not hear about them from this check either.
+
+        The reference must be *presumed foreign* to be silenced, which takes a
+        real configured associate (REQ-d00252-G: a lone repository never marks
+        anything foreign), so the federation below is a genuine two-repo one.
+        """
+        from elspais.graph.mutations import BrokenReference
+
+        host_graph = TraceGraph()
+        host_graph._broken_references = [
+            BrokenReference(source_id="REQ-d00001", target_id="widget-42", edge_kind="implements"),
+        ]
+        host_config = _merge_configs(
+            config_defaults(),
+            {"validation": {"allow_unresolved_cross_repo": allow_unresolved}},
+        )
+        host_config["project"] = {"name": "host", "namespace": "REQ"}
+        lib_config = config_defaults()
+        lib_config["project"] = {"name": "lib", "namespace": "HHT"}
+
+        fed = FederatedGraph(
+            [
+                RepoEntry(
+                    name="host",
+                    graph=host_graph,
+                    config=host_config,
+                    repo_root=Path("/repo/host"),
+                ),
+                RepoEntry(
+                    name="lib",
+                    graph=TraceGraph(),
+                    config=lib_config,
+                    repo_root=Path("/repo/lib"),
+                ),
+            ],
+            root_repo="host",
+        )
+        # Nothing is silenced unless the federation actually presumed it foreign.
+        assert [br.presumed_foreign for br in fed.broken_references()] == [True]
+
+        check = check_unclaimed_references(fed, host_config)
+
+        assert check.passed is allow_unresolved
+        assert any("widget-42" in f.message for f in check.findings) is not allow_unresolved
 
 
 # =============================================================================

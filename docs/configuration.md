@@ -395,7 +395,9 @@ color = "#6c757d"
 # Hash mode for change detection: "full-text" | "normalized-text"
 hash_mode = "normalized-text"
 
-# Allow unresolved cross-repo references
+# Allow unresolved cross-repo references. When true, a reference presumed to
+# belong to a repository this project has not configured is dropped from both
+# `spec.broken_references` and `spec.unclaimed_references`.
 allow_unresolved_cross_repo = false
 
 # hash_algorithm = "sha256"         # Hash algorithm
@@ -457,6 +459,22 @@ active = ["Active"]
 provisional = ["Draft", "Proposed"]
 aspirational = ["Roadmap", "Future", "Idea"]
 retired = ["Deprecated", "Superseded", "Rejected"]
+
+# Severity of the reference checks. Each value is "ok", "info", "warning"
+# or "error"; "ok" reports the finding without failing the run.
+#   retired/provisional/aspirational -- a reference resolves, but to a
+#     requirement whose status makes the link stale or premature.
+#   unclaimed -- a reference resolves to nothing and names an identifier no
+#     configured repository claims. A sibling repository that has not yet
+#     authored the requirement is advisory to one project and a build
+#     failure to another, so the level is yours to pick; a target that does
+#     match a configured ID pattern but names no node stays a hard error
+#     under `spec.broken_references` and is not tunable here.
+[rules.references]
+retired = "warning"
+provisional = "info"
+aspirational = "info"
+unclaimed = "warning"
 
 #──────────────────────────────────────────────────────────────────────────────
 # CHANGELOG

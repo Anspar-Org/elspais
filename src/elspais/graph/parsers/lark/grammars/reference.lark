@@ -36,6 +36,7 @@ _entry: ref_line _NL
          | block_ref
          | test_name_ref
          | control_marker
+         | unresolved_ref
          | other_line
 
 // --- Single-line reference comment ---
@@ -63,6 +64,15 @@ test_name_ref.3: TEST_NAME_LINE
 
 control_marker.3: CONTROL_MARKER_LINE
 
+// --- Reference comment naming no configured identifier ---
+// # Implements: WIDGET-42
+//
+// A reference whose target no repository of the federation claims is a
+// fact about the estate its author needs to see, so the line is admitted
+// here and reported as a broken reference rather than read as prose.
+
+unresolved_ref.2: UNRESOLVED_REF_LINE
+
 // --- Ordinary line (no reference) ---
 
 other_line.1: TEXT
@@ -85,6 +95,21 @@ BLOCK_REF_LINE.4: /[ \t]*(?:__COMMENT_STYLES__)[ \t]+(?:__NAMESPACE__[-_]|JNY-)[
 
 // Test function name containing REQ pattern
 TEST_NAME_LINE.4: /[ \t]*(?:async[ \t]+)?def[ \t]+test_\w*__NAMESPACE__[-_][^\n]+/
+
+// Reference comment whose target names no configured identifier.  The colon
+// must abut the keyword, so "# IMPLEMENTS REQUIREMENTS:" still lexes as a
+// block header, and a full-length match here always loses to SINGLE_REF_LINE.
+//
+// What decides recognition is position, not the shape of the target.  A
+// target no repository claims is by definition outside every configured
+// grammar, so nothing about how it looks can say whether it was meant as a
+// reference; only where it was written can.  The keyword must therefore be
+// the first content of the comment -- a terminal spans a whole line, so a
+// keyword appearing anywhere else in the line is left ordinary text -- and
+// whatever follows the colon is the target, whatever it looks like.  That
+// admits a foreign identifier with a lowercase namespace, which a
+// shape-based rule cannot.
+UNRESOLVED_REF_LINE.3: /[ \t]*(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__):[ \t]+[^\n]+/
 
 // elspais control marker
 CONTROL_MARKER_LINE.4: /(?:__COMMENT_STYLES__|\/\*|<!--)[ \t]*[Ee][Ll][Ss][Pp][Aa][Ii][Ss]:[ \t]*[^\n]+/

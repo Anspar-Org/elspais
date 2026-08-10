@@ -637,7 +637,7 @@
     },
     "ReferenceSeverityConfig": {
       "additionalProperties": false,
-      "description": "Severity levels for status-based reference checks.",
+      "description": "Severity levels for the reference checks.\n\n``unclaimed`` governs references whose target no configured repository\nclaims. Noticing one is not the project's decision, but how loudly is:\na repository may legitimately reference a requirement a sibling has not\nauthored yet, and the same finding is advisory to one project and a\nbuild failure to another.",
       "properties": {
         "retired": {
           "default": "warning",
@@ -652,6 +652,11 @@
         "aspirational": {
           "default": "info",
           "title": "Aspirational",
+          "type": "string"
+        },
+        "unclaimed": {
+          "default": "info",
+          "title": "Unclaimed",
           "type": "string"
         }
       },
