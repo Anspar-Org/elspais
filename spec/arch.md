@@ -48,7 +48,7 @@
  │   ├── trace.py                # elspais trace                                                             
  │   ├── fix_cmd.py              # elspais fix                                                              
  │   ├── changed.py              # elspais changed                                                           
- │   ├── index.py                # elspais index                                                             
+ │   ├── index.py                # INDEX.md generation (used by fix)                                         
  │   ├── edit.py                 # elspais edit                                                              
  │   ├── init.py                 # elspais init                                                              
  │   ├── config_cmd.py           # elspais config                                                            

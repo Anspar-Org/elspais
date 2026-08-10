@@ -1199,7 +1199,7 @@ def check_spec_index_current(
         return HealthCheck(
             name="spec.index_current",
             passed=True,
-            message="No INDEX.md found (run 'elspais index regenerate' to create one)",
+            message="No INDEX.md found (run 'elspais fix' to create one)",
             category="spec",
             severity="info",
         )
