@@ -7602,12 +7602,14 @@ def run_server(
             acknowledged to its writer and then dropped with the process;
             refusing it instead is the only outcome the writer can act on.
 
-            Only the flag is raised here. This runs on the event loop
-            thread, and a write handler suspended at an await while
-            holding the write lock could never resume to release it, so
-            waiting for that lock here would hang the process instead of
-            saving anything. The work is accounted for below, on the main
-            thread, once the loop has stopped.
+            Nothing waits here. This runs on the event loop thread, and a
+            write handler suspended at an await while holding the write
+            lock could never resume to release it, so waiting for that
+            lock here would hang the process instead of saving anything.
+            The save is therefore started on its own thread and proceeds
+            independently of the drain -- it must not depend on the drain
+            finishing, because a supervisor that gives up on a slow drain
+            would otherwise take the unwritten work with it.
             """
 
             # Implements: REQ-p00083-A, REQ-p00083-D

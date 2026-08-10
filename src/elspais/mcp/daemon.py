@@ -839,8 +839,9 @@ def stop_daemon(repo_root: Path, wait: bool = True, timeout: float = 20.0) -> St
         print(
             f"warning: the daemon (pid {info['pid']}) did not stop within "
             f"{timeout:.0f}s -- a client holding a request open can stall its "
-            "shutdown indefinitely. Ending it. The changes it held were written "
-            "when it was first asked to stop.",
+            "shutdown. Ending it. It was asked to write what it held when it "
+            "was first signalled; whether it managed to is in its own log, and "
+            "anything it had not written by now goes with it.",
             file=sys.stderr,
         )
         try:
