@@ -1863,13 +1863,16 @@ class TestIdleTimeoutSparesADaemonInUse:
     """
 
     @staticmethod
-    def _middleware(monkeypatch, signals, **kwargs):
+    def _middleware(monkeypatch, endings, **kwargs):
         from elspais.mcp.shared_state import SharedServerState
         from elspais.server.middleware import TTLMiddleware
 
+        # A stop the daemon decided on ends the process directly; a signal
+        # sent to itself would be recorded here too, and is not expected.
+        monkeypatch.setattr("elspais.server.middleware.os._exit", endings.append)
         monkeypatch.setattr(
             "elspais.server.middleware.os.kill",
-            lambda pid, sig: signals.append(sig),
+            lambda pid, sig: endings.append(f"signal:{sig}"),
         )
         shared = SharedServerState()
         mw = TTLMiddleware(app=lambda *a: None, ttl_minutes=60, shared=shared, **kwargs)
@@ -1877,18 +1880,18 @@ class TestIdleTimeoutSparesADaemonInUse:
         return shared, mw
 
     def test_REQ_o00074_O_live_client_survives_an_expired_idle_timeout(self, monkeypatch):
-        signals: list[int] = []
-        shared, mw = self._middleware(monkeypatch, signals, clients_alive=lambda: True)
+        endings: list[object] = []
+        shared, mw = self._middleware(monkeypatch, endings, clients_alive=lambda: True)
 
         mw._exit()
         mw._timer.cancel()
 
-        assert signals == [], "the idle timeout stopped a daemon a client is using"
+        assert endings == [], "the idle timeout stopped a daemon a client is using"
         assert shared.is_shutting_down is False, "a daemon in use was committed to stopping"
 
     def test_REQ_o00074_O_spared_daemon_waits_out_another_idle_period(self, monkeypatch):
-        signals: list[int] = []
-        _shared, mw = self._middleware(monkeypatch, signals, clients_alive=lambda: True)
+        endings: list[object] = []
+        _shared, mw = self._middleware(monkeypatch, endings, clients_alive=lambda: True)
         first = mw._timer
 
         mw._exit()
@@ -1897,39 +1900,39 @@ class TestIdleTimeoutSparesADaemonInUse:
         mw._timer.cancel()
 
     def test_REQ_o00074_O_daemon_with_no_recorded_client_still_times_out(self, monkeypatch):
-        signals: list[int] = []
-        shared, mw = self._middleware(monkeypatch, signals, clients_alive=lambda: False)
+        endings: list[object] = []
+        shared, mw = self._middleware(monkeypatch, endings, clients_alive=lambda: False)
 
         mw._exit()
 
-        assert signals, "a daemon nobody is using was not stopped by its idle timeout"
+        assert endings == [0], "a daemon nobody is using was not stopped by its idle timeout"
         assert shared.is_shutting_down is True
 
     def test_REQ_o00074_O_an_absent_liveness_source_reads_as_no_clients(self, monkeypatch):
         """An explicitly started daemon has no client watchdog to ask, and its
         lifetime is governed solely by its idle timeout (REQ-o00074-C)."""
-        signals: list[int] = []
-        shared, mw = self._middleware(monkeypatch, signals)
+        endings: list[object] = []
+        shared, mw = self._middleware(monkeypatch, endings)
 
         mw._exit()
 
-        assert signals, "an explicitly started daemon stopped answering to its timeout"
+        assert endings == [0], "an explicitly started daemon stopped answering to its timeout"
         assert shared.is_shutting_down is True
 
     def test_REQ_o00074_O_unreadable_liveness_source_does_not_read_as_no_clients(
         self, monkeypatch, capsys
     ):
-        signals: list[int] = []
+        endings: list[object] = []
 
         def _boom() -> bool:
             raise RuntimeError("the client set could not be read")
 
-        shared, mw = self._middleware(monkeypatch, signals, clients_alive=_boom)
+        shared, mw = self._middleware(monkeypatch, endings, clients_alive=_boom)
 
         mw._exit()
         mw._timer.cancel()
 
-        assert signals == [], "a broken instrument ended a daemon no evidence says is unused"
+        assert endings == [], "a broken instrument ended a daemon no evidence says is unused"
         assert shared.is_shutting_down is False
         assert "could not be read" in capsys.readouterr().err
 

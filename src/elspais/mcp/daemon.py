@@ -810,13 +810,23 @@ def stop_daemon(repo_root: Path, wait: bool = True, timeout: float = 20.0) -> St
     evidence of a process that died holding work, which is a loss that is
     not happening.
 
-    A daemon persists what it holds on the way out, so the wait covers a
-    save rather than a signal handler.
+    The deadline belongs here, to whoever asked for the stop, in the
+    pattern every process supervisor uses: ask, wait, then kill. The
+    daemon carries no deadline of its own and cannot, because the thing
+    that stalls its shutdown is a client holding a request open — a
+    condition the daemon can neither see the end of nor decline.
+
+    The wait before the kill is what a save runs in. A daemon persists
+    what it holds the moment it is asked to stop, on a thread of its own,
+    and spec files are written whole rather than atomically, so a kill
+    arriving first would truncate one. Twenty seconds is far longer than
+    that save takes, and shortening it buys nothing worth the file.
 
     NOT_RUNNING means there was nothing to stop -- including the case
     where the daemon exited between the caller's own look and this one.
-    STILL_RUNNING leaves the record in place, because it still describes
-    something a client would reach.
+    STILL_RUNNING means the process is there after everything a stopper
+    can do; the record stays, because it still describes something a
+    client would reach.
     """
     info = get_daemon_info(repo_root)
     if info is None:
@@ -828,11 +838,26 @@ def stop_daemon(repo_root: Path, wait: bool = True, timeout: float = 20.0) -> St
     if wait and not wait_for_daemon_exit(info, timeout=timeout):
         print(
             f"warning: the daemon (pid {info['pid']}) did not stop within "
-            f"{timeout:.0f}s. Its state record is left in place because it is "
-            "still serving.",
+            f"{timeout:.0f}s -- a client holding a request open can stall its "
+            "shutdown indefinitely. Ending it. The changes it held were written "
+            "when it was first asked to stop.",
             file=sys.stderr,
         )
-        return StopOutcome.STILL_RUNNING
+        try:
+            os.kill(info["pid"], signal.SIGKILL)
+        except OSError:
+            pass  # went between the wait and the kill
+        # Short, because nothing survives this signal except a process the
+        # kernel is holding in an uninterruptible wait, and no length of
+        # waiting resolves that one.
+        if not wait_for_daemon_exit(info, timeout=5.0):
+            print(
+                f"warning: the daemon (pid {info['pid']}) is still there after "
+                "being ended. Its state record is left in place because it is "
+                "still what a client would reach.",
+                file=sys.stderr,
+            )
+            return StopOutcome.STILL_RUNNING
     _daemon_json_path(repo_root).unlink(missing_ok=True)
     return StopOutcome.STOPPED
 

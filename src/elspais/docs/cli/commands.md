@@ -667,6 +667,16 @@ because the daemon can still be asked to save; an external stop cannot be
 declined, so there the failure is reported and the work is lost with the
 process.
 
+**A stop is asked for, waited on, and then enforced.** An external stop
+writes what the daemon holds the moment the signal arrives, before the
+daemon has finished serving; the wait that follows is for the shutdown to
+run its course. A client holding an MCP session open keeps a request
+in flight, and a shutdown can wait on that for as long as the client
+cares to hold it, so a stop that has not completed after 20 seconds ends
+the process outright. The deadline belongs to whoever asked for the stop,
+which is why the work is written first: by the time it passes there is
+nothing left in the process to lose.
+
 **How you find out.** A save the daemon performed is recorded in
 `.elspais/automatic-save.json` and reported to the next client in the
 ordinary metadata it already reads: `get_workspace_info`,

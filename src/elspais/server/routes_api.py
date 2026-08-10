@@ -2080,15 +2080,10 @@ async def api_shutdown(request: Request) -> JSONResponse:
     process stays up, and the work is still in it.
     """
     import os
-    import signal
     import sys
     import threading
 
-    from elspais.mcp.shared_state import (
-        arm_drain_backstop,
-        finalize_shutdown,
-        report_shutdown_outcome,
-    )
+    from elspais.mcp.shared_state import finalize_shutdown, report_shutdown_outcome
 
     # Buffered before the lock: an await while holding the write lock
     # would need the event loop it is blocking to resume.
@@ -2135,14 +2130,12 @@ async def api_shutdown(request: Request) -> JSONResponse:
     print("\nShutdown requested via API.", file=sys.stderr)
 
     def _stop() -> None:
-        # The work is already accounted for, so the drain has nothing left
-        # to protect: signal first for a graceful stop, and leave the shared
-        # bound behind for a drain that never finishes (a held-open MCP
-        # stream). The signal reaches the same handler and arms the same
-        # bound, which is armed once per process, so this call and that one
-        # leave one timer between them.
-        os.kill(os.getpid(), signal.SIGTERM)
-        arm_drain_backstop(state.shared, trigger="a client asked the server to stop")
+        # The work is already accounted for and the response has flushed,
+        # so the drain has nothing left to protect — and a client holding
+        # an MCP stream open can stall it indefinitely. This process was
+        # asked to stop by a client it has already answered; it ends,
+        # rather than signalling itself into a wait nobody is bounding.
+        os._exit(0)
 
     stopper = threading.Timer(0.5, _stop)
     stopper.daemon = True

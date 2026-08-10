@@ -83,9 +83,7 @@ from elspais.graph.terms import TermDictionary
 from elspais.mcp.search import ParsedQuery, matches_node, parse_query, score_node
 from elspais.mcp.shared_state import (
     SharedServerState,
-    arm_drain_backstop,
     attach_dirty_sentinel,
-    cancel_drain_backstop,
     finalize_shutdown,
     persist_pending,
     rebuild_shared_graph,
@@ -7566,6 +7564,35 @@ def run_server(
 
         uvi_config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
 
+        # Implements: REQ-p00083-A, REQ-p00083-D
+        def _account_for_held_work() -> None:
+            """Write what this process holds, starting now.
+
+            Called from signal context, which is why the work happens on a
+            thread rather than here: the routine takes the writers' lock,
+            and blocking on it inside a handler would stop the process it
+            was meant to save.
+
+            Started at the signal rather than after the drain, because the
+            drain may never end -- a client holding an MCP stream keeps an
+            in-flight request open for the life of its session, and the
+            accounting after serve() would then never run. Whoever asked
+            for the stop is waiting on a deadline of their own and will
+            end this process when it passes; by then the work is written.
+
+            The thread is not a daemon thread: the interpreter joins it on
+            the way out, so an exit that beats the save waits for it
+            instead of truncating a spec file.
+            """
+            import threading as _threading
+
+            trigger = "an operator or timeout stopped the server"
+
+            def _run() -> None:
+                report_shutdown_outcome(finalize_shutdown(state.shared, trigger), trigger)
+
+            _threading.Thread(target=_run, name="elspais-shutdown-save").start()
+
         # Implements: REQ-o00062-O
         class _ShutdownAwareServer(uvicorn.Server):
             """Raise the shutdown flag the moment a stop signal arrives.
@@ -7586,34 +7613,24 @@ def run_server(
             # Implements: REQ-p00083-A, REQ-p00083-D
             # This is the handler a stop signal actually reaches while the
             # server is serving — uvicorn installs it for the duration of
-            # serve(). A client holding an MCP stream, or any request that
-            # never completes, keeps the drain below from ever ending, so
-            # the accounting after serve() would never run and the work
-            # would sit in a process that has already stopped serving.
-            # Arming the bound here is what ends that. Only a timer is
-            # armed: this runs in signal context on the event loop thread.
-            #
-            # Arming comes FIRST, before anything else in this handler.
-            # Marking the state record writes a file and can print, and
-            # this handler runs in true signal context on whatever the
-            # main thread was doing — a write that blocks there blocks
-            # here, and a handler that never reaches the arming leaves
-            # the one case the bound exists for uncovered. Arming is a
-            # timer and one uncontended lock; nothing needs to precede it.
+            # serve(). Starting the save comes FIRST, before anything else
+            # here: marking the state record writes a file and can print,
+            # and this runs in true signal context on whatever the main
+            # thread was doing, so a write that blocks there blocks here.
+            # A handler that never reaches the save leaves the work in a
+            # process a supervisor is about to end.
             def handle_exit(self, sig: int, frame: Any) -> None:
-                arm_drain_backstop(
-                    state.shared, trigger="an operator or timeout stopped the server"
-                )
+                _account_for_held_work()
                 state.shared.begin_shutdown()
                 super().handle_exit(sig, frame)
 
         # Implements: REQ-p00083-A
         # The fall-through every stop path reaches, including the ones
         # nothing in this process initiated: an operator's signal, a
-        # container stop, a supervisor restart. The watchdog and the idle
-        # timeout run the same routine before they signal, because they
-        # can call off their own exit if the save fails; this one cannot,
-        # so it is the backstop rather than the primary.
+        # container stop, a supervisor restart. By the time it runs the
+        # handler above has usually already accounted for the work, and
+        # the routine is idempotent, so this repeat costs nothing and
+        # covers the paths that reach here without a signal.
         server = _ShutdownAwareServer(uvi_config)
 
         # Implements: REQ-p00083-A
@@ -7629,16 +7646,11 @@ def run_server(
         # signal has to reach the server as a request to stop rather than
         # be swallowed.
         #
-        # A handler may only arm a timer. A client holding an MCP stream
-        # keeps an in-flight GET open, so the drain below can wait for it
-        # forever and this routine's `finally` never runs; the bound armed
-        # here accounts for the work and ends the process instead. Doing
-        # that work inline would run it in signal context while the event
-        # loop holds locks.
-        # Arming first, for the reason given on the handler above: it is
-        # the cheapest thing here and the one that must not be skipped.
+        # The save starts here rather than after serve(), for the reason
+        # given on the handler above: the drain may never finish, and the
+        # accounting below would then never run.
         def _absorb_stop_signal(signum: int, frame: Any) -> None:
-            arm_drain_backstop(state.shared, trigger="an operator or timeout stopped the server")
+            _account_for_held_work()
             state.shared.begin_shutdown()
             server.should_exit = True
 
@@ -7649,10 +7661,5 @@ def run_server(
         try:
             anyio.run(server.serve)
         finally:
-            # serve() returning means the drain finished, so the bound has
-            # nothing left to bound. Cancelled BEFORE the accounting below,
-            # not after: a save slower than the window would otherwise be
-            # cut short by a backstop firing on a drain that succeeded.
-            cancel_drain_backstop(state.shared)
             trigger = "the server stopped serving requests"
             report_shutdown_outcome(finalize_shutdown(state.shared, trigger), trigger)

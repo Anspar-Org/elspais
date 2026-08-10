@@ -129,15 +129,17 @@ class TestShutdownFlagIsRaisedByEveryStopPath:
         state.begin_shutdown()  # idempotent, and there is no way back
         assert state.is_shutting_down is True
 
-    def test_REQ_o00074_I_idle_timeout_raises_the_flag_before_signalling(self, monkeypatch):
-        """The TTL path stops the process too, and its drain is no safer."""
+    def test_REQ_o00074_I_idle_timeout_raises_the_flag_before_it_ends(self, monkeypatch):
+        """The TTL path stops the process too, and a write arriving after it
+        has decided to stop is refused rather than taken down with it."""
         from elspais.mcp.shared_state import SharedServerState
         from elspais.server.middleware import TTLMiddleware
 
-        signals: list[int] = []
+        codes: list[object] = []
+        monkeypatch.setattr("elspais.server.middleware.os._exit", codes.append)
         monkeypatch.setattr(
             "elspais.server.middleware.os.kill",
-            lambda pid, sig: signals.append(sig),
+            lambda pid, sig: codes.append(f"signal:{sig}"),
         )
 
         shared = SharedServerState()
@@ -147,7 +149,7 @@ class TestShutdownFlagIsRaisedByEveryStopPath:
         mw._exit()
 
         assert shared.is_shutting_down is True, "TTL exit left writes acceptable during the drain"
-        assert signals, "TTL exit never signalled the process"
+        assert codes == [0], f"TTL exit never ended the process: {codes}"
 
 
 class TestBothSurfacesRefuseWritesAfterTheDecision:
@@ -533,19 +535,26 @@ class TestIdleTimeoutStopsThroughTheSameRoutine:
     """Validates REQ-p00083-A and REQ-p00083-D: the idle timeout is a stop like
     any other. An agent that applies a change and then reasons for half an hour
     sends no requests the whole time, so this is the common way a daemon holding
-    unsaved work stops -- it persists before it signals, and declines to stop at
+    unsaved work stops -- it persists before it ends, and declines to stop at
     all if it could not.
     """
 
     @pytest.fixture
-    def no_signals(self, monkeypatch):
-        """Capture the SIGTERM instead of sending it to the pytest process."""
-        signals: list[int] = []
+    def exits(self, monkeypatch):
+        """Capture the exit instead of ending the pytest process.
+
+        Also captures any signal the daemon sends itself: a stop the daemon
+        decided on has no supervisor waiting on a drain, so signalling itself
+        into one would only be a longer way to the same place -- through a
+        drain a held-open client can stall indefinitely.
+        """
+        codes: list[int] = []
+        monkeypatch.setattr("elspais.server.middleware.os._exit", codes.append)
         monkeypatch.setattr(
             "elspais.server.middleware.os.kill",
-            lambda pid, sig: signals.append(sig),
+            lambda pid, sig: codes.append(f"signal:{sig}"),
         )
-        return signals
+        return codes
 
     @pytest.fixture
     def middleware(self, app_state):
@@ -557,11 +566,9 @@ class TestIdleTimeoutStopsThroughTheSameRoutine:
             mw._timer.cancel()
 
     # Verifies: REQ-p00083-A
-    def test_REQ_o00074_I_idle_timeout_persists_before_it_signals(
-        self, app_state, client, project, middleware, no_signals
+    def test_REQ_o00074_I_idle_timeout_persists_before_it_ends_the_process(
+        self, app_state, client, project, middleware, exits
     ):
-        import signal as signal_module
-
         from elspais.mcp.daemon import read_automatic_save
 
         spec = _spec_file(app_state, project, REQ)
@@ -577,11 +584,11 @@ class TestIdleTimeoutStopsThroughTheSameRoutine:
             record["trigger"] == "the idle timeout expired"
         ), f"the idle timeout did not record what triggered it: {record}"
         assert app_state.shared.is_shutting_down is True
-        assert no_signals == [signal_module.SIGTERM], f"signals: {no_signals}"
+        assert exits == [0], f"the idle timeout did not end the process directly: {exits}"
 
     # Verifies: REQ-p00083-D
     def test_REQ_o00074_K_idle_timeout_that_cannot_save_waits_instead_of_stopping(
-        self, app_state, client, project, middleware, no_signals, monkeypatch
+        self, app_state, client, project, middleware, exits, monkeypatch
     ):
         from elspais.mcp import shared_state
 
@@ -597,7 +604,7 @@ class TestIdleTimeoutStopsThroughTheSameRoutine:
 
         middleware._exit()
 
-        assert no_signals == [], "the daemon signalled itself while still holding unwritten work"
+        assert exits == [], "the daemon ended itself while still holding unwritten work"
         assert app_state.shared.is_shutting_down is False
         assert title not in spec.read_text()
         assert not (project / ".elspais" / "automatic-save.json").exists()

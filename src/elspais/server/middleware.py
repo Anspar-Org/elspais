@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import signal
 import sys
 import threading
 import traceback
@@ -131,10 +130,17 @@ class TTLMiddleware(BaseHTTPMiddleware):
             self._start_timer()
             return
         print("\nTTL expired — shutting down.", file=sys.stderr)
-        # sys.exit() only raises SystemExit in the calling thread — it does
-        # NOT terminate the process when called from a non-main thread.
-        # Use SIGTERM so uvicorn shuts down gracefully.
-        os.kill(os.getpid(), signal.SIGTERM)
+        # Nobody asked for this stop, so nobody is waiting on it: the
+        # daemon decided, and it ends. Signalling itself would only put a
+        # drain in the way, and a client holding a request open can stall
+        # that drain for as long as it likes — with the work already
+        # written and every write already refused, waiting there protects
+        # nothing and risks a process that never goes. Dropping in-flight
+        # reads is the cost, and a reader sees a reset it can act on.
+        #
+        # os._exit, not sys.exit: this runs on a timer thread, where
+        # SystemExit unwinds that thread and leaves the process serving.
+        os._exit(0)
 
     async def dispatch(self, request: Request, call_next) -> Response:
         self._start_timer()

@@ -51,7 +51,6 @@ from __future__ import annotations
 
 import enum
 import os
-import signal
 import sys
 import threading
 import time
@@ -151,10 +150,13 @@ def shutdown_decision(
 
 
 def _default_exit() -> None:
-    # Same mechanism as TTLMiddleware._exit: sys.exit() from a non-main
-    # thread does not terminate the process; SIGTERM lets uvicorn shut
-    # down gracefully.
-    os.kill(os.getpid(), signal.SIGTERM)
+    # Same as TTLMiddleware._exit, and for the same reasons. Nobody asked
+    # for this stop, so nobody is waiting on it: the work is written and
+    # writes are refused, so a drain a held-open request can stall
+    # indefinitely protects nothing. os._exit, not sys.exit: this runs on
+    # the watchdog thread, where SystemExit unwinds that thread and leaves
+    # the process serving.
+    os._exit(0)
 
 
 class ClientWatchdog:
