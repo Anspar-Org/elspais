@@ -123,7 +123,8 @@ current graph. Reports missing IDs, extra IDs, or both.
 
 Flags requirements that have been parsed with differences from their on-disk
 format (duplicate references, stale hashes). These will be rewritten on the
-next `elspais fix` or `elspais save`.
+next `elspais fix`, or when pending in-memory changes are saved from
+the viewer or by an agent.
 
 #### `spec.hash_integrity` — Template Hash Review
 
