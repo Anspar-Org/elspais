@@ -113,3 +113,47 @@ class TestStopWaitsForTheProcess:
 
         assert stop_daemon(tmp_path) is True
         assert not record.exists()
+
+
+class TestRecordIsNeverSeenHalfWritten:
+    def test_REQ_o00075_E_a_concurrent_reader_never_sees_a_torn_record(self, tmp_path):
+        """Validates REQ-o00075-E: what a client locates describes the process
+        it would reach. A reader landing mid-write on a truncate-then-write
+        sees invalid JSON, and this record's reader deletes it on that
+        conclusion -- so a healthy daemon becomes undiscoverable while it is
+        still serving, and the next command starts a second one for the same
+        working tree."""
+        import json
+        import threading
+        import time
+
+        from elspais.mcp.daemon import _write_json_atomic
+
+        record = tmp_path / "daemon.json"
+        payload = {
+            "pid": 4242,
+            "port": 40000,
+            "clients": [{"kind": "pid", "id": i} for i in range(40)],
+        }
+        record.write_text(json.dumps(payload))
+
+        stop = threading.Event()
+
+        def writer() -> None:
+            while not stop.is_set():
+                _write_json_atomic(record, payload)
+
+        t = threading.Thread(target=writer, daemon=True)
+        t.start()
+        try:
+            torn = 0
+            deadline = time.monotonic() + 1.0
+            while time.monotonic() < deadline:
+                try:
+                    json.loads(record.read_text())
+                except (json.JSONDecodeError, FileNotFoundError):
+                    torn += 1
+            assert torn == 0, f"{torn} torn reads: the record was seen half-written"
+        finally:
+            stop.set()
+            t.join(timeout=2)

@@ -262,7 +262,7 @@ def write_daemon_json(
         # once a handle may be a held stream instead. Each entry says what
         # kind of handle it is.
         info["clients"] = [{"kind": "pid", "id": client_pid}]
-    daemon_json.write_text(json.dumps(info))
+    _write_json_atomic(daemon_json, info)
     return daemon_json
 
 
@@ -287,7 +287,7 @@ def record_daemon_clients(repo_root: Path, client_pids: list[int], held: int = 0
         info["clients"] = [{"kind": "pid", "id": p} for p in sorted(client_pids)] + (
             [{"kind": "session", "count": held}] if held else []
         )
-        path.write_text(json.dumps(info))
+        _write_json_atomic(path, info)
     except (json.JSONDecodeError, OSError) as exc:
         print(f"warning: could not publish the daemon's client set: {exc}", file=sys.stderr)
 
@@ -310,7 +310,7 @@ def refresh_daemon_config_hash(repo_root: Path) -> None:
     config_path = repo_root / ".elspais.toml"
     info["config_hash"] = compute_config_hash(config_path) if config_path.is_file() else ""
     try:
-        path.write_text(json.dumps(info))
+        _write_json_atomic(path, info)
     except OSError:
         pass  # Best effort — a failed refresh only risks an extra restart
 
@@ -320,6 +320,30 @@ def refresh_daemon_config_hash(repo_root: Path) -> None:
 
 def _daemon_dir(repo_root: Path) -> Path:
     return repo_root / ".elspais"
+
+
+def _write_json_atomic(path: Path, payload: dict) -> None:
+    """Replace a state record without a reader ever seeing it half-written.
+
+    Truncate-then-write leaves a window in which the file is short. A reader
+    landing there gets invalid JSON and concludes the record is corrupt --
+    and the reader for this record *deletes* it on that conclusion, so a
+    daemon that is running and healthy becomes undiscoverable while it is
+    still serving, and the next command starts a second one for the same
+    working tree.
+
+    Writing a sibling and renaming over the target is atomic on POSIX: a
+    reader sees either the whole old record or the whole new one. The
+    temporary file is a sibling so the rename stays within one filesystem,
+    and carries the writer's pid so two writers cannot collide on it.
+    """
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_text(json.dumps(payload))
+        os.replace(tmp, path)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def _daemon_json_path(repo_root: Path) -> Path:
@@ -512,7 +536,7 @@ def record_automatic_save(
     path = _automatic_save_path(repo_root)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(record))
+        _write_json_atomic(path, record)
     except OSError as exc:
         print(f"warning: could not record the automatic save: {exc}", file=sys.stderr)
 
@@ -578,7 +602,7 @@ def mark_daemon_stopping(repo_root: Path, pid: int | None = None) -> bool:
         if info.get("pid") != pid:
             return False
         info["stopping"] = True
-        path.write_text(json.dumps(info))
+        _write_json_atomic(path, info)
         return True
     except (json.JSONDecodeError, OSError, TypeError) as exc:
         print(
