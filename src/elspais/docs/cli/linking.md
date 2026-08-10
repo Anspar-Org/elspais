@@ -210,27 +210,29 @@ Use multi-assertion syntax for compact references:
 
 ## Configuration
 
-Reference parsing is configurable via `.elspais.toml`:
+What a reference may look like comes from the identifier configuration, in
+`[id-patterns]`. A repository declares its own canonical template, component
+style, and the single character separating a requirement from an *Assertion*
+label; references are read and written in exactly that form. In a federation
+each repository keeps its own, and a reference is understood under the grammar
+of whichever repository owns the identifier it names.
 
 ```toml
-[references.defaults]
-separators = ["-", "_"]
-case_sensitive = false
-comment_styles = ["#", "//", "--"]
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
 
-[references.defaults.keywords]
-implements = ["Implements", "IMPLEMENTS"]
-verifies = ["Verifies", "VERIFIES"]
-refines = ["Refines", "REFINES"]
+[id-patterns.assertions]
+separator = "-"          # between component and label
+multi_separator = "+"    # between labels, as in A+B+C
 ```
 
-Override settings for specific files or directories:
+There is no list of alternative separators. One spelling is accepted, the one
+configured, so a reference written some other way is reported rather than
+quietly resolved.
 
-```toml
-[[references.overrides]]
-match = "*.java"
-comment_styles = ["//"]
-keywords = { implements = ["@Implements"], verifies = ["@Tests"] }
-```
+The keyword that introduces a reference in a test file is
+`scanning.test.reference_keyword` (default `Verifies`). Comment styles are not
+configurable: `#`, `//` and `--` introduce a reference, and a keyword inside a
+block comment is not read.
 
 See `elspais docs config` for the full configuration reference.

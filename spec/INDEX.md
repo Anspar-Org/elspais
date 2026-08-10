@@ -94,8 +94,8 @@
 | REQ-d00078 | Scoped Search Implementation                                  | dev-mcp-tools.md        | c3a0cf17 |
 | REQ-d00079 | Discover Requirements Implementation                          | dev-mcp-tools.md        | 564cb7c6 |
 | REQ-d00080 | Diagnostic Command Exit Code Contract                         | dev-cli.md              | acc2aa77 |
-| REQ-d00081 | Multi-Assertion Reference Expansion                           | dev-cli.md              | 25c43ce2 |
-| REQ-d00082 | Unified Reference Configuration                               | dev-cli.md              | 109921be |
+| REQ-d00081 | Multi-Assertion Reference Expansion                           | dev-cli.md              | e001c08a |
+| REQ-d00082 | Unified Reference Configuration                               | dev-cli.md              | 6289e433 |
 | REQ-d00084 | Trace Command                                                 | dev-cli.md              | 1bd6bca1 |
 | REQ-d00085 | Unified Report Composition                                    | dev-cli.md              | 0d1e518a |
 | REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | a12d2826 |
@@ -122,7 +122,7 @@
 | REQ-d00209 | Schema-Driven Init Template Generation                        | dev-graph-config.md     | b25e4468 |
 | REQ-d00210 | Documentation Drift Detection                                 | dev-graph-config.md     | 59023724 |
 | REQ-d00211 | Config-Driven Viewer UI Values                                | dev-graph-config.md     | 58192a4f |
-| REQ-d00212 | Config Schema v3 Models                                       | dev-graph-config.md     | 40849780 |
+| REQ-d00212 | Config Schema v3 Models                                       | dev-graph-config.md     | 3b50127c |
 | REQ-d00213 | Version Check and Update Notification                         | dev-cli.md              | cedd398b |
 | REQ-d00214 | MCP Server Install/Uninstall CLI Commands                     | dev-mcp-tools.md        | 5f372b62 |
 | REQ-d00215 | Keyword Extraction Annotator                                  | dev-graph-core.md       | db477d99 |

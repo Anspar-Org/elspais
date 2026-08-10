@@ -162,8 +162,6 @@ _FIELD_COMMENTS: dict[str, str] = {
     # --- [id-patterns] ---
     "id-patterns": "Requirement ID format and type definitions",
     "id-patterns.canonical": "ID template; vars: {namespace}, {level.letter}, {component}",
-    "id-patterns.separators": "Characters treated as equivalent separators when matching IDs",
-    "id-patterns.prefix_optional": "If true, namespace prefix is optional when matching IDs",
     "id-patterns.aliases": "Named shorthand patterns for ID matching",
     "id-patterns.component": "Component (numeric part) of the ID",
     "id-patterns.component.style": (

@@ -478,18 +478,6 @@
         },
         "associated": {
           "$ref": "#/$defs/AssociatedPatternConfig"
-        },
-        "separators": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Separators",
-          "type": "array"
-        },
-        "prefix_optional": {
-          "default": false,
-          "title": "Prefix Optional",
-          "type": "boolean"
         }
       },
       "title": "IdPatternsConfig",

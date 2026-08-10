@@ -1,10 +1,9 @@
-# Verifies: REQ-d00082-E
+# Verifies: REQ-d00082-E, REQ-p00014-T
 """Regression: configured assertion separator/multi-separator combinations
 must parse correctly end-to-end (CUR-1568 Task 13).
 
-Root cause: ``build_multi_assertion_pattern()`` (graph/parsers/patterns.py)
-hardcoded the boundary between a requirement ID and its first assertion
-label to the "-"/"_" characters, completely ignoring the configured
+Root cause: the boundary between a requirement ID and its first assertion
+label was hardcoded to the "-"/"_" characters, ignoring the configured
 ``[id-patterns.assertions] separator``. Repos configuring a non-"-"/"_"
 separator (e.g. "/") silently lost the assertion suffix when extracting
 ``Verifies:`` references from test files -- the multi-assertion pattern
@@ -182,7 +181,7 @@ def test_separator_combinations_parse_targeted_refs(sep, multi, ref, expected_la
     ), f"Expected assertion_targets {expected_labels}, got {sorted(all_targets)}"
 
 
-# Verifies: REQ-d00082-E
+# Verifies: REQ-d00082-E, REQ-p00014-T
 @pytest.mark.parametrize("sep,multi,ref,expected_labels", _SEPARATOR_COMBINATIONS)
 def test_journey_validates_across_separator_combinations(
     sep, multi, ref, expected_labels, tmp_path

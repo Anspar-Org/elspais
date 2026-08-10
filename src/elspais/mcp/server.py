@@ -2006,7 +2006,6 @@ def _workspace_profile_code_refs(
     result["id_patterns"] = _build_id_patterns(config)
     result["code_references"] = {
         "code_directories": list(typed_config.scanning.code.directories),
-        "separators": typed_config.id_patterns.separators,
         "case_sensitive": False,
     }
     result["assertion_format"] = _build_assertion_format(config)
@@ -2049,7 +2048,6 @@ def _workspace_profile_retrofit(
 
     result["code_references"] = {
         "code_directories": list(typed_config.scanning.code.directories),
-        "separators": typed_config.id_patterns.separators,
         "case_sensitive": False,
     }
 
@@ -2129,7 +2127,6 @@ def _workspace_profile_all(
     # Code references
     result["code_references"] = {
         "code_directories": list(typed_config.scanning.code.directories),
-        "separators": typed_config.id_patterns.separators,
         "case_sensitive": False,
     }
 

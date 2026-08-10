@@ -45,7 +45,7 @@ A. The `multi_assertion_separator` key SHALL be available in `[references.defaul
 
 B. The default value of `multi_assertion_separator` SHALL be `"+"`.
 
-C. Config validation SHALL reject configurations where the multi-*Assertion* separator character appears in the `separators` list.
+C. [Removed - named a list of accepted alternate separators that no longer exists. The multi-*Assertion* separator is constrained against the characters an *Assertion* label can contain, per REQ-d00251-H.]
 
 D. Expansion SHALL occur in the graph builder's link resolution, applying uniformly to all parser types (requirement, code, test, result).
 
@@ -61,11 +61,13 @@ The previous implementation hardcoded expansion in RequirementParser only, using
 
 ### Changelog
 
+- 2026-08-10 | e001c08a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: retire C, which named a list of accepted alternate separators that no longer exists
 - 2026-07-31 | 25c43ce2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 313fe52b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 313fe52b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Multi-Assertion Reference Expansion* | **Hash**: 25c43ce2
+*End* *Multi-Assertion Reference Expansion* | **Hash**: e001c08a
 ---
 
 ## REQ-d00082: Unified Reference Configuration
@@ -78,7 +80,7 @@ The system SHALL provide a unified, configurable reference pattern system used b
 
 D. The reference configuration SHALL support case-sensitive and case-insensitive ID matching.
 
-E. The reference configuration SHALL support configurable ID separators including underscore and hyphen.
+E. Locating a reference in a source file SHALL use the separator the repository owning the referenced identifier configures, so that a reference is recognised in exactly the form that repository writes and in no other.
 
 F. The reference configuration SHALL support file-type specific overrides via glob patterns (e.g., `*.py`, `tests/legacy/**`).
 
@@ -100,12 +102,14 @@ Different projects use different ID conventions, comment styles, and directory s
 
 ### Changelog
 
+- 2026-08-10 | 6289e433 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: E names the configured separator rather than a list of accepted alternates
 - 2026-08-10 | 109921be | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 00cd96fc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 89956cd7 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 89956cd7 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Unified Reference Configuration* | **Hash**: 109921be
+*End* *Unified Reference Configuration* | **Hash**: 6289e433
 ---
 
 ## REQ-d00084: Trace Command

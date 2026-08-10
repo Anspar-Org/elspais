@@ -21,10 +21,6 @@ name = "elspais"
 [id-patterns]
 # ID template; vars: {namespace}, {level.letter}, {component}
 canonical = "{namespace}-{level.letter}{component}"
-# Characters treated as equivalent separators when matching IDs
-separators = ["-", "_"]
-# If true, namespace prefix is optional when matching IDs
-prefix_optional = false
 
 # Named shorthand patterns for ID matching
 [id-patterns.aliases]

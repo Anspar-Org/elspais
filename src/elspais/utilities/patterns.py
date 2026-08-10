@@ -412,8 +412,7 @@ class IdResolver:
         takes its patterns from here, so a repository's configuration is
         interpreted once and the surfaces cannot drift apart.  The fragments
         are uncompiled and unanchored so a caller can embed them in a larger
-        grammar; the compiled, anchored forms are ``canonical_regex`` and
-        ``search_regex``.
+        grammar; the compiled, anchored form is ``canonical_regex``.
 
         Args:
             separator: Render the same grammar with this character wherever
@@ -748,61 +747,6 @@ class IdResolver:
     def canonical_regex(self) -> re.Pattern:
         """Compiled regex for the canonical form (anchored with ^...$)."""
         return self._forms[0][1]
-
-    def search_regex(self) -> re.Pattern:
-        """Unanchored regex for finding canonical IDs within longer text.
-
-        Replaces literal hyphens with ``[-_]`` so the pattern matches IDs
-        written with either hyphen or underscore separators (e.g. both
-        ``REQ-p00001`` and ``REQ_p00001``).  A negative lookahead after
-        optional assertion labels prevents a trailing lowercase letter
-        from being captured as an assertion (e.g. the ``l`` in
-        ``REQ_p00001_login``).
-
-        Treats both literal ``-`` and escaped ``\\-`` outside character
-        classes as separators (the assertion suffix uses ``re.escape`` on
-        the configured separator, which yields ``\\-`` for the default).
-        """
-        pat = self._forms[0][1].pattern
-        # Strip ^ and $ anchors
-        if pat.startswith("^"):
-            pat = pat[1:]
-        if pat.endswith("$"):
-            pat = pat[:-1]
-        # Replace literal/escaped hyphens with [-_] to match both separators.
-        # The canonical regex uses literal '-' between groups (namespace-type,
-        # id-assertion).  Inside the assertion suffix, the separator is
-        # `re.escape`d, producing `\-`.  We replace both forms, but NOT
-        # hyphens inside character classes (e.g. [A-Z]).
-        out: list[str] = []
-        in_class = False
-        i = 0
-        while i < len(pat):
-            ch = pat[i]
-            if ch == "\\" and i + 1 < len(pat):
-                # Escaped hyphen outside a class behaves like a literal `-`
-                # in the source ID — substitute the same way.
-                if pat[i + 1] == "-" and not in_class:
-                    out.append("[-_]")
-                    i += 2
-                    continue
-                out.append(pat[i : i + 2])
-                i += 2
-                continue
-            if ch == "[":
-                in_class = True
-            elif ch == "]":
-                in_class = False
-            if ch == "-" and not in_class:
-                out.append("[-_]")
-            else:
-                out.append(ch)
-            i += 1
-        pat = "".join(out)
-        # Append negative lookahead to prevent lowercase letters immediately
-        # following the match from being captured as assertion labels.
-        pat += r"(?![a-z])"
-        return re.compile(pat)
 
     def all_type_codes(self) -> list[str]:
         """All canonical type codes."""

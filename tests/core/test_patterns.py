@@ -601,12 +601,6 @@ class TestIdResolverCanonicalRegex:
         pat = r.canonical_regex()
         assert pat.search("REQ-prd00044") is not None
 
-    def test_REQ_p00002_A_search_regex_finds_in_header(self):
-        r = _make_hht_resolver()
-        pat = r.search_regex()
-        m = pat.search("# REQ-prd00044: Some Title")
-        assert m is not None
-
     def test_REQ_p00002_A_all_type_codes(self):
         r = _make_hht_resolver()
         codes = r.all_type_codes()
@@ -669,11 +663,11 @@ class TestNormalizeRef:
     def test_lowercase_prefix_normalized(self, resolver):
         assert resolver.normalize_ref("req-p00001") == "REQ-p00001"
 
-    # Verifies: REQ-d00082-E
+    # Verifies: REQ-p00014-U
     def test_underscore_to_dash(self, resolver):
         assert resolver.normalize_ref("REQ_p00001") == "REQ-p00001"
 
-    # Verifies: REQ-d00082-E
+    # Verifies: REQ-p00014-U
     def test_mixed_case_underscore(self, resolver):
         assert resolver.normalize_ref("req_p00001") == "REQ-p00001"
 
@@ -681,7 +675,7 @@ class TestNormalizeRef:
     def test_already_canonical(self, resolver):
         assert resolver.normalize_ref("REQ-p00001") == "REQ-p00001"
 
-    # Verifies: REQ-d00082-E
+    # Verifies: REQ-p00014-U
     def test_with_assertion(self, resolver):
         assert resolver.normalize_ref("req_p00001_A") == "REQ-p00001-A"
 

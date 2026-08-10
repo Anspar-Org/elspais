@@ -214,8 +214,6 @@ class IdPatternsConfig(_StrictModel):
     component: ComponentConfig = Field(default_factory=ComponentConfig)
     assertions: AssertionConfig = Field(default_factory=AssertionConfig)
     associated: AssociatedPatternConfig = Field(default_factory=AssociatedPatternConfig)
-    separators: list[str] = Field(default_factory=lambda: ["-", "_"])
-    prefix_optional: bool = False
 
     @model_validator(mode="after")
     def _validate_style_pattern_and_separator(self):

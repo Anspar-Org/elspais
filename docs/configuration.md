@@ -132,12 +132,6 @@ implements = ["dev", "ops", "prd"]  # DEV can implement DEV, OPS, or PRD
 #   "{level.letter}-{component}"             -> p-00001
 canonical = "{namespace}-{level.letter}{component}"
 
-# Separator characters accepted between ID components (e.g., REQ-p00001 or REQ_p00001)
-separators = ["-", "_"]
-
-# Whether the namespace prefix (e.g., "REQ") is required for matching
-prefix_optional = false
-
 # Named alias patterns for short-form parsing
 [id-patterns.aliases]
 short = "{level.letter}{component}"

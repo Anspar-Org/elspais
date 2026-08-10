@@ -108,8 +108,6 @@ Controls requirement ID format and parsing.
 ```toml
 [id-patterns]
 canonical = "{namespace}-{level.letter}{component}"  # ID template
-separators = ["-", "_"]    # Accepted separator characters
-prefix_optional = false    # Whether namespace prefix is required
 
 [id-patterns.aliases]
 short = "{level.letter}{component}"   # Named alias patterns

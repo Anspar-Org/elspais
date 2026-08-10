@@ -1132,7 +1132,9 @@ reference_keyword = "Validates"
 
         code_refs = result["code_references"]
         assert "code_directories" in code_refs
-        assert "separators" in code_refs
+        # No accepted-alternates list is reported: it governed nothing, and
+        # naming it told an agent about a leniency that does not exist.
+        assert "separators" not in code_refs
         assert code_refs["code_directories"] == ["src"]
 
     def test_REQ_o00061_A_coverage_profile_includes_sections(self, sample_graph, tmp_path):

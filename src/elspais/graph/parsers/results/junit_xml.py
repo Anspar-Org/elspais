@@ -1,7 +1,7 @@
 """JUnit XML parser for test results.
 
 This parser extracts test results from JUnit XML format files.
-Uses IdResolver.search_regex() for finding requirement IDs in test output.
+Matches a result to its test by recorded identity.
 
 Source-file binding
 -------------------
@@ -78,7 +78,8 @@ class JUnitXMLParser:
     Parses standard JUnit XML format used by pytest, JUnit, and other
     test frameworks.
 
-    Uses IdResolver.search_regex() for finding requirement IDs in text.
+    Matches a result to its test by recorded identity, not by reading
+    requirement references out of a reported test name.
 
     Also implements the LineClaimingParser protocol via ``claim_and_parse()``
     so it can be used in the standard ParserRegistry pipeline.

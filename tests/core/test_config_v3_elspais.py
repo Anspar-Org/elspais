@@ -117,17 +117,14 @@ class TestElspaisConfigRestructuring:
 class TestIdPatternsConfigChanges:
     """Validates REQ-d00212-G: IdPatternsConfig changes."""
 
-    def test_REQ_d00212_G_has_separators_field(self):
-        """IdPatternsConfig has a 'separators' field (list[str])."""
-        assert "separators" in IdPatternsConfig.model_fields
-        cfg = IdPatternsConfig()
-        assert cfg.separators == ["-", "_"]
+    def test_REQ_d00212_G_no_alternate_separator_fields(self):
+        """The accepted-alternates list and the optional-prefix switch are gone.
 
-    def test_REQ_d00212_G_has_prefix_optional_field(self):
-        """IdPatternsConfig has a 'prefix_optional' field (bool, default False)."""
-        assert "prefix_optional" in IdPatternsConfig.model_fields
-        cfg = IdPatternsConfig()
-        assert cfg.prefix_optional is False
+        Neither governed anything: one separator is accepted, the one each
+        repository configures for itself.
+        """
+        assert "separators" not in IdPatternsConfig.model_fields
+        assert "prefix_optional" not in IdPatternsConfig.model_fields
 
     def test_REQ_d00212_G_no_types_field(self):
         """IdPatternsConfig does NOT have a 'types' field."""
