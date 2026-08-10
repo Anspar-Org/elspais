@@ -150,7 +150,6 @@ def _ingest_target_results(
             "classname": rec.get("classname", ""),
             "duration": rec.get("duration", 0.0),
             "message": rec.get("message"),
-            "verifies": rec.get("verifies", []),
             "test_id": rec.get("test_id"),
             "source_path": raw_src,
             "source_file": source_file,

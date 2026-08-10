@@ -4,7 +4,7 @@ Builds RESULT records carrying the REAL test-file path (from ``suite.path``)
 and per-test identity (name, line) — unlike tojunit's lossy classname.
 
 Record shape mirrors sibling parsers (junit_xml, pytest_json):
-``{"id", "name", "classname", "status", "duration", "message", "verifies",
+``{"id", "name", "classname", "status", "duration", "message",
 "source_path", "line", "root_path", "root_line", "test_id"}``.
 
 ``line`` is the line number from the machine event's ``test.line`` field.
@@ -87,7 +87,6 @@ class FlutterMachineParser:
                         "status": status,
                         "duration": 0.0,
                         "message": None,
-                        "verifies": [],
                         "source_path": path,
                         "line": meta["line"],
                         "root_line": meta["root_line"],

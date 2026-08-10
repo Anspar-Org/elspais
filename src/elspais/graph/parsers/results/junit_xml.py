@@ -72,7 +72,6 @@ if TYPE_CHECKING:
     from elspais.utilities.patterns import IdResolver
 
 
-# Implements: REQ-d00082-K
 class JUnitXMLParser:
     """Parser for JUnit XML test result files.
 
@@ -127,7 +126,6 @@ class JUnitXMLParser:
             }
         )
 
-    # Implements: REQ-d00082-K
     def parse(self, content: str, source_path: str) -> list[dict[str, Any]]:
         """Parse JUnit XML content and return test result dicts.
 
@@ -143,7 +141,6 @@ class JUnitXMLParser:
             - status: passed, failed, skipped, or error
             - duration: Test duration in seconds
             - message: Error/failure message (if any)
-            - verifies: List of requirement IDs this test verifies
         """
         results: list[dict[str, Any]] = []
 
@@ -208,9 +205,6 @@ class JUnitXMLParser:
                 except (TypeError, ValueError):
                     line_no = None
 
-                # Extract requirement references from test name or classname
-                verifies = self._extract_req_ids(f"{classname} {name}", source_path)
-
                 # Generate canonical TEST node ID using test_identity utility
                 test_id = None if file_attr else build_test_id_from_result(classname, name)
 
@@ -221,7 +215,6 @@ class JUnitXMLParser:
                     "status": status,
                     "duration": duration,
                     "message": message[:200] if message else None,
-                    "verifies": verifies,
                     "source_path": result_source,
                     "test_id": test_id,
                     "line": line_no,
@@ -274,28 +267,6 @@ class JUnitXMLParser:
                 raw_text="",
                 parsed_data=result,
             )
-
-    # Implements: REQ-d00082-K
-    def _extract_req_ids(self, text: str, source_file: str | None = None) -> list[str]:
-        """Extract requirement IDs from text.
-
-        Args:
-            text: Text to search for requirement IDs.
-            source_file: Optional source file for file-specific config (unused, kept for API).
-
-        Returns:
-            List of normalized requirement IDs (using hyphens).
-        """
-        resolver = self._get_resolver()
-        pattern = resolver.search_regex()
-
-        ids: list[str] = []
-        for m in pattern.finditer(text):
-            normalized = resolver.normalize_ref(m.group(0))
-            if normalized and normalized not in ids:
-                ids.append(normalized)
-
-        return ids
 
     # Implements: REQ-d00054-A
     def can_parse(self, file_path: Path) -> bool:

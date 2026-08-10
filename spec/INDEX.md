@@ -95,7 +95,7 @@
 | REQ-d00079 | Discover Requirements Implementation                          | dev-mcp-tools.md        | 564cb7c6 |
 | REQ-d00080 | Diagnostic Command Exit Code Contract                         | dev-cli.md              | acc2aa77 |
 | REQ-d00081 | Multi-Assertion Reference Expansion                           | dev-cli.md              | 25c43ce2 |
-| REQ-d00082 | Unified Reference Configuration                               | dev-cli.md              | 00cd96fc |
+| REQ-d00082 | Unified Reference Configuration                               | dev-cli.md              | 109921be |
 | REQ-d00084 | Trace Command                                                 | dev-cli.md              | 1bd6bca1 |
 | REQ-d00085 | Unified Report Composition                                    | dev-cli.md              | 0d1e518a |
 | REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | a12d2826 |

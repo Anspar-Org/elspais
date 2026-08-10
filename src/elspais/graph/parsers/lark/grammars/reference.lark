@@ -6,8 +6,7 @@
 //   # IMPLEMENTS REQUIREMENTS:
 //   #   REQ-p00001: Description
 //
-// Also recognizes test name patterns (def test_foo_REQ_p00001)
-// and elspais control markers (# elspais: expected-broken-links 3).
+// Also recognizes test name patterns (def test_foo_REQ_p00001).
 //
 // Pre-scan (function/class context tracking) is handled in Python,
 // not in the grammar.
@@ -35,7 +34,6 @@ _entry: ref_line _NL
          | block_header
          | block_ref
          | test_name_ref
-         | control_marker
          | unresolved_ref
          | other_line
 
@@ -58,11 +56,6 @@ block_ref.3: BLOCK_REF_LINE
 // def test_foo_REQ_p00001_A(...)
 
 test_name_ref.3: TEST_NAME_LINE
-
-// --- elspais control marker ---
-// # elspais: expected-broken-links 3
-
-control_marker.3: CONTROL_MARKER_LINE
 
 // --- Reference comment naming no configured identifier ---
 // # Implements: WIDGET-42
@@ -110,9 +103,6 @@ TEST_NAME_LINE.4: /[ \t]*(?:async[ \t]+)?def[ \t]+test_\w*__NAMESPACE__[-_][^\n]
 // admits a foreign identifier with a lowercase namespace, which a
 // shape-based rule cannot.
 UNRESOLVED_REF_LINE.3: /[ \t]*(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__):[ \t]+[^\n]+/
-
-// elspais control marker
-CONTROL_MARKER_LINE.4: /(?:__COMMENT_STYLES__|\/\*|<!--)[ \t]*[Ee][Ll][Ss][Pp][Aa][Ii][Ss]:[ \t]*[^\n]+/
 
 // Generic text (lowest priority)
 TEXT.1: /[^\n]+/

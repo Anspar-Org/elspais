@@ -147,13 +147,6 @@ class TestTestRefParsing:
         # Unlinked test function should inherit file defaults
         assert refs[0].parsed_data["file_default_verifies"] == ["REQ-p00001"]
 
-    def test_control_marker_recognized(self, resolver, code_parser):
-        content = "# elspais: expected-broken-links 3\ndef test_foo(): pass\n"
-        tree = code_parser.parse(content + "\n")
-        # Verify the control marker is in the tree
-        markers = [c for c in tree.children if hasattr(c, "data") and c.data == "control_marker"]
-        assert len(markers) == 1
-
     def test_block_verifies(self, resolver, code_parser):
         content = """\
 -- VERIFIES REQUIREMENTS:

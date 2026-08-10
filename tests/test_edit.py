@@ -1,4 +1,3 @@
-# elspais: expected-broken-links 3
 """
 Tests for the edit command.
 """

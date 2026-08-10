@@ -329,26 +329,18 @@ class FileDispatcher:
         else:
             line_context, all_test_funcs, first_def_line = text_prescan(lines)
 
-        # Extract file-level default verifies and expected-broken-links
-        # from control markers in the parse tree
+        # Extract file-level default verifies from the parse tree
         parser = self._get_ref_parser()
         tree = parser.parse(content)
 
         from elspais.graph.parsers.patterns import KEYWORD_PATTERN
 
         file_default_verifies: list[str] = []
-        expected_broken_count = 0
-        import re as _re
 
         for child in tree.children:
             if not hasattr(child, "data"):
                 continue
-            if child.data == "control_marker":
-                text = str(child.children[0])
-                m = _re.search(r"expected-broken-links\s+(\d+)", text, _re.IGNORECASE)
-                if m:
-                    expected_broken_count = int(m.group(1))
-            elif child.data == "single_ref":
+            if child.data == "single_ref":
                 token = child.children[0]
                 ln = token.line  # type: ignore[attr-defined]
                 if first_def_line and ln >= first_def_line:
@@ -373,7 +365,6 @@ class FileDispatcher:
             "test_ref",
             line_context=line_context,
             file_default_verifies=file_default_verifies,
-            expected_broken_count=expected_broken_count,
             all_test_funcs=all_test_funcs,
             source_id=file_path,
             reader=self._reader,

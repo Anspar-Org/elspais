@@ -5,7 +5,7 @@ context) is injected from external sources -- AST-based for Python, text-based
 for others, or external prescan command.
 
 The grammar pre-classifies lines as single_ref, block_header, block_ref,
-test_name_ref, control_marker, or other_line.  This transformer:
+test_name_ref, or other_line.  This transformer:
 1. Extracts requirement IDs from classified lines
 2. Annotates with function/class context from pre-scan
 3. Produces ParsedContent matching the old CodeParser/TestParser contracts
@@ -56,7 +56,6 @@ class ReferenceTransformer:
         content_type: Output content type -- "code_ref" or "test_ref".
         line_context: Pre-scan data mapping line_number -> (func_name, class_name, func_line).
         file_default_verifies: File-level default verifies (for test files).
-        expected_broken_count: From elspais control marker (for test files).
         all_test_funcs: All test functions from pre-scan (for emitting unlinked tests).
         reader: Reads the identifiers of every repository in this
             federation, normalizing each under the grammar of the member
@@ -72,7 +71,6 @@ class ReferenceTransformer:
         content_type: str,
         line_context: dict[int, tuple[str | None, str | None, int, int]] | None = None,
         file_default_verifies: list[str] | None = None,
-        expected_broken_count: int = 0,
         all_test_funcs: list[tuple[int, str, str | None]] | None = None,
         source_id: str = "",
         reader: FederatedIdReader | None = None,
@@ -85,7 +83,6 @@ class ReferenceTransformer:
         self.content_type = content_type
         self.line_context = line_context or {}
         self.file_default_verifies = file_default_verifies or []
-        self.expected_broken_count = expected_broken_count
         self.all_test_funcs = all_test_funcs or []
         self.source_id = source_id
         self.quoted_lines = quoted_lines or set()
@@ -219,10 +216,6 @@ class ReferenceTransformer:
                     results.append(pc)
                 else:
                     other_lines.append((token.line, str(token)))  # type: ignore[attr-defined]
-
-            elif child.data == "control_marker":
-                # Already extracted during pre-processing; skip
-                pass
 
             i += 1
 
@@ -359,8 +352,6 @@ class ReferenceTransformer:
                 "function_line": func_line,
                 "file_default_verifies": self.file_default_verifies,
             }
-            if self.expected_broken_count > 0:
-                parsed_data["expected_broken_count"] = self.expected_broken_count
 
         return ParsedContent(
             content_type=self.content_type,
@@ -424,8 +415,6 @@ class ReferenceTransformer:
                 "function_line": func_line,
                 "file_default_verifies": self.file_default_verifies,
             }
-            if self.expected_broken_count > 0:
-                parsed_data["expected_broken_count"] = self.expected_broken_count
 
         return ParsedContent(
             content_type=self.content_type,
@@ -482,8 +471,6 @@ class ReferenceTransformer:
             "function_line": func_line,
             "file_default_verifies": self.file_default_verifies,
         }
-        if self.expected_broken_count > 0:
-            parsed_data["expected_broken_count"] = self.expected_broken_count
 
         return ParsedContent(
             content_type="test_ref",

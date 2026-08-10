@@ -6,14 +6,14 @@ from elspais.graph.parsers.results.pytest_json import PytestJSONParser
 class TestPytestJSONParserBasic:
     """Basic tests for PytestJSONParser."""
 
-    # Verifies: REQ-d00082-L
+    # Verifies: REQ-d00254-F
     def test_parse_passing_test(self):
         """Parses a passing test case."""
         json_content = """
 {
   "tests": [
     {
-      "nodeid": "tests/test_auth.py::test_login_REQ_p00001",
+      "nodeid": "tests/test_auth.py::test_login",
       "outcome": "passed",
       "duration": 0.123
     }
@@ -26,10 +26,10 @@ class TestPytestJSONParserBasic:
 
         assert len(results) == 1
         assert results[0]["status"] == "passed"
-        assert results[0]["name"] == "test_login_REQ_p00001"
-        assert "REQ-p00001" in results[0]["verifies"]
+        assert results[0]["name"] == "test_login"
+        assert results[0]["duration"] == 0.123
 
-    # Verifies: REQ-d00082-L
+    # Verifies: REQ-d00254-F
     def test_parse_failing_test(self):
         """Parses a failing test case."""
         json_content = """
@@ -54,7 +54,7 @@ class TestPytestJSONParserBasic:
         assert results[0]["status"] == "failed"
         assert "AssertionError" in results[0]["message"]
 
-    # Verifies: REQ-d00082-L
+    # Verifies: REQ-d00254-F
     def test_parse_skipped_test(self):
         """Parses a skipped test case."""
         json_content = """
@@ -75,7 +75,7 @@ class TestPytestJSONParserBasic:
         assert len(results) == 1
         assert results[0]["status"] == "skipped"
 
-    # Verifies: REQ-d00082-L
+    # Verifies: REQ-d00254-F
     def test_parse_error_test(self):
         """Parses a test with error."""
         json_content = """
@@ -99,7 +99,7 @@ class TestPytestJSONParserBasic:
         assert len(results) == 1
         assert results[0]["status"] == "error"
 
-    # Verifies: REQ-d00082-L
+    # Verifies: REQ-d00254-F
     def test_parse_multiple_tests(self):
         """Parses multiple test cases."""
         json_content = """
@@ -118,71 +118,10 @@ class TestPytestJSONParserBasic:
         assert len(results) == 3
 
 
-class TestPytestJSONParserReqExtraction:
-    """Tests for requirement ID extraction."""
+class TestPytestJSONParserTestIdentity:
+    """Tests for the recorded test identity carried by each result record."""
 
-    # Verifies: REQ-d00082-G
-    def test_extracts_req_from_name(self):
-        """Extracts REQ ID from test name."""
-        json_content = """
-{
-  "tests": [
-    {
-      "nodeid": "test.py::test_REQ_p00001_login",
-      "outcome": "passed",
-      "duration": 0.1
-    }
-  ]
-}
-"""
-        parser = PytestJSONParser()
-
-        results = parser.parse(json_content, "results.json")
-
-        assert "REQ-p00001" in results[0]["verifies"]
-
-    # Verifies: REQ-d00082-G
-    def test_extracts_multiple_reqs(self):
-        """Extracts multiple REQ IDs from test name."""
-        json_content = """
-{
-  "tests": [
-    {
-      "nodeid": "test.py::test_REQ_p00001_and_REQ_o00002",
-      "outcome": "passed",
-      "duration": 0.1
-    }
-  ]
-}
-"""
-        parser = PytestJSONParser()
-
-        results = parser.parse(json_content, "results.json")
-
-        assert "REQ-p00001" in results[0]["verifies"]
-        assert "REQ-o00002" in results[0]["verifies"]
-
-    # Verifies: REQ-d00082-G
-    def test_extracts_assertion_refs(self):
-        """Extracts assertion references like REQ-p00001-A."""
-        json_content = """
-{
-  "tests": [
-    {
-      "nodeid": "test.py::test_REQ_p00001_A",
-      "outcome": "passed",
-      "duration": 0.1
-    }
-  ]
-}
-"""
-        parser = PytestJSONParser()
-
-        results = parser.parse(json_content, "results.json")
-
-        assert "REQ-p00001-A" in results[0]["verifies"]
-
-    # Verifies: REQ-d00082-L
+    # Verifies: REQ-d00254-G
     def test_generates_test_id(self):
         """Generates stable test_id from classname and name."""
         json_content = """
@@ -207,7 +146,7 @@ class TestPytestJSONParserReqExtraction:
 class TestPytestJSONParserEdgeCases:
     """Edge case tests for PytestJSONParser."""
 
-    # Verifies: REQ-d00082-L
+    # Verifies: REQ-d00254-F
     def test_invalid_json_returns_empty(self):
         """Returns empty list for invalid JSON."""
         parser = PytestJSONParser()
@@ -216,7 +155,7 @@ class TestPytestJSONParserEdgeCases:
 
         assert results == []
 
-    # Verifies: REQ-d00082-L
+    # Verifies: REQ-d00254-F
     def test_empty_tests_array(self):
         """Handles empty tests array."""
         json_content = '{"tests": []}'
@@ -226,7 +165,7 @@ class TestPytestJSONParserEdgeCases:
 
         assert results == []
 
-    # Verifies: REQ-d00082-L
+    # Verifies: REQ-d00254-F
     def test_xfailed_maps_to_skipped(self):
         """Maps xfailed (expected failure) to skipped."""
         json_content = """
@@ -246,7 +185,7 @@ class TestPytestJSONParserEdgeCases:
 
         assert results[0]["status"] == "skipped"
 
-    # Verifies: REQ-d00082-L
+    # Verifies: REQ-d00254-F
     def test_xpassed_maps_to_passed(self):
         """Maps xpassed (unexpected pass) to passed."""
         json_content = """
@@ -266,7 +205,7 @@ class TestPytestJSONParserEdgeCases:
 
         assert results[0]["status"] == "passed"
 
-    # Verifies: REQ-d00082-L
+    # Verifies: REQ-d00254-F
     def test_simple_list_format(self):
         """Handles simple list format."""
         json_content = """
@@ -283,7 +222,7 @@ class TestPytestJSONParserEdgeCases:
         assert results[0]["status"] == "passed"
         assert results[1]["status"] == "failed"
 
-    # Verifies: REQ-d00082-L
+    # Verifies: REQ-d00254-F
     def test_nodeid_with_class(self):
         """Handles nodeid with class name."""
         json_content = """
@@ -308,7 +247,7 @@ class TestPytestJSONParserEdgeCases:
 class TestPytestJSONParserCanParse:
     """Tests for can_parse method."""
 
-    # Verifies: REQ-d00082-L
+    # Verifies: REQ-d00254-F
     def test_can_parse_pytest_json(self):
         """Returns True for pytest JSON files."""
         from pathlib import Path
@@ -319,7 +258,7 @@ class TestPytestJSONParserCanParse:
         assert parser.can_parse(Path("test-results.json")) is True
         assert parser.can_parse(Path("results.json")) is True
 
-    # Verifies: REQ-d00082-L
+    # Verifies: REQ-d00254-F
     def test_cannot_parse_non_json(self):
         """Returns False for non-JSON files."""
         from pathlib import Path
@@ -328,127 +267,3 @@ class TestPytestJSONParserCanParse:
 
         assert parser.can_parse(Path("results.xml")) is False
         assert parser.can_parse(Path("test.py")) is False
-
-
-class TestPytestJSONParserCustomConfig:
-    """Tests for PytestJSONParser with custom configuration.
-
-    REQ-d00082-L: Parser accepts custom PatternConfig for non-standard prefixes.
-    REQ-d00082-L: Parser instantiation with PatternConfig and ReferenceResolver.
-    REQ-d00082-L: Parser extracts custom prefix IDs from test node IDs.
-    """
-
-    def test_REQ_d00082_L_custom_prefix_spec(self):
-        """REQ-d00082-L: Parser with custom prefix 'SPEC' extracts correct IDs."""
-        from elspais.utilities.patterns import IdPatternConfig, IdResolver
-
-        resolver = IdResolver(
-            IdPatternConfig.from_dict(
-                {
-                    "project": {"namespace": "SPEC"},
-                    "id-patterns": {
-                        "canonical": "{namespace}-{type.letter}{component}",
-                        "aliases": {"short": "{type.letter}{component}"},
-                        "types": {
-                            "prd": {"level": 1, "aliases": {"letter": "p"}},
-                            "ops": {"level": 2, "aliases": {"letter": "o"}},
-                            "dev": {"level": 3, "aliases": {"letter": "d"}},
-                        },
-                        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
-                    },
-                }
-            )
-        )
-        parser = PytestJSONParser(resolver=resolver)
-
-        json_content = """
-{
-  "tests": [
-    {
-      "nodeid": "tests/test_spec.py::test_SPEC_p00103_validation",
-      "outcome": "passed",
-      "duration": 0.1
-    }
-  ]
-}
-"""
-
-        results = parser.parse(json_content, "results.json")
-
-        assert len(results) == 1
-        assert "SPEC-p00103" in results[0]["verifies"]
-
-    def test_REQ_d00082_L_instantiation_with_pattern_config(self):
-        """REQ-d00082-L: Parser instantiation with IdResolver."""
-        from pathlib import Path
-
-        from elspais.utilities.patterns import IdPatternConfig, IdResolver
-
-        id_resolver = IdResolver(
-            IdPatternConfig.from_dict(
-                {
-                    "project": {"namespace": "REQ"},
-                    "id-patterns": {
-                        "canonical": "{namespace}-{type.letter}{component}",
-                        "aliases": {"short": "{type.letter}{component}"},
-                        "types": {
-                            "prd": {"level": 1, "aliases": {"letter": "p"}},
-                            "ops": {"level": 2, "aliases": {"letter": "o"}},
-                            "dev": {"level": 3, "aliases": {"letter": "d"}},
-                        },
-                        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
-                    },
-                }
-            )
-        )
-
-        base_path = Path(".")
-
-        # Verify instantiation succeeds with all parameters
-        parser = PytestJSONParser(
-            resolver=id_resolver,
-            base_path=base_path,
-        )
-
-        assert parser._resolver == id_resolver
-        assert parser._base_path == base_path
-
-    def test_REQ_d00082_L_extracts_custom_prefix_ids(self):
-        """REQ-d00082-L: Parser extracts custom prefix IDs from test node IDs."""
-        from elspais.utilities.patterns import IdPatternConfig, IdResolver
-
-        resolver = IdResolver(
-            IdPatternConfig.from_dict(
-                {
-                    "project": {"namespace": "TASK"},
-                    "id-patterns": {
-                        "canonical": "{namespace}-{type.letter}{component}",
-                        "aliases": {"short": "{type.letter}{component}"},
-                        "types": {
-                            "prd": {"level": 1, "aliases": {"letter": "p"}},
-                            "ops": {"level": 2, "aliases": {"letter": "o"}},
-                            "dev": {"level": 3, "aliases": {"letter": "d"}},
-                        },
-                        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
-                    },
-                }
-            )
-        )
-        parser = PytestJSONParser(resolver=resolver)
-
-        json_content = """
-{
-  "tests": [
-    {
-      "nodeid": "tests/test_task.py::test_TASK_d00103_feature",
-      "outcome": "passed",
-      "duration": 0.15
-    }
-  ]
-}
-"""
-
-        results = parser.parse(json_content, "results.json")
-
-        assert len(results) == 1
-        assert "TASK-d00103" in results[0]["verifies"]

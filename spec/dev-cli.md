@@ -84,15 +84,15 @@ F. The reference configuration SHALL support file-type specific overrides via gl
 
 G. The reference configuration SHALL extract ID components (prefix, type, number) from matched references.
 
-H. The reference configuration SHALL support configurable comment styles (e.g., `#`, `//`, `--`) for code reference detection.
+H. [Removed - named a reference-configuration artifact that does not exist. The limitation it described is real: a *Traceability* keyword inside a block comment is never read, so a block-comment-only language has no reference form.]
 
-I. CodeParser SHALL accept PatternConfig and ReferenceResolver for configurable reference matching in source files.
+I. [Removed - named classes that do not exist; source-file reference matching derives from the identifier grammar authority.]
 
-J. TestParser SHALL accept PatternConfig and ReferenceResolver for configurable reference matching in test files.
+J. [Removed - named classes that do not exist; test-file reference matching derives from the identifier grammar authority.]
 
-K. JUnitXMLParser SHALL accept PatternConfig and ReferenceResolver for configurable reference matching in JUnit XML reports.
+K. [Removed - a result record is matched to its test by recorded identity, not by reading requirement references out of a reported test name.]
 
-L. PytestJSONParser SHALL accept PatternConfig and ReferenceResolver for configurable reference matching in pytest JSON reports.
+L. [Removed - a result record is matched to its test by recorded identity, not by reading requirement references out of a reported test name.]
 
 ### Rationale
 
@@ -100,11 +100,12 @@ Different projects use different ID conventions, comment styles, and directory s
 
 ### Changelog
 
+- 2026-08-10 | 109921be | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 00cd96fc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 89956cd7 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 89956cd7 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Unified Reference Configuration* | **Hash**: 00cd96fc
+*End* *Unified Reference Configuration* | **Hash**: 109921be
 ---
 
 ## REQ-d00084: Trace Command
@@ -495,4 +496,4 @@ H. The tool SHALL report style findings through the standard checks reporting su
 
 Agent-generated code routinely cannot reliably be constrained to generate assertions according to a set of rules, so we must rely on checks instead. Not all checks can be automated, but those that can, are.
 
-*End* *Mechanical Requirement Style Checks* | **Hash**: 084c17a0
+*End* *Mechanical Style Checks* | **Hash**: 084c17a0

@@ -1,4 +1,3 @@
-# elspais: expected-broken-links 2
 """
 Tests for the example command.
 """

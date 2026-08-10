@@ -127,15 +127,6 @@ resemble your own. Such a reference is reported by
 `spec.unclaimed_references` at a severity you choose (see
 `elspais docs checks`) rather than discarded.
 
-## Suppressing Warnings
-
-For expected issues, add inline suppression:
-
-```markdown
-# elspais: expected-broken-links 2
-**Implements**: REQ-future-001, REQ-future-002
-```
-
 ## JSON Output
 
 For tooling and CI integration:

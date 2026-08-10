@@ -81,13 +81,17 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 **Comment/Review System**: An annotation layer stored as append-only JSONL files in `.elspais/comments/`. `CommentEvent` (frozen dataclass) represents comment/reply/resolve/promote events; `CommentThread` groups a root comment with its replies. `CommentIndex` (in-memory) provides iterator-only query API. `TraceGraph` delegates to `_comment_index` via public methods (`iter_comments`, `comment_count`, `has_comments`, `iter_orphaned_comments`, `find_comment_thread`, `remove_comment_thread`, `iter_comments_for_card`, `add_comment_thread`, `comment_source_file`). `FederatedGraph` routes comment queries to the owning repo using anchor-based ownership lookup (`parse_anchor()` extracts node_id). `FederatedGraph.load_comments()` loads per-repo indexes at viewer startup/refresh. Comment storage: only in `graph/comment_store.py` (parse_anchor, generate_comment_id, append_event, load_events, assemble_threads, load_comment_index, comment_file_for, validate_anchor, promote_orphaned_comments, update_anchors_on_rename, compact_file). Comment data models: only in `graph/comments.py`. Rename hooks in `TraceGraph.rename_node()`/`rename_assertion()` call `update_anchors_on_rename()` automatically. API endpoints: POST `/api/comment/add`, `/api/comment/reply`, `/api/comment/resolve`; GET `/api/comments`, `/api/comments/card`, `/api/comments/orphaned`. Author resolved server-side via `get_author_info()`. CLI: `elspais comments compact` strips resolved threads and collapses promote chains.
 **Multi-Language Comment Support:**
 
-| Language | Comment Style | Marker Example |
+| Language | Comment Style | Carries a reference? |
 |----------|--------------|----------------|
-| Python, Shell, Ruby, YAML, Terraform/HCL | `#` | `# elspais: expected-broken-links 3` |
-| JavaScript, TypeScript, Java, C, Go, Rust | `//` | `// elspais: expected-broken-links 3` |
-| SQL, Lua, Ada | `--` | `-- elspais: expected-broken-links 3` |
-| HTML, XML | `<!-- -->` | `<!-- elspais: expected-broken-links 3 -->` |
-| CSS, C-style block | `/* */` | `/* elspais: expected-broken-links 3 */` |
+| Python, Shell, Ruby, YAML, Terraform/HCL | `#` | Yes — `# Verifies: REQ-d00131-A` |
+| JavaScript, TypeScript, Java, C, Go, Rust | `//` | Yes — `// Verifies: REQ-d00131-A` |
+| SQL, Lua, Ada | `--` | Yes — `-- Verifies: REQ-d00131-A` |
+| HTML, XML | `<!-- -->` | **No** — the reference grammar accepts only `#`, `//` and `--` |
+| CSS, C-style block | `/* */` | **No** — same limitation |
+
+The last two rows are the gap, not a description of it working: a block-comment
+language is scanned, and its comments are recognised for binding a reference to
+the following function, but a _Traceability_ keyword inside one is never read.
 
 ## Workflow
 

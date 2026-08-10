@@ -19,7 +19,6 @@ if TYPE_CHECKING:
     from elspais.utilities.patterns import IdResolver
 
 
-# Implements: REQ-d00082-L
 class PytestJSONParser:
     """Parser for Pytest JSON test result files.
 
@@ -73,7 +72,6 @@ class PytestJSONParser:
             }
         )
 
-    # Implements: REQ-d00082-L
     def parse(self, content: str, source_path: str) -> list[dict[str, Any]]:
         """Parse Pytest JSON content and return test result dicts.
 
@@ -89,7 +87,6 @@ class PytestJSONParser:
             - status: passed, failed, skipped, or error
             - duration: Test duration in seconds
             - message: Error/failure message (if any)
-            - verifies: List of requirement IDs this test verifies
         """
         results: list[dict[str, Any]] = []
 
@@ -113,7 +110,6 @@ class PytestJSONParser:
 
         return results
 
-    # Implements: REQ-d00082-L
     def _parse_pytest_json_report_test(
         self, test: dict[str, Any], source_path: str
     ) -> dict[str, Any] | None:
@@ -171,9 +167,6 @@ class PytestJSONParser:
                         message = str(phase_data["message"])[:200]
                         break
 
-        # Extract requirement references
-        verifies = self._extract_req_ids(f"{classname} {name}", source_path)
-
         # Generate canonical TEST node ID from nodeid (already has file path)
         test_id = build_test_id_from_nodeid(nodeid)
 
@@ -184,7 +177,6 @@ class PytestJSONParser:
             "status": status,
             "duration": duration,
             "message": message,
-            "verifies": verifies,
             "source_path": source_path,
             "test_id": test_id,
             # Results-file provenance: for pytest JSON the results file IS the
@@ -193,7 +185,6 @@ class PytestJSONParser:
             "result_line": None,
         }
 
-    # Implements: REQ-d00082-L
     def _parse_simple_test(self, test: dict[str, Any], source_path: str) -> dict[str, Any] | None:
         """Parse a test from simple list format.
 
@@ -228,8 +219,6 @@ class PytestJSONParser:
         if message:
             message = str(message)[:200]
 
-        verifies = self._extract_req_ids(f"{classname} {name}", source_path)
-
         # Generate canonical TEST node ID using test_identity utility
         test_id = build_test_id_from_result(classname, name)
 
@@ -240,7 +229,6 @@ class PytestJSONParser:
             "status": status,
             "duration": duration,
             "message": message,
-            "verifies": verifies,
             "source_path": source_path,
             "test_id": test_id,
             "result_file": source_path or None,
@@ -275,28 +263,6 @@ class PytestJSONParser:
                 raw_text="",
                 parsed_data=result,
             )
-
-    # Implements: REQ-d00082-L
-    def _extract_req_ids(self, text: str, source_file: str | None = None) -> list[str]:
-        """Extract requirement IDs from text.
-
-        Args:
-            text: Text to search for requirement IDs.
-            source_file: Optional source file for file-specific config (unused, kept for API).
-
-        Returns:
-            List of normalized requirement IDs (using hyphens).
-        """
-        resolver = self._get_resolver()
-        pattern = resolver.search_regex()
-
-        ids: list[str] = []
-        for m in pattern.finditer(text):
-            normalized = resolver.normalize_ref(m.group(0))
-            if normalized and normalized not in ids:
-                ids.append(normalized)
-
-        return ids
 
     # Implements: REQ-d00054-A
     def can_parse(self, file_path: Path) -> bool:

@@ -53,7 +53,7 @@ class TestJUnitXMLClaimAndParse:
         assert results[0].content_type == "test_result"
 
     def test_REQ_d00054_parsed_data_contains_expected_keys(self):
-        """Parsed data dict contains standard test result keys."""
+        """Parsed data dict carries exactly the standard test result keys."""
         xml = (
             '<?xml version="1.0" encoding="utf-8"?>\n'
             '<testsuite tests="1">\n'
@@ -68,13 +68,19 @@ class TestJUnitXMLClaimAndParse:
         results = list(parser.claim_and_parse(lines, context))
 
         data = results[0].parsed_data
-        assert "id" in data
-        assert "name" in data
-        assert "classname" in data
-        assert "status" in data
-        assert "duration" in data
-        assert "verifies" in data
-        assert "test_id" in data
+        assert set(data) == {
+            "id",
+            "name",
+            "classname",
+            "status",
+            "duration",
+            "message",
+            "source_path",
+            "test_id",
+            "line",
+            "result_file",
+            "result_line",
+        }
         assert data["name"] == "test_REQ_d00054_pass"
         assert data["classname"] == "tests.test_check.TestCheck"
         assert data["status"] == "passed"
@@ -148,7 +154,7 @@ class TestPytestJSONClaimAndParse:
         assert results[0].content_type == "test_result"
 
     def test_REQ_d00054_parsed_data_contains_expected_keys(self):
-        """Parsed data dict contains standard test result keys."""
+        """Parsed data dict carries exactly the standard test result keys."""
         json_content = (
             '{"tests": [{"nodeid": "tests/test_check.py::TestCheck::test_REQ_d00054_pass",'
             ' "outcome": "passed", "duration": 0.05}]}'
@@ -160,13 +166,18 @@ class TestPytestJSONClaimAndParse:
         results = list(parser.claim_and_parse(lines, context))
 
         data = results[0].parsed_data
-        assert "id" in data
-        assert "name" in data
-        assert "classname" in data
-        assert "status" in data
-        assert "duration" in data
-        assert "verifies" in data
-        assert "test_id" in data
+        assert set(data) == {
+            "id",
+            "name",
+            "classname",
+            "status",
+            "duration",
+            "message",
+            "source_path",
+            "test_id",
+            "result_file",
+            "result_line",
+        }
         assert data["status"] == "passed"
         assert data["duration"] == 0.05
 
