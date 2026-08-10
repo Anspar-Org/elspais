@@ -7592,11 +7592,19 @@ def run_server(
             # would sit in a process that has already stopped serving.
             # Arming the bound here is what ends that. Only a timer is
             # armed: this runs in signal context on the event loop thread.
+            #
+            # Arming comes FIRST, before anything else in this handler.
+            # Marking the state record writes a file and can print, and
+            # this handler runs in true signal context on whatever the
+            # main thread was doing — a write that blocks there blocks
+            # here, and a handler that never reaches the arming leaves
+            # the one case the bound exists for uncovered. Arming is a
+            # timer and one uncontended lock; nothing needs to precede it.
             def handle_exit(self, sig: int, frame: Any) -> None:
-                state.shared.begin_shutdown()
                 arm_drain_backstop(
                     state.shared, trigger="an operator or timeout stopped the server"
                 )
+                state.shared.begin_shutdown()
                 super().handle_exit(sig, frame)
 
         # Implements: REQ-p00083-A
@@ -7627,10 +7635,12 @@ def run_server(
         # here accounts for the work and ends the process instead. Doing
         # that work inline would run it in signal context while the event
         # loop holds locks.
+        # Arming first, for the reason given on the handler above: it is
+        # the cheapest thing here and the one that must not be skipped.
         def _absorb_stop_signal(signum: int, frame: Any) -> None:
+            arm_drain_backstop(state.shared, trigger="an operator or timeout stopped the server")
             state.shared.begin_shutdown()
             server.should_exit = True
-            arm_drain_backstop(state.shared, trigger="an operator or timeout stopped the server")
 
         import signal as _signal
 

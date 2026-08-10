@@ -83,7 +83,11 @@ class SharedServerState(dict):
         # timer nobody holds a handle to would force an exit after a drain
         # that finished perfectly well.
         self._drain_backstop: threading.Timer | None = None
-        self._drain_backstop_lock = threading.Lock()
+        # Reentrant, because a stop signal can land on this thread while
+        # it is inside this lock's critical section, and the handler arms
+        # the bound as its first act. A plain lock would deadlock there —
+        # in the handler whose whole job is to stop the process hanging.
+        self._drain_backstop_lock = threading.RLock()
 
     # Implements: REQ-o00075-B, REQ-o00075-E
     def begin_shutdown(self) -> None:
