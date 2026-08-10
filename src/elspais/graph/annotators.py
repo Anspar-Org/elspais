@@ -1372,6 +1372,13 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                 # which conducts the refining requirement's coverage upward.
                 continue
 
+            if edge.kind == EdgeKind.INTEGRATES:
+                # An INTEGRATES edge credits the consumer through the live
+                # `integrates_rollup()` overlay, which reads the library
+                # requirement's own finalized metrics. Folding it in here too
+                # would count the same library evidence twice.
+                continue
+
             target_node = edge.target
             target_kind = target_node.kind
 

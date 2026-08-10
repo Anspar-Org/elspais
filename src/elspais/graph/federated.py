@@ -284,7 +284,8 @@ class FederatedGraph:
         #   - _detect_satisfies_cycles also runs unconditionally; cycles can
         #     in principle exist inside a single repo via in-repo Satisfies
         #     chains, though Phase-2 validation usually prevents that.
-        if len([e for e in repos if e.graph is not None]) > 1:
+        multi_repo = len([e for e in repos if e.graph is not None]) > 1
+        if multi_repo:
             self._wire_cross_graph_edges()
         # Implements: REQ-p00014-H
         self._instantiate_cross_repo_satisfies()
@@ -293,6 +294,9 @@ class FederatedGraph:
         # Implements: REQ-p00014-J
         self._detect_satisfies_cycles()
         self._annotate_presumed_foreign_refs()
+        # Implements: REQ-d00269-A
+        if multi_repo:
+            self._recompute_coverage()
         # Implements: REQ-d00201-B
         self._federated_log = FederatedMutationLog()
         self._federated_log._bind_repos(self._repos)
@@ -1349,6 +1353,61 @@ class FederatedGraph:
         }
     )
 
+    # Implements: REQ-d00269-A
+    def _recompute_coverage(self) -> None:
+        """Recompute coverage over the wired federation.
+
+        Each member repository is annotated as it is built, before any
+        cross-repository edge exists. Those edges are evidence like any
+        other, so the numbers are recomputed here -- once, over every
+        member at once -- after the wiring passes have run. One
+        computation spanning the whole federation is what lets a
+        reference conduct coverage between two repositories the same way
+        it does within one.
+
+        Coverage annotation rebuilds each requirement's metrics from the
+        graph rather than accumulating into what is already there, so
+        recomputing does not double-count.
+
+        The credit settings are collapsed from every member's test
+        targets, by the same rule that collapses several targets within
+        one repository.
+        """
+        from elspais.graph.annotators import (
+            annotate_coverage,
+            annotate_journey_verification,
+        )
+        from elspais.graph.factory import _derive_credit_config, _validate_config
+
+        targets = []
+        for entry in self._repos.values():
+            if entry.graph is None or entry.config is None:
+                continue
+            targets.extend(_validate_config(entry.config).scanning.test.targets)
+        annotate_journey_verification(self)
+        annotate_coverage(self, _derive_credit_config(targets))
+
+    @staticmethod
+    def _edge_anchor(target_graph: TraceGraph, target_id: str) -> tuple[str, list[str] | None]:
+        """Resolve the node a traceability edge attaches to, plus its labels.
+
+        A reference naming an *Assertion* attaches to the *Requirement* that
+        owns it and carries the assertion label, which is the shape the
+        same-repository builder produces and the shape the coverage
+        computation reads. Any other target attaches directly.
+
+        An assertion with no owning requirement (a shape the builder also
+        tolerates) anchors on itself.
+        """
+        target = target_graph._index.get(target_id)
+        if target is None or target.kind != NodeKind.ASSERTION:
+            return target_id, None
+        parent_reqs = [p for p in target.iter_parents() if p.kind == NodeKind.REQUIREMENT]
+        if not parent_reqs:
+            return target_id, None
+        label = target.get_field("label", "")
+        return parent_reqs[0].id, [label] if label else None
+
     def _wire_cross_graph_edges(self) -> None:
         """Wire cross-graph edges by resolving broken references across repos.
 
@@ -1385,11 +1444,17 @@ class FederatedGraph:
                 if target_repo_name and target_repo_name != source_entry.name:
                     target_entry = self._repos[target_repo_name]
                     if target_entry.graph is not None:
-                        # Wire the cross-graph edge
+                        # Wire the cross-graph edge in the same shape the
+                        # same-repository builder produces (REQ-d00269-B):
+                        # an assertion-targeted reference hangs off the
+                        # owning REQUIREMENT and names the assertion in
+                        # ``assertion_targets``.
+                        anchor_id, targets = self._edge_anchor(target_entry.graph, br.target_id)
                         source_entry.graph.add_edge(
                             br.source_id,
-                            br.target_id,
+                            anchor_id,
                             EdgeKind(br.edge_kind),
+                            assertion_targets=targets,
                             target_graph=target_entry.graph,
                         )
                         resolved.append(i)
