@@ -7,6 +7,7 @@ server process, and lightweight clients for querying a running server
 
 from __future__ import annotations
 
+import enum
 import json
 import os
 import signal
@@ -764,8 +765,28 @@ def start_daemon(
 
 
 # Implements: REQ-o00075-B, REQ-o00075-E
-def stop_daemon(repo_root: Path, wait: bool = True, timeout: float = 20.0) -> bool:
-    """Stop a running daemon. True once it is gone.
+class StopOutcome(str, enum.Enum):
+    """What a stop attempt actually found, as three distinct facts.
+
+    A boolean cannot carry these. "Nothing was running" and "it would not
+    stop" are both not-stopped, and a caller that refuses on the second
+    must not refuse on the first: a daemon that exited between the
+    caller's look and this one is gone, which is what the caller wanted.
+    Conflating them produced confident, wrong refusals.
+    """
+
+    STOPPED = "stopped"
+    NOT_RUNNING = "not-running"
+    STILL_RUNNING = "still-running"
+
+    @property
+    def is_gone(self) -> bool:
+        """True when nothing is serving this working tree any more."""
+        return self is not StopOutcome.STILL_RUNNING
+
+
+def stop_daemon(repo_root: Path, wait: bool = True, timeout: float = 20.0) -> StopOutcome:
+    """Stop a running daemon. Reports which of three things happened.
 
     The record is unlinked last, and only once the process it describes
     has exited. Removing it first left a window in which a daemon was
@@ -778,12 +799,14 @@ def stop_daemon(repo_root: Path, wait: bool = True, timeout: float = 20.0) -> bo
     A daemon persists what it holds on the way out, so the wait covers a
     save rather than a signal handler.
 
-    Returns False when the process did not exit, leaving the record in
-    place because it still describes something a client would reach.
+    NOT_RUNNING means there was nothing to stop -- including the case
+    where the daemon exited between the caller's own look and this one.
+    STILL_RUNNING leaves the record in place, because it still describes
+    something a client would reach.
     """
     info = get_daemon_info(repo_root)
     if info is None:
-        return False
+        return StopOutcome.NOT_RUNNING
     try:
         os.kill(info["pid"], signal.SIGTERM)
     except OSError:
@@ -795,9 +818,9 @@ def stop_daemon(repo_root: Path, wait: bool = True, timeout: float = 20.0) -> bo
             "still serving.",
             file=sys.stderr,
         )
-        return False
+        return StopOutcome.STILL_RUNNING
     _daemon_json_path(repo_root).unlink(missing_ok=True)
-    return True
+    return StopOutcome.STOPPED
 
 
 def _config_hash_stale(info: dict, repo_root: Path) -> bool:
@@ -1194,7 +1217,7 @@ def restart_daemon(
                 }
 
     # At this point we're committed to restart.
-    if not stopped and not stop_daemon(repo_root):
+    if not stopped and not stop_daemon(repo_root).is_gone:
         return {
             "success": False,
             "error": (
@@ -1247,7 +1270,7 @@ def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
 
         daemon_version = info.get("version")
         if daemon_version and daemon_version != __version__:
-            if not stop_daemon(repo_root):
+            if not stop_daemon(repo_root).is_gone:
                 # It is still serving. An out-of-date daemon answering is
                 # better than two daemons answering differently. This
                 # session is about to use it in place of the fresh one it
@@ -1257,7 +1280,7 @@ def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
                 return info["port"]
             # Fall through to start a fresh daemon
         elif _config_hash_stale(info, repo_root):
-            if not stop_daemon(repo_root):
+            if not stop_daemon(repo_root).is_gone:
                 # It is still serving. An out-of-date daemon answering is
                 # better than two daemons answering differently. This
                 # session is about to use it in place of the fresh one it

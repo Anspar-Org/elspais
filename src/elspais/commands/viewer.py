@@ -217,13 +217,14 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
         write_daemon_json,
     )
 
-    # Kill any existing server for this project. stop_daemon() returning
-    # False also means "nothing was running" (the common case), so only
-    # treat it as a refusal when a record existed to begin with -- writing
-    # our own record over a daemon that is still serving would make it an
+    # Kill any existing server for this project. Refuse only when one is
+    # still running: a daemon that exited between the look above and the
+    # stop below is gone, which is what we wanted -- reporting that as a
+    # refusal failed a command that had in fact succeeded. Writing our own
+    # record over a daemon that IS still serving would make it an
     # undiscoverable second process for this working tree.
     existing = get_daemon_info(repo_root)
-    if existing is not None and not stop_daemon(repo_root):
+    if existing is not None and not stop_daemon(repo_root).is_gone:
         print(
             f"Could not stop the daemon (pid {existing['pid']}) already "
             "serving this project; it is still running. Not starting a "

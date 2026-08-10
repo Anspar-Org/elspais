@@ -22,7 +22,7 @@ import sys
 import time
 from pathlib import Path
 
-from elspais.mcp.daemon import _daemon_json_path, stop_daemon, wait_for_daemon_exit
+from elspais.mcp.daemon import StopOutcome, _daemon_json_path, stop_daemon, wait_for_daemon_exit
 
 
 def _write_record(repo_root: Path, pid: int, port: int = 65000) -> Path:
@@ -44,7 +44,7 @@ class TestStopWaitsForTheProcess:
         # background reaper of its own.
         record = _write_record(tmp_path, proc.pid)
 
-        assert stop_daemon(tmp_path) is True
+        assert stop_daemon(tmp_path) is StopOutcome.STOPPED
         assert proc.poll() is not None, "stop_daemon returned while the process was alive"
         assert not record.exists()
 
@@ -72,7 +72,7 @@ class TestStopWaitsForTheProcess:
         proc.stdout.readline()
         record = _write_record(tmp_path, proc.pid)
         try:
-            assert stop_daemon(tmp_path, timeout=1.0) is False
+            assert stop_daemon(tmp_path, timeout=1.0) is StopOutcome.STILL_RUNNING
             assert record.exists(), "the record was removed while the process was still serving"
         finally:
             proc.kill()
@@ -81,7 +81,7 @@ class TestStopWaitsForTheProcess:
     def test_REQ_o00075_E_no_record_is_not_an_error(self, tmp_path):
         """Validates REQ-o00075-E: stopping when nothing is serving reports
         that nothing was stopped rather than failing."""
-        assert stop_daemon(tmp_path) is False
+        assert stop_daemon(tmp_path) is StopOutcome.NOT_RUNNING
 
     def test_REQ_o00075_E_unreaped_zombie_is_seen_as_gone_promptly(self):
         """Validates REQ-o00075-E: a process that exited but was never
@@ -111,12 +111,12 @@ class TestStopWaitsForTheProcess:
         time.sleep(0.3)  # let it exit and sit unreaped
         record = _write_record(tmp_path, proc.pid)
 
-        assert stop_daemon(tmp_path) is True
+        assert stop_daemon(tmp_path) is StopOutcome.STOPPED
         assert not record.exists()
 
 
 class TestRecordIsNeverSeenHalfWritten:
-    def test_REQ_o00075_E_a_concurrent_reader_never_sees_a_torn_record(self, tmp_path):
+    def test_REQ_o00075_E_concurrent_reader_never_sees_a_torn_record(self, tmp_path):
         """Validates REQ-o00075-E: what a client locates describes the process
         it would reach. A reader landing mid-write on a truncate-then-write
         sees invalid JSON, and this record's reader deletes it on that
@@ -157,3 +157,43 @@ class TestRecordIsNeverSeenHalfWritten:
         finally:
             stop.set()
             t.join(timeout=2)
+
+
+class TestStopDistinguishesGoneFromRefusing:
+    def test_REQ_o00075_B_daemon_that_exits_first_is_not_a_refusal(self, tmp_path):
+        """Validates REQ-o00075-B: a caller refuses to start a second process
+        only when one is still serving. A daemon that exits between the
+        caller's own look and the stop is gone -- reporting that as "it would
+        not stop" fails a command that had in fact succeeded, which is the
+        race a single boolean could not express."""
+        proc = subprocess.Popen([sys.executable, "-c", "pass"])
+        proc.wait()
+        _write_record(tmp_path, proc.pid)
+
+        outcome = stop_daemon(tmp_path)
+
+        assert outcome is StopOutcome.NOT_RUNNING
+        assert outcome.is_gone, "an already-exited daemon must not read as a refusal"
+
+    def test_REQ_o00075_B_only_a_live_daemon_reads_as_still_running(self, tmp_path):
+        """Validates REQ-o00075-B: the one outcome that must stop a caller is
+        a daemon that is still serving."""
+        proc = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                "import signal,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);"
+                "print('ready',flush=True);time.sleep(30)",
+            ],
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+        assert proc.stdout.readline().strip() == "ready"
+        _write_record(tmp_path, proc.pid)
+        try:
+            outcome = stop_daemon(tmp_path, timeout=1.0)
+            assert outcome is StopOutcome.STILL_RUNNING
+            assert not outcome.is_gone
+        finally:
+            proc.kill()
+            proc.wait()
