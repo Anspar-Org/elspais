@@ -27,10 +27,18 @@ version = 4
 # MCP tool usage statistics file path (optional, or set ELSPAIS_STATS env var)
 stats = ""
 
-# CLI daemon auto-start TTL (minutes).
-#   >0: auto-start daemon, exit after N minutes idle (default: 30)
+# CLI daemon auto-start TTL (minutes) — the idle timeout for a daemon
+# nobody is using.
+#   >0: auto-start daemon, exit after N minutes unused (default: 30)
 #    0: never auto-launch daemon from CLI (manual start only)
 #   <0: auto-start daemon that never times out
+#
+# The timeout does not end a daemon that still has a recorded client,
+# however long that client has been quiet: an agent that applies a change
+# and then reasons for an hour sends nothing meanwhile and still has its
+# daemon afterwards. When the timeout expires and a client is there, the
+# daemon starts another idle period. So a daemon with a live client
+# outlives cli_ttl, and client liveness is what bounds it instead.
 #
 # Client liveness: a daemon auto-started on behalf of a session records
 # that session's PID as `client_pid` in .elspais/daemon.json, and every
@@ -47,7 +55,11 @@ stats = ""
 # shell qualifies; a batch or CI shell does not). The last two steps read
 # /proc and a POSIX session id, so where those are unavailable only the
 # env var can resolve. When none resolve, no identity is recorded and
-# cli_ttl is the only limit. If the daemon holds unsaved in-memory
+# cli_ttl is the only limit. A daemon that has decided to stop says so in
+# .elspais/daemon.json and refuses writes until it goes; a command that
+# meets one waits for it to go and starts a fresh daemon rather than
+# reusing it or running a second one alongside it. If the daemon holds
+# unsaved in-memory
 # mutations when its last client is gone, it logs the count to
 # .elspais/daemon.log, waits a bounded grace period (30 minutes), then
 # SAVES them to disk and stops — nothing is discarded. The same holds for

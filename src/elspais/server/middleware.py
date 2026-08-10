@@ -59,7 +59,7 @@ class TTLMiddleware(BaseHTTPMiddleware):
     the client-liveness watchdog does.
     """
 
-    def __init__(self, app, shared, ttl_minutes: float = 30) -> None:
+    def __init__(self, app, shared, ttl_minutes: float = 30, clients_alive=None) -> None:
         super().__init__(app)
         self._ttl_seconds = ttl_minutes * 60
         self._timer: threading.Timer | None = None
@@ -70,6 +70,10 @@ class TTLMiddleware(BaseHTTPMiddleware):
         # stop the process without reaching the shutdown routine — which
         # is the behaviour this class exists to stop having.
         self._shared = shared
+        # Supplied the same way, and absent means "no recorded client":
+        # a daemon somebody started deliberately has no client to answer
+        # to, and its lifetime stays exactly what it was.
+        self._clients_alive = clients_alive
         self._start_timer()
 
     def _start_timer(self) -> None:
@@ -80,9 +84,42 @@ class TTLMiddleware(BaseHTTPMiddleware):
             self._timer.daemon = True
             self._timer.start()
 
-    # Implements: REQ-o00062-O, REQ-p00083-A, REQ-p00083-D
+    # Implements: REQ-o00074-O
+    def _has_live_client(self) -> bool:
+        """Whether a recorded client of this daemon still exists.
+
+        Asked before anything else a stop would do. A source that cannot
+        answer has said nothing about whether a client is there, so its
+        failure keeps the daemon: ending one on the strength of a broken
+        instrument is the outcome this check exists to prevent.
+        """
+        if self._clients_alive is None:
+            return False
+        try:
+            return bool(self._clients_alive())
+        except Exception as exc:
+            print(
+                f"WARNING: a client-liveness source could not be read ({exc!r}); "
+                "treating the idle timeout as inconclusive and keeping the daemon.",
+                file=sys.stderr,
+                flush=True,
+            )
+            return True
+
+    # Implements: REQ-o00062-O, REQ-o00074-O, REQ-p00083-A, REQ-p00083-D
     def _exit(self) -> None:
         from elspais.mcp.shared_state import finalize_shutdown, report_shutdown_outcome
+
+        # Asked first, and before the shutdown routine, because that
+        # routine commits the process to stopping: a daemon spared here
+        # after being committed there would refuse every write and never
+        # go, which is worse than either outcome on its own.
+        if self._has_live_client():
+            # Quiet is not gone. The timeout governs a daemon nobody is
+            # using; this one has a client, so it waits out another idle
+            # period and asks again rather than spinning.
+            self._start_timer()
+            return
 
         trigger = "the idle timeout expired"
         outcome = finalize_shutdown(self._shared, trigger=trigger)

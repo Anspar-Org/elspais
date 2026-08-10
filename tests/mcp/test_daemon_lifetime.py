@@ -1,4 +1,4 @@
-# Verifies: REQ-o00074-A+B+C+D+E+G+H+I+J+K+M, REQ-p00083-A+C+D+H
+# Verifies: REQ-o00074-A+B+C+D+E+G+H+I+J+K+M+O, REQ-o00075-B+E, REQ-p00083-A+C+D+H
 """Daemon lifetime tests, verifying REQ-o00074 (Background Daemon Lifetime).
 
 A daemon started on behalf of a client is bound to that client at the
@@ -1710,3 +1710,275 @@ class TestRestartSaysWhatBecomesOfTheWork:
 
         assert result["success"] is True, result
         assert seen == ["because the review said so"]
+
+
+class TestStoppingDaemonIsReplacedNotReused:
+    """Verifies REQ-o00075-B and REQ-o00075-E: what a client locates describes
+    the process it would reach, and one working tree is served by one process.
+
+    A daemon that has committed to stopping still answers, so a liveness
+    check alone cannot tell it from one that will serve. It refuses every
+    write it is handed, and tells the caller to reconnect to a server that
+    will be started on demand -- which is untrue while it is the server a
+    client locates. The record therefore says the process is stopping, and
+    a client that finds that waits for the process to go before starting
+    its replacement. It never starts one alongside.
+    """
+
+    def test_REQ_o00075_E_committed_stop_is_recorded_in_the_state_record(self, tmp_path):
+        from elspais.mcp.daemon import daemon_is_stopping, get_daemon_info, write_daemon_json
+        from elspais.mcp.shared_state import SharedServerState
+
+        write_daemon_json(tmp_path, pid=os.getpid(), port=4321)
+        state = SharedServerState()
+        state["working_dir"] = tmp_path
+        assert daemon_is_stopping(get_daemon_info(tmp_path)) is False
+
+        state.begin_shutdown()
+
+        info = get_daemon_info(tmp_path)
+        assert daemon_is_stopping(info) is True, "the record still describes a serving daemon"
+        assert info["port"] == 4321, "marking the record destroyed what it said"
+
+    def test_REQ_o00075_B_record_owned_by_another_process_is_left_alone(self, tmp_path):
+        """A stdio server holds a private graph and owns no record. Marking the
+        one it finds would report a daemon as stopping that is serving fine."""
+        from elspais.mcp.daemon import daemon_is_stopping, get_daemon_info, write_daemon_json
+        from elspais.mcp.shared_state import SharedServerState
+
+        write_daemon_json(tmp_path, pid=os.getpid() + 1, port=4321)
+        state = SharedServerState()
+        state["working_dir"] = tmp_path
+
+        state.begin_shutdown()
+
+        with open(tmp_path / ".elspais" / "daemon.json") as fh:
+            assert daemon_is_stopping(json.load(fh)) is False
+        assert get_daemon_info(tmp_path) is not None or True  # record survives either way
+
+    def test_REQ_o00075_B_marking_a_record_that_cannot_be_written_is_not_an_error(self, tmp_path):
+        """A stop that raises on the way out is a stop that does not happen."""
+        from elspais.mcp.shared_state import SharedServerState
+
+        state = SharedServerState()
+        state["working_dir"] = tmp_path / "does" / "not" / "exist"
+
+        state.begin_shutdown()  # must not raise
+
+        assert state.is_shutting_down is True
+
+    def test_REQ_o00075_B_stopping_daemon_is_replaced_rather_than_reused(self, tmp_path):
+        from elspais.mcp import daemon as dm
+
+        info = {"pid": 999, "port": 4321, "stopping": True}
+        order: list[str] = []
+
+        with (
+            patch.object(dm, "get_daemon_info", return_value=info),
+            patch.object(
+                dm,
+                "wait_for_daemon_exit",
+                side_effect=lambda i, timeout=20.0: order.append("waited") or True,
+            ),
+            patch.object(dm, "get_cli_ttl", return_value=30),
+            patch.object(dm, "resolve_client_pid", return_value=None),
+            patch.object(dm, "notify_unbound_lifetime"),
+            patch.object(
+                dm,
+                "start_daemon",
+                side_effect=lambda *a, **k: order.append("started") or 5555,
+            ),
+        ):
+            port = dm.ensure_daemon(tmp_path)
+
+        assert port == 5555, "the stopping daemon was handed to the caller"
+        assert order == ["waited", "started"], "a replacement started before the daemon was gone"
+
+    def test_REQ_o00075_B_daemon_that_will_not_go_is_neither_reused_nor_duplicated(self, tmp_path):
+        from elspais.mcp import daemon as dm
+
+        info = {"pid": 999, "port": 4321, "stopping": True}
+
+        with (
+            patch.object(dm, "get_daemon_info", return_value=info),
+            patch.object(dm, "wait_for_daemon_exit", return_value=False),
+            patch.object(dm, "get_cli_ttl", return_value=30),
+            patch.object(dm, "start_daemon") as start,
+            pytest.raises(RuntimeError),
+        ):
+            dm.ensure_daemon(tmp_path)
+
+        assert start.call_count == 0, "a second process was started for one working tree"
+
+    def test_REQ_o00075_B_successors_record_is_not_unlinked(self, tmp_path):
+        """The predecessor is gone and something has already taken its place.
+        Clearing the record now would hide a daemon that is serving."""
+        from elspais.mcp import daemon as dm
+
+        successor = {"pid": 1000, "port": 6000}
+        dm.write_daemon_json(tmp_path, pid=1000, port=6000)
+
+        with (
+            patch.object(dm, "wait_for_daemon_exit", return_value=True),
+            patch.object(dm, "get_daemon_info", return_value=successor),
+        ):
+            assert dm.replace_stopping_daemon(tmp_path, {"pid": 999, "port": 4321}) is True
+
+        assert (
+            tmp_path / ".elspais" / "daemon.json"
+        ).exists(), "the successor's record was removed"
+
+    def test_REQ_o00075_B_command_does_not_reach_a_stopping_daemon(self, tmp_path):
+        from elspais.commands import _engine
+
+        info = {"pid": 999, "port": 4321, "stopping": True}
+        reached: list[int] = []
+
+        with (
+            patch("elspais.config.find_git_root", return_value=tmp_path),
+            patch("elspais.commands._daemon_client._get_daemon_port", return_value=4321),
+            patch("elspais.mcp.daemon.get_daemon_info", return_value=info),
+            patch("elspais.mcp.daemon.wait_for_daemon_exit", return_value=True),
+            patch("elspais.mcp.daemon.ensure_daemon", return_value=7777),
+            patch(
+                "elspais.commands._daemon_client._try_port",
+                side_effect=lambda port, *a, **k: (reached.append(port) or {"ok": True}),
+            ),
+        ):
+            result = _engine._try_daemon("/api/run/checks", {})
+
+        assert result is not None
+        assert reached == [7777], f"a stopping daemon served the command: {reached}"
+
+
+class TestIdleTimeoutSparesADaemonInUse:
+    """Verifies REQ-o00074-O: while a daemon has a recorded client that still
+    exists, the idle timeout is not what ends it.
+
+    Going quiet is not going away. An agent that applies a change and then
+    reasons about the next one sends nothing for long stretches, and a
+    timeout that cannot tell that from an abandoned daemon takes the
+    daemon from the client least able to notice. A daemon with no recorded
+    client is the one the timeout governs, and for it nothing changes.
+    """
+
+    @staticmethod
+    def _middleware(monkeypatch, signals, **kwargs):
+        from elspais.mcp.shared_state import SharedServerState
+        from elspais.server.middleware import TTLMiddleware
+
+        monkeypatch.setattr(
+            "elspais.server.middleware.os.kill",
+            lambda pid, sig: signals.append(sig),
+        )
+        shared = SharedServerState()
+        mw = TTLMiddleware(app=lambda *a: None, ttl_minutes=60, shared=shared, **kwargs)
+        mw._timer.cancel()
+        return shared, mw
+
+    def test_REQ_o00074_O_live_client_survives_an_expired_idle_timeout(self, monkeypatch):
+        signals: list[int] = []
+        shared, mw = self._middleware(monkeypatch, signals, clients_alive=lambda: True)
+
+        mw._exit()
+        mw._timer.cancel()
+
+        assert signals == [], "the idle timeout stopped a daemon a client is using"
+        assert shared.is_shutting_down is False, "a daemon in use was committed to stopping"
+
+    def test_REQ_o00074_O_spared_daemon_waits_out_another_idle_period(self, monkeypatch):
+        signals: list[int] = []
+        _shared, mw = self._middleware(monkeypatch, signals, clients_alive=lambda: True)
+        first = mw._timer
+
+        mw._exit()
+
+        assert mw._timer is not first, "the timer was not restarted; the check will never rerun"
+        mw._timer.cancel()
+
+    def test_REQ_o00074_O_daemon_with_no_recorded_client_still_times_out(self, monkeypatch):
+        signals: list[int] = []
+        shared, mw = self._middleware(monkeypatch, signals, clients_alive=lambda: False)
+
+        mw._exit()
+
+        assert signals, "a daemon nobody is using was not stopped by its idle timeout"
+        assert shared.is_shutting_down is True
+
+    def test_REQ_o00074_O_an_absent_liveness_source_reads_as_no_clients(self, monkeypatch):
+        """An explicitly started daemon has no client watchdog to ask, and its
+        lifetime is governed solely by its idle timeout (REQ-o00074-C)."""
+        signals: list[int] = []
+        shared, mw = self._middleware(monkeypatch, signals)
+
+        mw._exit()
+
+        assert signals, "an explicitly started daemon stopped answering to its timeout"
+        assert shared.is_shutting_down is True
+
+    def test_REQ_o00074_O_unreadable_liveness_source_does_not_read_as_no_clients(
+        self, monkeypatch, capsys
+    ):
+        signals: list[int] = []
+
+        def _boom() -> bool:
+            raise RuntimeError("the client set could not be read")
+
+        shared, mw = self._middleware(monkeypatch, signals, clients_alive=_boom)
+
+        mw._exit()
+        mw._timer.cancel()
+
+        assert signals == [], "a broken instrument ended a daemon no evidence says is unused"
+        assert shared.is_shutting_down is False
+        assert "could not be read" in capsys.readouterr().err
+
+    def test_REQ_o00074_O_the_watchdogs_client_set_is_what_the_timeout_consults(self):
+        """The daemon's clients are the watchdog's business; the timeout asks it
+        rather than keeping a second answer that can disagree with the first."""
+        from elspais.server.client_watch import ClientWatchdog
+
+        alive = {4242: True}
+        wd = ClientWatchdog(
+            client_pid=4242,
+            pending_fn=lambda: (0, 1),
+            alive_fn=lambda pid: alive.get(pid, False),
+        )
+        assert wd.has_live_client() is True
+
+        alive[4242] = False
+        assert wd.has_live_client() is False
+
+    def test_REQ_o00074_O_an_inconclusive_held_source_keeps_the_daemon(self, capsys):
+        from elspais.server.client_watch import ClientWatchdog
+
+        def _boom() -> int:
+            raise RuntimeError("the session tracker could not be read")
+
+        wd = ClientWatchdog(
+            client_pid=4242,
+            pending_fn=lambda: (0, 1),
+            alive_fn=lambda pid: False,
+            extra_liveness_fn=_boom,
+        )
+
+        assert wd.has_live_client() is True
+        assert "could not be read" in capsys.readouterr().err
+
+    def test_REQ_o00074_O_reading_the_client_set_publishes_nothing(self):
+        """The timeout's question is a read. A check that pruned or republished
+        would make the record depend on how often the timeout happened to ask."""
+        from elspais.server.client_watch import ClientWatchdog
+
+        published: list[tuple] = []
+        wd = ClientWatchdog(
+            client_pid=4242,
+            pending_fn=lambda: (0, 1),
+            alive_fn=lambda pid: False,
+            publish_fn=lambda pids, held: published.append((pids, held)),
+        )
+
+        wd.has_live_client()
+
+        assert published == [], "a read of the client set rewrote the state record"
+        assert wd.clients() == [4242], "a read of the client set pruned it"

@@ -215,6 +215,27 @@ class ClientWatchdog:
             self._clients.add(pid)
         return True
 
+    # Implements: REQ-o00074-O
+    def has_live_client(self) -> bool:
+        """Whether any recorded client still exists. Reads, changes nothing.
+
+        The daemon's client set is this watchdog's business, so anything
+        else that needs the answer — the idle timeout, which must not be
+        the cause of a daemon's termination while a client is there — asks
+        here rather than keeping a second answer that can disagree.
+
+        A read, not a check: it prunes nothing and publishes nothing, so
+        the state record does not depend on how often it is asked. A
+        handle source that cannot be read is inconclusive, which is
+        neither "some" nor "none", and reads as a client being there.
+        """
+        with self._clients_lock:
+            pids = list(self._clients)
+        if any(self._alive_fn(pid) for pid in pids):
+            return True
+        held = self._held_handles()
+        return held is None or held > 0
+
     def clients(self) -> list[int]:
         """Currently recorded client PIDs, for disclosure to callers."""
         with self._clients_lock:

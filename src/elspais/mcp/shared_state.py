@@ -85,9 +85,42 @@ class SharedServerState(dict):
         self._drain_backstop: threading.Timer | None = None
         self._drain_backstop_lock = threading.Lock()
 
+    # Implements: REQ-o00075-B, REQ-o00075-E
     def begin_shutdown(self) -> None:
-        """Mark this process as shutting down. Irreversible by design."""
+        """Mark this process as shutting down. Irreversible by design.
+
+        The state record clients read to find this process is marked too,
+        because from here on it describes a server that answers and
+        refuses: every write is turned away with a message telling the
+        caller to reconnect to a server started on demand, which is untrue
+        while this one is the server a client locates. Marked rather than
+        removed — a record removed while its process still serves is what
+        lets a second daemon boot alongside it.
+
+        Marking is best effort and never raises: a stop that cannot write
+        this is still a stop, and failing here would leave the process
+        neither stopping nor serving.
+        """
+        already = self._shutting_down.is_set()
         self._shutting_down.set()
+        if already:
+            # Reached from every stop path, and more than one can run. The
+            # record already says what this would write.
+            return
+        working_dir = self.get("working_dir")
+        if working_dir is None:
+            return
+        try:
+            from elspais.mcp.daemon import mark_daemon_stopping
+
+            mark_daemon_stopping(working_dir)
+        except Exception as exc:  # never let a stop fail on its own bookkeeping
+            print(
+                f"warning: could not record that this daemon is stopping ({exc!r}); "
+                "a client may reuse it and have its writes refused.",
+                file=sys.stderr,
+                flush=True,
+            )
 
     def request_discard(self) -> None:
         """Record an instruction to drop the work this process holds.

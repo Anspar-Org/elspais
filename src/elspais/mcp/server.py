@@ -7453,7 +7453,21 @@ def run_server(
         if ttl_minutes > 0:
             from elspais.server.middleware import TTLMiddleware
 
-            app.add_middleware(TTLMiddleware, ttl_minutes=ttl_minutes, shared=state.shared)
+            # Implements: REQ-o00074-C, REQ-o00074-O
+            # Looked up on each expiry rather than captured: the watchdog
+            # is built further down, and a daemon started explicitly never
+            # gets one at all — which is how that daemon keeps a lifetime
+            # governed solely by its idle timeout.
+            def _clients_alive() -> bool:
+                watchdog = state.shared.get("watchdog")
+                return watchdog is not None and watchdog.has_live_client()
+
+            app.add_middleware(
+                TTLMiddleware,
+                ttl_minutes=ttl_minutes,
+                shared=state.shared,
+                clients_alive=_clients_alive,
+            )
 
         # Resolve ephemeral port if port=0
         if port == 0:

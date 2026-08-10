@@ -117,12 +117,16 @@ Use `--no-daemon` to force a local graph build (~2-4s).
 
 **Daemon config** (in `.elspais.toml`):
 
-    cli_ttl = 30     # auto-start daemon, exit after 30 min idle (default)
+    cli_ttl = 30     # auto-start daemon, exit after 30 min unused (default)
     cli_ttl = 0      # never auto-launch (manual start only)
     cli_ttl = -1     # auto-start daemon, never timeout
 
-A daemon auto-started this way also ends when the session it was started
-for ends, whatever `cli_ttl` says — see "Daemon lifetime" below.
+`cli_ttl` is the idle timeout for a daemon nobody is using. It does not
+end a daemon that still has a recorded client, however quiet that client
+has been — an agent that applies a change and then reasons for an hour
+sends nothing the whole time, and still has its daemon at the end of it.
+A daemon auto-started for a session ends when that session's clients are
+gone, whatever `cli_ttl` says — see "Daemon lifetime" below.
 
 ## viewer
 
@@ -601,6 +605,27 @@ first check after its last client is gone rather than the instant it
 dies. Client requests do not enter into it: they reset the idle timeout,
 not this check.
 
+**The idle timeout waits for the clients.** While a daemon has a recorded
+client that still exists, `cli_ttl` is not what ends it: the timeout
+expires, finds a client, and starts another idle period. That is what
+makes a connected-but-quiet client safe — a session sitting at a prompt,
+or an agent between mutations, is not a session that has gone. A daemon
+with no recorded client is the one `cli_ttl` governs, which is every
+explicitly started one and any implicit one whose clients could not be
+identified. The trade is deliberate: a daemon with a live client outlives
+the timeout configured for it, and the client-liveness check above is
+what still bounds it.
+
+**A stopping daemon is replaced, not reused.** Between deciding to stop
+and actually going, a daemon still answers — and refuses everything,
+because a write accepted into a shutdown would be acknowledged and then
+lost. It says so in `daemon.json` (`"stopping": true`) from the moment it
+decides. A command that finds that waits for the process to go and then
+starts a fresh daemon; it never starts one alongside, because one working
+tree is served by one process. If the outgoing daemon has not gone within
+20 seconds, the command builds its own graph locally rather than starting
+a second server.
+
 **Unsaved work is saved, not dropped.** If a client-bound daemon still
 holds pending mutations when its last client is gone, it writes to
 `.elspais/daemon.log` naming how many mutations are pending — the real
@@ -625,12 +650,11 @@ dropping them.
 
 **Every way of stopping saves, unless you asked otherwise.** The grace
 deadline above is not the only way a daemon stops, and the others hold
-the same work. An idle timeout firing while a client is alive but quiet,
-and an external stop — `elspais daemon`, a `kill`, a container
-shutting down — both persist pending mutations and leave the same record
-before the process ends. Going quiet is not the same as going away, and
-being told to stop says nothing about what the daemon happens to be
-holding. Being told to discard does:
+the same work. An idle timeout firing on a daemon with no client left, and an
+external stop — `elspais daemon`, a `kill`, a container shutting down —
+both persist pending mutations and leave the same record before the
+process ends. Being told to stop says nothing about what the daemon
+happens to be holding. Being told to discard does:
 
     idle timeout expires, work pending -> SAVE to disk, record it, stop
     stop signal arrives, work pending  -> SAVE to disk, record it, stop

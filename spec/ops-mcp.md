@@ -461,6 +461,8 @@ M. While a daemon is holding a termination open for a grace interval, it SHALL d
 
 N. Where a client's use of a daemon does not result in a recorded handle — because none could be established, or because one the client declared could not be used — the tool SHALL disclose that the daemon's lifetime is not bound to that client, and SHALL name what the client can supply to bind it. The disclosure SHALL NOT repeat for every use.
 
+O. While a daemon has a recorded client that still exists, its idle timeout SHALL NOT be the cause of its termination; the idle timeout governs a daemon with no recorded client.
+
 ### Rationale
 
 A daemon is started implicitly to serve one client and is then detached from it, so nothing in the running process can afterwards say whose disappearance should end it. The handle has to be handed over at start or it is unrecoverable, which is why assertion A fixes the moment rather than the means. What makes a handle a handle is that its disappearance can be observed without the client's cooperation: a client that crashes revokes no token and sends no goodbye, so anything that depends on the client acting at the end fails the case the requirement exists for. A process identifier tested by signalling it, and a connection the client holds open, both satisfy that property; a declared name or label does not, because it never disappears.
@@ -489,8 +491,11 @@ Assertion G's honest-count clause is there because a disclosure that understates
 
 Assertion N exists because a lifetime that is not bound to the client is invisible from the client's side. A daemon that lingers past its usefulness on an idle timeout, and one that dies before the job still using it, both look like arbitrary behaviour unless the client is told which regime it got. Naming what the client can supply is what makes the declared handle discoverable at all — a harness author has no other way to learn that a handle can be declared, or what it must contain — and it turns a bare condition into something actionable, since a job that publishes its runner's handle once at setup gets a daemon whose lifetime matches the job. The disclosure is a warning rather than a refusal at either of the two points a refusal could sit: refusing the command would make the daemon a dependency, which REQ-o00075-G forbids, and declining to use a daemon at all would tax the environments least able to act on the message. It does not repeat for every use, because a warning attached to every invocation is one readers learn to skip, and the second occurrence carries no information the first did not.
 
+Assertion O settles which of a daemon's bounds answers when two of them disagree. Going quiet is not going away: a client that applies a change and then reasons about the next one sends nothing for long stretches, and an idle timeout counts that silence exactly as it counts an empty room. A timeout that cannot tell the two apart takes the daemon from the client least able to notice — one that is mid-task, holding work it has not written, and about to find its server gone. So which regime governs is decided by whether anyone is recorded as using the daemon, not by how recently they last spoke. The cost is real and is stated rather than hidden: a daemon with a live client outlives the idle timeout configured for it, for as long as that client exists. The client-liveness rule is what still bounds it, and assertion E is what makes that bound sufficient — a daemon whose recorded clients are all gone is ended by the same rule that spared it while one remained.
+
 ### Changelog
 
+- 2026-08-10 | dace8fb0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-08 | 870802ca | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-08 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: state the lifetime bound one-directionally, scope the deadline and failure clauses, and refine against the new parents
 - 2026-08-08 | 1c2cc1cf | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -498,7 +503,7 @@ Assertion N exists because a lifetime that is not bound to the client is invisib
 - 2026-08-08 | 81945155 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-07 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: author background daemon lifetime, client-liveness, and unattended-persistence invariants
 
-*End* *Background Daemon Lifetime* | **Hash**: 870802ca
+*End* *Background Daemon Lifetime* | **Hash**: dace8fb0
 ---
 
 ## REQ-o00075: Shared Graph Daemon

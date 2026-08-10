@@ -543,6 +543,88 @@ def clear_automatic_save(repo_root: Path) -> None:
         print(f"warning: could not retire the automatic-save record: {exc}", file=sys.stderr)
 
 
+# Implements: REQ-o00075-B, REQ-o00075-E
+def mark_daemon_stopping(repo_root: Path, pid: int | None = None) -> bool:
+    """Record that the daemon described by the state record is stopping.
+
+    A process that has committed to stopping goes on answering until it
+    actually goes, so being alive no longer distinguishes it from one that
+    will serve. Everything it is handed is refused, and the refusal tells
+    the caller to reconnect to a server that will be started on demand —
+    which is not what happens while this one is still the server a client
+    locates.
+
+    The record is marked rather than removed. Removing it while the
+    process still serves is what lets a successor boot alongside it, and
+    one working tree is served by one process (REQ-o00075-B). It is
+    unlinked once the process is gone, which is stopping's job.
+
+    Only a record describing *this* process is marked. A server holding a
+    private graph — a stdio session, or any process that did not write the
+    record — would otherwise report a daemon as stopping that is serving
+    perfectly well.
+
+    Returns True if the record was marked. Best effort: a stop that could
+    not write this is still a stop, so failure is warned about and never
+    raised into a shutdown already underway.
+    """
+    if pid is None:
+        pid = os.getpid()
+    path = _daemon_json_path(repo_root)
+    try:
+        if not path.is_file():
+            return False
+        info = json.loads(path.read_text())
+        if info.get("pid") != pid:
+            return False
+        info["stopping"] = True
+        path.write_text(json.dumps(info))
+        return True
+    except (json.JSONDecodeError, OSError, TypeError) as exc:
+        print(
+            f"warning: could not record that this daemon is stopping: {exc}. "
+            "A client may reuse it and have its writes refused.",
+            file=sys.stderr,
+        )
+        return False
+
+
+# Implements: REQ-o00075-E
+def daemon_is_stopping(info: dict | None) -> bool:
+    """True when the record says its daemon has committed to stopping."""
+    return bool(info and info.get("stopping"))
+
+
+# Implements: REQ-o00075-B
+def replace_stopping_daemon(repo_root: Path, info: dict, timeout: float = 20.0) -> bool:
+    """Wait for a stopping daemon to go, so a fresh one can take its place.
+
+    The wait is the same one stopping performs, and for the same reason:
+    starting a replacement while the outgoing process still serves would
+    put two processes on one working tree, each holding a graph the other
+    cannot see.
+
+    The record is unlinked only if it still describes the process waited
+    on. A successor that has already registered owns the record by then,
+    and clearing it would hide a daemon that is serving.
+
+    Returns False when the daemon did not go, in which case the caller has
+    neither a daemon to reuse nor leave to start one.
+    """
+    if not wait_for_daemon_exit(info, timeout=timeout):
+        print(
+            f"warning: the daemon (pid {info.get('pid')}) is stopping but had not "
+            f"gone after {timeout:.0f}s. It refuses writes, and starting a second "
+            "one for this working tree would split the graph between two processes.",
+            file=sys.stderr,
+        )
+        return False
+    current = get_daemon_info(repo_root)
+    if current and current.get("pid") == info.get("pid"):
+        _daemon_json_path(repo_root).unlink(missing_ok=True)
+    return True
+
+
 def get_daemon_info(repo_root: Path) -> dict | None:
     """Read daemon.json and verify the process is alive.
 
@@ -1121,6 +1203,20 @@ def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
     Restarts the daemon if its version or config hash doesn't match.
     """
     info = get_daemon_info(repo_root)
+    # Implements: REQ-o00075-B, REQ-o00075-E
+    # A daemon that has committed to stopping passes every liveness check
+    # and refuses everything it is handed. Wait for it and start a fresh
+    # one; do not hand it out, and do not start alongside it. The wait
+    # happens here rather than inside the start path because that path
+    # discards the answer, and a daemon that will not go has to stop the
+    # start rather than be spawned past.
+    if daemon_is_stopping(info):
+        if not replace_stopping_daemon(repo_root, info):
+            raise RuntimeError(
+                "The daemon serving this working tree is stopping and has not gone. "
+                "Starting a second one would split the graph between two processes."
+            )
+        info = None
     if info:
         # Version check: restart if daemon is from a different elspais version
         from elspais import __version__
