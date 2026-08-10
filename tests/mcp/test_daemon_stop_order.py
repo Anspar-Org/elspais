@@ -197,3 +197,35 @@ class TestStopDistinguishesGoneFromRefusing:
         finally:
             proc.kill()
             proc.wait()
+
+
+class TestStartRefusesToJoinALiveDaemon:
+    def test_REQ_o00075_B_start_refuses_when_the_predecessor_will_not_go(self, tmp_path):
+        """Validates REQ-o00075-B: at most one process serves a working tree.
+        Callers stop the old daemon before starting a new one, so this guard
+        is unreachable through them -- which is the point. The invariant
+        cannot rest on every future caller of a function named start_daemon
+        remembering to check first."""
+        import pytest as _pytest
+
+        from elspais.mcp.daemon import start_daemon
+
+        proc = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                "import signal,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);"
+                "print('ready',flush=True);time.sleep(30)",
+            ],
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+        assert proc.stdout.readline().strip() == "ready"
+        record = _write_record(tmp_path, proc.pid)
+        try:
+            with _pytest.raises(RuntimeError, match="did not stop"):
+                start_daemon(tmp_path, ttl_minutes=30)
+            assert record.exists(), "the live daemon's record must survive the refusal"
+        finally:
+            proc.kill()
+            proc.wait()

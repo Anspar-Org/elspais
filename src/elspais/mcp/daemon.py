@@ -688,9 +688,23 @@ def start_daemon(
             the daemon watches it and shuts down after the session
             exits. None (explicit starts) keeps TTL-only lifetime.
     """
-    # Stop any existing server before overwriting daemon.json.
-    # Without this, the old server becomes an undiscoverable orphan.
-    stop_daemon(repo_root)
+    # Stop any existing server before overwriting daemon.json. Without
+    # this, the old server becomes an undiscoverable orphan.
+    #
+    # Implements: REQ-o00075-B
+    # And refuse if it would not go. Every caller today checks this for
+    # itself and reaches here with the tree already clear, so this guard
+    # is unreachable in practice -- which is exactly why it belongs here.
+    # "At most one process per working tree" cannot rest on every future
+    # caller of a function named start_daemon remembering to stop one
+    # first; the function that would break the invariant is the one that
+    # has to hold it.
+    if stop_daemon(repo_root) is StopOutcome.STILL_RUNNING:
+        raise RuntimeError(
+            "Refusing to start a daemon for this working tree: the one already "
+            "serving it did not stop. Two daemons would split the graph between "
+            "two processes, and neither would see the other's unsaved work."
+        )
 
     # Implements: REQ-o00074-N
     # A fresh daemon is a fresh account of its own client set, so it
