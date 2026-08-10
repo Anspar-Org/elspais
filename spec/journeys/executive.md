@@ -13,7 +13,7 @@ Validates: REQ-p00003, REQ-p00006
 
 ## Steps
 
-1. Priya asks the project manager to generate the interactive traceability view with `elspais trace --view --embed-content`.
+1. Priya asks the project manager to generate the interactive traceability view with `elspais viewer --static --embed-content`.
 2. She opens the HTML dashboard in her browser and reviews the high-level statistics: total requirements, coverage percentage, and status breakdown.
 3. She navigates to the regulatory compliance section and confirms all relevant PRD requirements have Active status.
 4. She drills down into the authentication module to spot-check that DEV requirements trace back to the PRD.

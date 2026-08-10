@@ -68,7 +68,7 @@ Validates: REQ-p00001, REQ-p00002, REQ-p00003, REQ-p00004
 3. She runs `elspais checks --spec` to identify any requirements without valid parent links. The report shows no structural orphans.
 4. She runs `elspais -v checks` to perform a comprehensive validation. All format, hierarchy, and traceability checks pass.
 5. She generates a complete traceability matrix with `elspais trace --format csv -o audit-trace.csv` for inclusion in the validation package.
-6. She generates the HTML version with `elspais trace --view --embed-content` to review the full requirement text in context.
+6. She generates the HTML version with `elspais viewer --static --embed-content` to review the full requirement text in context.
 7. She reviews the git history for the spec directory to confirm all changes follow the project's change control process.
 8. She documents her findings in the validation report, attaching the traceability matrix and validation output as evidence.
 

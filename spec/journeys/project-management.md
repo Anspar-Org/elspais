@@ -13,7 +13,7 @@ Validates: REQ-p00003, REQ-p00004, REQ-p00006
 
 ## Steps
 
-1. Elvira runs `elspais trace --view` to generate an interactive HTML traceability view.
+1. Elvira runs `elspais viewer --static` to generate an interactive HTML traceability view.
 2. She opens the HTML file in her browser and navigates to the reporting module requirements.
 3. She expands the hierarchy for REQ-p00005 to see all OPS and DEV children.
 4. She runs `elspais changed` to see which spec files have been modified during the sprint.
