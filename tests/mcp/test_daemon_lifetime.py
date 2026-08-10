@@ -1985,3 +1985,36 @@ class TestIdleTimeoutSparesADaemonInUse:
 
         assert published == [], "a read of the client set rewrote the state record"
         assert wd.clients() == [4242], "a read of the client set pruned it"
+
+
+class TestStoppingDaemonStopsAdvertising:
+    def test_REQ_o00074_B_publishing_preserves_a_stopping_mark(self, tmp_path):
+        """Validates REQ-o00074-B: the record a client reads to find a daemon
+        must describe the process it would reach, so a mark saying it is
+        stopping must survive anything else that writes the record.
+
+        Publishing read-modify-writes, so a publish that starts AFTER the mark
+        preserves it -- pinned here because that is what keeps the remaining
+        exposure to a publish already in flight when the mark lands, rather
+        than to every publish that follows one."""
+        import json
+        import os
+
+        from elspais.mcp.daemon import (
+            _daemon_json_path,
+            daemon_is_stopping,
+            get_daemon_info,
+            mark_daemon_stopping,
+            record_daemon_clients,
+        )
+
+        path = _daemon_json_path(tmp_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"pid": os.getpid(), "port": 41000, "clients": []}))
+
+        mark_daemon_stopping(tmp_path, os.getpid())
+        record_daemon_clients(tmp_path, [4242], 0)
+
+        info = get_daemon_info(tmp_path)
+        assert daemon_is_stopping(info), "a later publish erased the stopping mark"
+        assert info["clients"] == [{"kind": "pid", "id": 4242}]

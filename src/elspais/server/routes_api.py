@@ -1163,7 +1163,10 @@ async def api_attach_client(request: Request) -> JSONResponse:
     clients = watchdog.clients()
     tracker = state.shared.get("session_tracker")
     held = tracker.held() if tracker is not None else 0
-    if attached:
+    if attached and not state.shared.is_shutting_down:
+        # Same rule as every other write once this process has committed to
+        # stopping: it does not update its own advertisement, because the
+        # record now says it is stopping and a client needs to read that.
         from elspais.mcp.daemon import record_daemon_clients
 
         record_daemon_clients(state.repo_root, clients, held)

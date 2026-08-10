@@ -7543,6 +7543,15 @@ def run_server(
             def _publish_clients(pids: list[int], held: int) -> None:
                 from elspais.mcp.daemon import record_daemon_clients
 
+                # A process that has committed to stopping does not update
+                # its own advertisement. This is the rule that already
+                # refuses graph writes once `is_shutting_down` is raised,
+                # applied to the one write that escaped it: publishing
+                # read-modify-writes the record, so a mark landing between
+                # its read and its write was silently dropped, and nothing
+                # ever re-marks it.
+                if state.shared.is_shutting_down:
+                    return
                 record_daemon_clients(working_dir, pids, held)
 
             interval = float(_os.environ.get("_ELSPAIS_CLIENT_CHECK_INTERVAL", "60"))
