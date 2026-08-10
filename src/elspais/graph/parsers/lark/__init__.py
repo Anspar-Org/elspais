@@ -69,11 +69,11 @@ class GrammarFactory:
                 file declares only identifiers its own repository owns, so
                 its grammar stays narrow.
         """
-        # Every fragment comes from the one derivation authority (REQ-d00268-C),
+        # Every fragment comes from the one derivation authority (REQ-d00212-G),
         # so the grammar this parser recognises and the identifiers the resolver
         # accepts cannot drift apart.  A federated fragment alternates each
         # member's own derivation rather than merging configurations
-        # (REQ-d00268-E).
+        # (REQ-d00251-J).
         g = self._resolver.grammar()
 
         tokens: dict[str, str] = {

@@ -1163,7 +1163,7 @@ class TestValidatesEdges:
 class TestMultiAssertionExpansion:
     """Tests for multi-assertion expansion in GraphBuilder.
 
-    Validates REQ-d00081-D, REQ-d00081-G and REQ-d00268-A:
+    Validates REQ-d00081-D, REQ-d00081-G and REQ-d00212-G:
     Multi-assertion compact references (e.g. REQ-p00001-A+B+C) are expanded
     into individual assertion references during link resolution.
     """
@@ -1241,7 +1241,7 @@ class TestMultiAssertionExpansion:
             pytest.fail("Expected edge from REQ-p00001 to code:src/auth.py:10 not found")
 
     def test_REQ_d00081_E_custom_separator_works(self):
-        """REQ-d00268-A: Custom separator '&' expands REQ-p00001-A&B&C correctly."""
+        """REQ-d00212-G: Custom separator '&' expands REQ-p00001-A&B&C correctly."""
         builder = GraphBuilder(multi_assertion_separator="&")
         builder.add_parsed_content(
             make_requirement(

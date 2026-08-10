@@ -49,7 +49,7 @@ C. [Removed - named a list of accepted alternate separators that no longer exist
 
 D. A multi-*Assertion* reference SHALL expand to the same set of individual references wherever it is written.
 
-E. [Removed - superseded by REQ-d00268-A, which makes the multi-*Assertion* expansion pattern one of the fragments the single derivation authority produces.]
+E. [Removed - restated the derivation of a pattern rather than an obligation the tool must meet. What a multi-*Assertion* reference expands to is D; which strings the grammar admits is REQ-d00212-G.]
 
 F. [Removed - an empty separator is not a configurable state. A separator is exactly one character, per REQ-d00251-I, so there is no value of it that disables expansion.]
 
@@ -61,6 +61,7 @@ The previous implementation hardcoded expansion in RequirementParser only, using
 
 ### Changelog
 
+- 2026-08-10 | c40a462e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | 67ee3df9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: A and B name the configured separator, D states expansion uniformity; retire E (superseded) and F (empty is not a state)
 - 2026-08-10 | e001c08a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -69,7 +70,7 @@ The previous implementation hardcoded expansion in RequirementParser only, using
 - 2026-05-11 | 313fe52b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 313fe52b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Multi-Assertion Reference Expansion* | **Hash**: 67ee3df9
+*End* *Multi-Assertion Reference Expansion* | **Hash**: c40a462e
 ---
 
 ## REQ-d00082: Unified Reference Configuration
@@ -80,7 +81,7 @@ The system SHALL provide a unified, configurable reference pattern system used b
 
 ### Assertions
 
-D. [Removed - named a configurable case-matching mode that does not exist. Which parts of an identifier carry significant case is a property of the grammar, stated in REQ-d00268-G.]
+D. [Removed - named a configurable case-matching mode that does not exist. An identifier is admitted in one spelling only, per REQ-d00212-G, so there is no case-matching mode to configure.]
 
 E. Locating a reference in a source file SHALL use the separator the repository owning the referenced identifier configures, so that a reference is recognised in exactly the form that repository writes and in no other.
 
@@ -104,6 +105,7 @@ Different projects use different ID conventions, comment styles, and directory s
 
 ### Changelog
 
+- 2026-08-10 | f0808bb9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | 268cdb9f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: retire D and F, which named configuration that does not exist; G states the parts a read reference yields
 - 2026-08-10 | 6289e433 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -113,7 +115,7 @@ Different projects use different ID conventions, comment styles, and directory s
 - 2026-05-11 | 89956cd7 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 89956cd7 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Unified Reference Configuration* | **Hash**: 268cdb9f
+*End* *Unified Reference Configuration* | **Hash**: f0808bb9
 ---
 
 ## REQ-d00084: Trace Command

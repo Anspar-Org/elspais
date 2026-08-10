@@ -175,7 +175,7 @@ class TestMultiAssertionPipelineExpansion:
 
     Validates REQ-d00081-D: Spec files using multi-assertion syntax expand into
     individual edges.
-    Validates REQ-d00268-A: Code comments using multi-assertion syntax also expand
+    Validates REQ-d00212-G: Code comments using multi-assertion syntax also expand
     (proving centralization).
     Validates REQ-d00081-G: When separator is empty/disabled, no expansion occurs.
     """

@@ -154,7 +154,7 @@ G. A repository's identifier configuration SHALL admit exactly one spelling of a
 
 H. `HierarchyConfig` SHALL contain only boolean flags (`allow_circular`, `allow_structural_orphans`, `allow_orphans`, `cross_repo_implements`). Per-level implement rules SHALL be defined in `LevelConfig.implements` instead. The model SHALL be strict (`extra="forbid"`).
 
-I. [Removed - named a references section of the configuration that does not exist. Identifier grammar is configured under identifier patterns, and case significance is a property of the grammar rather than a setting, per REQ-d00268-G.]
+I. [Removed - named a references section of the configuration that does not exist. Identifier grammar is configured under identifier patterns, and an identifier is admitted in one spelling only, per REQ-d00212-G.]
 
 J. `ProjectConfig` SHALL contain only `namespace` and `name`. The `version` and `type` fields SHALL be removed.
 
@@ -186,6 +186,7 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 
 ### Changelog
 
+- 2026-08-10 | 52cce4c8 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | d2250c7d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: retire I, which named a references section that does not exist
 - 2026-08-10 | 3b50127c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -201,7 +202,7 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 - 2026-03-30 | db4ad28c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-03-29 | c75b87f8 | - | Michael Lewis (<michael@anspar.org>) | Add assertion N for config migration v3 to v4
 
-*End* *Config Schema v3 Models* | **Hash**: d2250c7d
+*End* *Config Schema v3 Models* | **Hash**: 52cce4c8
 ---
 
 ## REQ-d00251: Component Style Vocabulary and Assertion Separator
@@ -234,6 +235,8 @@ J. The multi-*Assertion* separator SHALL NOT be a character that can legally app
 
 I. The *Assertion* separator and the multi-*Assertion* separator SHALL each be exactly one character. A configuration declaring either as empty, or as longer than one character, SHALL be rejected at validation time.
 
+J. A repository's identifier grammar SHALL be derived from that repository's own identifier configuration, so that a process holding several repositories at once applies each repository's grammar only to that repository.
+
 ### Rationale
 
 An identifier is read left to right, so every boundary inside it has to be findable without knowing what follows. A separator drawn from the characters a component may itself contain destroys that boundary: the component absorbs the separator and the label after it, and the reference resolves to a different requirement rather than failing. The result is a wrong answer, not an error, which is why this is rejected at validation time rather than warned about later.
@@ -247,6 +250,7 @@ I is what makes F and H decidable. Both are stated over *a character*, which lea
 ### Changelog
 
 - 2026-08-10 | e4e4a5fc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | 534a01d7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | 3632edb9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: separators are exactly one character (K)
 - 2026-08-08 | 7a2823ed | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -261,9 +265,9 @@ I is what makes F and H decidable. Both are stated over *a character*, which lea
 
 ## REQ-d00268: Single-Authority Identifier Grammar Derivation
 
-**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+**Level**: dev | **Status**: Superseded | **Implements**: REQ-p00002
 
-A repository's identifier grammar is derived in one place. The canonical identifier pattern, the component sub-pattern, the *Assertion* label pattern, the boundary between component and *Assertion* suffix, and the expansion of a multi-*Assertion* reference all come from one authority reading that repository's identifier configuration, so that every surface which recognises, parses, or expands an identifier answers for exactly the same set of strings.
+This requirement stated an implementation structure rather than a property of the tool. Deriving the identifier grammar in one place is an engineering rule, and it lives with the other such rules rather than as an obligation the tool can be measured against. The one property it carried that is observable — that each repository's grammar applies only to that repository's identifiers — is REQ-d00251-J. Which strings a configuration admits, and what becomes of a string spelled any other way, are REQ-d00212-G and REQ-d00212-R.
 
 ### Assertions
 

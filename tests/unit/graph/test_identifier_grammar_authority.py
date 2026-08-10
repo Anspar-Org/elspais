@@ -1,4 +1,4 @@
-# Verifies: REQ-d00268-A, REQ-d00268-B, REQ-d00268-C, REQ-d00268-D
+# Verifies: REQ-d00212-G, REQ-p00014-T
 """One authority derives a repository's identifier grammar.
 
 Several surfaces have to recognise an identifier: the resolver that parses
@@ -106,7 +106,7 @@ KEBAB_DASH = _config(
     ],
 )
 def test_matcher_and_resolver_recognise_the_same_strings(config: dict, probe: str) -> None:
-    # Verifies: REQ-d00268-D
+    # Verifies: REQ-p00014-T
     # The probes are written in the case the configuration prescribes. The
     # matcher reads text tolerantly and hands what it finds to
     # ``normalize_ref`` before anything parses it, so a mis-cased namespace
@@ -145,7 +145,7 @@ def _stub_grammar(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_grammar_fragments_are_reachable_through_the_public_interface() -> None:
-    # Verifies: REQ-d00268-B
+    # Verifies: REQ-d00212-G
     resolver = build_resolver(_config())
     grammar = resolver.grammar()
     for name in (
@@ -166,7 +166,7 @@ def test_grammar_fragments_are_reachable_through_the_public_interface() -> None:
 def test_lark_grammar_builder_takes_its_tokens_from_the_authority(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Verifies: REQ-d00268-C
+    # Verifies: REQ-d00212-G
     resolver = build_resolver(_config())
     _stub_grammar(monkeypatch)
 
@@ -192,7 +192,7 @@ class _Token:
 def test_test_function_matcher_takes_its_pattern_from_the_authority(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Verifies: REQ-d00268-C
+    # Verifies: REQ-d00212-G
     resolver = build_resolver(_config())
     transformer = ReferenceTransformer(resolver, "test_ref")
     _stub_grammar(monkeypatch)
@@ -208,7 +208,7 @@ def test_test_function_matcher_takes_its_pattern_from_the_authority(
 def test_reference_expansion_takes_its_pattern_from_the_authority(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Verifies: REQ-d00268-C
+    # Verifies: REQ-d00212-G
     resolver = build_resolver(_config())
     transformer = ReferenceTransformer(resolver, "code_ref")
     sentinel_re = re.compile(r"ZQX-q[0-9]{4}")
@@ -244,7 +244,7 @@ def _reference_regex(grammar: IdGrammar) -> re.Pattern[str]:
     ],
 )
 def test_underscore_notation_matches_the_same_identifiers(hyphen_spelling: str) -> None:
-    # Verifies: REQ-d00268-A
+    # Verifies: REQ-d00212-G
     resolver = build_resolver(_config())
     hyphen = _reference_regex(resolver.grammar())
     underscore = _reference_regex(resolver.grammar(separator="_"))
@@ -259,7 +259,7 @@ def test_underscore_notation_matches_the_same_identifiers(hyphen_spelling: str) 
 
 
 def test_underscore_notation_rejects_the_hyphen_spelling() -> None:
-    # Verifies: REQ-d00268-A
+    # Verifies: REQ-d00212-G
     """The notation is rendered, not merely tolerated alongside the default."""
     resolver = build_resolver(_config())
     underscore = _reference_regex(resolver.grammar(separator="_"))
@@ -301,7 +301,7 @@ def federation(tmp_path_factory) -> FederatedGraph:
 def test_claim_probe_claims_what_the_resolver_accepts(
     federation: FederatedGraph, probe: str
 ) -> None:
-    # Verifies: REQ-d00268-D
+    # Verifies: REQ-p00014-T
     assert federation._claim_for(probe) == ("lib", "LIB-d00001")
 
 
@@ -317,7 +317,7 @@ def test_claim_probe_claims_what_the_resolver_accepts(
 def test_claim_probe_refuses_what_the_resolver_rejects(
     federation: FederatedGraph, probe: str
 ) -> None:
-    # Verifies: REQ-d00268-D
+    # Verifies: REQ-p00014-T
     resolver = federation._resolver_for(federation._repos["lib"])
     assert resolver is not None
     assert not resolver.is_local_id(probe), "probe must be one the owning resolver rejects"
@@ -376,7 +376,7 @@ def _matcher_recognises(resolver: IdResolver, text: str) -> bool:
 def test_normalize_ref_settles_case_the_grammar_does_not_own(
     config: dict, raw: str, expected: str, local: bool
 ) -> None:
-    # Verifies: REQ-d00268-D
+    # Verifies: REQ-p00014-T
     resolver = build_resolver(config)
 
     normalized = resolver.normalize_ref(raw)
@@ -398,7 +398,7 @@ def test_normalize_ref_settles_case_the_grammar_does_not_own(
     ],
 )
 def test_matcher_and_resolver_agree_after_normalization(variant: str) -> None:
-    # Verifies: REQ-d00268-D
+    # Verifies: REQ-p00014-T
     """Whatever the matcher recognises, the resolver claims once normalized.
 
     The matcher compiles case-insensitively and the resolver parses
@@ -433,7 +433,7 @@ def test_matcher_and_resolver_agree_after_normalization(variant: str) -> None:
     ],
 )
 def test_normalize_ref_leaves_what_it_cannot_claim_untouched(config: dict, raw: str) -> None:
-    # Verifies: REQ-d00268-D
+    # Verifies: REQ-p00014-T
     resolver = build_resolver(config)
 
     normalized = resolver.normalize_ref(raw)
@@ -451,7 +451,7 @@ def test_normalize_ref_leaves_what_it_cannot_claim_untouched(config: dict, raw: 
     ],
 )
 def test_every_assertion_label_is_canonicalized(raw: str, expected: str) -> None:
-    # Verifies: REQ-d00268-D
+    # Verifies: REQ-p00014-T
     """A multi-assertion reference is a list of labels, each one settled."""
     resolver = build_resolver(NUMERIC)
 
@@ -495,7 +495,7 @@ NUMERIC_LABELS = _config(assertions={"label_style": "numeric"})
 def test_a_test_function_name_yields_an_identifier_the_resolver_accepts(
     config: dict, function_name: str, expected: str
 ) -> None:
-    # Verifies: REQ-d00268-D
+    # Verifies: REQ-p00014-T
     """What the reader picks out of a name must be one the resolver parses.
 
     A test function name spells every boundary as an underscore, so the
@@ -518,7 +518,7 @@ def test_a_test_function_name_yields_an_identifier_the_resolver_accepts(
 
 
 def test_case_tolerance_of_a_label_ends_where_the_notation_runs_out() -> None:
-    # Verifies: REQ-d00268-D
+    # Verifies: REQ-p00014-T
     """Only a second label needs its case to be told from a following word.
 
     Both notations separate the component from the first label with a
@@ -572,7 +572,7 @@ def test_case_tolerance_of_a_label_ends_where_the_notation_runs_out() -> None:
 def test_a_component_style_folds_onto_the_templates_own_separators(
     config: dict, function_name: str, expected: str
 ) -> None:
-    # Verifies: REQ-d00268-D
+    # Verifies: REQ-p00014-T
     """A test name under a case-style component yields an identifier that parses.
 
     The reader recognises the name through the grammar re-rendered in
@@ -600,7 +600,7 @@ def test_a_component_style_folds_onto_the_templates_own_separators(
     ],
 )
 def test_normalize_ref_folds_a_case_style_component(config: dict, raw: str, expected: str) -> None:
-    # Verifies: REQ-d00268-D
+    # Verifies: REQ-p00014-T
     resolver = build_resolver(config)
 
     normalized = resolver.normalize_ref(raw)
@@ -610,7 +610,7 @@ def test_normalize_ref_folds_a_case_style_component(config: dict, raw: str, expe
 
 
 def test_underscore_notation_still_reads_two_labels() -> None:
-    # Verifies: REQ-d00268-D
+    # Verifies: REQ-p00014-T
     """The notation spells both boundaries as `_`, so the split is searched for.
 
     A head that already carries a label is not the boundary; the longest head
@@ -633,7 +633,7 @@ def test_underscore_notation_still_reads_two_labels() -> None:
 def test_component_regex_honours_an_alternate_internal_separator(
     style: str, expected_spelling: str
 ) -> None:
-    # Verifies: REQ-d00268-A
+    # Verifies: REQ-d00212-G
     """A case-style's internal punctuation is a parameter of the one authority.
 
     A notation that cannot spell the style's own character substitutes its
