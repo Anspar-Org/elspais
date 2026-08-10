@@ -83,7 +83,9 @@ from elspais.graph.terms import TermDictionary
 from elspais.mcp.search import ParsedQuery, matches_node, parse_query, score_node
 from elspais.mcp.shared_state import (
     SharedServerState,
+    arm_drain_backstop,
     attach_dirty_sentinel,
+    cancel_drain_backstop,
     finalize_shutdown,
     persist_pending,
     rebuild_shared_graph,
@@ -7567,8 +7569,20 @@ def run_server(
             thread, once the loop has stopped.
             """
 
+            # Implements: REQ-p00083-A, REQ-p00083-D
+            # This is the handler a stop signal actually reaches while the
+            # server is serving — uvicorn installs it for the duration of
+            # serve(). A client holding an MCP stream, or any request that
+            # never completes, keeps the drain below from ever ending, so
+            # the accounting after serve() would never run and the work
+            # would sit in a process that has already stopped serving.
+            # Arming the bound here is what ends that. Only a timer is
+            # armed: this runs in signal context on the event loop thread.
             def handle_exit(self, sig: int, frame: Any) -> None:
                 state.shared.begin_shutdown()
+                arm_drain_backstop(
+                    state.shared, trigger="an operator or timeout stopped the server"
+                )
                 super().handle_exit(sig, frame)
 
         # Implements: REQ-p00083-A
@@ -7592,9 +7606,17 @@ def run_server(
         # the narrow window before uvicorn captures anything, where the
         # signal has to reach the server as a request to stop rather than
         # be swallowed.
+        #
+        # A handler may only arm a timer. A client holding an MCP stream
+        # keeps an in-flight GET open, so the drain below can wait for it
+        # forever and this routine's `finally` never runs; the bound armed
+        # here accounts for the work and ends the process instead. Doing
+        # that work inline would run it in signal context while the event
+        # loop holds locks.
         def _absorb_stop_signal(signum: int, frame: Any) -> None:
             state.shared.begin_shutdown()
             server.should_exit = True
+            arm_drain_backstop(state.shared, trigger="an operator or timeout stopped the server")
 
         import signal as _signal
 
@@ -7603,5 +7625,10 @@ def run_server(
         try:
             anyio.run(server.serve)
         finally:
+            # serve() returning means the drain finished, so the bound has
+            # nothing left to bound. Cancelled BEFORE the accounting below,
+            # not after: a save slower than the window would otherwise be
+            # cut short by a backstop firing on a drain that succeeded.
+            cancel_drain_backstop(state.shared)
             trigger = "the server stopped serving requests"
             report_shutdown_outcome(finalize_shutdown(state.shared, trigger), trigger)

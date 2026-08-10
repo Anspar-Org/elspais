@@ -261,7 +261,31 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
             port=port,
             log_level="warning" if quiet else "info",
         )
-        server = uvicorn.Server(uvi_config)
+
+        # Implements: REQ-p00083-A, REQ-p00083-D
+        class _ShutdownAwareServer(uvicorn.Server):
+            """Bound the drain from the handler the signal actually reaches.
+
+            uvicorn installs its own stop handler for the duration of
+            serve(), so this — not the handler below — is where an
+            operator's signal lands while the viewer is serving. A request
+            that never completes keeps the drain from ending, and the
+            accounting after serve() would never run. Only a timer is
+            armed here: this runs in signal context on the event loop
+            thread, where waiting for the write lock would hang the
+            process it was meant to save.
+            """
+
+            def handle_exit(self, sig: int, frame: object) -> None:
+                from elspais.mcp.shared_state import arm_drain_backstop
+
+                state.shared.begin_shutdown()
+                arm_drain_backstop(
+                    state.shared, trigger="an operator or timeout stopped the viewer"
+                )
+                super().handle_exit(sig, frame)  # type: ignore[arg-type]
+
+        server = _ShutdownAwareServer(uvi_config)
 
         # Implements: REQ-p00083-A
         # uvicorn re-raises the stop signal it caught once its drain is
@@ -270,9 +294,16 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
         # work it is holding never reaches the routine below that writes
         # it. SIGINT is left alone: its default disposition raises
         # KeyboardInterrupt, which returns through the same path.
+        # A handler may only arm a timer: a browser or an MCP client
+        # holding a request open keeps the drain from ever finishing, and
+        # the accounting below then never runs. The bound armed here does
+        # that accounting and ends the process instead.
         def _absorb_stop_signal(signum: int, frame: object) -> None:
+            from elspais.mcp.shared_state import arm_drain_backstop
+
             state.shared.begin_shutdown()
             server.should_exit = True
+            arm_drain_backstop(state.shared, trigger="an operator or timeout stopped the viewer")
 
         import signal as _signal
 
@@ -288,8 +319,16 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
         # can therefore be holding unsaved changes when it stops. It runs
         # the same shutdown routine, for the same reason and by the same
         # rules, rather than a second one written to look like it.
-        from elspais.mcp.shared_state import finalize_shutdown, report_shutdown_outcome
+        from elspais.mcp.shared_state import (
+            cancel_drain_backstop,
+            finalize_shutdown,
+            report_shutdown_outcome,
+        )
 
+        # The drain finished, so the bound on it goes before the save
+        # starts — a save slower than the window must not be cut short by
+        # a backstop firing on a shutdown that worked.
+        cancel_drain_backstop(state.shared)
         _trigger = "the server stopped serving requests"
         report_shutdown_outcome(finalize_shutdown(state.shared, _trigger), _trigger)
         daemon_json.unlink(missing_ok=True)
