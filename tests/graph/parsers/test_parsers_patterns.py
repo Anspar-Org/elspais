@@ -1,6 +1,6 @@
 # Verifies: REQ-d00250-A
 # Verifies: REQ-d00131-B
-# Verifies: REQ-d00212-G
+# Verifies: REQ-d00081-D
 """Behavior tests for the shared parser regex patterns.
 
 ``src/elspais/graph/parsers/patterns.py`` holds the fixed patterns the

@@ -628,7 +628,7 @@ class TestSplitAssertionRef:
         result = resolver.split_assertion_ref("not-a-valid-id")
         assert result is None
 
-    # Verifies: REQ-d00212-G
+    # Verifies: REQ-d00081-D
     def test_multi_assertion_ref(self, resolver):
         result = resolver.split_assertion_ref("REQ-p00044-A+B")
         assert result == ("REQ-p00044", "A+B")

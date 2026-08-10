@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-# Implements: REQ-d00212-G
+# Implements: REQ-d00269-E
 def is_empty_comment(text: str, comment_styles: list[str]) -> bool:
     """Check if a line is an empty comment.
 

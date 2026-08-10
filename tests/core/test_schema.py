@@ -50,7 +50,7 @@ def test_unknown_nested_key_rejected():
         ElspaisConfig.model_validate({"scanning": {"bogus_nested": True}})
 
 
-# Verifies: REQ-d00212-G
+# Verifies: REQ-d00212-F
 def test_hyphenated_keys_accepted():
     """TOML hyphenated keys (e.g. 'id-patterns') accepted via aliases."""
     from elspais.config.schema import ElspaisConfig

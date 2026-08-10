@@ -110,12 +110,12 @@ class TestElspaisConfigRestructuring:
 
 
 # ---------------------------------------------------------------------------
-# REQ-d00212-G: IdPatternsConfig changes
+# REQ-d00212-G: one admitted spelling per identifier
 # ---------------------------------------------------------------------------
 
 
 class TestIdPatternsConfigChanges:
-    """Validates REQ-d00212-G: IdPatternsConfig changes."""
+    """Validates REQ-d00212-G: no configuration surface offers a second spelling."""
 
     def test_REQ_d00212_G_no_alternate_separator_fields(self):
         """The accepted-alternates list and the optional-prefix switch are gone.

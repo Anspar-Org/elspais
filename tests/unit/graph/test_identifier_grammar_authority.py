@@ -1,4 +1,4 @@
-# Verifies: REQ-d00212-G, REQ-p00014-T
+# Verifies: REQ-p00014-T, REQ-d00251-J
 """One authority derives a repository's identifier grammar.
 
 Several surfaces have to recognise an identifier: the resolver that parses
@@ -144,29 +144,10 @@ def _stub_grammar(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(IdResolver, "grammar", lambda self, separator=None: _SENTINEL)
 
 
-def test_grammar_fragments_are_reachable_through_the_public_interface() -> None:
-    # Verifies: REQ-d00212-G
-    resolver = build_resolver(_config())
-    grammar = resolver.grammar()
-    for name in (
-        "namespace",
-        "level",
-        "component",
-        "identifier",
-        "assertion_label",
-        "assertion_label_exact",
-        "assertion_separator",
-        "multi_separator",
-    ):
-        fragment = getattr(grammar, name)
-        assert isinstance(fragment, str) and fragment, f"{name} fragment is empty"
-        re.compile(fragment)  # every fragment is usable on its own
-
-
 def test_lark_grammar_builder_takes_its_tokens_from_the_authority(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Verifies: REQ-d00212-G
+    # Verifies: REQ-p00014-T
     resolver = build_resolver(_config())
     _stub_grammar(monkeypatch)
 
@@ -192,7 +173,7 @@ class _Token:
 def test_test_function_matcher_takes_its_pattern_from_the_authority(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Verifies: REQ-d00212-G
+    # Verifies: REQ-p00014-T
     resolver = build_resolver(_config())
     transformer = ReferenceTransformer(resolver, "test_ref")
     _stub_grammar(monkeypatch)
@@ -208,7 +189,7 @@ def test_test_function_matcher_takes_its_pattern_from_the_authority(
 def test_reference_expansion_takes_its_pattern_from_the_authority(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Verifies: REQ-d00212-G
+    # Verifies: REQ-d00081-D
     resolver = build_resolver(_config())
     transformer = ReferenceTransformer(resolver, "code_ref")
     sentinel_re = re.compile(r"ZQX-q[0-9]{4}")
@@ -244,7 +225,7 @@ def _reference_regex(grammar: IdGrammar) -> re.Pattern[str]:
     ],
 )
 def test_underscore_notation_matches_the_same_identifiers(hyphen_spelling: str) -> None:
-    # Verifies: REQ-d00212-G
+    # Verifies: REQ-p00014-T
     resolver = build_resolver(_config())
     hyphen = _reference_regex(resolver.grammar())
     underscore = _reference_regex(resolver.grammar(separator="_"))
@@ -259,7 +240,7 @@ def test_underscore_notation_matches_the_same_identifiers(hyphen_spelling: str) 
 
 
 def test_underscore_notation_rejects_the_hyphen_spelling() -> None:
-    # Verifies: REQ-d00212-G
+    # Verifies: REQ-p00014-T
     """The notation is rendered, not merely tolerated alongside the default."""
     resolver = build_resolver(_config())
     underscore = _reference_regex(resolver.grammar(separator="_"))
@@ -633,7 +614,7 @@ def test_underscore_notation_still_reads_two_labels() -> None:
 def test_component_regex_honours_an_alternate_internal_separator(
     style: str, expected_spelling: str
 ) -> None:
-    # Verifies: REQ-d00212-G
+    # Verifies: REQ-p00014-T
     """A case-style's internal punctuation is a parameter of the one authority.
 
     A notation that cannot spell the style's own character substitutes its

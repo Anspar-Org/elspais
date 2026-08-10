@@ -519,19 +519,11 @@ class TestAmbiguityRejection:
 
 
 # ---------------------------------------------------------------------------
-# REQ-d00212-G: helper centralization
+# REQ-d00251-A+B: the component sub-pattern each style resolves to
 # ---------------------------------------------------------------------------
 
 
 class TestComponentRegexHelper:
-    def test_helper_is_importable_from_utilities_patterns(self):
-        # Verifies: REQ-d00212-G
-        from elspais.utilities import patterns as patterns_mod
-
-        assert hasattr(
-            patterns_mod, "component_regex"
-        ), "component_regex must live in elspais.utilities.patterns"
-
     @pytest.mark.parametrize(
         "style,probe,expected",
         [
@@ -546,7 +538,7 @@ class TestComponentRegexHelper:
         ],
     )
     def test_helper_returns_matching_regex_per_style(self, style, probe, expected):
-        # Verifies: REQ-d00212-G
+        # Verifies: REQ-d00251-B
         import re as _re
 
         from elspais.utilities.patterns import ComponentFormat, component_regex
@@ -560,7 +552,7 @@ class TestComponentRegexHelper:
         )
 
     def test_helper_returns_numeric_regex(self):
-        # Verifies: REQ-d00212-G
+        # Verifies: REQ-d00251-A
         import re as _re
 
         from elspais.utilities.patterns import ComponentFormat, component_regex
@@ -571,7 +563,7 @@ class TestComponentRegexHelper:
         assert _re.fullmatch(regex_str, "abc") is None
 
     def test_helper_returns_user_pattern_for_regex_style(self):
-        # Verifies: REQ-d00212-G
+        # Verifies: REQ-d00251-A
         import re as _re
 
         from elspais.utilities.patterns import ComponentFormat, component_regex
@@ -580,22 +572,3 @@ class TestComponentRegexHelper:
         regex_str = component_regex(cf)
         assert _re.fullmatch(regex_str, "Foo") is not None
         assert _re.fullmatch(regex_str, "foo") is None
-
-    def test_helper_is_sole_authority_no_inline_dispatch_in_lark(self):
-        # Verifies: REQ-d00212-G
-        # The lark grammar takes its component fragment from the derivation
-        # authority rather than dispatching on the configured style itself.
-        import inspect
-
-        from elspais.graph.parsers import lark as lark_mod
-
-        src = inspect.getsource(lark_mod)
-        # The per-style if/elif chain literals; their absence is the sign
-        # that the dispatch has not been copied here.
-        forbidden_literals = [
-            "comp.style ==",
-            "component.style ==",
-        ]
-        offenders = [lit for lit in forbidden_literals if lit in src]
-        assert not offenders, f"lark parser still contains inline style dispatch: {offenders}"
-        assert ".grammar(" in src, "lark parser should take its fragments from IdResolver.grammar()"

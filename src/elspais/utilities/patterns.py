@@ -82,7 +82,7 @@ class AssertionFormat:
     separator: str = "-"
 
 
-# Implements: REQ-d00212-G
+# Implements: REQ-d00251-J
 @dataclass(frozen=True)
 class IdGrammar:
     """The regex fragments of one repository's identifier grammar.
@@ -404,7 +404,7 @@ class IdResolver:
             return r"[0-9]{2}" if af.zero_pad else r"[1-9][0-9]?"
         return r"[A-Z]"
 
-    # Implements: REQ-d00212-G+B
+    # Implements: REQ-d00251-J
     def grammar(self, separator: str | None = None) -> IdGrammar:
         """The regex fragments of this repository's identifier grammar.
 
@@ -485,7 +485,7 @@ class IdResolver:
             multi_separator=re.escape(cfg.assertions.multi_separator),
         )
 
-    # Implements: REQ-d00212-G
+    # Implements: REQ-d00081-D
     def multi_assertion_reference_regex(self) -> re.Pattern[str]:
         """Compile the pattern matching an identifier with its assertion suffix.
 
@@ -811,7 +811,10 @@ class IdResolver:
             ]
         return self._ci_forms
 
-    # Implements: REQ-p00014-T
+    # Implements no requirement. Repairing a mis-spelled reference is an
+    # unspecified stop-gap: it contradicts the rule that an identifier
+    # resolves only in the one spelling its configuration admits, and it
+    # goes when test annotations stop depending on it.
     def _canonicalize_case(self, cleaned: str) -> str | None:
         """Rewrite a reference's level code and *Assertion* labels to canonical case.
 
@@ -976,7 +979,7 @@ class IdResolver:
         return instance_id.split(INSTANCE_SEPARATOR, 1)[0]
 
 
-# Implements: REQ-d00269-C, REQ-d00212-G+E
+# Implements: REQ-d00269-C, REQ-d00251-J
 class FederatedIdReader:
     """Reads the identifiers of every repository in one federation.
 
