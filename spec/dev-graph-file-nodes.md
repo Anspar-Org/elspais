@@ -213,6 +213,8 @@ N. The viewer SHALL construct requirement cards and journey cards through a sing
 
 O. Where a card capability — a coverage indicator, a source link, or a body section — is semantically meaningful for more than one card kind, the viewer SHALL present that capability uniformly across those kinds' cards.
 
+P. Where a requirement's content yields no hash under the configured hash mode, `REQUIREMENT` render SHALL emit in the `*End*` marker's hash position a reserved value that no hash computation can produce, marking the content as unhashable rather than as awaiting a hash.
+
 ### Rationale
 
 The render protocol is the inverse of parsing: each node kind knows how to serialize itself back to text. This enables the graph to reconstruct files from its internal state, which is the foundation for render-based persistence. Order-independent *Assertion* hashing ensures that *Assertion* reordering does not trigger false change-detection flags.
@@ -221,10 +223,14 @@ The render contract is elspais's to own: downstream document pipelines that need
 
 Assertions N and O extend the one-canonical-render-per-object principle to the viewer's card presentation. Duplicated per-kind card builders have already produced capability divergence in practice — journey cards lacked the UAT-coverage badge that requirement cards carried — which is the failure mode a single shared path prevents. N forbids the duplicated structure; O states the observable consequence, capability parity: a capability that makes sense for both kinds appears on both, and only genuinely kind-semantic differences (an actor/goal section is meaningful only on a journey card) may distinguish them. How the shared path is decomposed internally is mechanism and deliberately unspecified.
 
+A requirement carrying no *Assertion* offers normalized-text hashing nothing to consume, so its hash position cannot hold a computed value. Leaving that position empty would make such a requirement indistinguishable from one whose hash has never been written, and the two states call for different responses: the first is complete and needs nothing, the second is work an author still owes. Assertion P therefore requires a reserved value to occupy the position. Which token serves as that value is mechanism; what the assertion fixes is that it cannot collide with a computed hash, so that reading an *End* marker answers "unhashable" and "unhashed" differently. Whether format validation accepts the reserved value as discharging a requirement for a hash is the concern of the requirements governing validation, not of this render contract.
+
 Deriving the version from rendered output rather than from a counter means a rebuild that produces identical content produces identical versions, so refreshing the graph does not invalidate every outstanding version held by a client. It also makes the version content-addressed: if a node changes and then changes back, a version captured before the round trip still matches, and correctly so — the state is identical to what its holder observed. A file's version excludes its children's content so that editing prose inside one requirement does not invalidate a pending file-level operation.
 
 ### Changelog
 
+- 2026-08-08 | e701b585 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-09 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-59: author assertion P (reserved value marks unhashable content in the End marker)
 - 2026-08-02 | fd882e78 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | f1f1ab9b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 92b4c498 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -238,7 +244,7 @@ Deriving the version from rendered output rather than from a counter means a reb
 - 2026-05-11 | c004c62e | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | c004c62e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Render Protocol for Graph Nodes* | **Hash**: fd882e78
+*End* *Render Protocol for Graph Nodes* | **Hash**: e701b585
 ---
 
 ## REQ-d00132: Render-Based Save Operation

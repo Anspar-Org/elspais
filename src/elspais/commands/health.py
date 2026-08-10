@@ -569,7 +569,7 @@ def check_spec_hierarchy_levels(graph: FederatedGraph, config: dict[str, Any]) -
         findings = [
             HealthFinding(
                 message=(
-                    f"{v['child']} ({v['child_level']}) -> " f"{v['parent']} ({v['parent_level']})"
+                    f"{v['child']} ({v['child_level']}) -> {v['parent']} ({v['parent_level']})"
                 ),
                 node_id=v["child"],
                 related=[v["parent"]],
@@ -1162,7 +1162,7 @@ def check_spec_changelog_format(graph: FederatedGraph, config: dict[str, Any]) -
         return HealthCheck(
             name="spec.changelog_format",
             passed=False,
-            message=(f"{len(violations)} changelog entry/entries" f" missing required fields"),
+            message=(f"{len(violations)} changelog entry/entries missing required fields"),
             category="spec",
             severity="error",
             details={"violations": violations[:10]},
@@ -1423,7 +1423,7 @@ def check_unmarked_usage(
         # Implements: REQ-d00223-F
         wrong = item.get("wrong_marking", "")
         if wrong:
-            msg = f"Wrong markup for '{item['term']}' " f"(uses {wrong}) in {item['node_id']}"
+            msg = f"Wrong markup for '{item['term']}' (uses {wrong}) in {item['node_id']}"
         else:
             msg = f"Unmarked usage of '{item['term']}' in {item['node_id']}"
         findings.append(
@@ -2027,8 +2027,8 @@ def run_spec_checks(
 
 
 def _status_flags(args: argparse.Namespace) -> set[str]:
-    """Title-cased set of statuses named via ``--status`` (empty when unset)."""
-    raw: list[str] | None = getattr(args, "status", None)
+    """Title-cased set of statuses named via ``--treat-active`` (empty when unset)."""
+    raw: list[str] | None = getattr(args, "treat_active", None)
     return {s.title() for s in raw} if raw else set()
 
 
@@ -2036,11 +2036,11 @@ def _config_with_status_overlay(
     config: dict[str, Any] | None,
     status_flags: set[str],
 ) -> dict[str, Any] | None:
-    """Config overlay forcing ``expects_implementation=True`` for --status names.
+    """Config overlay forcing ``expects_implementation=True`` for --treat-active names.
 
-    ``--status Draft`` makes Draft count toward coverage (the documented
+    ``--treat-active Draft`` makes Draft count toward coverage (the documented
     capability, ``docs/cli/checks.md``). Rather than a second coverage-inclusion
-    predicate, ``--status`` is expressed as a per-call CONFIG overlay so the ONE
+    predicate, ``--treat-active`` is expressed as a per-call CONFIG overlay so the ONE
     resolver (``status_expects_implementation``) drives both the dimension
     COUNTS (``aggregate_dimension``) and the excluded-NOTE from the same source
     -- they can no longer disagree (REQ-d00258-C).
@@ -2075,11 +2075,11 @@ def _resolve_exclude_status(
     """Statuses treated as coverage-EXCLUDED for the reference-status checks.
 
     This drives ``_check_status_references`` (retired/provisional/aspirational
-    reference flagging): ``--status Draft`` promotes Draft to active-like, so it
+    reference flagging): ``--treat-active Draft`` promotes Draft to active-like, so it
     is removed from this set and Draft references stop being flagged. Coverage
     COUNTS and the excluded-note no longer read this set -- they route through
     ``_config_with_status_overlay`` + ``status_expects_implementation`` so a
-    single resolver keeps them consistent (REQ-d00258-C). Without ``--status``,
+    single resolver keeps them consistent (REQ-d00258-C). Without ``--treat-active``,
     the role system supplies the default exclusion set.
     """
     from elspais.config import get_status_roles
@@ -2097,9 +2097,9 @@ def _excluded_note(
 
     A status is 'excluded' iff it does NOT expect implementation under the given
     config -- the SAME resolver (``status_expects_implementation``) that gates
-    ``aggregate_dimension``'s counts (REQ-d00258-C). Passing the ``--status``
+    ``aggregate_dimension``'s counts (REQ-d00258-C). Passing the ``--treat-active``
     overlay here keeps the note and the counts in agreement: a status promoted
-    by ``--status`` (or by ``[statuses.<S>].expects_implementation``) is counted
+    by ``--treat-active`` (or by ``[statuses.<S>].expects_implementation``) is counted
     and therefore NOT listed as excluded.
     """
     from elspais.config import status_expects_implementation
@@ -2133,10 +2133,10 @@ def check_dimension_coverage(
         dimension: One of 'implemented', 'tested', 'verified',
                    'uat_coverage', 'uat_verified'.
         exclude_status: Vestigial; coverage inclusion is now gated entirely by
-            ``config`` (the ``--status`` overlay) via
+            ``config`` (the ``--treat-active`` overlay) via
             ``status_expects_implementation`` (REQ-d00258-C). Retained only for
             call-site signature stability.
-        config: Project config dict (the ``--status`` overlay when applicable).
+        config: Project config dict (the ``--treat-active`` overlay when applicable).
         level_filter: Optional predicate ``(level) -> bool`` limiting which
             requirement levels are counted (see ``aggregate_dimension``).
         message_suffix: Optional clarifying text appended to the message.
@@ -2170,7 +2170,7 @@ def check_dimension_coverage(
     req_pct = (req_with_any / req_count * 100) if req_count > 0 else 0
     direct_pct = (direct_assertions / total_assertions * 100) if total_assertions > 0 else 0
     indirect_pct = (indirect_assertions / total_assertions * 100) if total_assertions > 0 else 0
-    # REQ-d00258-C: note and counts read the SAME config (the --status overlay),
+    # REQ-d00258-C: note and counts read the SAME config (the --treat-active overlay),
     # so a promoted status is counted AND absent from the excluded-note.
     note = _excluded_note(graph, config=config)
 
@@ -2360,7 +2360,7 @@ def _check_status_references(
             if req.kind != NodeKind.REQUIREMENT:
                 continue
             req_status = req.status
-            # If this status was promoted by --status, skip it
+            # If this status was promoted by --treat-active, skip it
             if exclude_status and req_status and req_status not in exclude_status:
                 continue
             if roles_cfg.role_of(req_status) != role:
@@ -2369,8 +2369,7 @@ def _check_status_references(
             findings.append(
                 HealthFinding(
                     message=(
-                        f"{node.id} references {req.id} "
-                        f"(status={req_status}, role={role.value})"
+                        f"{node.id} references {req.id} (status={req_status}, role={role.value})"
                     ),
                     file_path=fn.get_field("relative_path") if fn else None,
                     line=node.get_field("parse_line"),
@@ -2461,10 +2460,18 @@ def run_code_checks(
             graph, NodeKind.CODE, StatusRole.RETIRED, ref_sev.retired, exclude_status
         ),
         _check_status_references(
-            graph, NodeKind.CODE, StatusRole.PROVISIONAL, ref_sev.provisional, exclude_status
+            graph,
+            NodeKind.CODE,
+            StatusRole.PROVISIONAL,
+            ref_sev.provisional,
+            exclude_status,
         ),
         _check_status_references(
-            graph, NodeKind.CODE, StatusRole.ASPIRATIONAL, ref_sev.aspirational, exclude_status
+            graph,
+            NodeKind.CODE,
+            StatusRole.ASPIRATIONAL,
+            ref_sev.aspirational,
+            exclude_status,
         ),
         check_whole_req_only_coverage(graph, config),
     ]
@@ -2935,7 +2942,9 @@ def check_uat_results(graph: FederatedGraph, config: dict[str, Any] | None = Non
 
 
 def run_test_checks(
-    graph: FederatedGraph, exclude_status: set[str] | None = None, config: dict | None = None
+    graph: FederatedGraph,
+    exclude_status: set[str] | None = None,
+    config: dict | None = None,
 ) -> list[HealthCheck]:
     """Run all test file health checks."""
     from elspais.graph import NodeKind
@@ -2953,10 +2962,18 @@ def run_test_checks(
             graph, NodeKind.TEST, StatusRole.RETIRED, ref_sev.retired, exclude_status
         ),
         _check_status_references(
-            graph, NodeKind.TEST, StatusRole.PROVISIONAL, ref_sev.provisional, exclude_status
+            graph,
+            NodeKind.TEST,
+            StatusRole.PROVISIONAL,
+            ref_sev.provisional,
+            exclude_status,
         ),
         _check_status_references(
-            graph, NodeKind.TEST, StatusRole.ASPIRATIONAL, ref_sev.aspirational, exclude_status
+            graph,
+            NodeKind.TEST,
+            StatusRole.ASPIRATIONAL,
+            ref_sev.aspirational,
+            exclude_status,
         ),
     ]
 
@@ -3008,8 +3025,8 @@ def render_section(
     if graph:
         raw_config = config if config else {}
         exclude_status = _resolve_exclude_status(args, config=raw_config)
-        # REQ-d00258-C: --status becomes a coverage-config overlay so dimension
-        # counts AND the excluded-note agree (both read this one overlay).
+        # REQ-d00258-C: --treat-active becomes a coverage-config overlay so
+        # dimension counts AND the excluded-note agree (both read this overlay).
         cov_config = _config_with_status_overlay(raw_config, _status_flags(args))
         for check in run_code_checks(graph, exclude_status=exclude_status, config=cov_config):
             report.add(check)
@@ -3050,11 +3067,10 @@ def compute_checks(
 
     # Build a minimal args namespace for _resolve_exclude_status
     fake_args = argparse.Namespace()
-    status_str = params.get("status", None)
-    fake_args.status = status_str.split(",") if status_str else None
-
+    treat_str = params.get("treat_active", None)
+    fake_args.treat_active = treat_str.split(",") if treat_str else None
     exclude_status = _resolve_exclude_status(fake_args, config=config)
-    # REQ-d00258-C: --status overlay drives coverage counts + note consistently.
+    # REQ-d00258-C: --treat-active overlay drives coverage counts + note consistently.
     cov_config = _config_with_status_overlay(config, _status_flags(fake_args))
 
     # Config checks
@@ -3216,9 +3232,9 @@ def run(args: argparse.Namespace) -> int:
         params["terms_only"] = "true"
     if getattr(args, "lenient", False):
         params["lenient"] = "true"
-    status_filter = getattr(args, "status", None)
-    if status_filter:
-        params["status"] = ",".join(status_filter)
+    treat_active = getattr(args, "treat_active", None)
+    if treat_active:
+        params["treat_active"] = ",".join(treat_active)
 
     spec_dir = getattr(args, "spec_dir", None)
     # Force fresh build when runners just produced new result files.
@@ -3346,9 +3362,9 @@ def _format_report(
 
     # Build active flags summary from args
     flag_parts: list[str] = []
-    status_list = getattr(args, "status", None)
-    if status_list:
-        flag_parts.append("--status " + " ".join(status_list))
+    treat_active_list = getattr(args, "treat_active", None)
+    if treat_active_list:
+        flag_parts.append("--treat-active " + " ".join(treat_active_list))
     if getattr(args, "lenient", False):
         flag_parts.append("--lenient")
     if getattr(args, "spec_only", False):
@@ -3494,8 +3510,7 @@ def _build_hint(report: HealthReport, already_verbose: bool) -> str | None:
         )
     else:
         return (
-            f"Run 'elspais checks{scope} --format json -o health.json'"
-            f" for machine-readable output."
+            f"Run 'elspais checks{scope} --format json -o health.json' for machine-readable output."
         )
 
 
@@ -3511,9 +3526,7 @@ def _build_summary_line(report: HealthReport) -> str:
     elif report.failed == 0 and report.warnings == 0:
         return f"{report.passed}/{counted} checks passed{skip_suffix}"
     elif report.failed == 0:
-        return (
-            f"{report.passed}/{counted} checks passed," f" {report.warnings} warnings{skip_suffix}"
-        )
+        return f"{report.passed}/{counted} checks passed, {report.warnings} warnings{skip_suffix}"
     else:
         return f"UNHEALTHY: {report.failed} errors, {report.warnings} warnings{skip_suffix}"
 

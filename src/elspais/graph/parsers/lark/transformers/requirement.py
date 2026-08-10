@@ -478,12 +478,26 @@ class RequirementTransformer:
         label = entry_text[:dot_idx].strip()
         text_parts = [entry_text[dot_idx + 1 :].strip()]
 
-        # Collect continuation lines (ASSERT_CONT tokens)
+        # Collect continuation lines (ASSERT_CONT tokens).
+        #
+        # A blank line inside an assertion matches the grammar's bare `_NL`
+        # alternative and yields no token, so joining the tokens alone would
+        # silently close the gap — and a blank line is not decoration: it is
+        # what separates a paragraph from a following table, list or fenced
+        # block, without which the block stops rendering as one. Each
+        # ASSERT_CONT matches exactly one line and carries its line number, so
+        # the blank lines are recovered from the gaps between them.
+        expected_line = line_num + 1
         for child in node.children[1:]:
             if isinstance(child, Token) and child.type == "ASSERT_CONT":
+                cont_line = child.line  # type: ignore[attr-defined]
+                if cont_line and cont_line > expected_line:
+                    text_parts.extend([""] * (cont_line - expected_line))
                 text_parts.append(str(child))
+                expected_line = (cont_line or expected_line) + 1
 
-        # Strip trailing blank parts
+        # Strip trailing blank parts: blank lines before the next assertion are
+        # structure between assertions, not content within this one.
         while text_parts and not text_parts[-1].strip():
             text_parts.pop()
 

@@ -194,19 +194,13 @@ def _error_data_from_dict(data: dict[str, Any]) -> ErrorData:
 def compute_errors(
     graph: FederatedGraph, config: dict[str, Any], params: dict[str, str]
 ) -> dict[str, Any]:
-    """Engine-compatible wrapper around collect_errors.
-
-    Params:
-        status: Optional comma-separated statuses to include.
-    """
-    from elspais.commands.health import _resolve_exclude_status
-
-    fake_args = argparse.Namespace()
-    status_str = params.get("status", None)
-    fake_args.status = status_str.split(",") if status_str else None
-
-    exclude_status = _resolve_exclude_status(fake_args, config=config)
-    data = collect_errors(graph, config, exclude_status)
+    """Engine-compatible wrapper around collect_errors."""
+    # This command is the drill-down the health report names for format-rule
+    # and no-assertion detail, and those checks weigh every requirement
+    # whatever its status. The listing therefore excludes nothing: excluding
+    # provisional statuses here would report none of what the summary just
+    # counted, which is the disagreement this command exists to resolve.
+    data = collect_errors(graph, config, exclude_status=set())
 
     result: dict[str, Any] = {}
     for et in _ALL_ERROR_TYPES:
@@ -232,9 +226,6 @@ def run(args: argparse.Namespace) -> int:
     spec_dir = getattr(args, "spec_dir", None)
 
     params: dict[str, str] = {}
-    status = getattr(args, "status", None)
-    if status:
-        params["status"] = ",".join(status)
 
     data = engine_call(
         "/api/run/errors",

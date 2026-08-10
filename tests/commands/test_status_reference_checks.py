@@ -138,10 +138,10 @@ class TestStatusReferenceChecks:
         assert "provisional" in check.findings[0].message
 
     def test_REQ_p00002_A_status_promoted_by_exclude_skips_check(self) -> None:
-        """When Draft is NOT in exclude_status (promoted by --status), no finding."""
+        """When Draft is NOT in exclude_status (promoted by --treat-active), no finding."""
         graph = _build_graph_with_ref("Draft", NodeKind.CODE)
         fg = _wrap(graph)
-        # Simulate --status Draft: remove Draft from excludes
+        # Simulate --treat-active Draft: remove Draft from excludes
         promoted_excludes = _DEFAULT_EXCLUDES - {"Draft"}
         check = _check_status_references(
             fg, NodeKind.CODE, StatusRole.PROVISIONAL, "info", exclude_status=promoted_excludes

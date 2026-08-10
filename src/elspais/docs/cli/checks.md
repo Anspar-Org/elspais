@@ -167,10 +167,12 @@ reference may be stale or premature:
 - **Aspirational** (Roadmap, Future, Idea) — the requirement is planned
   but not committed; references are informational.
 
-**`--status` interaction:** Using `--status Draft` promotes Draft requirements
-to active-like status, so `code.provisional_references` and
-`tests.provisional_references` will not flag Draft references when
-`--status Draft` is used.
+### `--treat-active` interaction
+
+Naming a status with `--treat-active` promotes those requirements to
+active-like status, so `code.provisional_references` and
+`tests.provisional_references` stop flagging references to them —
+`--treat-active Draft` silences the Draft references specifically.
 
 **Configuration** — adjust severity via `[rules.references]` in `.elspais.toml`:
 
@@ -551,9 +553,12 @@ you to `elspais errors` for requirement-level detail:
 elspais errors                     # Show all spec errors
 elspais errors --format markdown   # Markdown table output
 elspais errors --format json       # JSON output
-elspais errors --status Draft      # Include Draft requirements
 elspais errors -o errors.txt       # Write to file
 ```
+
+The drill-down weighs every requirement whatever its status, so it accounts for
+exactly what the two checks above counted. It takes no status option: format
+rules bind a requirement whatever its status, so there is no baseline to widen.
 
 **Example output (text format):**
 
@@ -570,7 +575,6 @@ NO ASSERTIONS (2):
 **Options:**
 
   `--format {text,markdown,json}`  Output format (default: text)
-  `--status STATUS`                Include additional statuses (repeatable)
   `-o, --output PATH`              Write output to file instead of stdout
 
 **Performance:** Uses daemon-first execution like other drill-down commands.
@@ -605,35 +609,34 @@ By default, `checks` and `gaps` only include requirements with **Active** status
 in coverage calculations. Requirements with Draft, Proposed, or other provisional
 statuses are excluded.
 
-Use `--status` to include additional statuses and see what traceability gaps
-would exist if those requirements were promoted to Active:
+Use `--treat-active` to count additional statuses as committed and see what
+traceability gaps would exist if those requirements were promoted to Active:
 
 ```bash
 # Show gaps assuming all Draft requirements were active
-elspais gaps --status Draft
+elspais gaps --treat-active Draft
 
-# Show checks including both Draft and Proposed
-elspais checks --status Draft --status Proposed
+# Show checks counting both Draft and Proposed
+elspais checks --treat-active Draft Proposed
 
 # Combine with gap subcommands
-elspais untested --status Draft
+elspais untested --treat-active Draft
 ```
 
 This is useful for planning: before promoting a batch of Draft requirements,
 run a prospective report to see which ones still need code references, tests,
 or UAT validation.
 
-A promoted status is **counted in the coverage numerator and denominator** and
-is correspondingly **absent from the trailing `[... excluded]` note** — the
-counts and the note always agree. Under the hood `--status <S>` is an overlay
-that forces `expects_implementation = true` for `<S>`, so it is exactly
-equivalent to setting `[statuses.<S>] expects_implementation = true` in
-`.elspais.toml` for the duration of the run (and composes with any such config
-already present).
+A promoted status is counted in the coverage numerator and denominator and is
+correspondingly absent from the trailing `[... excluded]` note — the counts and
+the note always agree. Under the hood `--treat-active <S>` is an overlay that
+forces `expects_implementation = true` for `<S>`, so it is exactly equivalent to
+setting `[statuses.<S>] expects_implementation = true` in `.elspais.toml` for the
+duration of the run (and composes with any such config already present).
 
-The `--status` flag accepts any configured status name (case-insensitive; the
-name is title-cased before matching). See `elspais docs config` for how status
-roles are configured.
+`--treat-active` accepts any configured status name (case-insensitive; the name
+is title-cased before matching). See `elspais docs config` for how status roles
+are configured.
 
 ## Exit Codes
 

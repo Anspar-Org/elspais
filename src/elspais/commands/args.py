@@ -49,8 +49,8 @@ class ChecksArgs:
     lenient: bool = False
     """Allow warnings without affecting exit code."""
 
-    status: list[str] | None = None
-    """Additional statuses to include in coverage (e.g. Draft Proposed)."""
+    treat_active: list[str] | None = None
+    """Treat these statuses as committed, counting them alongside Active."""
 
     include_passing_details: bool = False
     """Show full details for passing checks."""
@@ -81,8 +81,8 @@ class GapsArgs:
     format: Literal["text", "markdown", "json"] = "text"
     """Output format."""
 
-    status: list[str] | None = None
-    """Statuses to include (default: Active)."""
+    treat_active: list[str] | None = None
+    """Treat these statuses as committed, counting them alongside Active."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
@@ -95,8 +95,8 @@ class UncoveredArgs:
     format: Literal["text", "markdown", "json"] = "text"
     """Output format."""
 
-    status: list[str] | None = None
-    """Statuses to include (default: Active)."""
+    treat_active: list[str] | None = None
+    """Treat these statuses as committed, counting them alongside Active."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
@@ -109,8 +109,8 @@ class UntestedArgs:
     format: Literal["text", "markdown", "json"] = "text"
     """Output format."""
 
-    status: list[str] | None = None
-    """Statuses to include (default: Active)."""
+    treat_active: list[str] | None = None
+    """Treat these statuses as committed, counting them alongside Active."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
@@ -123,8 +123,8 @@ class UnvalidatedArgs:
     format: Literal["text", "markdown", "json"] = "text"
     """Output format."""
 
-    status: list[str] | None = None
-    """Statuses to include (default: Active)."""
+    treat_active: list[str] | None = None
+    """Treat these statuses as committed, counting them alongside Active."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
@@ -137,8 +137,8 @@ class FailingArgs:
     format: Literal["text", "markdown", "json"] = "text"
     """Output format."""
 
-    status: list[str] | None = None
-    """Statuses to include (default: Active)."""
+    treat_active: list[str] | None = None
+    """Treat these statuses as committed, counting them alongside Active."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
@@ -161,9 +161,6 @@ class ErrorsArgs:
 
     format: Literal["text", "markdown", "json"] = "text"
     """Output format."""
-
-    status: list[str] | None = None
-    """Statuses to include (default: Active)."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""

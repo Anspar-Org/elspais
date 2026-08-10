@@ -127,7 +127,7 @@ class TestCliArgsDataclasses:
         assert h.tests_only is False
         assert h.format == "text"
         assert h.lenient is False
-        assert h.status is None
+        assert h.treat_active is None
         assert h.include_passing_details is False
         assert h.output is None
 
