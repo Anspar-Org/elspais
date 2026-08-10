@@ -539,3 +539,114 @@ def test_case_tolerance_of_a_label_ends_where_the_notation_runs_out() -> None:
     assert reader.extract_underscored_ref("test_REQ_d00001_a") == "REQ-d00001-A"
 
     assert reader.extract_underscored_ref("test_REQ_d00001_A_note") == "REQ-d00001-A"
+
+
+# ---------------------------------------------------------------------------
+# The underscore notation folds back onto the template's own literals.
+# ---------------------------------------------------------------------------
+#
+# A component style has punctuation of its own, and it is not always the
+# punctuation the canonical template spells its boundaries with. Under a
+# snake_case component the two are `_` and `-`; a fold that rewrites every
+# underscore into the component's character therefore rewrites nothing, and
+# the name the matcher recognised arrives at the resolver unchanged and
+# unclaimed. Folding has to restore each character where it belongs: the
+# template's literals between the parts, the component's own inside it.
+
+
+@pytest.mark.parametrize(
+    "config, function_name, expected",
+    [
+        # snake_case component: the component keeps its `_`, the template's
+        # boundaries go back to `-`.
+        (SNAKE_DASH, "test_REQ_p_data_export_A", "REQ-p-data_export-A"),
+        (SNAKE_DASH, "test_REQ_d_my_long_widget_B", "REQ-d-my_long_widget-B"),
+        (SNAKE_DASH, "test_REQ_p_widget", "REQ-p-widget"),
+        # kebab-case control: here the component's own character happens to
+        # equal the template's, and the component must still be spelled with
+        # it rather than left in the notation it was read in.
+        (KEBAB_DASH, "test_REQ_p_data_export_A", "REQ-p-data-export-A"),
+        (KEBAB_DASH, "test_REQ_p_widget", "REQ-p-widget"),
+    ],
+)
+def test_a_component_style_folds_onto_the_templates_own_separators(
+    config: dict, function_name: str, expected: str
+) -> None:
+    # Verifies: REQ-d00268-D
+    """A test name under a case-style component yields an identifier that parses.
+
+    The reader recognises the name through the grammar re-rendered in
+    underscore notation. If normalization cannot spell the result back in the
+    configured punctuation the resolver refuses it, and the test's own name
+    mints a broken reference to a requirement nothing declares.
+    """
+    resolver = build_resolver(config)
+    reader = FederatedIdReader(resolver)
+
+    extracted = reader.extract_underscored_ref(function_name)
+
+    assert extracted == expected
+    assert resolver.is_local_id(extracted), (
+        f"the reader picked {extracted!r} out of {function_name!r} but the " f"resolver refuses it"
+    )
+
+
+@pytest.mark.parametrize(
+    "config, raw, expected",
+    [
+        (SNAKE_DASH, "REQ_p_data_export_A", "REQ-p-data_export-A"),
+        (SNAKE_DASH, "REQ-p-data_export-A", "REQ-p-data_export-A"),
+        (KEBAB_DASH, "REQ_p_data_export_A", "REQ-p-data-export-A"),
+    ],
+)
+def test_normalize_ref_folds_a_case_style_component(config: dict, raw: str, expected: str) -> None:
+    # Verifies: REQ-d00268-D
+    resolver = build_resolver(config)
+
+    normalized = resolver.normalize_ref(raw)
+
+    assert normalized == expected
+    assert resolver.is_local_id(normalized)
+
+
+def test_underscore_notation_still_reads_two_labels() -> None:
+    # Verifies: REQ-d00268-D
+    """The notation spells both boundaries as `_`, so the split is searched for.
+
+    A head that already carries a label is not the boundary; the longest head
+    that parses without one is, and the remainder are labels joined by the
+    configured multi-separator.
+    """
+    resolver = build_resolver(NUMERIC)
+
+    assert resolver.normalize_ref("REQ_d00001_A_B") == "REQ-d00001-A+B"
+    assert resolver.is_local_id(resolver.normalize_ref("REQ_d00001_A_B"))
+
+
+@pytest.mark.parametrize(
+    "style, expected_spelling",
+    [
+        ("snake_case", "data_export"),
+        ("kebab-case", "data_export"),
+    ],
+)
+def test_component_regex_honours_an_alternate_internal_separator(
+    style: str, expected_spelling: str
+) -> None:
+    # Verifies: REQ-d00268-A
+    """A case-style's internal punctuation is a parameter of the one authority.
+
+    A notation that cannot spell the style's own character substitutes its
+    own, and the pattern has to follow it there rather than being composed a
+    second time by the caller.
+    """
+    from elspais.utilities.patterns import ComponentFormat, component_regex
+
+    comp = ComponentFormat(style=style, digits=0, leading_zeros=False, pattern=None)
+
+    assert re.fullmatch(component_regex(comp, internal_separator="_"), expected_spelling)
+    assert re.fullmatch(component_regex(comp, internal_separator="/"), "data/export")
+    if style == "kebab-case":
+        # Without the parameter the style's own character is what is demanded.
+        assert re.fullmatch(component_regex(comp), "data-export")
+        assert not re.fullmatch(component_regex(comp), "data_export")

@@ -403,7 +403,11 @@ class SpecDirConfig:
 
 # Implements: REQ-d00254-A+B+F
 def _derive_credit_config(targets):
-    """Collapse per-target credit settings into the annotator's global CoverageCreditConfig.
+    """Collapse one repository's per-target credit settings into a CoverageCreditConfig.
+
+    The result governs that repository's evidence only; a federation derives
+    one per member and credits each member's evidence under its own
+    (REQ-d00261-E).
 
     Phase 1: homogeneous targets. assertion_credit = strongest credit_coverage;
     unmatched_credit = "verified" iff any aggregate target; dirs = target cwds;
@@ -936,10 +940,10 @@ def build_graph(
     )
 
     annotate_keywords(graph)
-    # Derive the global coverage-credit config from [[scanning.test.targets]].
-    # Per-target settings are collapsed into one global config (acceptable for
-    # Phase 1 homogeneous targets). Logic lives in _derive_credit_config (pure,
-    # unit-tested independently).
+    # Derive this repository's coverage-credit config from
+    # [[scanning.test.targets]]. Per-target settings are collapsed into one
+    # config for the repository (acceptable for Phase 1 homogeneous targets).
+    # Logic lives in _derive_credit_config (pure, unit-tested independently).
     credit = _derive_credit_config(typed_config.scanning.test.targets)
     # Roll each journey's verifying tests into a journey_verification metric
     # BEFORE coverage, so the per-REQ UAT consumer can read each validating

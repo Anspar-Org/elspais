@@ -20,11 +20,15 @@
         },
         "separator": {
           "default": "-",
+          "maxLength": 1,
+          "minLength": 1,
           "title": "Separator",
           "type": "string"
         },
         "multi_separator": {
           "default": "+",
+          "maxLength": 1,
+          "minLength": 1,
           "title": "Multi Separator",
           "type": "string"
         }

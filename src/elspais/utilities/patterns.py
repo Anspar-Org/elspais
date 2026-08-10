@@ -108,6 +108,16 @@ class IdGrammar:
 STYLE_INTERNAL_SEPARATOR = {"snake_case": "_", "kebab-case": "-"}
 
 
+def _respell(segment: str, separator: str) -> str:
+    """Rewrite a template's literal punctuation into *separator*'s notation.
+
+    One rule, used wherever a notation is rendered: a notation spends its one
+    character on every boundary the template spells with ``-`` or ``_``, and
+    leaves everything else alone.
+    """
+    return "".join(separator if c in "-_" else c for c in segment)
+
+
 def component_regex(component: ComponentFormat, internal_separator: str | None = None) -> str:
     """Resolve a ComponentFormat to its regex string.
 
@@ -259,6 +269,9 @@ class IdResolver:
                 self._reverse_aliases[alias_name][alias_value] = type_code
 
         self._ci_forms: list[tuple[str, re.Pattern, str | None]] | None = None
+        # The same forms rendered in an alternate notation, keyed by the
+        # notation's character. Compiled on first use.
+        self._notation_forms_cache: dict[str, list[tuple[str, re.Pattern, str | None]]] = {}
         # Compile all forms: list of (form_name, compiled_regex, type_alias_name_or_None)
         # type_alias_name is the TypeDef alias name used in the template (e.g., "letter")
         self._forms: list[tuple[str, re.Pattern, str | None]] = []
@@ -307,9 +320,23 @@ class IdResolver:
         m = re.search(r"\{(?:type|level)\.(\w+)\}", template)
         return m.group(1) if m else None
 
-    def _compile_regex(self, template: str) -> re.Pattern:
-        """Compile a template string into a regex for parsing."""
+    def _compile_regex(self, template: str, separator: str | None = None) -> re.Pattern:
+        """Compile a template string into a regex for parsing.
+
+        Args:
+            separator: Compile the template in an alternate notation, where
+                every boundary -- the template's own literals, the component's
+                internal punctuation and the *Assertion* separator -- is
+                spelled with this character. A Python test name can spell them
+                only as ``_``; that is one grammar in two notations, so the
+                notation is a parameter here rather than a second derivation.
+        """
         pattern = template
+        if separator is not None:
+            parts = re.split(r"(\{[^}]+\})", template)
+            pattern = "".join(
+                part if part.startswith("{") else _respell(part, separator) for part in parts
+            )
 
         # {namespace} -> literal match
         pattern = pattern.replace(
@@ -331,20 +358,25 @@ class IdResolver:
                 pattern = pattern.replace(match.group(0), f"(?P<type>{val_alt})")
 
         # {component} -> resolved via the single style→regex helper
-        comp_pattern = component_regex(self.config.component)
+        comp_pattern = component_regex(self.config.component, internal_separator=separator)
         pattern = pattern.replace("{component}", f"(?P<component>{comp_pattern})")
 
         # Assertion suffix (optional)
-        assertion_suffix = self._build_assertion_suffix()
+        assertion_suffix = self._build_assertion_suffix(separator)
         pattern = f"^{pattern}{assertion_suffix}$"
 
         return re.compile(pattern)
 
-    def _build_assertion_suffix(self) -> str:
-        """Build optional assertion suffix regex."""
+    def _build_assertion_suffix(self, separator: str | None = None) -> str:
+        """Build optional assertion suffix regex.
+
+        The multi-*Assertion* separator is not a boundary the notation has to
+        respell -- it is not punctuation an identifier can be embedded behind
+        -- so it stays as configured, matching ``grammar()``.
+        """
         af = self.config.assertions
         label_pat = self._assertion_label_regex_str()
-        sep = re.escape(af.separator)
+        sep = re.escape(separator if separator is not None else af.separator)
         multi = re.escape(af.multi_separator)
         return rf"(?:{sep}(?P<assertions>{label_pat}(?:{multi}{label_pat})*))?"
 
@@ -424,7 +456,7 @@ class IdResolver:
         def _literal(segment: str) -> str:
             if separator is None:
                 return re.escape(segment)
-            return re.escape("".join(separator if c in "-_" else c for c in segment))
+            return re.escape(_respell(segment, separator))
 
         parts = re.split(r"(\{[^}]+\})", cfg.canonical_template)
         identifier = "".join(placeholders[p] if p in placeholders else _literal(p) for p in parts)
@@ -483,6 +515,37 @@ class IdResolver:
                 return self._match_to_parsed_id(m, alias_used)
         return None
 
+    def _notation_forms(self, separator: str) -> list[tuple[str, re.Pattern, str | None]]:
+        """This repository's forms, compiled in *separator*'s notation."""
+        forms = self._notation_forms_cache.get(separator)
+        if forms is None:
+            templates = [("canonical", self.config.canonical_template)]
+            templates.extend(self.config.aliases.items())
+            forms = [
+                (
+                    name,
+                    self._compile_regex(template, separator),
+                    self._extract_type_alias_name(template),
+                )
+                for name, template in templates
+            ]
+            self._notation_forms_cache[separator] = forms
+        return forms
+
+    def _parse_notation(self, raw_id: str, separator: str) -> ParsedId | None:
+        """``parse`` for an identifier spelled in *separator*'s notation.
+
+        The parts come back in the configured spelling, so the result renders
+        canonically without any further rewriting.
+        """
+        if "::" in raw_id:
+            return None
+        for _form_name, regex, alias_used in self._notation_forms(separator):
+            m = regex.match(raw_id)
+            if m:
+                return self._match_to_parsed_id(m, alias_used, separator=separator)
+        return None
+
     def is_local_id(self, raw_id: str) -> bool:
         """Return True if raw_id matches this repo's ID pattern.
 
@@ -492,8 +555,16 @@ class IdResolver:
         """
         return self.parse(raw_id) is not None
 
-    def _match_to_parsed_id(self, m: re.Match, alias_used: str | None) -> ParsedId:
-        """Convert regex match to ParsedId."""
+    def _match_to_parsed_id(
+        self, m: re.Match, alias_used: str | None, separator: str | None = None
+    ) -> ParsedId:
+        """Convert regex match to ParsedId.
+
+        Args:
+            separator: The notation the match was read in. A case-style
+                component's own punctuation was spelled with it, so it is
+                spelled back before anything is rendered from the component.
+        """
         groups = m.groupdict()
         namespace = groups.get("namespace", self.config.namespace)
         raw_type = groups.get("type", "")
@@ -511,6 +582,9 @@ class IdResolver:
 
         # Normalize component (zero-pad if needed)
         comp = self.config.component
+        internal = STYLE_INTERNAL_SEPARATOR.get(comp.style)
+        if separator is not None and internal is not None and component:
+            component = component.replace(separator, internal)
         if comp.style == "numeric" and comp.digits > 0 and comp.leading_zeros:
             component = component.zfill(comp.digits)
 
@@ -846,25 +920,54 @@ class IdResolver:
         """Rewrite an alternate notation onto the configured punctuation.
 
         A reference embedded in a Python identifier can spell every boundary
-        only as ``_``. Folding restores the configured characters: the
-        *Assertion* separator where a label follows, and the component's own
-        punctuation everywhere else.
+        only as ``_``. Folding restores the configured characters, each where
+        it belongs: the template's own literals between the parts, the
+        component's own punctuation inside it, and the *Assertion* separator
+        where a label follows. Which underscore is which cannot be read off
+        the string, so the notation is parsed by the same grammar rendered in
+        it rather than guessed at by substitution -- a component style whose
+        punctuation is already ``_`` would otherwise leave every boundary
+        unfolded and the reference unclaimable.
         """
         if "_" not in raw_ref:
             return raw_ref
-        internal = STYLE_INTERNAL_SEPARATOR.get(self.config.component.style, "-")
         sep = self.config.assertions.separator
-        all_internal = raw_ref.replace("_", internal)
-        if self.parse(all_internal) is not None:
-            # Every underscore was the component's own punctuation.
-            return all_internal
+        multi = self.config.assertions.multi_separator
+
+        parsed = self._parse_notation(raw_ref, "_")
+        if parsed is not None:
+            return self.render_canonical(parsed)
 
         # Otherwise some suffix of the parts are labels. The notation spends
         # its one punctuation character on every boundary, so the split has to
         # be found rather than read: take the longest head that parses as a
         # requirement, and the rest are labels joined by the multi-separator.
+        notation_parts = raw_ref.split("_")
+        for cut in range(len(notation_parts) - 1, 0, -1):
+            head = "_".join(notation_parts[:cut])
+            labels = notation_parts[cut:]
+            parsed_head = self._parse_notation(head, "_")
+            if parsed_head is None or parsed_head.assertions:
+                # A head that already carries labels is not the boundary --
+                # it would leave the remaining labels stranded behind the
+                # wrong separator.
+                continue
+            if all(self.is_valid_assertion_label(label) for label in labels):
+                return self.render_canonical(parsed_head) + sep + multi.join(labels)
+
+        # Nothing parses in either notation. Respell what punctuation can be
+        # placed without a parse, so a reference whose case is what stops it
+        # parsing still reaches case canonicalization downstream.
+        internal = STYLE_INTERNAL_SEPARATOR.get(self.config.component.style, "-")
+        all_internal = raw_ref.replace("_", internal)
+        if self.parse(all_internal) is not None:
+            # Every underscore was the component's own punctuation.
+            return all_internal
+
+        # The same split search over the respelled string, for a component
+        # style that spells its own punctuation outside what the notation
+        # rendering can express.
         parts = raw_ref.split("_")
-        multi = self.config.assertions.multi_separator
         for cut in range(len(parts) - 1, 0, -1):
             head = internal.join(parts[:cut])
             labels = parts[cut:]

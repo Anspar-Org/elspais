@@ -84,13 +84,16 @@ class ComponentConfig(_StrictModel):
         return value
 
 
-# Implements: REQ-d00251-E
+# Implements: REQ-d00251-E, REQ-d00251-I
 class AssertionConfig(_StrictModel):
     label_style: str = "uppercase"
     max_count: int = 26
     zero_pad: bool = False
-    separator: str = "-"
-    multi_separator: str = "+"
+    # A boundary is a character (REQ-d00251-I). The length is constrained on
+    # the field rather than in the model validator so the exported JSON schema
+    # carries it too, and an editor rejects what the runtime would reject.
+    separator: str = Field(default="-", min_length=1, max_length=1)
+    multi_separator: str = Field(default="+", min_length=1, max_length=1)
 
 
 class AssociatedPatternConfig(_StrictModel):
@@ -101,26 +104,98 @@ class AssociatedPatternConfig(_StrictModel):
     separator: str = "-"
 
 
+_PRINTABLE = frozenset(chr(code) for code in range(0x21, 0x7F))
+
+
+def _in_set_chars(items) -> set[str]:
+    """The printable characters a parsed ``[...]`` set admits."""
+    negated = False
+    collected: set[str] = set()
+    for op, av in items:
+        name = str(op)
+        if name == "NEGATE":
+            negated = True
+        elif name == "LITERAL":
+            collected.add(chr(av))
+        elif name == "RANGE":
+            low, high = av
+            collected.update(chr(code) for code in range(low, high + 1))
+        elif name == "CATEGORY":
+            collected |= _category_chars(str(av))
+        elif name == "IN":  # nested set (character class union)
+            collected |= _in_set_chars(av)
+    collected &= _PRINTABLE
+    return (_PRINTABLE - collected) if negated else collected
+
+
+def _category_chars(category: str) -> set[str]:
+    digits = set("0123456789")
+    word = digits | set("abcdefghijklmnopqrstuvwxyz") | set("ABCDEFGHIJKLMNOPQRSTUVWXYZ") | {"_"}
+    if category.endswith("CATEGORY_DIGIT"):
+        return digits
+    if category.endswith("CATEGORY_NOT_DIGIT"):
+        return _PRINTABLE - digits
+    if category.endswith("CATEGORY_WORD"):
+        return word
+    if category.endswith("CATEGORY_NOT_WORD"):
+        return _PRINTABLE - word
+    if category.endswith("CATEGORY_SPACE"):
+        return set()  # no printable character in 0x21..0x7E is whitespace
+    if category.endswith("CATEGORY_NOT_SPACE"):
+        return set(_PRINTABLE)
+    return set(_PRINTABLE)  # unknown category: assume it admits anything
+
+
+def _walk_pattern(parsed, legal: set[str]) -> None:
+    for op, av in parsed:
+        name = str(op)
+        if name == "LITERAL":
+            legal.update(_PRINTABLE & {chr(av)})
+        elif name == "NOT_LITERAL":
+            legal.update(_PRINTABLE - {chr(av)})
+        elif name == "IN":
+            legal.update(_in_set_chars(av))
+        elif name == "ANY":
+            legal.update(_PRINTABLE)
+        elif name in ("MAX_REPEAT", "MIN_REPEAT", "POSSESSIVE_REPEAT"):
+            _minimum, maximum, sub = av
+            if maximum:
+                _walk_pattern(sub, legal)
+        elif name == "BRANCH":
+            for branch in av[1]:
+                _walk_pattern(branch, legal)
+        elif name == "SUBPATTERN":
+            _walk_pattern(av[-1], legal)
+        elif name == "ATOMIC_GROUP":
+            _walk_pattern(av, legal)
+        elif name == "GROUPREF_EXISTS":
+            for sub in av[1:]:
+                if sub:
+                    _walk_pattern(sub, legal)
+        # ASSERT / ASSERT_NOT consume nothing, AT is an anchor, GROUPREF
+        # repeats characters already collected -- none add to the alphabet.
+
+
 def _legal_chars(pattern: str) -> set[str]:
     """The printable characters ``pattern`` can match at some position.
 
-    Probed rather than parsed: a component style may be an arbitrary
-    user-supplied regex, so the set is discovered by asking the pattern
-    itself which characters it accepts.
+    A component style may be an arbitrary user-supplied regex, so the set
+    is read off the pattern's own parse tree rather than guessed by trying
+    sample strings against it: a probe can only speak for the positions and
+    lengths it happens to cover, and every character that is legal only
+    after the first position, or only in a match longer than the probe,
+    would be missed and wrongly offered as a separator.
     """
     import re as _re
 
-    compiled = _re.compile(pattern)
+    try:  # Python 3.11+
+        from re import _parser as _regex_parser
+    except ImportError:  # pragma: no cover - Python 3.10
+        import sre_parse as _regex_parser  # type: ignore[no-redef]
+
+    _re.compile(pattern)  # reject a malformed pattern here, as before
     legal: set[str] = set()
-    for code in range(0x21, 0x7F):
-        char = chr(code)
-        # A character is legal in this part if it can appear anywhere a
-        # match extends over -- leading, interior, or trailing.
-        for probe in (char, f"a{char}", f"a{char}b", f"{char}a"):
-            m = compiled.match(probe)
-            if m and char in m.group(0):
-                legal.add(char)
-                break
+    _walk_pattern(_regex_parser.parse(pattern), legal)
     return legal
 
 
@@ -132,7 +207,7 @@ _LABEL_STYLE_PATTERNS = {
 }
 
 
-# Implements: REQ-d00212-G, REQ-d00251-C, REQ-d00251-F
+# Implements: REQ-d00212-G, REQ-d00251-C, REQ-d00251-F, REQ-d00251-H, REQ-d00251-I
 class IdPatternsConfig(_StrictModel):
     canonical: str = "{namespace}-{level.letter}{component}"
     aliases: dict[str, str] = Field(default_factory=lambda: {"short": "{level.letter}{component}"})
@@ -169,16 +244,22 @@ class IdPatternsConfig(_StrictModel):
         label_chars = _legal_chars(label_pattern)
 
         def _suggest(taken: set[str]) -> str:
-            for candidate in ("/", ":", ".", "#", "|", "~"):
+            # ":" is deliberately absent: it is reserved out of every
+            # configurable pattern element so "::" stays unambiguous as
+            # the composite instance-ID joiner (REQ-p00014-S).
+            for candidate in ("/", ".", "#", "|", "~"):
                 if candidate not in taken:
                     return candidate
             return "/"
 
+        # Both separators are exactly one character by field constraint
+        # (REQ-d00251-I), so membership answers the overlap question directly.
         sep_taken = component_chars | label_chars
-        if self.assertions.separator in sep_taken:
-            where = "a component" if self.assertions.separator in component_chars else "a label"
+        separator = self.assertions.separator
+        if separator in sep_taken:
+            where = "a component" if separator in component_chars else "a label"
             raise ValueError(
-                f'assertions.separator is "{self.assertions.separator}", which can '
+                f'assertions.separator is "{separator}", which can '
                 f"legally appear in {where} under "
                 f'component.style = "{self.component.style}" / '
                 f'label_style = "{self.assertions.label_style}".\n'
@@ -187,9 +268,10 @@ class IdPatternsConfig(_StrictModel):
                 f"fail.\n"
                 f'Use a character neither can contain, e.g. "{_suggest(sep_taken)}".'
             )
-        if self.assertions.multi_separator in label_chars:
+        multi = self.assertions.multi_separator
+        if multi in label_chars:
             raise ValueError(
-                f'assertions.multi_separator is "{self.assertions.multi_separator}", '
+                f'assertions.multi_separator is "{multi}", '
                 f"which can legally appear in a label under label_style = "
                 f'"{self.assertions.label_style}".\n'
                 f"Two labels would run together with no findable boundary.\n"

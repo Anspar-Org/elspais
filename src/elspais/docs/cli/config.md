@@ -125,8 +125,8 @@ leading_zeros = true       # Pad with zeros (00001 vs 1, numeric style only)
 label_style = "uppercase"  # "uppercase" | "numeric" | "alphanumeric" | "numeric_1based"
 max_count = 26             # Maximum assertions per requirement
 # zero_pad = false         # Pad numeric labels with zeros
-# separator = "-"          # Character between component and label (use ":" for snake/kebab + numeric labels)
-# multi_separator = "+"    # Separator for multi-assertion syntax (A+B+C)
+# separator = "-"          # Single character between component and label (use "/" for snake/kebab components)
+# multi_separator = "+"    # Single character joining multi-assertion syntax (A+B+C)
 ```
 
 **Component style examples** (with the canonical
@@ -139,10 +139,23 @@ directly after the level letter with no extra separator):
   `kebab-case`   `REQ-puser-auth`       (`[a-z][a-z0-9]*(?:-[a-z0-9]+)*`)
   `regex`        custom — set `pattern`
 
-Some `style` + `label_style` combinations are ambiguous and rejected at config
-load time: `snake_case` + `separator = "_"` with non-uppercase labels, and
-`kebab-case` + `separator = "-"` with non-uppercase labels. The fix is a
-different `assertions.separator` (commonly `":"`).
+Both separators are validated at config load time, and a violation is an error
+rather than a warning — an absorbed boundary makes a reference resolve to the
+wrong requirement instead of failing.
+
+- Each separator must be **exactly one character**. Empty and multi-character
+  values are rejected.
+- `assertions.separator` must be a character that can appear in neither a
+  component nor an *Assertion* label. So `snake_case` + `separator = "_"` and
+  `kebab-case` + `separator = "-"` are rejected, whatever the label style —
+  the component absorbs the separator and the label after it.
+- `assertions.multi_separator` must be a character that cannot appear in a
+  label. So `numeric` labels rule out digits, and `numeric_1based` rules out
+  `"0"` as well, since `10` is a legal label.
+
+The fix is a different `assertions.separator` — commonly `"/"`. Avoid `:`,
+which is reserved so that `::` stays unambiguous as the composite instance-ID
+joiner.
 
 **Template Tokens:**
   `{namespace}`      ID prefix (e.g., "REQ")

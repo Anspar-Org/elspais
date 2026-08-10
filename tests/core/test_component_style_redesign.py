@@ -412,9 +412,15 @@ AMBIGUOUS_COMBOS = [
     # internally: digits and letters are component characters too.
     ("numeric", "5", "uppercase", None),
     ("camelCase", "x", "uppercase", None),
+    # A character legal only after the first position is a component
+    # character all the same.
+    ("PascalCase", "x", "uppercase", None),
+    ("PascalCase", "5", "uppercase", None),
     # A custom component pattern is read the same way, by asking the
     # pattern itself which characters it admits.
     ("regex", ".", "uppercase", "[A-Z.]+"),
+    # ... including one whose shortest match is longer than any probe.
+    ("regex", "5", "uppercase", "[0-9]{5,}"),
     # The label's own alphabet is the other half of the rule.
     ("numeric", "A", "uppercase", None),
     ("numeric", "3", "numeric", None),
@@ -436,6 +442,8 @@ COLLIDING_MULTI_SEPARATORS = [
     ("uppercase", "A"),
     ("numeric", "7"),
     ("numeric_1based", "3"),
+    # "10" is a legal numeric_1based label, so "0" is a label character.
+    ("numeric_1based", "0"),
     ("alphanumeric", "B"),
 ]
 

@@ -12,7 +12,11 @@ from __future__ import annotations
 
 import pytest
 
-from elspais.graph.annotators import annotate_coverage, annotate_journey_verification
+from elspais.graph.annotators import (
+    CreditPolicy,
+    annotate_coverage,
+    annotate_journey_verification,
+)
 from elspais.graph.factory import _derive_credit_config, _validate_config, build_graph
 from elspais.graph.GraphNode import NodeKind
 from elspais.graph.metrics import integrates_rollup
@@ -300,12 +304,16 @@ def test_recomputation_does_not_double_count(federated):
     }
     contributions = {k: len(v) for k, v in before.assertion_coverage.items()}
 
-    targets = []
-    for entry in federated._repos.values():
-        if entry.graph is not None and entry.config is not None:
-            targets.extend(_validate_config(entry.config).scanning.test.targets)
+    by_repo = {
+        entry.name: _derive_credit_config(_validate_config(entry.config).scanning.test.targets)
+        for entry in federated._repos.values()
+        if entry.graph is not None and entry.config is not None
+    }
     annotate_journey_verification(federated)
-    annotate_coverage(federated, _derive_credit_config(targets))
+    annotate_coverage(
+        federated,
+        CreditPolicy(by_repo=by_repo, owner=lambda node: federated._ownership.get(node.id)),
+    )
 
     after = _metrics(federated, "LIB-d00001")
     assert {d: (getattr(after, d).direct, getattr(after, d).indirect) for d in snapshot} == snapshot
@@ -350,3 +358,160 @@ def test_cross_repo_nodes_are_reachable_from_the_library_requirement(federated):
     assert NodeKind.CODE in reached
     assert NodeKind.TEST in reached
     assert NodeKind.USER_JOURNEY in reached
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Crediting policy at a repository boundary
+# ─────────────────────────────────────────────────────────────────────────────
+
+POLICY_LIB_TOML = """version = 3
+
+[project]
+name = "plib"
+namespace = "PLIB"
+
+[levels.prd]
+rank = 1
+implements = []
+
+[levels.dev]
+rank = 2
+implements = ["prd", "dev"]
+
+[scanning.test]
+enabled = true
+"""
+
+POLICY_APP_TOML = """version = 3
+
+[project]
+name = "papp"
+namespace = "PAPP"
+
+[levels.prd]
+rank = 1
+implements = []
+
+[levels.dev]
+rank = 2
+implements = ["prd", "dev"]
+
+[scanning.test]
+enabled = true
+
+[[scanning.test.targets]]
+name = "pytest"
+reporter = "junit"
+results = "results/*.xml"
+match = "aggregate"
+cwd = "tests"
+
+[associates.plib]
+path = "../plib"
+namespace = "PLIB"
+"""
+
+POLICY_LIB_SPEC = """# Lib spec
+
+## PLIB-d00001: Library thing
+
+**Status**: active
+
+The library shall do a thing.
+
+### Assertions
+
+A. The system SHALL do the A thing.
+
+*End*
+"""
+
+POLICY_APP_SPEC = """# App spec
+
+## PAPP-d00001: App thing
+
+**Status**: active
+
+The app shall do a thing.
+
+### Assertions
+
+A. The system SHALL do the app thing.
+
+*End*
+"""
+
+POLICY_LIB_TEST = '''"""Lib tests."""
+
+
+# Verifies: PLIB-d00001-A
+def test_lib_a():
+    assert True
+'''
+
+POLICY_APP_TEST = '''"""App tests."""
+
+
+# Verifies: PAPP-d00001-A
+def test_app_a():
+    assert True
+'''
+
+POLICY_JUNIT = """<?xml version="1.0" encoding="utf-8"?>
+<testsuites><testsuite name="pytest" tests="1" failures="0" errors="0">
+<testcase classname="tests.test_app" name="test_app_a" file="tests/test_shared.py" line="4"/>
+</testsuite></testsuites>
+"""
+
+
+@pytest.fixture(scope="module")
+def policy_federation(tmp_path_factory):
+    """A consumer that credits aggregate app-green, and a library that does not.
+
+    Both repositories keep their tests in ``tests/``, so the consumer's app
+    directory names the library's test files too -- the shape in which a
+    consumer's crediting policy leaks across the boundary. They deliberately
+    use the SAME relative test path, which is one node id in two repositories:
+    ownership of such a file cannot be read off the id alone.
+    """
+    base = tmp_path_factory.mktemp("credit_policy")
+    lib = make_repo(base, "plib", namespace="PLIB", config_text=POLICY_LIB_TOML)
+    (lib / "spec" / "reqs.md").write_text(POLICY_LIB_SPEC, encoding="utf-8")
+    (lib / "tests").mkdir()
+    (lib / "tests" / "test_shared.py").write_text(POLICY_LIB_TEST, encoding="utf-8")
+    _git(lib, "add", "-A")
+    _git(lib, "commit", "-m", "spec")
+
+    app = make_repo(base, "papp", namespace="PAPP", config_text=POLICY_APP_TOML)
+    (app / "spec" / "reqs.md").write_text(POLICY_APP_SPEC, encoding="utf-8")
+    (app / "tests").mkdir()
+    (app / "tests" / "test_shared.py").write_text(POLICY_APP_TEST, encoding="utf-8")
+    (app / "tests" / "results").mkdir()
+    (app / "tests" / "results" / "junit.xml").write_text(POLICY_JUNIT, encoding="utf-8")
+    _git(app, "add", "-A")
+    _git(app, "commit", "-m", "tests")
+    return app, lib
+
+
+# Verifies: REQ-d00261-E
+def test_consumer_crediting_policy_stops_at_the_boundary(policy_federation):
+    """The library declares no test targets, so no aggregate app-green credit
+    applies to it. Joining a federation whose consumer does declare one must
+    not change that: membership alone credits nothing."""
+    app, lib = policy_federation
+    alone_metrics = _metrics(build_graph(repo_root=lib), "PLIB-d00001")
+    federated_metrics = _metrics(build_graph(repo_root=app), "PLIB-d00001")
+
+    assert alone_metrics.verified.indirect == 0.0
+    assert federated_metrics.verified.direct == alone_metrics.verified.direct
+    assert federated_metrics.verified.indirect == alone_metrics.verified.indirect
+
+
+# Verifies: REQ-d00261-E
+def test_consumer_keeps_its_own_crediting_policy(policy_federation):
+    """The consumer's own requirement still receives the credit its own
+    target declares -- the policy is scoped to its repository, not switched
+    off."""
+    app, _lib = policy_federation
+    metrics = _metrics(build_graph(repo_root=app), "PAPP-d00001")
+    assert metrics.verified.indirect == 1.0

@@ -1369,23 +1369,45 @@ class FederatedGraph:
         graph rather than accumulating into what is already there, so
         recomputing does not double-count.
 
-        The credit settings are collapsed from every member's test
-        targets, by the same rule that collapses several targets within
-        one repository.
+        Crediting settings stay with the repository that declares them:
+        each member's own test targets are collapsed by the same rule that
+        collapses several targets within one repository, and its evidence
+        is credited under that result alone. A member declaring none is
+        credited exactly as it is when built by itself, so joining a
+        federation moves no coverage number by membership (REQ-d00261-E).
         """
         from elspais.graph.annotators import (
+            CreditPolicy,
             annotate_coverage,
             annotate_journey_verification,
         )
         from elspais.graph.factory import _derive_credit_config, _validate_config
 
-        targets = []
+        by_repo = {}
         for entry in self._repos.values():
             if entry.graph is None or entry.config is None:
                 continue
-            targets.extend(_validate_config(entry.config).scanning.test.targets)
+            targets = _validate_config(entry.config).scanning.test.targets
+            by_repo[entry.name] = _derive_credit_config(targets)
+        policy = CreditPolicy(by_repo=by_repo, owner=self._owner_of_node)
         annotate_journey_verification(self)
-        annotate_coverage(self, _derive_credit_config(targets))
+        annotate_coverage(self, policy)
+
+    # Implements: REQ-d00261-E
+    def _owner_of_node(self, node) -> str | None:
+        """Return the name of the repository holding ``node``.
+
+        FILE and REMAINDER ids repeat across repositories -- two members
+        both holding ``tests/test_x.py`` produce the same node id -- so the
+        ownership map records only one of them for those kinds. Identify
+        their holder by the node object itself, which is unambiguous.
+        """
+        if not node.id.startswith(STRUCTURAL_ID_PREFIXES):
+            return self._ownership.get(node.id)
+        for repo_name, entry in self._repos.items():
+            if entry.graph is not None and entry.graph._index.get(node.id) is node:
+                return repo_name
+        return self._ownership.get(node.id)
 
     @staticmethod
     def _edge_anchor(target_graph: TraceGraph, target_id: str) -> tuple[str, list[str] | None]:
@@ -1415,6 +1437,14 @@ class FederatedGraph:
         in another sub-graph. If found, create the edge using target_graph
         parameter and remove the broken reference. After wiring, demote any
         source nodes from _roots that now have content-level parent edges.
+
+        A reference naming several *Assertion* labels of a foreign
+        requirement never appears in the ownership index, because that index
+        holds node ids and no node is named ``REQ-x-A+B``. The per-repo
+        builder expands such a reference under its own grammar, which does
+        not claim a foreign identifier, so the reference arrives here whole.
+        It is expanded under the grammar of the repository that owns it and
+        wired one edge per label (REQ-d00269-B).
         """
         # Track source node IDs that got wired via content edges, keyed by repo
         wired_sources: dict[str, set[str]] = {}
@@ -1423,6 +1453,9 @@ class FederatedGraph:
             if source_entry.graph is None:
                 continue
             resolved: list[int] = []  # indices to remove
+            # Broken references that survive wiring in a different shape than
+            # they were written: index -> the references that replace it.
+            replacements: dict[int, list[BrokenReference]] = {}
             for i, br in enumerate(source_entry.graph._broken_references):
                 # SATISFIES is handled by _instantiate_cross_repo_satisfies,
                 # which clones the template subtree instead of wiring a
@@ -1441,6 +1474,27 @@ class FederatedGraph:
                 if br.edge_kind == EdgeKind.INTEGRATES.value:
                     continue
                 target_repo_name = self._ownership.get(br.target_id)
+                if target_repo_name is None:
+                    expansion = self._expand_foreign_multi_reference(br.target_id)
+                    if expansion is not None and expansion[0] != source_entry.name:
+                        owner, present, missing = expansion
+                        wired = self._wire_expanded_labels(source_entry, br, owner, present)
+                        if wired and EdgeKind(br.edge_kind) in self._CONTENT_EDGE_KINDS:
+                            wired_sources.setdefault(source_entry.name, set()).add(br.source_id)
+                        replacements[i] = [
+                            BrokenReference(
+                                source_id=br.source_id,
+                                target_id=missing_id,
+                                edge_kind=br.edge_kind,
+                                diagnostic=(
+                                    f"repository '{owner}' owns {missing_id} in the identifier "
+                                    f"grammar it declares, but has no such node; check the "
+                                    f"labels named in {br.target_id}."
+                                ),
+                            )
+                            for missing_id in missing
+                        ]
+                        continue
                 if target_repo_name and target_repo_name != source_entry.name:
                     target_entry = self._repos[target_repo_name]
                     if target_entry.graph is not None:
@@ -1460,15 +1514,82 @@ class FederatedGraph:
                         resolved.append(i)
                         if EdgeKind(br.edge_kind) in self._CONTENT_EDGE_KINDS:
                             wired_sources.setdefault(source_entry.name, set()).add(br.source_id)
-            # Remove resolved broken references (reverse to preserve indices)
-            for idx in reversed(resolved):
-                source_entry.graph._broken_references.pop(idx)
+            # Drop the resolved broken references and swap in the
+            # replacements, in one rebuild so no index shifts underfoot.
+            if resolved or replacements:
+                dropped = set(resolved)
+                rebuilt: list[BrokenReference] = []
+                for idx, ref in enumerate(source_entry.graph._broken_references):
+                    if idx in replacements:
+                        rebuilt.extend(replacements[idx])
+                    elif idx not in dropped:
+                        rebuilt.append(ref)
+                source_entry.graph._broken_references[:] = rebuilt
 
         # Demote wired source nodes from _roots — they now have parent edges
         for repo_name, source_ids in wired_sources.items():
             graph = self._repos[repo_name].graph
             if graph is not None:
                 graph._roots = [r for r in graph._roots if r.id not in source_ids]
+
+    # Implements: REQ-d00269-B
+    def _expand_foreign_multi_reference(
+        self, target_id: str
+    ) -> tuple[str, list[str], list[str]] | None:
+        """Expand a multi-*Assertion* reference under its owner's grammar.
+
+        Returns ``(repo_name, present_ids, missing_ids)`` for the first
+        repository that claims ``target_id`` and holds at least one of the
+        nodes it expands to. Returns ``None`` when the reference names at
+        most one label (the single-target case the ownership index already
+        answers) and when no repository holds any of the expansion -- a
+        reference nothing in the federation can resolve keeps whatever
+        classification it already carries, exactly as a single-target one
+        does.
+
+        Expansion is delegated to that repository's ``IdResolver`` — the one
+        authority for the identifier grammar — never to a separator split
+        here.
+        """
+        for entry in self._repos.values():
+            if entry.graph is None:
+                continue
+            resolver = self._resolver_for(entry)
+            if resolver is None:
+                continue
+            parsed = resolver.parse(target_id)
+            if parsed is None or len(parsed.assertions) <= 1:
+                continue
+            canonical = [resolver.render_canonical(p) for p in resolver.expand(parsed)]
+            present = [c for c in canonical if c in entry.graph._index]
+            if not present:
+                continue
+            missing = [c for c in canonical if c not in entry.graph._index]
+            return entry.name, present, missing
+        return None
+
+    # Implements: REQ-d00269-B
+    def _wire_expanded_labels(
+        self,
+        source_entry: RepoEntry,
+        br: BrokenReference,
+        owner: str,
+        target_ids: list[str],
+    ) -> bool:
+        """Wire one cross-graph edge per expanded target. Returns True if any."""
+        target_entry = self._repos[owner]
+        if target_entry.graph is None or not target_ids:
+            return False
+        for target_id in target_ids:
+            anchor_id, targets = self._edge_anchor(target_entry.graph, target_id)
+            source_entry.graph.add_edge(
+                br.source_id,
+                anchor_id,
+                EdgeKind(br.edge_kind),
+                assertion_targets=targets,
+                target_graph=target_entry.graph,
+            )
+        return True
 
     def _resolver_for(self, entry: RepoEntry) -> IdResolver | None:
         """Return the cached ``IdResolver`` for ``entry``'s repo.

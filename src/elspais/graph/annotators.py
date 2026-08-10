@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import functools
 import re
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -66,6 +67,50 @@ class CoverageCreditConfig:
     min_coverage_fraction: float = 0.0
 
 
+# Implements: REQ-d00261-E
+@dataclass(frozen=True)
+class CreditPolicy:
+    """Which crediting settings apply to which evidence.
+
+    Crediting settings are declared by a repository, in paths relative to
+    that repository's root, so they mean nothing outside it. A federation
+    annotates several repositories in one pass; each piece of evidence is
+    credited under the settings of the repository that holds it, and a
+    repository that declares none is credited exactly as it is when built
+    alone (REQ-d00261-E).
+
+    ``owner`` answers which repository a node belongs to; over a single
+    repository it is absent and every node takes ``default``.
+    """
+
+    default: CoverageCreditConfig = field(default_factory=CoverageCreditConfig)
+    by_repo: Mapping[str, CoverageCreditConfig] = field(default_factory=dict)
+    owner: Callable[[Any], str | None] | None = None
+
+    def owner_of(self, node) -> str | None:
+        """Return the name of the repository owning ``node``, if known."""
+        if self.owner is None or node is None:
+            return None
+        return self.owner(node)
+
+    def for_owner(self, repo: str | None) -> CoverageCreditConfig:
+        """Return the crediting settings a named repository declares."""
+        if repo is None:
+            return self.default
+        return self.by_repo.get(repo, self.default)
+
+    def for_node(self, node) -> CoverageCreditConfig:
+        """Return the crediting settings governing evidence held by ``node``."""
+        return self.for_owner(self.owner_of(node))
+
+
+def _as_policy(credit: CoverageCreditConfig | CreditPolicy | None) -> CreditPolicy:
+    """Accept either a single config (one repository) or a per-repo policy."""
+    if isinstance(credit, CreditPolicy):
+        return credit
+    return CreditPolicy(default=credit or CoverageCreditConfig())
+
+
 # Implements: REQ-d00254-A
 def _match_app_dir(path: str | None, app_dirs: tuple[str, ...]) -> str | None:
     """Return the app dir whose segments appear deepest in ``path``.
@@ -95,18 +140,42 @@ def _match_app_dir(path: str | None, app_dirs: tuple[str, ...]) -> str | None:
 
 # Implements: REQ-d00254-A
 def _compute_app_status(graph, app_dirs: tuple[str, ...]) -> dict[str, str]:
-    """Map app dir -> 'green'|'red' from RESULT node statuses (CUR-1533)."""
+    """Map app dir -> 'green'|'red' from RESULT node statuses (CUR-1533).
+
+    The one-repository case of ``_compute_app_status_by_owner``: every
+    result answers to the same declared app dirs.
+    """
+    policy = CreditPolicy(default=CoverageCreditConfig(app_dirs=app_dirs))
+    return _compute_app_status_by_owner(graph, policy).get(None, {})
+
+
+# Implements: REQ-d00261-E
+def _compute_app_status_by_owner(graph, policy: CreditPolicy) -> dict[str | None, dict[str, str]]:
+    """Map repository -> its own app-dir statuses.
+
+    A result belongs to the repository that recorded it, and the app dirs it
+    can match are the ones that repository declares. Two repositories that
+    both call their test directory ``tests`` therefore keep separate
+    verdicts instead of one deciding the other's.
+    """
     from elspais.graph import NodeKind
 
-    failed_by_app: dict[str, bool] = {}
+    failed: dict[tuple[str | None, str], bool] = {}
     for r in graph.nodes_by_kind(NodeKind.RESULT):
+        owner = policy.owner_of(r)
+        app_dirs = policy.for_owner(owner).app_dirs
+        if not app_dirs:
+            continue
         app = _match_app_dir(r.get_field("source_path"), app_dirs)
         if app is None:
             continue
         status = (r.get_field("status") or "").lower()
         is_fail = status in ("failed", "fail", "failure", "error")
-        failed_by_app[app] = failed_by_app.get(app, False) or is_fail
-    return {app: ("red" if failed else "green") for app, failed in failed_by_app.items()}
+        failed[(owner, app)] = failed.get((owner, app), False) or is_fail
+    result: dict[str | None, dict[str, str]] = {}
+    for (owner, app), is_fail in failed.items():
+        result.setdefault(owner, {})[app] = "red" if is_fail else "green"
+    return result
 
 
 if TYPE_CHECKING:
@@ -968,15 +1037,17 @@ def _block_region_lines(file_node, cache: dict) -> dict:
 
 # Implements: REQ-d00254-B
 def _compute_lcov_tested(
-    node, metrics, credit, app_status, region_cache: dict | None = None
+    node, metrics, policy: CreditPolicy, app_status_by_owner, region_cache: dict | None = None
 ) -> None:
-    """Credit the lcov_tested dimension from covered // Implements: lines (CUR-1533)."""
+    """Credit the lcov_tested dimension from covered // Implements: lines (CUR-1533).
+
+    Line-coverage credit is decided per implementing file, under the settings
+    of the repository that holds it: its coverage directories, its minimum
+    fraction and its app status (REQ-d00261-E).
+    """
     from elspais.graph import NodeKind
     from elspais.graph.metrics import CoverageDimension
     from elspais.graph.relations import EdgeKind
-
-    if credit.assertion_credit == "off":
-        return
 
     labels = [
         c.get_field("label", "")
@@ -990,6 +1061,8 @@ def _compute_lcov_tested(
     blanket_lines: set[tuple[str, int]] = set()
     file_cov: dict[str, dict[int, int]] = {}
     file_app: dict[str, str | None] = {}
+    file_credit: dict[str, CoverageCreditConfig] = {}
+    file_owner: dict[str, str | None] = {}
 
     for edge in node.iter_outgoing_edges():
         if edge.kind != EdgeKind.IMPLEMENTS:
@@ -1008,6 +1081,10 @@ def _compute_lcov_tested(
         fn = target.file_node()
         if fn is None:
             continue
+        owner = policy.owner_of(fn)
+        credit = policy.for_owner(owner)
+        if credit.assertion_credit == "off":
+            continue
         rel = fn.get_field("relative_path")
         if not rel or not _under_dirs(rel, credit.coverage_dirs):
             continue
@@ -1016,6 +1093,8 @@ def _compute_lcov_tested(
             continue
         file_cov.setdefault(rel, lc)
         file_app.setdefault(rel, _match_app_dir(rel, credit.app_dirs))
+        file_credit.setdefault(rel, credit)
+        file_owner.setdefault(rel, owner)
         if end == start:
             owned = _block_region_lines(fn, region_cache if region_cache is not None else {}).get(
                 start, set()
@@ -1039,26 +1118,35 @@ def _compute_lcov_tested(
         covered = sum(1 for (rel, ln) in lines if file_cov.get(rel, {}).get(ln, 0) > 0)
         return covered / len(lines)
 
+    def threshold(lines: set[tuple[str, int]]) -> float:
+        """The strictest minimum any contributing file's repository sets."""
+        return max(
+            (file_credit[rel].min_coverage_fraction for rel, _ in lines if rel in file_credit),
+            default=0.0,
+        )
+
     direct_pct: dict[str, float] = {}
     for lbl, lines in direct_lines.items():
         f = frac(lines)
-        if f > 0 and f >= credit.min_coverage_fraction:
+        if f > 0 and f >= threshold(lines):
             direct_pct[lbl] = f
 
     indirect_pct: dict[str, float] = dict(direct_pct)
     if blanket_lines:
         bf = frac(blanket_lines)
-        if bf > 0 and bf >= credit.min_coverage_fraction:
+        if bf > 0 and bf >= threshold(blanket_lines):
             for lbl in labels:
                 indirect_pct.setdefault(lbl, bf)
 
     if not indirect_pct:
         return
 
-    has_failures = False
-    if credit.assertion_credit == "verified":
-        apps = {file_app.get(rel) for rel in file_cov}
-        has_failures = any(app_status.get(a) == "red" for a in apps if a)
+    has_failures = any(
+        file_credit[rel].assertion_credit == "verified"
+        and file_app.get(rel)
+        and app_status_by_owner.get(file_owner.get(rel), {}).get(file_app[rel]) == "red"
+        for rel in file_cov
+    )
 
     # A red app is a whole-application failure signal, so it attributes to every
     # lcov-credited assertion (there is no per-assertion granularity in app
@@ -1234,7 +1322,9 @@ def annotate_journey_verification(graph: FederatedGraph) -> None:
 
 
 # Implements: REQ-p00061-A
-def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None = None) -> None:
+def annotate_coverage(
+    graph: FederatedGraph, credit: CoverageCreditConfig | CreditPolicy | None = None
+) -> None:
     """Compute and store coverage metrics for all requirement nodes.
 
     This function traverses the graph once to compute RollupMetrics for
@@ -1265,6 +1355,10 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
 
     Args:
         graph: The TraceGraph to annotate.
+        credit: The crediting settings to apply -- one ``CoverageCreditConfig``
+            when every node answers to the same repository, or a
+            ``CreditPolicy`` when the graph spans several and each repository's
+            evidence must be credited under its own settings (REQ-d00261-E).
     """
     from elspais.graph import NodeKind
     from elspais.graph.metrics import (
@@ -1274,9 +1368,8 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
     )
     from elspais.graph.relations import EdgeKind
 
-    if credit is None:
-        credit = CoverageCreditConfig()
-    app_status = _compute_app_status(graph, credit.app_dirs) if credit.app_dirs else {}
+    policy = _as_policy(credit)
+    app_status_by_owner = _compute_app_status_by_owner(graph, policy)
     region_cache: dict = {}
 
     # Build a per-file index of RESULT nodes with match=="source" (Task 5).
@@ -1571,14 +1664,19 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                         verified_saw_signal = True
                         if not source_file_carried.get(rel, False):
                             verified_all_carried = False
-                elif credit.unmatched_credit == "verified":
+                # The settings that decide this come from the repository
+                # holding the test, and so does the app status it is read
+                # against: a consumer's aggregate green says nothing about a
+                # library's tests (REQ-d00261-E).
+                elif policy.for_node(fn or test_node).unmatched_credit == "verified":
                     # Aggregate app-green path: derived from per-app green/red
                     # status, not a specific RESULT node, so carried-ness can't
                     # be recovered precisely here. Per the safe-ambiguity rule
                     # (CUR-1557), default this signal to fresh rather than risk
                     # mislabeling fresh coverage as "(baseline)".
-                    app = _match_app_dir(rel, credit.app_dirs)
-                    st = app_status.get(app) if app else None
+                    owner = policy.owner_of(fn or test_node)
+                    app = _match_app_dir(rel, policy.for_owner(owner).app_dirs)
+                    st = app_status_by_owner.get(owner, {}).get(app) if app else None
                     if st == "green":
                         if assertion_targets:
                             for label in assertion_targets:
@@ -1660,7 +1758,7 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
 
         # Compute code_tested dimension from coverage data
         _compute_code_tested(node, metrics, region_cache)
-        _compute_lcov_tested(node, metrics, credit, app_status, region_cache)
+        _compute_lcov_tested(node, metrics, policy, app_status_by_owner, region_cache)
 
         # Store in node metrics
         node.set_metric("rollup_metrics", metrics)

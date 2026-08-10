@@ -217,6 +217,8 @@ I. An *Assertion* label series configured as `alphanumeric` SHALL run 0 to 9 and
 
 J. The multi-*Assertion* separator SHALL NOT be a character that can legally appear in an *Assertion* label.
 
+I. The *Assertion* separator and the multi-*Assertion* separator SHALL each be exactly one character. A configuration declaring either as empty, or as longer than one character, SHALL be rejected at validation time.
+
 ### Rationale
 
 An identifier is read left to right, so every boundary inside it has to be findable without knowing what follows. A separator drawn from the characters a component may itself contain destroys that boundary: the component absorbs the separator and the label after it, and the reference resolves to a different requirement rather than failing. The result is a wrong answer, not an error, which is why this is rejected at validation time rather than warned about later.
@@ -225,9 +227,13 @@ Restricting the rule to the punctuation a style happens to use internally would 
 
 Uppercase *Assertion* labels do make a lowercase component mechanically unambiguous, and that exception was previously how an overlapping separator was tolerated. It is a subtlety every reader has to re-derive, and it silently changes which requirement a mis-cased reference names, so the tolerance is not worth its cost.
 
+I is what makes F and H decidable. Both are stated over *a character*, which leaves a separator of some other length outside the rule rather than inside it: an empty separator marks no boundary at all, and a longer one is absorbed character by character exactly as a single legal character would be, so asking whether the whole string is legal answers a different question than the one F and H pose. Fixing the length at one keeps every boundary a single findable character and leaves F and H to say which character it may be.
+
 ### Changelog
 
 - 2026-08-10 | e4e4a5fc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | 3632edb9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: separators are exactly one character (K)
 - 2026-08-08 | 7a2823ed | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-08 | 427d0f5f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 7857498c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash

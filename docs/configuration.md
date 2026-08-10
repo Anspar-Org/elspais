@@ -153,19 +153,24 @@ digits = 5
 # For numeric: pad with leading zeros
 leading_zeros = true
 
-# For alphanumeric: regex pattern
+# For style = "regex": the pattern is required
 # pattern = "[A-Z]{2}[0-9]{3}"
-
-# For named: allowed characters and max length
-# max_length = 32
 
 # Assertion label configuration
 [id-patterns.assertions]
 label_style = "uppercase"  # "uppercase" [A-Z], "numeric" [00-99], "alphanumeric" [0-Z], "numeric_1based" [1-99]
 max_count = 26             # Maximum assertions per requirement
 # zero_pad = false         # Pad numeric labels with zeros
-# separator = "-"          # Character between requirement ID and first label (REQ-p00001-A)
-# multi_separator = "+"    # Separator for multi-assertion syntax (A+B+C)
+# separator = "-"          # Single character between component and label
+# multi_separator = "+"    # Single character joining multi-assertion syntax (A+B+C)
+
+# Both separators are validated when the config loads. Each must be exactly
+# one character. `separator` must be a character that can appear in neither a
+# component nor an assertion label, and `multi_separator` must be a character
+# that cannot appear in a label. A kebab-case component therefore rules out
+# separator = "-", and numeric labels rule out a digit as multi_separator.
+# Use "/" where the default collides; ":" is reserved so that "::" stays
+# unambiguous as the composite instance-ID joiner.
 ```
 
 These two characters are the only accepted way to cite an assertion, and they

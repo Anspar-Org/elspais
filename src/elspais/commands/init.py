@@ -182,11 +182,12 @@ _FIELD_COMMENTS: dict[str, str] = {
     "id-patterns.assertions.max_count": "Maximum number of assertions per requirement",
     "id-patterns.assertions.zero_pad": "Pad numeric assertion labels with leading zero",
     "id-patterns.assertions.separator": (
-        'Character between component and label, default "-". '
-        'Use ":" for snake/kebab + numeric labels.'
+        'Single character between component and label, default "-". '
+        'Must appear in neither a component nor a label; use "/" for snake/kebab.'
     ),
     "id-patterns.assertions.multi_separator": (
-        'Separator for multi-assertion refs (e.g. "+" -> A+B+C)'
+        'Single character joining multi-assertion refs (e.g. "+" -> A+B+C). '
+        "Must not be a character a label can contain."
     ),
     "id-patterns.associated": "Associated (cross-repo) prefix formatting",
     "id-patterns.associated.enabled": "Enable associated prefix in IDs",
