@@ -154,7 +154,7 @@ G. A repository's identifier configuration SHALL admit exactly one spelling of a
 
 H. `HierarchyConfig` SHALL contain only boolean flags (`allow_circular`, `allow_structural_orphans`, `allow_orphans`, `cross_repo_implements`). Per-level implement rules SHALL be defined in `LevelConfig.implements` instead. The model SHALL be strict (`extra="forbid"`).
 
-I. `ReferencesConfig` SHALL contain only `enabled` (bool) and `case_sensitive` (bool). The `defaults` sub-model and `overrides` list SHALL be removed.
+I. [Removed - named a references section of the configuration that does not exist. Identifier grammar is configured under identifier patterns, and case significance is a property of the grammar rather than a setting, per REQ-d00268-G.]
 
 J. `ProjectConfig` SHALL contain only `namespace` and `name`. The `version` and `type` fields SHALL be removed.
 
@@ -186,6 +186,8 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 
 ### Changelog
 
+- 2026-08-10 | d2250c7d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: retire I, which named a references section that does not exist
 - 2026-08-10 | 3b50127c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | 92f8213c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | 9b2c6bea | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -199,7 +201,7 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 - 2026-03-30 | db4ad28c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-03-29 | c75b87f8 | - | Michael Lewis (<michael@anspar.org>) | Add assertion N for config migration v3 to v4
 
-*End* *Config Schema v3 Models* | **Hash**: 3b50127c
+*End* *Config Schema v3 Models* | **Hash**: d2250c7d
 ---
 
 ## REQ-d00251: Component Style Vocabulary and Assertion Separator
@@ -271,9 +273,13 @@ B. The derivation authority SHALL expose every fragment it produces through its 
 
 C. A surface that recognises, parses, or expands an identifier SHALL derive its patterns from the derivation authority rather than compose them.
 
-D. For a given identifier configuration, every surface that recognises an identifier SHALL recognise the same set of strings as an identifier, including the surface that decides which repository of a federation claims an identifier.
+D. For a given identifier configuration, every surface whose answer decides whether a string is an identifier SHALL recognise the same set of strings, including the surface that decides which repository of a federation claims an identifier.
 
 E. The derivation authority SHALL derive a repository's identifier grammar from that repository's own identifier configuration, so that a process holding several repositories at once applies each repository's grammar only to that repository.
+
+F. A surface that narrows candidates before a deciding surface is consulted SHALL NOT reject a string that the deciding surface accepts.
+
+G. Where a component style treats case as part of a component's spelling, a component differing only in case SHALL name no requirement rather than the same one.
 
 ### Rationale
 
@@ -281,10 +287,16 @@ Federation puts several repositories, each with its own identifier configuration
 
 The governed surfaces are the identifier resolver, the lark grammar builder that recognises identifiers in spec and code, the reference matcher that expands multi-*Assertion* targets, and the federation claim probe that splits a hard broken reference from a presumed-foreign one. B exists because a fragment reachable only as a private internal is an interface by accident: consumers that reach for one are as coupled as consumers that copy it, and neither survives a change to the derivation. The single-authority rule for the component sub-pattern alone is folded into A rather than kept alongside it, so one rule covers the whole grammar.
 
+D is stated over surfaces whose answer decides, because not every surface that inspects a string is claiming to settle the question. A cheap filter that discards obvious non-candidates before the real test runs is legitimate and useful, and holding it to the full grammar would mean deriving that grammar twice. F is what keeps the licence one-directional: such a filter may pass strings the deciding surface will refuse, since the decision still follows, but it may never refuse one the deciding surface would accept — that discards an identifier before anything can report it, and no later surface can recover what was never offered.
+
+G says which differences are differences. Under a case-bearing style, a component's case is part of its spelling rather than a presentation of it, so a component differing only in case is a component nobody declared. The parts whose case the grammar does not treat as significant may be canonicalised on the way in, which is what turns a mis-cased level code or *Assertion* label into the typo it is instead of a reference to something foreign.
+
 ### Changelog
 
+- 2026-08-10 | d3233556 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: D scoped to deciding surfaces; add F (pre-filter contract) and G (component case is spelling)
 - 2026-08-08 | 2e02bcf7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-08-09 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: single-authority derivation for the whole identifier grammar
 
-*End* *Single-Authority Identifier Grammar Derivation* | **Hash**: 2e02bcf7
+*End* *Single-Authority Identifier Grammar Derivation* | **Hash**: d3233556
 ---

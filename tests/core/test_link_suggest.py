@@ -576,7 +576,7 @@ class TestApplyLinkToFile:
 
 
 class TestKeywordForFile:
-    """# Verifies: REQ-d00082-F"""
+    # Verifies: REQ-o00065-F
 
     def test_test_directory_returns_verifies(self) -> None:
         cfg = {"scanning": {"test": {"directories": ["tests"], "reference_keyword": "Verifies"}}}

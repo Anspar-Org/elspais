@@ -1163,7 +1163,7 @@ class TestValidatesEdges:
 class TestMultiAssertionExpansion:
     """Tests for multi-assertion expansion in GraphBuilder.
 
-    Validates REQ-d00081-D, REQ-d00081-E, REQ-d00081-F, REQ-d00081-G:
+    Validates REQ-d00081-D, REQ-d00081-G and REQ-d00268-A:
     Multi-assertion compact references (e.g. REQ-p00001-A+B+C) are expanded
     into individual assertion references during link resolution.
     """
@@ -1241,7 +1241,7 @@ class TestMultiAssertionExpansion:
             pytest.fail("Expected edge from REQ-p00001 to code:src/auth.py:10 not found")
 
     def test_REQ_d00081_E_custom_separator_works(self):
-        """REQ-d00081-E: Custom separator '&' expands REQ-p00001-A&B&C correctly."""
+        """REQ-d00268-A: Custom separator '&' expands REQ-p00001-A&B&C correctly."""
         builder = GraphBuilder(multi_assertion_separator="&")
         builder.add_parsed_content(
             make_requirement(
@@ -1273,38 +1273,6 @@ class TestMultiAssertionExpansion:
                     for at in edge.assertion_targets:
                         assertion_targets_found.add(at)
         assert {"A", "B", "C"} == assertion_targets_found
-
-    def test_REQ_d00081_F_empty_separator_disables_expansion(self):
-        """REQ-d00081-F: Empty separator disables expansion."""
-        builder = GraphBuilder(multi_assertion_separator="")
-        builder.add_parsed_content(
-            make_requirement(
-                "REQ-p00001",
-                level="PRD",
-                assertions=[
-                    {"label": "A", "text": "First"},
-                    {"label": "B", "text": "Second"},
-                ],
-            ),
-        )
-        builder.add_parsed_content(
-            make_code_ref(
-                implements=["REQ-p00001-A+B"],
-                source_path="src/auth.py",
-                start_line=10,
-            ),
-        )
-        graph = builder.build()
-
-        # With expansion disabled, "REQ-p00001-A+B" is treated as a literal ID
-        # which doesn't exist, so it becomes a broken reference
-        assert graph.has_broken_references()
-        broken_targets = {br.target_id for br in graph.broken_references()}
-        assert "REQ-p00001-A+B" in broken_targets
-
-        # Code node should NOT be linked to the requirement
-        req = graph.find_by_id("REQ-p00001")
-        assert "code:src/auth.py:10" not in children_string(req)
 
     def test_REQ_d00081_D_test_ref_multi_assertion_expands(self):
         """REQ-d00081-D: Test ref with multi-assertion also expands, uniform across parser types."""

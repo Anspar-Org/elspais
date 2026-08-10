@@ -41,17 +41,17 @@ Multi-*Assertion* references allow compact notation for referencing multiple ass
 
 ### Assertions
 
-A. The `multi_assertion_separator` key SHALL be available in `[references.defaults]` configuration.
+A. The character joining *Assertion* labels within one reference SHALL be configurable per repository.
 
-B. The default value of `multi_assertion_separator` SHALL be `"+"`.
+B. The multi-*Assertion* separator SHALL default to `+`.
 
 C. [Removed - named a list of accepted alternate separators that no longer exists. The multi-*Assertion* separator is constrained against the characters an *Assertion* label can contain, per REQ-d00251-H.]
 
-D. Expansion SHALL occur in the graph builder's link resolution, applying uniformly to all parser types (requirement, code, test, result).
+D. A multi-*Assertion* reference SHALL expand to the same set of individual references wherever it is written.
 
-E. The expansion pattern SHALL derive from the configured *Assertion* label pattern and multi-*Assertion* separator.
+E. [Removed - superseded by REQ-d00268-A, which makes the multi-*Assertion* expansion pattern one of the fragments the single derivation authority produces.]
 
-F. When `multi_assertion_separator` is empty or `false`, expansion SHALL be disabled.
+F. [Removed - an empty separator is not a configurable state. A separator is exactly one character, per REQ-d00251-I, so there is no value of it that disables expansion.]
 
 G. A reference containing no multi-*Assertion* separator character SHALL pass through unchanged.
 
@@ -61,13 +61,15 @@ The previous implementation hardcoded expansion in RequirementParser only, using
 
 ### Changelog
 
+- 2026-08-10 | 67ee3df9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: A and B name the configured separator, D states expansion uniformity; retire E (superseded) and F (empty is not a state)
 - 2026-08-10 | e001c08a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: retire C, which named a list of accepted alternate separators that no longer exists
 - 2026-07-31 | 25c43ce2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 313fe52b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 313fe52b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Multi-Assertion Reference Expansion* | **Hash**: e001c08a
+*End* *Multi-Assertion Reference Expansion* | **Hash**: 67ee3df9
 ---
 
 ## REQ-d00082: Unified Reference Configuration
@@ -78,13 +80,13 @@ The system SHALL provide a unified, configurable reference pattern system used b
 
 ### Assertions
 
-D. The reference configuration SHALL support case-sensitive and case-insensitive ID matching.
+D. [Removed - named a configurable case-matching mode that does not exist. Which parts of an identifier carry significant case is a property of the grammar, stated in REQ-d00268-G.]
 
 E. Locating a reference in a source file SHALL use the separator the repository owning the referenced identifier configures, so that a reference is recognised in exactly the form that repository writes and in no other.
 
-F. The reference configuration SHALL support file-type specific overrides via glob patterns (e.g., `*.py`, `tests/legacy/**`).
+F. [Removed - named per-file reference overrides that do not exist. One set of acceptance rules applies in every context that accepts a reference, per REQ-p00014-T.]
 
-G. The reference configuration SHALL extract ID components (prefix, type, number) from matched references.
+G. Reading a reference SHALL yield the parts its grammar defines, so that a consumer works from the identifier's structure rather than from the matched text.
 
 H. [Removed - named a reference-configuration artifact that does not exist. The limitation it described is real: a *Traceability* keyword inside a block comment is never read, so a block-comment-only language has no reference form.]
 
@@ -102,6 +104,8 @@ Different projects use different ID conventions, comment styles, and directory s
 
 ### Changelog
 
+- 2026-08-10 | 268cdb9f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: retire D and F, which named configuration that does not exist; G states the parts a read reference yields
 - 2026-08-10 | 6289e433 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: E names the configured separator rather than a list of accepted alternates
 - 2026-08-10 | 109921be | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -109,7 +113,7 @@ Different projects use different ID conventions, comment styles, and directory s
 - 2026-05-11 | 89956cd7 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 89956cd7 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Unified Reference Configuration* | **Hash**: 6289e433
+*End* *Unified Reference Configuration* | **Hash**: 268cdb9f
 ---
 
 ## REQ-d00084: Trace Command

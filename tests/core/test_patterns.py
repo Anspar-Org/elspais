@@ -628,7 +628,7 @@ class TestSplitAssertionRef:
         result = resolver.split_assertion_ref("not-a-valid-id")
         assert result is None
 
-    # Verifies: REQ-d00081-E
+    # Verifies: REQ-d00268-A
     def test_multi_assertion_ref(self, resolver):
         result = resolver.split_assertion_ref("REQ-p00044-A+B")
         assert result == ("REQ-p00044", "A+B")
@@ -659,7 +659,7 @@ class TestAllTypeAliasValues:
 
 
 class TestNormalizeRef:
-    # Verifies: REQ-d00082-D
+    # Verifies: REQ-p00014-U
     def test_lowercase_prefix_normalized(self, resolver):
         assert resolver.normalize_ref("req-p00001") == "REQ-p00001"
 
@@ -671,7 +671,7 @@ class TestNormalizeRef:
     def test_mixed_case_underscore(self, resolver):
         assert resolver.normalize_ref("req_p00001") == "REQ-p00001"
 
-    # Verifies: REQ-d00082-D
+    # Verifies: REQ-p00014-U
     def test_already_canonical(self, resolver):
         assert resolver.normalize_ref("REQ-p00001") == "REQ-p00001"
 
