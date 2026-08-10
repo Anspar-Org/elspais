@@ -41,7 +41,7 @@ Validates: REQ-p00001, REQ-p00002, REQ-p00004
 
 1. Rita runs `elspais changed` to see which requirements were modified in the bug fix branch.
 2. The output shows REQ-d00008 was modified. She reviews the change: Assertion C was updated to specify a consistent 30-minute timeout.
-3. She runs `elspais fix` and confirms that REQ-d00008's hash was updated to reflect the content change.
+3. She runs `elspais fix --dry-run` and confirms REQ-d00008 is not listed as needing a hash update — its hash already reflects the content change.
 4. She checks the test results to confirm that a test references REQ-d00008-C specifically.
 5. She verifies the test passes with the new timeout value.
 6. She runs `elspais checks` to confirm the requirement still passes all format and hierarchy checks.
