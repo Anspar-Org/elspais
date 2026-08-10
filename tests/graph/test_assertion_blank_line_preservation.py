@@ -42,6 +42,16 @@ directories = ["spec"]
 hash_current = false
 """
 
+# Same project, but on the other hash mode: full-text applies no
+# normalization, so vertical whitespace inside an assertion is hashed content.
+FULL_TEXT_CONFIG_TOML = (
+    CONFIG_TOML
+    + """
+[validation]
+hash_mode = "full-text"
+"""
+)
+
 # Draft requirement, no hash on the End marker, whose assertion A is a
 # paragraph, a blank line, and a 3-row GFM table.
 REQ_ASSERTION_WITH_TABLE = """\
@@ -194,10 +204,10 @@ END_LINE_RE = re.compile(r"^\*End\*.*$", re.MULTILINE)
 HASH_SEGMENT_RE = re.compile(r" \| \*\*Hash\*\*: [0-9a-f]{8}$")
 
 
-def _make_project(tmp_path: Path, req_content: str) -> Path:
+def _make_project(tmp_path: Path, req_content: str, config_toml: str = CONFIG_TOML) -> Path:
     """Create a minimal on-disk project with config and one spec file."""
     tmp_path.mkdir(parents=True, exist_ok=True)
-    (tmp_path / ".elspais.toml").write_text(CONFIG_TOML)
+    (tmp_path / ".elspais.toml").write_text(config_toml)
     spec_dir = tmp_path / "spec"
     spec_dir.mkdir()
     (spec_dir / "requirements.md").write_text(req_content)
@@ -490,7 +500,11 @@ class TestRewriteTouchesNothingItWasNotAskedTo:
 
 
 class TestNormalizedHashIsBlankLineInvariant:
-    """Pins REQ-d00131-J's normalization: interior blank lines cost no hash."""
+    """Pins REQ-d00131-J's normalization: interior blank lines cost no hash.
+
+    Also pins the contrast with the other configured mode: `full-text` hashes
+    the source as written and so does distinguish the two.
+    """
 
     def test_preserving_blank_lines_does_not_change_the_computed_hash(self):
         """`compute_normalized_hash` collapses newlines to spaces and runs of
@@ -507,4 +521,71 @@ class TestNormalizedHashIsBlankLineInvariant:
             "An interior blank line changed the normalized hash "
             f"({without_gap!r} -> {with_gap!r}); preserving blank lines would "
             "silently invalidate every stored requirement hash"
+        )
+
+    def test_full_text_hash_reflects_the_blank_line_in_the_source(self, tmp_path):
+        """`full-text` hashes the lines between header and footer as written,
+        so an interior blank line inside an assertion is part of the hashed
+        content and two sources differing only by that blank line hash
+        differently. `normalized-text` collapses newlines to spaces and runs
+        of spaces to one, so the same pair hashes identically there.
+
+        The two modes disagree here by design: full-text now digests what the
+        file actually contains, where before the parser silently dropped the
+        blank line first. A project configured for `full-text` mode that holds
+        such an assertion therefore sees a one-time hash restamp.
+        """
+        from elspais.graph import NodeKind
+        from elspais.graph.render import compute_hash_for_node
+
+        without_gap_source = REQ_ASSERTION_WITH_TABLE.replace(
+            "listed:\n\n| Priority", "listed:\n| Priority"
+        )
+        assert without_gap_source != REQ_ASSERTION_WITH_TABLE, (
+            "The two sources must differ only by the interior blank line; the "
+            "fixture no longer contains the paragraph/table gap this test needs"
+        )
+
+        def requirement_node(project: Path):
+            graph = _build_graph(project)
+            node = next(
+                (n for n in graph.iter_by_kind(NodeKind.REQUIREMENT) if n.id == "REQ-d00001"),
+                None,
+            )
+            assert node is not None, f"REQ-d00001 not found in graph for {project}"
+            return graph, node
+
+        with_gap_graph, with_gap_node = requirement_node(
+            _make_project(tmp_path / "with_gap", REQ_ASSERTION_WITH_TABLE, FULL_TEXT_CONFIG_TOML)
+        )
+        _, without_gap_node = requirement_node(
+            _make_project(tmp_path / "without_gap", without_gap_source, FULL_TEXT_CONFIG_TOML)
+        )
+
+        # Precondition: the digest below rests on the blank line reaching the
+        # assertion node at all.
+        assertion_text = _assertion_text(with_gap_graph, "REQ-d00001-A")
+        assert "\n\n" in assertion_text, (
+            "The blank line before the table was lost at parse time, so the "
+            f"full-text digest cannot reflect it; assertion text was:\n{assertion_text!r}"
+        )
+
+        with_gap_full = compute_hash_for_node(with_gap_node, "full-text")
+        without_gap_full = compute_hash_for_node(without_gap_node, "full-text")
+        assert with_gap_full and without_gap_full, (
+            "Both requirements must yield a full-text hash; got "
+            f"{with_gap_full!r} and {without_gap_full!r}"
+        )
+        assert with_gap_full != without_gap_full, (
+            "full-text applies no normalization, so the interior blank line "
+            "must change the digest; both sources hashed to "
+            f"{with_gap_full!r}, meaning the blank line never reached the hash"
+        )
+
+        with_gap_norm = compute_hash_for_node(with_gap_node, "normalized-text")
+        without_gap_norm = compute_hash_for_node(without_gap_node, "normalized-text")
+        assert with_gap_norm == without_gap_norm, (
+            "normalized-text collapses the blank line, so the same pair of "
+            f"sources must hash identically there ({with_gap_norm!r} vs "
+            f"{without_gap_norm!r})"
         )

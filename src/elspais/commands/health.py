@@ -2036,11 +2036,11 @@ def _config_with_status_overlay(
     config: dict[str, Any] | None,
     status_flags: set[str],
 ) -> dict[str, Any] | None:
-    """Config overlay forcing ``expects_implementation=True`` for --status names.
+    """Config overlay forcing ``expects_implementation=True`` for --treat-active names.
 
-    ``--status Draft`` makes Draft count toward coverage (the documented
+    ``--treat-active Draft`` makes Draft count toward coverage (the documented
     capability, ``docs/cli/checks.md``). Rather than a second coverage-inclusion
-    predicate, ``--status`` is expressed as a per-call CONFIG overlay so the ONE
+    predicate, ``--treat-active`` is expressed as a per-call CONFIG overlay so the ONE
     resolver (``status_expects_implementation``) drives both the dimension
     COUNTS (``aggregate_dimension``) and the excluded-NOTE from the same source
     -- they can no longer disagree (REQ-d00258-C).
@@ -2075,11 +2075,11 @@ def _resolve_exclude_status(
     """Statuses treated as coverage-EXCLUDED for the reference-status checks.
 
     This drives ``_check_status_references`` (retired/provisional/aspirational
-    reference flagging): ``--status Draft`` promotes Draft to active-like, so it
+    reference flagging): ``--treat-active Draft`` promotes Draft to active-like, so it
     is removed from this set and Draft references stop being flagged. Coverage
     COUNTS and the excluded-note no longer read this set -- they route through
     ``_config_with_status_overlay`` + ``status_expects_implementation`` so a
-    single resolver keeps them consistent (REQ-d00258-C). Without ``--status``,
+    single resolver keeps them consistent (REQ-d00258-C). Without ``--treat-active``,
     the role system supplies the default exclusion set.
     """
     from elspais.config import get_status_roles
@@ -2097,9 +2097,9 @@ def _excluded_note(
 
     A status is 'excluded' iff it does NOT expect implementation under the given
     config -- the SAME resolver (``status_expects_implementation``) that gates
-    ``aggregate_dimension``'s counts (REQ-d00258-C). Passing the ``--status``
+    ``aggregate_dimension``'s counts (REQ-d00258-C). Passing the ``--treat-active``
     overlay here keeps the note and the counts in agreement: a status promoted
-    by ``--status`` (or by ``[statuses.<S>].expects_implementation``) is counted
+    by ``--treat-active`` (or by ``[statuses.<S>].expects_implementation``) is counted
     and therefore NOT listed as excluded.
     """
     from elspais.config import status_expects_implementation
@@ -2133,10 +2133,10 @@ def check_dimension_coverage(
         dimension: One of 'implemented', 'tested', 'verified',
                    'uat_coverage', 'uat_verified'.
         exclude_status: Vestigial; coverage inclusion is now gated entirely by
-            ``config`` (the ``--status`` overlay) via
+            ``config`` (the ``--treat-active`` overlay) via
             ``status_expects_implementation`` (REQ-d00258-C). Retained only for
             call-site signature stability.
-        config: Project config dict (the ``--status`` overlay when applicable).
+        config: Project config dict (the ``--treat-active`` overlay when applicable).
         level_filter: Optional predicate ``(level) -> bool`` limiting which
             requirement levels are counted (see ``aggregate_dimension``).
         message_suffix: Optional clarifying text appended to the message.
@@ -2170,7 +2170,7 @@ def check_dimension_coverage(
     req_pct = (req_with_any / req_count * 100) if req_count > 0 else 0
     direct_pct = (direct_assertions / total_assertions * 100) if total_assertions > 0 else 0
     indirect_pct = (indirect_assertions / total_assertions * 100) if total_assertions > 0 else 0
-    # REQ-d00258-C: note and counts read the SAME config (the --status overlay),
+    # REQ-d00258-C: note and counts read the SAME config (the --treat-active overlay),
     # so a promoted status is counted AND absent from the excluded-note.
     note = _excluded_note(graph, config=config)
 
