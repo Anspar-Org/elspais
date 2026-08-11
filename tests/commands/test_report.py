@@ -85,13 +85,14 @@ def _patch_graph_build():
 
 
 # ===========================================================================
-# Verifies: Multiple sections concatenated in order (REQ-d00085-A)
+# Multiple sections concatenated in order
 # ===========================================================================
 
 
 class TestMultipleSectionsConcatenated:
     """Validates REQ-d00085-A: Multiple sections concatenated in order."""
 
+    # Verifies: REQ-d00085-A
     def test_REQ_d00085_A_multiple_sections_concatenated(self, capsys):
         """Two sections produce output containing both in order."""
         with patch.object(report, "_render_section", side_effect=_mock_render_section):
@@ -109,6 +110,7 @@ class TestMultipleSectionsConcatenated:
         assert coverage_pos != -1, "Coverage output missing"
         assert health_pos < coverage_pos, "Health should appear before coverage"
 
+    # Verifies: REQ-d00085-A
     def test_REQ_d00085_A_three_sections_in_order(self, capsys):
         """Three sections are concatenated in the order specified."""
         with patch.object(report, "_render_section", side_effect=_mock_render_section):
@@ -125,6 +127,7 @@ class TestMultipleSectionsConcatenated:
         coverage_pos = captured.out.find("Coverage Report")
         assert trace_pos < health_pos < coverage_pos
 
+    # Verifies: REQ-d00085-A
     def test_REQ_d00085_A_sections_separated_by_blank_lines(self, capsys):
         """Sections are joined with double newlines."""
         with patch.object(report, "_render_section", side_effect=_mock_render_section):
@@ -145,28 +148,32 @@ class TestMultipleSectionsConcatenated:
 
 
 # ===========================================================================
-# Verifies: Shared flags apply globally (REQ-d00085-B)
+# Shared flags apply globally
 # ===========================================================================
 
 
 class TestSharedFlagsApplyGlobally:
     """Validates REQ-d00085-B: Shared flags (--format, -q, --lenient) apply globally."""
 
+    # Verifies: REQ-d00085-B
     def test_REQ_d00085_B_parse_shared_args_format(self):
         """--format is parsed from argv."""
         args = parse_shared_args(["--format", "markdown"])
         assert args.format == "markdown"
 
+    # Verifies: REQ-d00085-B
     def test_REQ_d00085_B_parse_shared_args_quiet(self):
         """-q flag is parsed from argv."""
         args = parse_shared_args(["-q"])
         assert args.quiet is True
 
+    # Verifies: REQ-d00085-B
     def test_REQ_d00085_B_parse_shared_args_lenient(self):
         """--lenient flag is parsed from argv."""
         args = parse_shared_args(["--lenient"])
         assert args.lenient is True
 
+    # Verifies: REQ-d00085-B
     def test_REQ_d00085_B_parse_shared_args_defaults(self):
         """Default values for shared args."""
         args = parse_shared_args([])
@@ -174,6 +181,7 @@ class TestSharedFlagsApplyGlobally:
         assert args.quiet is False
         assert args.lenient is False
 
+    # Verifies: REQ-d00085-B
     def test_REQ_d00085_B_format_passed_to_all_sections(self):
         """--format flag is passed to each section via the shared args namespace."""
         mock_rs = MagicMock(return_value=("output", 0))
@@ -193,13 +201,14 @@ class TestSharedFlagsApplyGlobally:
 
 
 # ===========================================================================
-# Verifies: Exit code is worst-of-all-sections (REQ-d00085-C)
+# Exit code is worst-of-all-sections
 # ===========================================================================
 
 
 class TestWorstExitCode:
     """Validates REQ-d00085-C: Exit code is worst-of-all-sections."""
 
+    # Verifies: REQ-d00085-C
     def test_REQ_d00085_C_all_pass_exit_zero(self):
         """All sections passing returns exit 0."""
         with patch.object(report, "_render_section", side_effect=_mock_render_section):
@@ -212,6 +221,7 @@ class TestWorstExitCode:
 
         assert exit_code == 0
 
+    # Verifies: REQ-d00085-C+G
     def test_REQ_d00085_C_one_failure_propagates(self):
         """If checks returns 1, overall exit is 1 even if coverage returns 0."""
         with patch.object(report, "_render_section", side_effect=_mock_render_section_with_warning):
@@ -224,6 +234,7 @@ class TestWorstExitCode:
 
         assert exit_code == 1
 
+    # Verifies: REQ-d00085-C
     def test_REQ_d00085_C_worst_code_wins(self):
         """The worst exit code across sections is returned."""
         mock_rs = MagicMock(side_effect=[("ok", 0), ("fail", 2)])
@@ -239,13 +250,14 @@ class TestWorstExitCode:
 
 
 # ===========================================================================
-# Verifies: Single section behaves identically to standalone (REQ-d00085-D)
+# Single section behaves identically to standalone
 # ===========================================================================
 
 
 class TestSingleSectionIdentical:
     """Validates REQ-d00085-D: Single section behaves identically to standalone."""
 
+    # Verifies: REQ-d00085-D
     def test_REQ_d00085_D_single_section_returns_its_output(self, capsys):
         """Single section output is printed without extra wrapping."""
         with patch.object(report, "_render_section", side_effect=_mock_render_section):
@@ -260,6 +272,7 @@ class TestSingleSectionIdentical:
         assert "Coverage Report" in captured.out
         assert exit_code == 0
 
+    # Verifies: REQ-d00085-D
     def test_REQ_d00085_D_single_section_exit_code_passthrough(self):
         """Single section exit code is passed through directly."""
         mock_rs = MagicMock(return_value=("output", 1))
@@ -275,19 +288,21 @@ class TestSingleSectionIdentical:
 
 
 # ===========================================================================
-# Verifies: Format support validation (REQ-d00085-E)
+# Format support validation
 # ===========================================================================
 
 
 class TestFormatSupportValidation:
     """Validates REQ-d00085-E: Format support validation (invalid format -> error)."""
 
+    # Verifies: REQ-d00085-E
     def test_REQ_d00085_E_format_support_dict_exists(self):
         """FORMAT_SUPPORT defines valid formats for each composable section."""
         for section in COMPOSABLE_SECTIONS:
             assert section in FORMAT_SUPPORT
             assert isinstance(FORMAT_SUPPORT[section], set)
 
+    # Verifies: REQ-d00085-E
     def test_REQ_d00085_E_invalid_format_returns_error(self, capsys):
         """Requesting csv for changed section returns exit 1 with error message."""
         exit_code = run(["changed"], ["--format", "csv"])
@@ -297,6 +312,7 @@ class TestFormatSupportValidation:
         assert "not supported" in captured.err
         assert "changed" in captured.err
 
+    # Verifies: REQ-d00085-E
     def test_REQ_d00085_E_invalid_format_for_one_section_in_multi(self, capsys):
         """If format is invalid for any section, error is returned early."""
         # csv is not supported for "changed"
@@ -306,6 +322,7 @@ class TestFormatSupportValidation:
         captured = capsys.readouterr()
         assert "not supported" in captured.err
 
+    # Verifies: REQ-d00085-E
     def test_REQ_d00085_E_valid_format_proceeds(self):
         """A valid format for all requested sections proceeds normally."""
         with patch.object(report, "_render_section", side_effect=_mock_render_section):
@@ -318,23 +335,26 @@ class TestFormatSupportValidation:
 
         assert exit_code == 0
 
+    # Verifies: REQ-d00085-E
     def test_REQ_d00085_E_checks_supports_text_markdown_json_junit_sarif(self):
         """Checks section supports text, markdown, json, junit, sarif."""
         assert FORMAT_SUPPORT["checks"] == {"text", "markdown", "json", "junit", "sarif"}
 
+    # Verifies: REQ-d00085-E
     def test_REQ_d00085_E_changed_supports_text_json_only(self):
         """Changed section supports only text and json."""
         assert FORMAT_SUPPORT["changed"] == {"text", "json"}
 
 
 # ===========================================================================
-# Verifies: Quiet mode (REQ-d00085-F)
+# Quiet mode
 # ===========================================================================
 
 
 class TestQuietMode:
     """Validates REQ-d00085-F: -q/--quiet suppresses output to summary."""
 
+    # Verifies: REQ-d00085-F
     def test_REQ_d00085_F_quiet_with_output_file_no_stderr(self, capsys, tmp_path):
         """With -q and -o, no 'Generated:' message appears on stderr."""
         output_file = tmp_path / "report.txt"
@@ -353,6 +373,7 @@ class TestQuietMode:
         assert "Generated:" not in captured.err
         assert exit_code == 0
 
+    # Verifies: REQ-d00085-F
     def test_REQ_d00085_F_without_quiet_output_file_shows_generated(self, capsys, tmp_path):
         """Without -q, -o shows 'Generated:' on stderr."""
         output_file = tmp_path / "report.txt"
@@ -372,13 +393,14 @@ class TestQuietMode:
 
 
 # ===========================================================================
-# Verifies: Lenient mode (REQ-d00085-G)
+# Lenient mode
 # ===========================================================================
 
 
 class TestLenientMode:
     """Validates REQ-d00085-G: --lenient allows warnings to pass."""
 
+    # Verifies: REQ-d00085-G
     def test_REQ_d00085_G_without_lenient_warnings_fail(self):
         """Without --lenient, checks warning exit code 1 propagates."""
         with patch.object(
@@ -395,6 +417,7 @@ class TestLenientMode:
 
         assert exit_code == 1
 
+    # Verifies: REQ-d00085-B
     def test_REQ_d00085_G_lenient_flag_parsed(self):
         """--lenient flag is available in the args namespace passed to sections."""
         mock_rs = MagicMock(return_value=("output", 0))
@@ -411,13 +434,14 @@ class TestLenientMode:
 
 
 # ===========================================================================
-# Verifies: Output to file (--output)
+# Output to file (--output)
 # ===========================================================================
 
 
 class TestOutputFile:
     """Validates REQ-d00085-B: --output writes combined report to file."""
 
+    # Verifies: REQ-d00085-B
     def test_REQ_d00085_B_output_file_written(self, tmp_path):
         """--output writes the combined output to a file."""
         output_file = tmp_path / "report.txt"
@@ -440,13 +464,14 @@ class TestOutputFile:
 
 
 # ===========================================================================
-# Verifies: CLI dispatch integration (REQ-d00085-A)
+# CLI dispatch integration
 # ===========================================================================
 
 
 class TestCLIDispatch:
     """Validates REQ-d00085-A: cli.main() dispatches multi-section to report.run."""
 
+    # Verifies: REQ-d00085-A
     def test_REQ_d00085_A_cli_detects_multiple_sections(self):
         """cli.main() with multiple composable names dispatches to report.run."""
         with patch("elspais.commands.report.run", return_value=0) as mock_run:
@@ -463,6 +488,7 @@ class TestCLIDispatch:
         assert "--format" in call_args[0][1]
         assert "text" in call_args[0][1]
 
+    # Verifies: REQ-d00085-D
     def test_REQ_d00085_D_cli_single_section_uses_normal_argparse(self):
         """cli.main() with single composable name uses normal argparse dispatch."""
         with patch("elspais.commands.report.run") as mock_report_run:
@@ -479,13 +505,14 @@ class TestCLIDispatch:
 
 
 # ===========================================================================
-# Verifies: COMPOSABLE_SECTIONS constant
+# COMPOSABLE_SECTIONS constant
 # ===========================================================================
 
 
 class TestComposableSections:
     """Validates REQ-d00085-A: The set of composable sections."""
 
+    # Verifies: REQ-d00085-A
     def test_REQ_d00085_A_composable_sections_has_minimum_set(self):
         """COMPOSABLE_SECTIONS includes the core composable section names."""
         for name in ("checks", "summary", "trace", "changed"):
@@ -495,13 +522,14 @@ class TestComposableSections:
 
 
 # ===========================================================================
-# Verifies: Integration with real spec dir
+# Integration with real spec dir
 # ===========================================================================
 
 
 class TestIntegrationWithSpecDir:
     """Validates REQ-d00085-A+D: Integration test with real spec directory."""
 
+    # Verifies: REQ-d00085-D
     def test_REQ_d00085_D_single_coverage_with_spec_dir(self, tmp_path, monkeypatch):
         """Single coverage section with real spec dir produces output."""
         spec_dir = _make_spec_dir(tmp_path)
@@ -514,6 +542,7 @@ class TestIntegrationWithSpecDir:
 
         assert exit_code == 0
 
+    # Verifies: REQ-d00085-A+B
     def test_REQ_d00085_A_multi_section_with_spec_dir(self, tmp_path, monkeypatch):
         """Multiple sections with real spec dir produces combined output."""
         spec_dir = _make_spec_dir(tmp_path)
