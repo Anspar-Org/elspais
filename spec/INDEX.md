@@ -35,6 +35,7 @@
 
 | ID                     | Title                                   | File | Hash     |
 | ---------------------- | --------------------------------------- | ---- | -------- |
+| REQ-d00268::REQ-p00019 | Truthful Reporting and Error Discipline |      | b2a947fb |
 | REQ-p00015::REQ-p00019 | Truthful Reporting and Error Discipline |      | b2a947fb |
 | REQ-p00080::REQ-p00019 | Truthful Reporting and Error Discipline |      | b2a947fb |
 | REQ-p00081::REQ-p00019 | Truthful Reporting and Error Discipline |      | b2a947fb |
@@ -48,7 +49,7 @@
 | REQ-o00051 | Composable Annotation Design        | ops-architecture.md | 2fabd3d4 |
 | REQ-o00060 | MCP Core Query Tools                | ops-mcp.md          | 3a9ae713 |
 | REQ-o00061 | MCP Workspace Context Tools         | ops-mcp.md          | 3306c687 |
-| REQ-o00062 | MCP Graph Mutation Tools            | ops-mcp.md          | 0dfcea34 |
+| REQ-o00062 | MCP Graph Mutation Tools            | ops-mcp.md          | f11c79aa |
 | REQ-o00063 | MCP File Mutation Tools             | ops-mcp.md          | 05c1e9c4 |
 | REQ-o00064 | MCP Test Coverage Analysis Tools    | ops-mcp.md          | a97fc5c4 |
 | REQ-o00065 | Agent-Assisted Link Suggestion      | ops-mcp.md          | 06f8e1ac |
@@ -161,7 +162,7 @@
 | REQ-d00248 | Fix Command Idempotency                                       | prd-core.md             | 2b421222 |
 | REQ-d00249 | Configured test runner execution                              | dev-cli.md              | 784f8350 |
 | REQ-d00250 | Section Header Depth Canonicalization                         | dev-graph-core.md       | 48fc2f11 |
-| REQ-d00251 | Component Style Vocabulary and Assertion Separator            | dev-graph-config.md     | 7857498c |
+| REQ-d00251 | Component Style Vocabulary and Assertion Separator            | dev-graph-config.md     | e4e4a5fc |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 8e07589c |
 | REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | f454041e |
 | REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | 22faeb40 |
@@ -177,6 +178,7 @@
 | REQ-d00264 | Usage-Driven Glossary Selection                               | prd-core.md             | 12f529a3 |
 | REQ-d00266 | Mechanical Style Checks                                       | dev-cli.md              | 084c17a0 |
 | REQ-d00267 | Viewer Pending-Work Indicator Truth                           | prd-features.md         | c1be85e3 |
+| REQ-d00268 | Report Malformed Assertion Labels                             | dev-graph-core.md       | cb7e96dd |
 
 ## User Journeys
 

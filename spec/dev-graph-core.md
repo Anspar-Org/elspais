@@ -383,6 +383,36 @@ F. The `validate` / health-check command reports B and C as
 
 *End* *Section Header Depth Canonicalization* | **Hash**: 48fc2f11
 
+## REQ-d00268: Report Malformed Assertion Labels
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+**Satisfies**: REQ-p00019
+
+Spec files are ordinary markdown that any editor can produce, so the labelling a requirement arrives with cannot be assumed well-formed. A label the parser cannot place is reported against its source rather than passed over.
+
+### Assertions
+
+A. An *Assertion* label outside the configured label series SHALL be reported, naming the file, the requirement and the label, and SHALL NOT be read as an assertion, skipped, or absorbed into surrounding prose.
+
+B. An *Assertion* label that repeats one already used in the same requirement SHALL be reported, naming both occurrences.
+
+C. An *Assertion* label that is not the successor of the label before it SHALL be reported, naming the label found and the label expected, so that a series with a label missing from the middle is reported rather than read as complete.
+
+D. A requirement whose assertions do not form a single run SHALL be reported, naming the requirement and the number of runs found; no run SHALL displace another.
+
+E. A requirement carrying any condition in assertions A through D SHALL NOT be reported as parsed successfully, and the conditions found SHALL be reported together rather than only the first.
+
+### Rationale
+
+A label is a permanent name: references point at it, coverage accrues to it, and a reader relies on the sequence to tell whether they have seen everything. Each condition here is a label the parser cannot honour, and the failure being prevented is the same in all of them — reading a requirement as complete when part of it was not understood, which leaves the omission to be discovered as a coverage gap that was never real. Assertion C is what makes a series legible: a removed *Assertion* keeps its label and is marked retired rather than vanishing, so a label missing from the middle is evidence of loss rather than of removal. Assertion E prevents the diagnosis arriving one item at a time, which for a file being repaired by hand is the difference between one pass and four.
+
+### Changelog
+
+- 2026-08-10 | cb7e96dd | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: report malformed assertion labelling instead of discarding it
+
+*End* *Report Malformed Assertion Labels* | **Hash**: cb7e96dd
+
 ## REQ-d00254: Test Evidence: Attribution, Ingestion, and Coverage Crediting
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00051
