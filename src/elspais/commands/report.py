@@ -1,4 +1,4 @@
-# Implements: REQ-d00085-A+B+C+D+E+F+G
+# Implements: REQ-d00085-A+B+C+D+E+F+G+K+L
 """
 elspais.commands.report - Composable multi-section report system.
 

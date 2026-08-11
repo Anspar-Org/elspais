@@ -221,7 +221,7 @@ class TestWorstExitCode:
 
         assert exit_code == 0
 
-    # Verifies: REQ-d00085-C+G
+    # Verifies: REQ-d00085-C+L
     def test_REQ_d00085_C_one_failure_propagates(self):
         """If checks returns 1, overall exit is 1 even if coverage returns 0."""
         with patch.object(report, "_render_section", side_effect=_mock_render_section_with_warning):
@@ -400,8 +400,8 @@ class TestQuietMode:
 class TestLenientMode:
     """Validates REQ-d00085-G: --lenient allows warnings to pass."""
 
-    # Verifies: REQ-d00085-G
-    def test_REQ_d00085_G_without_lenient_warnings_fail(self):
+    # Verifies: REQ-d00085-L
+    def test_REQ_d00085_L_without_lenient_warnings_fail(self):
         """Without --lenient, checks warning exit code 1 propagates."""
         with patch.object(
             report,
@@ -418,7 +418,7 @@ class TestLenientMode:
         assert exit_code == 1
 
     # Verifies: REQ-d00085-B
-    def test_REQ_d00085_G_lenient_flag_parsed(self):
+    def test_REQ_d00085_B_lenient_flag_parsed(self):
         """--lenient flag is available in the args namespace passed to sections."""
         mock_rs = MagicMock(return_value=("output", 0))
         with patch.object(report, "_render_section", mock_rs):

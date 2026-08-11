@@ -167,9 +167,9 @@ D. When a single section is specified, it SHALL behave identically to a standalo
 
 E. The `--format` flag SHALL support `text`, `markdown`, `json`, and `csv` output modes. Not all formats are valid for all sections; invalid combinations SHALL produce a clear error.
 
-F. The `-q`/`--quiet` flag SHALL suppress all output except a single summary line per section. The `-v`/`--verbose` flag SHALL expand all available detail.
+F. The `-q`/`--quiet` flag SHALL suppress all output except a single summary line per section.
 
-G. The `--lenient` flag SHALL allow warnings to pass without affecting the exit code. Without `--lenient`, any warning-level finding SHALL cause a non-zero exit code.
+G. The `--lenient` flag SHALL allow warnings to pass without affecting the exit code.
 
 H. The `--format junit` option SHALL render health checks as JUnit XML, mapping categories to `<testsuite>` elements, checks to `<testcase>` elements, failures to `<failure>` elements, warnings to `<system-err>`, and info to `<system-out>`.
 
@@ -177,17 +177,25 @@ I. Each `HealthCheck` SHALL carry a `findings` list of `HealthFinding` dataclass
 
 J. The `--format sarif` option SHALL render health findings as SARIF v2.1.0 JSON, with one `reportingDescriptor` per unique check name, one `result` per `HealthFinding` with physical locations, passing checks omitted, and coverage stats in `run.properties`.
 
+K. The `-v`/`--verbose` flag SHALL expand all available detail.
+
+L. Without `--lenient`, any warning-level finding SHALL cause a non-zero exit code.
+
 ### Rationale
 
 Report-producing commands (`health`, `trace`, `coverage`, `changed`) currently exist as independent subcommands with inconsistent format support. Composing a combined report (e.g. health + coverage for a CI PR comment) requires multiple invocations and manual concatenation. A composable system builds the graph once, renders each section, and produces unified output. The `--lenient` flag provides an escape hatch for workflows that want to observe warnings without gating on them.
 
+Quietness and verbosity are separate obligations (F, K), as are leniency and the default it departs from (G, L). Each pair was carried under one label until evidence for one half was found standing in for both: coverage is reported per assertion, so a label holding two obligations cannot distinguish an implementation from half of one.
+
 ### Changelog
 
+- 2026-08-11 | 650b3641 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-11 | 0d1e518a | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: split the verbose half of F into K and the without-lenient half of G into L
 - 2026-07-31 | 0d1e518a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 82d76f1a | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 82d76f1a | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Unified Report Composition* | **Hash**: 0d1e518a
+*End* *Unified Report Composition* | **Hash**: 650b3641
 ---
 
 ## REQ-d00086: Coverage Report Section
