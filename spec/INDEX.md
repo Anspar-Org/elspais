@@ -97,7 +97,7 @@
 | REQ-d00081 | Multi-Assertion Reference Expansion                           | dev-cli.md              | e001c08a |
 | REQ-d00082 | Unified Reference Configuration                               | dev-cli.md              | 6289e433 |
 | REQ-d00084 | Trace Command                                                 | dev-cli.md              | 1bd6bca1 |
-| REQ-d00085 | Unified Report Composition                                    | dev-cli.md              | 650b3641 |
+| REQ-d00085 | Unified Report Composition                                    | dev-cli.md              | 587285b0 |
 | REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | a12d2826 |
 | REQ-d00124 | Graph Analysis Engine                                         | dev-cli.md              | b153d5f6 |
 | REQ-d00125 | Analysis CLI Command                                          | dev-cli.md              | 474fa8af |
