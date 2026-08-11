@@ -52,7 +52,11 @@ Example chain:
                Coverage rolls up in traceability reports
 
   **Refines**    - Adds detail to parent without claiming satisfaction
-               No coverage rollup; just shows relationship
+               The edge grants no coverage by itself, but a refining
+               requirement conducts its own coverage up to the parent.
+               Naming an assertion credits that assertion on both
+               footings; refining the whole requirement credits every
+               assertion on the generous footing only.
 
   **Integrates** - Satisfaction is provided by a requirement in a
                configured associate (external library) repo. Coverage
