@@ -23,7 +23,7 @@
 | REQ-p00017 | Reference Integrity Under Mutation               | prd-core.md     | 8ddf7122 |
 | REQ-p00018 | Compiled Risk Register                           | prd-core.md     | 0f0438e9 |
 | REQ-p00019 | Truthful Reporting and Error Discipline          | prd-core.md     | b2a947fb |
-| REQ-p00050 | Unified Graph Architecture                       | prd-features.md | 46ac5f6a |
+| REQ-p00050 | Unified Graph Architecture                       | prd-features.md | 3a0fb899 |
 | REQ-p00060 | MCP Server for AI-Driven Requirements Management | prd-features.md | a729a853 |
 | REQ-p00061 | Requirement Decomposition Rules                  | prd-core.md     | 462c146e |
 | REQ-p00080 | Spec-to-PDF Compilation                          | prd-core.md     | acc97ca9 |
@@ -112,7 +112,7 @@
 | REQ-d00134 | Comprehensive Mutation Round-Trip Scenario Test               | dev-graph-file-nodes.md | 6c865949 |
 | REQ-d00200 | FederatedGraph Read-Only Delegation                           | dev-graph-federation.md | 06b84d97 |
 | REQ-d00201 | FederatedGraph Mutation Delegation                            | dev-graph-federation.md | 85081cae |
-| REQ-d00202 | Associates Config Loading                                     | dev-graph-federation.md | b599e6ec |
+| REQ-d00202 | Associates Config Loading                                     | dev-graph-federation.md | 0522f86c |
 | REQ-d00203 | Multi-Repo Build Pipeline                                     | dev-graph-federation.md | 957568b6 |
 | REQ-d00204 | Per-Repo Health Check Delegation                              | dev-graph-federation.md | 7e0f5586 |
 | REQ-d00205 | MCP Federation Support                                        | dev-mcp-tools.md        | 42c7a840 |

@@ -288,6 +288,8 @@ C. The system SHALL NOT create parallel data structures that duplicate informati
 
 D. The system SHALL NOT have multiple code paths that independently compute hierarchy, coverage, or relationships.
 
+E. A node's identifier SHALL denote exactly one node.
+
 ### Rationale
 
 Multiple data structures lead to synchronization bugs, duplicated logic, and maintenance burden. A single graph provides:
@@ -297,13 +299,17 @@ Multiple data structures lead to synchronization bugs, duplicated logic, and mai
 - Centralized metrics computation
 - Easier testing and debugging
 
+An identifier that denotes two nodes makes the graph two sources of truth wearing one name, which is the synchronization failure A exists to prevent rather than a separate concern. A lookup has to be able to answer, and a caller that writes based on that answer has to be writing to the thing it asked for.
+
 ### Changelog
 
+- 2026-08-10 | 3a0fb899 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | 46ac5f6a | - | Michael Lewis (<michael@anspar.org>) | Oblige an identifier to denote one node
 - 2026-07-31 | 46ac5f6a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 4a1e5d0b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 4a1e5d0b | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Unified Graph Architecture* | **Hash**: 46ac5f6a
+*End* *Unified Graph Architecture* | **Hash**: 3a0fb899
 ---
 
 ## REQ-p00060: MCP Server for AI-Driven Requirements Management
