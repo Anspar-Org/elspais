@@ -115,7 +115,8 @@ def extract_comments(source: str, ext: str) -> list[tuple[str, int]]:
         results.extend(_extract_line_comments(source, _DASH_COMMENT_RE))
     elif ext_lower in _HTML_LANGS:
         results.extend(_extract_block_comments(source, _HTML_COMMENT_RE))
-    # Implements: REQ-d00236-G — unknown extensions fall through with []
+    # Implements: REQ-d00236-G
+    # An unknown extension falls through with [].
 
     results.sort(key=lambda x: x[1])
     return results
@@ -265,7 +266,8 @@ def scan_text_for_terms(
     # match -- this dominates scan cost on large federated graphs.
     text_cf = text.casefold()
 
-    # Implements: REQ-d00237-G — longest-first for deterministic nesting.
+    # Implements: REQ-d00237-G
+    # Longest-first, for deterministic nesting.
     for entry in _terms_longest_first(td):
         term = entry.term
 
@@ -329,8 +331,9 @@ def scan_text_for_terms(
                 continue
 
             lineno = text[:span_start].count("\n") + 1 + line_offset
-            # Implements: REQ-d00237-F — record the reference (for the index)
-            # but flag occurrences embedded in a compound identifier so they are
+            # Implements: REQ-d00237-F
+            # Record the reference (for the index) but flag occurrences
+            # embedded in a compound identifier so they are
             # neither auto-marked nor reported as unmarked-emphasis violations.
             ref = TermRef(
                 node_id=node_id,
@@ -488,7 +491,8 @@ def _canonicalize_text(
     claimed: list[tuple[int, int]] = []
     replacements: list[tuple[str, str]] = []  # (old_form, new_form)
 
-    # Implements: REQ-d00237-G — longest-first so a compound term (e.g.
+    # Implements: REQ-d00237-G
+    # Longest-first, so a compound term (e.g.
     # "Sponsor Portal") is marked as a whole rather than having its inner
     # term ("Sponsor") wrapped first.
     for entry in _terms_longest_first(td):
@@ -550,7 +554,8 @@ def _canonicalize_text(
                 continue
             if _in_outer_emphasis(m.start(), m.end()):
                 continue
-            # Implements: REQ-d00237-F — don't reach into compound identifiers
+            # Implements: REQ-d00237-F
+            # Don't reach into compound identifiers
             # (e.g. a REQ-ID); marking a sub-token would emit ``...-*Session*-...``.
             if _is_embedded_in_compound(text, m.start(), m.end()):
                 continue

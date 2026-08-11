@@ -1721,7 +1721,8 @@ def check_term_canonical_form(
                 continue
             if ref.is_canonical(canonical):
                 continue
-            # Implements: REQ-d00237-F — embedded-in-identifier occurrences are
+            # Implements: REQ-d00237-F
+            # Embedded-in-identifier occurrences are
             # references, not non-canonical prose; leave them untouched.
             if ref.embedded:
                 continue
@@ -1782,7 +1783,8 @@ def run_term_checks(
     unmarked: list[dict] = []
     for entry in entries:
         for ref in entry.references:
-            # Implements: REQ-d00237-F — occurrences embedded in a compound
+            # Implements: REQ-d00237-F
+            # Occurrences embedded in a compound
             # identifier (e.g. a REQ-ID) are references, not unmarked-emphasis
             # violations.
             if ref.embedded:

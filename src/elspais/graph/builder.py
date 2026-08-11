@@ -4373,7 +4373,8 @@ class GraphBuilder:
                 # in-repo Satisfies clones.
                 if self._project_name:
                     clone.set_field("template_repo", self._project_name)
-                # Implements: REQ-d00129-C -- copy parse_line fields from original
+                # Implements: REQ-d00129-C
+                # Copy parse_line fields from the original.
                 if orig.get_field("parse_line") is not None:
                     clone.set_field("parse_line", orig.get_field("parse_line"))
                 if orig.get_field("parse_end_line") is not None:
@@ -4409,7 +4410,8 @@ class GraphBuilder:
             if cloned_root:
                 declaring_node.link(cloned_root, EdgeKind.SATISFIES)
 
-            # Implements: REQ-d00128-J -- DEFINES edges from declaring FILE to INSTANCE nodes
+            # Implements: REQ-d00128-J
+            # DEFINES edges run from the declaring FILE to the INSTANCE nodes.
             declaring_file = declaring_node.file_node()
             if declaring_file:
                 for clone in clone_map.values():

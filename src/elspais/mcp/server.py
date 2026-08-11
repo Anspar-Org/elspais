@@ -486,7 +486,8 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
     keywords = node.get_field("keywords", []) or []
 
     # ── Kind-specific properties ──
-    # Implements: REQ-p00014-K (cross-repo template provenance affordance)
+    # Implements: REQ-p00014-K
+    # The cross-repository template provenance affordance.
     properties: dict[str, Any] = {}
     if kind == NodeKind.REQUIREMENT:
         from elspais.graph.relations import Stereotype
@@ -6313,7 +6314,8 @@ def create_server(
         if guard:
             return guard
         parent = None
-        # Implements: REQ-o00062-M — placement changes the destination file's
+        # Implements: REQ-o00062-M
+        # Placement changes the destination file's
         # composition, so the FILE token is the one that must be current.
         guarded_id = file_id or parent_id
         if guarded_id:

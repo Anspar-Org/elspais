@@ -295,7 +295,10 @@ class FileDispatcher:
         prescan_data: dict[str, list[dict]] | None = None,
     ) -> list:
         """Parse a test file and return ParsedContent list."""
-        from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
+        from elspais.graph.parsers.lark.transformers.reference import (
+            ReferenceTransformer,
+            read_reference_list,
+        )
         from elspais.graph.parsers.prescan import (
             ast_prescan,
             dart_prescan,
@@ -356,7 +359,10 @@ class FileDispatcher:
                         # Silently skip — test fixtures contain cross-type
                         # keywords in string literals
                         continue
-                    for ref in self._reader.extract_refs(text):
+                    # A file-level default is an annotation like any other:
+                    # it names a list of references or it names none
+                    # (REQ-d00269-G).
+                    for ref in read_reference_list(self._reader, text) or ():
                         if ref not in file_default_verifies:
                             file_default_verifies.append(ref)
 

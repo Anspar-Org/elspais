@@ -127,6 +127,36 @@ resemble your own. Such a reference is reported by
 `spec.unclaimed_references` at a severity you choose (see
 `elspais docs checks`) rather than discarded.
 
+## What a Reference May Introduce
+
+A recognised line still has to say something the tool can read. What a
+keyword introduces is a list of references separated by commas, and
+nothing else. Each item may name an assertion, and may name several at
+once:
+
+```text
+# Implements: REQ-p00001
+# Implements: REQ-p00001-A
+# Implements: REQ-p00001-A+B
+# Implements: REQ-p00001, REQ-p00002-A
+**Implements**: REQ-p00001-A+B, REQ-p00002
+```
+
+A target holding anything else -- a note after the reference, prose around
+it, an identifier from another estate that merely contains one of yours --
+resolves to nothing and is reported as an unresolved reference carrying the
+line as written. No identifier is picked out of it: an edge to a
+requirement you never named would be evidence filed against the wrong
+requirement, and nothing would report it.
+
+```text
+# Implements: REQ-p00001 -- the flag path        (a note is not a reference)
+# Verifies: exit code is worst-of-all (REQ-p00001-C)   (prose is not a list)
+# Implements: XREQ-d00001                        (not your REQ-d00001)
+```
+
+Put the note on the line below, and the line above stays a reference.
+
 ## JSON Output
 
 For tooling and CI integration:

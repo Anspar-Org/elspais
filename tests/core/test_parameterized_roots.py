@@ -1,4 +1,4 @@
-# Verifies: REQ-d00130-A, REQ-d00130-B, REQ-d00130-C, REQ-d00130-D,
+# Verifies: REQ-d00130-A, REQ-d00130-B, REQ-d00130-C, REQ-d00130-D
 # Verifies: REQ-d00130-E, REQ-d00130-F
 """Tests for parameterized iter_roots() and iter_by_kind().
 

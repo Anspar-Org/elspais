@@ -102,6 +102,12 @@ TEST_NAME_LINE.4: /[ \t]*(?:async[ \t]+)?def[ \t]+test_\w*__NAMESPACE__[-_][^\n]
 // whatever follows the colon is the target, whatever it looks like.  That
 // admits a foreign identifier with a lowercase namespace, which a
 // shape-based rule cannot.
+//
+// Recognising a line is not resolving it.  What a target may *mean* is a
+// list of references and nothing else, and that is decided in the
+// transformer, over the target as a whole: a target this terminal admits
+// and that grammar cannot account for resolves to nothing and is reported
+// verbatim.
 UNRESOLVED_REF_LINE.3: /[ \t]*(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__):[ \t]+[^\n]+/
 
 // Generic text (lowest priority)

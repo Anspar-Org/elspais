@@ -519,9 +519,9 @@ class TestAssociatedMutations:
 
 # ---------------------------------------------------------------------------
 # Test: Federation write/index scope (CUR-1419 / REQ-d00253)
-# Verifies: REQ-d00253-B (fix writes primary-only)
-# Verifies: REQ-d00253-C (INDEX/term-index primary-only)
-# Verifies: REQ-d00253-D (MCP rejects associate mutations)
+# Verifies: REQ-d00253-B, REQ-d00253-C, REQ-d00253-D
+# B: fix writes primary-only.  C: INDEX/term-index primary-only.
+# D: MCP rejects associate mutations.
 #
 # These tests RUN `elspais fix` (which writes disk) and toggle config flags,
 # so each builds its OWN isolated core+associate project in tmp_path. The

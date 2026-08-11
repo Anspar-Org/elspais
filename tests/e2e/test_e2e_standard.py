@@ -1,4 +1,4 @@
-# Verifies: REQ-p00002, REQ-p00003, REQ-p00004, REQ-p00060,
+# Verifies: REQ-p00002, REQ-p00003, REQ-p00004, REQ-p00060
 #            REQ-d00074-A+B+C+D, REQ-d00080, REQ-d00085-A, REQ-d00250-E,
 #            REQ-o00062-I+J+K, REQ-d00131-L
 """Standard workhorse e2e tests — module-scoped fixture with daemon acceleration.

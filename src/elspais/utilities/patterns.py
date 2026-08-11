@@ -20,6 +20,11 @@ from typing import Any
 
 INSTANCE_SEPARATOR = "::"
 
+# The character between two references of one list. One spelling, shared by
+# every surface that reads a list of references, so a *Requirement*'s
+# metadata line and a code annotation admit exactly the same target.
+REF_LIST_SEPARATOR = ","
+
 # --- Shared regex patterns ---
 
 # Matches 3+ consecutive newlines for cleanup (collapse to double-newline)
@@ -1007,6 +1012,8 @@ class FederatedIdReader:
                 resolvers.append(other)
         self._resolvers: tuple[IdResolver, ...] = tuple(resolvers)
         self._ref_regex: re.Pattern[str] | None = None
+        self._item_regex: re.Pattern[str] | None = None
+        self._extra_item_regexes: dict[tuple[str, ...], tuple[re.Pattern[str], ...]] = {}
 
     @property
     def own(self) -> IdResolver:
@@ -1065,6 +1072,68 @@ class FederatedIdReader:
         refs: list[str] = []
         for match in self._reference_regex().finditer(text):
             ref = self.normalize(match.group(0))
+            if ref not in refs:
+                refs.append(ref)
+        return refs
+
+    def _item_pattern(self) -> re.Pattern[str]:
+        """One member reference, matched whole rather than searched for."""
+        if self._item_regex is None:
+            self._item_regex = re.compile(
+                "(?:"
+                + "|".join(r.multi_assertion_reference_regex().pattern for r in self._resolvers)
+                + ")",
+                re.IGNORECASE,
+            )
+        return self._item_regex
+
+    def _extra_patterns(self, extra_items: Sequence[str]) -> tuple[re.Pattern[str], ...]:
+        key = tuple(extra_items)
+        compiled = self._extra_item_regexes.get(key)
+        if compiled is None:
+            compiled = tuple(re.compile(p, re.IGNORECASE) for p in key)
+            self._extra_item_regexes[key] = compiled
+        return compiled
+
+    # Implements: REQ-d00269-G
+    def parse_ref_list(self, text: str, *, extra_items: Sequence[str] = ()) -> list[str] | None:
+        """The references *text* spells as a separated list, or None.
+
+        A *Traceability* keyword introduces a list of references and nothing
+        else, so each item is matched whole against a member's grammar rather
+        than searched for inside the item.  Searching would read
+        ``XREQ-d00001`` as ``REQ-d00001`` -- an edge to a requirement the
+        author never named, and one nothing reports, since a reference that
+        resolved is a reference that looked fine.
+
+        None means *text* is not such a list.  It is one answer for the whole
+        text, not per item: a target the grammar can only partly account for
+        is a target read wrongly, so the caller reports the line rather than
+        keeping whichever items happened to parse.
+
+        Args:
+            text: The content a keyword introduced, with the keyword and its
+                colon already removed.
+            extra_items: Patterns for items belonging to a grammar this
+                reader does not own -- a journey step, say -- which are
+                accepted verbatim rather than normalized.
+        """
+        stripped = text.strip()
+        if not stripped:
+            return None
+        item = self._item_pattern()
+        extras = self._extra_patterns(extra_items)
+        refs: list[str] = []
+        for part in stripped.split(REF_LIST_SEPARATOR):
+            candidate = part.strip()
+            if not candidate:
+                return None
+            if item.fullmatch(candidate):
+                ref = self.normalize(candidate)
+            elif any(extra.fullmatch(candidate) for extra in extras):
+                ref = candidate
+            else:
+                return None
             if ref not in refs:
                 refs.append(ref)
         return refs

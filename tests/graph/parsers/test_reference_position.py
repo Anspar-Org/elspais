@@ -1,4 +1,4 @@
-# Verifies: REQ-d00269-E
+# Verifies: REQ-d00269-E, REQ-d00269-G
 """Position, not shape, decides whether a *Traceability* keyword refers.
 
 A keyword introduces a reference only where it is the first content of a
@@ -132,43 +132,121 @@ def _verifies(dispatcher: FileDispatcher, source: str) -> list[str]:
     return targets
 
 
-class TestAnIdentifierIsFoundWhereverInTheTargetItSits:
-    """REQ-d00269-D -- the target is searched before it is given up on.
+def _spec_implements(dispatcher: FileDispatcher, target: str) -> list[str]:
+    """Every target a requirement's ``Implements:`` metadata line names."""
+    source = f"# REQ-d00001: Demo\n\n**Level**: dev\n**Implements**: {target}\n\nBody.\n"
+    return [
+        ref
+        for parsed in dispatcher.dispatch_spec(source, "spec/demo.md")
+        if parsed.content_type == "requirement"
+        for ref in parsed.parsed_data.get("implements", [])
+    ]
 
-    Position recognises the line, so the target may be written any way at
-    all -- and a section banner writes the prose first. Recording the whole
-    remainder without looking inside it loses an edge to a requirement that
-    exists, which is the failure REQ-d00269-D exists to prevent.
+
+class TestTheTargetIsASeparatedListOfReferences:
+    """Validates REQ-d00269-G: the supported spelling of a target.
+
+    Each item may name an *Assertion* and may name several at once, and a
+    list may mix the plain form with the labelled one. Both the code
+    annotation and the *Requirement* metadata line read the same list, so
+    an author who learns one spelling has learned the other.
     """
 
-    # Verifies: REQ-d00269-D
-    def test_REQ_d00269_D_prose_before_an_identifier_in_code_resolves_to_it(
+    _LISTS = [
+        pytest.param("REQ-p00001", ["REQ-p00001"], id="bare"),
+        pytest.param("REQ-p00001-A", ["REQ-p00001-A"], id="labelled"),
+        pytest.param("REQ-p00001-A+B", ["REQ-p00001-A+B"], id="multi-assertion"),
+        pytest.param(
+            "REQ-p00001, REQ-p00002",
+            ["REQ-p00001", "REQ-p00002"],
+            id="list",
+        ),
+        pytest.param(
+            "REQ-p00001-A+B, REQ-p00002",
+            ["REQ-p00001-A+B", "REQ-p00002"],
+            id="mixed-list",
+        ),
+    ]
+
+    # Verifies: REQ-d00269-G
+    @pytest.mark.parametrize(("target", "expected"), _LISTS)
+    def test_REQ_d00269_G_a_code_annotation_reads_the_whole_list(
+        self, dispatcher: FileDispatcher, target: str, expected: list[str]
+    ) -> None:
+        source = f"# Implements: {target}\ndef impl():\n    pass\n"
+
+        assert _implements(dispatcher, source) == expected
+
+    # Verifies: REQ-d00269-G
+    @pytest.mark.parametrize(("target", "expected"), _LISTS)
+    def test_REQ_d00269_G_a_test_annotation_reads_the_whole_list(
+        self, dispatcher: FileDispatcher, target: str, expected: list[str]
+    ) -> None:
+        """The two dispatch paths take different branches, so both are held."""
+        source = f"# Verifies: {target}\ndef test_thing():\n    assert True\n"
+
+        assert _verifies(dispatcher, source) == expected
+
+    # Verifies: REQ-d00269-G
+    @pytest.mark.parametrize(("target", "expected"), _LISTS)
+    def test_REQ_d00269_G_a_metadata_line_reads_the_whole_list(
+        self, dispatcher: FileDispatcher, target: str, expected: list[str]
+    ) -> None:
+        assert _spec_implements(dispatcher, target) == expected
+
+
+class TestATargetHoldingMoreThanReferencesIsUnresolved:
+    """Validates REQ-d00269-G: no identifier is picked out of prose.
+
+    An identifier the author never named is worse than no edge at all: it
+    is evidence attached to the wrong *Requirement*, and nothing reports
+    it. So a target that is not a list of references resolves to nothing,
+    and the line goes out on the unresolved-reference channel carrying
+    what its author actually wrote.
+    """
+
+    # Verifies: REQ-d00269-G
+    def test_REQ_d00269_G_a_foreign_identifier_sharing_the_namespace_is_not_read(
+        self, dispatcher: FileDispatcher
+    ) -> None:
+        """``XREQ-d00001`` holds ``REQ-d00001``; it names a different estate."""
+        source = "# Implements: XREQ-d00001\ndef impl():\n    pass\n"
+
+        assert _implements(dispatcher, source) == ["XREQ-d00001"]
+
+    # Verifies: REQ-d00269-G
+    def test_REQ_d00269_G_prose_around_an_identifier_is_not_read_in_code(
         self, dispatcher: FileDispatcher
     ) -> None:
         source = "# Implements: Shared flags apply globally (REQ-p00001-B)\ndef impl():\n    pass\n"
 
-        assert _implements(dispatcher, source) == ["REQ-p00001-B"]
+        assert _implements(dispatcher, source) == ["Shared flags apply globally (REQ-p00001-B)"]
 
-    # Verifies: REQ-d00269-D
-    def test_REQ_d00269_D_prose_before_an_identifier_in_a_test_resolves_to_it(
+    # Verifies: REQ-d00269-G
+    def test_REQ_d00269_G_prose_around_an_identifier_is_not_read_in_a_test(
         self, dispatcher: FileDispatcher
     ) -> None:
         """The two dispatch paths take different branches, so both are held."""
-        source = (
-            "# Verifies: Exit code is worst-of-all sections (REQ-p00001-C)\n"
-            "def test_exit_code():\n"
-            "    assert True\n"
-        )
+        source = "# Verifies: some prose (REQ-p00001-A)\ndef test_exit_code():\n    assert True\n"
 
-        assert _verifies(dispatcher, source) == ["REQ-p00001-C"]
+        assert _verifies(dispatcher, source) == ["some prose (REQ-p00001-A)"]
 
-    # Verifies: REQ-d00269-D
-    def test_REQ_d00269_D_multi_assertion_survives_the_leading_prose(
+    # Verifies: REQ-d00269-G
+    def test_REQ_d00269_G_one_unreadable_item_leaves_the_whole_line_unresolved(
         self, dispatcher: FileDispatcher
     ) -> None:
-        source = "# Implements: some prose REQ-p00001-A+B\ndef impl():\n    pass\n"
+        """The line is the unit: a target part-read is a target misread."""
+        source = "# Implements: REQ-p00001 and see XREQ-d00002\ndef impl():\n    pass\n"
 
-        assert _implements(dispatcher, source) == ["REQ-p00001-A+B"]
+        assert _implements(dispatcher, source) == ["REQ-p00001 and see XREQ-d00002"]
+
+    # Verifies: REQ-d00269-G
+    def test_REQ_d00269_G_trailing_prose_after_a_readable_reference_is_not_read(
+        self, dispatcher: FileDispatcher
+    ) -> None:
+        source = "# Implements: REQ-p00001 -- the flag path\ndef impl():\n    pass\n"
+
+        assert _implements(dispatcher, source) == ["REQ-p00001 -- the flag path"]
 
     # Verifies: REQ-d00269-D
     @pytest.mark.parametrize(
@@ -183,9 +261,10 @@ class TestAnIdentifierIsFoundWhereverInTheTargetItSits:
     ) -> None:
         """The fallback is the population REQ-d00269-F reports; it must survive.
 
-        Searching the target is what finds an identifier written late, not a
-        licence to discard a target that holds none: a reference the tool
-        cannot read still has to read as a reference.
+        Refusing to read an identifier out of prose is not a licence to drop
+        the line: a reference the tool cannot read still has to read as a
+        reference, or a *Requirement* whose evidence was discarded looks
+        exactly like one that never had any.
         """
         source = f"# Implements: {target}\ndef impl():\n    pass\n"
 

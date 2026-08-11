@@ -48,6 +48,36 @@ _log = logging.getLogger(__name__)
 _COMMENT_STYLES = ["#", "//", "--"]
 
 
+def reference_target(text: str) -> str:
+    """The text a reference line names as its target, verbatim.
+
+    Trailing block-comment terminators are not part of what the author
+    wrote as a target, so they are dropped; everything else is kept as
+    written, since the point of reporting it is to show the author the
+    string that could not be resolved.
+    """
+    match = _KEYWORD_RE.search(text)
+    if not match:
+        return ""
+    tail = text[match.end() :].lstrip(": \t")
+    for terminator in ("*/", "-->"):
+        if tail.endswith(terminator):
+            tail = tail[: -len(terminator)]
+    return tail.strip()
+
+
+# Implements: REQ-d00269-G
+def read_reference_list(reader: FederatedIdReader, text: str) -> list[str] | None:
+    """The references a reference line names, or None if it names none.
+
+    One reading for every surface that has a whole annotation line in hand,
+    so a file-level default and the annotation above a function admit the
+    same targets.  A journey step belongs to its own grammar rather than to
+    any repository's identifiers, so it is offered alongside them.
+    """
+    return reader.parse_ref_list(reference_target(text), extra_items=(_JOURNEY_REF_RE.pattern,))
+
+
 class ReferenceTransformer:
     """Transform a reference.lark parse tree into ParsedContent objects.
 
@@ -157,8 +187,9 @@ class ReferenceTransformer:
                     # Skip keywords invalid for this file type (silently —
                     # test fixtures legitimately contain cross-type keywords
                     # in string literals that the grammar also matches)
-                    # Implements: REQ-d00252 -- Integrates is spec-file only;
-                    # it must never create a traceability edge in code/test.
+                    # Implements: REQ-d00252
+                    # Integrates is spec-file only; it must never create a
+                    # traceability edge in code or test.
                     if keyword == "integrates":
                         continue
                     if self.content_type == "code_ref" and keyword == "refines":
@@ -310,73 +341,34 @@ class ReferenceTransformer:
     # ------------------------------------------------------------------
 
     def _handle_single_ref(self, node: Tree) -> ParsedContent | None:
-        """Handle a single-line reference comment."""
+        """Handle a single-line reference comment.
+
+        A line the grammar opened on a namespace and a line it opened on
+        anything else are read alike: what the keyword introduces is a list
+        of references, or it is a target that could not be resolved
+        (REQ-d00269-G).  So both go through one reader.
+        """
         token = node.children[0]
-        text = str(token)
-        line_num = token.line  # type: ignore[attr-defined]
-
-        refs = self._extract_ids(text)
-        if not refs:
-            # The line names a target no repository claims. Reporting it as
-            # broken is the diagnostic floor beneath cross-repository
-            # recognition (REQ-d00269-D).
-            return self._handle_unresolved_ref(text, line_num)
-
-        func_name, class_name, func_line, func_end_line = self.line_context.get(
-            line_num, (None, None, 0, 0)
-        )
-
-        keyword = self._detect_keyword(text)
-
-        if self.content_type == "code_ref":
-            # Implements: REQ-d00252 -- Integrates is spec-file only.
-            if keyword == "integrates":
-                return None  # Integrates is valid only in spec files
-            if keyword == "refines":
-                return None  # Refines is requirement-to-requirement only
-            parsed_data: dict[str, Any] = {
-                "implements": refs if keyword == "implements" else [],
-                "verifies": refs if keyword == "verifies" else [],
-                "function_name": func_name,
-                "class_name": class_name,
-                "function_line": func_line,
-                "function_end_line": func_end_line,
-            }
-        else:  # test_ref
-            if keyword != "verifies":
-                return None  # Only Verifies is valid in test files
-            parsed_data = {
-                "verifies": refs,
-                "function_name": func_name,
-                "class_name": class_name,
-                "function_line": func_line,
-                "file_default_verifies": self.file_default_verifies,
-            }
-
-        return ParsedContent(
-            content_type=self.content_type,
-            start_line=line_num,
-            end_line=line_num,
-            raw_text=text,
-            parsed_data=parsed_data,
-        )
+        return self._handle_unresolved_ref(str(token), token.line)  # type: ignore[attr-defined]
 
     # ------------------------------------------------------------------
     # Unresolvable reference handling
     # ------------------------------------------------------------------
 
-    # Implements: REQ-d00269-D
+    # Implements: REQ-d00269-D, REQ-d00269-G
     def _handle_unresolved_ref(self, text: str, line_num: int) -> ParsedContent | None:
-        """Read a reference line the identifier grammar did not open.
+        """Read a reference line, resolved or not.
 
         The line is recognised because of where the keyword sits, so the
-        target may be written any way at all -- including with prose ahead of
-        the identifier, as a section banner spells it. Every identifier any
-        federation member owns is looked for in the whole target first, and
-        only a target holding none of them is carried through verbatim, on
-        the same broken-reference channel a misspelled local identifier
-        travels: a requirement with no evidence and a requirement whose
-        evidence was discarded otherwise read alike.
+        target may be written any way at all.  What it may *mean* is
+        narrower: a list of references, each item matched whole.  A target
+        that is anything else -- prose around an identifier, a foreign
+        identifier that merely contains one -- resolves to nothing and is
+        carried through verbatim instead, on the same broken-reference
+        channel a misspelled local identifier travels.  Nothing is picked out
+        of it: an edge to a requirement the author never named is worse than
+        no edge, because a reference that resolved is a reference nothing
+        reports.
 
         Returns None when the keyword is not one this kind of file may use,
         which leaves the line ordinary text exactly as before.
@@ -385,11 +377,14 @@ class ReferenceTransformer:
         if self.content_type == "test_ref":
             if keyword != "verifies":
                 return None
+        # Implements: REQ-d00252
+        # Integrates is spec-file only, and Refines is
+        # requirement-to-requirement only: neither may create an edge here.
         elif keyword in ("integrates", "refines"):
             return None
 
-        refs = self._extract_ids(text)
-        if not refs:
+        refs = read_reference_list(self.reader, text)
+        if refs is None:
             raw = self._raw_target(text)
             if not raw:
                 return None
@@ -426,21 +421,8 @@ class ReferenceTransformer:
 
     @staticmethod
     def _raw_target(text: str) -> str:
-        """The text a reference line names as its target, verbatim.
-
-        Trailing block-comment terminators are not part of what the author
-        wrote as a target, so they are dropped; everything else is kept as
-        written, since the point of reporting it is to show the author the
-        string that could not be resolved.
-        """
-        match = _KEYWORD_RE.search(text)
-        if not match:
-            return ""
-        tail = text[match.end() :].lstrip(": \t")
-        for terminator in ("*/", "-->"):
-            if tail.endswith(terminator):
-                tail = tail[: -len(terminator)]
-        return tail.strip()
+        """The text a reference line names as its target, verbatim."""
+        return reference_target(text)
 
     # ------------------------------------------------------------------
     # Test name reference handling
