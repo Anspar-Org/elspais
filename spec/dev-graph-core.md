@@ -563,8 +563,16 @@ K. The coverage dimension labels SHALL be derived from a single configurable map
 
 L. A per-status `expects_implementation` flag SHALL declare whether a requirement in that status is expected to have implementation; its default SHALL be derived from the status's role, so that active-role statuses expect implementation and others do not. When a status does not expect implementation, absent implementation SHALL be neither flagged as a gap, nor error-colored, nor counted against aggregate implemented coverage. All surfaces SHALL resolve this flag through a single shared helper, and it SHALL supersede the coverage-exclusion role when determining coverage inclusion.
 
+M. A surface that reports which assertions need work (`gaps`, the health coverage checks, and the MCP uncovered-*Assertion* and test-coverage tools) SHALL determine gaps on the strict footing per REQ-d00069-L, so that an *Assertion* with no evidence naming it is reported however much whole-requirement evidence its requirement carries.
+
+### Rationale
+
+A reports how the estate is doing and M reports what is left to do; the two questions want different footings. Crediting whole-requirement evidence to every *Assertion* is defensible when summarising, because the evidence plausibly reaches them and the `~` marker says as much. It is not defensible when listing work, because an *Assertion* nobody has written evidence for is precisely what the list exists to surface — and on the generous footing it is the one thing the list can never show.
+
 ### Changelog
 
+- 2026-08-11 | e0925092 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-11 | 5270fa45 | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: gap surfaces answer on the strict footing (M)
 - 2026-07-31 | 5270fa45 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-07 | 90053f29 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-07 | 4767b41c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -575,4 +583,4 @@ L. A per-status `expects_implementation` flag SHALL declare whether a requiremen
 - 2026-07-03 | c843c727 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-02 | be97c170 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Reporting Surface Consistency* | **Hash**: 5270fa45
+*End* *Reporting Surface Consistency* | **Hash**: e0925092
