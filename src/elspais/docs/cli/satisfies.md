@@ -158,7 +158,7 @@ inbound `Refines:`. A `Satisfies:` cycle (transitively across SATISFIES and
 INSTANCE edges) is reported once per build with a diagnostic containing
 the word `cycle` and the cycle path.
 
-All diagnostics surface in `elspais health` and `elspais checks`.
+All diagnostics surface in `elspais checks` and `elspais broken`.
 
 ## See also
 

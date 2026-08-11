@@ -117,9 +117,16 @@ Use `--no-daemon` to force a local graph build (~2-4s).
 
 **Daemon config** (in `.elspais.toml`):
 
-    cli_ttl = 30     # auto-start daemon, exit after 30 min idle (default)
+    cli_ttl = 30     # auto-start daemon, exit after 30 min unused (default)
     cli_ttl = 0      # never auto-launch (manual start only)
     cli_ttl = -1     # auto-start daemon, never timeout
+
+`cli_ttl` is the idle timeout for a daemon nobody is using. It does not
+end a daemon that still has a recorded client, however quiet that client
+has been — an agent that applies a change and then reasons for an hour
+sends nothing the whole time, and still has its daemon at the end of it.
+A daemon auto-started for a session ends when that session's clients are
+gone, whatever `cli_ttl` says — see "Daemon lifetime" below.
 
 ## viewer
 
@@ -367,6 +374,7 @@ Read the user guide.
   `assertions`     Writing testable assertions
   `traceability`   Linking to code and tests
   `linking`        Code and test linking details
+  `satisfies`      Cross-cutting templates
   `validation`     Running validation
   `git`            Change detection
   `config`         Configuration reference
@@ -434,9 +442,9 @@ Manage links to associated repositories.
 
 Link suggestion tools for connecting tests to requirements.
 
-  $ elspais link suggest                    # Suggest links for unlinked tests
-  $ elspais link suggest --file test_auth.py  # Suggest for specific file
-  $ elspais link suggest --apply            # Auto-apply suggestions
+  $ elspais link                    # Suggest links for unlinked tests
+  $ elspais link --file test_auth.py  # Suggest for specific file
+  $ elspais link --apply            # Auto-apply suggestions
 
 **Options:**
 
@@ -470,6 +478,252 @@ MCP (Model Context Protocol) server commands.
 **Options for serve:**
 
   `--transport {stdio,sse,streamable-http}`  Transport type (default: stdio)
+
+## daemon
+
+Manage the background daemon. One daemon per repository serves both the
+CLI and MCP agents.
+
+  $ elspais daemon                     # Re-read .elspais.toml, fresh graph
+  $ elspais daemon --persist \
+      --message "why"                  # Save pending mutations first
+  $ elspais daemon --discard-changes   # Throw the pending mutations away
+
+**Options:**
+
+  `--persist`           Save unsaved in-memory mutations before restarting
+  `--message TEXT`      Changelog reason for `--persist`, required when the
+                        mutations touch Active requirements
+  `--discard-changes`   Throw the unsaved in-memory mutations away
+
+A restart refuses to run while the daemon holds unsaved in-memory
+mutations unless one of those two flags says what to do with them.
+`--persist` and `--discard-changes` are mutually exclusive.
+
+`--discard-changes` destroys the mutations: the daemon drops them and
+stops, and nothing reaches disk. Without it a stopping daemon writes
+what it holds and records that it did so, because nobody has said the
+work is unwanted — an unwanted write costs one `git checkout` to undo,
+and there is no comparable way back from a discard. `--discard-changes`
+is that statement.
+
+The discard covers the mutations that exist when you ask for it. If
+another writer applies one in between, the daemon refuses the whole
+request rather than throwing away a change you never saw; re-read what
+is pending and decide again.
+
+**Lifetime:** a daemon started this way is an explicit start — it records
+no session and lives by `cli_ttl` alone. A daemon that a CLI command
+auto-started lives only as long as the session it was started for (see
+"Daemon lifetime" below).
+
+## Daemon lifetime
+
+A daemon is started one of two ways, and the two have different
+lifetimes.
+
+**Started for a session (implicit).** Any CLI command that needs a graph
+and finds no daemon running starts one on behalf of the session it is
+running in. That daemon records the session's process ID as
+`client_pid` in `.elspais/daemon.json`, and shuts itself down once no
+client of its is running any more. This is independent of the idle
+timeout: a `cli_ttl` of `-1` disables the timeout but not this, so a
+daemon cannot outlive every client that ever used it.
+
+**Clients accumulate.** A daemon is shared — it serves several clients at
+once, and it deliberately outlives the session that started it so a later
+one can pick it up. Any command that reuses a running daemon registers
+itself as one of its clients, and the set is published as `clients` in
+`.elspais/daemon.json`. Each entry says what kind of handle it is: a
+`pid`, or a `session` count for clients present only as a stream they
+hold open — an agent connected over MCP that supplies no process ID is
+watched through the connection instead. The daemon keeps serving while
+any of them is running, so a session that adopted a daemon does not lose
+it when the session that originally started it exits. A client with
+neither handle — no resolvable identity (the table below) and no held
+stream — cannot register, and therefore does not extend the daemon's
+life.
+
+The identity is recorded at the moment of the start and never inferred
+afterwards — the daemon is detached from its parent as it starts, so
+there is nothing left to infer from. It is resolved in this order:
+
+    ELSPAIS_CLIENT_PID      an explicit declaration by a session or IDE
+        |                   (or its former name ELSPAIS_SPAWNER_PID,
+        |                    still honoured; always decisive; an unusable
+        |                    value means "no identity", not "keep looking")
+        v
+    nearest ancestor named 'claude', when CLAUDECODE is set
+        |
+        v
+    the controlling-terminal session leader, if it has a tty
+        |                   (an interactive shell qualifies; a batch or
+        |                    CI shell has no tty and does not)
+        v
+    no identity recorded -> idle timeout is the only limit
+
+The last two steps read `/proc` and a POSIX session id, so where those are
+unavailable only the environment variable can resolve. A guessed identity
+would be worse than none, so when nothing resolves the daemon simply keeps
+its `cli_ttl` lifetime.
+
+**Declare it — don't rely on inference.** `ELSPAIS_CLIENT_PID` is not just
+the first rung of that ladder, it is the thing to set. A CI job, a build
+agent, or any harness that runs several `elspais` commands as part of one
+longer-lived job should export the process id of that job's own long-lived
+process — the runner, the agent, the `make` process — once at setup:
+
+    export ELSPAIS_CLIENT_PID=$$
+
+Every `elspais` command that job runs afterward then inherits a daemon
+whose lifetime matches the job, rather than whichever of the three rungs
+below it happens to land on.
+
+**A held MCP session counts too.** An agent connected over streamable HTTP
+does not need a process id at all: holding the session's GET stream open
+for its lifetime is itself a handle the daemon can observe, so it is
+counted as a client for as long as the connection is held. A completed
+request is not — request traffic never keeps a daemon alive on its own,
+only presence does.
+
+**When nothing binds, you are told once.** If no handle can be derived —
+none of the three rungs resolves — or a declared `ELSPAIS_CLIENT_PID`
+names a process id that is already dead, the daemon is not refused: the
+command still runs, but the first time this happens for a given daemon it
+prints a `note:` to stderr saying the daemon's lifetime is not bound to
+this client and naming `ELSPAIS_CLIENT_PID` as the variable to set. It
+does not repeat for that daemon; the same daemon does not warn you twice.
+
+**Started deliberately (explicit).** `elspais daemon`, a manual
+`elspais mcp serve`, and the viewer record no session at all. Their
+lifetime is governed solely by `cli_ttl`, and `daemon.json` carries no
+`client_pid` key.
+
+**Termination.** The check runs on the daemon's own clock, about once a
+minute, so a client-bound daemon with nothing pending shuts down at the
+first check after its last client is gone rather than the instant it
+dies. Client requests do not enter into it: they reset the idle timeout,
+not this check.
+
+**The idle timeout waits for the clients.** While a daemon has a recorded
+client that still exists, `cli_ttl` is not what ends it: the timeout
+expires, finds a client, and starts another idle period. That is what
+makes a connected-but-quiet client safe — a session sitting at a prompt,
+or an agent between mutations, is not a session that has gone. A daemon
+with no recorded client is the one `cli_ttl` governs, which is every
+explicitly started one and any implicit one whose clients could not be
+identified. The trade is deliberate: a daemon with a live client outlives
+the timeout configured for it, and the client-liveness check above is
+what still bounds it.
+
+**A stopping daemon is replaced, not reused.** Between deciding to stop
+and actually going, a daemon still answers — and refuses everything,
+because a write accepted into a shutdown would be acknowledged and then
+lost. It says so in `daemon.json` (`"stopping": true`) from the moment it
+decides. A command that finds that waits for the process to go and then
+starts a fresh daemon; it never starts one alongside, because one working
+tree is served by one process. If the outgoing daemon has not gone within
+20 seconds, the command builds its own graph locally rather than starting
+a second server.
+
+**Unsaved work is saved, not dropped.** If a client-bound daemon still
+holds pending mutations when its last client is gone, it writes to
+`.elspais/daemon.log` naming how many mutations are pending — the real
+number, taken from the whole mutation log — and the deadline. It then
+waits a bounded grace period (30 minutes) and, if nothing has changed by
+then, **saves the pending mutations to disk** and stops.
+
+Nothing is discarded unless you say so. Spec files are under revision
+control, where an unwanted write costs one `git diff` and one
+`git checkout` to undo, while work that is destroyed has to be redone
+from memory and sometimes cannot be — so saving is what happens when
+nobody has said the work is unwanted. `elspais daemon --discard-changes`
+is how you say it. If the save itself fails, the
+daemon keeps the mutations, reports the failure, and retries rather than
+dropping them.
+
+    last client gone, nothing pending -> shut down at next check
+    last client gone, work pending    -> log the count, hold for 30 min
+      a mutation arrives in that window -> keep serving, restart the 30 min
+      a client attaches in that window  -> keep serving
+      nothing happens                   -> SAVE to disk, record it, stop
+
+**Every way of stopping saves, unless you asked otherwise.** The grace
+deadline above is not the only way a daemon stops, and the others hold
+the same work. An idle timeout firing on a daemon with no client left, and an
+external stop — `elspais daemon`, a `kill`, a container shutting down —
+both persist pending mutations and leave the same record before the
+process ends. Being told to stop says nothing about what the daemon
+happens to be holding. Being told to discard does:
+
+    idle timeout expires, work pending -> SAVE to disk, record it, stop
+    stop signal arrives, work pending  -> SAVE to disk, record it, stop
+    told to discard, work pending      -> drop it, write nothing, stop
+    stopping with nothing pending      -> stop, and write no record
+
+If the save fails on either of the first two, the mutations are kept.
+The idle timeout then declines to stop and waits out another idle period,
+because the daemon can still be asked to save; an external stop cannot be
+declined, so there the failure is reported and the work is lost with the
+process.
+
+**A stop is asked for, waited on, and then enforced.** An external stop
+writes what the daemon holds the moment the signal arrives, before the
+daemon has finished serving; the wait that follows is for the shutdown to
+run its course. A client holding an MCP session open keeps a request
+in flight, and a shutdown can wait on that for as long as the client
+cares to hold it, so a stop that has not completed after 20 seconds ends
+the process outright. The deadline belongs to whoever asked for the stop,
+which is why the work is written first: by the time it passes there is
+nothing left in the process to lose.
+
+**How you find out.** A save the daemon performed is recorded in
+`.elspais/automatic-save.json` and reported to the next client in the
+ordinary metadata it already reads: `get_workspace_info`,
+`get_graph_status`, `/api/dirty` and `/api/check-freshness` all carry an
+`automatic_save` block while one is outstanding. It states who saved
+(the daemon), when, how many mutations it covered, and what triggered it.
+It says nothing about whether that work is finished or wanted — a client
+can disappear because it finished, because it crashed, or because a
+connection dropped, and the daemon cannot tell those apart. You decide;
+it reports.
+
+The record is retired the moment any client saves at its own request
+(`save_mutations` over MCP, Save in the viewer, or
+`elspais daemon --persist`). A later automatic save replaces it.
+Committing or reverting the files does not clear it — the daemon is not
+watching your working tree — so save deliberately, or delete the file, if
+you want the notice gone.
+
+**A process that dies holding work says so.** While a server holds
+changes it has not written, `.elspais/unsaved-changes` exists; it is
+created before the change is acknowledged and removed when the last one
+is saved, reverted or discarded. Presence is the entire signal — it
+records no counts and no ids, and it is not a recovery mechanism: nothing
+anywhere keeps the changes themselves.
+
+If a server starts and finds that file, the process that wrote it is gone
+and never wrote what it held — a SIGKILL, a machine that slept, a
+supervisor with a shorter patience than the save took. The finding
+becomes `.elspais/lost-changes` and is reported as a `lost_changes` block
+on the same surfaces the automatic-save record uses, so what you learn is
+that something was lost, not what. It is retired the next time a client
+saves at its own request. A discard you asked for is not a loss and
+leaves nothing behind.
+
+**Applied changes restart the clock.** A mutation applied after the last
+client was seen gone counts as proof that a writer is present even when
+that writer could not register: the daemon keeps serving and the grace
+period starts again. Only applied changes count. Reading — search,
+queries, the viewer's polling — moves nothing and never postpones
+termination, so a client that merely polls cannot hold an orphaned daemon
+open.
+
+**Writes during shutdown are refused.** Once the daemon has decided to
+stop, mutations are rejected with `server_shutting_down` (HTTP 409 with
+the same body on the viewer's routes) rather than accepted into a
+shutdown that would drop them. A refusal you can see beats an
+acknowledgement that turns out to be a lie.
 
 ## install / uninstall
 

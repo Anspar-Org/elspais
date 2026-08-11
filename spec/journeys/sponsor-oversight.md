@@ -64,11 +64,11 @@ Validates: REQ-p00001, REQ-p00002, REQ-p00003, REQ-p00004
 ## Steps
 
 1. Janet receives access to the project repository at the tagged release commit.
-2. She runs `elspais validate` to confirm all content hashes match their requirement bodies. No tampering or undocumented changes are detected.
-3. She runs `elspais analyze orphans` to identify any requirements without valid parent links. The tool reports zero orphans.
-4. She runs `elspais validate -v` to perform a comprehensive validation. All format, hierarchy, and traceability checks pass.
+2. She runs `elspais checks` to confirm all content hashes match their requirement bodies. No tampering or undocumented changes are detected.
+3. She runs `elspais checks --spec` to identify any requirements without valid parent links. The report shows no structural orphans.
+4. She runs `elspais -v checks` to perform a comprehensive validation. All format, hierarchy, and traceability checks pass.
 5. She generates a complete traceability matrix with `elspais trace --format csv -o audit-trace.csv` for inclusion in the validation package.
-6. She generates the HTML version with `elspais trace --view --embed-content` to review the full requirement text in context.
+6. She generates the HTML version with `elspais viewer --static --embed-content` to review the full requirement text in context.
 7. She reviews the git history for the spec directory to confirm all changes follow the project's change control process.
 8. She documents her findings in the validation report, attaching the traceability matrix and validation output as evidence.
 
@@ -91,9 +91,9 @@ Validates: REQ-p00003, REQ-p00004
 
 1. Janet runs `elspais changed --base-branch v2.0 --json` to get a machine-readable list of all requirement changes since the last release.
 2. The output shows three modified requirements and one new requirement.
-3. She runs `elspais validate` and identifies that REQ-p00008 has a hash mismatch, confirming its content changed.
+3. She runs `elspais checks` and identifies that REQ-p00008 has a hash mismatch, confirming its content changed.
 4. She uses git diff to review the exact changes to REQ-p00008's assertions: one assertion was strengthened with a more specific threshold.
-5. She checks the hierarchy with `elspais analyze hierarchy` to identify all DEV requirements that implement REQ-p00008.
+5. She checks the hierarchy by opening `elspais viewer` and expanding REQ-p00008 in the tree to identify all DEV requirements that implement it.
 6. She verifies that the downstream DEV requirements were updated to reflect the tighter threshold.
 7. She confirms the new requirement (REQ-d00045) has proper implements links and a valid hash.
 8. She documents her change impact assessment, noting that all modifications are properly propagated and justified.

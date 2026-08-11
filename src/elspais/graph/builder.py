@@ -712,6 +712,7 @@ class TraceGraph:
         target_id = entry.before_state.get("target_id")
         edge_kind_str = entry.before_state.get("edge_kind")
         assertion_targets = entry.before_state.get("assertion_targets", [])
+        old_metadata = entry.before_state.get("metadata", {})
         became_orphan = entry.after_state.get("became_orphan", False)
 
         if source_id and target_id and edge_kind_str:
@@ -719,7 +720,8 @@ class TraceGraph:
             target = self._index.get(target_id)
             if source and target:
                 edge_kind = EdgeKind(edge_kind_str)
-                target.link(source, edge_kind, assertion_targets or None)
+                edge = target.link(source, edge_kind, assertion_targets or None)
+                edge.metadata.update(old_metadata)
                 self._restore_journey_bodies(entry)
 
                 # Remove from orphans if it was marked orphan after deletion
@@ -889,7 +891,8 @@ class TraceGraph:
                 parent_id = entry.before_state.get("parent_id")
                 if parent_id and parent_id in self._index:
                     parent = self._index[parent_id]
-                    parent.link(node, EdgeKind.STRUCTURES)
+                    edge = parent.link(node, EdgeKind.STRUCTURES)
+                    edge.metadata["render_order"] = entry.before_state.get("render_order", 0.0)
                     # Restore parent hash (even if None)
                     if "parent_hash" in entry.before_state:
                         parent.set_field("hash", entry.before_state["parent_hash"])
@@ -1705,23 +1708,108 @@ class TraceGraph:
         self._mutation_log.append(entry)
         return entry
 
-    def add_assertion(self, req_id: str, label: str, text: str) -> MutationEntry:
-        """Add assertion to requirement.
+    def _next_assertion_label(self, parent: GraphNode) -> str:
+        """The label following ``parent``'s last assertion in its series.
 
-        Creates an assertion node, links it as child of the requirement,
-        and recomputes the requirement hash.
+        Returns the first label in the series when the requirement has no
+        assertions yet. Raises ValueError when the series is exhausted --
+        a requirement that has run out of labels is one to split, not one
+        to label outside its own alphabet (REQ-o00062-S).
+        """
+        resolver = self._resolver
+        if resolver is None:
+            # Without a configured series the default A-Z applies.
+            highest = -1
+            for child in parent.iter_children(edge_kinds={EdgeKind.STRUCTURES}):
+                if child.kind == NodeKind.ASSERTION:
+                    label = child.get_field("label", "")
+                    if len(label) == 1 and label.isupper():
+                        highest = max(highest, ord(label) - ord("A"))
+            if highest + 1 > 25:
+                raise ValueError(
+                    f"Requirement '{parent.id}' has no assertion label left "
+                    "(A-Z exhausted); split the requirement"
+                )
+            return chr(ord("A") + highest + 1)
+
+        highest = -1
+        for child in parent.iter_children(edge_kinds={EdgeKind.STRUCTURES}):
+            if child.kind != NodeKind.ASSERTION:
+                continue
+            try:
+                highest = max(
+                    highest, resolver.parse_assertion_label_index(child.get_field("label", ""))
+                )
+            except ValueError:
+                # A label outside the series is reported by the parser
+                # (REQ-d00268-A); it must not decide where the next one lands.
+                continue
+        try:
+            return resolver.format_assertion_label(highest + 1)
+        except ValueError as exc:
+            raise ValueError(
+                f"Requirement '{parent.id}' has no assertion label left "
+                f"in the configured series; split the requirement ({exc})"
+            ) from exc
+
+    @staticmethod
+    def _order_after_assertions(parent: GraphNode, new_edge: Any) -> float:
+        """A render_order placing ``new_edge`` after the last assertion.
+
+        Falls between the last assertion and whatever follows it, so a
+        trailing Rationale stays trailing. With no assertions yet, sits
+        after the requirement's first child -- the preamble -- so the block
+        opens ahead of the closing prose rather than beyond it.
+        """
+        last_assertion = None
+        following = None
+        for edge in parent.iter_outgoing_edges():
+            if edge.kind != EdgeKind.STRUCTURES or edge is new_edge:
+                continue
+            order = edge.metadata.get("render_order", 0.0)
+            if edge.target.kind == NodeKind.ASSERTION:
+                if last_assertion is None or order > last_assertion:
+                    last_assertion = order
+        if last_assertion is None:
+            # No assertions yet: land just past the first child.
+            orders = sorted(
+                e.metadata.get("render_order", 0.0)
+                for e in parent.iter_outgoing_edges()
+                if e.kind == EdgeKind.STRUCTURES and e is not new_edge
+            )
+            if not orders:
+                return 0.0
+            last_assertion = orders[0]
+        for edge in parent.iter_outgoing_edges():
+            if edge.kind != EdgeKind.STRUCTURES or edge is new_edge:
+                continue
+            order = edge.metadata.get("render_order", 0.0)
+            if order > last_assertion and (following is None or order < following):
+                following = order
+        if following is None:
+            return last_assertion + 1.0
+        return (last_assertion + following) / 2.0
+
+    def add_assertion(self, req_id: str, text: str) -> MutationEntry:
+        """Add an assertion to a requirement, after its existing assertions.
+
+        The label is not the caller's to choose (REQ-o00062-R): it follows
+        the last existing assertion's label in the configured series, so the
+        label order and the rendered order cannot disagree. The assigned
+        label is reported on the returned entry.
 
         Args:
             req_id: The parent requirement ID.
-            label: The assertion label (e.g., "A", "B").
             text: The assertion text.
 
         Returns:
-            MutationEntry recording the operation.
+            MutationEntry recording the operation. ``after_state["label"]``
+            carries the label that was assigned.
 
         Raises:
             KeyError: If req_id is not found.
-            ValueError: If req_id is not a requirement or assertion exists.
+            ValueError: If req_id is not a requirement, or the label series
+                is exhausted (REQ-o00062-S).
         """
         if req_id not in self._index:
             raise KeyError(f"Requirement '{req_id}' not found")
@@ -1730,6 +1818,7 @@ class TraceGraph:
         if parent.kind != NodeKind.REQUIREMENT:
             raise ValueError(f"Node '{req_id}' is not a requirement")
 
+        label = self._next_assertion_label(parent)
         assertion_id = self.make_assertion_id(req_id, label)
         if assertion_id in self._index:
             raise ValueError(f"Assertion '{assertion_id}' already exists")
@@ -1748,12 +1837,11 @@ class TraceGraph:
         self._index[assertion_id] = assertion_node
         edge = parent.link(assertion_node, EdgeKind.STRUCTURES)
 
-        # Assign render_order after existing children
-        max_order = 0.0
-        for e in parent.iter_outgoing_edges():
-            if e.kind == EdgeKind.STRUCTURES and e is not edge:
-                max_order = max(max_order, e.metadata.get("render_order", 0.0))
-        edge.metadata = {"render_order": max_order + 1.0}
+        # Sit after the last existing assertion, not the last child: a
+        # requirement usually ends in prose, and an assertion rendered past
+        # it opens a second Assertions block that the parser cannot read
+        # back (REQ-o00062-R).
+        edge.metadata = {"render_order": self._order_after_assertions(parent, edge)}
 
         # Recompute parent hash
         new_hash = self._recompute_requirement_hash(parent)
@@ -1816,6 +1904,15 @@ class TraceGraph:
         old_label = node.get_field("label", "")
         old_text = node.get_label()
         old_hash = parent.get_field("hash")
+
+        # The edge carries the assertion's position in the rendered requirement;
+        # without it the undo re-links at the default 0.0 and the assertion
+        # reappears ahead of everything else.
+        old_render_order = 0.0
+        for edge in parent.iter_outgoing_edges():
+            if edge.kind == EdgeKind.STRUCTURES and edge.target is node:
+                old_render_order = edge.metadata.get("render_order", 0.0)
+                break
 
         # Collect sibling assertions sorted by label
         siblings = []
@@ -1888,6 +1985,7 @@ class TraceGraph:
                 "parent_hash": old_hash,
                 "compact": compact,
                 "renames": renames,
+                "render_order": old_render_order,
             },
             after_state={
                 "parent_hash": new_hash,
@@ -2169,6 +2267,9 @@ class TraceGraph:
                 "target_id": target_id,
                 "edge_kind": edge_to_delete.kind.value,
                 "assertion_targets": list(edge_to_delete.assertion_targets),
+                # Structural edges carry render_order, which places the child in
+                # its parent's rendered text; a bare re-link would lose it.
+                "metadata": dict(edge_to_delete.metadata),
                 "journey_bodies": self._journey_bodies_snapshot(source, target),
             },
             after_state={

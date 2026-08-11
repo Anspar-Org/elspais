@@ -609,7 +609,7 @@ D. Ubiquitous function words SHALL NOT contribute to relevance ranking.
 
 ### Rationale
 
-Presence-based scoring over fixed field weights cannot rank an enlarged corpus: a rare discriminating term and a ubiquitous one score identically, raw substring matching lets `cat` match `concatenate`, and unstemmed matching treats `request` and `requests` as unrelated. Making discovery scope optional (REQ-o00071-E) enlarges the searched corpus to the whole federated view, which is a net loss without discrimination — this REQ is the K1 invariant that must land with it. Generic thesaurus synonym expansion was considered and rejected: wrong corpus, heavy dependency, and expansion before rarity weighting widens recall against a scorer that cannot rank. Same inflection need as term-usage detection (TOOL-13).
+Presence-based scoring over fixed field weights cannot rank an enlarged corpus: a rare discriminating term and a ubiquitous one score identically, raw substring matching lets `cat` match `concatenate`, and unstemmed matching treats `request` and `requests` as unrelated. Making discovery scope optional (REQ-o00071-E) enlarges the searched corpus to the whole federated view, which is a net loss without discrimination — this REQ is the K1 invariant that must land with it. Inflectional matching (assertion C) is the same need term-usage detection has: a term and its plural are one term. Generic thesaurus synonym expansion is out of scope — it draws on the wrong corpus and widens recall ahead of the rarity weighting that would have to rank the extra results.
 
 ### Changelog
 

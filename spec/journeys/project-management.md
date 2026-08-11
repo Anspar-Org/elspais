@@ -13,12 +13,12 @@ Validates: REQ-p00003, REQ-p00004, REQ-p00006
 
 ## Steps
 
-1. Elvira runs `elspais trace --view` to generate an interactive HTML traceability view.
+1. Elvira runs `elspais viewer --static` to generate an interactive HTML traceability view.
 2. She opens the HTML file in her browser and navigates to the reporting module requirements.
 3. She expands the hierarchy for REQ-p00005 to see all OPS and DEV children.
 4. She runs `elspais changed` to see which spec files have been modified during the sprint.
 5. She cross-references the changed requirements with the sprint plan to confirm progress.
-6. She runs `elspais analyze orphans` to check for any requirements that lost their parent link during refactoring.
+6. She runs `elspais checks --spec` to check for any requirements that lost their parent link during refactoring.
 7. She finds one orphaned requirement and notifies the developer to fix the implements reference.
 8. She generates an HTML report with `elspais trace --format html -o sprint-review.html` for the sprint review meeting.
 
@@ -41,10 +41,10 @@ Validates: REQ-p00001, REQ-p00002, REQ-p00005
 
 1. Elvira reviews the `sponsors.yml` configuration to confirm the sponsor repository is properly registered.
 2. She verifies the associated repository uses the correct ID prefix (e.g., `REQ-CAL-d00001`) for its requirements.
-3. She runs `elspais validate --mode combined` to validate both the core and sponsor requirements together.
-4. The validator reports a broken link: a sponsor DEV requirement references a core PRD that was recently renamed.
+3. She runs `elspais checks` to validate both the core and sponsor requirements together (the associate repository is checked automatically once configured).
+4. The checks report a broken link: a sponsor DEV requirement references a core PRD that was recently renamed.
 5. She coordinates with the sponsor development team to update the implements reference.
-6. She re-runs combined validation and confirms all cross-repository links are intact.
+6. She re-runs `elspais checks` and confirms all cross-repository links are intact.
 7. She generates a combined traceability matrix with `elspais trace --mode combined --format html` showing the full hierarchy.
 
 ## Expected Outcome
@@ -65,8 +65,8 @@ Validates: REQ-p00001, REQ-p00002, REQ-p00004
 ## Steps
 
 1. Alex installs Elspais in the CI container image with `pip install elspais`.
-2. He adds a validation step to the CI pipeline: `elspais validate -v`.
-3. He adds a hash verification step: `elspais validate`.
+2. He adds a validation step to the CI pipeline: `elspais -v checks`.
+3. He adds a hash verification step: `elspais checks`.
 4. He configures the pipeline to fail the pull request if either step returns a non-zero exit code.
 5. A developer submits a PR with a new requirement missing its content hash.
 6. The CI pipeline runs, the hash verification step fails, and the PR is blocked.

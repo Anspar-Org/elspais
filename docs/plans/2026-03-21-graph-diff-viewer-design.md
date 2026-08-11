@@ -1,7 +1,8 @@
 # Graph Diff Viewer — Design Spec
 
 **Date**: 2026-03-21
-**Status**: Draft
+**Status**: Not started. The problem below is current and the approach still
+fits the code; no part of this design has been built.
 
 ## Problem
 
@@ -204,14 +205,17 @@ New "Diff" filter button alongside existing Uncommitted/Changed buttons. When ac
 |------|--------|
 | `src/elspais/graph/diff.py` | **New** — diff engine and annotation |
 | `src/elspais/html/generator.py` | TreeRow fields, `_build_tree_rows()` population |
-| `src/elspais/html/templates/_nav-tree.js.j2` | Diff CSS classes, row rendering |
-| `src/elspais/html/templates/_nav-tree.css.j2` | Diff background/border styles |
-| `src/elspais/html/templates/_toolbar.html.j2` | Diff filter button |
-| `src/elspais/html/templates/_card-stack.js.j2` | Inline diff rendering |
-| `src/elspais/html/templates/_card-stack.css.j2` | Red text, green/red link styles |
+| `src/elspais/html/templates/partials/js/_nav-tree.js.j2` | Diff CSS classes, row rendering |
+| `src/elspais/html/templates/partials/css/_nav-panel.css.j2` | Diff background/border styles |
+| `src/elspais/html/templates/partials/_toolbar.html.j2` | Diff filter button |
+| `src/elspais/html/templates/partials/js/_card-stack.js.j2` | Inline diff rendering |
+| `src/elspais/html/templates/partials/css/_card-stack.css.j2` | Red text, green/red link styles |
 | `src/elspais/graph/render.py` | Skip ghost nodes in `render_save()` |
 | `tests/core/test_diff.py` | **New** — unit tests for diff engine |
 | `tests/core/test_html/test_diff_rendering.py` | **New** — viewer diff rendering tests |
+
+Nav-tree styling lives in the nav-panel stylesheet; there is no separate
+nav-tree stylesheet.
 
 ## Testing Strategy
 

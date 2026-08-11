@@ -8,9 +8,8 @@ elspais looks for configuration in this order:
 
 1. `--config PATH` flag (explicit path)
 2. `.elspais.toml` in current directory
-3. `.elspais.toml` in git root
-4. `~/.config/elspais/config.toml` (user defaults)
-5. Built-in defaults
+3. `.elspais.toml` in any parent directory, up to and including the git root
+4. Built-in defaults
 
 For **git worktrees**, elspais detects the canonical (main) repository
 root and uses it when resolving relative associate paths. This means
@@ -20,28 +19,57 @@ main repo, not the worktree location.
 ## Complete Configuration Reference
 
 ```toml
-# .elspais.toml - Full configuration reference (v3)
+# .elspais.toml - Full configuration reference (v4)
 
-# Config schema version (defaults to 3)
-version = 3
+# Config schema version (defaults to 4)
+version = 4
 
 # MCP tool usage statistics file path (optional, or set ELSPAIS_STATS env var)
 stats = ""
 
-# CLI daemon auto-start TTL (minutes).
-#   >0: auto-start daemon, exit after N minutes idle (default: 30)
+# CLI daemon auto-start TTL (minutes) — the idle timeout for a daemon
+# nobody is using.
+#   >0: auto-start daemon, exit after N minutes unused (default: 30)
 #    0: never auto-launch daemon from CLI (manual start only)
 #   <0: auto-start daemon that never times out
 #
-# Spawner liveness: a daemon auto-started on behalf of a session (a Claude
-# Code session, an IDE declaring itself via the ELSPAIS_SPAWNER_PID env var,
-# or an interactive shell) also exits shortly after that session ends, even
-# when cli_ttl < 0 — orphaned daemons do not accumulate. If the daemon holds
-# unsaved in-memory mutations when its session dies, it logs a warning to
-# .elspais/daemon.log, waits a bounded grace period (5 minutes), then exits
-# WITHOUT saving; nothing is persisted silently. Explicitly started servers
-# (`elspais daemon restart`, `elspais mcp serve`, the viewer) are never
-# session-tied and keep TTL-only behavior.
+# The timeout does not end a daemon that still has a recorded client,
+# however long that client has been quiet: an agent that applies a change
+# and then reasons for an hour sends nothing meanwhile and still has its
+# daemon afterwards. When the timeout expires and a client is there, the
+# daemon starts another idle period. So a daemon with a live client
+# outlives cli_ttl, and client liveness is what bounds it instead.
+#
+# Client liveness: a daemon auto-started on behalf of a session records
+# that session's PID as `client_pid` in .elspais/daemon.json, and every
+# later session that reuses the daemon is added to the `clients` list,
+# where each entry names the kind of handle it is (`pid`, or `session`
+# for a client present only as a stream it holds open). It exits
+# shortly after the last of them is gone, even when cli_ttl < 0 — orphaned
+# daemons do not accumulate, and a daemon somebody is still using is not
+# shut down under them. A client is identified at the moment it is
+# recorded (the daemon is detached, so it cannot be recovered afterwards),
+# in this order: the ELSPAIS_CLIENT_PID env var, then the nearest ancestor
+# process named `claude` when CLAUDECODE is set, then the
+# controlling-terminal session leader if it has a tty (an interactive
+# shell qualifies; a batch or CI shell does not). The last two steps read
+# /proc and a POSIX session id, so where those are unavailable only the
+# env var can resolve. When none resolve, no identity is recorded and
+# cli_ttl is the only limit. A daemon that has decided to stop says so in
+# .elspais/daemon.json and refuses writes until it goes; a command that
+# meets one waits for it to go and starts a fresh daemon rather than
+# reusing it or running a second one alongside it. If the daemon holds
+# unsaved in-memory
+# mutations when its last client is gone, it logs the count to
+# .elspais/daemon.log, waits a bounded grace period (30 minutes), then
+# SAVES them to disk and stops — nothing is discarded. The same holds for
+# every other way a daemon stops, including an expired cli_ttl and an
+# external stop signal: it saves what it is holding first. The save is
+# recorded in .elspais/automatic-save.json and reported to the next client
+# in the ordinary workspace/status metadata; a client-requested save
+# retires the record. Explicitly started servers (`elspais daemon
+# restart`, `elspais mcp serve`, the viewer) are never client-tied and
+# keep TTL-only behavior.
 cli_ttl = 30
 
 #──────────────────────────────────────────────────────────────────────────────
@@ -49,7 +77,9 @@ cli_ttl = 30
 #──────────────────────────────────────────────────────────────────────────────
 
 [project]
-# Project namespace (used as the ID prefix, e.g. "REQ" -> REQ-p00001)
+# Project namespace (REQUIRED; non-empty; used as the ID prefix,
+# e.g. "REQ" -> REQ-p00001). load_config() rejects configs that omit this
+# field or leave it blank.
 namespace = "REQ"
 
 # Project name (REQUIRED; non-empty; used in reports). load_config() rejects
@@ -413,9 +443,8 @@ no_assertions_severity = "warning"
 # (Implements:, Verifies:, Validates:). null = use check default ("warning")
 # no_traceability_severity = "warning"
 
-# Allowed status values
-allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
-# content_rules = []               # Additional content validation rules
+# The set of accepted status values is the union of the status_roles lists
+# below; there is no separate allowed_statuses key.
 
 # Status role classification -- determines behavior in metrics and viewer
 # Each role controls how requirements with that status are treated:
@@ -426,8 +455,8 @@ allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
 [rules.format.status_roles]
 active = ["Active"]
 provisional = ["Draft", "Proposed"]
-aspirational = ["Roadmap", "Future"]
-retired = ["Deprecated", "Superseded"]
+aspirational = ["Roadmap", "Future", "Idea"]
+retired = ["Deprecated", "Superseded", "Rejected"]
 
 #──────────────────────────────────────────────────────────────────────────────
 # CHANGELOG
@@ -487,9 +516,19 @@ ELSPAIS_SCANNING_SKIP='["node_modules", ".git"]'
 ```
 
 Reserved (never treated as config overrides): `ELSPAIS_VERSION`
-(min-CLI-version pin) and `ELSPAIS_SPAWNER_PID` (a session/IDE declares
-itself the spawner of implicitly auto-started daemons, tying the daemon's
-lifetime to that process — see the `cli_ttl` comment above).
+(min-CLI-version pin) and `ELSPAIS_CLIENT_PID` (a session/IDE declares
+itself the client of implicitly auto-started daemons, tying the daemon's
+lifetime to that process — see the `cli_ttl` comment above). The value
+must be a process id, not a label or name: the client-liveness rule needs
+a handle whose disappearance it can observe without the client's
+cooperation, and a process id can be tested by signalling it while an
+arbitrary string cannot — a label never disappears, so it could never end
+the daemon's watch on that client. A set `ELSPAIS_CLIENT_PID` is decisive:
+a value that is not a usable PID (not an integer, or a PID that is
+already dead) means "no session identity", not "fall back to the other
+checks" — and the daemon reports that once on stderr rather than silently
+falling through. The former name, `ELSPAIS_SPAWNER_PID`, is still honoured
+for callers that set it.
 
 ## Minimal Configuration Examples
 
@@ -498,12 +537,14 @@ lifetime to that process — see the `cli_ttl` comment above).
 ```toml
 [project]
 name = "my-project"
+namespace = "REQ"
 ```
 
 ### Custom Levels
 
 ```toml
 [project]
+name = "my-project"
 namespace = "PROJ"
 
 [levels.epic]
@@ -530,6 +571,7 @@ implements = ["task", "story", "epic"]
 ```toml
 [project]
 name = "core-platform"
+namespace = "REQ"
 
 [associates.callisto]
 path = "../callisto"
@@ -543,6 +585,10 @@ namespace = "PHX"
 ### Type-Prefix Style Requirements
 
 ```toml
+[project]
+name = "my-project"
+namespace = "REQ"
+
 [id-patterns]
 canonical = "{level.letter}-{component}"
 
@@ -570,6 +616,7 @@ digits = 5
 
 ```toml
 [project]
+name = "my-project"
 namespace = "PROJ"
 
 [id-patterns]

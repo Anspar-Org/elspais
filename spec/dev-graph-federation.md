@@ -100,7 +100,7 @@ I. When scanning directories for candidate associates, a directory whose elspais
 
 ### Rationale
 
-Associates are declared in `.elspais.toml` using a structured TOML section. Each associate specifies a relative filesystem path and optional git remote URL. Transitive federation was originally disallowed (assertion D was a hard error) to keep the topology simple; that guard made symmetric or chained repo arrangements unusable from any repository but the root (TOOL-33) and blocked federating an org-policy repository reachable through a chain (TOOL-38). Directed cycles remain a genuine error because dependency direction drives resolution order; diamonds are convergence, not cycles, and the git-origin identity rule (assertion G) is what makes the two distinguishable. Disjoint ID spaces (assertion H) were previously enforced but undocumented — federating repositories must use non-overlapping ID patterns.
+Associates are declared in `.elspais.toml` using a structured TOML section. Each associate specifies a relative filesystem path and optional git remote URL. Transitivity (assertion D) is what makes symmetric or chained repo arrangements usable from any repository rather than only from the root, and what allows federating an org-policy repository reachable through a chain. Directed cycles remain a genuine error because dependency direction drives resolution order; diamonds are convergence, not cycles, and the git-origin identity rule (assertion G) is what makes the two distinguishable. Disjoint ID spaces (assertion H) are required because a shared ID would make resolution ambiguous — federating repositories must use non-overlapping ID patterns.
 
 ### Changelog
 
@@ -311,7 +311,7 @@ O. Registry-related errors — unmet workspace expectation, unreadable registry,
 
 ### Rationale
 
-The registry is the second discovery source beside `[associates]` (directed dependencies): membership is flat and undirected, so cycles are impossible by construction, while dependency direction — which drives resolution order and base/overlay relationships — stays in `[associates]` where cycles remain a genuine error. Both sources feed one assembly keyed by git origin, which is stable across worktrees and clones where path and name are not. This dissolves the symmetric-configuration circularity of TOOL-33: neither of two mutually-dependent repos needs to declare the other for membership.
+The registry is the second discovery source beside `[associates]` (directed dependencies): membership is flat and undirected, so cycles are impossible by construction, while dependency direction — which drives resolution order and base/overlay relationships — stays in `[associates]` where cycles remain a genuine error. Both sources feed one assembly keyed by git origin, which is stable across worktrees and clones where path and name are not. This is what dissolves the symmetric-configuration circularity: neither of two mutually-dependent repos needs to declare the other for membership.
 
 A per-user file solves what committed config cannot: associate paths are machine-specific, so org membership cannot live in `.elspais.toml`; one list per machine replaces one list per repo per machine; a workspace root is addressable even though it is not a repository (REQ-p00081-E); and CI points the environment override at a generated file resolving that job's checkout paths.
 

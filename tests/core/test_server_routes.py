@@ -1,4 +1,4 @@
-# Verifies: REQ-d00010-A
+# Verifies: REQ-d00010-A, REQ-p00015-E
 """Tests for Starlette server routes using TestClient."""
 from __future__ import annotations
 
@@ -968,3 +968,114 @@ implements = ["dev", "ops", "prd"]
         assert resp.status_code == 200, resp.text
         data = resp.json()
         assert data["lines"][0].startswith("# REQ-p00001")
+
+
+class TestServedValueFreshness:
+    """Validates REQ-p00015-E: when the tool serves a value derived from source
+    content that has changed since the value was computed, it serves a value
+    recomputed from the current content or marks the served value as stale.
+
+    The graph is derived data: every answer the server gives (node counts,
+    search results, coverage rollups) is computed once at build time and then
+    served repeatedly. Between builds the spec files on disk can move, and the
+    defect the assertion names is serving the old answer as though it were
+    current. The tool discharges the obligation on both of its branches, and
+    both are exercised here:
+
+    - mark stale -- ``/api/check-freshness`` compares each spec file's mtime
+      against the build_time stamped on the served graph and names every file
+      that has moved since, which is what lets a polling client disclose the
+      divergence instead of trusting the answer it already has;
+    - recompute -- ``AppState.ensure_fresh()`` rebuilds from the current
+      content, so the next answer is computed from what is on disk now.
+
+    The unchanged-source case is asserted alongside the changed one on purpose:
+    a surface that reports staleness unconditionally discloses nothing, so the
+    marking has to track the actual divergence to be worth anything.
+    """
+
+    _SECOND_REQ = (
+        "# REQ-p00002: Second Requirement\n"
+        "\n"
+        "**Level**: PRD | **Status**: Active\n"
+        "\n"
+        "Body text.\n"
+        "\n"
+        "A. First assertion\n"
+        "\n"
+        "*End* *REQ-p00002*\n"
+    )
+
+    @staticmethod
+    def _set_mtime(path: Path, when: float) -> None:
+        """Pin a file's mtime exactly, so freshness never depends on timing."""
+        import os
+
+        os.utime(path, (when, when))
+
+    @staticmethod
+    def _requirement_ids(state) -> set[str]:
+        """The requirement ids in the graph currently being served."""
+        from elspais.graph.GraphNode import NodeKind
+
+        return {n.id for n in state.graph.iter_by_kind(NodeKind.REQUIREMENT)}
+
+    # Verifies: REQ-p00015-E
+    def test_REQ_p00015_E_changed_source_marks_the_served_value_stale(
+        self, client: TestClient, app_state, elspais_project: Path
+    ):
+        """A spec file that moved after the build is disclosed, by name.
+
+        The boolean alone would leave a client unable to say *what* went
+        stale, so the changed file has to be named in the same answer.
+        """
+        spec_file = elspais_project / "spec" / "test.md"
+        self._set_mtime(spec_file, app_state.build_time + 10)
+
+        data = client.get("/api/check-freshness").json()
+
+        assert data["stale"] is True, "a spec file edited after the build was served as current"
+        assert "spec/test.md" in data["stale_files"]
+
+    # Verifies: REQ-p00015-E
+    def test_REQ_p00015_E_unchanged_source_is_not_marked_stale(
+        self, client: TestClient, app_state, elspais_project: Path
+    ):
+        """Nothing moved, so nothing is disclosed.
+
+        This is what gives the marking its meaning: a surface that always
+        says "stale" tells a consumer exactly as much as one that never does.
+        """
+        spec_file = elspais_project / "spec" / "test.md"
+        self._set_mtime(spec_file, app_state.build_time - 10)
+
+        data = client.get("/api/check-freshness").json()
+
+        assert data["stale"] is False
+        assert data["stale_files"] == []
+
+    # Verifies: REQ-p00015-E
+    def test_REQ_p00015_E_changed_source_is_recomputed_before_being_served(
+        self, app_state, elspais_project: Path
+    ):
+        """The other branch: the value served afterwards comes from disk now.
+
+        A requirement added to the spec tree after the build is absent from
+        the served graph until the recompute happens; once it does, the graph
+        being served answers from the current content rather than from the
+        content the build saw.
+        """
+        assert "REQ-p00002" not in self._requirement_ids(app_state)
+
+        new_file = elspais_project / "spec" / "second.md"
+        new_file.write_text(self._SECOND_REQ)
+        # Pin the mtime past the build rather than relying on the clock: a
+        # write can land inside filesystem mtime granularity and read as
+        # unchanged.
+        self._set_mtime(new_file, app_state.build_time + 10)
+        # ensure_fresh() checks at most once a second; clear the throttle so
+        # the check is the thing under test, not the timer.
+        app_state._last_stale_check = 0.0
+
+        assert app_state.ensure_fresh() is True, "changed source did not trigger a recompute"
+        assert "REQ-p00002" in self._requirement_ids(app_state)

@@ -1603,13 +1603,14 @@ def test_add_assertion_sets_render_order():
             existing_orders.append(edge.metadata.get("render_order", 0.0))
     max_existing = max(existing_orders) if existing_orders else 0.0
 
-    # Add a new assertion via the public API
-    graph.add_assertion("REQ-p00001", "ZZ", "New test assertion")
+    # Add a new assertion via the public API; the label follows the series.
+    entry = graph.add_assertion("REQ-p00001", "New test assertion")
+    new_id = entry.after_state["id"]
 
-    # Find the new STRUCTURES edge to the ZZ assertion
+    # Find the new STRUCTURES edge to the added assertion
     new_edge = None
     for edge in req.iter_outgoing_edges():
-        if edge.kind == EdgeKind.STRUCTURES and edge.target.id == "REQ-p00001-ZZ":
+        if edge.kind == EdgeKind.STRUCTURES and edge.target.id == new_id:
             new_edge = edge
             break
 

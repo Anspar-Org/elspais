@@ -4,30 +4,44 @@ elspais supports flexible requirement ID formats to match your organization's co
 
 ## Pattern Template
 
-The `id_template` configuration defines the structure of requirement IDs using tokens:
+The `canonical` key in `[id-patterns]` defines the structure of requirement IDs
+using tokens:
 
 | Token | Description | Example Value |
 |-------|-------------|---------------|
-| `{prefix}` | Base prefix from `patterns.prefix` | `REQ`, `PROJ` |
-| `{type}` | Requirement type identifier | `p`, `PRD`, `dev` |
-| `{associated}` | Associated repo namespace (if enabled) | `CAL`, `XYZ` |
-| `{id}` | Unique identifier (number or name) | `00001`, `123`, `UserAuth` |
+| `{namespace}` | Base namespace from `project.namespace` | `REQ`, `PROJ` |
+| `{level.letter}` | The `letter` declared by the matching `[levels.*]` section | `p`, `P`, `d` |
+| `{type}` | The `[levels.*]` section name itself | `prd`, `PRD`, `dev` |
+| `{component}` | Unique identifier (number or name) | `00001`, `123`, `UserAuth` |
 
 ## Common Patterns
 
-### Pattern 1: HHT Default (`REQ-p00001`)
+### Pattern 1: Standard (`REQ-p00001`)
 
 ```toml
-[patterns]
-id_template = "{prefix}-{type}{id}"
-prefix = "REQ"
+[project]
+namespace = "REQ"
+name = "my-project"
 
-[patterns.types]
-prd = { id = "p", name = "Product Requirement", level = 1 }
-ops = { id = "o", name = "Operations Requirement", level = 2 }
-dev = { id = "d", name = "Development Requirement", level = 3 }
+[levels.prd]
+rank = 1
+letter = "p"
+implements = ["prd"]
 
-[patterns.id_format]
+[levels.ops]
+rank = 2
+letter = "o"
+implements = ["ops", "prd"]
+
+[levels.dev]
+rank = 3
+letter = "d"
+implements = ["dev", "ops", "prd"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
+
+[id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
@@ -42,26 +56,24 @@ leading_zeros = true
 ### Pattern 2: With Associated Prefix (`REQ-CAL-d00001`)
 
 ```toml
-[patterns]
-id_template = "{prefix}-{associated}{type}{id}"
-prefix = "REQ"
+[project]
+namespace = "REQ"
+name = "my-project"
 
-[patterns.associated]
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
+
+[id-patterns.component]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[id-patterns.associated]
 enabled = true
 position = "after_prefix"
 format = "uppercase"
 length = 3
 separator = "-"
-
-[patterns.types]
-prd = { id = "p", level = 1 }
-ops = { id = "o", level = 2 }
-dev = { id = "d", level = 3 }
-
-[patterns.id_format]
-style = "numeric"
-digits = 5
-leading_zeros = true
 ```
 
 **Examples:**
@@ -73,16 +85,29 @@ leading_zeros = true
 ### Pattern 3: Type-Prefix Style (`PRD-00001`)
 
 ```toml
-[patterns]
-id_template = "{type}-{id}"
+[project]
+namespace = "REQ"
+name = "my-project"
 
-[patterns.types]
-PRD = { id = "PRD", name = "Product Requirement", level = 1 }
-OPS = { id = "OPS", name = "Operations Requirement", level = 2 }
-DEV = { id = "DEV", name = "Development Requirement", level = 3 }
-TST = { id = "TST", name = "Test Requirement", level = 3 }
+[levels.PRD]
+rank = 1
+letter = "P"
+implements = ["PRD"]
 
-[patterns.id_format]
+[levels.OPS]
+rank = 2
+letter = "O"
+implements = ["OPS", "PRD"]
+
+[levels.DEV]
+rank = 3
+letter = "D"
+implements = ["DEV", "OPS", "PRD"]
+
+[id-patterns]
+canonical = "{type}-{component}"
+
+[id-patterns.component]
 style = "numeric"
 digits = 5
 leading_zeros = true
@@ -93,21 +118,25 @@ leading_zeros = true
 - `PRD-00001` - Product requirement
 - `OPS-00042` - Operations requirement
 - `DEV-00127` - Development requirement
-- `TST-00003` - Test requirement
 
 ### Pattern 4: Jira-Like (`PROJ-123`)
 
 ```toml
-[patterns]
-id_template = "{prefix}-{id}"
-prefix = "PROJ"  # Change per project
+[project]
+namespace = "PROJ"       # Change per project
+name = "my-project"
 
-[patterns.types]
-req = { id = "", name = "Requirement", level = 1 }
+[levels.req]
+rank = 1
+letter = "r"
+implements = ["req"]
 
-[patterns.id_format]
+[id-patterns]
+canonical = "{namespace}-{component}"
+
+[id-patterns.component]
 style = "numeric"
-digits = 0  # Variable length
+digits = 0            # Variable length
 leading_zeros = false
 ```
 
@@ -120,17 +149,20 @@ leading_zeros = false
 ### Pattern 5: Named Requirements (`REQ-UserAuth`)
 
 ```toml
-[patterns]
-id_template = "{prefix}-{id}"
-prefix = "REQ"
+[project]
+namespace = "REQ"
+name = "my-project"
 
-[patterns.types]
-req = { id = "", name = "Requirement", level = 1 }
+[levels.req]
+rank = 1
+letter = "r"
+implements = ["req"]
 
-[patterns.id_format]
-style = "named"
-pattern = "[A-Z][a-zA-Z0-9]+"  # PascalCase
-max_length = 32
+[id-patterns]
+canonical = "{namespace}-{component}"
+
+[id-patterns.component]
+style = "PascalCase"
 ```
 
 **Examples:**
@@ -139,20 +171,28 @@ max_length = 32
 - `REQ-DataExport`
 - `REQ-AuditLog`
 
-### Pattern 6: Alphanumeric (`REQ-AB123`)
+### Pattern 6: Custom Regex (`REQ-PAB123`)
 
 ```toml
-[patterns]
-id_template = "{prefix}-{type}{id}"
-prefix = "REQ"
+[project]
+namespace = "REQ"
+name = "my-project"
 
-[patterns.types]
-prd = { id = "P", level = 1 }
-ops = { id = "O", level = 2 }
-dev = { id = "D", level = 3 }
+[levels.prd]
+rank = 1
+letter = "P"
+implements = ["prd"]
 
-[patterns.id_format]
-style = "alphanumeric"
+[levels.dev]
+rank = 3
+letter = "D"
+implements = ["dev", "prd"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
+
+[id-patterns.component]
+style = "regex"
 pattern = "[A-Z]{2}[0-9]{3}"  # 2 letters + 3 digits
 ```
 
@@ -161,58 +201,83 @@ pattern = "[A-Z]{2}[0-9]{3}"  # 2 letters + 3 digits
 - `REQ-PAB123` - Product requirement AB123
 - `REQ-DXY456` - Dev requirement XY456
 
-## Type Configuration
+## Level Configuration
 
-Each requirement type needs:
+Each level is its own `[levels.<name>]` section. The section name is the level's
+canonical code (the `{type}` token).
 
 | Property | Description | Required |
 |----------|-------------|----------|
-| `id` | Identifier used in IDs | Yes |
-| `name` | Display name | No |
-| `level` | Hierarchy level (1=highest) | Yes |
+| `rank` | Hierarchy rank (1 = highest) | Yes |
+| `letter` | Single-character code used in IDs (the `{level.letter}` token) | Yes |
+| `implements` | Level names this level may implement | Yes |
+| `display_name` | Display name | No |
+| `color` | Hex color for the viewer | No |
+| `expects_validation` | Requirements at this level are expected to have UAT validation | No |
 
 ```toml
-[patterns.types]
-prd = { id = "p", name = "Product Requirement", level = 1 }
-ops = { id = "o", name = "Operations Requirement", level = 2 }
-dev = { id = "d", name = "Development Requirement", level = 3 }
+[levels.prd]
+rank = 1
+letter = "p"
+display_name = "Product Requirement"
+implements = ["prd"]
+
+[levels.ops]
+rank = 2
+letter = "o"
+display_name = "Operations Requirement"
+implements = ["ops", "prd"]
+
+[levels.dev]
+rank = 3
+letter = "d"
+display_name = "Development Requirement"
+implements = ["dev", "ops", "prd"]
 ```
 
 ### Level Rules
 
-- **Level 1**: Root requirements (can only implement other level 1)
-- **Level 2**: Mid-level (can implement level 1 and 2)
-- **Level 3**: Leaf requirements (can implement levels 1, 2, and 3)
+Each level's `implements` list names the levels it is allowed to reference. In
+the configuration above, `dev` may implement `dev`, `ops`, and `prd`, while
+`prd` may implement only `prd` — so "DEV can implement PRD" is allowed and
+"PRD can implement DEV" is not.
 
-This enables validation rules like "DEV can implement PRD" while forbidding "PRD can implement DEV".
+## Component Format Options
 
-## ID Format Options
+`[id-patterns.component]` accepts `style`, plus the keys the chosen style uses:
+
+| Key | Applies to | Description |
+|-----|------------|-------------|
+| `style` | all | `numeric`, `camelCase`, `PascalCase`, `snake_case`, `kebab-case`, or `regex` |
+| `digits` | `numeric` | Maximum number of digits (0 = variable) |
+| `leading_zeros` | `numeric` | Pad with zeros: `00001` vs `1` |
+| `pattern` | `regex` | Regex the component must match (required for `regex`) |
+| `max_length` | all | Accepted but not currently enforced |
 
 ### Numeric (`style = "numeric"`)
 
 ```toml
-[patterns.id_format]
+[id-patterns.component]
 style = "numeric"
-digits = 5           # Number of digits (0 = variable)
+digits = 5           # Maximum number of digits (0 = variable)
 leading_zeros = true # Pad with zeros: 00001 vs 1
 ```
 
-### Named (`style = "named"`)
+### Named (`style = "PascalCase"`)
+
+Also available: `camelCase`, `snake_case`, `kebab-case`.
 
 ```toml
-[patterns.id_format]
-style = "named"
-pattern = "[A-Z][a-zA-Z0-9]+"  # Regex pattern
-max_length = 32                 # Maximum characters
-allowed_chars = "A-Za-z0-9-"    # Alternative to pattern
+[id-patterns.component]
+style = "PascalCase"
 ```
 
-### Alphanumeric (`style = "alphanumeric"`)
+### Custom Regex (`style = "regex"`)
 
 ```toml
-[patterns.id_format]
-style = "alphanumeric"
-pattern = "[A-Z]{2}[0-9]{3}"  # Strict regex pattern
+[id-patterns.component]
+style = "regex"
+pattern = "[A-Z]{2}[0-9]{3}"  # Required for this style
 ```
 
 ## Associated Prefix Configuration
@@ -220,35 +285,30 @@ pattern = "[A-Z]{2}[0-9]{3}"  # Strict regex pattern
 For multi-repository setups with associated namespaces:
 
 ```toml
-[patterns.associated]
-enabled = true           # Enable associated prefixes
-position = "after_prefix" # Where to place associated prefix
-format = "uppercase"     # "uppercase" | "lowercase" | "mixed"
-length = 3              # Fixed length (null for variable)
-separator = "-"         # Separator character
+[id-patterns.associated]
+enabled = true            # Enable associated prefixes
+position = "after_prefix" # "after_prefix" | "before_prefix"
+format = "uppercase"      # "uppercase" | "lowercase" | "mixed"
+length = 3                # Fixed length
+separator = "-"           # Separator character
 ```
-
-### Associated Position Options
-
-- `after_prefix`: `REQ-CAL-d00001` (prefix-associated-type-id)
-- `before_type`: `REQ-CAL-d00001` (same effect, semantic difference)
-- `none`: `REQ-d00001` (no associated prefix in ID)
 
 ## Validation
 
 elspais validates IDs against the configured pattern:
 
-```python
-# Valid IDs (with HHT default pattern)
+```text
+# Valid IDs (with the standard pattern above)
 REQ-p00001  ✓
 REQ-d00042  ✓
 REQ-o99999  ✓
+REQ-p1      ✓  # Accepted and normalized to REQ-p00001
 
 # Invalid IDs
-REQ-x00001  ✗  # Unknown type 'x'
-REQ-p1      ✗  # Wrong digit count
+REQ-x00001  ✗  # Unknown level letter 'x'
+REQ-p123456 ✗  # More digits than `digits` allows
 REQ00001    ✗  # Missing separator
-req-p00001  ✗  # Wrong case (if configured)
+req-p00001  ✗  # Wrong case
 ```
 
 ## Migration Between Patterns

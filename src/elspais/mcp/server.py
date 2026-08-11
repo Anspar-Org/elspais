@@ -81,7 +81,14 @@ from elspais.graph.serialize import (
 )
 from elspais.graph.terms import TermDictionary
 from elspais.mcp.search import ParsedQuery, matches_node, parse_query, score_node
-from elspais.mcp.shared_state import SharedServerState, rebuild_shared_graph
+from elspais.mcp.shared_state import (
+    SharedServerState,
+    attach_dirty_sentinel,
+    finalize_shutdown,
+    persist_pending,
+    rebuild_shared_graph,
+    report_shutdown_outcome,
+)
 from elspais.utilities.patterns import build_resolver
 
 # Known schema fields (by alias and Python name) for filtering non-schema keys
@@ -804,13 +811,17 @@ def _search_terms_logic(td: TermDictionary, query: str) -> list[dict[str, Any]]:
     return results
 
 
-def _get_graph_status(graph: FederatedGraph) -> dict[str, Any]:
+def _get_graph_status(
+    graph: FederatedGraph, working_dir: Path | str | None = None
+) -> dict[str, Any]:
     """Get graph status.
 
     REQ-d00060-A: Returns is_stale from metadata.
     REQ-d00060-B: Returns node_counts by calling nodes_by_kind().
     REQ-d00060-D: Returns root_count using graph.root_count().
     REQ-d00060-E: Does NOT iterate full graph for counts.
+    REQ-p00083-C: Reports an outstanding automatic-save record, so the
+    quick status question also answers "how did these files get here".
     """
     # Count nodes by kind using the efficient nodes_by_kind iterator
     node_counts: dict[str, int] = {}
@@ -819,7 +830,7 @@ def _get_graph_status(graph: FederatedGraph) -> dict[str, Any]:
         if count > 0:
             node_counts[kind.value] = count
 
-    return {
+    status = {
         "root_count": graph.root_count(),
         "node_counts": node_counts,
         "total_nodes": graph.node_count(),
@@ -827,6 +838,13 @@ def _get_graph_status(graph: FederatedGraph) -> dict[str, Any]:
         "has_broken_references": graph.has_broken_references(),
         "terms_dirty": _has_dirty_terms(graph),
     }
+    record = _automatic_save_record(working_dir)
+    if record is not None:
+        status["automatic_save"] = record
+    notice = _lost_changes_notice(working_dir)
+    if notice is not None:
+        status["lost_changes"] = notice
+    return status
 
 
 def _has_dirty_terms(graph: FederatedGraph) -> bool:
@@ -1724,7 +1742,7 @@ def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dic
         "local_config": local_config_exists,
     }
 
-    return {
+    info: dict[str, Any] = {
         "repo_path": str(working_dir),
         "project_name": project_name,
         "elspais_version": _get_elspais_version(),
@@ -1732,6 +1750,55 @@ def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dic
         "detail": "default",
         "available_details": dict(_WORKSPACE_DETAIL_PROFILES),
         "config_summary": config_summary,
+    }
+    # Implements: REQ-p00083-C
+    # Carried on the base profile, not a detail level, so a client that
+    # asks the ordinary orientation question is told how the files it is
+    # about to read reached their current form.
+    record = _automatic_save_record(working_dir)
+    if record is not None:
+        info["automatic_save"] = record
+    # Implements: REQ-p00083-F
+    notice = _lost_changes_notice(working_dir)
+    if notice is not None:
+        info["lost_changes"] = notice
+    return info
+
+
+# Implements: REQ-p00083-C
+def _automatic_save_record(working_dir: Path | str | None) -> dict[str, Any] | None:
+    """The outstanding record of a save the daemon performed, if any.
+
+    Facts only — who saved, when, how many changes, what triggered it.
+    Nothing here says whether the work is finished or wanted; the daemon
+    cannot know that and the reader decides.
+    """
+    if working_dir is None:
+        return None
+    from elspais.mcp.daemon import read_automatic_save
+
+    return read_automatic_save(Path(working_dir))
+
+
+# Implements: REQ-p00083-F
+def _lost_changes_notice(working_dir: Path | str | None) -> dict[str, Any] | None:
+    """Present while a process is known to have died holding unwritten changes.
+
+    Presence is the whole of what is known. Nothing recorded what the
+    changes were, and this says so rather than implying otherwise.
+    """
+    if working_dir is None:
+        return None
+    from elspais.mcp.daemon import has_lost_changes
+
+    if not has_lost_changes(Path(working_dir)):
+        return None
+    return {
+        "note": (
+            "A previous server process ended while holding changes it never wrote "
+            "to disk. The files you are reading do not include them, nothing "
+            "records what they were, and they cannot be recovered."
+        )
     }
 
 
@@ -2486,7 +2553,10 @@ _FAQ_ENTRIES: list[dict[str, str]] = [
             "move-to-file) in the request body, and thread the 'version' each\n"
             "success returns. The history routes /api/save, /api/revert and\n"
             '/api/reload require if_tip_mutation_id in the JSON body ("" =\n'
-            "nothing pending). An unknown node is 404 with code node_not_found."
+            "nothing pending). An unknown node is 404 with code node_not_found.\n"
+            "409 means a conflict only: a save refused for a missing changelog\n"
+            "reason is 400 (changelog_message_required) and a save whose write\n"
+            "failed is 500 (save_failed). Retrying those unchanged cannot help."
         ),
     },
     {
@@ -2592,7 +2662,7 @@ def _get_docs(topic: str) -> dict[str, Any]:
         # Multi-word: each variant set must have at least one hit
         return all(any(v in lowered for v in vs) for vs in variant_sets)
 
-    # 1. Search docs/cli/*.md files (section-level granularity)
+    # 1. Search the shipped doc topics (section-level granularity)
     for t in available:
         tc = load_topic(t)
         if tc is None:
@@ -2611,7 +2681,7 @@ def _get_docs(topic: str) -> dict[str, Any]:
             if _text_matches(section_text):
                 matches.append(
                     {
-                        "source": f"docs/cli/{t}.md",
+                        "source": f"elspais docs {t}",
                         "content": section_text,
                     }
                 )
@@ -2755,6 +2825,31 @@ def _guard_version(graph: Any, node_id: str, if_version: str) -> dict[str, Any] 
         "hint": (
             "State changed since you read it. Reconcile against current_state "
             "and retry with current_version."
+        ),
+    }
+
+
+# Implements: REQ-o00062-O, REQ-p00083-G
+def _guard_shutdown(state: Any) -> dict[str, Any] | None:
+    """Return a rejection dict if this process is stopping; otherwise None.
+
+    Between the decision to stop and the end of the drain, the HTTP stack
+    keeps accepting requests. A mutation accepted there is guarded,
+    applied, acknowledged to its writer — and then dies with the process,
+    which is the accepted-then-dropped write the version guards exist to
+    make impossible. Refusing it is the only outcome the writer can act
+    on, and it belongs in the same family of rejections callers already
+    handle: same shape, same 409 on the HTTP surface.
+    """
+    if state is None or not getattr(state, "is_shutting_down", False):
+        return None
+    return {
+        "success": False,
+        "code": "server_shutting_down",
+        "error": "The server is shutting down; this change was not applied.",
+        "hint": (
+            "Nothing was changed. Reconnect — a new server will be started on "
+            "demand — and re-apply against the state you read there."
         ),
     }
 
@@ -3111,20 +3206,22 @@ def _mutate_delete_journey(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _mutate_add_assertion(
-    graph: FederatedGraph, req_id: str, label: str, text: str
-) -> dict[str, Any]:
+def _mutate_add_assertion(graph: FederatedGraph, req_id: str, text: str) -> dict[str, Any]:
     """Add assertion to requirement.
 
     REQ-d00065-D: Only parameter validation and delegation.
     REQ-o00062-E: Returns MutationEntry for audit.
+    REQ-o00062-R: Reports the label it assigned; the caller does not choose it.
     """
     try:
-        entry = graph.add_assertion(req_id, label, text)
+        entry = graph.add_assertion(req_id, text)
+        assertion_id = entry.after_state["id"]
         return {
             "success": True,
             "mutation": _serialize_mutation_entry(entry),
-            "message": f"Added assertion {req_id}-{label}",
+            "label": entry.after_state["label"],
+            "assertion_id": assertion_id,
+            "message": f"Added assertion {assertion_id}",
         }
     except (ValueError, KeyError) as e:
         return {"success": False, "error": str(e)}
@@ -5413,7 +5510,8 @@ your last read — and returns the new `version` on success. See the
 
 ### Assertion Mutations (in-memory)
 Assertion tokens are the PARENT REQUIREMENT's version.
-- `mutate_add_assertion(req_id, label, text, if_version)` - Add assertion
+- `mutate_add_assertion(req_id, text, if_version)` - Add assertion; the next
+  label in the series is assigned and returned as `label`
 - `mutate_update_assertion(assertion_id, new_text, if_version)` - Update text
 - `mutate_delete_assertion(assertion_id, if_version, confirm=True)` - Delete
   (requires confirm); returns the parent requirement's resulting version
@@ -5680,11 +5778,19 @@ def create_server(
         before another writer's mutate lands is a lost update. Applied to
         every tool that writes to the graph, the mutation log, or disk;
         read tools stay lock-free.
+
+        The shutdown check is taken inside the same lock, because the
+        decision to stop is taken inside it too: outside, a write could
+        pass the check and land after the process had committed to
+        stopping (REQ-p00083-G).
         """
 
         @functools.wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             with _state.write_lock:
+                stopping = _guard_shutdown(_state)
+                if stopping is not None:
+                    return stopping
                 return fn(*args, **kwargs)
 
         return wrapper
@@ -5699,7 +5805,7 @@ def create_server(
 
         Use when: you need a fast overview of project health without running full checks.
         """
-        return _get_graph_status(_state["graph"])
+        return _get_graph_status(_state["graph"], _state.get("working_dir"))
 
     @mcp.tool()
     @_locked
@@ -6210,8 +6316,13 @@ def create_server(
 
     @mcp.tool()
     @_locked
-    def mutate_add_assertion(req_id: str, label: str, text: str, if_version: str) -> dict[str, Any]:
-        """Add a testable assertion (A, B, C...) to a requirement. Text should include SHALL.
+    def mutate_add_assertion(req_id: str, text: str, if_version: str) -> dict[str, Any]:
+        """Add a testable assertion to a requirement. Text should include SHALL.
+
+        The assertion is appended after the requirement's existing assertions
+        and given the next label in the series; the assigned label is returned
+        as `label`. A requirement whose series is exhausted is one to split,
+        and the call fails rather than labelling outside the series.
 
         Args:
             if_version: The version of req_id — the parent requirement — from
@@ -6225,7 +6336,7 @@ def create_server(
         if conflict:
             return conflict
         parent = _state["graph"].find_by_id(req_id)
-        return _attach_version(_mutate_add_assertion(_state["graph"], req_id, label, text), parent)
+        return _attach_version(_mutate_add_assertion(_state["graph"], req_id, text), parent)
 
     @mcp.tool()
     @_locked
@@ -7054,8 +7165,6 @@ def create_server(
                 (when changelog enforcement is enabled).
         """
         # Implements: REQ-d00132-A, REQ-d00132-B
-        from elspais.graph.render import render_save
-
         graph = _state["graph"]
         if graph is None:
             return {"success": False, "error": "graph not available"}
@@ -7066,54 +7175,7 @@ def create_server(
         if conflict:
             return conflict
 
-        # Check changelog enforcement for Active requirements
-        config = _state.get("config", {})
-        typed_config = _validate_config(config) if isinstance(config, dict) else config
-        changelog_enforce = typed_config.changelog.hash_current
-
-        if changelog_enforce:
-            active_mutated = _get_active_mutated_reqs(graph)
-            if active_mutated and not message:
-                ids = ", ".join(sorted(active_mutated))
-                return {
-                    "success": False,
-                    "error": (
-                        f"Active requirement(s) modified: {ids}. "
-                        "Provide a 'message' parameter with the "
-                        "changelog reason."
-                    ),
-                }
-
-        if save_branch:
-            from elspais.utilities.git import create_safety_branch
-
-            create_safety_branch(_state["working_dir"], "save-mutations")
-
-        from elspais.utilities.patterns import build_resolver as _build_resolver_for_save
-
-        result = render_save(
-            graph,
-            _state["working_dir"],
-            resolver=_build_resolver_for_save(config),
-            write_associates=(
-                config.get("federation", {}).get("write_associates", False)
-                if isinstance(config, dict)
-                else False
-            ),
-        )
-
-        # Add changelog entries for Active requirements after save. Failure
-        # to resolve the author MUST propagate — a successful render with a
-        # missing changelog row breaks attribution.
-        if result.get("success") and changelog_enforce and message:
-            cl_result = _add_changelog_for_active_mutations(
-                graph, _state["working_dir"], config, message
-            )
-            if not cl_result.get("success", True):
-                return {
-                    "success": False,
-                    "error": cl_result.get("error", "Changelog author resolution failed"),
-                }
+        result = persist_pending(_state, message=message, save_branch=save_branch)
 
         # REQ-o00063-F: Refresh graph after file mutations
         if result.get("success"):
@@ -7353,8 +7415,26 @@ def run_server(
         daemon_json = Path(env_dj)
 
     if transport == "stdio":
-        mcp = create_server(working_dir=working_dir)
-        mcp.run(transport="stdio")
+        # Implements: REQ-p00083-A
+        # A stdio server holds its own graph and its own pending
+        # mutations, and it ends when its client's pipe closes rather
+        # than by any decision of its own. Hold the holder so the same
+        # routine can account for that work; a private one created
+        # inside create_server would be unreachable from here.
+        stdio_state = SharedServerState()
+        mcp = create_server(working_dir=working_dir, shared_state=stdio_state)
+        # No dirty sentinel here, deliberately. The sentinel is a
+        # per-checkout signal with no owner recorded in it, and a stdio
+        # server is the one kind that can run beside another server in
+        # the same repo: it would read the daemon's sentinel as evidence
+        # of a dead process and clear it, reporting a loss that never
+        # happened and erasing the record of one that might. The HTTP
+        # servers are one per repo and can own it unambiguously.
+        try:
+            mcp.run(transport="stdio")
+        finally:
+            trigger = "the client's connection closed"
+            report_shutdown_outcome(finalize_shutdown(stdio_state, trigger), trigger)
     else:
         # HTTP: use unified app (REST + MCP + auto-refresh)
         import socket
@@ -7370,11 +7450,30 @@ def run_server(
 
         state = AppState.from_config(repo_root=working_dir)
         app = create_app(state)
+        # Implements: REQ-p00083-E
+        # Before anything is served: a sentinel still standing here was
+        # written by a process that is gone, and what it says about this
+        # one is nothing.
+        attach_dirty_sentinel(state.shared)
 
         if ttl_minutes > 0:
             from elspais.server.middleware import TTLMiddleware
 
-            app.add_middleware(TTLMiddleware, ttl_minutes=ttl_minutes)
+            # Implements: REQ-o00074-C, REQ-o00074-O
+            # Looked up on each expiry rather than captured: the watchdog
+            # is built further down, and a daemon started explicitly never
+            # gets one at all — which is how that daemon keeps a lifetime
+            # governed solely by its idle timeout.
+            def _clients_alive() -> bool:
+                watchdog = state.shared.get("watchdog")
+                return watchdog is not None and watchdog.has_live_client()
+
+            app.add_middleware(
+                TTLMiddleware,
+                ttl_minutes=ttl_minutes,
+                shared=state.shared,
+                clients_alive=_clients_alive,
+            )
 
         # Resolve ephemeral port if port=0
         if port == 0:
@@ -7383,16 +7482,21 @@ def run_server(
                 s.bind(("127.0.0.1", 0))
                 port = s.getsockname()[1]
 
-        # Spawner liveness: set for implicitly spawned daemons only (env
+        # Client liveness: set for implicitly spawned daemons only (env
         # written by daemon.start_daemon). Explicit starts (manual serve,
-        # viewer, daemon restart) have no spawner and keep TTL-only life.
-        spawner_pid: int | None = None
-        env_spawner = _os.environ.get("_ELSPAIS_SPAWNER_PID")
-        if env_spawner:
+        # viewer, elspais daemon) have no client and keep TTL-only life.
+        # Implements: REQ-o00074-A, REQ-o00074-C
+        client_pid: int | None = None
+        env_client = _os.environ.get("_ELSPAIS_CLIENT_PID")
+        if env_client:
             try:
-                spawner_pid = int(env_spawner)
+                client_pid = int(env_client)
             except ValueError:
-                spawner_pid = None
+                client_pid = None
+            # Same floor the resolver applies: 1 is init, which never
+            # dies, so watching it is a daemon that never terminates.
+            if client_pid is not None and client_pid <= 1:
+                client_pid = None
 
         if daemon_json:
             from elspais.mcp.daemon import write_daemon_json
@@ -7402,25 +7506,179 @@ def run_server(
                 pid=_os.getpid(),
                 port=port,
                 server_type="daemon",
-                spawner_pid=spawner_pid,
+                client_pid=client_pid,
             )
 
-        if spawner_pid is not None:
-            from elspais.server.spawner_watch import SpawnerWatchdog
+        if client_pid is not None:
+            from elspais.server.client_watch import (
+                DEFAULT_GRACE_SECONDS,
+                ClientWatchdog,
+                pending_snapshot,
+            )
 
-            def _unsaved_mutation_count() -> int | None:
-                log = _get_mutation_log(state.graph, limit=1)
-                count = log.get("count")
-                return count if isinstance(count, int) else None
+            # Implements: REQ-o00074-G, REQ-o00074-H
+            # Dereference the holder on every check: the live graph is
+            # swapped on rebuild, so a cached object would count and
+            # fingerprint a log nobody is writing to any more.
+            def _pending() -> tuple[int, str | None]:
+                return pending_snapshot(state.graph)
 
-            interval = float(_os.environ.get("_ELSPAIS_SPAWNER_CHECK_INTERVAL", "60"))
-            grace = float(_os.environ.get("_ELSPAIS_SPAWNER_GRACE", "300"))
-            SpawnerWatchdog(
-                spawner_pid=spawner_pid,
-                mutation_count_fn=_unsaved_mutation_count,
+            # Implements: REQ-p00083-A
+            # The watchdog does not save or raise the shutdown flag
+            # itself; it decides *that* the daemon stops and hands over
+            # to the one routine every stop path runs.
+            def _stop() -> dict[str, Any]:
+                return finalize_shutdown(
+                    state.shared,
+                    trigger="no recorded client was running",
+                )
+
+            # Implements: REQ-o00074-A, REQ-o00074-E
+            # A client that supplies no process identifier can still be
+            # holding a stream open, and that is a handle of the same
+            # kind. Looked up on each check rather than captured, so the
+            # order in which the app and the watchdog are built does not
+            # decide whether the handle is seen at all.
+            def _sessions_held() -> int:
+                tracker = state.shared.get("session_tracker")
+                return tracker.held() if tracker is not None else 0
+
+            # Implements: REQ-o00074-B
+            # Published from the check that computes the composition, so a
+            # client present only as a held stream — which registers
+            # nothing — is still visible to whoever asks why this daemon
+            # is running.
+            def _publish_clients(pids: list[int], held: int) -> None:
+                from elspais.mcp.daemon import record_daemon_clients
+
+                # A process that has committed to stopping does not update
+                # its own advertisement. This is the rule that already
+                # refuses graph writes once `is_shutting_down` is raised,
+                # applied to the one write that escaped it: publishing
+                # read-modify-writes the record, so a mark landing between
+                # its read and its write was silently dropped, and nothing
+                # ever re-marks it.
+                if state.shared.is_shutting_down:
+                    return
+                record_daemon_clients(working_dir, pids, held)
+
+            interval = float(_os.environ.get("_ELSPAIS_CLIENT_CHECK_INTERVAL", "60"))
+            grace = float(_os.environ.get("_ELSPAIS_CLIENT_GRACE", str(int(DEFAULT_GRACE_SECONDS))))
+            watchdog = ClientWatchdog(
+                client_pid=client_pid,
+                pending_fn=_pending,
                 interval_seconds=interval,
                 grace_seconds=grace,
-            ).start()
+                lock=state.shared.write_lock,
+                stop_fn=_stop,
+                extra_liveness_fn=_sessions_held,
+                publish_fn=_publish_clients,
+            )
+            # Published so the adoption route can register the clients that
+            # pick this daemon up after its first one is gone.
+            state.shared["watchdog"] = watchdog
+            watchdog.start()
 
         uvi_config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
-        anyio.run(uvicorn.Server(uvi_config).serve)
+
+        # Implements: REQ-p00083-A, REQ-p00083-D
+        def _account_for_held_work() -> None:
+            """Write what this process holds, starting now.
+
+            Called from signal context, which is why the work happens on a
+            thread rather than here: the routine takes the writers' lock,
+            and blocking on it inside a handler would stop the process it
+            was meant to save.
+
+            Started at the signal rather than after the drain, because the
+            drain may never end -- a client holding an MCP stream keeps an
+            in-flight request open for the life of its session, and the
+            accounting after serve() would then never run. Whoever asked
+            for the stop is waiting on a deadline of their own and will
+            end this process when it passes; by then the work is written.
+
+            The thread is not a daemon thread: the interpreter joins it on
+            the way out, so an exit that beats the save waits for it
+            instead of truncating a spec file.
+            """
+            import threading as _threading
+
+            trigger = "an operator or timeout stopped the server"
+
+            def _run() -> None:
+                report_shutdown_outcome(finalize_shutdown(state.shared, trigger), trigger)
+
+            _threading.Thread(target=_run, name="elspais-shutdown-save").start()
+
+        # Implements: REQ-o00062-O
+        class _ShutdownAwareServer(uvicorn.Server):
+            """Raise the shutdown flag the moment a stop signal arrives.
+
+            Between the signal and the end of the drain, uvicorn keeps
+            serving requests. A mutation accepted in that window is
+            acknowledged to its writer and then dropped with the process;
+            refusing it instead is the only outcome the writer can act on.
+
+            Nothing waits here. This runs on the event loop thread, and a
+            write handler suspended at an await while holding the write
+            lock could never resume to release it, so waiting for that
+            lock here would hang the process instead of saving anything.
+            The save is therefore started on its own thread and proceeds
+            independently of the drain -- it must not depend on the drain
+            finishing, because a supervisor that gives up on a slow drain
+            would otherwise take the unwritten work with it.
+            """
+
+            # Implements: REQ-p00083-A, REQ-p00083-D
+            # This is the handler a stop signal actually reaches while the
+            # server is serving — uvicorn installs it for the duration of
+            # serve(). Starting the save comes FIRST, before anything else
+            # here: marking the state record writes a file and can print,
+            # and this runs in true signal context on whatever the main
+            # thread was doing, so a write that blocks there blocks here.
+            # A handler that never reaches the save leaves the work in a
+            # process a supervisor is about to end.
+            def handle_exit(self, sig: int, frame: Any) -> None:
+                _account_for_held_work()
+                state.shared.begin_shutdown()
+                super().handle_exit(sig, frame)
+
+        # Implements: REQ-p00083-A
+        # The fall-through every stop path reaches, including the ones
+        # nothing in this process initiated: an operator's signal, a
+        # container stop, a supervisor restart. By the time it runs the
+        # handler above has usually already accounted for the work, and
+        # the routine is idempotent, so this repeat costs nothing and
+        # covers the paths that reach here without a signal.
+        server = _ShutdownAwareServer(uvi_config)
+
+        # Implements: REQ-p00083-A
+        # uvicorn captures the stop signals for the duration of serve(),
+        # and re-raises the one it caught once its own drain is over —
+        # with whatever handler was installed before it started. If that
+        # is the default disposition, the process dies inside serve(),
+        # the call never returns, and the accounting below never runs:
+        # an operator's `kill` would destroy the work the daemon holds.
+        # Standing in front of it with a handler of our own is what lets
+        # serve() return so the work can be accounted for. It also covers
+        # the narrow window before uvicorn captures anything, where the
+        # signal has to reach the server as a request to stop rather than
+        # be swallowed.
+        #
+        # The save starts here rather than after serve(), for the reason
+        # given on the handler above: the drain may never finish, and the
+        # accounting below would then never run.
+        def _absorb_stop_signal(signum: int, frame: Any) -> None:
+            _account_for_held_work()
+            state.shared.begin_shutdown()
+            server.should_exit = True
+
+        import signal as _signal
+
+        _signal.signal(_signal.SIGTERM, _absorb_stop_signal)
+
+        try:
+            anyio.run(server.serve)
+        finally:
+            trigger = "the server stopped serving requests"
+            report_shutdown_outcome(finalize_shutdown(state.shared, trigger), trigger)

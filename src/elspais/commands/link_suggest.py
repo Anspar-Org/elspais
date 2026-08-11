@@ -8,11 +8,11 @@ heuristics (import analysis, function name matching, file path proximity,
 keyword overlap). Exposes the link suggestion engine via CLI.
 
 Usage:
-    elspais link suggest                          # Scan all unlinked tests
-    elspais link suggest --file tests/test_foo.py # Single file
-    elspais link suggest --format json            # Machine-readable output
-    elspais link suggest --min-confidence high    # Filter by confidence
-    elspais link suggest --apply --dry-run        # Preview changes
+    elspais link                          # Scan all unlinked tests
+    elspais link --file tests/test_foo.py # Single file
+    elspais link --format json            # Machine-readable output
+    elspais link --min-confidence high    # Filter by confidence
+    elspais link --apply --dry-run        # Preview changes
 """
 
 from __future__ import annotations

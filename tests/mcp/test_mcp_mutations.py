@@ -289,14 +289,15 @@ class TestMutateAddAssertion:
         result = _mutate_add_assertion(
             mutation_graph,
             req_id="REQ-p00001",
-            label="C",
             text="SHALL log all access attempts",
         )
 
         assert result["success"] is True
-        assertion = mutation_graph.find_by_id("REQ-p00001-C")
+        assertion = mutation_graph.find_by_id(result["assertion_id"])
         assert assertion is not None
         assert assertion.get_label() == "SHALL log all access attempts"
+        assert result["label"] == assertion.get_field("label")
+        assert result["message"] == f"Added assertion {result['assertion_id']}"
 
     # Verifies: REQ-o00062-E
     def test_returns_mutation_entry(self, mutation_graph):
@@ -304,7 +305,7 @@ class TestMutateAddAssertion:
         pytest.importorskip("mcp")
         from elspais.mcp.server import _mutate_add_assertion
 
-        result = _mutate_add_assertion(mutation_graph, "REQ-p00001", "C", "New assertion text")
+        result = _mutate_add_assertion(mutation_graph, "REQ-p00001", "New assertion text")
 
         assert "mutation" in result
         assert result["mutation"]["operation"] == "add_assertion"

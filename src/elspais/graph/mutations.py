@@ -7,7 +7,7 @@ broken references, and other graph state changes.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -99,6 +99,40 @@ class MutationLog:
     def __init__(self) -> None:
         """Initialize an empty mutation log."""
         self._entries: list[MutationEntry] = []
+        self._revision = 0
+        self._dirty_observer: Callable[[bool], None] | None = None
+
+    # Implements: REQ-p00083-E
+    def set_dirty_observer(self, observer: Callable[[bool], None] | None) -> None:
+        """Watch the transitions between holding changes and holding none.
+
+        The observer is called with True when the log goes from empty to
+        holding an entry, and with False when it goes back to empty. Only
+        on those transitions, never per entry: what it exists to record is
+        the fact of holding unrecorded work, which does not change while
+        the count merely grows.
+
+        It runs inside the append, before the mutation is acknowledged to
+        whoever made it. A process that dies between the acknowledgement
+        and the observer is the case the whole arrangement exists for.
+        """
+        self._dirty_observer = observer
+
+    def _notify_dirty(self, holding: bool) -> None:
+        observer = self._dirty_observer
+        if observer is not None:
+            observer(holding)
+
+    @property
+    def revision(self) -> int:
+        """Monotonic count of changes to this log.
+
+        Advances on every append, undo and clear, and never repeats. The
+        tip id cannot serve this purpose: an append followed by an undo
+        restores the previous tip exactly, so two logs with the same tip
+        may have had activity between them.
+        """
+        return self._revision
 
     def append(self, entry: MutationEntry) -> None:
         """Append a mutation entry to the log.
@@ -106,7 +140,11 @@ class MutationLog:
         Args:
             entry: The mutation record to append.
         """
+        was_holding = bool(self._entries)
         self._entries.append(entry)
+        self._revision += 1
+        if not was_holding:
+            self._notify_dirty(True)
 
     def iter_entries(self) -> Iterator[MutationEntry]:
         """Iterate over all entries in chronological order.
@@ -176,11 +214,22 @@ class MutationLog:
         Returns:
             The removed entry, or None if log is empty.
         """
-        return self._entries.pop() if self._entries else None
+        if not self._entries:
+            return None
+        self._revision += 1
+        entry = self._entries.pop()
+        if not self._entries:
+            self._notify_dirty(False)
+        return entry
 
     def clear(self) -> None:
         """Clear all entries from the log."""
+        was_holding = bool(self._entries)
+        if was_holding:
+            self._revision += 1
         self._entries.clear()
+        if was_holding:
+            self._notify_dirty(False)
 
 
 __all__ = ["BrokenReference", "MutationEntry", "MutationLog"]

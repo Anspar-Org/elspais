@@ -28,6 +28,15 @@ pytestmark = [
 ]
 
 
+def _recorded_pids(info: dict) -> list[int]:
+    """Process-id client handles published in a daemon's state record.
+
+    The record describes each handle by kind, because a client can be
+    present as a held stream rather than as a process id (REQ-o00074-B).
+    """
+    return sorted(c["id"] for c in (info.get("clients") or []) if c.get("kind") == "pid")
+
+
 # ---------------------------------------------------------------------------
 # From test_cli_commands.py::TestInit
 # ---------------------------------------------------------------------------
@@ -618,20 +627,40 @@ class TestDaemonConfigStaleRestart:
 
 
 # ---------------------------------------------------------------------------
-# TOOL-12: daemons must not outlive the session that spawned them
+# Daemon session identity: bound at start, or withheld on explicit starts
 # ---------------------------------------------------------------------------
+# Verifies: REQ-o00074-A+B+C+E+F+I
 
 
-class TestDaemonSpawnerLiveness:
-    """Verifies REQ-p00015-E: an implicitly spawned daemon exits after its
-    spawning session dies, instead of surviving as an orphan that could
-    keep serving values no session is refreshing.
+class TestDaemonClientLiveness:
+    """Validates REQ-o00074-A: a daemon started implicitly on behalf of a
+    client records that client's identity at the moment it starts, so it can
+    afterwards determine whether the client still exists.
 
-    Deterministic: the "session" is a subprocess we control and kill; the
-    daemon's check interval is shortened via the internal env knob.
+    Validates REQ-o00074-B: the client identities it has recorded are
+    observable in the state record clients use to locate it.
+
+    Validates REQ-o00074-C: a daemon started explicitly records no client
+    identity and keeps idle-timeout-only lifetime.
+
+    Validates REQ-o00074-E: while a recorded client still exists the daemon
+    keeps serving, including a client that adopted it after the one that
+    started it was gone; once none of them exists it terminates.
+
+    Validates REQ-o00074-F: that obligation holds under every idle-timeout
+    configuration, including one in which the idle timeout never expires.
+
+    Validates REQ-o00074-I: a daemon terminating with no client present
+    persists the changes it holds and leaves the facts of that save where the
+    next client will find them.
+
+    Deterministic: the "client" is a subprocess we control and kill; the
+    daemon's check interval and grace period are shortened via the internal
+    env knobs. This is the only tier that catches a watchdog thread that never
+    starts at all.
     """
 
-    def test_daemon_exits_after_spawner_dies(self, tmp_path):
+    def test_REQ_o00074_A_daemon_exits_after_client_dies(self, tmp_path):
         import os
         import sys
         import time
@@ -640,7 +669,7 @@ class TestDaemonSpawnerLiveness:
 
         build_project(
             tmp_path,
-            base_config(name="spawner-liveness-project"),
+            base_config(name="client-liveness-project"),
             spec_files={
                 "spec/prd.md": [
                     Requirement(
@@ -654,17 +683,17 @@ class TestDaemonSpawnerLiveness:
         )
 
         # Fake session process: long-lived until we kill it.
-        spawner = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+        client = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
         daemon_pid = None
         try:
             # Implicit daemon spawn via the CLI reuse path, declaring the
-            # fake session as spawner.
+            # fake session as client.
             result = run_elspais(
                 "summary",
                 cwd=tmp_path,
                 env={
-                    "ELSPAIS_SPAWNER_PID": str(spawner.pid),
-                    "_ELSPAIS_SPAWNER_CHECK_INTERVAL": "0.3",
+                    "ELSPAIS_CLIENT_PID": str(client.pid),
+                    "_ELSPAIS_CLIENT_CHECK_INTERVAL": "0.3",
                 },
             )
             assert result.returncode == 0, result.stderr
@@ -672,14 +701,17 @@ class TestDaemonSpawnerLiveness:
             daemon_json = tmp_path / ".elspais" / "daemon.json"
             assert daemon_json.exists(), "daemon should have auto-started"
             info = json.loads(daemon_json.read_text())
-            assert info["spawner_pid"] == spawner.pid
+            assert info["client_pid"] == client.pid
+            # REQ-o00074-B: the recorded client set, not just the starter,
+            # is what an operator reads to ask why the daemon is still up.
+            assert _recorded_pids(info) == [client.pid]
             daemon_pid = info["pid"]
-            os.kill(daemon_pid, 0)  # daemon alive while spawner alive
+            os.kill(daemon_pid, 0)  # daemon alive while client alive
 
             # Kill the session; the daemon must notice and exit cleanly
             # (no unsaved mutations -> no grace period).
-            spawner.kill()
-            spawner.wait()
+            client.kill()
+            client.wait()
 
             deadline = time.time() + 20
             while time.time() < deadline:
@@ -690,23 +722,23 @@ class TestDaemonSpawnerLiveness:
                 time.sleep(0.3)
             else:
                 raise AssertionError(
-                    "daemon survived its spawner's death: "
+                    "daemon survived its client's death: "
                     + (tmp_path / ".elspais" / "daemon.log").read_text()[-1000:]
                 )
 
             log = (tmp_path / ".elspais" / "daemon.log").read_text()
             assert "shutting down" in log
         finally:
-            spawner.kill()
+            client.kill()
             if daemon_pid is not None:
                 try:
                     os.kill(daemon_pid, 15)
                 except OSError:
                     pass
 
-    def test_explicit_restart_records_no_spawner(self, tmp_path):
+    def test_REQ_o00074_C_explicit_restart_records_no_client(self, tmp_path):
         """`elspais daemon restart` is an explicit start: the daemon keeps
-        TTL-only lifetime and records no spawner identity, even when the
+        TTL-only lifetime and records no client identity, even when the
         environment declares one."""
         import os
         import time
@@ -733,13 +765,13 @@ class TestDaemonSpawnerLiveness:
             result = run_elspais(
                 "daemon",  # defaults to the restart action
                 cwd=tmp_path,
-                env={"ELSPAIS_SPAWNER_PID": str(os.getpid())},
+                env={"ELSPAIS_CLIENT_PID": str(os.getpid())},
             )
             assert result.returncode == 0, result.stderr
             assert daemon_json.exists()
             info = json.loads(daemon_json.read_text())
             assert (
-                "spawner_pid" not in info
+                "client_pid" not in info
             ), f"explicitly restarted daemon must not be session-tied: {info}"
             # And it stays up: no watchdog is running.
             time.sleep(1.5)
@@ -750,3 +782,674 @@ class TestDaemonSpawnerLiveness:
                     os.kill(json.loads(daemon_json.read_text())["pid"], 15)
                 except (OSError, ValueError, KeyError):
                     pass
+
+    def test_REQ_o00074_F_daemon_exits_with_idle_timeout_disabled(self, tmp_path):
+        """Validates REQ-o00074-F: the termination obligation holds under every
+        idle-timeout configuration, including one in which the idle timeout
+        never expires (``cli_ttl < 0``), and is not discharged by client request
+        traffic. The check must hang off the daemon's own passage of time, not
+        off a timeout a project can switch off or a client can keep resetting."""
+        import os
+        import sys
+        import time
+        import urllib.error
+        import urllib.request
+
+        from tests.e2e.helpers import Requirement, base_config, build_project
+
+        config = base_config(name="no-ttl-client-project")
+        config["cli_ttl"] = -1  # daemon never times out on idleness
+
+        build_project(
+            tmp_path,
+            config,
+            spec_files={
+                "spec/prd.md": [
+                    Requirement(
+                        "REQ-p00001",
+                        "Feature One",
+                        "PRD",
+                        assertions=[("A", "The system SHALL do one thing.")],
+                    )
+                ]
+            },
+        )
+
+        client = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+        daemon_pid = None
+        try:
+            result = run_elspais(
+                "summary",
+                cwd=tmp_path,
+                env={
+                    "ELSPAIS_CLIENT_PID": str(client.pid),
+                    "_ELSPAIS_CLIENT_CHECK_INTERVAL": "0.3",
+                },
+            )
+            assert result.returncode == 0, result.stderr
+
+            daemon_json = tmp_path / ".elspais" / "daemon.json"
+            assert daemon_json.exists(), "daemon should have auto-started with cli_ttl=-1"
+            info = json.loads(daemon_json.read_text())
+            assert info["client_pid"] == client.pid
+            daemon_pid = info["pid"]
+            dirty_url = f"http://127.0.0.1:{info['port']}/api/dirty"
+
+            client.kill()
+            client.wait()
+
+            deadline = time.time() + 20
+            while time.time() < deadline:
+                try:
+                    os.kill(daemon_pid, 0)
+                except ProcessLookupError:
+                    break  # daemon exited
+                # A client that keeps talking to the daemon must not keep it
+                # alive: read traffic is not evidence a writer is present.
+                try:
+                    urllib.request.urlopen(dirty_url, timeout=2).read()
+                except (urllib.error.URLError, OSError):
+                    pass  # daemon shutting down mid-poll is the expected end
+                time.sleep(0.3)
+            else:
+                raise AssertionError(
+                    "daemon with a never-expiring idle timeout survived its "
+                    "client's death under continuous client traffic: "
+                    + (tmp_path / ".elspais" / "daemon.log").read_text()[-1000:]
+                )
+        finally:
+            client.kill()
+            if daemon_pid is not None:
+                try:
+                    os.kill(daemon_pid, 15)
+                except OSError:
+                    pass
+
+    def test_REQ_o00074_E_adopted_client_keeps_the_daemon_then_lets_it_go(self, tmp_path):
+        """Validates REQ-o00074-E: a client that begins using a running daemon
+        is recorded alongside its existing clients; the daemon keeps serving
+        while that adopted client exists and terminates once it too is gone.
+
+        The negative half is the point. A daemon that merely never dies would
+        satisfy the positive half trivially, so the same daemon is driven
+        through both: it survives its starter's death because an adopter is
+        present, and then dies when the adopter goes.
+        """
+        import os
+        import sys
+        import time
+        import urllib.request
+
+        from tests.e2e.helpers import Requirement, base_config, build_project
+
+        build_project(
+            tmp_path,
+            base_config(name="adopted-client-project"),
+            spec_files={
+                "spec/prd.md": [
+                    Requirement(
+                        "REQ-p00001",
+                        "Feature One",
+                        "PRD",
+                        assertions=[("A", "The system SHALL do one thing.")],
+                    )
+                ]
+            },
+        )
+
+        starter = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+        adopter = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+        daemon_pid = None
+        daemon_json = tmp_path / ".elspais" / "daemon.json"
+        try:
+            result = run_elspais(
+                "summary",
+                cwd=tmp_path,
+                env={
+                    "ELSPAIS_CLIENT_PID": str(starter.pid),
+                    "_ELSPAIS_CLIENT_CHECK_INTERVAL": "0.3",
+                },
+            )
+            assert result.returncode == 0, result.stderr
+            assert daemon_json.exists(), "daemon should have auto-started"
+            info = json.loads(daemon_json.read_text())
+            daemon_pid = info["pid"]
+
+            # A second client picks up the running daemon and announces
+            # itself, which is what the adoption surface exists for.
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{info['port']}/api/session/attach",
+                data=json.dumps({"pid": adopter.pid}).encode(),
+                method="POST",
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                answer = json.loads(resp.read().decode())
+            assert answer["attached"] is True, answer
+            assert sorted(answer["clients"]) == sorted([starter.pid, adopter.pid])
+
+            info = json.loads(daemon_json.read_text())
+            assert info["pid"] == daemon_pid, "the second client restarted the daemon"
+            assert _recorded_pids(info) == sorted(
+                [starter.pid, adopter.pid]
+            ), f"the adopting client was not published in the state record: {info}"
+
+            # The starter exits. The daemon must not stop underneath the
+            # client that is actually using it.
+            starter.kill()
+            starter.wait()
+            time.sleep(3)
+            os.kill(daemon_pid, 0)  # raises ProcessLookupError if it stopped
+
+            # Now the adopter goes. Nobody is left.
+            adopter.kill()
+            adopter.wait()
+            deadline = time.time() + 20
+            while time.time() < deadline:
+                try:
+                    os.kill(daemon_pid, 0)
+                except ProcessLookupError:
+                    break
+                time.sleep(0.3)
+            else:
+                raise AssertionError(
+                    "daemon kept serving with every recorded client gone: "
+                    + (tmp_path / ".elspais" / "daemon.log").read_text()[-1500:]
+                )
+        finally:
+            starter.kill()
+            adopter.kill()
+            if daemon_pid is not None:
+                try:
+                    os.kill(daemon_pid, 15)
+                except OSError:
+                    pass
+
+    def test_REQ_o00074_I_daemon_saves_pending_work_before_terminating(self, tmp_path):
+        """Validates REQ-o00074-I: a daemon terminating with no client present
+        writes the changes it holds to disk rather than destroying them, and
+        leaves a record saying that it saved them itself, when, how many, and
+        what triggered it -- so the next client to open these files can see how
+        they reached their current form.
+        """
+        import os
+        import sys
+        import time
+        import urllib.request
+
+        from tests.e2e.helpers import Requirement, base_config, build_project
+
+        build_project(
+            tmp_path,
+            base_config(name="unattended-save-project"),
+            spec_files={
+                "spec/prd.md": [
+                    Requirement(
+                        "REQ-p00001",
+                        "Feature One",
+                        "PRD",
+                        assertions=[("A", "The system SHALL do one thing.")],
+                    )
+                ]
+            },
+        )
+
+        client = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+        daemon_pid = None
+        try:
+            result = run_elspais(
+                "summary",
+                cwd=tmp_path,
+                env={
+                    "ELSPAIS_CLIENT_PID": str(client.pid),
+                    "_ELSPAIS_CLIENT_CHECK_INTERVAL": "0.3",
+                    "_ELSPAIS_CLIENT_GRACE": "1",
+                },
+            )
+            assert result.returncode == 0, result.stderr
+
+            daemon_json = tmp_path / ".elspais" / "daemon.json"
+            assert daemon_json.exists(), "daemon should have auto-started"
+            info = json.loads(daemon_json.read_text())
+            daemon_pid = info["pid"]
+            base = f"http://127.0.0.1:{info['port']}"
+
+            # A writer applies a change and leaves it unsaved in memory.
+            with urllib.request.urlopen(f"{base}/api/node/REQ-p00001", timeout=5) as resp:
+                version = json.loads(resp.read().decode())["version"]
+            req = urllib.request.Request(
+                f"{base}/api/mutate/title",
+                data=json.dumps(
+                    {
+                        "node_id": "REQ-p00001",
+                        "new_title": "Feature One Renamed In Memory",
+                        "if_version": version,
+                    }
+                ).encode(),
+                method="POST",
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                assert json.loads(resp.read().decode())["success"] is True
+            assert (
+                "Feature One Renamed In Memory" not in (tmp_path / "spec" / "prd.md").read_text()
+            ), "the mutation was already on disk; the test cannot show the daemon saved it"
+
+            # The writer disappears. No further writes: a change applied after
+            # this point would restart the countdown (REQ-o00074-H).
+            client.kill()
+            client.wait()
+
+            deadline = time.time() + 30
+            while time.time() < deadline:
+                try:
+                    os.kill(daemon_pid, 0)
+                except ProcessLookupError:
+                    break
+                time.sleep(0.3)
+            else:
+                raise AssertionError(
+                    "daemon holding unsaved work never terminated: "
+                    + (tmp_path / ".elspais" / "daemon.log").read_text()[-1500:]
+                )
+
+            log_tail = (tmp_path / ".elspais" / "daemon.log").read_text()[-1500:]
+            assert "Feature One Renamed In Memory" in (tmp_path / "spec" / "prd.md").read_text(), (
+                "the daemon terminated without persisting the work it held: " + log_tail
+            )
+
+            record_path = tmp_path / ".elspais" / "automatic-save.json"
+            assert record_path.is_file(), (
+                "the daemon saved without recording that it did so: " + log_tail
+            )
+            record = json.loads(record_path.read_text())
+            assert record["saved_by"] == "daemon"
+            assert record["mutation_count"] == 1, f"dishonest count in the record: {record}"
+            assert record["files_written"] >= 1
+            assert record["trigger"], "the record does not say what triggered the save"
+        finally:
+            client.kill()
+            if daemon_pid is not None:
+                try:
+                    os.kill(daemon_pid, 15)
+                except OSError:
+                    pass
+
+    def test_REQ_o00074_E_cli_reusing_a_daemon_records_itself_as_a_client(self, tmp_path):
+        """Validates REQ-o00074-E: a client that begins using an already-running
+        daemon is recorded alongside the daemon's existing clients.
+
+        The CLI is the ordinary way a second session begins using a daemon, so
+        the obligation has to hold for it and not only for callers that know to
+        post to the adoption endpoint themselves.
+        """
+        import os
+        import sys
+
+        from tests.e2e.helpers import Requirement, base_config, build_project
+
+        build_project(
+            tmp_path,
+            base_config(name="cli-adoption-project"),
+            spec_files={
+                "spec/prd.md": [
+                    Requirement(
+                        "REQ-p00001",
+                        "Feature One",
+                        "PRD",
+                        assertions=[("A", "The system SHALL do one thing.")],
+                    )
+                ]
+            },
+        )
+
+        starter = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+        adopter = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+        daemon_json = tmp_path / ".elspais" / "daemon.json"
+        daemon_pid = None
+        try:
+            result = run_elspais(
+                "summary",
+                cwd=tmp_path,
+                env={"ELSPAIS_CLIENT_PID": str(starter.pid)},
+            )
+            assert result.returncode == 0, result.stderr
+            assert daemon_json.exists(), "daemon should have auto-started"
+            daemon_pid = json.loads(daemon_json.read_text())["pid"]
+
+            result = run_elspais(
+                "summary",
+                cwd=tmp_path,
+                env={"ELSPAIS_CLIENT_PID": str(adopter.pid)},
+            )
+            assert result.returncode == 0, result.stderr
+
+            info = json.loads(daemon_json.read_text())
+            assert info["pid"] == daemon_pid, "the second invocation restarted the daemon"
+            assert _recorded_pids(info) == sorted(
+                [starter.pid, adopter.pid]
+            ), f"the CLI reused the daemon without becoming one of its clients: {info}"
+        finally:
+            starter.kill()
+            adopter.kill()
+            if daemon_pid is not None:
+                try:
+                    os.kill(daemon_pid, 15)
+                except OSError:
+                    pass
+
+
+# ---------------------------------------------------------------------------
+# Stopping a live daemon: what becomes of the work it holds
+# ---------------------------------------------------------------------------
+# Verifies: REQ-o00074-I+L, REQ-p00083-A+E+F
+
+
+def _daemon_project(tmp_path, name: str):
+    """A one-requirement project, plus the spec file the mutation lands in."""
+    from tests.e2e.helpers import Requirement, base_config, build_project
+
+    build_project(
+        tmp_path,
+        base_config(name=name),
+        spec_files={
+            "spec/prd.md": [
+                Requirement(
+                    "REQ-p00001",
+                    "Feature One",
+                    "PRD",
+                    assertions=[("A", "The system SHALL do one thing.")],
+                )
+            ]
+        },
+    )
+    return tmp_path / "spec" / "prd.md"
+
+
+def _start_daemon_for(tmp_path, client_pid: int) -> dict:
+    """Auto-start a daemon on behalf of a fake session and return its record."""
+    result = run_elspais(
+        "summary",
+        cwd=tmp_path,
+        env={"ELSPAIS_CLIENT_PID": str(client_pid)},
+    )
+    assert result.returncode == 0, result.stderr
+    daemon_json = tmp_path / ".elspais" / "daemon.json"
+    assert daemon_json.exists(), "daemon should have auto-started"
+    return json.loads(daemon_json.read_text())
+
+
+def _apply_pending_title(info: dict, title: str) -> None:
+    """Apply one in-memory mutation to a live daemon over its HTTP surface."""
+    import urllib.request
+
+    base = f"http://127.0.0.1:{info['port']}"
+    with urllib.request.urlopen(f"{base}/api/node/REQ-p00001", timeout=5) as resp:
+        version = json.loads(resp.read().decode())["version"]
+    req = urllib.request.Request(
+        f"{base}/api/mutate/title",
+        data=json.dumps(
+            {"node_id": "REQ-p00001", "new_title": title, "if_version": version}
+        ).encode(),
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        assert json.loads(resp.read().decode())["success"] is True
+
+
+def _await_exit(pid: int, seconds: float = 30.0) -> bool:
+    import os
+    import time
+
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        time.sleep(0.2)
+    return False
+
+
+class TestStoppingALiveDaemonAccountsForItsWork:
+    """Validates REQ-p00083-A and REQ-p00083-B: a live daemon told to discard the
+    work it holds drops it, and one stopped by any other route writes it. Only a
+    real process can show this: the instruction, the decision and the write all
+    happen after the CLI that asked has returned, and the evidence is what is on
+    disk afterwards.
+
+    Validates REQ-o00074-L, REQ-p00083-E, REQ-p00083-F: a process killed outright
+    leaves the record that it was holding unwritten changes, and the next server
+    turns that record into a finding about the process that is gone rather than a
+    claim about itself, and discloses it.
+    """
+
+    def test_REQ_o00074_I_the_instructed_discard_keeps_the_work_off_disk(self, tmp_path):
+        import os
+        import sys
+
+        spec = _daemon_project(tmp_path, "discard-project")
+        client = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+        daemon_pid = None
+        try:
+            info = _start_daemon_for(tmp_path, client.pid)
+            daemon_pid = info["pid"]
+            title = "Feature One Thrown Away"
+            _apply_pending_title(info, title)
+            assert title not in spec.read_text()
+            assert (
+                tmp_path / ".elspais" / "unsaved-changes"
+            ).exists(), "a daemon holding an unwritten change said nothing outside itself"
+
+            result = run_elspais("daemon", "--discard-changes", cwd=tmp_path)
+
+            assert result.returncode == 0, result.stderr + result.stdout
+            assert _await_exit(daemon_pid), "the daemon told to discard never stopped"
+            assert (
+                title not in spec.read_text()
+            ), "the work the operator said to throw away was written anyway"
+            assert not (
+                tmp_path / ".elspais" / "automatic-save.json"
+            ).exists(), "a save that never happened was announced to the next client"
+            assert not (tmp_path / ".elspais" / "unsaved-changes").exists()
+            assert not (tmp_path / ".elspais" / "lost-changes").exists(), (
+                "a discard the operator asked for was reported to the successor as " "work lost"
+            )
+            daemon_pid = json.loads((tmp_path / ".elspais" / "daemon.json").read_text())["pid"]
+        finally:
+            client.kill()
+            if daemon_pid is not None:
+                try:
+                    os.kill(daemon_pid, 15)
+                except OSError:
+                    pass
+
+    def test_REQ_o00074_I_stop_request_carrying_no_instruction_saves(self, tmp_path):
+        """The negative half, on the path an operator actually drives. A stop
+        request that says nothing about the work is not an instruction to
+        discard it: the daemon writes what it holds and says that it did."""
+        import os
+        import sys
+        import urllib.request
+
+        spec = _daemon_project(tmp_path, "plain-stop-project")
+        client = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+        daemon_pid = None
+        try:
+            info = _start_daemon_for(tmp_path, client.pid)
+            daemon_pid = info["pid"]
+            title = "Feature One Saved By A Plain Stop"
+            _apply_pending_title(info, title)
+            assert title not in spec.read_text()
+
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{info['port']}/api/shutdown", data=b"", method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                payload = json.loads(resp.read().decode())
+            assert payload["saved"] is True, payload
+            assert payload["discarded"] is False
+
+            assert _await_exit(daemon_pid), "the daemon asked to stop never stopped"
+            assert (
+                title in spec.read_text()
+            ), "a stop nobody qualified destroyed the work the daemon held"
+            record = json.loads((tmp_path / ".elspais" / "automatic-save.json").read_text())
+            assert record["saved_by"] == "daemon"
+            assert record["mutation_count"] == 1
+            assert not (tmp_path / ".elspais" / "unsaved-changes").exists()
+        finally:
+            client.kill()
+            if daemon_pid is not None:
+                try:
+                    os.kill(daemon_pid, 15)
+                except OSError:
+                    pass
+
+    def test_REQ_o00074_I_an_external_signal_leaves_the_work_on_disk(self, tmp_path):
+        """The negative half. Nothing instructed this daemon to discard, so the
+        signal that stops it is not read as one: the work is written and the
+        save is disclosed to whoever opens the files next."""
+        import os
+        import signal
+        import sys
+
+        spec = _daemon_project(tmp_path, "signalled-save-project")
+        client = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+        daemon_pid = None
+        try:
+            info = _start_daemon_for(tmp_path, client.pid)
+            daemon_pid = info["pid"]
+            title = "Feature One Saved On The Way Out"
+            _apply_pending_title(info, title)
+            assert title not in spec.read_text()
+
+            os.kill(daemon_pid, signal.SIGTERM)
+
+            assert _await_exit(daemon_pid), "the signalled daemon never stopped"
+            log_tail = (tmp_path / ".elspais" / "daemon.log").read_text()[-1500:]
+            assert title in spec.read_text(), (
+                "a signalled daemon destroyed the work it was holding: " + log_tail
+            )
+            record_path = tmp_path / ".elspais" / "automatic-save.json"
+            assert record_path.is_file(), (
+                "the daemon saved without recording that it did so: " + log_tail
+            )
+            record = json.loads(record_path.read_text())
+            assert record["saved_by"] == "daemon"
+            assert record["mutation_count"] == 1
+            assert not (
+                tmp_path / ".elspais" / "unsaved-changes"
+            ).exists(), "the work is on disk and the record still says it is held in memory"
+        finally:
+            client.kill()
+            if daemon_pid is not None:
+                try:
+                    os.kill(daemon_pid, 15)
+                except OSError:
+                    pass
+
+    def test_REQ_o00074_L_work_lost_to_a_kill_is_reported_by_the_next_server(self, tmp_path):
+        """The ending nothing inside the process can describe. A daemon killed
+        outright writes nothing and says nothing; the record it left before the
+        change was acknowledged is the only account that survives, and the next
+        server turns it into a finding rather than a claim about itself."""
+        import os
+        import signal
+        import sys
+        import urllib.request
+
+        spec = _daemon_project(tmp_path, "lost-changes-project")
+        sentinel = tmp_path / ".elspais" / "unsaved-changes"
+        finding = tmp_path / ".elspais" / "lost-changes"
+        first_client = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+        second_client = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+        daemon_pid = None
+        try:
+            info = _start_daemon_for(tmp_path, first_client.pid)
+            daemon_pid = info["pid"]
+            assert not sentinel.exists(), "a daemon holding nothing claimed to hold work"
+            title = "Feature One Lost To A Kill"
+            _apply_pending_title(info, title)
+            assert sentinel.exists(), (
+                "the record was not on disk before the change was acknowledged; a "
+                "kill here would be silent"
+            )
+
+            os.kill(daemon_pid, signal.SIGKILL)
+            assert _await_exit(daemon_pid)
+            assert sentinel.exists(), "the only surviving account of the loss went with the process"
+            assert title not in spec.read_text(), "the work reached disk, so nothing was lost"
+
+            # The next server starts and finds what the dead one left.
+            info = _start_daemon_for(tmp_path, second_client.pid)
+            daemon_pid = info["pid"]
+
+            assert finding.exists(), "the successor discarded the finding rather than recording it"
+            assert not sentinel.exists(), (
+                "the successor holds nothing and the same file now says it is holding "
+                "work; presence cannot mean two things at once"
+            )
+
+            base = f"http://127.0.0.1:{info['port']}"
+            with urllib.request.urlopen(f"{base}/api/dirty", timeout=5) as resp:
+                dirty = json.loads(resp.read().decode())
+            assert dirty.get("lost_changes"), "the successor told its clients nothing"
+            assert dirty["lost_changes"]["note"].strip()
+
+            # A client writes the tree at its own request; the finding described
+            # the tree that write has just replaced.
+            _apply_pending_title(info, "Feature One Written By The Client")
+            with urllib.request.urlopen(f"{base}/api/dirty", timeout=5) as resp:
+                tip = json.loads(resp.read().decode())["tip"] or ""
+            req = urllib.request.Request(
+                f"{base}/api/save",
+                data=json.dumps(
+                    {"if_tip_mutation_id": tip, "message": "the client asked for this"}
+                ).encode(),
+                method="POST",
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                assert json.loads(resp.read().decode())["success"] is True
+
+            assert not finding.exists(), "a notice about a superseded tree is still being shown"
+            assert not sentinel.exists()
+        finally:
+            first_client.kill()
+            second_client.kill()
+            if daemon_pid is not None:
+                try:
+                    os.kill(daemon_pid, 15)
+                except OSError:
+                    pass
+
+
+class TestTheRestartSurfaceOffersTheTwoAnswers:
+    """Validates REQ-p00083-A and REQ-p00083-B: the command line is where an operator says what
+    becomes of the work, so the two answers have to be reachable from it -- and
+    the flag that used to mean "restart anyway, the daemon saves it for you"
+    must not still be accepted under its old name, now that the name means the
+    opposite.
+    """
+
+    def test_REQ_o00074_I_the_help_text_offers_both_answers(self, tmp_path):
+        result = run_elspais("daemon", "--help", cwd=tmp_path)
+
+        assert result.returncode == 0, result.stderr
+        assert "--discard-changes" in result.stdout
+        assert "--persist" in result.stdout
+        assert "--message" in result.stdout
+        assert "--force" not in result.stdout, "the retired flag is still offered"
+
+    def test_REQ_o00074_I_the_retired_flag_is_refused(self, tmp_path):
+        _daemon_project(tmp_path, "retired-flag-project")
+
+        result = run_elspais("daemon", "--force", cwd=tmp_path)
+
+        assert result.returncode != 0, (
+            "--force was still accepted; a caller expecting the old meaning "
+            "(restart and let the daemon save) would have got a discard"
+        )
+        assert "force" in (result.stderr + result.stdout)

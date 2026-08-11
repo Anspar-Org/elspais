@@ -211,12 +211,17 @@ F. Ambiguous combinations SHALL be rejected at config validation time: `style = 
 
 G. A single helper in `utilities/patterns.py` SHALL resolve a `ComponentFormat` to its regex string. The helper SHALL be the sole authority used by both the `IdResolver` regex compiler (`utilities/patterns.py`) and the lark grammar pattern builder (`graph/parsers/lark/__init__.py`); no other component-style dispatch SHALL exist in the codebase.
 
+H. An *Assertion* label series SHALL be one of two ordered alphabets: `uppercase`, running A to Z; and `numeric`, running 0 upward. Each SHALL have a first label, a successor for every label but its last, and a last label beyond which the series does not extend.
+
+I. An *Assertion* label series configured as `alphanumeric` SHALL run 0 to 9 and then A to Z, giving thirty-six labels in that order.
+
 ### Changelog
 
+- 2026-08-10 | e4e4a5fc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 7857498c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | e04a4e37 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | e04a4e37 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize term forms, update hash
 - 2026-05-11 | - | - | Developer (<dev@example.com>) | Initial authoring: introduce explicit case-style vocabulary and configurable assertion separator.
 
-*End* *Component Style Vocabulary and Assertion Separator* | **Hash**: 7857498c
+*End* *Component Style Vocabulary and Assertion Separator* | **Hash**: e4e4a5fc
 ---

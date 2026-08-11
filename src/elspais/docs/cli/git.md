@@ -11,7 +11,7 @@ resolve from the main repo, not the worktree location.
 
 Use `-v` to see detected roots:
 
-  $ elspais -v health
+  $ elspais -v checks
   Working from repository root: /home/dev/worktrees/feature-x
   Canonical root (main repo): /home/dev/my-project
 
@@ -47,13 +47,13 @@ The interactive viewer (`elspais viewer`) shows:
 ```sh
 #!/bin/sh
 # .git/hooks/pre-commit
-elspais health || exit 1
+elspais checks || exit 1
 ```
 
 ## Workflow
 
 1. Edit requirements
-2. $ elspais health  # Check format
+2. $ elspais checks  # Check format
 3. $ elspais fix  # Fix hashes and formatting
 4. $ elspais changed  # Review what changed
 5. Commit with message referencing requirement IDs

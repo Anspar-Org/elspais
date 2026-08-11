@@ -23,7 +23,7 @@ even when working from a worktree in a different directory.
 
 Use `-v` to see which roots were detected:
 
-  $ elspais -v health
+  $ elspais -v checks
   Working from repository root: /home/dev/worktrees/feature-x
   Canonical root (main repo): /home/dev/my-project
 
@@ -372,8 +372,8 @@ a `$schema` self-reference for IDE autocompletion. A committed copy lives at
 
 Any config key can be overridden via environment variables:
 
-  ELSPAIS_PROJECT_NAMESPACE=MYREQ elspais health
-  ELSPAIS_SCANNING_TEST_ENABLED=true elspais health
+  ELSPAIS_PROJECT_NAMESPACE=MYREQ elspais checks
+  ELSPAIS_SCANNING_TEST_ENABLED=true elspais checks
 
 **Conversion:**
   `ELSPAIS_PROJECT_NAMESPACE` -> `project.namespace`

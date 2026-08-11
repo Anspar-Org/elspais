@@ -13,7 +13,7 @@ Validates: REQ-p00003, REQ-p00006
 
 ## Steps
 
-1. Priya asks the project manager to generate the interactive traceability view with `elspais trace --view --embed-content`.
+1. Priya asks the project manager to generate the interactive traceability view with `elspais viewer --static --embed-content`.
 2. She opens the HTML dashboard in her browser and reviews the high-level statistics: total requirements, coverage percentage, and status breakdown.
 3. She navigates to the regulatory compliance section and confirms all relevant PRD requirements have Active status.
 4. She drills down into the authentication module to spot-check that DEV requirements trace back to the PRD.
@@ -63,8 +63,8 @@ Validates: REQ-p00001, REQ-p00002, REQ-p00003, REQ-p00004, REQ-p00006
 
 ## Steps
 
-1. Priya asks the DevOps engineer to run the full validation suite: `elspais validate -v` on the tagged release.
-2. She asks the validation consultant to independently verify hash integrity with `elspais validate`.
+1. Priya asks the DevOps engineer to run the full validation suite: `elspais -v checks` on the tagged release.
+2. She asks the validation consultant to independently verify hash integrity with `elspais checks`.
 3. The team generates a complete traceability matrix in multiple formats: HTML for interactive review and CSV for the inspector's spreadsheet.
 4. They generate the coverage report showing test-to-requirement mapping with pass/fail status.
 5. The validation consultant confirms: zero orphaned requirements, all hashes match, all hierarchy links valid.

@@ -50,18 +50,19 @@ elspais init --template   # also creates spec/EXAMPLE-requirement.md
 
 Review `.elspais.toml` and adjust:
 
-- **`[project]`** — name, description
+- **`[project]`** — namespace, name, color
 - **`[levels]`** — hierarchy tiers (default: PRD -> OPS -> DEV)
 - **`[id-patterns]`** — requirement ID format and assertion labels
 - **`[scanning]`** — which directories contain spec, code, test, and result files
 
 ## 3. Register the MCP Server
 
-The MCP server gives you ~30 tools for searching, navigating, and mutating
+The MCP server gives you ~70 tools for searching, navigating, and mutating
 the requirement graph without touching files directly.
 
 ```shell
-elspais mcp install       # registers with Claude Code / Claude Desktop
+elspais mcp install             # registers with Claude Code
+elspais mcp install --desktop   # also registers with Claude Desktop
 ```
 
 Or add manually to `.mcp.json`:

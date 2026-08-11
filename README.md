@@ -34,7 +34,7 @@ pip install elspais[all]           # Everything
 elspais init
 
 # Validate requirements
-elspais validate
+elspais checks
 
 # Auto-fix hashes and formatting
 elspais fix
@@ -95,18 +95,31 @@ Create `.elspais.toml` in your repository root (or run `elspais init`):
 ```toml
 [project]
 name = "my-project"
-type = "core"
+namespace = "REQ"
 
-[directories]
-spec = "spec"
-code = ["src"]
+[levels.prd]
+rank = 1
+letter = "p"
+implements = ["prd"]
 
-[patterns]
-prefix = "REQ"
-id_template = "{prefix}-{type}{id}"
+[levels.ops]
+rank = 2
+letter = "o"
+implements = ["ops", "prd"]
 
-[rules.hierarchy]
-allowed_implements = ["dev -> ops, prd", "ops -> prd"]
+[levels.dev]
+rank = 3
+letter = "d"
+implements = ["dev", "ops", "prd"]
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = ["src"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
 
 [rules.format]
 require_hash = true
@@ -122,19 +135,18 @@ Link associated repositories that extend a core requirement set:
 ```bash
 elspais init --type associated --associated-prefix CAL
 elspais associate ../core-repo
-elspais validate --mode combined
+elspais checks
 ```
 
 ## CLI Commands
 
 ```
-elspais validate       Validate requirements format, links, and hashes
+elspais checks         Verify requirements traceability and configuration
 elspais fix            Auto-fix spec file issues (hashes, formatting)
 elspais trace          Generate traceability matrix (markdown, html, csv)
 elspais viewer         Start interactive viewer server
-elspais health         Check repository and configuration health
 elspais doctor         Diagnose environment and installation health
-elspais analyze        Analyze hierarchy, orphans, or coverage
+elspais analysis       Analyze foundational requirement importance
 elspais changed        Detect git changes to spec files
 elspais edit           Edit requirements in-place
 elspais config         View and modify configuration
@@ -146,7 +158,7 @@ elspais docs           Built-in user guide
 elspais example        Requirement format examples
 ```
 
-Run `elspais <command> --help` for detailed usage. See [docs/cli/commands.md](docs/cli/commands.md) for full documentation.
+Run `elspais <command> --help` for detailed usage. See [src/elspais/docs/cli/commands.md](src/elspais/docs/cli/commands.md) for full documentation.
 
 ## Development
 

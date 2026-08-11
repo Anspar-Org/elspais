@@ -37,7 +37,7 @@ Delete this file after reviewing the structure.
 - **Rationale**: Optional explanation section (non-normative)
 - **Footer**: `*End* *Title* | **Hash**: XXXXXXXX` - hash computed by `elspais fix`
 
-Run `elspais format` for more templates and `elspais validate` to check this file.
+Run `elspais example` for more templates and `elspais checks` to check this file.
 
 *End* *Example Requirement Title* | **Hash**: 00000000
 """
@@ -53,42 +53,47 @@ def run(args: argparse.Namespace) -> int:
     Returns:
         Exit code (0 for success)
     """
-    # Handle --template flag separately
-    if getattr(args, "template", False):
-        return create_template_requirement(args)
-
+    template = getattr(args, "template", False)
     config_path = Path.cwd() / ".elspais.toml"
 
     if config_path.exists() and not args.force:
-        print(f"Configuration file already exists: {config_path}")
-        print("Use --force to overwrite.")
-        return 1
+        if not template:
+            print(f"Configuration file already exists: {config_path}")
+            print("Use --force to overwrite.")
+            return 1
+        # --template on an already-configured project: the user wants the
+        # example added, not the config touched. --force would still be
+        # required to overwrite the config itself; skip straight to the
+        # example below rather than refusing the whole command.
+    else:
+        # Determine project type
+        project_type = args.type or "core"
+        associated_prefix = args.associated_prefix
 
-    # Determine project type
-    project_type = args.type or "core"
-    associated_prefix = args.associated_prefix
+        if project_type == "associated" and not associated_prefix:
+            print("Error: --associated-prefix required for associated repositories")
+            return 1
 
-    if project_type == "associated" and not associated_prefix:
-        print("Error: --associated-prefix required for associated repositories")
-        return 1
+        # Derive project name from the user's original invocation directory.
+        # cli.py chdir's to the git root before dispatching, so Path.cwd() here
+        # points at the git root, not where the user typed `elspais init`.
+        # For a nested-init scenario (`cd ~/repos/myrepo/sub/dir && elspais init`)
+        # the user almost certainly wants "dir" as the project name, not the git
+        # root's basename. `args.original_cwd` is stashed by cli.py; tests that
+        # bypass cli.py (calling init.run directly) will not set it, in which
+        # case generate_config falls back to Path.cwd().name.
+        original_cwd = getattr(args, "original_cwd", None)
+        project_name = original_cwd.name if original_cwd else None
 
-    # Derive project name from the user's original invocation directory.
-    # cli.py chdir's to the git root before dispatching, so Path.cwd() here
-    # points at the git root, not where the user typed `elspais init`.
-    # For a nested-init scenario (`cd ~/repos/myrepo/sub/dir && elspais init`)
-    # the user almost certainly wants "dir" as the project name, not the git
-    # root's basename. `args.original_cwd` is stashed by cli.py; tests that
-    # bypass cli.py (calling init.run directly) will not set it, in which
-    # case generate_config falls back to Path.cwd().name.
-    original_cwd = getattr(args, "original_cwd", None)
-    project_name = original_cwd.name if original_cwd else None
+        # Generate configuration
+        config_content = generate_config(project_type, associated_prefix, project_name=project_name)
 
-    # Generate configuration
-    config_content = generate_config(project_type, associated_prefix, project_name=project_name)
+        # Write file
+        config_path.write_text(config_content, encoding="utf-8")
+        print(f"Created configuration: {config_path}")
 
-    # Write file
-    config_path.write_text(config_content, encoding="utf-8")
-    print(f"Created configuration: {config_path}")
+    if template:
+        return create_template_requirement(args)
 
     return 0
 
@@ -128,7 +133,7 @@ def create_template_requirement(args: argparse.Namespace) -> int:
     print("Next steps:")
     print("  1. Review the example to understand the format")
     print("  2. Delete or rename it when creating real requirements")
-    print("  3. Run `elspais validate` to check format compliance")
+    print("  3. Run `elspais checks` to check format compliance")
     print("  4. Run `elspais fix` to compute content hashes")
 
     return 0
@@ -142,8 +147,9 @@ def create_template_requirement(args: argparse.Namespace) -> int:
 _FIELD_COMMENTS: dict[str, str] = {
     # --- top-level scalars ---
     "version": "Config schema version (do not change)",
-    "cli_ttl": "Daemon TTL in minutes (>0 = auto-start, 0 = disabled, <0 = no idle timeout); "
-    "session-spawned daemons also exit when their session ends",
+    "cli_ttl": "Idle timeout in minutes for a daemon nobody is using "
+    "(>0 = auto-start, 0 = disabled, <0 = no idle timeout); a daemon with a "
+    "live client keeps running, and exits when its clients are gone",
     "stats": "File path for MCP tool-usage statistics (optional)",
     # --- [project] ---
     "project": "Project identity",

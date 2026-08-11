@@ -79,8 +79,16 @@ def _save(client: TestClient) -> dict:
     ``if_tip_mutation_id`` -- the id of the newest pending mutation as the
     caller last saw it (``""`` when nothing is pending). Reads the tip from
     GET /api/dirty, saves, asserts success, and returns the response payload.
+
+    The changelog reason rides along because the route now enforces the same
+    rule the MCP save tool does: a pending change to an Active requirement is
+    refused until the caller says why it was made. Tests here are about the
+    round trip, not about the reason, so they supply one.
     """
-    resp = client.post("/api/save", json={"if_tip_mutation_id": _tip(client)})
+    resp = client.post(
+        "/api/save",
+        json={"if_tip_mutation_id": _tip(client), "message": "test round-trip save"},
+    )
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["success"] is True, f"Save failed: {data}"
@@ -777,7 +785,6 @@ class TestMutateAssertionAdd:
             "/api/mutate/assertion/add",
             json={
                 "req_id": "REQ-p00001",
-                "label": "C",
                 "text": "SHALL audit all access",
                 "if_version": _version(client, "REQ-p00001"),
             },
@@ -790,7 +797,7 @@ class TestMutateAssertionAdd:
         """Missing parameters return 400."""
         resp = client.post(
             "/api/mutate/assertion/add",
-            json={"req_id": "REQ-p00001", "label": "C"},
+            json={"req_id": "REQ-p00001"},
         )
         assert resp.status_code == 400
 
@@ -899,18 +906,18 @@ class TestMutateAssertionDelete:
             "/api/mutate/assertion/add",
             json={
                 "req_id": "REQ-p00001",
-                "label": "Z",
                 "text": "Temp assertion",
                 "if_version": _version(client, "REQ-p00001"),
             },
         )
         assert added.status_code == 200, added.text
+        added_id = added.json()["assertion_id"]
         # The add moved the requirement's version; the response carries the new
         # one, so thread it straight into the delete.
         resp = client.post(
             "/api/mutate/assertion/delete",
             json={
-                "assertion_id": "REQ-p00001-Z",
+                "assertion_id": added_id,
                 "confirm": True,
                 "if_version": added.json()["version"],
             },
@@ -2130,7 +2137,6 @@ class TestMutateSaveRoundTrip:
             "/api/mutate/assertion/add",
             json={
                 "req_id": "REQ-t00001",
-                "label": "C",
                 "text": "The system SHALL do a third thing.",
                 "if_version": _version(client, "REQ-t00001"),
             },
@@ -2414,23 +2420,23 @@ class TestMutateSaveRoundTrip:
         app, spec_file = disk_app
         client = TestClient(app)
 
-        # Add assertion C
+        # Add an assertion
         resp = client.post(
             "/api/mutate/assertion/add",
             json={
                 "req_id": "REQ-t00001",
-                "label": "C",
                 "text": "Temporary assertion.",
                 "if_version": _version(client, "REQ-t00001"),
             },
         )
         assert resp.status_code == 200
+        added_id = resp.json()["assertion_id"]
 
-        # Delete assertion C (token from the add's response)
+        # Delete the assertion just added (token from the add's response)
         resp = client.post(
             "/api/mutate/assertion/delete",
             json={
-                "assertion_id": "REQ-t00001-C",
+                "assertion_id": added_id,
                 "confirm": True,
                 "if_version": resp.json()["version"],
             },
@@ -2559,7 +2565,6 @@ class TestMutateSaveRoundTrip:
             "/api/mutate/assertion/add",
             json={
                 "req_id": "REQ-t00001",
-                "label": "C",
                 "text": "New assertion for first req.",
                 "if_version": _version(client, "REQ-t00001"),
             },
@@ -2570,7 +2575,6 @@ class TestMutateSaveRoundTrip:
             "/api/mutate/assertion/add",
             json={
                 "req_id": "REQ-t00002",
-                "label": "B",
                 "text": "New assertion for second req.",
                 "if_version": _version(client, "REQ-t00002"),
             },
@@ -2616,7 +2620,7 @@ class TestMutateValidation:
     def test_mutate_assertion_add_missing_fields(self, disk_client):
         resp = disk_client.post(
             "/api/mutate/assertion/add",
-            json={"req_id": "REQ-t00001", "label": "C"},
+            json={"req_id": "REQ-t00001"},
         )
         assert resp.status_code == 400
 

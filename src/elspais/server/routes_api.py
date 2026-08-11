@@ -10,6 +10,7 @@ State is accessed via ``request.app.state.app_state`` (an AppState instance).
 from __future__ import annotations
 
 import functools
+import json
 import time
 from datetime import date as date_type
 from pathlib import Path
@@ -31,6 +32,7 @@ from elspais.graph.GraphNode import make_file_id
 from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.mcp.server import (
     _attach_version,
+    _automatic_save_record,
     _get_assertion_code_map,
     _get_assertion_refines_map,
     _get_assertion_test_map,
@@ -41,7 +43,9 @@ from elspais.mcp.server import (
     _get_node,
     _get_requirement,
     _guard_mutation_tip,
+    _guard_shutdown,
     _guard_version,
+    _lost_changes_notice,
     _mutate_add_assertion,
     _mutate_add_edge,
     _mutate_add_journey,
@@ -85,12 +89,19 @@ def _serialized_write(handler: Any) -> Any:
     lock is a ``threading.RLock`` and must never be held across a genuine
     await (another handler blocking on acquire would freeze the event loop
     the holder needs to resume).
+
+    A server that has decided to stop refuses writes here rather than
+    accepting them into a drain that will discard them, and it refuses
+    with the same body the MCP surface returns (REQ-o00062-O).
     """
 
     @functools.wraps(handler)
     async def wrapper(request: Request) -> JSONResponse:
         await request.body()
         with _st(request).shared.write_lock:
+            stopping = _guard_shutdown(_st(request).shared)
+            if stopping is not None:
+                return JSONResponse(stopping, status_code=409)
             return await handler(request)
 
     return wrapper
@@ -477,7 +488,7 @@ async def api_status(request: Request) -> JSONResponse:
     from elspais import __version__
 
     state = _st(request)
-    result = _get_graph_status(state.graph)
+    result = _get_graph_status(state.graph, state.repo_root)
     result["version"] = __version__
     # Implements: REQ-d00206-C
     # Include federation repo metadata from iter_repos().
@@ -1118,6 +1129,50 @@ async def api_spec_files(request: Request) -> JSONResponse:
     return JSONResponse({"files": files})
 
 
+# Implements: REQ-o00074-E, REQ-o00074-B
+async def api_attach_client(request: Request) -> JSONResponse:
+    """POST /api/session/attach - Register a client now using this daemon.
+
+    A daemon is shared and deliberately outlives the client that started
+    it, so a client that picks up a running one has to say so or the
+    daemon will stop underneath it.
+    """
+    state = _st(request)
+    try:
+        data = json.loads(await request.body() or b"{}")
+    except (json.JSONDecodeError, ValueError):
+        return JSONResponse({"attached": False, "error": "invalid JSON body"}, status_code=400)
+    try:
+        pid = int(data.get("pid", 0))
+    except (TypeError, ValueError):
+        pid = 0
+
+    watchdog = state.shared.get("watchdog")
+    if watchdog is None:
+        # An explicitly started server has no client-bound lifetime at
+        # all, so there is nothing for a client to attach to. Reported,
+        # not silently accepted.
+        return JSONResponse(
+            {
+                "attached": False,
+                "reason": "this server's lifetime is not bound to its clients",
+                "clients": [],
+            }
+        )
+    attached = watchdog.attach_client(pid)
+    clients = watchdog.clients()
+    tracker = state.shared.get("session_tracker")
+    held = tracker.held() if tracker is not None else 0
+    if attached and not state.shared.is_shutting_down:
+        # Same rule as every other write once this process has committed to
+        # stopping: it does not update its own advertisement, because the
+        # record now says it is stopping and a client needs to read that.
+        from elspais.mcp.daemon import record_daemon_clients
+
+        record_daemon_clients(state.repo_root, clients, held)
+    return JSONResponse({"attached": attached, "clients": clients, "held_sessions": held})
+
+
 async def api_dirty(request: Request) -> JSONResponse:
     """GET /api/dirty - Check if graph has unsaved mutations."""
     state = _st(request)
@@ -1127,13 +1182,20 @@ async def api_dirty(request: Request) -> JSONResponse:
     # tail(0) snapshots the whole log -- never iterate the live list while
     # other writers may be appending to (or undoing from) it.
     entries = state.graph.mutation_log.tail(0)
-    return JSONResponse(
-        {
-            "dirty": bool(entries),
-            "mutation_count": len(entries),
-            "tip": entries[-1].id if entries else None,
-        }
-    )
+    body: dict[str, Any] = {
+        "dirty": bool(entries),
+        "mutation_count": len(entries),
+        "tip": entries[-1].id if entries else None,
+    }
+    # Implements: REQ-p00083-C
+    record = _automatic_save_record(state.repo_root)
+    if record is not None:
+        body["automatic_save"] = record
+    # Implements: REQ-p00083-F
+    notice = _lost_changes_notice(state.repo_root)
+    if notice is not None:
+        body["lost_changes"] = notice
+    return JSONResponse(body)
 
 
 async def api_check_freshness(request: Request) -> JSONResponse:
@@ -1171,6 +1233,14 @@ async def api_check_freshness(request: Request) -> JSONResponse:
             # graph. In-memory mutations touch no file, so mtime staleness
             # alone can never reveal them. "" means nothing pending.
             "mutation_tip": log.get("current_tip", ""),
+            # Implements: REQ-p00083-C
+            # The poll every client already runs, so a save the daemon
+            # performed reaches the next client without it having to ask.
+            "automatic_save": _automatic_save_record(state.repo_root),
+            # Implements: REQ-p00083-F
+            # Same poll, same reason: a process that died holding changes
+            # reaches the next client without it having to ask.
+            "lost_changes": _lost_changes_notice(state.repo_root),
         }
     )
 
@@ -1388,16 +1458,18 @@ async def api_mutate_assertion_add(request: Request) -> JSONResponse:
     state = _st(request)
     data = await request.json()
     req_id = data.get("req_id", "")
-    label = data.get("label", "")
     text = data.get("text", "")
-    if not req_id or not label or not text:
+    if not req_id or not text:
         return JSONResponse(
-            {"success": False, "error": "req_id, label, and text required"}, status_code=400
+            {"success": False, "error": "req_id and text required"}, status_code=400
         )
     conflict = _version_conflict(state, data, req_id)
     if conflict is not None:
         return conflict
-    result = _mutate_add_assertion(state.graph, req_id, label, text)
+    # The label follows from the position (REQ-o00062-R); a label supplied by
+    # the client is ignored rather than honoured, so both surfaces assign the
+    # same one (REQ-o00062-O).
+    result = _mutate_add_assertion(state.graph, req_id, text)
     result = _with_version(state, result, req_id)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
@@ -1983,15 +2055,106 @@ async def api_mutate_undo(request: Request) -> JSONResponse:
 # ─────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-p00083-A, REQ-p00083-B, REQ-p00083-D
 async def api_shutdown(request: Request) -> JSONResponse:
-    """POST /api/shutdown - Gracefully stop the server."""
+    """POST /api/shutdown - Stop the server, accounting for the work it holds.
+
+    Body, all optional::
+
+        discard_changes     True to drop the pending changes instead of
+                            writing them.
+        if_tip_mutation_id  The mutation-log tip as the caller last saw
+                            it. Required with ``discard_changes``.
+
+    With no body this is the stop every existing caller asks for, and the
+    work the process holds is written before it goes. With
+    ``discard_changes`` the caller has said what is to become of that
+    work, and it is dropped instead.
+
+    The instruction covers the changes that existed when it was given and
+    no others, which is what the tip guard is doing here: a change
+    applied since the caller read the tip moves it, and the whole request
+    is refused rather than quietly sweeping that change into the discard.
+    A change arriving after this returns meets a process that has already
+    committed to stopping and is refused too — so between the request and
+    the stop there is no change that can be silently dropped or silently
+    written.
+
+    The accounting runs here, before the signal, so that a save which
+    fails can call the stop off (REQ-p00083-D): the caller is told, the
+    process stays up, and the work is still in it.
+    """
     import os
     import sys
     import threading
 
+    from elspais.mcp.shared_state import finalize_shutdown, report_shutdown_outcome
+
+    # Buffered before the lock: an await while holding the write lock
+    # would need the event loop it is blocking to resume.
+    await request.body()
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+
+    state = _st(request)
+    discard = bool(data.get("discard_changes"))
+    trigger = (
+        "a client asked the server to stop and to discard what it held"
+        if discard
+        else "a client asked the server to stop"
+    )
+
+    with state.shared.write_lock:
+        if discard:
+            conflict = _tip_conflict(state, data, field="if_tip_mutation_id")
+            if conflict is not None:
+                return conflict
+            state.shared.request_discard()
+        outcome = finalize_shutdown(state.shared, trigger)
+
+    report_shutdown_outcome(outcome, trigger)
+    if not outcome.get("success"):
+        return JSONResponse(
+            {
+                "success": False,
+                "code": "save_failed",
+                "error": (
+                    f"The server is still running: it holds "
+                    f"{outcome.get('pending')} unsaved change(s) and could not "
+                    f"write them ({outcome.get('error')})."
+                ),
+                "pending": outcome.get("pending"),
+            },
+            status_code=500,
+        )
+
     print("\nShutdown requested via API.", file=sys.stderr)
-    threading.Timer(0.5, lambda: os._exit(0)).start()
-    return JSONResponse({"success": True, "message": "Server shutting down"})
+
+    def _stop() -> None:
+        # The work is already accounted for and the response has flushed,
+        # so the drain has nothing left to protect — and a client holding
+        # an MCP stream open can stall it indefinitely. This process was
+        # asked to stop by a client it has already answered; it ends,
+        # rather than signalling itself into a wait nobody is bounding.
+        os._exit(0)
+
+    stopper = threading.Timer(0.5, _stop)
+    stopper.daemon = True
+    stopper.start()
+    return JSONResponse(
+        {
+            "success": True,
+            "message": "Server shutting down",
+            "saved": bool(outcome.get("saved")),
+            "discarded": bool(outcome.get("discarded")),
+            "pending": outcome.get("pending"),
+            "files_written": outcome.get("files_written"),
+        }
+    )
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -2013,10 +2176,23 @@ async def _history_json(request: Request) -> dict:
 
 @_serialized_write
 async def api_save(request: Request) -> JSONResponse:
-    """POST /api/save - Persist mutations to spec files on disk."""
-    # Implements: REQ-d00132-A
-    from elspais.graph.render import render_save
-    from elspais.utilities.patterns import build_resolver as _build_resolver_for_save
+    """POST /api/save - Persist mutations to spec files on disk.
+
+    Body: ``{if_tip_mutation_id, message?, save_branch?}``.
+
+    The write itself is the one shared with the MCP save tool and the
+    daemon's own save, so a save requested here enforces the same
+    changelog rule and retires the same record as one requested there.
+
+    Status codes distinguish what the caller can do about a refusal. A
+    guard rejection is 409, the conflict family a client already knows to
+    re-read and retry. A save that failed for any other reason is not a
+    conflict and does not become one: a missing changelog reason is 400,
+    because the caller has to supply something, and a write that failed
+    is 500, because retrying the same request is not the answer.
+    """
+    # Implements: REQ-d00132-A, REQ-p00083-H
+    from elspais.mcp.shared_state import persist_pending
 
     state = _st(request)
     # REQ-o00062-N: persisting affects every writer's pending work — the
@@ -2025,15 +2201,15 @@ async def api_save(request: Request) -> JSONResponse:
     conflict = _tip_conflict(state, data, field="if_tip_mutation_id")
     if conflict is not None:
         return conflict
-    result = render_save(
-        state.graph,
-        state.repo_root,
-        resolver=_build_resolver_for_save(state.config),
-        write_associates=state.config.get("federation", {}).get("write_associates", False),
+    result = persist_pending(
+        state.shared,
+        message=data.get("message"),
+        save_branch=bool(data.get("save_branch")),
     )
-    status_code = 200 if result.get("success") else 409
     if result.get("success"):
         state.build_time = time.time()
+        return JSONResponse(result, status_code=200)
+    status_code = 400 if result.get("code") == "changelog_message_required" else 500
     return JSONResponse(result, status_code=status_code)
 
 

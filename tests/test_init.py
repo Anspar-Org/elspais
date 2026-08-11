@@ -302,6 +302,30 @@ directories = ["requirements"]
         example_path = tmp_path / "requirements" / "EXAMPLE-requirement.md"
         assert example_path.exists()
 
+    # Verifies: REQ-p00002-A
+    def test_REQ_p00002_A_template_also_writes_the_configuration(self, tmp_path: Path, monkeypatch):
+        """`--template` adds an example requirement; it does not replace the
+        configuration the command exists to create. Without the config the
+        example cannot be parsed and every next step the command prints
+        fails."""
+        from elspais.commands.init import run
+
+        monkeypatch.chdir(tmp_path)
+
+        args = argparse.Namespace(
+            type="core",
+            associated_prefix=None,
+            force=False,
+            template=True,
+            config=None,
+        )
+
+        result = run(args)
+
+        assert result == 0
+        assert (tmp_path / ".elspais.toml").is_file(), "--template wrote no configuration"
+        assert (tmp_path / "spec" / "EXAMPLE-requirement.md").is_file()
+
     # Verifies: REQ-d00209-A
     def test_init_template_shows_next_steps(self, tmp_path: Path, monkeypatch, capsys):
         """Test --template shows helpful next steps."""
@@ -322,7 +346,7 @@ directories = ["requirements"]
         assert result == 0
         captured = capsys.readouterr()
         assert "Next steps:" in captured.out
-        assert "elspais validate" in captured.out
+        assert "elspais checks" in captured.out
         assert "elspais fix" in captured.out
 
 

@@ -102,14 +102,42 @@ def _try_daemon(
     # 1. Try existing server (viewer or daemon — both use daemon.json)
     port = _get_daemon_port()
     if port:
+        # Implements: REQ-o00075-B, REQ-o00075-E
+        # A server that has committed to stopping still answers and still
+        # refuses everything, so it is replaced rather than reused — and
+        # only once it has actually gone, since a second process for one
+        # working tree would split the graph. A daemon that will not go
+        # leaves this command to build its own graph.
+        from elspais.mcp.daemon import (
+            daemon_is_stopping,
+            get_daemon_info,
+            replace_stopping_daemon,
+        )
+
+        outgoing = get_daemon_info(repo_root)
+        if daemon_is_stopping(outgoing):
+            if not replace_stopping_daemon(repo_root, outgoing):
+                return None
+            port = None
+
+    if port:
         # Implements: REQ-p00004-J, REQ-p00015-G
         # Staleness checks: version mismatch or config edited
         # since the daemon captured its config hash. Warn-and-serve if the
         # daemon holds unsaved work; restart if clean.
         from elspais import __version__
-        from elspais.mcp.daemon import _config_hash_stale, get_daemon_info
+        from elspais.mcp.daemon import (
+            _config_hash_stale,
+            ensure_client_registered,
+            get_daemon_info,
+        )
 
         info = get_daemon_info(repo_root)
+        # Implements: REQ-o00074-E
+        # This is the path a session that never starts a daemon takes on
+        # every command, so it is where such a session has to announce
+        # itself; otherwise the daemon watches only whoever started it.
+        ensure_client_registered(repo_root, info)
         daemon_version = info.get("version") if info else None
         version_mismatch = bool(daemon_version and daemon_version != __version__)
         config_stale = info is not None and _config_hash_stale(info, repo_root)

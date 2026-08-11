@@ -212,11 +212,26 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
 
     from elspais.mcp.daemon import (
         _daemon_json_path,
+        get_daemon_info,
         stop_daemon,
         write_daemon_json,
     )
 
-    stop_daemon(repo_root)  # Kill any existing server for this project
+    # Kill any existing server for this project. Refuse only when one is
+    # still running: a daemon that exited between the look above and the
+    # stop below is gone, which is what we wanted -- reporting that as a
+    # refusal failed a command that had in fact succeeded. Writing our own
+    # record over a daemon that IS still serving would make it an
+    # undiscoverable second process for this working tree.
+    existing = get_daemon_info(repo_root)
+    if existing is not None and not stop_daemon(repo_root).is_gone:
+        print(
+            f"Could not stop the daemon (pid {existing['pid']}) already "
+            "serving this project; it is still running. Not starting a "
+            "second server for the same working tree.",
+            file=sys.stderr,
+        )
+        return 1
     write_daemon_json(
         repo_root=repo_root,
         pid=os.getpid(),
@@ -230,6 +245,13 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
 
     atexit.register(lambda: daemon_json.unlink(missing_ok=True))
 
+    # Implements: REQ-p00083-E
+    # This process holds unwritten changes exactly as the daemon does,
+    # and can be killed in exactly the same ways.
+    from elspais.mcp.shared_state import attach_dirty_sentinel
+
+    attach_dirty_sentinel(state.shared)
+
     try:
         import anyio
         import uvicorn
@@ -240,12 +262,85 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
             port=port,
             log_level="warning" if quiet else "info",
         )
-        server = uvicorn.Server(uvi_config)
+
+        # Implements: REQ-p00083-A, REQ-p00083-D
+        def _account_for_held_work() -> None:
+            """Write what this process holds, starting now.
+
+            Called from signal context, so the routine runs on a thread of
+            its own: it takes the writers' lock, and blocking on that
+            inside a handler would stop the process it was meant to save.
+            Started at the signal rather than after the drain, because a
+            request that never completes keeps the drain from ending and
+            the accounting after serve() would then never run. The thread
+            is not a daemon thread, so an exit that beats the save waits
+            for it rather than truncating a spec file.
+            """
+            import threading as _threading
+
+            from elspais.mcp.shared_state import finalize_shutdown, report_shutdown_outcome
+
+            _trigger = "an operator or timeout stopped the viewer"
+
+            def _run() -> None:
+                report_shutdown_outcome(finalize_shutdown(state.shared, _trigger), _trigger)
+
+            _threading.Thread(target=_run, name="elspais-shutdown-save").start()
+
+        class _ShutdownAwareServer(uvicorn.Server):
+            """Account for held work from the handler the signal reaches.
+
+            uvicorn installs its own stop handler for the duration of
+            serve(), so this — not the handler below — is where an
+            operator's signal lands while the viewer is serving.
+            """
+
+            # Starting the save comes FIRST. Marking the state record
+            # writes a file and can print, and this runs in true signal
+            # context on whatever the main thread was doing; a write that
+            # blocks there blocks here, and a handler that never reaches
+            # the save leaves the work in a process about to be ended.
+            def handle_exit(self, sig: int, frame: object) -> None:
+                _account_for_held_work()
+                state.shared.begin_shutdown()
+                super().handle_exit(sig, frame)  # type: ignore[arg-type]
+
+        server = _ShutdownAwareServer(uvi_config)
+
+        # Implements: REQ-p00083-A
+        # uvicorn re-raises the stop signal it caught once its drain is
+        # done, under the handler that was in place beforehand. Left as
+        # the default, that kills this process inside serve() and the
+        # work it is holding never reaches the routine below that writes
+        # it. SIGINT is left alone: its default disposition raises
+        # KeyboardInterrupt, which returns through the same path.
+        # The save starts here rather than after serve(), for the reason
+        # given on the handler above: a browser or an MCP client holding a
+        # request open keeps the drain from ever finishing, and the
+        # accounting below would then never run.
+        def _absorb_stop_signal(signum: int, frame: object) -> None:
+            _account_for_held_work()
+            state.shared.begin_shutdown()
+            server.should_exit = True
+
+        import signal as _signal
+
+        _signal.signal(_signal.SIGTERM, _absorb_stop_signal)
+
         anyio.run(server.serve)
     except KeyboardInterrupt:
         if not quiet:
             print("\nServer stopped.", file=sys.stderr)
     finally:
+        # Implements: REQ-p00083-A
+        # This process serves the same mutation routes as the daemon and
+        # can therefore be holding unsaved changes when it stops. It runs
+        # the same shutdown routine, for the same reason and by the same
+        # rules, rather than a second one written to look like it.
+        from elspais.mcp.shared_state import finalize_shutdown, report_shutdown_outcome
+
+        _trigger = "the server stopped serving requests"
+        report_shutdown_outcome(finalize_shutdown(state.shared, _trigger), _trigger)
         daemon_json.unlink(missing_ok=True)
 
     return 0

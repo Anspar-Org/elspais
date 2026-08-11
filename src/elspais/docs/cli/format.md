@@ -64,7 +64,7 @@ The 8-character hash is computed from the requirement body content.
 When content changes, the hash changes, triggering review.
 
   $ elspais fix            # Recompute all hashes
-  $ elspais health         # Check for stale hashes
+  $ elspais checks         # Check for stale hashes
 
 ## Changelog
 

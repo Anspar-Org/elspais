@@ -1,11 +1,10 @@
 # Implements: REQ-d00052-G
 # Implements: REQ-d00217-A+B+C+D
 """
-elspais.commands.index - INDEX.md management command.
+elspais.commands.index - INDEX.md generation and validation.
 
-Uses graph-based system:
-- `elspais index validate` - Validate INDEX.md accuracy
-- `elspais index regenerate` - Regenerate INDEX.md from requirements
+A library, not a command: the `elspais index` subcommand it once backed is
+retired, and `elspais fix` regenerates INDEX.md through the functions here.
 """
 
 from __future__ import annotations
@@ -21,38 +20,6 @@ if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
 
 from elspais.graph import NodeKind
-
-
-def run(args: argparse.Namespace) -> int:
-    """Run the index command."""
-    from elspais.config import get_config, get_spec_directories
-    from elspais.graph.factory import build_graph
-
-    spec_dir = getattr(args, "spec_dir", None)
-    config_path = getattr(args, "config", None)
-
-    config = get_config(config_path)
-    spec_dirs = get_spec_directories(spec_dir, config)
-
-    all_spec_dirs = list(spec_dirs)
-
-    graph = build_graph(
-        config=config,
-        spec_dirs=all_spec_dirs if spec_dir else None,
-        config_path=config_path,
-    )
-
-    action = getattr(args, "index_action", None)
-
-    include_assoc = config.get("federation", {}).get("index_associates", False)
-
-    if action == "validate":
-        return _validate_index(graph, all_spec_dirs, args, include_associates=include_assoc)
-    elif action == "regenerate":
-        return _regenerate_index(graph, all_spec_dirs, args, include_associates=include_assoc)
-    else:
-        print("Usage: elspais index <validate|regenerate>", file=sys.stderr)
-        return 1
 
 
 def _validate_index(
@@ -72,7 +39,7 @@ def _validate_index(
 
     if not index_path:
         print("No INDEX.md found in spec directories.")
-        print("Run 'elspais index regenerate' to create one.")
+        print("Run 'elspais fix' to create one.")
         return 1
 
     # Parse IDs from INDEX.md

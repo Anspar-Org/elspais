@@ -203,7 +203,7 @@ A. The system SHALL <do something>.
 3. **Hash** - Auto-computed with `elspais fix`
 4. **Sequential labels** - A, B, C... don't skip letters
 
-Run `elspais validate` to check format compliance.
+Run `elspais checks` to check format compliance.
 """
 
 
@@ -323,5 +323,5 @@ def show_full_spec(args: argparse.Namespace) -> int:
         print(f"  - {spec_path}")
         print(f"  - {alt_path}")
         print()
-        print("Use `elspais format requirement` for a template instead.")
+        print("Use `elspais example requirement` for a template instead.")
         return 1
