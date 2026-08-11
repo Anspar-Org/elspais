@@ -443,3 +443,71 @@ class TestFileVersionIsCompositionOnly:
         mutable_graph.rename_file("file:spec/glossary.md", "spec/terms.md")
 
         assert node_version(mutable_graph.find_by_id("file:spec/terms.md")) != before
+
+
+@pytest.fixture
+def private_graph():
+    """A throwaway build of the canonical fixture, safe to mutate and undo.
+
+    These tests exercise undo itself, so they must not run against the
+    session-scoped ``canonical_graph``: an undo that fails to restore state
+    would leave every later test in the session reading a corrupted graph.
+    ``mutable_graph`` is unusable for the same reason -- its teardown restores
+    the graph *by undoing*, which is the mechanism under test.
+    """
+    fg = build_repo_graph(repo_root=FIXTURES_DIR / "hht-like")
+    return fg._repos[fg._root_repo].graph
+
+
+def _delete_assertion(graph, node_id: str) -> None:
+    graph.delete_assertion(node_id)
+
+
+def _delete_remainder(graph, node_id: str) -> None:
+    graph.delete_remainder(node_id)
+
+
+class TestUndoRestoresRenderedText:
+    """Validates REQ-d00131-L: undo returns a node to the version it had.
+
+    A node's version is a digest of its rendered text, so an undo that
+    restores content but not the *order* that content renders in leaves the
+    node at a different version than the one the client locked against --
+    the graph looks reverted while the file it would write does not match.
+    """
+
+    @pytest.mark.parametrize(
+        "delete, target",
+        [
+            pytest.param(_delete_assertion, "REQ-o00002-D", id="last-assertion"),
+            pytest.param(_delete_assertion, "REQ-o00002-B", id="middle-assertion-compacts"),
+            pytest.param(_delete_remainder, "REQ-o00002:section:1", id="remainder-section"),
+        ],
+    )
+    def test_REQ_d00131_L_delete_then_undo_restores_requirement(
+        self, private_graph, delete, target
+    ):
+        """Deleting a child of a requirement and undoing renders identically."""
+        requirement = private_graph.find_by_id("REQ-o00002")
+        before_text = render.render_node(requirement)
+        before_version = node_version(requirement)
+
+        delete(private_graph, target)
+        private_graph.undo_last()
+
+        restored = private_graph.find_by_id("REQ-o00002")
+        assert render.render_node(restored) == before_text
+        assert node_version(restored) == before_version
+
+    def test_REQ_d00131_L_delete_contains_edge_then_undo_restores_file(self, private_graph):
+        """A CONTAINS edge carries the position its target renders at."""
+        spec_file = private_graph.find_by_id(SPEC_FILE)
+        before_text = render.render_file(spec_file)
+        before_version = node_version(spec_file)
+
+        private_graph.delete_edge(source_id="REQ-d00001", target_id=SPEC_FILE)
+        private_graph.undo_last()
+
+        restored = private_graph.find_by_id(SPEC_FILE)
+        assert render.render_file(restored) == before_text
+        assert node_version(restored) == before_version

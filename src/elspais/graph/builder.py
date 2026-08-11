@@ -712,6 +712,7 @@ class TraceGraph:
         target_id = entry.before_state.get("target_id")
         edge_kind_str = entry.before_state.get("edge_kind")
         assertion_targets = entry.before_state.get("assertion_targets", [])
+        old_metadata = entry.before_state.get("metadata", {})
         became_orphan = entry.after_state.get("became_orphan", False)
 
         if source_id and target_id and edge_kind_str:
@@ -719,7 +720,8 @@ class TraceGraph:
             target = self._index.get(target_id)
             if source and target:
                 edge_kind = EdgeKind(edge_kind_str)
-                target.link(source, edge_kind, assertion_targets or None)
+                edge = target.link(source, edge_kind, assertion_targets or None)
+                edge.metadata.update(old_metadata)
                 self._restore_journey_bodies(entry)
 
                 # Remove from orphans if it was marked orphan after deletion
@@ -889,7 +891,8 @@ class TraceGraph:
                 parent_id = entry.before_state.get("parent_id")
                 if parent_id and parent_id in self._index:
                     parent = self._index[parent_id]
-                    parent.link(node, EdgeKind.STRUCTURES)
+                    edge = parent.link(node, EdgeKind.STRUCTURES)
+                    edge.metadata["render_order"] = entry.before_state.get("render_order", 0.0)
                     # Restore parent hash (even if None)
                     if "parent_hash" in entry.before_state:
                         parent.set_field("hash", entry.before_state["parent_hash"])
@@ -1817,6 +1820,15 @@ class TraceGraph:
         old_text = node.get_label()
         old_hash = parent.get_field("hash")
 
+        # The edge carries the assertion's position in the rendered requirement;
+        # without it the undo re-links at the default 0.0 and the assertion
+        # reappears ahead of everything else.
+        old_render_order = 0.0
+        for edge in parent.iter_outgoing_edges():
+            if edge.kind == EdgeKind.STRUCTURES and edge.target is node:
+                old_render_order = edge.metadata.get("render_order", 0.0)
+                break
+
         # Collect sibling assertions sorted by label
         siblings = []
         for child in parent.iter_children():
@@ -1888,6 +1900,7 @@ class TraceGraph:
                 "parent_hash": old_hash,
                 "compact": compact,
                 "renames": renames,
+                "render_order": old_render_order,
             },
             after_state={
                 "parent_hash": new_hash,
@@ -2169,6 +2182,9 @@ class TraceGraph:
                 "target_id": target_id,
                 "edge_kind": edge_to_delete.kind.value,
                 "assertion_targets": list(edge_to_delete.assertion_targets),
+                # Structural edges carry render_order, which places the child in
+                # its parent's rendered text; a bare re-link would lose it.
+                "metadata": dict(edge_to_delete.metadata),
                 "journey_bodies": self._journey_bodies_snapshot(source, target),
             },
             after_state={
