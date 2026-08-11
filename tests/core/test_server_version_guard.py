@@ -133,7 +133,7 @@ ROUTE_CASES = [
     RouteCase(
         "/api/mutate/assertion/add",
         REQ,
-        {"req_id": REQ, "label": "E", "text": "SHALL be newly added"},
+        {"req_id": REQ, "text": "SHALL be newly added"},
     ),
     RouteCase(
         "/api/mutate/assertion/delete",

@@ -304,7 +304,7 @@ class TestNormalizedTextMode:
         graph._recompute_requirement_hash(parent)
         hash_before = parent.get_field("hash")
 
-        graph.add_assertion("REQ-p00001", "C", "The system SHALL notify users.")
+        graph.add_assertion("REQ-p00001", "The system SHALL notify users.")
         hash_after = parent.get_field("hash")
 
         assert (

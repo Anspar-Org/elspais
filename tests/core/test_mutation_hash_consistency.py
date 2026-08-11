@@ -72,7 +72,7 @@ class TestAddAssertionHashConsistency:
         old_hash = parent.get_field("hash")
 
         # Perform mutation
-        graph.add_assertion("REQ-p00001", "C", "The system SHALL notify users.")
+        graph.add_assertion("REQ-p00001", "The system SHALL notify users.")
 
         # Verify hash matches what we'd compute from reconstructed body_text
         new_hash = parent.get_field("hash")
@@ -88,7 +88,7 @@ class TestAddAssertionHashConsistency:
         graph = build_graph_for_hash()
         parent = graph.find_by_id("REQ-p00001")
 
-        graph.add_assertion("REQ-p00001", "C", "The system SHALL notify users.")
+        graph.add_assertion("REQ-p00001", "The system SHALL notify users.")
 
         body = reconstruct_body_text(parent)
         assert "C. The system SHALL notify users." in body
@@ -240,8 +240,8 @@ class TestHashConsistencyAfterMultipleMutations:
         parent = graph.find_by_id("REQ-p00001")
 
         # Perform multiple mutations
-        graph.add_assertion("REQ-p00001", "C", "Third assertion.")
-        graph.add_assertion("REQ-p00001", "D", "Fourth assertion.")
+        graph.add_assertion("REQ-p00001", "Third assertion.")
+        graph.add_assertion("REQ-p00001", "Fourth assertion.")
 
         # Verify hash consistency
         stored_hash = parent.get_field("hash")
@@ -260,7 +260,7 @@ class TestHashConsistencyAfterMultipleMutations:
         parent = graph.find_by_id("REQ-p00001")
 
         # Perform various mutations
-        graph.add_assertion("REQ-p00001", "C", "Third assertion.")
+        graph.add_assertion("REQ-p00001", "Third assertion.")
         graph.update_assertion("REQ-p00001-A", "Updated first assertion.")
         graph.rename_assertion("REQ-p00001-B", "X")
 
@@ -278,7 +278,7 @@ class TestHashConsistencyAfterMultipleMutations:
         # Delete A (with compact, so B becomes A)
         graph.delete_assertion("REQ-p00001-A", compact=True)
         # Add a new B
-        graph.add_assertion("REQ-p00001", "B", "New B assertion.")
+        graph.add_assertion("REQ-p00001", "New B assertion.")
 
         # Verify hash consistency
         stored_hash = parent.get_field("hash")

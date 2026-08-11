@@ -1296,7 +1296,6 @@ class TestStandardMCPMutations:
             "mutate_add_assertion",
             {
                 "req_id": "REQ-p00001",
-                "label": "D",
                 "text": "The system SHALL support SSO.",
                 "if_version": _version_of(mcp_server, "REQ-p00001"),
             },
@@ -1579,7 +1578,6 @@ class TestStandardMCPMutations:
             "mutate_add_assertion",
             {
                 "req_id": "REQ-d00002",
-                "label": "B",
                 "text": "The module SHALL log delivery status.",
                 "if_version": req["version"],
             },
@@ -1643,7 +1641,6 @@ class TestStandardMCPMutations:
             "mutate_add_assertion",
             {
                 "req_id": "REQ-o00099",
-                "label": "A",
                 "text": "Operations SHALL deploy new service.",
                 "if_version": edge["version"],
             },
@@ -1654,7 +1651,6 @@ class TestStandardMCPMutations:
             "mutate_add_assertion",
             {
                 "req_id": "REQ-o00099",
-                "label": "B",
                 "text": "Operations SHALL monitor new service.",
                 "if_version": first["version"],
             },

@@ -351,7 +351,7 @@ class TestSaveAddAssertion:
         """add_assertion mutation is saved via render_save."""
         graph, spec_file = _build_graph_with_spec(tmp_path, "placeholder")
 
-        graph.add_assertion("REQ-t00001", "C", "The system SHALL do a third thing.")
+        graph.add_assertion("REQ-t00001", "The system SHALL do a third thing.")
 
         result = render_save(graph, tmp_path)
 

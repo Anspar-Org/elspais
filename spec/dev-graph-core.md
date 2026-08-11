@@ -386,7 +386,6 @@ F. The `validate` / health-check command reports B and C as
 ## REQ-d00268: Report Malformed Assertion Labels
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
-**Satisfies**: REQ-p00019
 
 Spec files are ordinary markdown that any editor can produce, so the labelling a requirement arrives with cannot be assumed well-formed. A label the parser cannot place is reported against its source rather than passed over.
 

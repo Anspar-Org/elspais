@@ -1458,16 +1458,18 @@ async def api_mutate_assertion_add(request: Request) -> JSONResponse:
     state = _st(request)
     data = await request.json()
     req_id = data.get("req_id", "")
-    label = data.get("label", "")
     text = data.get("text", "")
-    if not req_id or not label or not text:
+    if not req_id or not text:
         return JSONResponse(
-            {"success": False, "error": "req_id, label, and text required"}, status_code=400
+            {"success": False, "error": "req_id and text required"}, status_code=400
         )
     conflict = _version_conflict(state, data, req_id)
     if conflict is not None:
         return conflict
-    result = _mutate_add_assertion(state.graph, req_id, label, text)
+    # The label follows from the position (REQ-o00062-R); a label supplied by
+    # the client is ignored rather than honoured, so both surfaces assign the
+    # same one (REQ-o00062-O).
+    result = _mutate_add_assertion(state.graph, req_id, text)
     result = _with_version(state, result, req_id)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)

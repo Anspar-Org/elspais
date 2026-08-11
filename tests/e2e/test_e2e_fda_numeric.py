@@ -264,7 +264,6 @@ class TestMCPNumericAssertions:
                 "mutate_add_assertion",
                 {
                     "req_id": "PRD-00001",
-                    "label": "2",
                     "text": "The system SHALL do two.",
                     "if_version": version,
                 },

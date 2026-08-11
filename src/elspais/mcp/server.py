@@ -3206,20 +3206,22 @@ def _mutate_delete_journey(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _mutate_add_assertion(
-    graph: FederatedGraph, req_id: str, label: str, text: str
-) -> dict[str, Any]:
+def _mutate_add_assertion(graph: FederatedGraph, req_id: str, text: str) -> dict[str, Any]:
     """Add assertion to requirement.
 
     REQ-d00065-D: Only parameter validation and delegation.
     REQ-o00062-E: Returns MutationEntry for audit.
+    REQ-o00062-R: Reports the label it assigned; the caller does not choose it.
     """
     try:
-        entry = graph.add_assertion(req_id, label, text)
+        entry = graph.add_assertion(req_id, text)
+        assertion_id = entry.after_state["id"]
         return {
             "success": True,
             "mutation": _serialize_mutation_entry(entry),
-            "message": f"Added assertion {req_id}-{label}",
+            "label": entry.after_state["label"],
+            "assertion_id": assertion_id,
+            "message": f"Added assertion {assertion_id}",
         }
     except (ValueError, KeyError) as e:
         return {"success": False, "error": str(e)}
@@ -5508,7 +5510,8 @@ your last read — and returns the new `version` on success. See the
 
 ### Assertion Mutations (in-memory)
 Assertion tokens are the PARENT REQUIREMENT's version.
-- `mutate_add_assertion(req_id, label, text, if_version)` - Add assertion
+- `mutate_add_assertion(req_id, text, if_version)` - Add assertion; the next
+  label in the series is assigned and returned as `label`
 - `mutate_update_assertion(assertion_id, new_text, if_version)` - Update text
 - `mutate_delete_assertion(assertion_id, if_version, confirm=True)` - Delete
   (requires confirm); returns the parent requirement's resulting version
@@ -6313,8 +6316,13 @@ def create_server(
 
     @mcp.tool()
     @_locked
-    def mutate_add_assertion(req_id: str, label: str, text: str, if_version: str) -> dict[str, Any]:
-        """Add a testable assertion (A, B, C...) to a requirement. Text should include SHALL.
+    def mutate_add_assertion(req_id: str, text: str, if_version: str) -> dict[str, Any]:
+        """Add a testable assertion to a requirement. Text should include SHALL.
+
+        The assertion is appended after the requirement's existing assertions
+        and given the next label in the series; the assigned label is returned
+        as `label`. A requirement whose series is exhausted is one to split,
+        and the call fails rather than labelling outside the series.
 
         Args:
             if_version: The version of req_id — the parent requirement — from
@@ -6328,7 +6336,7 @@ def create_server(
         if conflict:
             return conflict
         parent = _state["graph"].find_by_id(req_id)
-        return _attach_version(_mutate_add_assertion(_state["graph"], req_id, label, text), parent)
+        return _attach_version(_mutate_add_assertion(_state["graph"], req_id, text), parent)
 
     @mcp.tool()
     @_locked

@@ -942,18 +942,19 @@ class FederatedGraph:
         return result
 
     # Implements: REQ-d00201-A
-    def add_assertion(self, req_id: str, label: str, text: str) -> MutationEntry:
+    def add_assertion(self, req_id: str, text: str) -> MutationEntry:
         """Add an assertion to a requirement.
+
+        The label is assigned by the owning TraceGraph (REQ-o00062-R) and
+        reported on the entry; ownership is keyed off that id rather than a
+        second derivation.
 
         # Strategy: by_id
         """
         repo_name = self._ownership[req_id]
         tg = self._graph_for(req_id)
-        result = tg.add_assertion(req_id, label, text)
-        # New assertion gets ownership — derive ID from the same TraceGraph
-        # convention so federated lookup and graph index agree.
-        assertion_id = tg.make_assertion_id(req_id, label)
-        self._ownership[assertion_id] = repo_name
+        result = tg.add_assertion(req_id, text)
+        self._ownership[result.after_state["id"]] = repo_name
         self._record_mutation(repo_name, result)
         return result
 

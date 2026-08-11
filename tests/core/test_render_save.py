@@ -163,7 +163,7 @@ class TestRenderSaveDirtyFiles:
 
         graph, spec_file, _ = _build_graph_with_spec(tmp_path)
 
-        graph.add_assertion("REQ-t00001", "C", "The system SHALL do a third thing.")
+        graph.add_assertion("REQ-t00001", "The system SHALL do a third thing.")
         result = render_save(graph, tmp_path)
 
         assert result["success"] is True

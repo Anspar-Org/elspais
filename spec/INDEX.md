@@ -35,7 +35,6 @@
 
 | ID                     | Title                                   | File | Hash     |
 | ---------------------- | --------------------------------------- | ---- | -------- |
-| REQ-d00268::REQ-p00019 | Truthful Reporting and Error Discipline |      | b2a947fb |
 | REQ-p00015::REQ-p00019 | Truthful Reporting and Error Discipline |      | b2a947fb |
 | REQ-p00080::REQ-p00019 | Truthful Reporting and Error Discipline |      | b2a947fb |
 | REQ-p00081::REQ-p00019 | Truthful Reporting and Error Discipline |      | b2a947fb |

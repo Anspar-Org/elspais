@@ -200,16 +200,15 @@ class TestScenarioMutationsE2E:
             # 2b: Add assertions to new requirement (read its token once, then
             # thread each mutation's returned token into the next)
             d00003_version = _version_of(proc, "REQ-d00003")
-            for label, text in [
-                ("A", "The module SHALL enforce permission checks."),
-                ("B", "The module SHALL support role inheritance."),
+            for text in [
+                "The module SHALL enforce permission checks.",
+                "The module SHALL support role inheritance.",
             ]:
                 result = mcp_call(
                     proc,
                     "mutate_add_assertion",
                     {
                         "req_id": "REQ-d00003",
-                        "label": label,
                         "text": text,
                         "if_version": d00003_version,
                     },
@@ -275,16 +274,15 @@ class TestScenarioMutationsE2E:
             mutation_count += 1
 
             # 2h: Add more assertions, threading the returned token
-            for label, text in [
-                ("D", "The platform SHALL audit all access control changes."),
-                ("E", "The platform SHALL support multi-factor authentication."),
+            for text in [
+                "The platform SHALL audit all access control changes.",
+                "The platform SHALL support multi-factor authentication.",
             ]:
                 result = mcp_call(
                     proc,
                     "mutate_add_assertion",
                     {
                         "req_id": "REQ-p00001",
-                        "label": label,
                         "text": text,
                         "if_version": p00001_version,
                     },
@@ -346,7 +344,6 @@ class TestScenarioMutationsE2E:
                     "mutate_add_assertion",
                     {
                         "req_id": rid,
-                        "label": "A",
                         "text": f"Batch {i} SHALL exist.",
                         "if_version": _version_of(proc, rid),
                     },

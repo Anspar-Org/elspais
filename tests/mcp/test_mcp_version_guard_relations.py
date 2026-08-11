@@ -423,7 +423,7 @@ class TestFixBrokenReferenceGuardsTheSource:
 CREATION_TOOL_CALLS = [
     (
         "mutate_add_assertion",
-        {"req_id": "REQ-d00003", "label": "Z", "text": "The module SHALL have leaked."},
+        {"req_id": "REQ-d00003", "text": "The module SHALL have leaked."},
     ),
     (
         "mutate_add_remainder",
@@ -509,13 +509,13 @@ class TestAddAssertionThreadsTheRequirementVersion:
 
         result = tools["mutate_add_assertion"](
             req_id=self.PARENT,
-            label="E",
             text="The module SHALL rotate encryption keys annually.",
             if_version=before,
         )
 
         assert result["success"] is True, result.get("error")
-        assert chain.find_by_id(f"{self.PARENT}-E") is not None
+        assert chain.find_by_id(result["assertion_id"]) is not None
+        TestAddAssertionThreadsTheRequirementVersion.first_id = result["assertion_id"]
         TestAddAssertionThreadsTheRequirementVersion.threaded = result["version"]
 
     def test_REQ_o00062_K_success_returns_the_requirements_new_version(self, chain):
@@ -527,26 +527,28 @@ class TestAddAssertionThreadsTheRequirementVersion:
         """REQ-o00062-I: The concurrent appender must re-read first."""
         result = tools["mutate_add_assertion"](
             req_id=self.PARENT,
-            label="F",
             text="The module SHALL never land.",
             if_version=self.spent,
         )
 
         assert result["success"] is False
         assert result["code"] == "version_conflict"
-        assert chain.find_by_id(f"{self.PARENT}-F") is None
+        assert not any(
+            node.get_label() == "The module SHALL never land."
+            for node in chain.find_by_id(self.PARENT).iter_children()
+        )
 
     def test_REQ_o00062_K_threaded_token_admits_the_second_assertion(self, chain, tools):
         """REQ-o00062-K: Reconciled via the returned token, the append lands."""
         result = tools["mutate_add_assertion"](
             req_id=self.PARENT,
-            label="F",
             text="The module SHALL purge exports after 30 days.",
             if_version=self.threaded,
         )
 
         assert result["success"] is True, result.get("error")
-        assert chain.find_by_id(f"{self.PARENT}-F") is not None
+        assert chain.find_by_id(result["assertion_id"]) is not None
+        assert result["assertion_id"] != self.first_id
 
 
 @pytest.mark.incremental
