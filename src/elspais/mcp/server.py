@@ -2662,7 +2662,7 @@ def _get_docs(topic: str) -> dict[str, Any]:
         # Multi-word: each variant set must have at least one hit
         return all(any(v in lowered for v in vs) for vs in variant_sets)
 
-    # 1. Search docs/cli/*.md files (section-level granularity)
+    # 1. Search the shipped doc topics (section-level granularity)
     for t in available:
         tc = load_topic(t)
         if tc is None:
@@ -2681,7 +2681,7 @@ def _get_docs(topic: str) -> dict[str, Any]:
             if _text_matches(section_text):
                 matches.append(
                     {
-                        "source": f"docs/cli/{t}.md",
+                        "source": f"elspais docs {t}",
                         "content": section_text,
                     }
                 )

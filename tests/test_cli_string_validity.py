@@ -563,13 +563,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SRC_ROOT = REPO_ROOT / "src" / "elspais"
 DOCS_ROOT = SRC_ROOT / "docs"
 
-# The repository-facing command reference is canonical (see CLAUDE.md); the
-# packaged copy under src/ ships to users. Both describe the CLI as it is, so
-# both are held to it. Design notes and roadmaps under docs/ are deliberately
-# excluded: they discuss invocations that are proposed rather than shipped,
-# and holding a dated plan to today's flags would force it to be rewritten
-# every time the CLI moves.
-REPO_DOCS_CLI_ROOT = REPO_ROOT / "docs" / "cli"
+# The command reference lives inside the package and is the only copy, so
+# what ships to users is what is held to the CLI. Design notes and roadmaps
+# under the repository's docs/ are deliberately excluded: they discuss
+# invocations that are proposed rather than shipped, and holding a dated plan
+# to today's flags would force it to be rewritten every time the CLI moves.
 
 # A synopsis block wraps one invocation over several lines:
 #
@@ -685,10 +683,9 @@ def test_all_elspais_strings_in_markdown_docs_use_real_flags(
     continuation lines of a multi-line synopsis.
     """
     assert DOCS_ROOT.is_dir(), f"Docs root missing: {DOCS_ROOT}"
-    assert REPO_DOCS_CLI_ROOT.is_dir(), f"Docs root missing: {REPO_DOCS_CLI_ROOT}"
 
     all_findings: list[Finding] = []
-    for md_file in [*DOCS_ROOT.rglob("*.md"), *REPO_DOCS_CLI_ROOT.rglob("*.md")]:
+    for md_file in DOCS_ROOT.rglob("*.md"):
         rel = md_file.relative_to(REPO_ROOT)
         text = md_file.read_text(encoding="utf-8")
         for lineno, line, cmd in _iter_doc_lines(text):

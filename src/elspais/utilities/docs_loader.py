@@ -1,8 +1,8 @@
 # Implements: REQ-d00254-C
 """Documentation loader for CLI docs command.
 
-Loads markdown documentation files from docs/cli/ directory.
-Supports both installed package and development repository layouts.
+Loads the markdown topics shipped inside the package, which are the same
+files whether elspais is installed from a wheel or checked out.
 """
 
 from __future__ import annotations
@@ -43,29 +43,17 @@ TOPIC_ORDER = [
 
 
 def find_docs_dir() -> Path | None:
-    """Locate the docs/cli directory.
+    """Locate the shipped CLI documentation directory.
 
-    Checks two locations:
-    1. Package location: <package>/docs/cli (installed via wheel)
-    2. Repository location: <repo>/docs/cli (development mode)
+    The topics live inside the package, so the same files answer `elspais
+    docs` from a wheel and from an editable checkout. There is no second
+    copy at the repository root to fall back to.
 
     Returns:
-        Path to docs/cli directory, or None if not found.
+        Path to the docs directory, or None if not found.
     """
-    # Try package location first (installed wheel)
-    package_dir = Path(__file__).parent.parent  # src/elspais
-    package_docs = package_dir / "docs" / "cli"
-    if package_docs.is_dir():
-        return package_docs
-
-    # Try repository root (development mode)
-    # Walk up from utilities/ to find docs/cli
-    repo_root = package_dir.parent.parent  # src/../..
-    repo_docs = repo_root / "docs" / "cli"
-    if repo_docs.is_dir():
-        return repo_docs
-
-    return None
+    package_docs = Path(__file__).parent.parent / "docs" / "cli"
+    return package_docs if package_docs.is_dir() else None
 
 
 def load_topic(topic: str) -> str | None:
