@@ -304,10 +304,16 @@ def _req_with_assertions(
         req.link(assertion, EdgeKind.STRUCTURES)
 
     def _dim(fractions: dict[str, float]) -> CoverageDimension:
+        # The supplied fractions model assertion-targeted (named) evidence, so
+        # they populate BOTH footings: the gap surfaces read the strict map
+        # (REQ-d00258-M) and the reporting surfaces read the generous one.
+        # Whole-requirement-only evidence is exercised separately, on a graph
+        # built from real references (TestStrictFootingGaps).
         return CoverageDimension(
             total=len(labels),
-            direct=sum(1 for f in fractions.values() if f >= 1.0),
+            direct=sum(fractions.values()),
             indirect=sum(fractions.values()),
+            direct_pct_by_label=dict(fractions),
             indirect_pct_by_label=dict(fractions),
         )
 
@@ -742,3 +748,107 @@ class TestGapsIntegrates:
         }
         gd = _gap_data_from_dict(d)
         assert gd.integrated == {}
+
+
+# ===========================================================================
+# REQ-d00258-M: gap surfaces answer on the STRICT footing, so an assertion
+# with no evidence naming it is reported however much whole-requirement
+# evidence its requirement carries.
+# ===========================================================================
+
+
+@pytest.fixture
+def blanket_evidence_graph():
+    """REQ-700 with assertions A and B.
+
+    Evidence:
+      * a whole-requirement ``Implements: REQ-700`` code ref (blanket) --
+        credits A and B on the generous footing only,
+      * an assertion-targeted ``Implements: REQ-700-B`` code ref -- credits B
+        on the strict footing,
+      * a whole-requirement ``Verifies: REQ-700`` test ref (blanket) -- credits
+        A and B as tested on the generous footing only.
+
+    So on the strict footing: implemented = {B}, tested = {}. On the generous
+    footing both dimensions are fully covered.
+    """
+    from elspais.graph.annotators import annotate_coverage
+    from tests.core.graph_test_helpers import (
+        build_graph,
+        make_code_ref,
+        make_requirement,
+        make_test_ref,
+    )
+
+    graph = build_graph(
+        make_requirement(
+            "REQ-700",
+            level="PRD",
+            assertions=[
+                {"label": "A", "text": "Assertion A"},
+                {"label": "B", "text": "Assertion B"},
+            ],
+        ),
+        make_code_ref(implements=["REQ-700"], source_path="src/whole.py"),
+        make_code_ref(implements=["REQ-700-B"], source_path="src/b.py"),
+        make_test_ref(verifies=["REQ-700"], source_path="tests/test_whole.py"),
+    )
+    annotate_coverage(graph)
+    return graph
+
+
+class TestStrictFootingGaps:
+    """Validates REQ-d00258-M: gaps are determined on the strict footing."""
+
+    def _gap_labels(self, data, section: str, req_id: str = "REQ-700") -> set[str]:
+        labels: set[str] = set()
+        for entry in getattr(data, section):
+            if entry.req_id != req_id:
+                continue
+            for aid, _frac in entry.assertions:
+                labels.add(aid.rsplit("-", 1)[-1])
+        return labels
+
+    # Verifies: REQ-d00258-M
+    def test_REQ_d00258_M_whole_req_only_assertion_is_implementation_gap(
+        self, blanket_evidence_graph
+    ) -> None:
+        """(a) A has ONLY whole-requirement implementation evidence, so it is
+        reported as an implementation gap even though the requirement is fully
+        implemented on the generous footing."""
+        data = collect_gaps(blanket_evidence_graph, exclude_status=set(), config={})
+        assert "A" in self._gap_labels(data, "uncovered")
+
+    # Verifies: REQ-d00258-M
+    def test_REQ_d00258_M_directly_referenced_assertion_is_not_a_gap(
+        self, blanket_evidence_graph
+    ) -> None:
+        """(b) B is named by an assertion-targeted `Implements:` reference, so
+        it is NOT an implementation gap."""
+        data = collect_gaps(blanket_evidence_graph, exclude_status=set(), config={})
+        assert "B" not in self._gap_labels(data, "uncovered")
+
+    # Verifies: REQ-d00258-M
+    def test_REQ_d00258_M_reporting_surface_still_headlines_generous_footing(
+        self, blanket_evidence_graph
+    ) -> None:
+        """(c) REQ-d00258-A is untouched: the shared aggregation the reporting
+        surfaces read still credits whole-requirement evidence to every
+        assertion (generous 2.0 vs strict 1.0 on the same graph)."""
+        from elspais.graph.aggregation import aggregate_dimension, relative_tier_for
+
+        agg = aggregate_dimension(blanket_evidence_graph, "implemented", config={})
+        assert agg.covered == pytest.approx(2.0)  # generous: A and B
+        assert agg.direct == pytest.approx(1.0)  # strict: B only
+
+        rollup = blanket_evidence_graph.find_by_id("REQ-700").get_metric("rollup_metrics")
+        tier, is_na = relative_tier_for(rollup, "tested")
+        assert (tier, is_na) == ("full", False)
+
+    # Verifies: REQ-d00258-M
+    def test_REQ_d00258_M_relative_denominator_is_also_strict(self, blanket_evidence_graph) -> None:
+        """(d) The testing denominator is strict too: A (implemented only by
+        whole-requirement evidence) is NOT a testing gap, while B (implemented
+        by name, tested only by a whole-requirement test) IS."""
+        data = collect_gaps(blanket_evidence_graph, exclude_status=set(), config={})
+        assert self._gap_labels(data, "untested") == {"B"}

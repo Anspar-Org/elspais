@@ -132,22 +132,33 @@ def coverage_graph():
     # testing gaps at all (an unimplemented assertion has nothing to test yet).
     from elspais.graph.metrics import CoverageDimension, RollupMetrics
 
+    # The fractions model assertion-targeted (named) evidence, so they populate
+    # BOTH footings: gap surfaces read the strict map (REQ-d00258-M) while
+    # reporting surfaces read the generous one. Whole-requirement-only evidence
+    # is exercised separately (TestStrictFootingMcpGaps).
+    def _dim(total: int, fractions: dict[str, float]) -> CoverageDimension:
+        return CoverageDimension(
+            total=total,
+            direct=sum(fractions.values()),
+            indirect=sum(fractions.values()),
+            direct_pct_by_label=dict(fractions),
+            indirect_pct_by_label=dict(fractions),
+        )
+
     req_node.set_metric(
         "rollup_metrics",
         RollupMetrics(
             total_assertions=3,
-            implemented=CoverageDimension(
-                total=3, indirect_pct_by_label={"A": 1.0, "B": 1.0, "C": 1.0}
-            ),
-            tested=CoverageDimension(total=3, indirect_pct_by_label={"A": 1.0}),
+            implemented=_dim(3, {"A": 1.0, "B": 1.0, "C": 1.0}),
+            tested=_dim(3, {"A": 1.0}),
         ),
     )
     req_node2.set_metric(
         "rollup_metrics",
         RollupMetrics(
             total_assertions=1,
-            implemented=CoverageDimension(total=1, indirect_pct_by_label={"A": 1.0}),
-            tested=CoverageDimension(total=1, indirect_pct_by_label={}),
+            implemented=_dim(1, {"A": 1.0}),
+            tested=_dim(1, {}),
         ),
     )
 
@@ -564,3 +575,123 @@ class TestFindAssertionsByKeywords:
 
         result = _find_assertions_by_keywords(coverage_graph, keywords=["Tls"])
         assert len(result["assertions"]) == 1
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# REQ-d00258-M: the MCP uncovered-assertion and test-coverage tools determine
+# gaps on the STRICT footing -- an assertion with no evidence naming it is
+# reported however much whole-requirement evidence its requirement carries.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def blanket_evidence_graph():
+    """REQ-700 with A covered ONLY by whole-requirement evidence.
+
+    ``Implements: REQ-700`` (blanket) + ``Implements: REQ-700-B`` (named) +
+    ``Verifies: REQ-700`` (blanket). Strict footing: implemented = {B},
+    tested = {}. Generous footing: everything covered.
+    """
+    from elspais.graph.annotators import annotate_coverage
+    from tests.core.graph_test_helpers import (
+        build_graph,
+        make_code_ref,
+        make_requirement,
+        make_test_ref,
+    )
+
+    graph = build_graph(
+        make_requirement(
+            "REQ-700",
+            level="PRD",
+            assertions=[
+                {"label": "A", "text": "Assertion A"},
+                {"label": "B", "text": "Assertion B"},
+            ],
+        ),
+        make_code_ref(implements=["REQ-700"], source_path="src/whole.py"),
+        make_code_ref(implements=["REQ-700-B"], source_path="src/b.py"),
+        make_test_ref(verifies=["REQ-700"], source_path="tests/test_whole.py"),
+    )
+    annotate_coverage(graph)
+    return graph
+
+
+class TestStrictFootingMcpGaps:
+    """Validates REQ-d00258-M: MCP gap tools answer on the strict footing."""
+
+    # Verifies: REQ-d00258-M
+    def test_REQ_d00258_M_test_coverage_reports_blanket_only_assertion_uncovered(
+        self, blanket_evidence_graph
+    ) -> None:
+        """(a) B is tested only by a whole-requirement `Verifies:`, so
+        get_test_coverage reports it as uncovered, not covered."""
+        from elspais.mcp.server import _get_test_coverage
+
+        result = _get_test_coverage(blanket_evidence_graph, "REQ-700")
+        assert "REQ-700-B" in result["uncovered_assertions"]
+        assert "REQ-700-B" not in result["covered_assertions"]
+
+    # Verifies: REQ-d00258-M
+    def test_REQ_d00258_M_test_coverage_still_lists_the_whole_req_test(
+        self, blanket_evidence_graph
+    ) -> None:
+        """The whole-requirement test is real evidence and stays in the tool's
+        test listing -- only the covered/uncovered verdict goes strict."""
+        from elspais.mcp.server import _get_test_coverage
+
+        result = _get_test_coverage(blanket_evidence_graph, "REQ-700")
+        assert result["test_nodes"], "whole-requirement test must still be listed"
+
+    # Verifies: REQ-d00258-M
+    def test_REQ_d00258_M_uncovered_detail_fraction_matches_strict_verdict(
+        self, blanket_evidence_graph
+    ) -> None:
+        """An assertion reported as a gap must not be annotated with a
+        generous-footing fraction of 1.0."""
+        from elspais.mcp.server import _get_test_coverage
+
+        result = _get_test_coverage(blanket_evidence_graph, "REQ-700")
+        detail = {d["id"]: d for d in result["uncovered_detail"]}
+        assert detail["REQ-700-B"]["fraction"] == 0.0
+
+    # Verifies: REQ-d00258-M
+    def test_REQ_d00258_M_uncovered_assertions_uses_strict_numerator(
+        self, blanket_evidence_graph
+    ) -> None:
+        """(a) B is implemented by name but tested only by a whole-requirement
+        test, so it IS a testing gap."""
+        from elspais.mcp.server import _get_uncovered_assertions
+
+        result = _get_uncovered_assertions(blanket_evidence_graph, req_id="REQ-700", source="test")
+        assert "B" in result["uncovered_labels"]
+
+    # Verifies: REQ-d00258-M
+    def test_REQ_d00258_M_uncovered_assertions_denominator_is_also_strict(
+        self, blanket_evidence_graph
+    ) -> None:
+        """(d) A is implemented only by whole-requirement evidence, so it is
+        not in the strict implemented denominator and is not a testing gap."""
+        from elspais.mcp.server import _get_uncovered_assertions
+
+        result = _get_uncovered_assertions(blanket_evidence_graph, req_id="REQ-700", source="test")
+        assert result["uncovered_labels"] == ["B"]
+
+    # Verifies: REQ-d00258-M
+    def test_REQ_d00258_M_mcp_agrees_with_cli_gaps_on_strict_footing(
+        self, blanket_evidence_graph
+    ) -> None:
+        """(b/c) The MCP test axis and the CLI `gaps untested` surface report
+        the same strict-footing gap set."""
+        from elspais.commands.gaps import collect_gaps
+        from elspais.mcp.server import _get_uncovered_assertions
+
+        mcp = _get_uncovered_assertions(blanket_evidence_graph, req_id="REQ-700", source="test")
+        data = collect_gaps(blanket_evidence_graph, exclude_status=set(), config={})
+        cli = {
+            aid.rsplit("-", 1)[-1]
+            for entry in data.untested
+            if entry.req_id == "REQ-700"
+            for aid, _frac in entry.assertions
+        }
+        assert set(mcp["uncovered_labels"]) == cli == {"B"}

@@ -3913,12 +3913,14 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
         # rollup dimension. Fold those in so it is not reported as a gap -- but
         # only when conduction makes it ~fully covered. A partially covered
         # assertion (0 < fraction < 1) remains a gap.
+        # REQ-d00258-M: read the STRICT map -- whole-requirement credit does
+        # not cover an assertion nothing names.
         if rollup is None:
             return
         dim = getattr(rollup, dimension, None)
         if dim is None:
             return
-        for label, frac in dim.indirect_pct_by_label.items():
+        for label, frac in dim.direct_pct_by_label.items():
             if frac >= 1.0 - 1e-9:
                 aid = label_to_id.get(label)
                 if aid is not None:
@@ -3929,17 +3931,22 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     test_nodes: list[dict[str, Any]] = []
     covered_assertion_ids: set[str] = set()
 
-    for test_node, labels in _iter_assertion_coverage(node, NodeKind.TEST):
-        # Track covered assertions
-        for label in labels:
-            if label in label_to_id:
-                covered_assertion_ids.add(label_to_id[label])
-
+    # Two passes over the same coverage iterator, because the listing and the
+    # verdict answer different questions (REQ-d00258-M). The listing includes a
+    # whole-requirement test -- it is real evidence and the caller should see
+    # it. The covered/uncovered verdict is strict: a blanket `Verifies:` names
+    # no assertion, so it covers none of them.
+    for test_node, _labels in _iter_assertion_coverage(node, NodeKind.TEST):
         if test_node.id in seen_test_ids:
             continue
         seen_test_ids.add(test_node.id)
 
         test_nodes.append(_serialize_test_info(test_node, graph))
+
+    for _test_node, labels in _iter_assertion_coverage(node, NodeKind.TEST, direct_only=True):
+        for label in labels:
+            if label in label_to_id:
+                covered_assertion_ids.add(label_to_id[label])
 
     _fold_conducted(covered_assertion_ids, "tested")
     covered_assertions = sorted(covered_assertion_ids)
@@ -3951,7 +3958,9 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     # is additive alongside ``uncovered_assertions`` -- that field keeps its
     # existing flat id-list shape for backward compatibility.
     id_to_label = dict(assertions)
-    tested_fractions = rollup.tested.indirect_pct_by_label if rollup is not None else {}
+    # Strict map (REQ-d00258-M): the annotation must agree with the verdict --
+    # an assertion listed as a gap can never read 100% covered.
+    tested_fractions = rollup.tested.direct_pct_by_label if rollup is not None else {}
     uncovered_detail = []
     for aid in uncovered_assertions:
         frac = tested_fractions.get(id_to_label.get(aid, ""), 0.0)
@@ -4354,16 +4363,20 @@ def _get_uncovered_assertions(
         incoming edge, and is counted here only when conduction makes it
         ~fully covered (rollup fraction ~1.0). A partial fraction (0 < f < 1)
         stays a gap.
+
+        Strict footing (REQ-d00258-M): a whole-requirement reference names no
+        assertion, so it covers none of them here -- blanket edges are skipped
+        and the strict per-label map is read.
         """
         covered: set[str] = set()
-        for _node, labels in _iter_assertion_coverage(req_node, kind):
+        for _node, labels in _iter_assertion_coverage(req_node, kind, direct_only=True):
             covered.update(labels)
         rollup = req_node.get_metric("rollup_metrics")
         if rollup is not None:
             dim = getattr(rollup, dimension, None)
             if dim is not None:
                 covered.update(
-                    lbl for lbl, frac in dim.indirect_pct_by_label.items() if frac >= 1.0 - 1e-9
+                    lbl for lbl, frac in dim.direct_pct_by_label.items() if frac >= 1.0 - 1e-9
                 )
         return covered
 
@@ -4375,6 +4388,11 @@ def _get_uncovered_assertions(
         assertions that are IMPLEMENTED, mirroring gaps.py's
         ``restrict_to_dimension="implemented"``. An unimplemented assertion has
         nothing built to test yet and is therefore not a testing gap.
+
+        Read on the strict footing (REQ-d00258-M), like the numerator: an
+        assertion whose only implementation evidence is whole-requirement
+        credit has nothing directly implementing it, so it does not enter the
+        tested denominator.
         """
         rollup = req_node.get_metric("rollup_metrics")
         if rollup is None:
@@ -4382,7 +4400,7 @@ def _get_uncovered_assertions(
         dim = getattr(rollup, "implemented", None)
         if dim is None:
             return set()
-        return {lbl for lbl, frac in dim.indirect_pct_by_label.items() if frac > 0}
+        return {lbl for lbl, frac in dim.direct_pct_by_label.items() if frac > 0}
 
     def _uncovered_labels_for_req(req_node: Any, all_labels: list[str]) -> set[str]:
         """Union of per-axis gaps for the requested ``source`` (REQ-d00258).
@@ -4408,7 +4426,9 @@ def _get_uncovered_assertions(
     def _fraction_for_label(req_node: Any, label: str) -> float:
         # REQ-d00069-J: the strongest conducted fraction across the dimensions
         # this call considers (per ``source``), for annotating an uncovered
-        # label with its "how close to covered" progress.
+        # label with its "how close to covered" progress. Read on the same
+        # strict footing as the verdict (REQ-d00258-M) so a reported gap can
+        # never be annotated as fully covered.
         rollup = req_node.get_metric("rollup_metrics")
         if rollup is None:
             return 0.0
@@ -4416,11 +4436,11 @@ def _get_uncovered_assertions(
         if source in ("test", "both"):
             dim = getattr(rollup, "tested", None)
             if dim is not None:
-                fractions.append(dim.indirect_pct_by_label.get(label, 0.0))
+                fractions.append(dim.direct_pct_by_label.get(label, 0.0))
         if source in ("uat", "both"):
             dim = getattr(rollup, "uat_coverage", None)
             if dim is not None:
-                fractions.append(dim.indirect_pct_by_label.get(label, 0.0))
+                fractions.append(dim.direct_pct_by_label.get(label, 0.0))
         return max(fractions) if fractions else 0.0
 
     def _uncovered_detail(req_node: Any, labels: list[str], id_by_label: dict[str, str]) -> list:
