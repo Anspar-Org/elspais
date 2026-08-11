@@ -48,7 +48,7 @@
 | REQ-o00051 | Composable Annotation Design        | ops-architecture.md | 2fabd3d4 |
 | REQ-o00060 | MCP Core Query Tools                | ops-mcp.md          | 3a9ae713 |
 | REQ-o00061 | MCP Workspace Context Tools         | ops-mcp.md          | 3306c687 |
-| REQ-o00062 | MCP Graph Mutation Tools            | ops-mcp.md          | e4b381e0 |
+| REQ-o00062 | MCP Graph Mutation Tools            | ops-mcp.md          | 0dfcea34 |
 | REQ-o00063 | MCP File Mutation Tools             | ops-mcp.md          | 05c1e9c4 |
 | REQ-o00064 | MCP Test Coverage Analysis Tools    | ops-mcp.md          | a97fc5c4 |
 | REQ-o00065 | Agent-Assisted Link Suggestion      | ops-mcp.md          | 06f8e1ac |

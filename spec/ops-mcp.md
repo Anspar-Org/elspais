@@ -110,14 +110,21 @@ P. Undoing a deletion SHALL restore the node's structural attachment, not merely
 
 Q. When the daemon serves HTTP, its MCP interface SHALL accept sessions at the documented endpoint and SHALL operate on the same in-memory graph as the review server's HTTP interface, so agent and human writers are guarded against each other rather than only against writers on their own transport. A mount that cannot be served SHALL be reported, not silently omitted.
 
+R. An *Assertion* added to a requirement SHALL take its position after that requirement's existing assertions, and SHALL be given the label that follows theirs in the series — the first label in the series when the requirement has none — so a requirement's assertions remain one run whose rendered order is its label order.
+
+S. A caller SHALL be able to add an *Assertion* at any position among a requirement's existing assertions, and to remove any one of them, leaving the labels of those that remain a contiguous series in rendered order.
+
 ### Rationale
 
 In-memory mutations enable AI agents to draft requirement changes that can be reviewed before persisting. The undo system provides safety for exploratory editing.
+
+A requirement's assertions are read back from the file by position, so where a new one goes decides what it is. Assertion R therefore derives the label from the position rather than letting a caller set the two independently, which would let a label name one assertion while the file shows another; and it fixes the position against the existing assertions rather than the requirement's last content, which would put a new assertion beyond the closing prose and split the run in two. Assertion S is the capability R constrains, stated separately because appending is the easy half — a caller revising a requirement needs to place an assertion between two others, and to take one out, without rewriting the file by hand.
 
 A single daemon serves multiple concurrent writers — MCP agents and the viewer share one graph — and nothing else can detect that two of them read the same state before both writing it. Requiring the caller to state which version it believes it is modifying turns a silent lost update into a rejection the caller can act on. The precondition is mandatory rather than optional because an unguarded mutation is a blind write, which is the failure being prevented; returning the resulting version on success keeps the cost at one read per sequence rather than one per mutation. The history guards exist for the same reason at a different granularity: reversing, discarding, or persisting affects every writer's pending work, so no caller should be able to do it to a set of mutations it has never seen.
 
 ### Changelog
 
+- 2026-08-10 | 0dfcea34 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | e4b381e0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | ad214b71 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | ca1d9dee | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -127,7 +134,7 @@ A single daemon serves multiple concurrent writers — MCP agents and the viewer
 - 2026-05-11 | ef63f424 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | ef63f424 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *MCP Graph Mutation Tools* | **Hash**: e4b381e0
+*End* *MCP Graph Mutation Tools* | **Hash**: 0dfcea34
 ---
 
 ## REQ-o00063: MCP File Mutation Tools
