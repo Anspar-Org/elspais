@@ -8,9 +8,9 @@ Consolidated from:
     TestMCPAssociatedSubtree
 
 On-disk fixture layout (tests/fixtures/e2e-associated/):
-  - core:  standard IDs (REQ-p/o/d), uppercase assertions, associates=[alpha,beta]
-  - alpha: standard IDs, prefix ALP, uppercase assertions
-  - beta:  standard IDs, prefix BET, numeric assertions
+  - core:  namespace REQ, uppercase assertions, associates=[alpha,beta]
+  - alpha: namespace REQ-ALP, uppercase assertions
+  - beta:  namespace REQ-BET, numeric assertions
 """
 
 from __future__ import annotations

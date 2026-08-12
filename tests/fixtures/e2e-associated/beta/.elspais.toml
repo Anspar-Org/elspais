@@ -2,7 +2,7 @@ version = 3
 
 [project]
 name = "beta"
-namespace = "REQ"
+namespace = "REQ-BET"
 
 [levels.prd]
 rank = 1
