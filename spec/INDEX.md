@@ -94,8 +94,8 @@
 | REQ-d00078 | Scoped Search Implementation                                  | dev-mcp-tools.md        | c3a0cf17 |
 | REQ-d00079 | Discover Requirements Implementation                          | dev-mcp-tools.md        | 564cb7c6 |
 | REQ-d00080 | Diagnostic Command Exit Code Contract                         | dev-cli.md              | acc2aa77 |
-| REQ-d00081 | Multi-Assertion Reference Expansion                           | dev-cli.md              | e001c08a |
-| REQ-d00082 | Unified Reference Configuration                               | dev-cli.md              | 6289e433 |
+| REQ-d00081 | Multi-Assertion Reference Expansion                           | dev-cli.md              | b1812806 |
+| REQ-d00082 | Unified Reference Configuration                               | dev-cli.md              | f0808bb9 |
 | REQ-d00084 | Trace Command                                                 | dev-cli.md              | 1bd6bca1 |
 | REQ-d00085 | Unified Report Composition                                    | dev-cli.md              | 587285b0 |
 | REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | a12d2826 |
@@ -122,7 +122,7 @@
 | REQ-d00209 | Schema-Driven Init Template Generation                        | dev-graph-config.md     | b25e4468 |
 | REQ-d00210 | Documentation Drift Detection                                 | dev-graph-config.md     | 59023724 |
 | REQ-d00211 | Config-Driven Viewer UI Values                                | dev-graph-config.md     | 58192a4f |
-| REQ-d00212 | Config Schema v3 Models                                       | dev-graph-config.md     | 3b50127c |
+| REQ-d00212 | Config Schema v3 Models                                       | dev-graph-config.md     | 52cce4c8 |
 | REQ-d00213 | Version Check and Update Notification                         | dev-cli.md              | cedd398b |
 | REQ-d00214 | MCP Server Install/Uninstall CLI Commands                     | dev-mcp-tools.md        | 5f372b62 |
 | REQ-d00215 | Keyword Extraction Annotator                                  | dev-graph-core.md       | db477d99 |
@@ -161,7 +161,7 @@
 | REQ-d00248 | Fix Command Idempotency                                       | prd-core.md             | 2b421222 |
 | REQ-d00249 | Configured test runner execution                              | dev-cli.md              | 784f8350 |
 | REQ-d00250 | Section Header Depth Canonicalization                         | dev-graph-core.md       | 48fc2f11 |
-| REQ-d00251 | Component Style Vocabulary and Assertion Separator            | dev-graph-config.md     | e4e4a5fc |
+| REQ-d00251 | Component Style Vocabulary and Assertion Separator            | dev-graph-config.md     | c7541313 |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 8e07589c |
 | REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | f454041e |
 | REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | 22faeb40 |
@@ -178,6 +178,8 @@
 | REQ-d00266 | Mechanical Style Checks                                       | dev-cli.md              | 084c17a0 |
 | REQ-d00267 | Viewer Pending-Work Indicator Truth                           | prd-features.md         | c1be85e3 |
 | REQ-d00268 | Report Malformed Assertion Labels                             | dev-graph-core.md       | cb7e96dd |
+| REQ-d00269 | Cross-Repository Coverage Credit                              | dev-graph-federation.md | 8cac4dcd |
+| REQ-d00270 | Single-Authority Identifier Grammar Derivation                | dev-graph-config.md     | d3233556 |
 
 ## User Journeys
 

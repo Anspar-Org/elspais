@@ -61,7 +61,7 @@ namespace = "REQ"
 canonical = "{{namespace}}-{{level.letter}}-{{component}}"
 
 [id-patterns.component]
-style = "kebab-case"
+style = "{style}"
 
 [id-patterns.assertions]
 label_style = "uppercase"
@@ -98,6 +98,7 @@ def _make_project(
     multi: str,
     ref: str,
     journey_ref: str | None = None,
+    style: str = "kebab-case",
 ) -> Path:
     """Build a minimal on-disk project: one REQ with assertions A/B/C and
     one test file with a single ``# Verifies: <ref>`` comment.
@@ -124,7 +125,7 @@ def _make_project(
         )
 
     (project / ".elspais.toml").write_text(
-        _CONFIG_TEMPLATE.format(sep=sep, multi=multi),
+        _CONFIG_TEMPLATE.format(sep=sep, multi=multi, style=style),
         encoding="utf-8",
     )
     return project
@@ -284,7 +285,7 @@ def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
 # Off-config separator residue in CODE/TEST references
 #
 # A reference that cites an assertion with a separator the repo is NOT
-# configured for (e.g. "REQ-o-storage-rules/Z" under separator "-") must be
+# configured for (e.g. "REQ-o-storageRules/Z" under separator "-") must be
 # treated as ONE malformed reference token in every context that accepts
 # references -- spec metadata lines, code comments, test comments -- so it
 # fails resolution and surfaces as a broken reference naming the failure
@@ -307,7 +308,7 @@ namespace = "REQ"
 canonical = "{{namespace}}-{{level.letter}}-{{component}}"
 
 [id-patterns.component]
-style = "kebab-case"
+style = "camelCase"
 
 [id-patterns.assertions]
 label_style = "uppercase"
@@ -332,7 +333,7 @@ directories = ["src"]
 """
 
 _RESIDUE_SPEC_TEMPLATE = """\
-# REQ-o-storage-rules: Storage rules
+# REQ-o-storageRules: Storage rules
 
 The system stores things.
 
@@ -342,9 +343,9 @@ A. The system SHALL store.
 
 B. The system SHALL retain.
 
-*End* *REQ-o-storage-rules*
+*End* *REQ-o-storageRules*
 
-# REQ-d-storage-impl: Storage implementation
+# REQ-d-storageImpl: Storage implementation
 
 **Implements**: {spec_ref}
 
@@ -354,7 +355,7 @@ The storage detail.
 
 A. The system SHALL flush.
 
-*End* *REQ-d-storage-impl*
+*End* *REQ-d-storageImpl*
 """
 
 
@@ -415,14 +416,14 @@ def test_code_comment_off_config_residue_is_a_broken_reference(tmp_path):
     project = _make_residue_project(
         tmp_path,
         sep="-",
-        code_ref="REQ-o-storage-rules/Z",
-        spec_ref="REQ-o-storage-rules-A",
+        code_ref="REQ-o-storageRules/Z",
+        spec_ref="REQ-o-storageRules-A",
     )
     graph = _build_residue_graph(project)
 
     code_id = _code_node_id(graph)
-    req = graph.find_by_id("REQ-o-storage-rules")
-    assert req is not None, "REQ-o-storage-rules should be in the graph"
+    req = graph.find_by_id("REQ-o-storageRules")
+    assert req is not None, "REQ-o-storageRules should be in the graph"
 
     code_edges = [
         edge
@@ -440,7 +441,7 @@ def test_code_comment_off_config_residue_is_a_broken_reference(tmp_path):
         len(code_broken) == 1
     ), f"Expected exactly one broken reference from the code node, got {code_broken}"
     br = code_broken[0]
-    assert br.target_id == "REQ-o-storage-rules/Z", (
+    assert br.target_id == "REQ-o-storageRules/Z", (
         "The broken reference must carry the whole malformed token, not the "
         f"truncated requirement prefix; got {br.target_id!r}"
     )
@@ -456,14 +457,14 @@ def test_spec_and_code_contexts_agree_on_the_same_malformed_reference(tmp_path):
     """The owning repository's reference-acceptance rules apply identically in
     every context that accepts references: the same string in a spec metadata
     line and in a code comment must break the same way."""
-    ref = "REQ-o-storage-rules/Z"
+    ref = "REQ-o-storageRules/Z"
     project = _make_residue_project(tmp_path, sep="-", code_ref=ref, spec_ref=ref)
     graph = _build_residue_graph(project)
 
     code_id = _code_node_id(graph)
 
     spec_targets = {
-        br.target_id for br in graph.broken_references() if br.source_id == "REQ-d-storage-impl"
+        br.target_id for br in graph.broken_references() if br.source_id == "REQ-d-storageImpl"
     }
     code_targets = {br.target_id for br in graph.broken_references() if br.source_id == code_id}
 
@@ -484,7 +485,7 @@ def test_test_comment_off_config_residue_is_a_broken_reference(tmp_path):
     truncate into a blanket VERIFIES edge."""
     from elspais.graph.factory import build_graph
 
-    project = _make_project(tmp_path, "-", "+", "REQ-p-widget/Z")
+    project = _make_project(tmp_path, "-", "+", "REQ-p-widget/Z", style="camelCase")
     graph = build_graph(
         config_path=project / ".elspais.toml",
         repo_root=project,
@@ -523,14 +524,14 @@ def test_slash_configured_repo_still_parses_slash_suffix(tmp_path):
     project = _make_residue_project(
         tmp_path,
         sep="/",
-        code_ref="REQ-o-storage-rules/A",
-        spec_ref="REQ-o-storage-rules/A",
+        code_ref="REQ-o-storageRules/A",
+        spec_ref="REQ-o-storageRules/A",
     )
     graph = _build_residue_graph(project)
 
     code_id = _code_node_id(graph)
-    req = graph.find_by_id("REQ-o-storage-rules")
-    assert req is not None, "REQ-o-storage-rules should be in the graph"
+    req = graph.find_by_id("REQ-o-storageRules")
+    assert req is not None, "REQ-o-storageRules should be in the graph"
 
     targets: list[str] = []
     for edge in req.iter_outgoing_edges():
@@ -552,14 +553,14 @@ def test_same_separator_multi_assertion_ref_still_resolves(tmp_path):
     project = _make_residue_project(
         tmp_path,
         sep="-",
-        code_ref="REQ-o-storage-rules-A+B",
-        spec_ref="REQ-o-storage-rules-A",
+        code_ref="REQ-o-storageRules-A+B",
+        spec_ref="REQ-o-storageRules-A",
     )
     graph = _build_residue_graph(project)
 
     code_id = _code_node_id(graph)
-    req = graph.find_by_id("REQ-o-storage-rules")
-    assert req is not None, "REQ-o-storage-rules should be in the graph"
+    req = graph.find_by_id("REQ-o-storageRules")
+    assert req is not None, "REQ-o-storageRules should be in the graph"
 
     targets: list[str] = []
     for edge in req.iter_outgoing_edges():
@@ -580,14 +581,14 @@ def test_bare_requirement_reference_stays_a_blanket_edge(tmp_path):
     project = _make_residue_project(
         tmp_path,
         sep="-",
-        code_ref="REQ-o-storage-rules",
-        spec_ref="REQ-o-storage-rules",
+        code_ref="REQ-o-storageRules",
+        spec_ref="REQ-o-storageRules",
     )
     graph = _build_residue_graph(project)
 
     code_id = _code_node_id(graph)
-    req = graph.find_by_id("REQ-o-storage-rules")
-    assert req is not None, "REQ-o-storage-rules should be in the graph"
+    req = graph.find_by_id("REQ-o-storageRules")
+    assert req is not None, "REQ-o-storageRules should be in the graph"
 
     blanket = [
         edge

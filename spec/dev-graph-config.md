@@ -249,6 +249,7 @@ I is what makes F and H decidable. Both are stated over *a character*, which lea
 
 ### Changelog
 
+- 2026-08-12 | c7541313 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | e4e4a5fc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-12 | 0ba5e8b6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | 534a01d7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -261,7 +262,7 @@ I is what makes F and H decidable. Both are stated over *a character*, which lea
 - 2026-05-11 | e04a4e37 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize term forms, update hash
 - 2026-05-11 | - | - | Developer (<dev@example.com>) | Initial authoring: introduce explicit case-style vocabulary and configurable assertion separator.
 
-*End* *Component Style Vocabulary and Assertion Separator* | **Hash**: e4e4a5fc
+*End* *Component Style Vocabulary and Assertion Separator* | **Hash**: c7541313
 ---
 
 ## REQ-d00270: Single-Authority Identifier Grammar Derivation
