@@ -225,7 +225,7 @@ E. `AssertionConfig` SHALL include a `separator` field (str, default `"-"`) used
 
 F. The *Assertion* separator SHALL NOT be a character that can legally appear in a component or in an *Assertion* label. A configuration that violates this SHALL be rejected at validation time, naming the offending character, the style that makes it legal, and a non-overlapping character to use instead.
 
-G. [Removed - superseded by REQ-d00268, which extends single-authority derivation from the component sub-pattern to the whole identifier grammar]
+G. [Removed - superseded by REQ-d00270, which extends single-authority derivation from the component sub-pattern to the whole identifier grammar]
 
 H. An *Assertion* label series SHALL be one of two ordered alphabets: `uppercase`, running A to Z; and `numeric`, running 0 upward. Each SHALL have a first label, a successor for every label but its last, and a last label beyond which the series does not extend.
 
@@ -233,9 +233,9 @@ I. An *Assertion* label series configured as `alphanumeric` SHALL run 0 to 9 and
 
 J. The multi-*Assertion* separator SHALL NOT be a character that can legally appear in an *Assertion* label.
 
-I. The *Assertion* separator and the multi-*Assertion* separator SHALL each be exactly one character. A configuration declaring either as empty, or as longer than one character, SHALL be rejected at validation time.
+K. The *Assertion* separator and the multi-*Assertion* separator SHALL each be exactly one character. A configuration declaring either as empty, or as longer than one character, SHALL be rejected at validation time.
 
-J. A repository's identifier grammar SHALL be derived from that repository's own identifier configuration, so that a process holding several repositories at once applies each repository's grammar only to that repository.
+L. A repository's identifier grammar SHALL be derived from that repository's own identifier configuration, so that a process holding several repositories at once applies each repository's grammar only to that repository.
 
 ### Rationale
 
@@ -250,6 +250,7 @@ I is what makes F and H decidable. Both are stated over *a character*, which lea
 ### Changelog
 
 - 2026-08-10 | e4e4a5fc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-12 | 0ba5e8b6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | 534a01d7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | 3632edb9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: separators are exactly one character (K)
@@ -263,11 +264,11 @@ I is what makes F and H decidable. Both are stated over *a character*, which lea
 *End* *Component Style Vocabulary and Assertion Separator* | **Hash**: e4e4a5fc
 ---
 
-## REQ-d00268: Single-Authority Identifier Grammar Derivation
+## REQ-d00270: Single-Authority Identifier Grammar Derivation
 
 **Level**: dev | **Status**: Superseded | **Implements**: REQ-p00002
 
-This requirement stated an implementation structure rather than a property of the tool. Deriving the identifier grammar in one place is an engineering rule, and it lives with the other such rules rather than as an obligation the tool can be measured against. The one property it carried that is observable — that each repository's grammar applies only to that repository's identifiers — is REQ-d00251-J. Which strings a configuration admits, and what becomes of a string spelled any other way, are REQ-d00212-G and REQ-d00212-R.
+This requirement stated an implementation structure rather than a property of the tool. Deriving the identifier grammar in one place is an engineering rule, and it lives with the other such rules rather than as an obligation the tool can be measured against. The one property it carried that is observable — that each repository's grammar applies only to that repository's identifiers — is REQ-d00251-L. Which strings a configuration admits, and what becomes of a string spelled any other way, are REQ-d00212-G and REQ-d00212-R.
 
 ### Assertions
 

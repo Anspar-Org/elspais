@@ -73,7 +73,7 @@ class GrammarFactory:
         # so the grammar this parser recognises and the identifiers the resolver
         # accepts cannot drift apart.  A federated fragment alternates each
         # member's own derivation rather than merging configurations
-        # (REQ-d00251-J).
+        # (REQ-d00251-L).
         g = self._resolver.grammar()
 
         tokens: dict[str, str] = {

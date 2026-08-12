@@ -486,7 +486,7 @@ class TestAmbiguityRejection:
 
     @pytest.mark.parametrize("label_style,multi_separator", COLLIDING_MULTI_SEPARATORS)
     def test_multi_separator_inside_label_alphabet_rejected(self, label_style, multi_separator):
-        # Verifies: REQ-d00251-H
+        # Verifies: REQ-d00251-J
         payload = _elspais_config_payload(
             style="numeric", label_style=label_style, multi_separator=multi_separator
         )

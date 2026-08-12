@@ -65,7 +65,7 @@ class TestLegalCharDerivation:
         assert _legal_component_chars("regex", "[0-9]{5,}") == set("0123456789")
 
     def test_label_alphabet_covers_multi_character_labels(self):
-        # Verifies: REQ-d00251-H
+        # Verifies: REQ-d00251-J
         # "10" is a legal numeric_1based label, so "0" is a label character.
         assert "0" in _legal_chars(r"[1-9][0-9]?")
 
@@ -96,7 +96,7 @@ class TestSeparatorRejectedFromWholeAlphabet:
         assert "separator" in msg and f'"{separator}"' in msg
 
     def test_multi_separator_legal_in_a_two_digit_label_rejected(self):
-        # Verifies: REQ-d00251-H
+        # Verifies: REQ-d00251-J
         with pytest.raises(ValidationError) as excinfo:
             ElspaisConfig.model_validate(
                 _payload(
@@ -144,7 +144,7 @@ class TestSeparatorLength:
         ],
     )
     def test_multi_character_separator_with_a_taken_character_rejected(self, style, separator):
-        # Verifies: REQ-d00251-I
+        # Verifies: REQ-d00251-K
         with pytest.raises(ValidationError) as excinfo:
             ElspaisConfig.model_validate(
                 _payload(
@@ -158,7 +158,7 @@ class TestSeparatorLength:
     def test_multi_character_separator_of_clean_characters_rejected(self, separator):
         """Length is decided on its own terms: none of these characters can
         appear in a component or a label, and the separator is still refused."""
-        # Verifies: REQ-d00251-I
+        # Verifies: REQ-d00251-K
         with pytest.raises(ValidationError) as excinfo:
             ElspaisConfig.model_validate(
                 _payload(
@@ -169,7 +169,7 @@ class TestSeparatorLength:
         assert "at most 1 character" in str(excinfo.value)
 
     def test_multi_character_multi_separator_of_clean_characters_rejected(self):
-        # Verifies: REQ-d00251-I
+        # Verifies: REQ-d00251-K
         with pytest.raises(ValidationError) as excinfo:
             ElspaisConfig.model_validate(
                 _payload(assertions={"label_style": "uppercase", "multi_separator": "++"})
@@ -177,14 +177,14 @@ class TestSeparatorLength:
         assert "at most 1 character" in str(excinfo.value)
 
     def test_empty_separator_rejected(self):
-        # Verifies: REQ-d00251-I
+        # Verifies: REQ-d00251-K
         with pytest.raises(ValidationError) as excinfo:
             ElspaisConfig.model_validate(_payload(assertions={"separator": ""}))
         assert "separator" in str(excinfo.value)
 
     @pytest.mark.parametrize("multi_separator", ["", "AB", "1A"])
     def test_empty_or_colliding_multi_separator_rejected(self, multi_separator):
-        # Verifies: REQ-d00251-H, REQ-d00251-I
+        # Verifies: REQ-d00251-J, REQ-d00251-K
         with pytest.raises(ValidationError) as excinfo:
             ElspaisConfig.model_validate(
                 _payload(

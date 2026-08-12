@@ -45,13 +45,13 @@ A. The character joining *Assertion* labels within one reference SHALL be config
 
 B. The multi-*Assertion* separator SHALL default to `+`.
 
-C. [Removed - named a list of accepted alternate separators that no longer exists. The multi-*Assertion* separator is constrained against the characters an *Assertion* label can contain, per REQ-d00251-H.]
+C. [Removed - named a list of accepted alternate separators that no longer exists. The multi-*Assertion* separator is constrained against the characters an *Assertion* label can contain, per REQ-d00251-J.]
 
 D. A multi-*Assertion* reference SHALL expand to the same set of individual references wherever it is written.
 
 E. [Removed - restated the derivation of a pattern rather than an obligation the tool must meet. What a multi-*Assertion* reference expands to is D; which strings the grammar admits is REQ-d00212-G.]
 
-F. [Removed - an empty separator is not a configurable state. A separator is exactly one character, per REQ-d00251-I, so there is no value of it that disables expansion.]
+F. [Removed - an empty separator is not a configurable state. A separator is exactly one character, per REQ-d00251-K, so there is no value of it that disables expansion.]
 
 G. A reference containing no multi-*Assertion* separator character SHALL pass through unchanged.
 
@@ -61,6 +61,7 @@ The previous implementation hardcoded expansion in RequirementParser only, using
 
 ### Changelog
 
+- 2026-08-12 | b1812806 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | c40a462e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | 67ee3df9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: A and B name the configured separator, D states expansion uniformity; retire E (superseded) and F (empty is not a state)
@@ -70,7 +71,7 @@ The previous implementation hardcoded expansion in RequirementParser only, using
 - 2026-05-11 | 313fe52b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 313fe52b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Multi-Assertion Reference Expansion* | **Hash**: c40a462e
+*End* *Multi-Assertion Reference Expansion* | **Hash**: b1812806
 ---
 
 ## REQ-d00082: Unified Reference Configuration

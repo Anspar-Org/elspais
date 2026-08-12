@@ -1,4 +1,4 @@
-# Verifies: REQ-p00014-T, REQ-d00251-J
+# Verifies: REQ-p00014-T, REQ-d00251-L
 """One authority derives a repository's identifier grammar.
 
 Several surfaces have to recognise an identifier: the resolver that parses

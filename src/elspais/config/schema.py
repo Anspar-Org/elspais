@@ -84,12 +84,12 @@ class ComponentConfig(_StrictModel):
         return value
 
 
-# Implements: REQ-d00251-E, REQ-d00251-I
+# Implements: REQ-d00251-E, REQ-d00251-K
 class AssertionConfig(_StrictModel):
     label_style: str = "uppercase"
     max_count: int = 26
     zero_pad: bool = False
-    # A boundary is a character (REQ-d00251-I). The length is constrained on
+    # A boundary is a character (REQ-d00251-K). The length is constrained on
     # the field rather than in the model validator so the exported JSON schema
     # carries it too, and an editor rejects what the runtime would reject.
     separator: str = Field(default="-", min_length=1, max_length=1)
@@ -207,7 +207,7 @@ _LABEL_STYLE_PATTERNS = {
 }
 
 
-# Implements: REQ-d00212-G, REQ-d00251-C, REQ-d00251-F, REQ-d00251-H, REQ-d00251-I
+# Implements: REQ-d00212-G, REQ-d00251-C, REQ-d00251-F, REQ-d00251-J, REQ-d00251-K
 class IdPatternsConfig(_StrictModel):
     canonical: str = "{namespace}-{level.letter}{component}"
     aliases: dict[str, str] = Field(default_factory=lambda: {"short": "{level.letter}{component}"})
@@ -223,7 +223,7 @@ class IdPatternsConfig(_StrictModel):
                 'component.style = "regex" requires a non-empty `pattern` field.\n'
                 'Example: pattern = "[A-Z][a-zA-Z0-9]+"'
             )
-        # REQ-d00251-F+H: a separator drawn from the characters the part
+        # REQ-d00251-F+J: a separator drawn from the characters the part
         # before it may itself contain is absorbed by that part, taking the
         # label with it -- the reference then resolves to a different
         # requirement instead of failing.
@@ -251,7 +251,7 @@ class IdPatternsConfig(_StrictModel):
             return "/"
 
         # Both separators are exactly one character by field constraint
-        # (REQ-d00251-I), so membership answers the overlap question directly.
+        # (REQ-d00251-K), so membership answers the overlap question directly.
         sep_taken = component_chars | label_chars
         separator = self.assertions.separator
         if separator in sep_taken:

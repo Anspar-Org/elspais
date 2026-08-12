@@ -87,7 +87,7 @@ class AssertionFormat:
     separator: str = "-"
 
 
-# Implements: REQ-d00251-J
+# Implements: REQ-d00251-L
 @dataclass(frozen=True)
 class IdGrammar:
     """The regex fragments of one repository's identifier grammar.
@@ -409,7 +409,7 @@ class IdResolver:
             return r"[0-9]{2}" if af.zero_pad else r"[1-9][0-9]?"
         return r"[A-Z]"
 
-    # Implements: REQ-d00251-J
+    # Implements: REQ-d00251-L
     def grammar(self, separator: str | None = None) -> IdGrammar:
         """The regex fragments of this repository's identifier grammar.
 
@@ -984,7 +984,7 @@ class IdResolver:
         return instance_id.split(INSTANCE_SEPARATOR, 1)[0]
 
 
-# Implements: REQ-d00269-C, REQ-d00251-J
+# Implements: REQ-d00269-C, REQ-d00251-L
 class FederatedIdReader:
     """Reads the identifiers of every repository in one federation.
 
