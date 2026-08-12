@@ -227,9 +227,9 @@ F. The *Assertion* separator SHALL NOT be a character that can legally appear in
 
 G. [Removed - superseded by REQ-d00270, which extends single-authority derivation from the component sub-pattern to the whole identifier grammar]
 
-H. An *Assertion* label series SHALL be one of two ordered alphabets: `uppercase`, running A to Z; and `numeric`, running 0 upward. Each SHALL have a first label, a successor for every label but its last, and a last label beyond which the series does not extend.
+H. An *Assertion* label series SHALL be one of the alphabets a repository may configure, each having a first label, a successor for every label but its last, and a last label beyond which the series does not extend.
 
-I. An *Assertion* label series configured as `alphanumeric` SHALL run 0 to 9 and then A to Z, giving thirty-six labels in that order.
+I. [Removed - enumerated one alphabet's order here. Which alphabets a repository may configure is a matter for the configuration surface; what any of them must be is H, and a series ends at its alphabet's last label rather than at a separately configured count.]
 
 J. The multi-*Assertion* separator SHALL NOT be a character that can legally appear in an *Assertion* label.
 
@@ -245,10 +245,14 @@ Restricting the rule to the punctuation a style happens to use internally would 
 
 Uppercase *Assertion* labels do make a lowercase component mechanically unambiguous, and that exception was previously how an overlapping separator was tolerated. It is a subtlety every reader has to re-derive, and it silently changes which requirement a mis-cased reference names, so the tolerance is not worth its cost.
 
-I is what makes F and H decidable. Both are stated over *a character*, which leaves a separator of some other length outside the rule rather than inside it: an empty separator marks no boundary at all, and a longer one is absorbed character by character exactly as a single legal character would be, so asking whether the whole string is legal answers a different question than the one F and H pose. Fixing the length at one keeps every boundary a single findable character and leaves F and H to say which character it may be.
+K is what makes F and J decidable. Both are stated over *a character*, which leaves a separator of some other length outside the rule rather than inside it: an empty separator marks no boundary at all, and a longer one is absorbed character by character exactly as a single legal character would be, so asking whether the whole string is legal answers a different question than the one F and J pose. Fixing the length at one keeps every boundary a single findable character and leaves F and J to say which character it may be.
+
+The alphabets themselves are configuration rather than obligation: which ones a repository may choose belongs to the configuration surface, while H fixes what any of them must be — ordered, with a definite beginning and end, so that a label can be placed in it and the label after it named. That is what lets a label missing from the middle of a series be evidence of loss rather than of removal, and it is what ends a series without a separate count: a requirement runs out of labels when its alphabet does.
 
 ### Changelog
 
+- 2026-08-12 | d6d44bc9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-12 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: H states what any label alphabet must be, not which ones exist; retire I
 - 2026-08-12 | c7541313 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | e4e4a5fc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-12 | 0ba5e8b6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -262,7 +266,7 @@ I is what makes F and H decidable. Both are stated over *a character*, which lea
 - 2026-05-11 | e04a4e37 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize term forms, update hash
 - 2026-05-11 | - | - | Developer (<dev@example.com>) | Initial authoring: introduce explicit case-style vocabulary and configurable assertion separator.
 
-*End* *Component Style Vocabulary and Assertion Separator* | **Hash**: c7541313
+*End* *Component Style Vocabulary and Assertion Separator* | **Hash**: d6d44bc9
 ---
 
 ## REQ-d00270: Single-Authority Identifier Grammar Derivation
