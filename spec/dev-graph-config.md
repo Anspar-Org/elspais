@@ -210,11 +210,11 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 *End* *Config Schema v3 Models* | **Hash**: da474c2a
 ---
 
-## REQ-d00251: Component Style Vocabulary and Assertion Separator
+## REQ-d00251: A Repository's Identifier Grammar
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-The `[id-patterns.component].style` configuration SHALL use an explicit case-convention vocabulary rather than a small set of "custom pattern with hidden default" modes. The `[id-patterns.assertions]` section SHALL gain a configurable separator that decouples the component-to-*Assertion* boundary from any character used inside component names, enabling kebab-case and snake_case component styles to work cleanly with numeric *Assertion* labels.
+The `[id-patterns.component].style` configuration SHALL use an explicit case-convention vocabulary rather than a small set of "custom pattern with hidden default" modes. The `[id-patterns.assertions]` section SHALL gain a configurable separator that decouples the component-to-*Assertion* boundary from any character used inside component names, enabling kebab-case and snake_case component styles to work cleanly with numeric *Assertion* labels. The grammar these settings describe is one repository's own, and applies to that repository's identifiers alone.
 
 ### Assertions
 
@@ -271,7 +271,7 @@ The alphabets themselves are configuration rather than obligation: which ones a 
 - 2026-05-11 | e04a4e37 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize term forms, update hash
 - 2026-05-11 | - | - | Developer (<dev@example.com>) | Initial authoring: introduce explicit case-style vocabulary and configurable assertion separator.
 
-*End* *Component Style Vocabulary and Assertion Separator* | **Hash**: d6d44bc9
+*End* *A Repository's Identifier Grammar* | **Hash**: d6d44bc9
 ---
 
 ## REQ-d00270: Single-Authority Identifier Grammar Derivation

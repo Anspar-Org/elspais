@@ -161,7 +161,7 @@
 | REQ-d00248 | Fix Command Idempotency                                       | prd-core.md             | 2b421222 |
 | REQ-d00249 | Configured test runner execution                              | dev-cli.md              | 784f8350 |
 | REQ-d00250 | Section Header Depth Canonicalization                         | dev-graph-core.md       | 48fc2f11 |
-| REQ-d00251 | Component Style Vocabulary and Assertion Separator            | dev-graph-config.md     | d6d44bc9 |
+| REQ-d00251 | A Repository's Identifier Grammar                             | dev-graph-config.md     | d6d44bc9 |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 8e07589c |
 | REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | f454041e |
 | REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | 22faeb40 |
