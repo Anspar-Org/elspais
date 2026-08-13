@@ -998,6 +998,12 @@ def build_graph(
                     graph=graph,
                     config=config,
                     repo_root=repo_root,
+                    # The plan detected this repository's origin along with
+                    # every other member's. Leaving it off here made the
+                    # repository being worked in the one member that never
+                    # reported an origin, and so the one that never received
+                    # branch or divergence staleness.
+                    git_origin=plan[0].git_origin,
                 )
             ]
             for member in plan[1:]:

@@ -34,6 +34,7 @@ __all__ = [
     "FederationCycleError",
     "PlannedRepo",
     "declared_associates",
+    "repository_origin",
     "plan_federation",
     "plan_federation_or_error",
 ]
@@ -108,7 +109,7 @@ def _normalize_origin(url: str) -> str:
     return url.lower()
 
 
-def _git_origin(repo_root: Path) -> str | None:
+def repository_origin(repo_root: Path) -> str | None:
     """Return the normalized origin of the repository rooted at ``repo_root``.
 
     Answers only for a directory that *is* a repository root.  Git
@@ -134,7 +135,9 @@ def _git_origin(repo_root: Path) -> str | None:
         return result.stdout.strip() if result.returncode == 0 else None
 
     toplevel = _git("rev-parse", "--show-toplevel")
-    if not toplevel or Path(toplevel).resolve() != repo_root:
+    # Both sides resolved: a caller may name the directory any way that
+    # reaches it, and "." is not unequal to the path git prints for it.
+    if not toplevel or Path(toplevel).resolve() != Path(repo_root).resolve():
         return None
     origin = _git("remote", "get-url", "origin")
     return _normalize_origin(origin) if origin else None
@@ -191,7 +194,7 @@ def plan_federation(
 
     def _origin_of(path: Path) -> str | None:
         if path not in origins:
-            origins[path] = _git_origin(path) if path.is_dir() else None
+            origins[path] = repository_origin(path) if path.is_dir() else None
         return origins[path]
 
     def _declared_namespace(config: dict[str, Any] | None) -> str:

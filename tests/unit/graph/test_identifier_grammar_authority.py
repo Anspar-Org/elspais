@@ -22,6 +22,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from elspais.config.schema import ElspaisConfig
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.parsers.lark import GrammarFactory
 from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
@@ -41,12 +42,20 @@ def _config(
     component: dict | None = None,
     assertions: dict | None = None,
 ) -> dict:
-    """A minimal configuration dictionary for ``build_resolver``."""
-    return {
+    """A configuration dictionary the shipped schema accepts.
+
+    ``build_resolver`` takes a raw dictionary and never consults the config
+    schema, so a fixture built here could describe a repository no config
+    file can produce -- and pin behaviour no user can reach. Every fixture is
+    therefore validated the way ``load_config`` validates a file on disk,
+    before any resolver is built from it, so an unreachable one fails loudly
+    at collection instead of quietly pinning unreachable behaviour.
+    """
+    config = {
         "project": {"namespace": namespace},
         "levels": {
-            "prd": {"rank": 1, "letter": "p"},
-            "dev": {"rank": 2, "letter": "d"},
+            "prd": {"rank": 1, "letter": "p", "implements": ["prd"]},
+            "dev": {"rank": 2, "letter": "d", "implements": ["dev", "prd"]},
         },
         "id-patterns": {
             "canonical": canonical,
@@ -54,6 +63,8 @@ def _config(
             "assertions": assertions or {},
         },
     }
+    ElspaisConfig.model_validate(config)
+    return config
 
 
 KEBAB_SLASH = _config(
@@ -66,11 +77,6 @@ SNAKE_DASH = _config(
     canonical="{namespace}-{level.letter}-{component}",
     component={"style": "snake_case", "digits": 0, "leading_zeros": False},
     assertions={"separator": "-"},
-)
-
-KEBAB_DASH = _config(
-    canonical="{namespace}-{level.letter}-{component}",
-    component={"style": "kebab-case", "digits": 0, "leading_zeros": False},
 )
 
 
@@ -319,10 +325,7 @@ def test_claim_probe_refuses_what_the_resolver_rejects(
 #
 # The component is the exception. Under a case-style its case is its identity,
 # so a mis-cased component names a different component and must stay
-# unresolved. Note KEBAB_DASH is not exercised with a lowercase assertion
-# label: with a kebab-case component and "-" separating the labels, "-a" is
-# absorbed by the component, which is the separate ambiguity REQ-d00251-F
-# governs.
+# unresolved.
 
 NUMERIC = _config()
 
@@ -350,8 +353,8 @@ def _matcher_recognises(resolver: IdResolver, text: str) -> bool:
         (NUMERIC, "REQ-d00001-a+b", "REQ-d00001-A+B", True),  # multi-assertion
         (NUMERIC, "XXX-d00001-a", "XXX-d00001-a", False),  # foreign namespace
         # kebab-case component: the component's own case is load-bearing.
-        (KEBAB_DASH, "REQ-p-widget-A", "REQ-p-widget-A", True),
-        (KEBAB_DASH, "REQ-p-Widget-A", "REQ-p-Widget-A", False),
+        (KEBAB_SLASH, "REQ-p-widget/A", "REQ-p-widget/A", True),
+        (KEBAB_SLASH, "REQ-p-Widget/A", "REQ-p-Widget/A", False),
     ],
 )
 def test_normalize_ref_settles_case_the_grammar_does_not_own(
@@ -408,7 +411,7 @@ def test_matcher_and_resolver_agree_after_normalization(variant: str) -> None:
     [
         # A case-style component's case is its identity: this names a
         # component that does not exist, not "widget" spelled differently.
-        (KEBAB_DASH, "REQ-p-Widget-A"),
+        (KEBAB_SLASH, "REQ-p-Widget/A"),
         # Another repository's namespace: not this resolver's to rewrite.
         (NUMERIC, "XXX-d00001-a"),
     ],
@@ -546,8 +549,8 @@ def test_case_tolerance_of_a_label_ends_where_the_notation_runs_out() -> None:
         # kebab-case control: here the component's own character happens to
         # equal the template's, and the component must still be spelled with
         # it rather than left in the notation it was read in.
-        (KEBAB_DASH, "test_REQ_p_data_export_A", "REQ-p-data-export-A"),
-        (KEBAB_DASH, "test_REQ_p_widget", "REQ-p-widget"),
+        (KEBAB_SLASH, "test_REQ_p_data_export_A", "REQ-p-data-export/A"),
+        (KEBAB_SLASH, "test_REQ_p_widget", "REQ-p-widget"),
     ],
 )
 def test_a_component_style_folds_onto_the_templates_own_separators(
@@ -577,7 +580,7 @@ def test_a_component_style_folds_onto_the_templates_own_separators(
     [
         (SNAKE_DASH, "REQ_p_data_export_A", "REQ-p-data_export-A"),
         (SNAKE_DASH, "REQ-p-data_export-A", "REQ-p-data_export-A"),
-        (KEBAB_DASH, "REQ_p_data_export_A", "REQ-p-data-export-A"),
+        (KEBAB_SLASH, "REQ_p_data_export_A", "REQ-p-data-export/A"),
     ],
 )
 def test_normalize_ref_folds_a_case_style_component(config: dict, raw: str, expected: str) -> None:

@@ -181,7 +181,12 @@ class RepoEntry:
         graph: The repo's TraceGraph, or None if repo unavailable.
         config: The repo's config dict, or None if repo unavailable.
         repo_root: Expected local filesystem path.
-        git_origin: Remote URL for clone assistance.
+        git_origin: The repository's origin, reduced to a comparable
+            identity -- scheme, credentials and a trailing ".git" removed,
+            so the same repository addressed two ways compares equal. It is
+            what says two members are one repository, and what the surfaces
+            report; it is not a URL to clone from, and the remote a
+            declaration may carry is a separate thing.
         error: Human-readable error message if repo is in error state.
     """
 
@@ -548,12 +553,19 @@ class FederatedGraph:
         Returns:
             A FederatedGraph wrapping a single repo.
         """
+        from elspais.graph.federation_plan import repository_origin
+
         host_name = config["project"]["name"]
         entry = RepoEntry(
             name=host_name,
             graph=graph,
             config=config,
             repo_root=repo_root,
+            # Detected the same way a federated member's is. Without it a
+            # project with no associates would be the one kind of project
+            # whose own repository never reports an origin, and so never
+            # receives the staleness reporting that depends on having one.
+            git_origin=repository_origin(repo_root),
         )
         return cls([entry], root_repo=host_name)
 

@@ -20,6 +20,7 @@ import re
 
 import pytest
 
+from elspais.config.schema import ElspaisConfig
 from elspais.graph.parsers import patterns
 from elspais.utilities.patterns import build_resolver
 
@@ -267,12 +268,20 @@ def _config(
     component: dict | None = None,
     assertions: dict | None = None,
 ) -> dict:
-    """A minimal configuration dictionary for ``build_resolver``."""
-    return {
+    """A configuration dictionary the shipped schema accepts.
+
+    ``build_resolver`` takes a raw dictionary and never consults the config
+    schema, so a fixture built here could describe a repository no config
+    file can produce -- and pin behaviour no user can reach. Every fixture is
+    therefore validated the way ``load_config`` validates a file on disk,
+    before any resolver is built from it, so an unreachable one fails loudly
+    at construction instead of quietly pinning unreachable behaviour.
+    """
+    config = {
         "project": {"namespace": namespace},
         "levels": {
-            "prd": {"rank": 1, "letter": "p"},
-            "dev": {"rank": 2, "letter": "d"},
+            "prd": {"rank": 1, "letter": "p", "implements": ["prd"]},
+            "dev": {"rank": 2, "letter": "d", "implements": ["dev", "prd"]},
         },
         "id-patterns": {
             "canonical": canonical,
@@ -280,6 +289,8 @@ def _config(
             "assertions": assertions or {},
         },
     }
+    ElspaisConfig.model_validate(config)
+    return config
 
 
 _FDA = _config(
@@ -350,35 +361,29 @@ def test_multi_assertion_regex_is_case_insensitive_for_a_numeric_component() -> 
 def test_multi_assertion_regex_keeps_a_case_style_component_case_sensitive() -> None:
     """A case-style component's case is what identifies it, so it is honoured.
 
-    A ``kebab-case`` component is lowercase by definition; were it read
-    case-insensitively it would swallow the uppercase assertion label that
-    follows it and the reference would lose every label after the first.
+    Recognition is otherwise deliberately case-tolerant, because the parts a
+    mis-cased reference gets wrong -- namespace, level code, assertion label
+    -- are ones normalization can settle. A ``kebab-case`` component is not
+    such a part: it is lowercase by definition, so its case is its identity
+    and no rewriting can recover the intended name. Were the component read
+    case-insensitively the matcher would recognise ``REQ-p-Widget`` as an
+    identifier of this repository, and a reference to a component that does
+    not exist would be reported as a local broken reference instead of being
+    left to the repository whose grammar actually claims it.
     """
     pattern = build_resolver(
         _config(
             canonical="{namespace}-{level.letter}-{component}",
             component={"style": "kebab-case", "digits": 0, "leading_zeros": False},
+            # A kebab-case component absorbs "-", so the labels are marked
+            # out by a character the component cannot contain.
+            assertions={"separator": "/"},
         )
     ).multi_assertion_reference_regex()
 
-    m = pattern.search("REQ-p-widget-A+C")
+    m = pattern.search("REQ-p-widget/A+C")
     assert m is not None
-    assert m.group(0) == "REQ-p-widget-A+C"
+    assert m.group(0) == "REQ-p-widget/A+C"
     # An uppercase component is not a kebab-case component.
     assert pattern.fullmatch("REQ-p-Widget") is None
-
-
-@pytest.mark.parametrize("empty_sep", [None, ""])
-def test_multi_assertion_regex_defaults_empty_separator_to_plus(empty_sep) -> None:
-    """An empty multi-separator falls back to "+" rather than dissolving.
-
-    Without a separator between them, two labels run together into one
-    token and a reference naming several assertions can no longer be told
-    from a reference naming one.
-    """
-    pattern = build_resolver(
-        _config(assertions={"multi_separator": empty_sep})
-    ).multi_assertion_reference_regex()
-    m = pattern.search("REQ-d00001-A+B")
-    assert m is not None
-    assert m.group(0) == "REQ-d00001-A+B"
+    assert pattern.fullmatch("REQ-p-Widget/A") is None

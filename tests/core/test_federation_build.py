@@ -757,3 +757,71 @@ class TestCoverageAnnotatedInEveryBuildShape:
         assert (alone.direct, alone.indirect) == (joined.direct, joined.indirect)
         assert alone.direct_pct_by_label == joined.direct_pct_by_label
         assert alone.direct > 0.0, "the lone build carries no coverage to compare"
+
+
+class TestRootRepoReportsItsOrigin:
+    """Validates REQ-d00206-A: every repo from iter_repos() reports its origin.
+
+    The reporting surfaces read `git_origin` off whatever `iter_repos()`
+    yields, so a member that never carries one can never be reported with
+    one. These tests go through `build_graph` over real git-backed repos
+    rather than constructing a `RepoEntry` with an origin handed to it,
+    because the repository being worked in -- the one entry no test built
+    by hand -- was the one that went without.
+    """
+
+    # Verifies: REQ-d00206-A
+    def test_REQ_d00206_A_federated_host_reports_its_origin(self, tmp_path: Path) -> None:
+        """The host entry carries an origin, not only its associates."""
+        make_repo(tmp_path, "lib", origin="https://example.com/lib.git")
+        host = make_repo(
+            tmp_path,
+            "app",
+            associates={"lib": "../lib"},
+            origin="https://example.com/app.git",
+        )
+
+        fed = build_graph(repo_root=host, scan_code=False, scan_tests=False)
+        entries = {e.name: e for e in fed.iter_repos()}
+        assert set(entries) == {"app", "lib"}
+
+        # The planner may normalize the URL it detects, so what is asserted
+        # is that an origin was detected at all and that it names this repo.
+        assert entries["app"].git_origin is not None, (
+            "the host repository reported no origin, so no surface can report one for it"
+        )
+        assert "example.com/app" in entries["app"].git_origin
+        assert entries["lib"].git_origin is not None
+        assert "example.com/lib" in entries["lib"].git_origin
+
+    # Verifies: REQ-d00206-A
+    def test_REQ_d00206_A_lone_repository_reports_its_origin(self, tmp_path: Path) -> None:
+        """A project declaring no associates still reports its own origin."""
+        solo = make_repo(tmp_path, "solo", origin="https://example.com/solo.git")
+
+        fed = build_graph(repo_root=solo, scan_code=False, scan_tests=False)
+        entries = list(fed.iter_repos())
+
+        assert [e.name for e in entries] == ["solo"]
+        assert entries[0].git_origin is not None, (
+            "a project with no associates reported no origin for its own repository"
+        )
+        assert "example.com/solo" in entries[0].git_origin
+
+    # Verifies: REQ-d00206-A
+    def test_REQ_d00206_A_repository_without_a_remote_reports_none(self, tmp_path: Path) -> None:
+        """No remote configured stays distinguishable from an origin.
+
+        Absence is the answer for a repository that has no remote; anything
+        invented in its place would be reported as a real origin and would
+        draw staleness reporting against a remote that does not exist.
+        """
+        host = make_repo(tmp_path, "nohost", associates={"norem": "../norem"})
+        make_repo(tmp_path, "norem")
+
+        fed = build_graph(repo_root=host, scan_code=False, scan_tests=False)
+        entries = {e.name: e for e in fed.iter_repos()}
+
+        assert set(entries) == {"nohost", "norem"}
+        assert entries["nohost"].git_origin is None
+        assert entries["norem"].git_origin is None
