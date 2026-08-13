@@ -731,7 +731,6 @@ async def api_refines_coverage(request: Request) -> JSONResponse:
 
 async def api_tree_data(request: Request) -> JSONResponse:
     """GET /api/tree-data - Build tree data for nav panel."""
-    import re
 
     from elspais.html.generator import compute_coverage_tiers
     from elspais.view_model import local_namespace_from_config
@@ -797,11 +796,6 @@ async def api_tree_data(request: Request) -> JSONResponse:
                     if nid:
                         unsaved_ids.add(nid)
 
-    # "CORE" is the legacy sentinel for "local repo" set by annotators.py; the
-    # JSON we emit uses the actual local namespace string instead so JS clients
-    # can compare `repo_prefix` against the configured namespace.
-    _LOCAL_SENTINEL = "CORE"
-
     def _repo_namespace(node) -> str | None:
         """Resolve the node's owning-repo namespace via the federated graph.
         Returns None if the graph isn't federated or the lookup fails. Catches
@@ -818,44 +812,29 @@ async def api_tree_data(request: Request) -> JSONResponse:
         return ns or None
 
     def _is_associated(node) -> bool:
+        # Which repository holds a node is a question the federation
+        # answers. Guessing it from the shape of an identifier would dress
+        # a heuristic as an answer, and an identifier's shape is the
+        # repository's to configure, not this surface's to assume.
         ns = _repo_namespace(node)
         if ns is not None:
             return ns != local_ns
-        if re.match(r"^REQ-[A-Z]{2,4}-[a-z]", node.id):
-            return True
-        rp = node.get_metric("repo_prefix", "")
-        if rp and rp != _LOCAL_SENTINEL and rp != local_ns:
-            return True
         _fn = node.file_node()
         if _fn and _fn.get_field("repo"):
             return True
         return bool(node.get_field("associated", False))
 
     def _get_repo_prefix(node) -> str:
-        # 1. Federation-aware lookup wins — the FederatedGraph knows which
-        #    repo each node came from.
+        # The federation knows which repo each node came from.
         ns = _repo_namespace(node)
         if ns is not None:
             return ns
-        # 2. Fall back to the per-node `repo_prefix` metric set by
-        #    annotators.py, except for the legacy "CORE" sentinel which means
-        #    "local repo" — handled below.
-        rp = node.get_metric("repo_prefix", "")
-        if rp and rp != _LOCAL_SENTINEL:
-            return rp
         _fn = node.file_node()
         if _fn and _fn.get_field("repo"):
             return _fn.get_field("repo")
-        m = re.match(r"^REQ-([A-Z]{2,4})-[a-z]", node.id)
-        if m:
-            return m.group(1)
-        # 3. Final fallback: treat as local. Previously emitted the literal
-        #    "CORE" sentinel; we now emit the configured local namespace so
-        #    JS clients can compare `repo_prefix` against the same string they
-        #    receive in NAMESPACES. Any pre-existing "CORE"-marked node that
-        #    survived the metric-replace step (line 547) is relabelled to the
-        #    local namespace here — that's intentional and matches the new
-        #    "no `CORE` literal anywhere on the wire" invariant.
+        # Otherwise local. The wire carries the configured namespace rather
+        # than the "CORE" sentinel, so a JS client compares it against the
+        # same string it receives in NAMESPACES.
         return local_ns
 
     def _walk(node, depth: int, parent_id: str | None, ancestors: frozenset[str]) -> None:

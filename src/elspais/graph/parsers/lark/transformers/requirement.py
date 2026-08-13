@@ -12,6 +12,7 @@ values from pre-classified tokens -- no regex re-scanning for structure.
 from __future__ import annotations
 
 import re
+from functools import cache
 from typing import TYPE_CHECKING, Any
 
 from lark import Token, Tree
@@ -37,10 +38,21 @@ if TYPE_CHECKING:
     from elspais.utilities.patterns import IdResolver
 
 
-# Header parsing
-_REQ_HEADER_RE = re.compile(
-    r"^(?P<hashes>#+)[ \t]*(?P<id>[A-Z]+-[A-Za-z0-9-]+):[ \t]*(?P<title>.+)$"
-)
+# Header parsing. The identifier fragment comes from the repository's own
+# grammar, which is also what the Lark terminal that produced this token was
+# built from -- a second, hand-written spelling here would decide which
+# headers survive whenever the two disagreed, and it would decide silently,
+# by turning the requirement into prose.
+#
+# Compiled once per resolver rather than per file: the pattern depends on
+# configuration, so it cannot be a module constant, and parsing re-enters
+# this for every spec file in the repository.
+@cache
+def _req_header_re(resolver: IdResolver) -> re.Pattern[str]:
+    identifier = resolver.grammar().identifier
+    return re.compile(rf"^(?P<hashes>#+)[ \t]*(?P<id>{identifier}):[ \t]*(?P<title>.+)$")
+
+
 # Metadata field value extraction
 _FIELD_VALUE_RE = re.compile(r"\*\*\w+\*\*:[ \t]*(.*)")
 
@@ -167,8 +179,12 @@ class RequirementTransformer:
         header_text = str(header_token)
         header_line = header_token.line  # type: ignore[attr-defined]
 
-        header_match = _REQ_HEADER_RE.match(header_text)
+        header_match = _req_header_re(self.resolver).match(header_text)
         if not header_match:
+            # Structurally unreachable: the terminal that produced this token
+            # is built from the same fragment this pattern is. Kept as a
+            # guard, which is all it now is -- it used to be the path by
+            # which a requirement left the graph without a word said.
             return self._make_remainder(header_line, header_line, header_text)
 
         req_id = header_match.group("id")
