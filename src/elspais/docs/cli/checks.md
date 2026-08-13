@@ -44,7 +44,7 @@ Configuration checks always run as part of traceability verification. For focuse
 | `spec.hierarchy_levels` | Requirements follow hierarchy rules |
 | `spec.structural_orphans` | No nodes without a FILE ancestor (build bugs) |
 | `spec.broken_references` | No edges targeting non-existent nodes, where the target matches a configured ID pattern; severity: error |
-| `spec.unclaimed_references` | No reference names a target that no configured repository claims; default severity: warning |
+| `spec.unclaimed_references` | No reference names a target that no configured repository claims; default severity: info |
 | `spec.needs_rewrite` | Flags requirements that will be rewritten on next save (duplicate refs, stale hash); severity: warning |
 | `spec.hash_integrity` | Flags Satisfies-linked requirements for review when their template hash is stale; severity: warning |
 | `spec.changelog_present` | Active requirements must have at least one changelog entry (when `changelog.present = true`); severity: warning |
@@ -183,7 +183,7 @@ active-like status, so `code.provisional_references` and
 retired = "warning"       # info | warning | error
 provisional = "info"      # info | warning | error
 aspirational = "info"     # info | warning | error
-unclaimed = "warning"     # ok | info | warning | error
+unclaimed = "info"        # ok | info | warning | error
 ```
 
 #### `spec.unclaimed_references` — Targets Nobody Claims

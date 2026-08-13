@@ -1324,8 +1324,21 @@ def check_spec_index_current(
     # Byte-level mismatch — still provide the legacy ID-diff breakdown for context.
     import re
 
-    index_req_ids = set(re.findall(r"REQ-[a-z0-9-]+", actual, re.IGNORECASE))
-    index_jny_ids = set(re.findall(r"JNY-[A-Za-z0-9-]+", actual))
+    # Both grammars come from where they are defined: the repository's own
+    # configuration for requirement identifiers, the canonical pattern for
+    # journeys. Spelled here, this breakdown would recognise a different set
+    # of identifiers than the index it is comparing against was generated
+    # from, and would report every requirement missing under any namespace
+    # other than the one written into the pattern.
+    from elspais.config import config_defaults
+    from elspais.graph.parsers.patterns import JOURNEY_REF_PATTERN
+    from elspais.utilities.patterns import build_resolver
+
+    # An empty config is not the default configuration -- it has no levels,
+    # so its grammar matches no identifier at all.
+    _identifier = build_resolver(config or config_defaults()).grammar().identifier
+    index_req_ids = set(re.findall(_identifier, actual))
+    index_jny_ids = set(JOURNEY_REF_PATTERN.findall(actual))
     graph_req_ids = _indexed_node_ids(graph, NodeKind.REQUIREMENT, include_assoc)
     graph_jny_ids = _indexed_node_ids(graph, NodeKind.USER_JOURNEY, include_assoc)
 

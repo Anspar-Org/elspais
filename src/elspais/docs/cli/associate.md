@@ -79,6 +79,23 @@ elspais associate --unlink CAL                            # prefix code
 
 Even when the linked path is a worktree (e.g., `callisto-worktrees/some-branch`), `--unlink callisto` still matches via path component substring.
 
+## Who is in the federation
+
+Every repository reachable from this one, not only the ones named here. Each
+associate's own `[associates]` declarations are read too, and theirs in turn,
+depth-first from the repository the command was run in — so a repository you
+never named joins the federation because something you did name declares it,
+and the tool answers the same way from any repository in the chain.
+
+Repositories are identified by git origin rather than by path or declared
+name. Two chains reaching the same repository converge on one member rather
+than federating it twice, so declaring something a sibling already declares
+is harmless. A repository reached through itself is a cycle, and the build
+reports it as an error naming the declaration chain that formed it.
+
+`elspais checks` and `elspais doctor` report on every member, including the
+ones reached indirectly.
+
 ## Options
 
 | Flag | Description |
@@ -129,16 +146,36 @@ applies every member's grammar and reads the reference under the grammar of
 the repository that owns it. Test function names work the same way in
 underscore notation (`def test_window_CAL_d00007_B()`).
 
-A reference whose target no repository claims is reported as a broken
-reference carrying the text as written, rather than being dropped:
+An unresolved reference is always reported, carrying the text as written
+rather than being dropped. Which report it lands in depends on whether any
+member's grammar admits the identifier — not on whether the requirement
+exists:
 
 ```python
-# Implements: CAL-d99999-A     -> broken reference: CAL-d99999-A
+# Implements: CAL-d99999-A     -> broken reference (error)
+# Implements: ZZZ-d00001-A     -> unclaimed reference (severity is yours)
 ```
 
-List them with `elspais broken`. A requirement with no evidence and a
+`CAL-d99999-A` is spelled the way the `CAL` repository spells its
+identifiers, so that repository is the one that would own it — it simply has
+not authored it. That is a broken reference, and its severity is fixed at
+error: the repository that would answer for the target is in the federation
+and does not have it.
+
+`ZZZ-d00001-A` is spelled the way no member spells anything, so no member
+would own it. That is an unclaimed reference, reported at the severity the
+project configures in `[rules.references].unclaimed` (`info` by default) —
+a sibling repository that has not been written yet is advisory to one
+project and a build failure to another.
+
+List both with `elspais broken`. A requirement with no evidence and a
 requirement whose evidence could not be resolved otherwise read identically in
 every report.
+
+One setting changes this: with `[validation].allow_unresolved_cross_repo`
+turned on, a reference presumed to belong to a repository this project has
+not configured is dropped from both reports rather than appearing in either.
+It is off by default.
 
 ## Notes
 

@@ -482,7 +482,7 @@ retired = ["Deprecated", "Superseded", "Rejected"]
 retired = "warning"
 provisional = "info"
 aspirational = "info"
-unclaimed = "warning"
+unclaimed = "info"
 
 #──────────────────────────────────────────────────────────────────────────────
 # CHANGELOG
@@ -593,6 +593,12 @@ implements = ["task", "story", "epic"]
 ```
 
 ### With Associates (Federation)
+
+Each associate's own `[associates]` declarations are read as well, depth-first,
+so the federation is every repository reachable from this one rather than only
+the ones named here. Members are identified by git origin, so two chains
+reaching one repository converge on a single member; a repository reached
+through itself is an error naming the declaration chain.
 
 ```toml
 [project]
