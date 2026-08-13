@@ -962,11 +962,27 @@ def build_graph(
     # config for the repository (acceptable for Phase 1 homogeneous targets).
     # Logic lives in _derive_credit_config (pure, unit-tested independently).
     credit = _derive_credit_config(typed_config.scanning.test.targets)
-    # Roll each journey's verifying tests into a journey_verification metric
-    # BEFORE coverage, so the per-REQ UAT consumer can read each validating
-    # journey's verdict when populating the uat_verified dimension.
-    annotate_journey_verification(graph)
-    annotate_coverage(graph, credit)
+
+    def _annotate_coverage_here() -> None:
+        # Roll each journey's verifying tests into a journey_verification
+        # metric BEFORE coverage, so the per-REQ UAT consumer can read each
+        # validating journey's verdict when populating the uat_verified
+        # dimension.
+        annotate_journey_verification(graph)
+        annotate_coverage(graph, credit)
+
+    # A federation recomputes coverage over every member at once, after the
+    # cross-repository edges exist -- those edges are evidence, so numbers
+    # computed before them are provisional and are thrown away. Computing
+    # them here as well is work whose every result is overwritten, and it is
+    # the dominant cost of a build.
+    #
+    # A member build is always part of such a federation: it happens only
+    # because a host is assembling one, and the host's graph is live beside
+    # it, so the recompute is certain to run and this pass would be
+    # discarded. A host build cannot know yet -- its members are built
+    # below, and any of them may fail to load -- so it annotates once that
+    # is settled, and only where the recompute will not happen.
 
     # Implements: REQ-d00203-A+B+C+D+E
     # Build every repository the declarations reach, not only those the
@@ -1019,11 +1035,20 @@ def build_graph(
                     )
                 )
 
+            if len([e for e in entries if e.graph is not None]) < 2:
+                # Every member failed to load, so no recompute will run and
+                # this graph is the only one there is.
+                _annotate_coverage_here()
             federated = FederatedGraph(entries, root_repo=host_name)
             # Implements: REQ-d00254-I
             federated.render_fresh_targets = fresh_targets
             return federated
 
+    # Reached by a host with no associates to federate -- nothing will
+    # recompute, so this is the only pass -- and by a member build, whose
+    # host is about to recompute over it.
+    if _build_associates:
+        _annotate_coverage_here()
     federated = FederatedGraph.from_single(graph, config, repo_root)
     # Implements: REQ-d00254-I
     federated.render_fresh_targets = fresh_targets

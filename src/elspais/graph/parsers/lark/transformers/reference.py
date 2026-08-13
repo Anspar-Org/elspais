@@ -370,8 +370,11 @@ class ReferenceTransformer:
         no edge, because a reference that resolved is a reference nothing
         reports.
 
-        Returns None when the keyword is not one this kind of file may use,
-        which leaves the line ordinary text exactly as before.
+        Returns None when the keyword is not one this kind of file may use.
+        That says only that the line is not claimed as a reference; what
+        becomes of it is the caller's to decide, and the two callers decide
+        differently -- one gathers the line into a remainder block, the
+        other lets it fall out of the parse entirely.
         """
         keyword = self._detect_keyword(text)
         if self.content_type == "test_ref":

@@ -34,6 +34,19 @@ class Associate:
     local_path: str | None = None
 
 
+def spec_directory_name(config: dict) -> str:
+    """The directory a repository keeps its spec files in.
+
+    One reading of `[scanning.spec].directories` for everything that asks
+    where a federated repository's specs are: the scan that collects them
+    and the health check that reports on them answered this separately
+    before, and a repository that configured something other than the
+    default was described differently by each.
+    """
+    directories = (config or {}).get("scanning", {}).get("spec", {}).get("directories", [])
+    return directories[0] if directories else "spec"
+
+
 def get_associate_spec_directories(
     config: dict[str, Any],
     base_path: Path | None = None,
@@ -76,8 +89,7 @@ def get_associate_spec_directories(
         if member.config is None:
             errors.append(member.error or f"Associate could not be loaded: {member.repo_root}")
             continue
-        directories = member.config.get("scanning", {}).get("spec", {}).get("directories", [])
-        spec_dir = member.repo_root / (directories[0] if directories else "spec")
+        spec_dir = member.repo_root / spec_directory_name(member.config)
         if spec_dir.is_dir():
             spec_dirs.append(spec_dir)
         else:
@@ -128,13 +140,11 @@ def discover_associate_from_path(
         return f"Cannot load associate config in {repo_path}: {exc}"
 
     project = config.get("project", {})
-    scanning_spec = config.get("scanning", {}).get("spec", {})
-    spec_dirs = scanning_spec.get("directories", [])
     name = project.get("name") or repo_path.name
     # load_config refuses a config without a non-empty namespace, so this
     # is present by the time the candidate has loaded at all.
     namespace = project["namespace"]
-    spec_path = spec_dirs[0] if spec_dirs else "spec"
+    spec_path = spec_directory_name(config)
 
     return Associate(
         name=name,

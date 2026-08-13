@@ -292,6 +292,20 @@ def plan_federation(
                 continue
 
             # Implements: REQ-d00203-B
+            # A member's configuration is the one at its own root. The
+            # ordinary loader walks up to a parent and falls back to
+            # defaults, which would let a directory holding only spec files
+            # join as a member configured by something above it -- and then
+            # report the namespace it inherited as one it declared.
+            if not (assoc_path / ".elspais.toml").exists():
+                reason = f"No .elspais.toml at {assoc_path}"
+                if strict:
+                    raise FederationError(f"Associate '{name}': {reason}")
+                _record(
+                    PlannedRepo(name, assoc_path, None, origin, reason, child_path),
+                    identity,
+                )
+                continue
             try:
                 assoc_config = loader(None, assoc_path, quiet=True)
             except Exception as exc:  # noqa: BLE001 - reported, never swallowed

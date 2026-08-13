@@ -717,11 +717,17 @@ def check_unclaimed_references(graph: FederatedGraph, config=None) -> HealthChec
     severity = typed.rules.references.unclaimed
 
     if not unclaimed:
+        # The configured severity is reported whether or not anything was
+        # found. Dropping it here made the check answer "error" while
+        # passing, and moved it between the passed and skipped counts
+        # depending on its findings -- so the same check reported under two
+        # different headings from one run to the next.
         return HealthCheck(
             name="spec.unclaimed_references",
             passed=True,
             message="No references to unclaimed targets",
             category="spec",
+            severity=severity,
         )
 
     findings = []
@@ -1025,6 +1031,7 @@ def check_spec_no_assertions(graph: FederatedGraph, config: dict[str, Any]) -> H
         passed=True,
         message="All requirements have at least one assertion",
         category="spec",
+        severity=severity,
     )
 
 

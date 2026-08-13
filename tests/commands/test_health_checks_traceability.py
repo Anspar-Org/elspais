@@ -13,6 +13,7 @@ import pytest
 
 from elspais.commands.health import (
     HealthFinding,
+    HealthReport,
     check_broken_references,
     check_no_cycles,
     check_structural_orphans,
@@ -603,7 +604,8 @@ def _claimed_config(**overrides: object) -> dict:
 class TestCheckUnclaimedReferences:
     """Tests for check_unclaimed_references() — the dedicated check.
 
-    A reference recognised by position may name anything at all, so a
+    Validates REQ-d00269-F: a reference recognised by position may name
+    anything at all, so a
     target no configured repository claims is reported separately from a
     misspelling of an identifier the federation understands, at a
     severity the project chooses.
@@ -672,6 +674,106 @@ class TestCheckUnclaimedReferences:
 
         assert not check.passed
         assert check.severity == configured
+
+    # Verifies: REQ-d00269-F
+    @pytest.mark.parametrize("configured", ["info", "warning", "error"])
+    @pytest.mark.parametrize("has_finding", [True, False])
+    def test_REQ_d00269_F_severity_is_the_configured_one_in_both_states(
+        self, configured: str, has_finding: bool
+    ) -> None:
+        """The severity a check reports is the project's setting, not a
+        property of what the check happened to find.
+
+        A check that reports the configured severity only when it has
+        findings answers a different question on a clean estate — and a
+        report reader cannot tell the difference between "this project
+        treats unclaimed references as errors" and "this check forgot".
+        """
+        from elspais.graph.mutations import BrokenReference
+
+        graph = TraceGraph()
+        if has_finding:
+            graph._broken_references = [
+                BrokenReference(
+                    source_id="REQ-d00001", target_id="widget-42", edge_kind="implements"
+                ),
+            ]
+        config = _claimed_config(rules={"references": {"unclaimed": configured}})
+
+        check = check_unclaimed_references(_wrap(graph, config), config)
+
+        report = HealthReport()
+        report.add(check)
+
+        assert bool(check.findings) is has_finding
+        assert check.severity == configured
+        # The serialized report is what every downstream consumer reads.
+        assert report.to_dict()["checks"][0]["severity"] == configured
+
+    # Verifies: REQ-d00269-F
+    @pytest.mark.parametrize("has_finding", [True, False])
+    def test_REQ_d00269_F_info_severity_never_lands_in_passed(self, has_finding: bool) -> None:
+        """The bucket the check is counted under follows its configured
+        severity, so it does not migrate between report headings.
+
+        ``HealthReport`` counts every ``info`` check as *skipped* and
+        excludes it from *passed*. A check configured informational that
+        reported ``error`` when it found nothing was counted as passed on
+        a clean run and skipped on a dirty one — the same check under two
+        headings from one run to the next.
+        """
+        from elspais.graph.mutations import BrokenReference
+
+        graph = TraceGraph()
+        if has_finding:
+            graph._broken_references = [
+                BrokenReference(
+                    source_id="REQ-d00001", target_id="widget-42", edge_kind="implements"
+                ),
+            ]
+        config = _claimed_config(rules={"references": {"unclaimed": "info"}})
+
+        report = HealthReport()
+        report.add(check_unclaimed_references(_wrap(graph, config), config))
+
+        assert report.skipped == 1
+        assert report.passed == 0
+        assert report.to_dict()["checks"][0]["severity"] == "info"
+
+    # Verifies: REQ-d00269-F
+    @pytest.mark.parametrize(
+        "configured,has_finding,bucket",
+        [
+            ("warning", False, "passed"),
+            ("warning", True, "warnings"),
+            ("error", False, "passed"),
+            ("error", True, "failed"),
+        ],
+    )
+    def test_REQ_d00269_F_failing_severities_bucket_by_findings(
+        self, configured: str, has_finding: bool, bucket: str
+    ) -> None:
+        """A check the project asked to hear about loudly is counted as
+        passed when clean and against its own severity when not — and is
+        never counted as skipped, which is reserved for informational."""
+        from elspais.graph.mutations import BrokenReference
+
+        graph = TraceGraph()
+        if has_finding:
+            graph._broken_references = [
+                BrokenReference(
+                    source_id="REQ-d00001", target_id="widget-42", edge_kind="implements"
+                ),
+            ]
+        config = _claimed_config(rules={"references": {"unclaimed": configured}})
+
+        report = HealthReport()
+        report.add(check_unclaimed_references(_wrap(graph, config), config))
+
+        counts = {"passed": report.passed, "warnings": report.warnings, "failed": report.failed}
+        assert counts[bucket] == 1
+        assert sum(counts.values()) == 1
+        assert report.skipped == 0
 
     @pytest.mark.parametrize("allow_unresolved", [True, False])
     def test_REQ_d00269_F_allow_unresolved_cross_repo_silences_foreign_targets(

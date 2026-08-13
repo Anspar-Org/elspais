@@ -18,6 +18,7 @@ import tomlkit
 from elspais.graph.factory import build_graph
 from elspais.graph.federated import FederationError
 from elspais.graph.GraphNode import REMAINDER_ID_PREFIX, parse_structural_id
+from tests.federation_repos import _git, make_repo
 
 # ---------------------------------------------------------------------------
 # Helper: write a minimal .elspais.toml
@@ -564,3 +565,195 @@ class TestCrossGraphWiring:
             "'rem:spec/shared_notes.md' in some sub-graph; "
             "fixture did not reproduce the bug condition"
         )
+
+
+# ---------------------------------------------------------------------------
+# Coverage is annotated in every build shape
+# ---------------------------------------------------------------------------
+
+
+def _coverage_toml(name: str, namespace: str, associates: str = "") -> str:
+    """Config for a repo whose own `src/` carries the coverage evidence."""
+    return f"""version = 3
+
+[project]
+name = "{name}"
+namespace = "{namespace}"
+
+[levels.prd]
+rank = 1
+implements = []
+
+[levels.dev]
+rank = 2
+implements = ["prd", "dev"]
+
+[scanning.code]
+directories = ["src"]
+{associates}"""
+
+
+def _coverage_spec(namespace: str) -> str:
+    """One requirement with two labelled assertions, only A implemented."""
+    return f"""# Spec for {namespace}
+
+## {namespace}-d00001: A thing
+
+**Status**: active
+
+The system shall do a thing.
+
+### Assertions
+
+A. The system SHALL do the A thing.
+
+B. The system SHALL do the B thing.
+
+*End*
+"""
+
+
+def _coverage_code(namespace: str) -> str:
+    return f'''"""Implementation."""
+
+
+# Implements: {namespace}-d00001-A
+def do_a():
+    return 1
+'''
+
+
+def _make_coverage_repo(
+    base: Path,
+    name: str,
+    namespace: str,
+    associates: str = "",
+) -> Path:
+    """An on-disk repo holding one requirement and code implementing it."""
+    repo = make_repo(
+        base,
+        name,
+        namespace=namespace,
+        config_text=_coverage_toml(name, namespace, associates),
+    )
+    (repo / "spec" / "reqs.md").write_text(_coverage_spec(namespace), encoding="utf-8")
+    (repo / "src").mkdir()
+    (repo / "src" / "impl.py").write_text(_coverage_code(namespace), encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "code")
+    return repo
+
+
+@pytest.fixture(scope="module")
+def coverage_repos(tmp_path_factory) -> dict[str, Path]:
+    """One repo of every build shape, each self-evidencing its own assertion A.
+
+    ``app`` hosts a live federation with ``lib``; ``orphan`` declares an
+    associate that cannot be loaded at all; ``solo`` declares none.
+    """
+    base = tmp_path_factory.mktemp("cov_shapes")
+    lib = _make_coverage_repo(base, "lib", "LIB")
+    app = _make_coverage_repo(
+        base,
+        "app",
+        "APP",
+        associates='\n[associates.lib]\npath = "../lib"\nnamespace = "LIB"\n',
+    )
+    orphan = _make_coverage_repo(
+        base,
+        "orphan",
+        "ORPHAN",
+        associates='\n[associates.ghost]\npath = "../ghost"\nnamespace = "GHOST"\n',
+    )
+    solo = _make_coverage_repo(base, "solo", "SOLO")
+    return {"lib": lib, "app": app, "orphan": orphan, "solo": solo}
+
+
+def _implemented(fed, req_id: str):
+    """The implemented dimension of a requirement's rollup metrics."""
+    node = fed.find_by_id(req_id)
+    assert node is not None, f"{req_id} is not in the graph"
+    metrics = node.get_metric("rollup_metrics")
+    assert metrics is not None, f"{req_id} carries no rollup_metrics at all"
+    assert metrics.total_assertions == 2, (
+        f"{req_id} should hold two assertions, got {metrics.total_assertions}"
+    )
+    return metrics.implemented
+
+
+def _assert_a_implemented(fed, req_id: str) -> None:
+    """Assertion A is fully implemented and B is not.
+
+    Zero here is the signature of coverage never having been annotated for
+    this repository -- the failure mode that otherwise reads as a project
+    with no evidence at all.
+    """
+    dim = _implemented(fed, req_id)
+    assert dim.direct > 0.0, (
+        f"{req_id} reports no implemented coverage; its own code declares "
+        f"'Implements: {req_id}-A', so coverage was never annotated for this repo"
+    )
+    assert dim.direct_pct_by_label["A"] == 1.0
+    assert dim.direct_pct_by_label.get("B", 0.0) == 0.0
+
+
+class TestCoverageAnnotatedInEveryBuildShape:
+    """Coverage is present however a build was assembled.
+
+    Validates REQ-d00269-A: no coverage number depends on the order in which
+    a federation was assembled -- including the degenerate orders, where the
+    federation has one live member or none to recompute over.
+    Validates REQ-d00261-E: a member's own coverage is the same number built
+    alone as it is inside a federation.
+    """
+
+    # Verifies: REQ-d00269-A
+    def test_REQ_d00269_A_two_member_federation_carries_coverage(
+        self, coverage_repos: dict[str, Path]
+    ) -> None:
+        """Both members of a live federation carry their own coverage."""
+        fed = build_graph(repo_root=coverage_repos["app"])
+
+        live = [e for e in fed.iter_repos() if e.graph is not None]
+        assert len(live) == 2, f"expected two live members, got {[e.name for e in live]}"
+        _assert_a_implemented(fed, "APP-d00001")
+        _assert_a_implemented(fed, "LIB-d00001")
+
+    # Verifies: REQ-d00269-A
+    def test_REQ_d00269_A_host_with_no_loadable_associate_carries_coverage(
+        self, coverage_repos: dict[str, Path]
+    ) -> None:
+        """A host whose every associate failed to load still carries coverage.
+
+        No recompute runs over this graph, so the host's own annotation is
+        the only one there will ever be.
+        """
+        fed = build_graph(repo_root=coverage_repos["orphan"])
+
+        entries = list(fed.iter_repos())
+        assert [e.name for e in entries if e.graph is None] == ["ghost"], (
+            "fixture must produce exactly one associate that failed to load"
+        )
+        _assert_a_implemented(fed, "ORPHAN-d00001")
+
+    # Verifies: REQ-d00269-A
+    def test_REQ_d00269_A_lone_repository_carries_coverage(
+        self, coverage_repos: dict[str, Path]
+    ) -> None:
+        """A repository declaring no associates carries coverage."""
+        fed = build_graph(repo_root=coverage_repos["solo"])
+
+        assert [e.name for e in fed.iter_repos()] == ["solo"]
+        _assert_a_implemented(fed, "SOLO-d00001")
+
+    # Verifies: REQ-d00261-E
+    def test_REQ_d00261_E_member_coverage_matches_the_same_repo_built_alone(
+        self, coverage_repos: dict[str, Path]
+    ) -> None:
+        """Joining a federation moves none of a member's own numbers."""
+        alone = _implemented(build_graph(repo_root=coverage_repos["lib"]), "LIB-d00001")
+        joined = _implemented(build_graph(repo_root=coverage_repos["app"]), "LIB-d00001")
+
+        assert (alone.direct, alone.indirect) == (joined.direct, joined.indirect)
+        assert alone.direct_pct_by_label == joined.direct_pct_by_label
+        assert alone.direct > 0.0, "the lone build carries no coverage to compare"

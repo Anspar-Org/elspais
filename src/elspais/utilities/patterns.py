@@ -580,7 +580,18 @@ class IdResolver:
         else:
             type_code = raw_type
 
-        # If type is empty (JIRA-style with no {type} in template), use first type
+        # The type group is absent exactly when the matched form's template
+        # names no type token. Where the CANONICAL template is also typeless,
+        # the substituted type is never rendered back out -- it exists only
+        # to satisfy the membership check below -- and every shipped and
+        # fixture configuration of that shape declares exactly one level, so
+        # "the first declared" is "the only one".
+        #
+        # Nothing enforces that condition. Beside a TYPED canonical, or with
+        # more than one level declared, this invents a level, and which one
+        # depends on the order the levels appear in the TOML rather than on
+        # anything about the identifier. `type_code` also reaches next-ID
+        # allocation, which a wrong level mis-scopes.
         if not type_code and self.config.types:
             type_code = next(iter(self.config.types))
 
@@ -846,6 +857,9 @@ class IdResolver:
             if alias_used and alias_used in self._reverse_aliases:
                 by_lower = {k.lower(): v for k, v in self._reverse_aliases[alias_used].items()}
                 type_code = by_lower.get(raw_type.lower(), raw_type)
+            # Same substitution, same unenforced condition, as the plain
+            # parse above: absent only for a typeless template, harmless
+            # only while such a configuration declares one level.
             if not type_code and self.config.types:
                 type_code = next(iter(self.config.types))
             if type_code not in self.config.types:
