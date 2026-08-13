@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from elspais.graph import NodeKind
-from elspais.graph.GraphNode import FileType, make_file_id
+from elspais.graph.GraphNode import FileType
 from elspais.graph.relations import EdgeKind
 
 if TYPE_CHECKING:
@@ -133,15 +133,29 @@ def render_unlinked_markdown(data: UnlinkedData, *, verbose: bool = False) -> st
 
 
 def _serialize(data: UnlinkedData) -> dict[str, Any]:
-    """Serialize UnlinkedData to a JSON-compatible dict."""
+    """Serialize UnlinkedData to a JSON-compatible dict.
+
+    Carries each entry's node id alongside its path. A reader cannot
+    rebuild the id from the path -- the id names the repository holding
+    the file, which a bare path does not say -- so the id travels rather
+    than being guessed at the far end.
+    """
     return {
         "tests": {
             "count": len(data.tests),
             "files": [e.file for e in sorted(data.tests, key=lambda e: e.file)],
+            "nodes": [
+                {"node_id": e.node_id, "file": e.file}
+                for e in sorted(data.tests, key=lambda e: e.file)
+            ],
         },
         "code": {
             "count": len(data.code),
             "files": [e.file for e in sorted(data.code, key=lambda e: e.file)],
+            "nodes": [
+                {"node_id": e.node_id, "file": e.file}
+                for e in sorted(data.code, key=lambda e: e.file)
+            ],
         },
     }
 
@@ -177,12 +191,23 @@ def render_section(
 
 
 def _unlinked_data_from_dict(data: dict[str, Any]) -> UnlinkedData:
-    """Reconstruct UnlinkedData from a JSON dict returned by the daemon."""
+    """Reconstruct UnlinkedData from a JSON dict returned by the daemon.
+
+    Reads the node ids the daemon sent. A daemon that sent only paths
+    (an older one) leaves the id empty rather than having one invented
+    for it: an id naming the wrong repository is worse than none, and
+    every reader of this data displays the path.
+    """
     ud = UnlinkedData()
-    for f in data.get("tests", {}).get("files", []):
-        ud.tests.append(UnlinkedEntry(node_id=make_file_id(f), file=f))
-    for f in data.get("code", {}).get("files", []):
-        ud.code.append(UnlinkedEntry(node_id=make_file_id(f), file=f))
+    for kind, entries in (("tests", ud.tests), ("code", ud.code)):
+        section = data.get(kind, {})
+        nodes = section.get("nodes")
+        if nodes:
+            entries.extend(
+                UnlinkedEntry(node_id=n.get("node_id", ""), file=n.get("file", "")) for n in nodes
+            )
+            continue
+        entries.extend(UnlinkedEntry(node_id="", file=f) for f in section.get("files", []))
     return ud
 
 

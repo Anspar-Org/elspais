@@ -272,7 +272,7 @@ class TestTraceGraphMutationInfrastructure:
     # Verifies: REQ-o00062-G
     def test_undo_last_empty(self):
         """undo_last on empty log returns None."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ")
         builder.add_parsed_content(make_req("REQ-p00001"))
         graph = builder.build()
 
@@ -286,7 +286,7 @@ class TestUndoRenameNode:
     # Verifies: REQ-o00062-G
     def test_undo_rename_restores_id(self):
         """Undoing rename restores original node ID."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ")
         builder.add_parsed_content(make_req("REQ-p00001", "Test Req"))
         graph = builder.build()
 
@@ -330,7 +330,7 @@ class TestUndoUpdateTitle:
     # Verifies: REQ-o00062-G
     def test_undo_title_restores_original(self):
         """Undoing title update restores original title."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ")
         builder.add_parsed_content(make_req("REQ-p00001", "Original Title"))
         graph = builder.build()
 
@@ -360,7 +360,7 @@ class TestUndoTo:
     # Verifies: REQ-o00062-G
     def test_undo_to_multiple(self):
         """undo_to undoes multiple mutations in reverse order."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ")
         builder.add_parsed_content(make_req("REQ-p00001", "Title1"))
         graph = builder.build()
 

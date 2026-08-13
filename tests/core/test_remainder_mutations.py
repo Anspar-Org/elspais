@@ -40,7 +40,7 @@ def make_req(
 
 def build_graph_with_sections() -> TraceGraph:
     """Build a graph with a requirement that has sections."""
-    builder = GraphBuilder()
+    builder = GraphBuilder(namespace="REQ")
     builder.add_parsed_content(
         make_req(
             "REQ-p00001",
@@ -56,7 +56,7 @@ def build_graph_with_sections() -> TraceGraph:
 
 def build_graph_with_definition_block() -> TraceGraph:
     """Build a graph with a requirement that has a definition block."""
-    builder = GraphBuilder()
+    builder = GraphBuilder(namespace="REQ")
     content = ParsedContent(
         content_type="requirement",
         parsed_data={

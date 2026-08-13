@@ -21,8 +21,19 @@ import pytest
 
 from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
+from elspais.graph.GraphNode import make_file_id
 from elspais.graph.mutations import BrokenReference
 from elspais.graph.relations import EdgeKind
+
+# The namespace these hand-built graphs use -- a structural id carries the
+# namespace of the repository holding the node.
+NAMESPACE = "REQ"
+
+
+def file_id(relative_path: str) -> str:
+    """FILE node id for a path in the test repository."""
+    return make_file_id(NAMESPACE, relative_path)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixtures
@@ -426,7 +437,7 @@ def _build_remainder_graph() -> TraceGraph:
     from elspais.graph.builder import GraphBuilder
     from elspais.graph.parsers import ParsedContent
 
-    builder = GraphBuilder()
+    builder = GraphBuilder(namespace="REQ")
     builder.add_parsed_content(
         ParsedContent(
             content_type="requirement",
@@ -866,18 +877,18 @@ class TestMutateMoveNodeToFile:
         """Extend mutation_graph with FILE nodes and CONTAINS wiring."""
         graph = mutation_graph
 
-        file1 = GraphNode("file:spec/main.md", NodeKind.FILE, label="main.md")
+        file1 = GraphNode(file_id("spec/main.md"), NodeKind.FILE, label="main.md")
         file1.set_field("relative_path", "spec/main.md")
-        graph._index["file:spec/main.md"] = file1
+        graph._index[file_id("spec/main.md")] = file1
         graph._roots.append(file1)
 
         req = graph.find_by_id("REQ-p00001")
         edge = file1.link(req, EdgeKind.CONTAINS)
         edge.metadata["render_order"] = 0.0
 
-        file2 = GraphNode("file:spec/other.md", NodeKind.FILE, label="other.md")
+        file2 = GraphNode(file_id("spec/other.md"), NodeKind.FILE, label="other.md")
         file2.set_field("relative_path", "spec/other.md")
-        graph._index["file:spec/other.md"] = file2
+        graph._index[file_id("spec/other.md")] = file2
         graph._roots.append(file2)
 
         return graph
@@ -887,13 +898,13 @@ class TestMutateMoveNodeToFile:
         pytest.importorskip("mcp")
         from elspais.mcp.server import _mutate_move_node_to_file
 
-        result = _mutate_move_node_to_file(file_graph, "REQ-p00001", "file:spec/other.md")
+        result = _mutate_move_node_to_file(file_graph, "REQ-p00001", file_id("spec/other.md"))
 
         assert result["success"] is True
         assert "mutation" in result
         # Verify req is now under the target file
         req = file_graph.find_by_id("REQ-p00001")
-        assert req.file_node().id == "file:spec/other.md"
+        assert req.file_node().id == file_id("spec/other.md")
 
     def test_REQ_o00063_A_move_error_no_file_parent(self, file_graph):
         """REQ-o00063-A: Moving a node without a FILE parent returns error."""
@@ -905,7 +916,7 @@ class TestMutateMoveNodeToFile:
         orphan._content = {"level": "DEV", "status": "Draft"}
         file_graph._index["REQ-d00099"] = orphan
 
-        result = _mutate_move_node_to_file(file_graph, "REQ-d00099", "file:spec/other.md")
+        result = _mutate_move_node_to_file(file_graph, "REQ-d00099", file_id("spec/other.md"))
 
         assert result["success"] is False
         assert "error" in result
@@ -922,9 +933,9 @@ class TestMutateRenameFile:
         """Extend mutation_graph with a FILE node."""
         graph = mutation_graph
 
-        file1 = GraphNode("file:spec/main.md", NodeKind.FILE, label="main.md")
+        file1 = GraphNode(file_id("spec/main.md"), NodeKind.FILE, label="main.md")
         file1.set_field("relative_path", "spec/main.md")
-        graph._index["file:spec/main.md"] = file1
+        graph._index[file_id("spec/main.md")] = file1
         graph._roots.append(file1)
 
         req = graph.find_by_id("REQ-p00001")
@@ -938,21 +949,21 @@ class TestMutateRenameFile:
         pytest.importorskip("mcp")
         from elspais.mcp.server import _mutate_rename_file
 
-        result = _mutate_rename_file(file_graph, "file:spec/main.md", "spec/renamed.md")
+        result = _mutate_rename_file(file_graph, file_id("spec/main.md"), "spec/renamed.md")
 
         assert result["success"] is True
         assert "mutation" in result
         # Verify the new ID is findable
-        assert file_graph.find_by_id("file:spec/renamed.md") is not None
+        assert file_graph.find_by_id(file_id("spec/renamed.md")) is not None
         # Old ID should be gone
-        assert file_graph.find_by_id("file:spec/main.md") is None
+        assert file_graph.find_by_id(file_id("spec/main.md")) is None
 
     def test_REQ_o00063_A_rename_error_not_found(self, file_graph):
         """REQ-o00063-A: Renaming a nonexistent file returns error."""
         pytest.importorskip("mcp")
         from elspais.mcp.server import _mutate_rename_file
 
-        result = _mutate_rename_file(file_graph, "file:spec/nonexistent.md", "spec/new.md")
+        result = _mutate_rename_file(file_graph, file_id("spec/nonexistent.md"), "spec/new.md")
 
         assert result["success"] is False
         assert "error" in result

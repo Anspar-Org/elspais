@@ -768,16 +768,25 @@ def test_REQ_d00239_A_scan_terms_method_exists_and_calls_scan_graph():
     graph_a._index = {}
     graph_b._index = {}
 
+    # A repository's declared name and its namespace are different
+    # identifiers, and a term's attribution follows the namespace: the
+    # fixture keeps them distinct so a scan reading the wrong one shows.
     entry_a = RepoEntry(
         name="repo-a",
         graph=graph_a,
-        config={"terms": {"markup_styles": ["*"]}},
+        config={
+            "project": {"name": "repo-a", "namespace": "REPOA"},
+            "terms": {"markup_styles": ["*"]},
+        },
         repo_root=Path("/tmp/repo-a"),
     )
     entry_b = RepoEntry(
         name="repo-b",
         graph=graph_b,
-        config={"terms": {"markup_styles": ["**"]}},
+        config={
+            "project": {"name": "repo-b", "namespace": "REPOB"},
+            "terms": {"markup_styles": ["**"]},
+        },
         repo_root=Path("/tmp/repo-b"),
     )
 
@@ -790,8 +799,8 @@ def test_REQ_d00239_A_scan_terms_method_exists_and_calls_scan_graph():
         call_namespaces = {
             call.kwargs.get("namespace") or call.args[2] for call in mock_scan.call_args_list
         }
-        assert "repo-a" in call_namespaces
-        assert "repo-b" in call_namespaces
+        assert "REPOA" in call_namespaces
+        assert "REPOB" in call_namespaces
 
 
 # -- REQ-d00239-B: Per-repo config for markup_styles and exclude_files --------
@@ -886,13 +895,19 @@ def test_REQ_d00239_B_scan_terms_passes_per_repo_config():
     entry_a = RepoEntry(
         name="repo-a",
         graph=graph_a,
-        config={"terms": {"markup_styles": ["*"], "exclude_files": ["docs/*"]}},
+        config={
+            "project": {"name": "repo-a", "namespace": "REPOA"},
+            "terms": {"markup_styles": ["*"], "exclude_files": ["docs/*"]},
+        },
         repo_root=Path("/tmp/repo-a"),
     )
     entry_b = RepoEntry(
         name="repo-b",
         graph=graph_b,
-        config={"terms": {"markup_styles": ["**"], "exclude_files": []}},
+        config={
+            "project": {"name": "repo-b", "namespace": "REPOB"},
+            "terms": {"markup_styles": ["**"], "exclude_files": []},
+        },
         repo_root=Path("/tmp/repo-b"),
     )
 
@@ -906,16 +921,18 @@ def test_REQ_d00239_B_scan_terms_passes_per_repo_config():
             ns = call.kwargs.get("namespace") or call.args[2]
             calls_by_ns[ns] = call
 
-        assert "repo-a" in calls_by_ns
-        assert "repo-b" in calls_by_ns
+        # Keyed by NAMESPACE, which is what a term reference is attributed
+        # to -- deliberately different here from each repo's declared name.
+        assert "REPOA" in calls_by_ns
+        assert "REPOB" in calls_by_ns
 
         # Repo A should get markup_styles=["*"] and exclude_files=["docs/*"]
-        call_a = calls_by_ns["repo-a"]
+        call_a = calls_by_ns["REPOA"]
         assert call_a.kwargs.get("markup_styles") == ["*"]
         assert call_a.kwargs.get("exclude_files") == ["docs/*"]
 
         # Repo B should get markup_styles=["**"] and exclude_files=[]
-        call_b = calls_by_ns["repo-b"]
+        call_b = calls_by_ns["REPOB"]
         assert call_b.kwargs.get("markup_styles") == ["**"]
         assert call_b.kwargs.get("exclude_files") == []
 

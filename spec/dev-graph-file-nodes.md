@@ -70,7 +70,7 @@ The build pipeline SHALL create FILE nodes for every scanned file and wire CONTA
 
 ### Assertions
 
-A. `factory.py` SHALL create a FILE node with ID `file:<repo-relative-path>` for every scanned file before parsing its content.
+A. A FILE node SHALL be created for every scanned file before its content is parsed, identified by the repository that holds the file together with the file's path within that repository, so that a file at the same path in two federated repositories yields two distinctly identified nodes.
 
 B. FILE node content fields SHALL include: `file_type` (FileType enum), `absolute_path` (str), `relative_path` (str), `repo` (str or None), `git_branch` (str or None), `git_commit` (str or None).
 
@@ -96,15 +96,17 @@ L. `file_node()` SHALL return None for INSTANCE nodes. To find the originating f
 
 ### Rationale
 
-FILE nodes make source files first-class graph participants. Creating them in factory.py (which knows the file path and type) rather than the deserializer maintains separation of concerns. CONTAINS edges with line-range metadata enable file-level operations. RemainderParser ensures complete line coverage for text-based files. DEFINES edges from FILE to INSTANCE nodes establish provenance for virtual nodes created by template instantiation.
+FILE nodes make source files first-class graph participants. Creating them in factory.py (which knows the file path and type) rather than the deserializer maintains separation of concerns. A node whose identity comes from a source location has to name the repository as well as the path (A): a repo-relative path is unique only within one repository, and federated members routinely share a spec layout, so a path alone would give two files one identity and every answer about either would be about whichever was recorded. The identity a lone build of a repository produces is the identity it keeps inside a federation, so joining one changes no node's identity. CONTAINS edges with line-range metadata enable file-level operations. RemainderParser ensures complete line coverage for text-based files. DEFINES edges from FILE to INSTANCE nodes establish provenance for virtual nodes created by template instantiation.
 
 ### Changelog
 
+- 2026-08-13 | 926ddd2b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-13 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: amend A — a FILE node is identified by its repository together with its path, so federated members sharing a path yield distinct nodes
 - 2026-07-31 | 02374cc2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 7742f15f | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 7742f15f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *FILE Node Creation in Build Pipeline* | **Hash**: 02374cc2
+*End* *FILE Node Creation in Build Pipeline* | **Hash**: 926ddd2b
 ---
 
 ## REQ-d00129: SourceLocation Removal and Consumer Migration

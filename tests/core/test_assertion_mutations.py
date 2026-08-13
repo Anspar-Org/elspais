@@ -46,7 +46,7 @@ def make_req(
 
 def build_graph_with_assertions() -> TraceGraph:
     """Build a graph with a requirement that has assertions."""
-    builder = GraphBuilder()
+    builder = GraphBuilder(namespace="REQ")
     builder.add_parsed_content(
         make_req(
             "REQ-p00001",
@@ -63,7 +63,7 @@ def build_graph_with_assertions() -> TraceGraph:
 
 def build_graph_with_child_implementing_assertion() -> TraceGraph:
     """Build a graph where a child implements specific assertions."""
-    builder = GraphBuilder()
+    builder = GraphBuilder(namespace="REQ")
     builder.add_parsed_content(
         make_req(
             "REQ-p00001",
@@ -340,7 +340,7 @@ class TestAddAssertion:
     def test_REQ_o00062_S_exhausted_series_refuses_the_add(self):
         """REQ-o00062-S: a requirement filled to the end of its label series
         refuses the next add and creates no out-of-series label."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ")
         builder.add_parsed_content(
             make_req(
                 "REQ-p00001",
@@ -904,7 +904,7 @@ class TestAssertionPlacementInSeries:
     def test_REQ_o00062_R_first_assertion_takes_the_first_label(self):
         """REQ-o00062-R: a requirement with no assertions yet gets the first
         label in the series."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ")
         builder.add_parsed_content(make_req("REQ-p00001", "No Assertions Yet", assertions=[]))
         graph = builder.build()
 

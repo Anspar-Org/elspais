@@ -180,7 +180,9 @@ def test_coordinator_can_submit_credentials():
 A source file as a first-class graph node. Created automatically when
 elspais scans your directories.
 
-ID format: `file:src/auth/password.py`
+ID format: `file:REQ:src/auth/password.py` — the segment after the prefix is the namespace of the
+repository holding the file, so two federated repositories with a file at the same path own
+distinct nodes.
 
 FILE nodes are structural roots -- every parsed content node (requirement,
 code reference, test, etc.) is connected to its FILE node via a CONTAINS

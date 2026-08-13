@@ -43,7 +43,7 @@ def make_req(
 
 def build_graph_for_hash() -> TraceGraph:
     """Build a graph with a requirement containing assertions for hash testing."""
-    builder = GraphBuilder(hash_mode="full-text")
+    builder = GraphBuilder(hash_mode="full-text", namespace="REQ")
     builder.add_parsed_content(
         make_req(
             "REQ-p00001",

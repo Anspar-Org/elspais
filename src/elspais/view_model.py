@@ -64,6 +64,9 @@ def _associate_namespaces(typed, federation) -> list[tuple[str, str, str | None]
         project = (entry.config or {}).get("project", {})
         code = (declared.namespace if declared else "") or project.get("namespace", "")
         if not code:
+            # Only a member that failed to load reaches here: it has no
+            # config, contributes no nodes, and so has no namespace to
+            # badge. A member with a graph always declares one.
             continue
         color = (declared.color if declared else None) or project.get("color")
         out.append((entry.name, code, color))

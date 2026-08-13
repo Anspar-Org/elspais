@@ -67,7 +67,7 @@ class TestGraphNode:
     # Verifies: REQ-d00127-A
     def test_create_with_content(self):
         """Content is typed data based on node kind - use builder."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ")
         builder.add_parsed_content(
             make_requirement(
                 "REQ-p00001",

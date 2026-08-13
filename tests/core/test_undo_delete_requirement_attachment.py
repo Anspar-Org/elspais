@@ -25,11 +25,14 @@ from pathlib import Path
 import pytest
 
 from elspais.graph.factory import build_graph as build_repo_graph
+from elspais.graph.GraphNode import make_file_id
 from elspais.graph.render import render_file
 
 TARGET_ID = "REQ-d00001"
 ASSERTION_LABELS = ("A", "B", "C", "D")
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
+# The namespace the hht-like fixture declares; structural node ids carry it.
+NAMESPACE = "REQ"
 
 
 @pytest.fixture
@@ -83,7 +86,7 @@ class TestUndoDeleteRequirementRestoresAttachment:
         root_count = graph.root_count()
         # Guard: the fixture requirement must actually be attached, otherwise
         # the round trip below would compare orphan to orphan.
-        assert before["file_id"] == "file:spec/dev-impl.md"
+        assert before["file_id"] == make_file_id(NAMESPACE, "spec/dev-impl.md")
         assert before["incoming"] and before["outgoing"]
 
         graph.delete_requirement(TARGET_ID)

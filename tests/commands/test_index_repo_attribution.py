@@ -31,6 +31,11 @@ from elspais.graph.terms import TermDictionary, TermEntry, TermRef
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _project_config(name: str, namespace: str) -> dict:
+    """The [project] block every graph-bearing RepoEntry must declare."""
+    return {"project": {"name": name, "namespace": namespace}}
+
+
 def _make_file_node(repo_root: Path, relative_path: str) -> GraphNode:
     """Create a FILE node with absolute_path/relative_path populated."""
     file_id = f"file:{relative_path}"
@@ -106,13 +111,13 @@ def _build_two_repo_federation(
     root_entry = RepoEntry(
         name="root",
         graph=root_graph,
-        config=None,
+        config=_project_config("root", "REQ"),
         repo_root=root_repo,
     )
     cal_entry = RepoEntry(
         name="callisto",
         graph=cal_graph,
-        config=None,
+        config=_project_config("callisto", "REQ-CAL"),
         repo_root=callisto_repo,
     )
     fed = FederatedGraph([root_entry, cal_entry], root_repo="root")
@@ -253,7 +258,7 @@ class TestUnattributedBucket:
         entry = RepoEntry(
             name="root",
             graph=graph,
-            config=None,
+            config=_project_config("root", "REQ"),
             repo_root=tmp_path,
         )
         fed = _OrphanIDFederation([entry], root_repo="root")

@@ -30,6 +30,7 @@ from elspais.graph.GraphNode import (
     make_remainder_id,
     make_step_id,
     make_test_id,
+    parse_structural_id,
 )
 from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
 from elspais.graph.parsers import ParsedContent
@@ -86,6 +87,37 @@ class TraceGraph:
     # When None, falls back to the default "-" separator for tests/legacy
     # code paths that don't have a resolver wired up.
     _resolver: Any | None = field(default=None, repr=False)
+
+    # The namespace of the repository this graph holds, carried down from
+    # the builder that produced it. Read through the ``namespace``
+    # property, never directly: a graph assembled by hand has neither this
+    # nor a resolver, and must refuse rather than answer emptily.
+    _namespace: str = field(default="", repr=False)
+
+    @property
+    def namespace(self) -> str:
+        """The namespace this repository's identifiers are written in.
+
+        Preferred from the configured resolver, which is the one authority
+        for the identifier grammar, and otherwise the namespace the builder
+        was given — a builder cannot be constructed without one, so a graph
+        it produced can always answer.
+
+        Raises:
+            ValueError: The graph was assembled without either, and so
+                cannot say which repository it holds. There is no empty
+                answer: a caller asking this is about to identify a node,
+                and an id naming no repository resolves against nothing.
+        """
+        namespace = (
+            getattr(getattr(self._resolver, "config", None), "namespace", "") or self._namespace
+        )
+        if not namespace:
+            raise ValueError(
+                "This graph names no namespace and cannot say which repository "
+                "it holds; a node identified by source location needs one."
+            )
+        return namespace
 
     # Internal storage (prefixed) - excluded from constructor
     _roots: list[GraphNode] = field(default_factory=list, init=False)
@@ -1473,9 +1505,13 @@ class TraceGraph:
         node = self._index[node_id]
         was_root = node in self._roots
 
-        # Record state before deletion
+        # Record state before deletion. The FILE node's id is recorded
+        # alongside its path: a path alone does not say which repository
+        # holds the file, so a replay that rebuilt the id from the path
+        # could name a different repository's file of the same name.
         _fn = node.file_node()
         source_path = _fn.get_field("relative_path") if _fn else None
+        source_file_id = _fn.id if _fn else None
         entry = MutationEntry(
             operation="delete_requirement",
             target_id=node_id,
@@ -1489,6 +1525,7 @@ class TraceGraph:
                 "parent_ids": [p.id for p in node.iter_parents()],
                 "child_ids": [c.id for c in node.iter_children()],
                 "source_path": source_path,
+                "source_file_id": source_file_id,
                 # Implements: REQ-o00062-P
                 # Full edge capture so undo reattaches the requirement rather
                 # than restoring an orphan that renders into no file.
@@ -2409,13 +2446,17 @@ class TraceGraph:
         # Import here to avoid a circular import between builder and factory.
         from elspais.graph.factory import create_file_node
 
+        # Named rather than positional: the namespace sits between the file
+        # type and the repo, and a positional call that predates it lands
+        # every later argument one slot early without changing arity.
         node = create_file_node(
             absolute_path,
             repo_root,
             file_type,
-            repo,
-            git_branch,
-            git_commit,
+            self.namespace,
+            repo=repo,
+            git_branch=git_branch,
+            git_commit=git_commit,
         )
         if node.id in self._index:
             raise ValueError(f"FILE node '{node.id}' already exists")
@@ -2481,7 +2522,10 @@ class TraceGraph:
         if node.kind != NodeKind.FILE:
             raise ValueError(f"Node '{file_id}' is not a FILE node")
 
-        new_id = make_file_id(new_relative_path)
+        # A rename moves a file within its repository, never between
+        # repositories, so the new id is written in the same namespace the
+        # old one names.
+        new_id = make_file_id(parse_structural_id(file_id)[1], new_relative_path)
         old_relative_path = node.get_field("relative_path")
         old_absolute_path = node.get_field("absolute_path")
 
@@ -3368,7 +3412,7 @@ class GraphBuilder:
     """Builder for constructing TraceGraph from parsed content.
 
     Usage:
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ")
         for content in parsed_contents:
             builder.add_parsed_content(content)
         graph = builder.build()
@@ -3386,12 +3430,13 @@ class GraphBuilder:
     # Implements: REQ-d00222-D
     def __init__(
         self,
+        *,
+        namespace: str,
         repo_root: Path | None = None,
         hash_mode: str = "normalized-text",
         satellite_kinds: list[str] | None = None,
         multi_assertion_separator: str = "+",
         resolver: Any | None = None,
-        namespace: str = "",
         project_name: str = "",
         link_results_to_tests: bool = True,
     ) -> None:
@@ -3409,7 +3454,11 @@ class GraphBuilder:
             resolver: IdResolver instance for multi-assertion expansion.
                 When provided, uses resolver.parse()/expand()/render_canonical()
                 instead of string splitting.
-            namespace: Repository namespace for TermEntry attribution.
+            namespace: The namespace of the repository whose content this
+                graph holds. Required and non-empty: nodes identified by
+                source location name their repository, so a graph that
+                cannot say which repository it is holding cannot identify
+                what is in it. Also attributes ``TermEntry.namespace``.
             project_name: Human-readable repo/project name (from
                 ``[project].name`` in config). Used to tag in-repo
                 INSTANCE clones with ``template_repo`` so the viewer's
@@ -3426,6 +3475,11 @@ class GraphBuilder:
         """
         self.repo_root = repo_root or Path.cwd()
         self.hash_mode = hash_mode
+        if not namespace:
+            raise ValueError(
+                "GraphBuilder requires the namespace of the repository whose "
+                "content it holds: its nodes name that repository in their ids."
+            )
         self._namespace = namespace
         self._project_name = project_name
         self._link_results_to_tests = link_results_to_tests
@@ -3555,7 +3609,9 @@ class GraphBuilder:
                 source_ctx = getattr(content, "source_context", None)
                 source_path = source_ctx.source_id if source_ctx else ""
                 rel_source = self._to_relative_path(source_path) if source_path else source_path
-                remainder_id = data.get("id") or make_definition_id(rel_source, content.start_line)
+                remainder_id = data.get("id") or make_definition_id(
+                    self._namespace, rel_source, content.start_line
+                )
                 node = self._nodes.get(remainder_id)
                 if node:
                     self._wire_contains_edge(file_node, node, content)
@@ -3567,7 +3623,9 @@ class GraphBuilder:
                 source_ctx = getattr(content, "source_context", None)
                 source_path = source_ctx.source_id if source_ctx else ""
                 rel_source = self._to_relative_path(source_path) if source_path else source_path
-                remainder_id = data.get("id") or make_remainder_id(rel_source, content.start_line)
+                remainder_id = data.get("id") or make_remainder_id(
+                    self._namespace, rel_source, content.start_line
+                )
                 node = self._nodes.get(remainder_id)
                 if node:
                     self._wire_contains_edge(file_node, node, content)
@@ -4106,7 +4164,9 @@ class GraphBuilder:
         source_path = source_ctx.source_id if source_ctx else ""
 
         rel_source = self._to_relative_path(source_path) if source_path else source_path
-        remainder_id = data.get("id") or make_definition_id(rel_source, content.start_line)
+        remainder_id = data.get("id") or make_definition_id(
+            self._namespace, rel_source, content.start_line
+        )
         text = content.raw_text or ""
 
         node = GraphNode(
@@ -4136,7 +4196,9 @@ class GraphBuilder:
         # Use provided ID or generate from source location (repo-relative to
         # keep generated artifacts stable across worktrees).
         rel_source = self._to_relative_path(source_path) if source_path else source_path
-        remainder_id = data.get("id") or make_remainder_id(rel_source, content.start_line)
+        remainder_id = data.get("id") or make_remainder_id(
+            self._namespace, rel_source, content.start_line
+        )
         text = data.get("text", content.raw_text or "")
 
         node = GraphNode(
@@ -4809,6 +4871,7 @@ class GraphBuilder:
             hash_mode=self.hash_mode,
             satellite_kinds=self.satellite_kinds,
             _resolver=self._resolver,
+            _namespace=self._namespace,
         )
         graph._roots = roots
         graph._index = dict(self._nodes)

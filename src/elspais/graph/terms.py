@@ -40,8 +40,8 @@ class TermEntry:
     defined_at_line: int = 0  # for error reporting
     namespace: str = ""  # repo namespace (ID prefix, e.g. "REQ", "DIARY")
     repo_name: str = ""  # owning federated repo name (RepoEntry.name) —
-    # the canonical disambiguator when a term's defined_in is a FILE id,
-    # since FILE ids can legitimately collide across federated repos.
+    # translates an associate's own project name into the key the host
+    # declares it under, which no identifier carries.
     references: list[TermRef] = field(default_factory=list)
     # Phase 4: reference-type definitions, synonyms, change tracking
     is_reference: bool = False  # True for external standard/document definitions

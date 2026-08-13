@@ -40,7 +40,14 @@ def _make_app(tmp_path: Path) -> TestClient:
     req_node.set_field("title", "Authentication System")
     graph._index["REQ-p00001"] = req_node
 
-    repos = [RepoEntry(name="root", graph=graph, config={}, repo_root=tmp_path)]
+    repos = [
+        RepoEntry(
+            name="root",
+            graph=graph,
+            config={"project": {"name": "root", "namespace": "REQ"}},
+            repo_root=tmp_path,
+        )
+    ]
     federated = FederatedGraph(repos)
 
     terms = TermDictionary()

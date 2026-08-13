@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from elspais.graph.GraphNode import GraphNode, NodeKind, make_file_id
+from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.utilities.hasher import (
     HASH_VALUE_PATTERN,
@@ -790,11 +790,13 @@ def _find_dirty_files(graph: FederatedGraph, resolver: Any | None = None) -> lis
             if parent_id:
                 _mark_node_file(parent_id)
 
-        # For delete_requirement, use the stored source_path
+        # For delete_requirement, use the FILE id stored at delete time.
+        # The path stored beside it cannot name the repository, so it is
+        # not a fallback here -- it is display data.
         if entry.operation == "delete_requirement":
-            source_path = entry.before_state.get("source_path")
-            if source_path:
-                _mark(graph.find_by_id(make_file_id(source_path)))
+            source_file_id = entry.before_state.get("source_file_id")
+            if source_file_id:
+                _mark(graph.find_by_id(source_file_id))
             # Also try parent IDs from before_state
             for pid in entry.before_state.get("parent_ids", []):
                 _mark_node_file(pid)

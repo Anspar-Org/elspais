@@ -21,7 +21,7 @@ def sample_graph():
     """Create a sample graph for testing."""
     from elspais.graph.GraphNode import FileType
 
-    builder = GraphBuilder(repo_root=Path("/test/repo"))
+    builder = GraphBuilder(repo_root=Path("/test/repo"), namespace="REQ")
 
     # Create FILE nodes
     file_nodes = {}
@@ -238,7 +238,7 @@ class TestToCsv:
     # Verifies: REQ-d00052-C
     def test_csv_handles_commas(self):
         """Escapes commas in values."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ")
         builder.add_parsed_content(
             make_requirement(
                 "REQ-test",
@@ -257,7 +257,7 @@ class TestToCsv:
     # Verifies: REQ-d00052-C
     def test_csv_handles_quotes(self):
         """Escapes quotes in values."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ")
         builder.add_parsed_content(
             make_requirement(
                 "REQ-test",
@@ -303,7 +303,7 @@ class TestSerializeAdditionalCoverage:
     # Verifies: REQ-d00064-D
     def test_serialize_empty_graph(self):
         """Serializes empty graph correctly."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ")
         graph = builder.build()
 
         result = serialize_graph(graph)

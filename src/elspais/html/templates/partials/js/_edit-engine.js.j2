@@ -1549,7 +1549,8 @@ function onMoveToFile(nodeId, currentPath) {
 }
 
 function _showMoveToFileModal(nodeId, files, currentPath) {
-    var currentFileId = currentPath ? ('file:' + currentPath) : null;
+    // Compared by path: a node id names the repository holding the file,
+    // which this page cannot know, so it is never built here.
 
     var overlay = document.createElement('div');
     overlay.className = 'modal-overlay visible';
@@ -1570,7 +1571,7 @@ function _showMoveToFileModal(nodeId, files, currentPath) {
     var selectedFileId = null;
 
     files.forEach(function(f) {
-        if (f.id === currentFileId) return;
+        if (f.relative_path === currentPath) return;
         var item = document.createElement('label');
         item.className = 'modal-file-checkbox';
         var radio = document.createElement('input');
@@ -1662,7 +1663,7 @@ function _showMoveToFileModal(nodeId, files, currentPath) {
                 errorEl.style.display = 'block';
                 return;
             }
-            targetId = 'file:' + newPath;
+            targetId = newPath;
         }
         moveBtn.disabled = true;
         moveBtn.textContent = 'Moving\u2026';
@@ -1695,12 +1696,14 @@ function onRenameFile() {
     var currentPath = pathEl.title || pathEl.textContent;
     if (!currentPath || currentPath === 'No file selected') return;
 
-    var fileId = 'file:' + currentPath;
     var newPath = prompt('Rename file to:', currentPath);
     if (!newPath || newPath.trim() === currentPath) return;
 
+    // The file being renamed already exists, so it already has an id, and
+    // that id names the repository holding it -- something this page cannot
+    // work out from a path. Ask the server which node this path is.
     mutate('/api/mutate/rename-file', {
-        file_id: fileId,
+        file_id: currentPath,
         new_relative_path: newPath.trim()
     }).then(async function(result) {
         if (result && result.success) {
@@ -2740,7 +2743,7 @@ function _showAddRequirementModal(files) {
                 showToast('Enter a file path for the new file', 'warning');
                 return;
             }
-            fileId = 'file:' + newPath;
+            fileId = newPath;
         }
 
         mutate('/api/mutate/requirement/add', {
@@ -2896,7 +2899,7 @@ function _showAddJourneyModal(files) {
                 showToast('Enter a file path for the new file', 'warning');
                 return;
             }
-            fileId = 'file:' + newPath;
+            fileId = newPath;
         }
         if (!fileId) {
             showToast('Select a file', 'warning');

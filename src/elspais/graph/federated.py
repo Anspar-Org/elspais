@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from elspais.graph.GraphNode import (
-    STRUCTURAL_ID_PREFIXES,
     FileType,
     GraphNode,
     NodeKind,
@@ -215,12 +214,11 @@ class FederatedGraph:
         # ``namespace`` — the three identifiers (host-side handle,
         # display name, REQ-id prefix) are distinct and downstream
         # consumers (term cards, file routing, viewer namespace labels,
-        # render save) assume all three are present. The ``[project]``
-        # presence check is permissive on empty ``config={}`` so isolated
-        # unit tests that wire a TraceGraph straight into a RepoEntry
-        # don't need to fabricate a full config dict; production callers
-        # always go through ``load_config()`` which produces a populated
-        # ``[project]`` block.
+        # render save) assume all three are present. A repo that carries a
+        # graph must declare both: its nodes name their repository in their
+        # ids, and there is no namespace-less repository for them to name.
+        # A repo that failed to load carries no graph and no config, and is
+        # exempt because it contributes no nodes.
         for r in repos:
             if not r.name or not str(r.name).strip():
                 raise FederationError(
@@ -230,8 +228,8 @@ class FederatedGraph:
                 )
             if r.repo_root is None or str(r.repo_root) == "":
                 raise FederationError(f"RepoEntry({r.name!r}).repo_root must be set")
-            if r.config and "project" in r.config:
-                project = r.config["project"] or {}
+            if r.graph is not None:
+                project = (r.config or {}).get("project") or {}
                 if not project.get("name") or not str(project["name"]).strip():
                     raise FederationError(
                         f"RepoEntry({r.name!r}).config is missing non-empty "
@@ -248,22 +246,7 @@ class FederatedGraph:
         self._repos: dict[str, RepoEntry] = {r.name: r for r in repos}
         self._root_repo = root_repo or (repos[0].name if repos else "")
         # Build ownership map: node_id -> repo name
-        # Detect ID conflicts across repos (skip FILE/REMAINDER nodes which
-        # naturally have same relative paths across repos)
-        self._ownership: dict[str, str] = {}
-        for entry in repos:
-            if entry.graph is not None:
-                for node_id in entry.graph._index:
-                    if node_id in self._ownership:
-                        # FILE and REMAINDER nodes may share relative paths
-                        if node_id.startswith(STRUCTURAL_ID_PREFIXES):
-                            continue
-                        existing_repo = self._ownership[node_id]
-                        raise FederationError(
-                            f"ID conflict: '{node_id}' exists in both "
-                            f"'{existing_repo}' and '{entry.name}'"
-                        )
-                    self._ownership[node_id] = entry.name
+        self._ownership = self._build_ownership(repos)
         # Cache of per-repo IdResolvers, populated on first access by
         # ``_resolver_for``.  Cross-repo ownership / canonicalisation
         # probes hit this cache instead of rebuilding the resolver on
@@ -359,7 +342,9 @@ class FederatedGraph:
                 continue
             config = entry.config or {}
             terms_cfg = config.get("terms", {})
-            req_namespace = config.get("project", {}).get("namespace", "") or entry.name
+            # A repo with a graph has a config, and a config that loaded has a
+            # namespace -- load_config refuses one without. No substitute needed.
+            req_namespace = config["project"]["namespace"]
             unmatched = scan_graph(
                 self._terms,
                 entry.graph,
@@ -527,14 +512,18 @@ class FederatedGraph:
         must pass an explicit ``name`` sentinel (e.g. ``"<unconfigured>"``)
         so the degraded state is visible at the call site rather than hidden
         behind a default.
-        """
-        from elspais.graph.builder import TraceGraph
 
+        The entry carries no graph, which is the same shape a repository
+        that failed to load takes. A graph would have to say which
+        repository it holds, and this stands for a repository that could
+        not be read at all.
+        """
         entry = RepoEntry(
             name=name,
-            graph=TraceGraph(),
+            graph=None,
             config=None,
             repo_root=Path("."),
+            error="Configuration could not be read",
         )
         return cls([entry], root_repo=name)
 
@@ -1417,16 +1406,10 @@ class FederatedGraph:
     def _owner_of_node(self, node) -> str | None:
         """Return the name of the repository holding ``node``.
 
-        FILE and REMAINDER ids repeat across repositories -- two members
-        both holding ``tests/test_x.py`` produce the same node id -- so the
-        ownership map records only one of them for those kinds. Identify
-        their holder by the node object itself, which is unambiguous.
+        Every id names its repository, structural ids included, so the
+        ownership map answers for the node in hand rather than for some
+        other member that happens to hold the same path.
         """
-        if not node.id.startswith(STRUCTURAL_ID_PREFIXES):
-            return self._ownership.get(node.id)
-        for repo_name, entry in self._repos.items():
-            if entry.graph is not None and entry.graph._index.get(node.id) is node:
-                return repo_name
         return self._ownership.get(node.id)
 
     @staticmethod
@@ -2190,12 +2173,37 @@ class FederatedGraph:
         return undone
 
     def _rebuild_ownership(self) -> None:
-        """Rebuild the ownership map from all sub-graph indexes."""
-        self._ownership.clear()
-        for entry in self._repos.values():
-            if entry.graph is not None:
-                for node_id in entry.graph._index:
-                    self._ownership[node_id] = entry.name
+        """Rebuild the ownership map from all sub-graph indexes.
+
+        Built exactly as ``__init__`` builds it, so an undo cannot leave
+        ownership answering differently from how it answered before.
+        """
+        self._ownership = self._build_ownership(list(self._repos.values()))
+
+    @staticmethod
+    def _build_ownership(repos: list[RepoEntry]) -> dict[str, str]:
+        """Map every node id to the repository holding it.
+
+        Every id is unique across a federation: a semantic id carries its
+        repository's namespace, and so does a structural id, which is what
+        lets two repositories hold a file at the same repo-relative path
+        without their nodes colliding. So a repeated id is a genuine
+        conflict rather than a path two members happen to share, and it is
+        reported instead of silently resolving to one of them.
+        """
+        ownership: dict[str, str] = {}
+        for entry in repos:
+            if entry.graph is None:
+                continue
+            for node_id in entry.graph._index:
+                existing_repo = ownership.get(node_id)
+                if existing_repo is not None:
+                    raise FederationError(
+                        f"ID conflict: '{node_id}' exists in both "
+                        f"'{existing_repo}' and '{entry.name}'"
+                    )
+                ownership[node_id] = entry.name
+        return ownership
 
 
 def is_associate_owned(graph: Any, node: Any) -> bool:

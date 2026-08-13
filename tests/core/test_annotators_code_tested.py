@@ -2,8 +2,10 @@
 """Tests for _compute_code_tested annotator."""
 
 from elspais.graph.annotators import annotate_coverage
+from elspais.graph.GraphNode import make_file_id
 from elspais.graph.metrics import RollupMetrics
 from tests.core.graph_test_helpers import (
+    HELPER_NAMESPACE,
     build_graph,
     make_code_ref,
     make_requirement,
@@ -59,7 +61,7 @@ def _build_req_with_code(
 
     # Annotate FILE node with line_coverage if provided
     if line_coverage is not None:
-        file_id = f"file:{code_path}"
+        file_id = make_file_id(HELPER_NAMESPACE, code_path)
         file_node = graph.find_by_id(file_id)
         assert file_node is not None, f"FILE node {file_id} not found"
         file_node.set_field("line_coverage", line_coverage)
@@ -219,7 +221,7 @@ def _build_req_code_test_with_contexts(
 
     graph = build_graph(req, code_ref, test_ref)
 
-    file_id = f"file:{code_path}"
+    file_id = make_file_id(HELPER_NAMESPACE, code_path)
     file_node = graph.find_by_id(file_id)
     assert file_node is not None, f"FILE node {file_id} not found"
     file_node.set_field("line_coverage", line_coverage)

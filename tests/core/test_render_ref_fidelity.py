@@ -29,6 +29,7 @@ from pathlib import Path
 import pytest
 
 from elspais.graph.factory import build_graph
+from elspais.graph.GraphNode import make_file_id
 from elspais.graph.relations import EdgeKind
 from elspais.graph.render import node_version, render_file, render_node
 
@@ -311,7 +312,7 @@ class TestBrokenRefRenderPreservation:
         resolved ref (REQ-o00005/REQ-o00006). Both citations must survive a
         whole-file rewrite, so each broken ID must appear exactly twice.
         """
-        file_node = _node(fidelity_graph, "file:spec/reqs.md")
+        file_node = _node(fidelity_graph, make_file_id("REQ", "spec/reqs.md"))
         content = render_file(file_node)
         assert content.count("REQ-p77777") == 2, (
             "the mixed requirement's broken Implements entry was dropped " "from the file rewrite"

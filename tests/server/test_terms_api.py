@@ -46,7 +46,14 @@ def _make_app(tmp_path: Path) -> TestClient:
     graph._roots.append(file_node)
 
     # Build federated graph
-    repos = [RepoEntry(name="root", graph=graph, config={}, repo_root=tmp_path)]
+    repos = [
+        RepoEntry(
+            name="root",
+            graph=graph,
+            config={"project": {"name": "root", "namespace": "REQ"}},
+            repo_root=tmp_path,
+        )
+    ]
     federated = FederatedGraph(repos)
 
     # Populate terms dictionary
@@ -155,7 +162,14 @@ class TestTermsListEndpoint:
     def test_REQ_d00242_A_empty_dictionary(self, tmp_path: Path) -> None:
         """Empty TermDictionary returns []."""
         graph = TraceGraph(repo_root=tmp_path)
-        repos = [RepoEntry(name="root", graph=graph, config={}, repo_root=tmp_path)]
+        repos = [
+            RepoEntry(
+                name="root",
+                graph=graph,
+                config={"project": {"name": "root", "namespace": "REQ"}},
+                repo_root=tmp_path,
+            )
+        ]
         federated = FederatedGraph(repos)
         federated._terms = TermDictionary()
         state = AppState(graph=federated, repo_root=tmp_path, config={})
@@ -294,8 +308,18 @@ def _make_federated_app(tmp_path: Path) -> TestClient:
     )
 
     repos = [
-        RepoEntry(name="core", graph=core_graph, config={}, repo_root=core_root),
-        RepoEntry(name="assoc", graph=assoc_graph, config={}, repo_root=assoc_root),
+        RepoEntry(
+            name="core",
+            graph=core_graph,
+            config={"project": {"name": "core", "namespace": "CORE"}},
+            repo_root=core_root,
+        ),
+        RepoEntry(
+            name="assoc",
+            graph=assoc_graph,
+            config={"project": {"name": "assoc", "namespace": "ASSOC"}},
+            repo_root=assoc_root,
+        ),
     ]
     federated = FederatedGraph(repos)
 
@@ -405,8 +429,18 @@ class TestTermRepoNameAndPath:
         core_root.mkdir()
         core_graph = TraceGraph(repo_root=core_root)
         repos = [
-            RepoEntry(name="core", graph=core_graph, config={}, repo_root=core_root),
-            RepoEntry(name="assoc", graph=assoc_graph, config={}, repo_root=assoc_root),
+            RepoEntry(
+                name="core",
+                graph=core_graph,
+                config={"project": {"name": "core", "namespace": "CORE"}},
+                repo_root=core_root,
+            ),
+            RepoEntry(
+                name="assoc",
+                graph=assoc_graph,
+                config={"project": {"name": "assoc", "namespace": "ASSOC"}},
+                repo_root=assoc_root,
+            ),
         ]
         federated = FederatedGraph(repos)
 

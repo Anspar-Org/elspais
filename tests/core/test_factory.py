@@ -14,6 +14,7 @@ import pytest
 
 from elspais.graph import NodeKind
 from elspais.graph.factory import build_graph
+from elspais.graph.GraphNode import make_file_id
 from elspais.graph.relations import EdgeKind
 
 
@@ -327,7 +328,7 @@ class TestDefaultCodePatternFileTypes:
         graph = _build_graph_for_annotated_file(tmp_path, f"infra.{ext}")
 
         # REQ-d00128-A: FILE node with file:<repo-relative-path> ID
-        file_node = graph.find_by_id(f"file:src/infra.{ext}")
+        file_node = graph.find_by_id(make_file_id("REQ", f"src/infra.{ext}"))
         assert file_node is not None, f".{ext} file should produce a FILE node"
         assert file_node.get_field("relative_path") == f"src/infra.{ext}"
 

@@ -40,7 +40,10 @@ class TestFullPipeline:
         deserializer = DomainFile(spec_dir, patterns=["*.md"])
 
         # Build graph
-        builder = GraphBuilder(repo_root=integration_spec_dir)
+        builder = GraphBuilder(
+            repo_root=integration_spec_dir,
+            namespace=resolver.config.namespace,
+        )
         for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
@@ -65,7 +68,10 @@ class TestFullPipeline:
         spec_dir = integration_spec_dir / "spec"
         deserializer = DomainFile(spec_dir, patterns=["*.md"])
 
-        builder = GraphBuilder(repo_root=integration_spec_dir)
+        builder = GraphBuilder(
+            repo_root=integration_spec_dir,
+            namespace=resolver.config.namespace,
+        )
         for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
@@ -93,7 +99,10 @@ class TestFullPipeline:
         spec_dir = integration_spec_dir / "spec"
         deserializer = DomainFile(spec_dir, patterns=["*.md"])
 
-        builder = GraphBuilder(repo_root=integration_spec_dir)
+        builder = GraphBuilder(
+            repo_root=integration_spec_dir,
+            namespace=resolver.config.namespace,
+        )
         for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
@@ -126,7 +135,10 @@ class TestFullPipeline:
         spec_dir = integration_spec_dir / "spec"
         deserializer = DomainFile(spec_dir, patterns=["*.md"])
 
-        builder = GraphBuilder(repo_root=integration_spec_dir)
+        builder = GraphBuilder(
+            repo_root=integration_spec_dir,
+            namespace=resolver.config.namespace,
+        )
         for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
@@ -152,7 +164,10 @@ class TestFullPipeline:
         spec_dir = integration_spec_dir / "spec"
         deserializer = DomainFile(spec_dir, patterns=["*.md"])
 
-        builder = GraphBuilder(repo_root=integration_spec_dir)
+        builder = GraphBuilder(
+            repo_root=integration_spec_dir,
+            namespace=resolver.config.namespace,
+        )
         for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
@@ -205,6 +220,7 @@ class TestMultiAssertionPipelineExpansion:
         builder = GraphBuilder(
             repo_root=root_dir,
             multi_assertion_separator=multi_assertion_separator,
+            namespace=resolver.config.namespace,
         )
         for content in spec_deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)

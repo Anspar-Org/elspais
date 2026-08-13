@@ -56,14 +56,14 @@ class TestRealWorldSpecs:
         assert len(results) > 0
 
     # Verifies: REQ-p00013-C
-    def test_finds_prd_requirements(self, dispatcher):
+    def test_finds_prd_requirements(self, dispatcher, real_resolver):
         """Verify PRD requirements are found in real specs."""
         if not SPEC_DIR.exists():
             pytest.skip("No spec/ directory found")
 
         deserializer = DomainFile(SPEC_DIR, patterns=["*.md"])
 
-        builder = GraphBuilder(repo_root=REPO_ROOT)
+        builder = GraphBuilder(repo_root=REPO_ROOT, namespace=real_resolver.config.namespace)
         for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
@@ -78,14 +78,14 @@ class TestRealWorldSpecs:
         assert len(prd_reqs) > 0
 
     # Verifies: REQ-p00013-C
-    def test_graph_has_roots(self, dispatcher):
+    def test_graph_has_roots(self, dispatcher, real_resolver):
         """Verify graph identifies root requirements."""
         if not SPEC_DIR.exists():
             pytest.skip("No spec/ directory found")
 
         deserializer = DomainFile(SPEC_DIR, patterns=["*.md"])
 
-        builder = GraphBuilder(repo_root=REPO_ROOT)
+        builder = GraphBuilder(repo_root=REPO_ROOT, namespace=real_resolver.config.namespace)
         for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
@@ -95,14 +95,14 @@ class TestRealWorldSpecs:
         assert graph.root_count() > 0
 
     # Verifies: REQ-p00013-C
-    def test_assertions_are_created(self, dispatcher):
+    def test_assertions_are_created(self, dispatcher, real_resolver):
         """Verify assertions are extracted from requirements."""
         if not SPEC_DIR.exists():
             pytest.skip("No spec/ directory found")
 
         deserializer = DomainFile(SPEC_DIR, patterns=["*.md"])
 
-        builder = GraphBuilder(repo_root=REPO_ROOT)
+        builder = GraphBuilder(repo_root=REPO_ROOT, namespace=real_resolver.config.namespace)
         for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
@@ -114,14 +114,14 @@ class TestRealWorldSpecs:
         assert len(assertions) > 0
 
     # Verifies: REQ-p00013-C
-    def test_implements_relationships(self, dispatcher):
+    def test_implements_relationships(self, dispatcher, real_resolver):
         """Verify implements relationships are parsed."""
         if not SPEC_DIR.exists():
             pytest.skip("No spec/ directory found")
 
         deserializer = DomainFile(SPEC_DIR, patterns=["*.md"])
 
-        builder = GraphBuilder(repo_root=REPO_ROOT)
+        builder = GraphBuilder(repo_root=REPO_ROOT, namespace=real_resolver.config.namespace)
         for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 

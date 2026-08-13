@@ -20,10 +20,20 @@ from starlette.testclient import TestClient
 from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph, RepoEntry
-from elspais.graph.GraphNode import FileType
+from elspais.graph.GraphNode import FileType, make_file_id
 from elspais.graph.relations import EdgeKind
 from elspais.server.app import create_app
 from elspais.server.state import AppState
+
+# The namespace these tests build their graphs with -- a structural id carries
+# the namespace of the repository holding the node.
+NAMESPACE = "REQ"
+
+
+def file_id(relative_path: str) -> str:
+    """FILE node id for a path in the test repository."""
+    return make_file_id(NAMESPACE, relative_path)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixtures
@@ -1927,7 +1937,7 @@ def _make_disk_app(tmp_path, spec_content=DISK_SPEC, two_reqs=False):
     rel_path = str(spec_file.relative_to(tmp_path))
 
     # Create FILE node
-    file_node = GraphNode(id=f"file:{rel_path}", kind=NodeKind.FILE, label="test_spec.md")
+    file_node = GraphNode(id=file_id(rel_path), kind=NodeKind.FILE, label="test_spec.md")
     file_node.set_field("file_type", FileType.SPEC)
     file_node.set_field("relative_path", rel_path)
     file_node.set_field("absolute_path", str(spec_file))
@@ -1973,7 +1983,7 @@ def _make_disk_app(tmp_path, spec_content=DISK_SPEC, two_reqs=False):
     prd.link(req, EdgeKind.IMPLEMENTS)
 
     index = {
-        f"file:{rel_path}": file_node,
+        file_id(rel_path): file_node,
         "REQ-p00001": prd,
         "REQ-t00001": req,
         "REQ-t00001-A": a1,
@@ -2746,7 +2756,7 @@ def _make_freshness_app(tmp_path, spec_subdir="spec"):
     rel_path = str(spec_file.relative_to(tmp_path))
 
     # Create FILE node
-    file_node = GraphNode(id=f"file:{rel_path}", kind=NodeKind.FILE, label="requirements.md")
+    file_node = GraphNode(id=file_id(rel_path), kind=NodeKind.FILE, label="requirements.md")
     file_node.set_field("file_type", FileType.SPEC)
     file_node.set_field("relative_path", rel_path)
     file_node.set_field("absolute_path", str(spec_file))
@@ -2768,7 +2778,7 @@ def _make_freshness_app(tmp_path, spec_subdir="spec"):
 
     graph._roots = [file_node, prd]
     graph._index = {
-        f"file:{rel_path}": file_node,
+        file_id(rel_path): file_node,
         "REQ-p00001": prd,
         "REQ-p00001-A": a1,
     }
@@ -3161,7 +3171,7 @@ class TestSpecFiles:
         graph = TraceGraph(repo_root=Path("/test/repo"))
 
         spec_file1 = GraphNode(
-            id="file:spec/requirements.md",
+            id=file_id("spec/requirements.md"),
             kind=NodeKind.FILE,
             label="spec/requirements.md",
         )
@@ -3173,7 +3183,7 @@ class TestSpecFiles:
         }
 
         spec_file2 = GraphNode(
-            id="file:spec/ops/ops-reqs.md",
+            id=file_id("spec/ops/ops-reqs.md"),
             kind=NodeKind.FILE,
             label="spec/ops/ops-reqs.md",
         )
@@ -3185,7 +3195,7 @@ class TestSpecFiles:
         }
 
         code_file = GraphNode(
-            id="file:src/main.py",
+            id=file_id("src/main.py"),
             kind=NodeKind.FILE,
             label="src/main.py",
         )
@@ -3197,7 +3207,7 @@ class TestSpecFiles:
         }
 
         test_file = GraphNode(
-            id="file:tests/test_main.py",
+            id=file_id("tests/test_main.py"),
             kind=NodeKind.FILE,
             label="tests/test_main.py",
         )
@@ -3210,10 +3220,10 @@ class TestSpecFiles:
 
         graph._roots = []
         graph._index = {
-            "file:spec/requirements.md": spec_file1,
-            "file:spec/ops/ops-reqs.md": spec_file2,
-            "file:src/main.py": code_file,
-            "file:tests/test_main.py": test_file,
+            file_id("spec/requirements.md"): spec_file1,
+            file_id("spec/ops/ops-reqs.md"): spec_file2,
+            file_id("src/main.py"): code_file,
+            file_id("tests/test_main.py"): test_file,
         }
         # Register FILE nodes in the kind index
         graph._kind_index = {
@@ -3246,11 +3256,11 @@ class TestSpecFiles:
             assert f["file_type"] == "SPEC"
         # Check IDs
         ids = {f["id"] for f in files}
-        assert "file:spec/requirements.md" in ids
-        assert "file:spec/ops/ops-reqs.md" in ids
+        assert file_id("spec/requirements.md") in ids
+        assert file_id("spec/ops/ops-reqs.md") in ids
         # CODE/TEST should not appear
-        assert "file:src/main.py" not in ids
-        assert "file:tests/test_main.py" not in ids
+        assert file_id("src/main.py") not in ids
+        assert file_id("tests/test_main.py") not in ids
 
     def test_spec_files_sorted_by_path(self, spec_files_client):
         # Verifies: REQ-d00010
@@ -3269,7 +3279,7 @@ class TestSpecFiles:
         """Returns empty list when no SPEC files exist."""
         graph = TraceGraph(repo_root=Path("/test/repo"))
         code_file = GraphNode(
-            id="file:src/main.py",
+            id=file_id("src/main.py"),
             kind=NodeKind.FILE,
             label="src/main.py",
         )
@@ -3280,7 +3290,7 @@ class TestSpecFiles:
             "repo": "",
         }
         graph._roots = []
-        graph._index = {"file:src/main.py": code_file}
+        graph._index = {file_id("src/main.py"): code_file}
         graph._kind_index = {NodeKind.FILE: [code_file]}
 
         state = AppState(
@@ -3373,7 +3383,7 @@ class TestMoveToNewFile:
 
         body = {
             "node_id": "REQ-t00001",
-            "target_file_id": "file:spec/new-reqs.md",
+            "target_file_id": file_id("spec/new-reqs.md"),
             "if_version": _version(client, "REQ-t00001"),
             "if_source_file_version": _file_version(client, "REQ-t00001"),
             # The destination does not exist yet, so the caller has no token
@@ -3393,7 +3403,7 @@ class TestMoveToNewFile:
         assert new_file.exists()
 
         # The graph should have a FILE node for the new file
-        new_file_node = state.graph.find_by_id("file:spec/new-reqs.md")
+        new_file_node = state.graph.find_by_id(file_id("spec/new-reqs.md"))
         assert new_file_node is not None
 
     # Verifies: REQ-d00010
@@ -3406,7 +3416,7 @@ class TestMoveToNewFile:
             "/api/mutate/move-to-file",
             json={
                 "node_id": "REQ-t00001",
-                "target_file_id": "file:random/not-a-spec.md",
+                "target_file_id": file_id("random/not-a-spec.md"),
                 # Valid tokens, so the path rejection is what gets asserted
                 # rather than a version conflict masking it.
                 "if_version": _version(client, "REQ-t00001"),
@@ -3432,7 +3442,7 @@ class TestMoveToNewFile:
             "/api/mutate/move-to-file",
             json={
                 "node_id": "REQ-t00001",
-                "target_file_id": "file:spec/../../etc/passwd.md",
+                "target_file_id": file_id("spec/../../etc/passwd.md"),
             },
         )
         assert resp.status_code == 400
@@ -3463,19 +3473,19 @@ class TestMoveToNewFile:
         state._rebuild()
 
         # The target file already exists in the graph
-        target_node = state.graph.find_by_id("file:spec/other.md")
+        target_node = state.graph.find_by_id(file_id("spec/other.md"))
         assert target_node is not None
 
         resp = client.post(
             "/api/mutate/move-to-file",
             json={
                 "node_id": "REQ-t00001",
-                "target_file_id": "file:spec/other.md",
+                "target_file_id": file_id("spec/other.md"),
                 # A move changes the node, the file it leaves and the file it
                 # joins, so all three tokens are required.
                 "if_version": _version(client, "REQ-t00001"),
                 "if_source_file_version": _file_version(client, "REQ-t00001"),
-                "if_target_version": _version(client, "file:spec/other.md"),
+                "if_target_version": _version(client, file_id("spec/other.md")),
             },
         )
         assert resp.status_code == 200, resp.json()

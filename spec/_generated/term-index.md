@@ -15,9 +15,9 @@
 **REQ:**
 
 - REQ-d00259:section:1
-- rem:spec/requirements-spec.md:1
-- rem:spec/requirements-spec.md:7
-- rem:spec/requirements-spec.md:34
+- rem:REQ:spec/requirements-spec.md:1
+- rem:REQ:spec/requirements-spec.md:7
+- rem:REQ:spec/requirements-spec.md:34
 - JNY-Dev-Setup-01
 
 ## Traceability
@@ -56,7 +56,7 @@
 - REQ-d00241-C
 - REQ-d00241-D
 - REQ-p00005-B
-- rem:spec/AI-AGENT.md:20
+- rem:REQ:spec/AI-AGENT.md:20
 - REQ-d00084:section:0
 - REQ-d00084:section:1
 - REQ-d00069:section:1
@@ -65,7 +65,7 @@
 - REQ-d00269:section:0
 - REQ-d00269:section:1
 - REQ-d00126:section:0
-- rem:spec/dev-traceview-review.md:3
+- rem:REQ:spec/dev-traceview-review.md:3
 - REQ-d00010:section:0
 - REQ-o00066:section:0
 - REQ-o00065:section:1
@@ -80,11 +80,11 @@
 - REQ-p00082:section:0
 - REQ-p00006:section:0
 - REQ-p00060:section:1
-- rem:spec/requirements-spec.md:15
-- rem:spec/requirements-spec.md:81
-- rem:spec/requirements-spec.md:177
-- rem:spec/requirements-spec.md:179
-- rem:spec/requirements-spec.md:401
+- rem:REQ:spec/requirements-spec.md:15
+- rem:REQ:spec/requirements-spec.md:81
+- rem:REQ:spec/requirements-spec.md:177
+- rem:REQ:spec/requirements-spec.md:179
+- rem:REQ:spec/requirements-spec.md:401
 - JNY-CEO-Dashboard-01
 - JNY-CEO-Sponsor-01
 - JNY-CEO-Audit-01

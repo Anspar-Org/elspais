@@ -38,7 +38,7 @@ def _make_graph(*nodes: GraphNode) -> FederatedGraph:
     from elspais.graph.builder import GraphBuilder
     from elspais.graph.parsers import ParsedContent
 
-    builder = GraphBuilder()
+    builder = GraphBuilder(namespace="REQ")
     for n in nodes:
         builder.add_parsed_content(
             ParsedContent(

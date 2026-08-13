@@ -11,6 +11,8 @@ Validates REQ-d00237+d00238+d00240: Full pipeline definitions -> scan -> health 
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
+
 from elspais.commands.health import (
     HealthCheck,
     check_term_canonical_form,
@@ -20,7 +22,7 @@ from elspais.commands.health import (
 )
 from elspais.graph import NodeKind
 from elspais.graph.builder import GraphBuilder, TraceGraph
-from elspais.graph.GraphNode import FileType, GraphNode
+from elspais.graph.GraphNode import FileType, GraphNode, make_file_id
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.term_scanner import scan_graph
 from elspais.graph.terms import TermDictionary, TermEntry, TermRef
@@ -50,9 +52,9 @@ def _make_definition_block(
     )
 
 
-def _make_file_node(rel_path: str = "spec/test.md") -> GraphNode:
-    """Create a FILE node for testing."""
-    node = GraphNode(id=f"file:{rel_path}", kind=NodeKind.FILE)
+def _make_file_node(rel_path: str = "spec/test.md", namespace: str = "REQ") -> GraphNode:
+    """Create a FILE node for testing, in the namespace of the repo holding it."""
+    node = GraphNode(id=make_file_id(namespace, rel_path), kind=NodeKind.FILE)
     node.set_field("file_type", "SPEC")
     node.set_field("relative_path", rel_path)
     node.set_field("absolute_path", f"/test/repo/{rel_path}")
@@ -104,7 +106,7 @@ class TestTermsIntegration:
     def test_REQ_d00222_A_builder_creates_remainder_for_definition(self):
         """GraphBuilder.add_parsed_content with content_type='definition_block'
         creates a REMAINDER node with content_type='definition_block' field."""
-        builder = GraphBuilder(repo_root=Path("/test/repo"))
+        builder = GraphBuilder(repo_root=Path("/test/repo"), namespace="REQ")
         content = _make_definition_block("Electronic Record", "Any combination of text")
 
         builder.add_parsed_content(content)
@@ -127,7 +129,7 @@ class TestTermsIntegration:
 
     def test_REQ_d00222_A_builder_populates_terms(self):
         """After building, the graph's _terms contains the defined term."""
-        builder = GraphBuilder(repo_root=Path("/test/repo"))
+        builder = GraphBuilder(repo_root=Path("/test/repo"), namespace="REQ")
         content = _make_definition_block("Electronic Record", "Any combination of text")
 
         builder.add_parsed_content(content)
@@ -140,7 +142,7 @@ class TestTermsIntegration:
 
     def test_REQ_d00222_A_collection_flag_preserved(self):
         """A definition_block with collection=True has that flag in _terms."""
-        builder = GraphBuilder(repo_root=Path("/test/repo"))
+        builder = GraphBuilder(repo_root=Path("/test/repo"), namespace="REQ")
         content = _make_definition_block(
             "Validation Activity",
             "An activity that validates something",
@@ -158,7 +160,7 @@ class TestTermsIntegration:
 
     def test_REQ_d00222_B_defined_in_points_to_file(self):
         """For file-level definitions, defined_in is the FILE node ID."""
-        builder = GraphBuilder(repo_root=Path("/test/repo"))
+        builder = GraphBuilder(repo_root=Path("/test/repo"), namespace="REQ")
         file_node = _make_file_node("spec/glossary.md")
         builder.register_file_node(file_node)
 
@@ -168,13 +170,14 @@ class TestTermsIntegration:
 
         entry = graph._terms.lookup("Audit Trail")
         assert entry is not None, "Term should be in _terms"
+        expected_id = make_file_id("REQ", "spec/glossary.md")
         assert (
-            entry.defined_in == "file:spec/glossary.md"
+            entry.defined_in == expected_id
         ), f"defined_in should be FILE node ID, got '{entry.defined_in}'"
 
     def test_REQ_d00222_B_defined_in_points_to_requirement(self):
         """For requirement-level definitions, defined_in is the requirement ID."""
-        builder = GraphBuilder(repo_root=Path("/test/repo"))
+        builder = GraphBuilder(repo_root=Path("/test/repo"), namespace="REQ")
         file_node = _make_file_node("spec/reqs.md")
         builder.register_file_node(file_node)
 
@@ -258,21 +261,16 @@ class TestBuilderNamespaceOnTermEntry:
         # If we get here without TypeError, the parameter is accepted.
         assert builder is not None
 
-    def test_REQ_d00222_D_default_namespace_is_empty(self) -> None:
-        """GraphBuilder with no namespace arg produces terms with empty namespace."""
-        builder = GraphBuilder(repo_root=Path("/test/repo"))
-        file_node = _make_file_node("spec/glossary.md")
-        builder.register_file_node(file_node)
+    def test_REQ_d00128_A_definition_without_a_namespace_is_refused(self) -> None:
+        """A builder that cannot name its repository cannot identify a definition.
 
-        content = _make_definition_block("Audit Trail", "A chronological record", line=5)
-        builder.add_parsed_content(content, file_node=file_node)
-        graph = builder.build()
-
-        entry = graph._terms.lookup("Audit Trail")
-        assert entry is not None, "Term should exist in _terms"
-        assert (
-            entry.namespace == ""
-        ), f"Default namespace should be empty string, got '{entry.namespace}'"
+        A structural node's identity is its repository plus its path, so a
+        builder left without a namespace has no id to give a definition
+        block. It refuses at construction rather than minting an ambiguous
+        one later.
+        """
+        with pytest.raises(ValueError, match="namespace"):
+            GraphBuilder(repo_root=Path("/test/repo"), namespace="")
 
     def test_REQ_d00222_D_namespace_set_on_file_level_definition(self) -> None:
         """File-level definition_block gets namespace from GraphBuilder."""

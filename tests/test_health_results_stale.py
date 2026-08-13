@@ -14,7 +14,7 @@ from elspais.graph.GraphNode import FileType, GraphNode, NodeKind, make_file_id
 
 def _make_file_node(path: Path, file_type: FileType) -> GraphNode:
     node = GraphNode(
-        id=make_file_id(str(path.name)),
+        id=make_file_id("REQ", str(path.name)),
         kind=NodeKind.FILE,
     )
     node.set_field("file_type", file_type)

@@ -11,8 +11,12 @@ from pathlib import Path
 
 from elspais.graph import NodeKind
 from elspais.graph.factory import build_graph
-from elspais.graph.GraphNode import FileType
+from elspais.graph.GraphNode import FileType, make_file_id
 from elspais.graph.relations import EdgeKind
+
+# The namespace every config written by this module declares; structural node
+# ids carry it.
+NAMESPACE = "REQ"
 
 
 def _write_config(tmp_path: Path, extra: str = "") -> Path:
@@ -78,7 +82,7 @@ class TestFileNodeCreation:
     """Validates REQ-d00128-A: factory.py creates FILE nodes for scanned files."""
 
     def test_REQ_d00128_A_spec_file_gets_file_node(self, tmp_path: Path) -> None:
-        """A scanned spec file produces a FILE node with file:<relative-path> ID."""
+        """A scanned spec file produces a FILE node with file:<namespace>:<relative-path> ID."""
         config = _write_config(tmp_path)
         _write_spec(tmp_path)
 
@@ -93,13 +97,13 @@ class TestFileNodeCreation:
         assert len(file_nodes) >= 1, f"Expected at least 1 FILE node, got {len(file_nodes)}"
 
         file_ids = [n.id for n in file_nodes]
-        expected_id = "file:spec/reqs.md"
+        expected_id = make_file_id(NAMESPACE, "spec/reqs.md")
         assert (
             expected_id in file_ids
         ), f"Expected FILE node with ID '{expected_id}', got: {file_ids}"
 
     def test_REQ_d00128_A_code_file_gets_file_node(self, tmp_path: Path) -> None:
-        """A scanned code file produces a FILE node with file:<relative-path> ID."""
+        """A scanned code file produces a FILE node with file:<namespace>:<relative-path> ID."""
         config = _write_config(tmp_path)
         _write_spec(tmp_path)
         _write_code_file(tmp_path)
@@ -112,7 +116,7 @@ class TestFileNodeCreation:
 
         file_nodes = list(graph.nodes_by_kind(NodeKind.FILE))
         file_ids = [n.id for n in file_nodes]
-        expected_id = "file:src/main.py"
+        expected_id = make_file_id(NAMESPACE, "src/main.py")
         assert (
             expected_id in file_ids
         ), f"Expected FILE node with ID '{expected_id}', got: {file_ids}"
@@ -129,7 +133,7 @@ class TestFileNodeCreation:
             scan_tests=False,
         )
 
-        file_node = graph.find_by_id("file:spec/reqs.md")
+        file_node = graph.find_by_id(make_file_id(NAMESPACE, "spec/reqs.md"))
         assert file_node is not None
         assert file_node.kind == NodeKind.FILE
 
@@ -149,7 +153,7 @@ class TestFileNodeContentFields:
             scan_tests=False,
         )
 
-        file_node = graph.find_by_id("file:spec/reqs.md")
+        file_node = graph.find_by_id(make_file_id(NAMESPACE, "spec/reqs.md"))
         assert file_node is not None
         assert file_node.get_field("file_type") == FileType.SPEC
 
@@ -165,7 +169,7 @@ class TestFileNodeContentFields:
             scan_tests=False,
         )
 
-        file_node = graph.find_by_id("file:src/main.py")
+        file_node = graph.find_by_id(make_file_id(NAMESPACE, "src/main.py"))
         assert file_node is not None
         assert file_node.get_field("file_type") == FileType.CODE
 
@@ -181,7 +185,7 @@ class TestFileNodeContentFields:
             scan_tests=False,
         )
 
-        file_node = graph.find_by_id("file:spec/reqs.md")
+        file_node = graph.find_by_id(make_file_id(NAMESPACE, "spec/reqs.md"))
         assert file_node is not None
         assert file_node.get_field("relative_path") == "spec/reqs.md"
         abs_path = file_node.get_field("absolute_path")
@@ -200,7 +204,7 @@ class TestFileNodeContentFields:
             scan_tests=False,
         )
 
-        file_node = graph.find_by_id("file:spec/reqs.md")
+        file_node = graph.find_by_id(make_file_id(NAMESPACE, "spec/reqs.md"))
         assert file_node is not None
         assert file_node.get_field("repo") is None
 
@@ -220,7 +224,7 @@ class TestGitInfoCapture:
             scan_tests=False,
         )
 
-        file_node = graph.find_by_id("file:spec/reqs.md")
+        file_node = graph.find_by_id(make_file_id(NAMESPACE, "spec/reqs.md"))
         assert file_node is not None
         # Fields should be present (even if None when not in a git repo)
         content = file_node.get_all_content()
@@ -256,8 +260,8 @@ The system SHALL do something else.
             scan_tests=False,
         )
 
-        file1 = graph.find_by_id("file:spec/reqs.md")
-        file2 = graph.find_by_id("file:spec/reqs2.md")
+        file1 = graph.find_by_id(make_file_id(NAMESPACE, "spec/reqs.md"))
+        file2 = graph.find_by_id(make_file_id(NAMESPACE, "spec/reqs2.md"))
         assert file1 is not None and file2 is not None
         assert file1.get_field("git_branch") == file2.get_field("git_branch")
         assert file1.get_field("git_commit") == file2.get_field("git_commit")
@@ -278,7 +282,7 @@ class TestContainsEdges:
             scan_tests=False,
         )
 
-        file_node = graph.find_by_id("file:spec/reqs.md")
+        file_node = graph.find_by_id(make_file_id(NAMESPACE, "spec/reqs.md"))
         assert file_node is not None
 
         contains_children = list(file_node.iter_children(edge_kinds={EdgeKind.CONTAINS}))
@@ -299,7 +303,7 @@ class TestContainsEdges:
             scan_tests=False,
         )
 
-        file_node = graph.find_by_id("file:src/main.py")
+        file_node = graph.find_by_id(make_file_id(NAMESPACE, "src/main.py"))
         assert file_node is not None
 
         contains_children = list(file_node.iter_children(edge_kinds={EdgeKind.CONTAINS}))
@@ -323,7 +327,7 @@ class TestContainsEdges:
         fn = req_node.file_node()
         assert fn is not None
         assert fn.kind == NodeKind.FILE
-        assert fn.id == "file:spec/reqs.md"
+        assert fn.id == make_file_id(NAMESPACE, "spec/reqs.md")
 
 
 class TestContainsEdgeMetadata:
@@ -341,7 +345,7 @@ class TestContainsEdgeMetadata:
             scan_tests=False,
         )
 
-        file_node = graph.find_by_id("file:spec/reqs.md")
+        file_node = graph.find_by_id(make_file_id(NAMESPACE, "spec/reqs.md"))
         assert file_node is not None
 
         for edge in file_node.iter_outgoing_edges():
@@ -366,7 +370,7 @@ class TestContainsEdgeMetadata:
             scan_tests=False,
         )
 
-        file_node = graph.find_by_id("file:spec/reqs.md")
+        file_node = graph.find_by_id(make_file_id(NAMESPACE, "spec/reqs.md"))
         assert file_node is not None
 
         for edge in file_node.iter_outgoing_edges():
@@ -417,7 +421,7 @@ The system SHALL do thing two.
             scan_tests=False,
         )
 
-        file_node = graph.find_by_id("file:spec/reqs.md")
+        file_node = graph.find_by_id(make_file_id(NAMESPACE, "spec/reqs.md"))
         assert file_node is not None
 
         contains_edges = [e for e in file_node.iter_outgoing_edges() if e.kind == EdgeKind.CONTAINS]
@@ -448,7 +452,7 @@ class TestAssertionsNotContained:
             scan_tests=False,
         )
 
-        file_node = graph.find_by_id("file:spec/reqs.md")
+        file_node = graph.find_by_id(make_file_id(NAMESPACE, "spec/reqs.md"))
         assert file_node is not None
 
         contains_children = list(file_node.iter_children(edge_kinds={EdgeKind.CONTAINS}))
@@ -491,7 +495,7 @@ class TestAssertionsNotContained:
             scan_tests=False,
         )
 
-        file_node = graph.find_by_id("file:spec/reqs.md")
+        file_node = graph.find_by_id(make_file_id(NAMESPACE, "spec/reqs.md"))
         assert file_node is not None
 
         # Check that requirement-level REMAINDER sections (section:N IDs) are not
@@ -521,7 +525,7 @@ class TestRemainderParserRegistration:
             scan_tests=False,
         )
 
-        file_node = graph.find_by_id("file:spec/reqs.md")
+        file_node = graph.find_by_id(make_file_id(NAMESPACE, "spec/reqs.md"))
         assert file_node is not None
 
         contains_children = list(file_node.iter_children(edge_kinds={EdgeKind.CONTAINS}))
@@ -544,7 +548,7 @@ class TestRemainderParserRegistration:
             scan_tests=False,
         )
 
-        file_node = graph.find_by_id("file:src/main.py")
+        file_node = graph.find_by_id(make_file_id(NAMESPACE, "src/main.py"))
         assert file_node is not None
 
         contains_children = list(file_node.iter_children(edge_kinds={EdgeKind.CONTAINS}))
@@ -626,7 +630,7 @@ class TestExistingBehaviorUnaffected:
         )
 
         # FILE node should be findable
-        file_node = graph.find_by_id("file:spec/reqs.md")
+        file_node = graph.find_by_id(make_file_id(NAMESPACE, "spec/reqs.md"))
         assert file_node is not None
 
         # Total node count should include FILE nodes

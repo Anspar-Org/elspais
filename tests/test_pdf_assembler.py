@@ -718,8 +718,20 @@ def _make_federated_overview_graph(tmp_path: Path):
     assoc_req.link(assoc_assert, EdgeKind.STRUCTURES)
 
     # --- Federate ---
-    root_entry = RepoEntry(name="root", graph=root_graph, config={}, repo_root=root_dir)
-    assoc_entry = RepoEntry(name="assoc", graph=assoc_graph, config={}, repo_root=assoc_dir)
+    root_entry = RepoEntry(
+        name="root",
+        graph=root_graph,
+        config={"project": {"name": "root", "namespace": "REQ"}},
+        repo_root=root_dir,
+    )
+    assoc_entry = RepoEntry(
+        name="assoc",
+        graph=assoc_graph,
+        # A distinct namespace: two members of one federation may not
+        # declare the same one.
+        config={"project": {"name": "assoc", "namespace": "ASSOC"}},
+        repo_root=assoc_dir,
+    )
     fed = FederatedGraph([root_entry, assoc_entry], root_repo="root")
     return fed, root_dir, assoc_dir
 

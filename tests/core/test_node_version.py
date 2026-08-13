@@ -20,7 +20,7 @@ import pytest
 
 from elspais.graph import render
 from elspais.graph.factory import build_graph as build_repo_graph
-from elspais.graph.GraphNode import NodeKind
+from elspais.graph.GraphNode import NodeKind, make_file_id
 from elspais.graph.relations import EdgeKind
 from elspais.graph.render import compute_hash_for_node
 from tests.core.graph_test_helpers import (
@@ -48,10 +48,13 @@ _HEX16 = re.compile(r"^[0-9a-f]{16}$")
 
 # Nodes used across the classes below. CODE node ids embed an absolute path,
 # so that one is resolved from the graph by suffix rather than hard-coded.
+# The namespace the hht-like fixture declares; structural node ids carry it.
+NAMESPACE = "REQ"
+
 REQ_WITH_CODE_AND_TESTS = "REQ-d00001"
 CODE_NODE_SUFFIX = "database/schema.sql:44"
 TEST_NODE = "test:tests/test_auth.py::test_oauth_flow"
-SPEC_FILE = "file:spec/dev-impl.md"
+SPEC_FILE = make_file_id(NAMESPACE, "spec/dev-impl.md")
 
 # Sentinel accepted by ``_resolve`` in place of a literal node id.
 CODE_NODE = "<code-node>"
@@ -359,8 +362,8 @@ class TestNodeVersionPerKindResolution:
         here = build_graph(make_requirement("REQ-p00001", "One", source_path="spec/a.md"))
         there = build_graph(make_requirement("REQ-p00001", "One", source_path="spec/b.md"))
 
-        assert node_version(here.find_by_id("file:spec/a.md")) != node_version(
-            there.find_by_id("file:spec/b.md")
+        assert node_version(here.find_by_id(make_file_id(NAMESPACE, "spec/a.md"))) != node_version(
+            there.find_by_id(make_file_id(NAMESPACE, "spec/b.md"))
         )
 
     def test_REQ_d00131_L_file_version_tracks_child_order(self):
@@ -374,8 +377,9 @@ class TestNodeVersionPerKindResolution:
             make_requirement("REQ-p00001", "One", source_path="spec/a.md", start_line=20),
         )
 
-        assert node_version(first_then_second.find_by_id("file:spec/a.md")) != node_version(
-            second_then_first.find_by_id("file:spec/a.md")
+        _file_a = make_file_id(NAMESPACE, "spec/a.md")
+        assert node_version(first_then_second.find_by_id(_file_a)) != node_version(
+            second_then_first.find_by_id(make_file_id(NAMESPACE, "spec/a.md"))
         )
 
     def test_REQ_d00131_L_file_version_ignores_child_content(self):
@@ -403,8 +407,8 @@ class TestNodeVersionPerKindResolution:
             rewritten.find_by_id("REQ-p00001")
         )
         # ...but the file's identity and composition do not.
-        assert node_version(plain.find_by_id("file:spec/a.md")) == node_version(
-            rewritten.find_by_id("file:spec/a.md")
+        assert node_version(plain.find_by_id(make_file_id(NAMESPACE, "spec/a.md"))) == node_version(
+            rewritten.find_by_id(make_file_id(NAMESPACE, "spec/a.md"))
         )
 
 
@@ -428,21 +432,22 @@ class TestFileVersionIsCompositionOnly:
     def test_REQ_d00131_L_file_version_changes_when_child_moves_between_files(self, mutable_graph):
         """Moving a requirement out changes the composition of both files."""
         source_file = mutable_graph.find_by_id(SPEC_FILE)
-        target_file = mutable_graph.find_by_id("file:spec/ops-deploy.md")
+        target_file = mutable_graph.find_by_id(make_file_id(NAMESPACE, "spec/ops-deploy.md"))
         source_before, target_before = node_version(source_file), node_version(target_file)
 
-        mutable_graph.move_node_to_file("REQ-d00003", "file:spec/ops-deploy.md")
+        mutable_graph.move_node_to_file("REQ-d00003", make_file_id(NAMESPACE, "spec/ops-deploy.md"))
 
         assert node_version(source_file) != source_before
         assert node_version(target_file) != target_before
 
     def test_REQ_d00131_L_file_version_changes_on_file_rename(self, mutable_graph):
         """The path is part of the file's identity."""
-        before = node_version(mutable_graph.find_by_id("file:spec/glossary.md"))
+        before = node_version(mutable_graph.find_by_id(make_file_id(NAMESPACE, "spec/glossary.md")))
 
-        mutable_graph.rename_file("file:spec/glossary.md", "spec/terms.md")
+        mutable_graph.rename_file(make_file_id(NAMESPACE, "spec/glossary.md"), "spec/terms.md")
 
-        assert node_version(mutable_graph.find_by_id("file:spec/terms.md")) != before
+        _terms_file = make_file_id(NAMESPACE, "spec/terms.md")
+        assert node_version(mutable_graph.find_by_id(_terms_file)) != before
 
 
 @pytest.fixture

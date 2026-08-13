@@ -34,19 +34,21 @@ def _make_graph(
 def _make_federated_multi() -> FederatedGraph:
     """Create a multi-repo FederatedGraph with root + associate."""
     root_graph = _make_graph(Path("/test/root"), "REQ-p00001", "Root Req")
-    assoc_graph = _make_graph(Path("/test/associate"), "REQ-a00001", "Assoc Req")
+    # Written in the associate's own namespace: a member declares its
+    # namespace and its identifiers are spelled in it.
+    assoc_graph = _make_graph(Path("/test/associate"), "ASSOC-a00001", "Assoc Req")
 
     root_entry = RepoEntry(
         name="root",
         graph=root_graph,
-        config=None,
+        config={"project": {"name": "root", "namespace": "REQ"}},
         repo_root=Path("/test/root"),
         git_origin="https://github.com/org/root.git",
     )
     assoc_entry = RepoEntry(
         name="associate",
         graph=assoc_graph,
-        config=None,
+        config={"project": {"name": "associate", "namespace": "ASSOC"}},
         repo_root=Path("/test/associate"),
         git_origin="https://github.com/org/associate.git",
     )
@@ -103,7 +105,7 @@ class TestApiRepos:
         root_entry = RepoEntry(
             name="root",
             graph=root_graph,
-            config=None,
+            config={"project": {"name": "root", "namespace": "REQ"}},
             repo_root=Path("/test/root"),
         )
         error_entry = RepoEntry(
@@ -164,7 +166,7 @@ class TestApiReposStaleness:
         entry = RepoEntry(
             name="root",
             graph=root_graph,
-            config=None,
+            config={"project": {"name": "root", "namespace": "REQ"}},
             repo_root=Path("/test/root"),
             git_origin=None,  # No origin
         )

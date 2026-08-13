@@ -515,15 +515,27 @@ B. The `defined_in` field of each `TermEntry` SHALL point to the nearest REQUIRE
 
 C. `FederatedGraph` SHALL merge per-repo `_terms` dictionaries into a single federated `TermDictionary`, detecting cross-namespace duplicates.
 
-D. `GraphBuilder` SHALL accept a `namespace` parameter (str, default "") and set `TermEntry.namespace` from it during term creation.
+D. Constructing a graph SHALL require the namespace of the repository whose content it holds, and `TermEntry.namespace` SHALL be set from it during term creation.
+
+### Rationale
+
+A namespace says whose identifiers a graph's nodes carry, and nodes identified by source location cannot be
+identified at all without one. A default that stands for "no namespace" therefore describes a graph that can be
+constructed but cannot identify what it holds, and the failure surfaces later and elsewhere — as an identifier
+naming no repository, or as one repository's node answering for another's. Requiring it at construction is what
+makes every identifier in the graph answerable for its repository (D), which is the condition REQ-p00050-E rests
+on.
 
 ### Changelog
 
+- 2026-08-13 | 6f017c6d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-13 | e5d3b34d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-13 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: amend D — a namespace is required to construct a graph, replacing the empty default that described a graph unable to identify its own content
 - 2026-07-31 | 0299f7c2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 96b5223f | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 96b5223f | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *TraceGraph Terms and GraphBuilder Integration* | **Hash**: 0299f7c2
+*End* *TraceGraph Terms and GraphBuilder Integration* | **Hash**: 6f017c6d
 
 ## REQ-d00223: Term Health Checks
 

@@ -25,11 +25,12 @@ from elspais.commands.health import (
 from elspais.config import _merge_configs, config_defaults, get_config
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph, RepoEntry
-from elspais.graph.GraphNode import FileType, GraphNode, NodeKind
+from elspais.graph.GraphNode import FileType, GraphNode, NodeKind, make_file_id
 from elspais.graph.relations import EdgeKind
 from tests.federation_repos import make_repo
 
 from ..core.graph_test_helpers import (
+    HELPER_NAMESPACE,
     build_graph,
     make_code_ref,
     make_requirement,
@@ -202,7 +203,7 @@ class TestCheckUnlinkedTests:
             ),
         )
         # Sanity: the file really has a TEST child (not the empty-file case).
-        file_node = graph._index["file:tests/test_unmarked.py"]
+        file_node = graph._index[make_file_id(HELPER_NAMESPACE, "tests/test_unmarked.py")]
         assert any(
             c.kind == NodeKind.TEST for c in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
         )

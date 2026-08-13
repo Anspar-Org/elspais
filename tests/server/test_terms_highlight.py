@@ -37,7 +37,14 @@ def _make_app(tmp_path: Path) -> TestClient:
     graph._index["file:spec/glossary.md"] = file_node
     graph._roots.append(file_node)
 
-    repos = [RepoEntry(name="root", graph=graph, config={}, repo_root=tmp_path)]
+    repos = [
+        RepoEntry(
+            name="root",
+            graph=graph,
+            config={"project": {"name": "root", "namespace": "REQ"}},
+            repo_root=tmp_path,
+        )
+    ]
     federated = FederatedGraph(repos)
 
     terms = TermDictionary()

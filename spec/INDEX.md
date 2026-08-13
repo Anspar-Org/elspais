@@ -103,7 +103,7 @@
 | REQ-d00125 | Analysis CLI Command                                          | dev-cli.md              | 474fa8af |
 | REQ-d00126 | FILE Node Data Model                                          | dev-graph-file-nodes.md | 070e173b |
 | REQ-d00127 | GraphNode API: Filtered Traversal and Edge-Only Relationships | dev-graph-file-nodes.md | 20632d4a |
-| REQ-d00128 | FILE Node Creation in Build Pipeline                          | dev-graph-file-nodes.md | 02374cc2 |
+| REQ-d00128 | FILE Node Creation in Build Pipeline                          | dev-graph-file-nodes.md | 926ddd2b |
 | REQ-d00129 | SourceLocation Removal and Consumer Migration                 | dev-graph-file-nodes.md | 6d11df36 |
 | REQ-d00130 | Parameterized Root Iteration and Kind-Based Index Query       | dev-graph-file-nodes.md | 5733741e |
 | REQ-d00131 | Render Protocol for Graph Nodes                               | dev-graph-file-nodes.md | e701b585 |
@@ -132,7 +132,7 @@
 | REQ-d00219 | UAT Health Check Section                                      | dev-cli.md              | c2b0cc8e |
 | REQ-d00220 | TermDictionary Data Model                                     | prd-core.md             | 986251c3 |
 | REQ-d00221 | Grammar Extension for Definition Blocks                       | prd-core.md             | 5a3c278b |
-| REQ-d00222 | TraceGraph Terms and GraphBuilder Integration                 | prd-core.md             | 0299f7c2 |
+| REQ-d00222 | TraceGraph Terms and GraphBuilder Integration                 | prd-core.md             | 6f017c6d |
 | REQ-d00223 | Term Health Checks                                            | prd-core.md             | aac4da7f |
 | REQ-d00224 | Glossary and Term Index Generators                            | prd-core.md             | c8ce4253 |
 | REQ-d00225 | CLI Registration for Glossary and Term Index                  | prd-core.md             | 2b8a5235 |

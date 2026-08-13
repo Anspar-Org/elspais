@@ -53,7 +53,10 @@ def _resolve_coverage_file_node(graph, source_file, lcov_path, repo_root):
     Tries the SF verbatim, then resolves it relative to the package root
     (the directory containing the lcov file, minus a trailing 'coverage').
     """
-    node = graph.find_by_id(make_file_id(source_file))
+    # Coverage is ingested into the repository whose graph this is, so the
+    # id is written in that repository's namespace.
+    namespace = graph.namespace
+    node = graph.find_by_id(make_file_id(namespace, source_file))
     if node is not None:
         return node
     pkg_root = lcov_path.parent
@@ -63,7 +66,7 @@ def _resolve_coverage_file_node(graph, source_file, lcov_path, repo_root):
         rel = (pkg_root / source_file).resolve().relative_to(Path(repo_root).resolve())
     except ValueError:
         return None
-    return graph.find_by_id(make_file_id(str(rel)))
+    return graph.find_by_id(make_file_id(namespace, str(rel)))
 
 
 # Implements: REQ-d00254-F, REQ-d00254-I
@@ -212,6 +215,7 @@ def create_file_node(
     file_path: Path,
     repo_root: Path,
     file_type: FileType,
+    namespace: str,
     repo: str | None = None,
     git_branch: str | None = None,
     git_commit: str | None = None,
@@ -222,19 +226,31 @@ def create_file_node(
         file_path: Absolute path to the file.
         repo_root: Repository root for computing relative path.
         file_type: The FileType classification.
+        namespace: The namespace this repository declares. Positional and
+            required: a FILE id names the repository holding the file, and
+            a caller that cannot say which repository that is cannot make
+            the id.
         repo: Repository identifier (None for main project).
         git_branch: Current git branch (captured once per repo).
         git_commit: Current git commit (captured once per repo).
 
     Returns:
         A GraphNode with kind == NodeKind.FILE.
+
+    Raises:
+        ValueError: The namespace is empty.
     """
+    if not namespace:
+        raise ValueError(
+            f"Cannot make a FILE id for {file_path} without a namespace: the id "
+            f"names the repository holding the file."
+        )
     try:
         rel_path = str(file_path.resolve().relative_to(repo_root.resolve()))
     except ValueError:
         rel_path = str(file_path)
 
-    file_id = make_file_id(rel_path)
+    file_id = make_file_id(namespace, rel_path)
     node = GraphNode(
         id=file_id,
         kind=NodeKind.FILE,
@@ -645,7 +661,13 @@ def build_graph(
         resolved = str(source_path.resolve())
         if resolved not in file_nodes:
             fn = create_file_node(
-                source_path, repo_root, file_type, file_repo, git_branch, git_commit
+                source_path,
+                repo_root,
+                file_type,
+                typed_config.project.namespace,
+                repo=file_repo,
+                git_branch=git_branch,
+                git_commit=git_commit,
             )
             file_nodes[resolved] = fn
             builder.register_file_node(fn)

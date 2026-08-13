@@ -2,7 +2,9 @@
 """lcov_tested assertion-level crediting (CUR-1533)."""
 
 from elspais.graph.annotators import CoverageCreditConfig, annotate_coverage
+from elspais.graph.GraphNode import make_file_id
 from tests.core.graph_test_helpers import (
+    HELPER_NAMESPACE,
     build_graph,
     make_code_ref,
     make_requirement,
@@ -26,7 +28,7 @@ def _build(*, covered, result_status="passed", credit_mode="verified", min_frac=
             )
         )
     g = build_graph(*contents)
-    fn = g.find_by_id("file:provenance/lib/foo.dart")
+    fn = g.find_by_id(make_file_id(HELPER_NAMESPACE, "provenance/lib/foo.dart"))
     # lines 10,11,12; `covered` selects which are hit
     fn.set_field("line_coverage", {ln: (1 if ln in covered else 0) for ln in (10, 11, 12)})
     credit = CoverageCreditConfig(

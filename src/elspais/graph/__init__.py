@@ -33,6 +33,7 @@ from elspais.graph.GraphNode import (
     make_file_id,
     make_remainder_id,
     make_test_id,
+    parse_structural_id,
 )
 from elspais.graph.metrics import CoverageContribution, CoverageSource, RollupMetrics
 from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
@@ -51,6 +52,7 @@ __all__ = [
     "make_file_id",
     "make_remainder_id",
     "make_definition_id",
+    "parse_structural_id",
     "make_code_id",
     "make_test_id",
     "Edge",

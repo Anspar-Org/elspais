@@ -68,7 +68,7 @@ from elspais.graph.annotators import (
 )
 from elspais.graph.factory import build_graph
 from elspais.graph.federated import FederatedGraph
-from elspais.graph.GraphNode import GraphNode, make_file_id
+from elspais.graph.GraphNode import GraphNode
 from elspais.graph.mutations import MutationEntry
 from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.graph.relations import EdgeKind
@@ -6866,7 +6866,11 @@ def create_server(
                 the move itself creates has no prior version; pass "".
         """
         from elspais.graph import FILE_ID_PREFIX
-        from elspais.utilities.spec_paths import validate_new_spec_path
+        from elspais.graph.GraphNode import parse_structural_id
+        from elspais.utilities.spec_paths import (
+            file_id_for_reference,
+            validate_new_spec_path,
+        )
 
         guard = _guard_associate_write(_state["graph"], _state["config"], node_id, target_file_id)
         if guard:
@@ -6884,10 +6888,16 @@ def create_server(
         # (REQ-o00062-M/O): path validated against scanning config, every
         # guard runs BEFORE the file is created, and the brand-new file has
         # no version to require.
+        # The path comes out of the id through the one helper that knows
+        # where a structural id's colons fall -- it is written to disk below.
         if target_file_id.startswith(FILE_ID_PREFIX):
-            relative_path = target_file_id[len(FILE_ID_PREFIX) :]
+            try:
+                relative_path = parse_structural_id(target_file_id)[2]
+            except ValueError as exc:
+                return {"success": False, "error": str(exc)}
         else:
             relative_path = target_file_id
+            target_file_id = file_id_for_reference(target_file_id, _state["config"])
         if ".." in relative_path.split("/") or relative_path.startswith("/"):
             return {
                 "success": False,
@@ -7272,7 +7282,12 @@ def create_server(
                 read. The requirement is not guarded — its rendered form does
                 not change. Required.
         """
-        file_id = make_file_id(file_path)
+        # This tool writes relative to the primary repository's root, so the
+        # file it names is the primary's and its id is read in the primary's
+        # namespace. A caller cannot name another member's file here.
+        from elspais.utilities.spec_paths import file_id_for_reference
+
+        file_id = file_id_for_reference(file_path, _state["config"])
         conflict = _guard_version(_state["graph"], file_id, if_version)
         if conflict:
             return conflict

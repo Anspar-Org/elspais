@@ -42,15 +42,24 @@ pytestmark = [
 ]
 
 
+# Ports handed out in this session. A port is free between the probe below
+# releasing it and the viewer binding it, so two fixtures probing in that
+# window are handed the same one and the second viewer never comes up.
+_CLAIMED_PORTS: set[int] = set()
+
+
 def _find_free_port() -> int:
-    """Find a free port in the 15000-15050 range."""
+    """Find a free port in the 15000-15050 range, unclaimed by this session."""
     for port in range(15000, 15051):
+        if port in _CLAIMED_PORTS:
+            continue
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:
                 s.bind(("127.0.0.1", port))
-                return port
             except OSError:
                 continue
+        _CLAIMED_PORTS.add(port)
+        return port
     pytest.skip("No free port found in range 15000-15050")
 
 
@@ -2317,3 +2326,286 @@ class TestBrowserDestructiveOperationsUnderUnknownCount:
             f"a reported zero is a real answer and must not be refused; "
             f"error modal said {_error_modal_text(page)!r}"
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# File-mutating edit flows: a node id names its repository (REQ-p00050-E)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# A FILE node id is `file:<namespace>:<repo-relative-path>` — the namespace
+# being the owning repository's, which a browser page cannot know. The edit
+# engine therefore names a file by bare PATH and lets the server mint or
+# resolve the id. These tests drive the real UI controls (the file viewer's
+# Rename button and the card's Move button) so a client that went back to
+# concatenating `'file:' + path` is caught here rather than reported green.
+
+_FILE_MUT_REQ_ID = "REQ-p00001"
+_FILE_MUT_NAMESPACE = "REQ"  # tests/fixtures/viewer-tables project namespace
+
+
+@pytest.fixture(scope="module")
+def file_mutation_viewer_url(tmp_path_factory):
+    """Start a viewer against a private copy of the viewer-tables fixture.
+
+    A private copy (module scope, own server) because these tests rename and
+    create spec files. Launched through the worktree's own source (``python
+    -m elspais`` with ``PYTHONPATH``, as the journey fixtures do) rather than
+    whatever ``elspais`` is on PATH, since the JS under test ships inside the
+    package being served. The repo is put on a non-main working branch so the
+    edit toggle activates without the create-a-branch modal.
+    """
+    src = REPO_ROOT / "tests" / "fixtures" / "viewer-tables"
+    if not src.exists():
+        pytest.skip(f"viewer-tables fixture not present at {src}")
+
+    dest = tmp_path_factory.mktemp("viewer-file-mutations-run")
+    for item in src.iterdir():
+        if item.is_dir():
+            shutil.copytree(item, dest / item.name)
+        else:
+            shutil.copy2(item, dest / item.name)
+
+    git_env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "test",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "test",
+        "GIT_COMMITTER_EMAIL": "t@t",
+    }
+    subprocess.run(["git", "init"], cwd=dest, capture_output=True, env=git_env)
+    subprocess.run(["git", "add", "."], cwd=dest, capture_output=True, env=git_env)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=dest, capture_output=True, env=git_env)
+    subprocess.run(
+        ["git", "checkout", "-b", "file-edits"], cwd=dest, capture_output=True, env=git_env
+    )
+
+    port = _find_free_port()
+    base_url = f"http://127.0.0.1:{port}"
+
+    worktree_src = str(REPO_ROOT / "src")
+    env = dict(os.environ)
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = f"{worktree_src}:{existing}" if existing else worktree_src
+
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "elspais",
+            "viewer",
+            "--server",
+            "--port",
+            str(port),
+            "--path",
+            str(dest),
+        ],
+        cwd=str(dest),
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+
+    try:
+        _wait_for_server(base_url)
+        yield base_url
+    finally:
+        try:
+            import urllib.request
+
+            req = urllib.request.Request(f"{base_url}/api/shutdown", method="POST")
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            pass
+
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                proc.wait(timeout=5)
+
+
+@pytest.fixture()
+def page_file_mutation(file_mutation_viewer_url):
+    """Launch headless Chromium against the file-mutation-fixture viewer."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context()
+        pg = context.new_page()
+        pg.set_default_timeout(10_000)
+        yield pg
+        browser.close()
+
+
+def _spec_files(page, base: str) -> dict[str, str]:
+    """Map relative_path -> FILE node id, as the SERVER currently sees it."""
+    resp = page.request.get(f"{base}/api/spec-files")
+    assert resp.ok, f"GET /api/spec-files returned {resp.status}"
+    return {f["relative_path"]: f["id"] for f in resp.json().get("files", [])}
+
+
+def _wait_for_spec_file(page, base: str, relative_path: str, timeout: float = 10.0) -> dict:
+    """Poll /api/spec-files until `relative_path` is listed, else return the
+    last listing seen so the assertion can report what the server did have."""
+    deadline = time.monotonic() + timeout
+    files: dict[str, str] = {}
+    while time.monotonic() < deadline:
+        files = _spec_files(page, base)
+        if relative_path in files:
+            return files
+        time.sleep(0.3)
+    return files
+
+
+def _enter_edit_mode(page) -> None:
+    """Turn on the real edit toggle (the fixture repo is on a working branch,
+    so this activates directly instead of raising the branch modal)."""
+    page.click("#edit-toggle")
+    page.wait_for_selector("body.edit-mode", timeout=10_000)
+
+
+class TestBrowserFileMutations:
+    """Validates REQ-p00050-E: a FILE node id denotes exactly one node, so it
+    carries the owning repository's namespace and is minted or resolved by the
+    server. The browser names a file by path; it never builds the id."""
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_p00050_E_rename_file_through_ui_renames_the_file(
+        self, page_file_mutation, file_mutation_viewer_url
+    ):
+        # Verifies: REQ-p00050-E
+        """Rename a spec file through the file viewer's real Rename button
+        (a `prompt()` dialog, answered by a Playwright dialog handler) and
+        assert the SERVER-side effect: /api/spec-files stops listing the old
+        path and lists the new one under an id in the serving repository's
+        namespace.
+
+        The whole flow is driven through the UI: the card's source link opens
+        the file viewer, and #fv-rename is clicked. Nothing here calls fetch()
+        against the API, so the client-side path->id handling is exercised.
+        """
+        page = page_file_mutation
+        base = file_mutation_viewer_url
+        js_errors: list[str] = []
+        page.on("pageerror", lambda err: js_errors.append(str(err)))
+
+        before = _spec_files(page, base)
+        old_path = "spec/prd-tables.md"
+        new_path = "spec/prd-tables-renamed.md"
+        assert old_path in before, f"precondition: fixture must hold {old_path}, got {before}"
+        assert new_path not in before, f"precondition: {new_path} must not exist yet, got {before}"
+
+        page.goto(base, wait_until="networkidle")
+        _enter_edit_mode(page)
+        page.evaluate(f"() => window.openCard('{_FILE_MUT_REQ_ID}')")
+        card = page.locator(f"#card-{_FILE_MUT_REQ_ID}")
+        card.wait_for(state="visible", timeout=10_000)
+
+        # Open the file in the viewer through the card's own source link —
+        # that is what makes #fv-path (the path the rename reads) and the
+        # Rename button available.
+        card.locator("a", has_text="prd-tables.md:").first.click()
+        rename_btn = page.locator("#fv-rename")
+        rename_btn.wait_for(state="visible", timeout=10_000)
+        assert (
+            page.locator("#fv-path").get_attribute("title") == old_path
+        ), "file viewer must be showing the file about to be renamed"
+
+        # The Rename control asks for the new path with prompt().
+        page.on("dialog", lambda d: d.accept(new_path))
+        rename_btn.click()
+
+        after = _wait_for_spec_file(page, base, new_path)
+        assert new_path in after, (
+            f"renaming through the UI must land on the server: expected "
+            f"{new_path} in /api/spec-files, got {after}"
+        )
+        assert old_path not in after, (
+            f"the old path must be gone after a rename, still listed in " f"{after}"
+        )
+        assert after[new_path] == f"file:{_FILE_MUT_NAMESPACE}:{new_path}", (
+            f"the renamed FILE id must carry the owning repository's "
+            f"namespace, got {after[new_path]!r}"
+        )
+
+        assert not js_errors, f"JS errors during the rename flow: {js_errors}"
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_p00050_E_move_requirement_to_a_new_file_creates_it(
+        self, page_file_mutation, file_mutation_viewer_url
+    ):
+        # Verifies: REQ-p00050-E
+        """Move a requirement to a file that does not exist yet, through the
+        card's real Move button and its modal ("+ New file…" + a typed path),
+        and assert the SERVER-side effect: the file is created, carries an id
+        in the serving repository's namespace, and the requirement now reports
+        it as its source.
+
+        Driven entirely through the UI controls — the modal's radio, its path
+        input and its Move button — so the client-side handling of a path for
+        a not-yet-existing file is what is under test.
+        """
+        page = page_file_mutation
+        base = file_mutation_viewer_url
+        js_errors: list[str] = []
+        page.on("pageerror", lambda err: js_errors.append(str(err)))
+
+        new_path = "spec/moved-requirement.md"
+        before = _spec_files(page, base)
+        assert new_path not in before, f"precondition: {new_path} must not exist yet, got {before}"
+
+        page.goto(base, wait_until="networkidle")
+        _enter_edit_mode(page)
+        page.evaluate(f"() => window.openCard('{_FILE_MUT_REQ_ID}')")
+        card = page.locator(f"#card-{_FILE_MUT_REQ_ID}")
+        card.wait_for(state="visible", timeout=10_000)
+
+        source_before = page.request.get(f"{base}/api/requirement/{_FILE_MUT_REQ_ID}").json()
+        old_source_path = (source_before.get("source") or {}).get("path")
+        assert old_source_path and old_source_path != new_path, source_before
+
+        card.locator("button.card-move-file-btn").first.click()
+        overlay = page.locator("#move-file-modal-overlay")
+        overlay.wait_for(state="visible", timeout=10_000)
+
+        # "+ New file…" reveals the path input; the path names a file that
+        # does not exist, so only the server can say what its id will be.
+        overlay.locator('input[value="__new__"]').check()
+        path_input = overlay.locator("input.modal-input")
+        path_input.wait_for(state="visible", timeout=5_000)
+        path_input.fill(new_path)
+        overlay.locator("button.btn-primary").click()
+
+        # A successful move closes the modal; a refused one keeps it open and
+        # writes the server's reason into it. Capture that reason rather than
+        # failing on an opaque wait, so a rejected id shape names itself.
+        modal_error = ""
+        try:
+            overlay.wait_for(state="detached", timeout=10_000)
+        except PlaywrightTimeoutError:
+            modal_error = overlay.locator(".modal-error").inner_text()
+
+        after = _wait_for_spec_file(page, base, new_path)
+        assert new_path in after, (
+            f"moving to a new file must create it on the server: expected "
+            f"{new_path} in /api/spec-files, got {after}"
+            + (f"; the move modal reported: {modal_error!r}" if modal_error else "")
+        )
+        assert after[new_path] == f"file:{_FILE_MUT_NAMESPACE}:{new_path}", (
+            f"the created FILE id must carry the owning repository's "
+            f"namespace, got {after[new_path]!r}"
+        )
+
+        moved = page.request.get(f"{base}/api/requirement/{_FILE_MUT_REQ_ID}").json()
+        assert (moved.get("source") or {}).get("path") == new_path, (
+            f"{_FILE_MUT_REQ_ID} must now live in {new_path}, server reports "
+            f"{moved.get('source')!r}"
+        )
+
+        assert not js_errors, f"JS errors during the move flow: {js_errors}"

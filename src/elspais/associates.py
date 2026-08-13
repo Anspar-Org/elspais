@@ -131,7 +131,9 @@ def discover_associate_from_path(
     scanning_spec = config.get("scanning", {}).get("spec", {})
     spec_dirs = scanning_spec.get("directories", [])
     name = project.get("name") or repo_path.name
-    namespace = project.get("namespace", "")
+    # load_config refuses a config without a non-empty namespace, so this
+    # is present by the time the candidate has loaded at all.
+    namespace = project["namespace"]
     spec_path = spec_dirs[0] if spec_dirs else "spec"
 
     return Associate(

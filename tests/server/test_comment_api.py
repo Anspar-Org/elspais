@@ -41,7 +41,14 @@ def _make_app(tmp_path: Path) -> tuple[TestClient, Path]:
     # Create the .elspais/comments directory
     (tmp_path / ".elspais" / "comments").mkdir(parents=True, exist_ok=True)
 
-    repos = [RepoEntry(name="root", graph=graph, config={}, repo_root=tmp_path)]
+    repos = [
+        RepoEntry(
+            name="root",
+            graph=graph,
+            config={"project": {"name": "root", "namespace": "REQ"}},
+            repo_root=tmp_path,
+        )
+    ]
     federated = FederatedGraph(repos)
     state = AppState(graph=federated, repo_root=tmp_path, config={})
     app = create_app(state=state, mount_mcp=False)

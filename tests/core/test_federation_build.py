@@ -17,6 +17,7 @@ import tomlkit
 
 from elspais.graph.factory import build_graph
 from elspais.graph.federated import FederationError
+from elspais.graph.GraphNode import REMAINDER_ID_PREFIX, parse_structural_id
 
 # ---------------------------------------------------------------------------
 # Helper: write a minimal .elspais.toml
@@ -526,9 +527,9 @@ class TestCrossGraphWiring:
             encoding="utf-8",
         )
 
-        # Must NOT raise — REMAINDER nodes (`rem:spec/shared_notes.md:1`)
-        # naturally share IDs across repos and should be skipped during
-        # ID-conflict detection.
+        # Must NOT raise — REMAINDER nodes for a path both repos hold
+        # (`rem:<namespace>:spec/shared_notes.md:1`) must not be read as an
+        # ID conflict during ownership detection.
         fed = build_graph(
             repo_root=root_dir,
             scan_code=False,
@@ -550,7 +551,10 @@ class TestCrossGraphWiring:
             if entry.graph is None:
                 continue
             for node_id in entry.graph._index:
-                if node_id.startswith("rem:spec/shared_notes.md"):
+                if not node_id.startswith(REMAINDER_ID_PREFIX):
+                    continue
+                _prefix, namespace, relative_path, _line = parse_structural_id(node_id)
+                if namespace == entry.graph.namespace and relative_path == "spec/shared_notes.md":
                     rem_found = True
                     break
             if rem_found:

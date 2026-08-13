@@ -12,6 +12,11 @@ from elspais.graph.comments import CommentEvent, CommentIndex, CommentThread
 from elspais.graph.federated import FederatedGraph, RepoEntry
 
 
+def _project_config(name, namespace):
+    """The [project] block every graph-bearing RepoEntry must declare."""
+    return {"project": {"name": name, "namespace": namespace}}
+
+
 def _make_thread(anchor, cid="c1"):
     root = CommentEvent(
         event="comment",
@@ -90,8 +95,20 @@ class TestFederatedGraphComments:
 
         fed = FederatedGraph(
             repos=[
-                RepoEntry(name="root", graph=g1, config={}, repo_root=Path("/r1")),
-                RepoEntry(name="mod", graph=g2, config={}, repo_root=Path("/r2")),
+                RepoEntry(
+                    name="root",
+                    graph=g1,
+                    config=_project_config("root", "REQ"),
+                    repo_root=Path("/r1"),
+                ),
+                RepoEntry(
+                    name="mod",
+                    graph=g2,
+                    # A distinct namespace: two members of one federation
+                    # may not declare the same one.
+                    config=_project_config("mod", "MOD"),
+                    repo_root=Path("/r2"),
+                ),
             ],
         )
         return fed
@@ -196,8 +213,20 @@ class TestFederatedRepoRootFor:
 
         return FederatedGraph(
             repos=[
-                RepoEntry(name="root", graph=g1, config={}, repo_root=Path("/r1")),
-                RepoEntry(name="mod", graph=g2, config={}, repo_root=Path("/r2")),
+                RepoEntry(
+                    name="root",
+                    graph=g1,
+                    config=_project_config("root", "REQ"),
+                    repo_root=Path("/r1"),
+                ),
+                RepoEntry(
+                    name="mod",
+                    graph=g2,
+                    # A distinct namespace: two members of one federation
+                    # may not declare the same one.
+                    config=_project_config("mod", "MOD"),
+                    repo_root=Path("/r2"),
+                ),
             ],
         )
 

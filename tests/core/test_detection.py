@@ -42,7 +42,7 @@ class TestOrphanDetection:
     # Verifies: REQ-d00071-A
     def test_no_orphans_when_all_linked(self):
         """Requirements with valid implements links are not orphans."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ")
         builder.add_parsed_content(make_req("REQ-p00001", "Parent", "PRD"))
         builder.add_parsed_content(
             make_req("REQ-o00001", "Child", "OPS", implements=["REQ-p00001"])
@@ -56,7 +56,7 @@ class TestOrphanDetection:
 
     def test_REQ_d00071_B_parentless_reqs_are_roots(self):
         """REQ-d00071-B: Parentless requirements are always roots, even without children."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ")
         builder.add_parsed_content(make_req("REQ-p00001", "Parent", "PRD"))
         builder.add_parsed_content(make_req("REQ-o00001", "Standalone OPS", "OPS"))
 
@@ -68,7 +68,7 @@ class TestOrphanDetection:
 
     def test_REQ_d00071_B_broken_ref_req_is_still_root(self):
         """REQ-d00071-B: Requirement with broken implements is still a root."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ")
         builder.add_parsed_content(make_req("REQ-p00001", "Parent", "PRD"))
         builder.add_parsed_content(
             make_req(
@@ -91,7 +91,7 @@ class TestBrokenReferenceDetection:
     # Verifies: REQ-p00002-B
     def test_no_broken_refs_valid_graph(self):
         """Valid graph has no broken references."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ")
         builder.add_parsed_content(make_req("REQ-p00001", "Parent", "PRD"))
         builder.add_parsed_content(
             make_req("REQ-o00001", "Child", "OPS", implements=["REQ-p00001"])
@@ -105,7 +105,7 @@ class TestBrokenReferenceDetection:
     # Verifies: REQ-p00002-B
     def test_broken_ref_implements(self):
         """Broken implements reference is detected."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ")
         builder.add_parsed_content(
             make_req("REQ-o00001", "Broken", "OPS", implements=[fake_reqs.FAKE_NONEXISTENT_REQ])
         )
@@ -122,7 +122,7 @@ class TestBrokenReferenceDetection:
     # Verifies: REQ-p00002-B
     def test_broken_ref_refines(self):
         """Broken refines reference is detected."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ")
         builder.add_parsed_content(
             make_req(
                 "REQ-o00001", "Broken refines", "OPS", refines=[fake_reqs.FAKE_NONEXISTENT_REQ]
@@ -139,7 +139,7 @@ class TestBrokenReferenceDetection:
     # Verifies: REQ-p00002-B
     def test_multiple_broken_refs(self):
         """Multiple broken references are all detected."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ")
         builder.add_parsed_content(
             make_req("REQ-o00001", "First", "OPS", implements=["REQ-MISSING1"])
         )
@@ -176,7 +176,7 @@ class TestCodeAndTestOrphans:
     # Verifies: REQ-p00002-B
     def test_code_ref_to_nonexistent_req(self):
         """Code reference to non-existent requirement creates broken ref."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ")
 
         class SourceCtx:
             source_id = "src/main.py"
@@ -202,7 +202,7 @@ class TestCodeAndTestOrphans:
     # Verifies: REQ-p00002-B
     def test_test_ref_to_nonexistent_req(self):
         """Test reference to non-existent requirement creates broken ref."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ")
 
         class SourceCtx:
             source_id = "tests/test_main.py"
@@ -232,7 +232,7 @@ class TestIntegration:
     # Verifies: REQ-p00002-B
     def test_mixed_valid_and_broken(self):
         """Graph with both valid links and broken references."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ")
         builder.add_parsed_content(make_req("REQ-p00001", "Valid Parent", "PRD"))
         builder.add_parsed_content(
             make_req("REQ-o00001", "Valid Child", "OPS", implements=["REQ-p00001"])

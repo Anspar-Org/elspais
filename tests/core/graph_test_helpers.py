@@ -10,9 +10,15 @@ from pathlib import Path
 
 from elspais.graph import GraphNode
 from elspais.graph.builder import GraphBuilder, TraceGraph
-from elspais.graph.GraphNode import FileType, NodeKind
+from elspais.graph.GraphNode import FileType, NodeKind, make_file_id
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.relations import EdgeKind
+
+# The namespace helper-built graphs declare. A structural id names the
+# repository holding the node, so a helper that builds one has to say which
+# repository it is standing in; tests that look an id up by hand build it
+# with this same constant through ``make_file_id``.
+HELPER_NAMESPACE = "REQ"
 
 # === Constants ===
 
@@ -41,7 +47,7 @@ def make_node_with_file(
 
     # Create or reuse FILE node for this path
     if file_node is None:
-        file_id = f"file:{path}"
+        file_id = make_file_id(HELPER_NAMESPACE, path)
         file_node = GraphNode(id=file_id, kind=NodeKind.FILE, label=Path(path).name)
         file_node.set_field("file_type", FileType.SPEC)
         file_node.set_field("relative_path", path)
@@ -70,7 +76,7 @@ def wire_file_parent(
     node.set_field("parse_line", line)
     node.set_field("parse_end_line", end_line)
 
-    file_id = f"file:{path}"
+    file_id = make_file_id(HELPER_NAMESPACE, path)
     # Check if FILE already exists in graph index
     existing = graph._index.get(file_id) if graph else None
     if existing and existing.kind == NodeKind.FILE:
@@ -403,6 +409,7 @@ def make_remainder(
 def build_graph(
     *contents: ParsedContent,
     repo_root: Path | None = None,
+    namespace: str = HELPER_NAMESPACE,
 ) -> TraceGraph:
     """Build a TraceGraph from multiple ParsedContent items.
 
@@ -412,11 +419,14 @@ def build_graph(
     Args:
         *contents: ParsedContent items to add to the graph
         repo_root: Optional repository root path
+        namespace: The namespace the built graph's repository declares.
+            Structural ids carry it, so two graphs built for one
+            federation must be given different ones.
 
     Returns:
         Constructed TraceGraph
     """
-    builder = GraphBuilder(repo_root=repo_root)
+    builder = GraphBuilder(repo_root=repo_root, namespace=namespace)
 
     # Create FILE nodes from source contexts (like factory.py does)
     file_nodes: dict[str, GraphNode] = {}
@@ -425,7 +435,7 @@ def build_graph(
         source_path = source_ctx.source_id if source_ctx else None
         file_node = None
         if source_path and source_path not in file_nodes:
-            file_id = f"file:{source_path}"
+            file_id = make_file_id(namespace, source_path)
             file_node = GraphNode(id=file_id, kind=NodeKind.FILE, label=Path(source_path).name)
             # Infer FileType from content type
             ct = content.content_type

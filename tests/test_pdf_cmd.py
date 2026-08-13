@@ -210,8 +210,20 @@ class TestResourcePathsCallSite:
         root_graph = _make_graph_with_req(root_dir, "REQ-p00001")
         assoc_graph = _make_graph_with_req(assoc_dir, "REQ-a00001")
 
-        root_entry = RepoEntry(name="root", graph=root_graph, config={}, repo_root=root_dir)
-        assoc_entry = RepoEntry(name="assoc", graph=assoc_graph, config={}, repo_root=assoc_dir)
+        root_entry = RepoEntry(
+            name="root",
+            graph=root_graph,
+            config={"project": {"name": "root", "namespace": "REQ"}},
+            repo_root=root_dir,
+        )
+        assoc_entry = RepoEntry(
+            name="assoc",
+            graph=assoc_graph,
+            # A distinct namespace: two members of one federation may not
+            # declare the same one.
+            config={"project": {"name": "assoc", "namespace": "ASSOC"}},
+            repo_root=assoc_dir,
+        )
         fed = FederatedGraph([root_entry, assoc_entry], root_repo="root")
 
         captured = {}

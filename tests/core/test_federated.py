@@ -440,6 +440,10 @@ class TestPresumedForeignGuards:
         lib_graph = build_graph(
             make_requirement("REQ-p00002", title="Lib root", level="PRD"),
             repo_root=Path("/repo/lib"),
+            # Its own namespace, as its RepoEntry config declares below: the
+            # two repos hold a file at the same path, and it is the namespace
+            # in each FILE id that keeps their nodes distinct.
+            namespace="LIB",
         )
         host_entry = RepoEntry(
             name="host",
@@ -483,6 +487,10 @@ class TestPresumedForeignGuards:
         lib_graph = build_graph(
             make_requirement("REQ-p00002", title="Lib root", level="PRD"),
             repo_root=Path("/repo/lib"),
+            # Its own namespace, as its RepoEntry config declares below: the
+            # two repos hold a file at the same path, and it is the namespace
+            # in each FILE id that keeps their nodes distinct.
+            namespace="LIB",
         )
         host_entry = RepoEntry(
             name="host",
@@ -825,11 +833,18 @@ class TestFederatedGraphInvariants:
         with pytest.raises(FederationError, match=r"\[project\]\.namespace"):
             FederatedGraph([self._entry(tmp_path, config={"project": {"name": "r1"}})])
 
-    def test_empty_config_dict_is_allowed(self, tmp_path):
-        """``config={}`` is the unit-test isolation pattern — no [project]
-        block means no shape check fires."""
-        fed = FederatedGraph([self._entry(tmp_path, config={})])
-        assert fed.root_repo_name == "r1"
+    def test_graph_without_a_declared_namespace_is_refused(self, tmp_path):
+        """A repo carrying a graph must say which repository it is.
+
+        Its nodes name their repository in their ids, so a graph-bearing
+        entry with no ``[project]`` block describes content that cannot be
+        identified. It is refused at construction rather than producing a
+        federation whose ids answer for nothing.
+        """
+        from elspais.graph.federated import FederationError
+
+        with pytest.raises(FederationError, match=r"\[project\]"):
+            FederatedGraph([self._entry(tmp_path, config={})])
 
     def test_error_state_entry_skips_config_check(self, tmp_path):
         """An associate in error state (graph=None, config=None) is allowed."""

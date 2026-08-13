@@ -28,7 +28,7 @@ from elspais.graph.comment_store import (
     parse_anchor,
 )
 from elspais.graph.comments import CommentEvent, CommentThread
-from elspais.graph.GraphNode import make_file_id
+from elspais.graph.GraphNode import make_file_id, parse_structural_id
 from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.mcp.server import (
     _attach_version,
@@ -71,6 +71,7 @@ from elspais.mcp.server import (
 )
 from elspais.utilities.git import get_author_info
 from elspais.utilities.patterns import build_resolver
+from elspais.utilities.spec_paths import file_id_for_reference
 from elspais.view_model import build_levels, build_namespaces, build_statuses
 
 
@@ -580,6 +581,17 @@ async def api_node(request: Request) -> JSONResponse:
     node_id = request.path_params["node_id"]
     result = _get_node(state.graph, node_id)
     if "error" in result:
+        # A file may be named by bare repo-relative path here for the same
+        # reason the mutation routes accept one: the page knows the path it
+        # is showing, not which repository's namespace to write into the id.
+        # Reading has to accept what writing accepts, or a caller can be
+        # required to present a version token it has no way to obtain.
+        resolved = file_id_for_reference(node_id, state.config)
+        if resolved != node_id:
+            result = _get_node(state.graph, resolved)
+            if "error" not in result:
+                node_id = resolved
+    if "error" in result:
         return JSONResponse(result, status_code=404)
 
     # Enrich requirement nodes with per-dimension coverage data
@@ -1002,14 +1014,13 @@ async def api_file_content(request: Request) -> JSONResponse:
 
     1. ``repo_name`` (highest priority) — when supplied, look up the
        owning federated repo by name via ``iter_repos()`` and resolve
-       strictly against its root. This bypasses ``_ownership`` for
-       FILE-id-based callers (FILE ids legitimately collide across
-       federated repos; ownership map keeps only the first-iterated
-       repo, which can be wrong).
+       strictly against its root. A caller that already knows which
+       repository it is reading from says so and skips the lookup; it
+       is a shortcut, not a correction.
     2. ``node_id`` — when supplied and the federated graph knows the
        node, resolve via ``FederatedGraph.repo_root_for(node_id)``.
-       Reliable for non-structural node ids (REQ/ASSERTION/CODE/TEST —
-       collisions raise FederationError) but unreliable for FILE ids.
+       Every node id names its repository, structural ids included, so
+       this answers for the node the caller named.
     3. Federation root (``state.repo_root``).
     4. Fallback: scan every ``state.allowed_roots`` entry — covers raw
        file paths sent without any disambiguator (test/code references
@@ -1651,6 +1662,8 @@ async def api_mutate_requirement_add(request: Request) -> JSONResponse:
 
     # The destination file was never validated: an unknown file_id created an
     # unparented requirement and returned 200.
+    if file_id:
+        file_id = file_id_for_reference(file_id, state.config)
     conflict = _version_conflict(state, data, file_id)
     if conflict is not None:
         return conflict
@@ -1841,6 +1854,7 @@ async def api_mutate_journey_add(request: Request) -> JSONResponse:
             status_code=400,
         )
 
+    file_id = file_id_for_reference(file_id, state.config)
     conflict = _version_conflict(state, data, file_id)
     if conflict is not None:
         return conflict
@@ -1929,9 +1943,14 @@ async def api_mutate_move_to_file(request: Request) -> JSONResponse:
             status_code=400,
         )
 
-    # Check if the target file exists on disk; if not, create it
+    # Check if the target file exists on disk; if not, create it.
+    # The path comes out of the id through the one helper that knows where
+    # a structural id's colons fall -- this path is written to disk below.
     if target_file_id.startswith(FILE_ID_PREFIX):
-        relative_path = target_file_id[len(FILE_ID_PREFIX) :]
+        try:
+            relative_path = parse_structural_id(target_file_id)[2]
+        except ValueError as exc:
+            return JSONResponse({"success": False, "error": str(exc)}, status_code=400)
     else:
         relative_path = target_file_id
 
@@ -1993,7 +2012,13 @@ async def api_mutate_move_to_file(request: Request) -> JSONResponse:
         # + render_save all see the new node consistently.
         from elspais.graph.GraphNode import FileType
 
-        state.graph.add_file_node(target_path, FileType.SPEC)
+        _created = state.graph.add_file_node(target_path, FileType.SPEC)
+        # The graph mints the id, in the namespace of the repository it
+        # belongs to. Using the caller's string here would put whatever
+        # they sent into the graph.
+        target_file_id = getattr(_created, "target_id", target_file_id)
+    else:
+        target_file_id = file_id_for_reference(target_file_id, state.config)
 
     result = _mutate_move_node_to_file(state.graph, node_id, target_file_id)
     result = _with_version(state, result, node_id)
@@ -2015,6 +2040,8 @@ async def api_mutate_rename_file(request: Request) -> JSONResponse:
     data = await request.json()
     file_id = data.get("file_id", "")
     new_relative_path = data.get("new_relative_path", "")
+    if file_id:
+        file_id = file_id_for_reference(file_id, state.config)
     if not file_id or not new_relative_path:
         return JSONResponse(
             {"success": False, "error": "file_id and new_relative_path required"},
@@ -2024,7 +2051,7 @@ async def api_mutate_rename_file(request: Request) -> JSONResponse:
     if conflict is not None:
         return conflict
     # The rename changes the FILE's id, so report the version under the new one.
-    _renamed_file_id = make_file_id(new_relative_path)
+    _renamed_file_id = make_file_id(parse_structural_id(file_id)[1], new_relative_path)
     result = _mutate_rename_file(
         state.graph,
         file_id,
@@ -2558,9 +2585,8 @@ async def api_term(request: Request) -> JSONResponse:
 
     # Resolve `defined_in` (a node id — REQUIREMENT or FILE) into a concrete
     # (file_path, line) pair for the file-viewer link in the term card.
-    # REQ ids are always unique across the federation (collisions raise
-    # FederationError); FILE ids are not, so the JS also uses `repo_name`
-    # to disambiguate when calling /api/file-content.
+    # Every id names its repository, so `repo_name` accompanies the call to
+    # /api/file-content as a shortcut rather than as a disambiguator.
     defined_in_path = ""
     defined_in_line = entry.defined_at_line or 1
     if entry.defined_in:

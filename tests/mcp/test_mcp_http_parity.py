@@ -30,6 +30,7 @@ import pytest
 
 import elspais
 from elspais.graph import render
+from elspais.graph.GraphNode import make_file_id
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 HHT_LIKE = FIXTURES_DIR / "hht-like"
@@ -38,8 +39,12 @@ APP_SOURCE = Path(elspais.__file__).parent / "server" / "app.py"
 
 BOGUS_VERSION = "0" * 16
 
+# The namespace the hht-like fixture declares -- structural ids carry the
+# namespace of the repository holding the node.
+NAMESPACE = "REQ"
+
 JOURNEY = "JNY-001"
-JOURNEY_FILE = "file:spec/journeys.md"
+JOURNEY_FILE = make_file_id(NAMESPACE, "spec/journeys.md")
 
 CONFLICT_KEYS = {
     "success",

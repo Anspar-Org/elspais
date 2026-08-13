@@ -7,6 +7,7 @@ import pytest
 
 from elspais.graph import NodeKind
 from elspais.graph.factory import build_graph as build_repo_graph
+from elspais.graph.GraphNode import make_file_id
 from elspais.graph.relations import EdgeKind
 from elspais.graph.render import render_file
 from tests.core.graph_test_helpers import (
@@ -14,6 +15,9 @@ from tests.core.graph_test_helpers import (
     make_journey,
     make_requirement,
 )
+
+# The namespace the helper-built journey graphs declare.
+CANONICAL_NAMESPACE = "REQ"
 
 
 def build_journey_graph():
@@ -138,9 +142,11 @@ class TestAddDeleteJourney:
 
     def test_add_journey(self):
         graph = build_journey_graph()
-        file_node = graph.find_by_id("file:spec/journeys.md")
+        file_node = graph.find_by_id(make_file_id(CANONICAL_NAMESPACE, "spec/journeys.md"))
         assert file_node is not None
-        entry = graph.add_journey("JNY-SIGNUP-01", "User Signup", "file:spec/journeys.md")
+        entry = graph.add_journey(
+            "JNY-SIGNUP-01", "User Signup", make_file_id(CANONICAL_NAMESPACE, "spec/journeys.md")
+        )
         assert entry.operation == "add_journey"
         node = graph.find_by_id("JNY-SIGNUP-01")
         assert node is not None
@@ -152,12 +158,16 @@ class TestAddDeleteJourney:
     def test_add_journey_duplicate_raises(self):
         graph = build_journey_graph()
         with pytest.raises(ValueError, match="already exists"):
-            graph.add_journey("JNY-LOGIN-01", "Duplicate", "file:spec/journeys.md")
+            graph.add_journey(
+                "JNY-LOGIN-01", "Duplicate", make_file_id(CANONICAL_NAMESPACE, "spec/journeys.md")
+            )
 
     def test_add_journey_file_not_found_raises(self):
         graph = build_journey_graph()
         with pytest.raises(KeyError, match="not found"):
-            graph.add_journey("JNY-NEW-01", "New", "file:nonexistent.md")
+            graph.add_journey(
+                "JNY-NEW-01", "New", make_file_id(CANONICAL_NAMESPACE, "nonexistent.md")
+            )
 
     def test_delete_journey(self):
         graph = build_journey_graph()
@@ -262,7 +272,9 @@ class TestJourneyUndo:
 
     def test_undo_add_journey(self):
         graph = build_journey_graph()
-        graph.add_journey("JNY-NEW-01", "New", "file:spec/journeys.md")
+        graph.add_journey(
+            "JNY-NEW-01", "New", make_file_id(CANONICAL_NAMESPACE, "spec/journeys.md")
+        )
         assert graph.find_by_id("JNY-NEW-01") is not None
         graph.undo_last()
         assert graph.find_by_id("JNY-NEW-01") is None
@@ -277,6 +289,7 @@ class TestJourneyUndo:
 
 CANONICAL_JOURNEY_ID = "JNY-001"
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
+# The namespace the hht-like fixture declares; structural node ids carry it.
 
 
 @pytest.fixture
@@ -338,7 +351,7 @@ class TestUndoDeleteJourneyRestoresAttachment:
         before = _edge_signature(journey)
         # Guard: the canonical fixture journey must actually be attached,
         # otherwise the round-trip below would compare orphan to orphan.
-        assert before["file_id"] == "file:spec/journeys.md"
+        assert before["file_id"] == make_file_id(CANONICAL_NAMESPACE, "spec/journeys.md")
         assert before["incoming"] and before["outgoing"]
 
         journey_graph_from_disk.delete_journey(CANONICAL_JOURNEY_ID)

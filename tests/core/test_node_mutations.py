@@ -36,7 +36,7 @@ def make_req(
 
 def build_simple_graph() -> TraceGraph:
     """Build a simple graph with one root requirement and a child."""
-    builder = GraphBuilder()
+    builder = GraphBuilder(namespace="REQ")
     builder.add_parsed_content(make_req("REQ-p00001", "Test Requirement"))
     builder.add_parsed_content(make_req("REQ-o00001", "Child Req", implements=["REQ-p00001"]))
     return builder.build()
@@ -44,7 +44,7 @@ def build_simple_graph() -> TraceGraph:
 
 def build_hierarchy_graph() -> TraceGraph:
     """Build a graph with parent-child hierarchy."""
-    builder = GraphBuilder()
+    builder = GraphBuilder(namespace="REQ")
     builder.add_parsed_content(make_req("REQ-p00001", "Parent"))
     builder.add_parsed_content(make_req("REQ-p00002", "Child", implements=["REQ-p00001"]))
     return builder.build()
@@ -52,7 +52,7 @@ def build_hierarchy_graph() -> TraceGraph:
 
 def build_graph_with_assertions() -> TraceGraph:
     """Build a graph with a requirement that has assertions."""
-    builder = GraphBuilder()
+    builder = GraphBuilder(namespace="REQ")
     builder.add_parsed_content(
         make_req(
             "REQ-p00001",
