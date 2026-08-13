@@ -537,6 +537,10 @@ class ChangelogConfig(_StrictModel):
 class AssociateEntryConfig(_StrictModel):
     path: str
     namespace: str
+    # Where the repository can be obtained by someone who does not have it.
+    # The path and the namespace identify the member; the remote never does,
+    # so a declaration without one is complete.
+    git: str | None = None
     color: str | None = None
 
     @field_validator("namespace")

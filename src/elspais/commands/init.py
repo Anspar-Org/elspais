@@ -371,7 +371,13 @@ _FIELD_COMMENTS: dict[str, str] = {
     # --- [associates] ---
     "associates": "Associated repository definitions for cross-repo federation",
     "associates.*.path": "Path to the associated repository (absolute or relative to repo root)",
-    "associates.*.namespace": "Namespace prefix for the associated repo's requirements",
+    "associates.*.namespace": (
+        "Namespace the associated repo declares for itself; unique across the federation"
+    ),
+    "associates.*.git": (
+        "Optional remote where the associated repository can be obtained "
+        "when it is absent from this machine; never how it is located"
+    ),
     "associates.*.color": (
         'Optional badge color for this namespace (hex "#RRGGBB"); omit for a '
         "deterministic hash-derived color"

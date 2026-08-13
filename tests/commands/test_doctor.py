@@ -111,7 +111,7 @@ class TestDoctorAssociateChecks:
         assoc_dir = tmp_path / "callisto"
         assoc_dir.mkdir()
         (assoc_dir / ".elspais.toml").write_text(
-            'version = 3\n[project]\nname = "callisto"\nnamespace = "REQ"\n'
+            'version = 3\n[project]\nname = "callisto"\nnamespace = "CAL"\n'
         )
         config = {"associates": {"callisto": {"path": str(assoc_dir), "namespace": "CAL"}}}
         result = check_associate_paths(config, None)

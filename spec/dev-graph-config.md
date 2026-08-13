@@ -158,7 +158,7 @@ I. [Removed - named a references section of the configuration that does not exis
 
 J. `ProjectConfig` SHALL contain only `namespace` and `name`. The `version` and `type` fields SHALL be removed.
 
-K. `AssociateEntryConfig` SHALL contain `path` (str) and `namespace` (str). The `git` and `spec` fields SHALL be removed.
+K. `AssociateEntryConfig` SHALL define the fields an associate declaration is written in: `path` (str) and `namespace` (str), both required, together with the optional `git` remote and `color`. A declaration SHALL be admitted only where every field it carries is one this model defines.
 
 L. A `TermsConfig` model SHALL define defined-terms configuration: `output_dir` (str, default "spec/_generated"), `markup_styles` (list[str], default ["*", "**"]), `exclude_files` (list[str], default []), and a nested `severity` field of type `TermsSeverityConfig`. `TermsSeverityConfig` SHALL define 6 severity fields: `duplicate` (default "error"), `undefined` (default "warning"), `unmarked` (default "warning"), `unused` (default "warning"), `bad_definition` (default "error"), `collection_empty` (default "warning"). `ElspaisConfig` SHALL include a `terms` field of type `TermsConfig` with factory default.
 
@@ -178,6 +178,8 @@ R. An identifier SHALL resolve to a requirement only where it is spelled as the 
 
 Most lettered entries inventory the v3/v4 model shapes; G and O–R state the organising invariants those shapes must converge on.
 
+K carries the remote because a federation member is a git repository, and a member declared but absent from this machine is an ordinary situation rather than an error to be merely reported: the declaration is the one place that knows where the repository can be obtained. The remote never identifies a member — the path and the namespace do that, which is why it stays optional and why a declaration without one is complete. What a declaration may contain and what it must contain are one question, so the field list and the strictness that enforces it belong together rather than in separate assertions that could drift.
+
 G and R hold within a single repository, not only where several meet. G fixes what the configuration admits; R fixes what an inadmissible spelling may do. The failure R forbids is not silence but a wrong answer: a spelling nobody wrote being repaired into one that resolves, so a reference lands on a requirement its author did not name. That is invisible in every report, because the reference looks satisfied.
 
 Reporting is deliberately absent from R. Once an inadmissible spelling resolves to nothing, it is an unresolved reference like any other, and the existing obligations to record it and to report it at a project-chosen severity carry it the rest of the way. Stating the reporting again here would duplicate them and invite the two statements to drift apart.
@@ -186,6 +188,9 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 
 ### Changelog
 
+- 2026-08-12 | da474c2a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-08-12 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: amend K to state the fields an associate declaration is written in, including the optional git remote, reconciling it with REQ-d00202-A/B
+- 2026-08-12 | da474c2a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | 52cce4c8 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | d2250c7d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: retire I, which named a references section that does not exist
@@ -202,7 +207,7 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 - 2026-03-30 | db4ad28c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-03-29 | c75b87f8 | - | Michael Lewis (<michael@anspar.org>) | Add assertion N for config migration v3 to v4
 
-*End* *Config Schema v3 Models* | **Hash**: 52cce4c8
+*End* *Config Schema v3 Models* | **Hash**: da474c2a
 ---
 
 ## REQ-d00251: Component Style Vocabulary and Assertion Separator

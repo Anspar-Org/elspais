@@ -75,9 +75,9 @@ class TestTransitiveAssociateDetection:
         from elspais.graph.factory import build_graph
         from tests.config.test_federation_config import make_repo
 
-        make_repo(tmp_path, "sub-module", req_id="REQ-d00003")
-        make_repo(tmp_path, "core", associates={"sub-module": "../sub-module"}, req_id="REQ-d00002")
-        root = make_repo(tmp_path, "app", associates={"core": "../core"}, req_id="REQ-d00001")
+        make_repo(tmp_path, "sub-module")
+        make_repo(tmp_path, "core", associates={"sub-module": "../sub-module"})
+        root = make_repo(tmp_path, "app", associates={"core": "../core"})
 
         federated = build_graph(config=load_config(root / ".elspais.toml"), repo_root=root)
 
@@ -94,8 +94,8 @@ class TestTransitiveAssociateDetection:
         from elspais.graph.factory import build_graph
         from tests.config.test_federation_config import make_repo
 
-        make_repo(tmp_path, "core", req_id="REQ-d00002")
-        root = make_repo(tmp_path, "app", associates={"core": "../core"}, req_id="REQ-d00001")
+        make_repo(tmp_path, "core")
+        root = make_repo(tmp_path, "app", associates={"core": "../core"})
 
         federated = build_graph(config=load_config(root / ".elspais.toml"), repo_root=root)
 

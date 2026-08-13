@@ -24,6 +24,8 @@ elspais associate /path/to/callisto
 
 Validates the target has a `.elspais.toml` that loads successfully under the standard config schema. There is no `project.type` marker to opt in or out -- any directory with a loadable config is accepted.
 
+The link records the namespace the target declares for itself, and that namespace has to be the target's alone: a namespace says whose identifiers a given identifier is, so a federation in which two repositories claim one namespace can answer nothing and fails to build rather than guessing. If the repository you are linking declares the same namespace as one already in the federation, change one of them in `[project].namespace` before linking. The same applies to a repository reached indirectly -- membership follows each associate's own declarations, so a namespace can collide with a repository you never named yourself.
+
 ### Linking by name
 
 ```bash

@@ -293,7 +293,9 @@ class TestAssociateFDAStyle:
             name="core-std",
             associated_enabled=True,
         )
-        core_cfg["associates"] = {"paths": ["../fda-assoc"]}
+        core_cfg["associates"] = {
+            "fda-assoc": {"path": "../fda-assoc", "namespace": "FDA"},
+        }
         core_prd = Requirement(
             "REQ-p00001",
             "Core Standard",
@@ -306,9 +308,9 @@ class TestAssociateFDAStyle:
             spec_files={"spec/prd.md": [core_prd]},
         )
 
-        # FDA-style associate with namespaced prefix
+        # FDA-style associate under its own namespace
         assoc_prd = Requirement(
-            "REQ-FDA-p00001",
+            "FDA-p00001",
             "FDA Compliance",
             "PRD",
             assertions=[("A", "The system SHALL comply with FDA regulations.")],
@@ -425,7 +427,7 @@ class TestFileContentCrossRepo:
         # the associate root, so /api/file-content's security guard allows
         # reading from it.
         core_cfg["associates"] = {
-            "assoc": {"path": "../assoc", "namespace": "REQ"},
+            "assoc": {"path": "../assoc", "namespace": "XX"},
         }
         core_prd = Requirement(
             "REQ-p00001",
@@ -439,11 +441,12 @@ class TestFileContentCrossRepo:
             spec_files={"spec/prd-core.md": [core_prd]},
         )
 
-        # Associate uses the same namespace but a distinct numeric ID so
-        # the parser accepts it under the canonical {namespace}-{level}{n}
-        # pattern. The file content is distinguishable from the root.
+        # The associate owns its own namespace -- no two repositories in a
+        # federation may declare one namespace -- so its identifiers are
+        # distinct from the core's by construction. The file content is
+        # distinguishable from the root.
         assoc_prd = Requirement(
-            "REQ-p00099",
+            "XX-p00099",
             "Associate PRD",
             "PRD",
             assertions=[("A", "Cross-repo file content SHALL resolve.")],
@@ -459,7 +462,7 @@ class TestFileContentCrossRepo:
         return core_root, assoc_root
 
     def test_file_content_resolves_associate_repo(self, tmp_path):
-        """GET /api/file-content?path=spec/prd-assoc.md&node_id=REQ-p00099
+        """GET /api/file-content?path=spec/prd-assoc.md&node_id=XX-p00099
         returns the on-disk content of the associate's source file."""
         import json
         import urllib.request
@@ -493,14 +496,14 @@ class TestFileContentCrossRepo:
         # With node_id: same content, resolved explicitly via repo_root_for.
         ok_req = urllib.request.Request(
             f"http://127.0.0.1:{port}/api/file-content"
-            f"?path=spec/prd-assoc.md&node_id=REQ-p00099"
+            f"?path=spec/prd-assoc.md&node_id=XX-p00099"
         )
         resp = urllib.request.urlopen(ok_req, timeout=5)
         assert resp.status == 200
         data = json.loads(resp.read().decode("utf-8"))
         assert data["lines"] == on_disk
         # Content is distinguishable from the root repo's file.
-        assert any("REQ-p00099" in line for line in data["lines"])
+        assert any("XX-p00099" in line for line in data["lines"])
 
 
 # ---------------------------------------------------------------------------
@@ -548,13 +551,13 @@ class TestFederationWriteScope:
     """REQ-d00253-B/C: `elspais fix` writes and indexes the primary repo only,
     unless the corresponding federation opt-in flag is set."""
 
-    # Both repos use the default canonical pattern ({namespace}-{level}{n}).
-    # The associate's requirement is a DISTINCT numeric ID (REQ-p00099) so the
-    # core's parser accepts it and the federated graph indexes it as an
-    # associate-owned node (repo_for(...) -> "assoc"). This is the same
-    # construction TestFileContentCrossRepo uses for a real federation.
+    # Both repos use the default canonical pattern ({namespace}-{level}{n}),
+    # each under its own namespace -- one namespace names one repository in a
+    # federation. The federated graph therefore indexes the associate's
+    # requirement as an associate-owned node (repo_for(...) -> "assoc"). This
+    # is the same construction TestFileContentCrossRepo uses.
     CORE_REQ = "REQ-p00001"
-    ASSOC_REQ = "REQ-p00099"
+    ASSOC_REQ = "XX-p00099"
     ASSOC_NAME = "assoc"
 
     def _build(
@@ -571,7 +574,7 @@ class TestFederationWriteScope:
         # cli_ttl=0 disables the daemon so toggled config is always honoured.
         core_cfg["cli_ttl"] = 0
         # Named associate link so federation kicks in during fix.
-        core_cfg["associates"] = {self.ASSOC_NAME: {"path": "../assoc", "namespace": "REQ"}}
+        core_cfg["associates"] = {self.ASSOC_NAME: {"path": "../assoc", "namespace": "XX"}}
         fed = {}
         if write_associates:
             fed["write_associates"] = True
@@ -837,7 +840,7 @@ class TestFederationMCPGuard:
     federation.write_associates is set. Isolated core+associate per project."""
 
     CORE_REQ = "REQ-p00001"
-    ASSOC_REQ = "REQ-p00099"
+    ASSOC_REQ = "XX-p00099"
     ASSOC_NAME = "assoc"
 
     def _build(self, tmp_path, *, write_associates=False):
@@ -846,7 +849,7 @@ class TestFederationMCPGuard:
 
         core_cfg = base_config(name="fed-mcp-core")
         core_cfg["cli_ttl"] = 0
-        core_cfg["associates"] = {self.ASSOC_NAME: {"path": "../assoc", "namespace": "REQ"}}
+        core_cfg["associates"] = {self.ASSOC_NAME: {"path": "../assoc", "namespace": "XX"}}
         if write_associates:
             core_cfg["federation"] = {"write_associates": True}
 
@@ -1057,7 +1060,7 @@ class TestPdfMediaFidelity:
         assoc_root = base / "assoc"
 
         core_cfg = base_config(name="pdf-core", associated_enabled=True)
-        core_cfg["associates"] = {"paths": ["../assoc"]}
+        core_cfg["associates"] = {"assoc": {"path": "../assoc", "namespace": "ASC"}}
         build_project(
             core_root,
             core_cfg,

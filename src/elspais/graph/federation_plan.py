@@ -1,4 +1,4 @@
-# Implements: REQ-d00202-D+E+F+G+I+J, REQ-d00203-B
+# Implements: REQ-d00202-D+E+F+G+I+J+K+L, REQ-d00203-B
 """Resolve a federation's membership from declared associates.
 
 Planning is separated from building: this module answers "which
@@ -33,9 +33,25 @@ from elspais.graph.federated import FederationError
 __all__ = [
     "FederationCycleError",
     "PlannedRepo",
+    "declared_associates",
     "plan_federation",
     "plan_federation_or_error",
 ]
+
+
+def declared_associates(config: dict[str, Any], repo_root: Path) -> dict[str, dict]:
+    """Read one repository's associate declarations for federation use.
+
+    A declaration the config layer refuses is a federation failure like any
+    other, so it is reported through the one error family every planning
+    surface already handles, naming the repository whose config holds it.
+    """
+    from elspais.config import get_associates_config
+
+    try:
+        return get_associates_config(config, repo_root=repo_root)
+    except ValueError as exc:
+        raise FederationError(f"In the configuration at {repo_root}: {exc}") from exc
 
 
 class FederationCycleError(FederationError):
@@ -157,13 +173,14 @@ def plan_federation(
         FederationError: A repository could not be loaded and
             ``strict`` is set.
     """
-    from elspais.config import get_associates_config, get_config
+    from elspais.config import get_config
 
     loader = config_loader or get_config
 
     planned: list[PlannedRepo] = []
     resolved: dict[tuple[str, str], PlannedRepo] = {}
     by_name: dict[str, PlannedRepo] = {}
+    by_namespace: dict[str, PlannedRepo] = {}
 
     # One answer per directory per walk.  Identity decides diamond from
     # cycle, so a directory that answered with an origin once and with
@@ -176,6 +193,9 @@ def plan_federation(
         if path not in origins:
             origins[path] = _git_origin(path) if path.is_dir() else None
         return origins[path]
+
+    def _declared_namespace(config: dict[str, Any] | None) -> str:
+        return (config or {}).get("project", {}).get("namespace", "") or ""
 
     root_root = Path(root_repo_root).resolve()
     root_name = root_config.get("project", {}).get("name", "") or str(root_root.name)
@@ -191,6 +211,8 @@ def plan_federation(
     planned.append(root_entry)
     resolved[_identity(root_root, root_origin)] = root_entry
     by_name[root_name] = root_entry
+    if _declared_namespace(root_config):
+        by_namespace[_declared_namespace(root_config)] = root_entry
 
     def _record(entry: PlannedRepo, identity: tuple[str, str]) -> None:
         # A federation keys repositories by name, so two repositories
@@ -208,6 +230,28 @@ def plan_federation(
                 f"{' -> '.join(entry.declaration_path)}). Rename one declaration."
             )
         by_name[entry.name] = entry
+
+        # Implements: REQ-d00202-K
+        # A namespace answers whose identifiers these are, so two
+        # repositories claiming one namespace leave the question
+        # unanswerable -- the same argument disjoint requirement IDs rest
+        # on.  A repository that failed to load declares nothing and is
+        # not a claimant.
+        namespace = _declared_namespace(entry.config)
+        if namespace:
+            ns_clash = by_namespace.get(namespace)
+            if ns_clash is not None:
+                raise FederationError(
+                    f"Two repositories are federated under the namespace "
+                    f"'{namespace}': {ns_clash.repo_root} (declared via "
+                    f"{' -> '.join(ns_clash.declaration_path)}) and "
+                    f"{entry.repo_root} (declared via "
+                    f"{' -> '.join(entry.declaration_path)}). A namespace "
+                    f"identifies one repository's identifiers, so give each "
+                    f"repository its own."
+                )
+            by_namespace[namespace] = entry
+
         planned.append(entry)
         resolved[identity] = entry
 
@@ -217,7 +261,7 @@ def plan_federation(
         declaration_path: tuple[str, ...],
         on_path: dict[tuple[str, str], str],
     ) -> None:
-        associates = get_associates_config(parent_config, repo_root=parent_root)
+        associates = declared_associates(parent_config, parent_root)
         for name, info in associates.items():
             assoc_path = Path(parent_root, info["path"]).resolve()
             child_path = declaration_path + (name,)
@@ -259,6 +303,22 @@ def plan_federation(
                     identity,
                 )
                 continue
+
+            # Implements: REQ-d00202-L
+            # A declaration does not name a second namespace for the
+            # repository -- it states the namespace its author expected to
+            # find there.  A mismatch means the declaration points
+            # somewhere its author did not intend, which is a mistake to
+            # report rather than a preference to reconcile.
+            declared_ns = info.get("namespace") or ""
+            found_ns = _declared_namespace(assoc_config)
+            if declared_ns and found_ns and declared_ns != found_ns:
+                raise FederationError(
+                    f"Associate '{name}' at {assoc_path} declares the namespace "
+                    f"'{declared_ns}', but the repository there declares "
+                    f"'{found_ns}'. Point the declaration at the repository it "
+                    f"means, or correct the namespace it names."
+                )
 
             _record(
                 PlannedRepo(name, assoc_path, assoc_config, origin, None, child_path),

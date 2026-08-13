@@ -96,7 +96,6 @@ def _chain(base: Path, names: list[str]) -> Path:
             base,
             name,
             associates={successor: f"../{successor}"} if successor else None,
-            req_id=f"REQ-d0000{index + 1}",
         )
     return base / names[0]
 
@@ -144,14 +143,13 @@ class TestTransitiveResolution:
     # Verifies: REQ-d00202-D
     def test_REQ_d00202_D_depth_first_declaration_order(self, tmp_path):
         """A branch is fully expanded before the next sibling declaration."""
-        make_repo(tmp_path, "leaf", req_id="REQ-d00004")
-        make_repo(tmp_path, "mid", associates={"leaf": "../leaf"}, req_id="REQ-d00003")
-        make_repo(tmp_path, "sib", req_id="REQ-d00002")
+        make_repo(tmp_path, "leaf")
+        make_repo(tmp_path, "mid", associates={"leaf": "../leaf"})
+        make_repo(tmp_path, "sib")
         root = make_repo(
             tmp_path,
             "top",
             associates={"mid": "../mid", "sib": "../sib"},
-            req_id="REQ-d00001",
         )
 
         assert [entry.name for entry in _plan(root)] == ["top", "mid", "leaf", "sib"]
@@ -188,7 +186,6 @@ class TestCycleDetection:
                 tmp_path,
                 name,
                 associates={successor: f"../{successor}"},
-                req_id=f"REQ-d0000{index + 1}",
             )
         root = tmp_path / names[0]
 
@@ -207,14 +204,13 @@ class TestDiamondConvergence:
     # Verifies: REQ-d00202-F
     def test_REQ_d00202_F_shared_associate_appears_once(self, tmp_path):
         """A declares B and C; both declare D. D resolves to exactly one entry."""
-        shared = make_repo(tmp_path, "shared", req_id="REQ-d00004")
-        make_repo(tmp_path, "left", associates={"shared": "../shared"}, req_id="REQ-d00002")
-        make_repo(tmp_path, "right", associates={"shared": "../shared"}, req_id="REQ-d00003")
+        shared = make_repo(tmp_path, "shared")
+        make_repo(tmp_path, "left", associates={"shared": "../shared"})
+        make_repo(tmp_path, "right", associates={"shared": "../shared"})
         root = make_repo(
             tmp_path,
             "apex",
             associates={"left": "../left", "right": "../right"},
-            req_id="REQ-d00001",
         )
 
         planned = _plan(root)
@@ -232,13 +228,12 @@ class TestRepositoryIdentity:
     def test_REQ_d00202_G_shared_git_origin_is_one_repo(self, tmp_path):
         """Two distinct directories carrying the same origin URL are one entry."""
         origin = "https://example.com/shared-lib.git"
-        copy_a = make_repo(tmp_path, "libA", origin=origin, req_id="REQ-d00002")
-        copy_b = make_repo(tmp_path, "libB", origin=origin, req_id="REQ-d00003")
+        copy_a = make_repo(tmp_path, "libA", origin=origin)
+        copy_b = make_repo(tmp_path, "libB", origin=origin)
         root = make_repo(
             tmp_path,
             "consumer",
             associates={"libA": "../libA", "libB": "../libB"},
-            req_id="REQ-d00001",
         )
 
         planned = _plan(root)
@@ -253,13 +248,12 @@ class TestRepositoryIdentity:
     # Verifies: REQ-d00202-G
     def test_REQ_d00202_G_originless_repos_stay_distinct(self, tmp_path):
         """Without an origin, identity falls back to the resolved real path."""
-        make_repo(tmp_path, "plainA", req_id="REQ-d00002")
-        make_repo(tmp_path, "plainB", req_id="REQ-d00003")
+        make_repo(tmp_path, "plainA")
+        make_repo(tmp_path, "plainB")
         root = make_repo(
             tmp_path,
             "host",
             associates={"plainA": "../plainA", "plainB": "../plainB"},
-            req_id="REQ-d00001",
         )
 
         planned = _plan(root)
@@ -274,18 +268,17 @@ _INVALID_TOML = "version = 3\n\n[levels.prd]\nrank = 1\nimplements = []\n"
 
 def _federation_with_bad_associate(tmp_path: Path, kind: str) -> tuple[Path, Path]:
     """Root declares a good associate and a bad one; returns (root, bad_path)."""
-    make_repo(tmp_path, "good", req_id="REQ-d00002")
+    make_repo(tmp_path, "good")
     if kind == "missing":
         bad_path = tmp_path / "absent"
     elif kind == "unparseable":
-        bad_path = make_repo(tmp_path, "broken", config_text=_BROKEN_TOML, req_id="REQ-d00003")
+        bad_path = make_repo(tmp_path, "broken", config_text=_BROKEN_TOML)
     else:
-        bad_path = make_repo(tmp_path, "invalid", config_text=_INVALID_TOML, req_id="REQ-d00003")
+        bad_path = make_repo(tmp_path, "invalid", config_text=_INVALID_TOML)
     root = make_repo(
         tmp_path,
         "consumer",
         associates={"good": "../good", "bad": f"../{bad_path.name}"},
-        req_id="REQ-d00001",
     )
     return root, bad_path
 
@@ -331,16 +324,39 @@ class TestCrossRepoIdentifierCollision:
 
     # Verifies: REQ-d00202-H
     def test_REQ_d00202_H_duplicate_id_across_repos_raises(self, tmp_path):
-        """Two federated repos defining the same canonical ID is a hard error."""
+        """Two federated repos defining the same canonical ID is a hard error.
+
+        Distinct namespaces are what make two repos federable at all, and
+        an identifier that spells its namespace cannot then collide.  A
+        canonical pattern that spells a fixed literal instead is where the
+        collision survives, so that is the shape this exercises.
+        """
         from elspais.graph.factory import build_graph
         from elspais.graph.federated import FederationError
 
-        make_repo(tmp_path, "libcore", namespace="REQ", req_id="REQ-d00001")
+        def _fixed_prefix_config(name: str, namespace: str, associates: str = "") -> str:
+            return (
+                f'version = 3\n\n[project]\nname = "{name}"\n'
+                f'namespace = "{namespace}"\n\n'
+                '[levels.prd]\nrank = 1\nimplements = []\n\n'
+                '[levels.dev]\nrank = 2\nimplements = ["prd", "dev"]\n\n'
+                '[id-patterns]\ncanonical = "REQ-{level.letter}{component}"\n' + associates
+            )
+
+        make_repo(
+            tmp_path,
+            "libcore",
+            config_text=_fixed_prefix_config("libcore", "LIBCORE"),
+            req_id="REQ-d00001",
+        )
         root = make_repo(
             tmp_path,
             "appmain",
-            namespace="REQ",
-            associates={"libcore": "../libcore"},
+            config_text=_fixed_prefix_config(
+                "appmain",
+                "APPMAIN",
+                '\n[associates.libcore]\npath = "../libcore"\nnamespace = "LIBCORE"\n',
+            ),
             req_id="REQ-d00001",
         )
 
@@ -372,20 +388,23 @@ class TestDuplicateNameCollision:
             tmp_path,
             "coreX",
             origin="https://example.com/core-x.git",
-            req_id="REQ-d00003",
         )
         far = make_repo(
             tmp_path,
             "coreY",
             origin="https://example.com/core-y.git",
-            req_id="REQ-d00004",
         )
-        make_repo(tmp_path, "mid", associates={"core": "../coreY"}, req_id="REQ-d00002")
+        make_repo(
+            tmp_path,
+            "mid",
+            associates={"core": "../coreY"},
+            associate_namespaces={"core": "COREY"},
+        )
         root = make_repo(
             tmp_path,
             "top",
             associates={"core": "../coreX", "mid": "../mid"},
-            req_id="REQ-d00001",
+            associate_namespaces={"core": "COREX"},
         )
 
         with pytest.raises(FederationError) as excinfo:
@@ -414,17 +433,318 @@ class TestDuplicateNameCollision:
             tmp_path,
             "shared",
             origin="https://example.com/shared.git",
-            req_id="REQ-d00003",
         )
-        make_repo(tmp_path, "mid", associates={"core": "../shared"}, req_id="REQ-d00002")
+        make_repo(
+            tmp_path,
+            "mid",
+            associates={"core": "../shared"},
+            associate_namespaces={"core": "SHARED"},
+        )
         root = make_repo(
             tmp_path,
             "top",
             associates={"core": "../shared", "mid": "../mid"},
-            req_id="REQ-d00001",
+            associate_namespaces={"core": "SHARED"},
         )
 
         planned = _plan(root)
 
         assert [entry.name for entry in planned] == ["top", "core", "mid"]
         assert len([e for e in planned if e.repo_root == shared.resolve()]) == 1
+
+
+class TestDeclarationRequiredFields:
+    """Validates REQ-d00202-B.
+
+    A declaration says which repository it means by stating where it is and
+    whose identifiers live there.  Missing either, it names nothing in
+    particular, so it is refused rather than resolved against whatever
+    happens to sit at that path.  The git remote answers a different
+    question -- how to obtain the repository -- and is therefore optional.
+    """
+
+    @pytest.mark.parametrize(
+        "entry",
+        [
+            {"namespace": "LIB"},
+            {"path": "../lib"},
+            {"path": "", "namespace": "LIB"},
+            {"path": "../lib", "namespace": ""},
+            "../lib",
+        ],
+        ids=[
+            "no-path",
+            "no-namespace",
+            "empty-path",
+            "empty-namespace",
+            "not-a-table",
+        ],
+    )
+    # Verifies: REQ-d00202-B
+    def test_REQ_d00202_B_incomplete_declaration_is_refused(self, entry):
+        """A declaration missing its path or its namespace is a ValueError."""
+        from elspais.config import get_associates_config
+
+        with pytest.raises(ValueError) as excinfo:
+            get_associates_config({"associates": {"lib": entry}})
+
+        # The operator has to be told WHICH declaration is unusable.
+        assert "lib" in str(excinfo.value), str(excinfo.value)
+
+    @pytest.mark.parametrize(
+        "git",
+        [None, "https://example.com/lib.git"],
+        ids=["git-omitted", "git-supplied"],
+    )
+    # Verifies: REQ-d00202-B
+    def test_REQ_d00202_B_git_remote_is_optional(self, git):
+        """path + namespace alone is a complete declaration; git rides along."""
+        from elspais.config import get_associates_config
+
+        declaration = {"path": "../lib", "namespace": "LIB"}
+        if git is not None:
+            declaration["git"] = git
+
+        resolved = get_associates_config({"associates": {"lib": declaration}})
+
+        assert resolved["lib"]["path"] == "../lib"
+        assert resolved["lib"]["namespace"] == "LIB"
+        # Absent, it reads as "no clone hint" rather than being missing from
+        # the resolved declaration; present, it is carried untouched.  Either
+        # way it takes no part in locating the repository.
+        assert resolved["lib"]["git"] == git
+
+    # Verifies: REQ-d00202-B, REQ-d00212-K
+    def test_REQ_d00202_B_git_remote_survives_a_config_on_disk(self, tmp_path):
+        """An authored `.elspais.toml` may carry the remote, and it arrives intact.
+
+        The declaration reader tolerating a remote is not the same as an
+        operator being able to write one: config loading validates the
+        declaration table on its own terms, so a remote that never reaches
+        the reader is a remote nobody can supply.  This is the level the
+        obligation is actually met at.
+        """
+        from elspais.config import get_associates_config
+
+        remote = "https://example.com/lib.git"
+        make_repo(tmp_path, "lib")
+        root = make_repo(
+            tmp_path,
+            "app",
+            config_text=(
+                'version = 3\n\n[project]\nname = "app"\nnamespace = "APP"\n\n'
+                "[levels.prd]\nrank = 1\nimplements = []\n\n"
+                '[levels.dev]\nrank = 2\nimplements = ["prd", "dev"]\n\n'
+                f'[associates.lib]\npath = "../lib"\nnamespace = "LIB"\ngit = "{remote}"\n'
+            ),
+            req_id="APP-d00001",
+        )
+
+        config = _load(root)
+        resolved = get_associates_config(config, repo_root=root)
+
+        assert resolved["lib"]["git"] == remote
+        assert resolved["lib"]["path"] == "../lib"
+        assert resolved["lib"]["namespace"] == "LIB"
+        # The remote is clone assistance, not a locator: the federation
+        # resolves through the declared path exactly as it would without it.
+        assert [entry.name for entry in _plan(root)] == ["app", "lib"]
+
+    # Verifies: REQ-d00202-B
+    def test_REQ_d00202_B_incomplete_declaration_fails_the_federation(self, tmp_path):
+        """Reached through planning, the refusal is a FederationError.
+
+        A planning surface handles one error family.  A raw ValueError
+        escaping the walk would reach callers that catch FederationError and
+        take the rest of the report down with it, and it would not say which
+        repository's configuration holds the bad declaration.
+        """
+        from elspais.graph.federated import FederationError
+        from elspais.graph.federation_plan import plan_federation
+
+        root = make_repo(tmp_path, "hub")
+        config = _load(root)
+        config["associates"] = {"lib": {"path": "../lib"}}
+
+        with pytest.raises(FederationError) as excinfo:
+            plan_federation(config, root)
+
+        message = str(excinfo.value)
+        assert str(root.resolve()) in message, message
+        assert "lib" in message, message
+
+
+class TestNamespaceCollision:
+    """Validates REQ-d00202-K.
+
+    A namespace answers whose identifiers these are.  Two repositories
+    claiming one namespace leave that question unanswerable: identifiers
+    spelled with it route to whichever repository the walk recorded last,
+    and the other repository's requirements resolve against the wrong
+    configuration.  One declaration table cannot collide with itself, so
+    this only becomes reachable once declarations from several repositories
+    are combined.
+    """
+
+    # Verifies: REQ-d00202-K
+    def test_REQ_d00202_K_two_repos_under_one_namespace_raise(self, tmp_path):
+        """Distinct repos both declaring 'SHARED', reached at different depths."""
+        from elspais.graph.federated import FederationError
+
+        near = make_repo(tmp_path, "alpha", namespace="SHARED")
+        far = make_repo(tmp_path, "beta", namespace="SHARED")
+        make_repo(
+            tmp_path,
+            "mid",
+            associates={"beta": "../beta"},
+            associate_namespaces={"beta": "SHARED"},
+        )
+        root = make_repo(
+            tmp_path,
+            "top",
+            associates={"alpha": "../alpha", "mid": "../mid"},
+            associate_namespaces={"alpha": "SHARED"},
+        )
+
+        # Planning raises on its own: the collision is settled before a
+        # single repository's graph is built.
+        with pytest.raises(FederationError) as excinfo:
+            _plan(root)
+
+        message = str(excinfo.value)
+        assert "SHARED" in message, message
+        # Both repositories must be identified by path -- naming only the
+        # surviving claimant would leave the shadowed repo invisible.
+        assert str(near.resolve()) in message, message
+        assert str(far.resolve()) in message, message
+        # ...and the declaration chain that reached each, which is the only
+        # thing telling the two claims apart.  Ordering is pinned; the
+        # separator glyph is not.
+        assert re.search(r"top\W+alpha", message), message
+        assert re.search(r"top\W+mid\W+beta", message), message
+
+    # Verifies: REQ-d00202-K
+    def test_REQ_d00202_K_one_repo_reached_twice_is_not_a_collision(self, tmp_path):
+        """A diamond re-declaring one repository is convergence, not a clash.
+
+        The second arrival carries the same namespace by construction, so a
+        guard that ran before identity dedupe would reject every legitimate
+        shared associate.
+        """
+        shared = make_repo(tmp_path, "common")
+        make_repo(
+            tmp_path,
+            "mid",
+            associates={"lib": "../common"},
+            associate_namespaces={"lib": "COMMON"},
+        )
+        root = make_repo(
+            tmp_path,
+            "top",
+            associates={"core": "../common", "mid": "../mid"},
+            associate_namespaces={"core": "COMMON"},
+        )
+
+        planned = _plan(root)
+
+        assert [entry.name for entry in planned] == ["top", "core", "mid"]
+        assert len([e for e in planned if e.repo_root == shared.resolve()]) == 1
+
+    # Verifies: REQ-d00202-K
+    def test_REQ_d00202_K_unloadable_repos_are_not_namespace_claimants(self, tmp_path):
+        """A repo that failed to load declares nothing, so two cannot collide.
+
+        Their configs are None, so both would present the same empty
+        namespace; treating that as a claim would turn every pair of broken
+        associate paths into a spurious collision and hide the real reason
+        each one failed.
+        """
+        root = make_repo(
+            tmp_path,
+            "hub",
+            associates={"gone1": "../absent1", "gone2": "../absent2"},
+        )
+
+        planned = _plan(root)
+        by_name = {entry.name: entry for entry in planned}
+
+        assert set(by_name) == {"hub", "gone1", "gone2"}
+        assert by_name["gone1"].config is None
+        assert by_name["gone2"].config is None
+        assert by_name["gone1"].error and by_name["gone2"].error
+
+
+class TestDeclaredNamespaceMismatch:
+    """Validates REQ-d00202-L.
+
+    A declaration does not assign a namespace to the repository it names --
+    it states the namespace its author expected to find there.  A mismatch
+    means the declaration points somewhere its author did not intend, which
+    is a mistake to report rather than a preference to reconcile.
+    """
+
+    @pytest.mark.parametrize(
+        "declared",
+        ["WRONG", "Lib"],
+        ids=["different-namespace", "different-case"],
+    )
+    # Verifies: REQ-d00202-L
+    def test_REQ_d00202_L_mismatched_namespace_raises(self, tmp_path, declared):
+        """The message names the path, the namespace named, and the one found."""
+        from elspais.graph.federated import FederationError
+
+        lib = make_repo(tmp_path, "lib")  # declares namespace 'LIB'
+        root = make_repo(
+            tmp_path,
+            "app",
+            associates={"lib": "../lib"},
+            associate_namespaces={"lib": declared},
+        )
+
+        with pytest.raises(FederationError) as excinfo:
+            _plan(root)
+
+        message = str(excinfo.value)
+        assert str(lib.resolve()) in message, message
+        # Quoted so 'Lib' and 'LIB' cannot satisfy one another by substring:
+        # case is never repaired, so the near-miss spelling is still a miss.
+        assert f"'{declared}'" in message, message
+        assert "'LIB'" in message, message
+
+    # Verifies: REQ-d00202-L
+    def test_REQ_d00202_L_mismatch_is_caught_at_any_depth(self, tmp_path):
+        """A transitively-reached declaration is checked like a direct one."""
+        from elspais.graph.federated import FederationError
+
+        deep = make_repo(tmp_path, "deep")  # declares namespace 'DEEP'
+        make_repo(
+            tmp_path,
+            "mid",
+            associates={"deep": "../deep"},
+            associate_namespaces={"deep": "ELSEWHERE"},
+        )
+        root = make_repo(tmp_path, "front", associates={"mid": "../mid"})
+
+        with pytest.raises(FederationError) as excinfo:
+            _plan(root)
+
+        message = str(excinfo.value)
+        assert str(deep.resolve()) in message, message
+        assert "'ELSEWHERE'" in message, message
+        assert "'DEEP'" in message, message
+
+    # Verifies: REQ-d00202-L
+    def test_REQ_d00202_L_agreeing_namespace_resolves(self, tmp_path):
+        """The check fires on disagreement only, not on every declaration."""
+        make_repo(tmp_path, "lib")
+        root = make_repo(
+            tmp_path,
+            "app",
+            associates={"lib": "../lib"},
+            associate_namespaces={"lib": "LIB"},
+        )
+
+        planned = _plan(root)
+
+        assert [entry.name for entry in planned] == ["app", "lib"]
+        assert all(entry.error is None for entry in planned)

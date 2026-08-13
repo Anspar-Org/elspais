@@ -18,7 +18,6 @@ from typing import Any
 
 from elspais.config import (
     IgnoreConfig,
-    get_associates_config,
     get_code_directories,
     get_config,
     get_ignore_config,
@@ -28,7 +27,11 @@ from elspais.config.schema import ElspaisConfig
 from elspais.graph.builder import GraphBuilder
 from elspais.graph.deserializer import DomainFile
 from elspais.graph.federated import FederatedGraph
-from elspais.graph.federation_plan import PlannedRepo, plan_federation
+from elspais.graph.federation_plan import (
+    PlannedRepo,
+    declared_associates,
+    plan_federation,
+)
 from elspais.graph.GraphNode import FileType, GraphNode, NodeKind, make_file_id
 from elspais.graph.parsers import ParserRegistry
 from elspais.graph.parsers.journey import JourneyParser
@@ -181,16 +184,8 @@ def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
     that were consumed by migration but not removed. We filter those out before
     validation since ElspaisConfig uses extra='forbid'.
 
-    The 'associates' key may use legacy format (``{paths: [...]}`` instead of
-    ``{name: {path: ...}}``), which is incompatible with the schema. We strip
-    it when it has the legacy shape since factory.py accesses associates via
-    ``get_associates_config(config)`` on the raw dict.
     """
     filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
-    # Strip legacy-format associates (contains 'paths' list instead of named entries)
-    assoc = filtered.get("associates")
-    if isinstance(assoc, dict) and "paths" in assoc:
-        filtered.pop("associates", None)
     return ElspaisConfig.model_validate(filtered)
 
 
@@ -599,7 +594,7 @@ def build_graph(
     plan: list[PlannedRepo] | None = None
     if federation_resolvers is None:
         federation_resolvers = [default_resolver]
-        if _build_associates and get_associates_config(config, repo_root=repo_root):
+        if _build_associates and declared_associates(config, repo_root):
             plan = plan_federation(config, repo_root, strict=strict)
             federation_resolvers.extend(
                 build_resolver(member.config) for member in plan[1:] if member.config is not None

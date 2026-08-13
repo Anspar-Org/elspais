@@ -320,11 +320,6 @@ def load_config(config_path: Path) -> dict[str, Any]:
         if key in merged:
             stripped[key] = merged.pop(key)
 
-    # Strip legacy associates.paths list before validation (v3 expects named entries)
-    assoc = merged.get("associates")
-    if isinstance(assoc, dict) and "paths" in assoc:
-        stripped["associates"] = merged.pop("associates")
-
     # Strip removed field: allowed_statuses (now derived from status_roles)
     fmt = merged.get("rules", {}).get("format", {})
     if "allowed_statuses" in fmt:
@@ -1014,49 +1009,48 @@ def get_associates_config(
 ) -> dict[str, dict]:
     """Read [associates] sections from config.
 
-    Supports both the new named format ([associates.<name>]) and the legacy
-    paths array format ([associates] paths = ["../repo"]).
-
-    Each associate entry has:
+    Each associate is declared as ``[associates.<name>]`` and states:
     - path (str, required): relative path to the associate repo
-    - namespace (str, required): namespace prefix for the associate
+    - namespace (str, required): the namespace expected at that path
+    - git (str, optional): remote URL, for clone assistance only
 
     Args:
         config: The project configuration dictionary.
-        repo_root: Repository root for resolving relative legacy paths.
+        repo_root: Unused; retained so callers may pass the repository
+            root without knowing whether resolution needs it.
 
     Returns:
         Dict mapping associate name to {"path": str, "namespace": str}.
         Empty dict if no [associates] section exists.
+
+    Raises:
+        ValueError: A declaration omits its path or its namespace. Both
+            are how a declaration says which repository it means, so a
+            declaration missing either names nothing in particular.
     """
     associates = config.get("associates", {})
     if not associates:
         return {}
     result: dict[str, dict] = {}
     for name, entry in associates.items():
-        if isinstance(entry, dict):
-            result[name] = {
-                "path": entry["path"],
-                "namespace": entry.get("namespace", ""),
-                "git": entry.get("git"),
-            }
-
-    # Support legacy [associates] paths = ["../repo"] format
-    if not result:
-        paths = associates.get("paths", [])
-        if isinstance(paths, list) and paths:
-            from elspais.associates import discover_associate_from_path
-
-            for path_str in paths:
-                repo_path = Path(path_str)
-                if not repo_path.is_absolute() and repo_root:
-                    repo_path = repo_root / repo_path
-                assoc = discover_associate_from_path(repo_path)
-                if not isinstance(assoc, str):
-                    result[assoc.name] = {
-                        "path": path_str,
-                        "git": None,
-                    }
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"Associate '{name}' is not a declaration table. Declare it as "
+                f"[associates.{name}] with a path and a namespace."
+            )
+        if not entry.get("path"):
+            raise ValueError(f"Associate '{name}' declares no path.")
+        if not entry.get("namespace"):
+            raise ValueError(
+                f"Associate '{name}' declares no namespace. A declaration names "
+                f"the namespace it expects to find at that path, which is what "
+                f"identifies the repository it means."
+            )
+        result[name] = {
+            "path": entry["path"],
+            "namespace": entry["namespace"],
+            "git": entry.get("git"),
+        }
 
     return result
 

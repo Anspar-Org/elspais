@@ -145,10 +145,6 @@ def _resolve_spec_dir_info(spec_dir: Path) -> _SpecDirInfo:
                 f.alias or name for name, f in ElspaisConfig.model_fields.items()
             } | set(ElspaisConfig.model_fields.keys())
             filtered = {k: v for k, v in cfg.items() if k in schema_fields}
-            # Strip legacy associates.paths list (v3 expects named entries)
-            assoc = filtered.get("associates")
-            if isinstance(assoc, dict) and "paths" in assoc:
-                filtered.pop("associates", None)
             typed_config = ElspaisConfig.model_validate(filtered)
             project_name = typed_config.project.name or current.name
             try:

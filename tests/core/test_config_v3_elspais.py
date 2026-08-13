@@ -264,9 +264,14 @@ class TestAssociateEntryConfigSimplified:
         assert cfg.path == "/some/path"
         assert cfg.namespace == "NS"
 
-    def test_REQ_d00212_K_no_git_field(self):
-        """AssociateEntryConfig does NOT have a 'git' field."""
-        assert "git" not in AssociateEntryConfig.model_fields
+    def test_REQ_d00212_K_git_field_is_optional(self):
+        """AssociateEntryConfig carries an optional 'git' remote."""
+        assert "git" in AssociateEntryConfig.model_fields
+        # Optional: a declaration without a remote is complete, and the
+        # remote is never what identifies the repository.
+        assert AssociateEntryConfig(path="/some/path", namespace="NS").git is None
+        remote = "https://example.com/lib.git"
+        assert AssociateEntryConfig(path="/p", namespace="NS", git=remote).git == remote
 
     def test_REQ_d00212_K_no_spec_field(self):
         """AssociateEntryConfig does NOT have a 'spec' field."""

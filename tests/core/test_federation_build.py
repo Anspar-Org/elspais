@@ -41,10 +41,21 @@ _BASE_CONFIG = {
 }
 
 
-def _write_config(repo_dir: Path, extra: dict | None = None) -> Path:
-    """Write .elspais.toml into *repo_dir* and return its path."""
+def _write_config(
+    repo_dir: Path,
+    extra: dict | None = None,
+    namespace: str | None = None,
+) -> Path:
+    """Write .elspais.toml into *repo_dir* and return its path.
+
+    `namespace` defaults to the directory's own name upper-cased, so two
+    repos built for one federation declare different namespaces -- the
+    condition on which a federation can say whose identifiers are whose.
+    """
     repo_dir.mkdir(parents=True, exist_ok=True)
     cfg = dict(_BASE_CONFIG)
+    cfg["project"] = dict(cfg["project"])
+    cfg["project"]["namespace"] = namespace or repo_dir.name.upper()
     if extra:
         cfg.update(extra)
     config_path = repo_dir / ".elspais.toml"
@@ -109,7 +120,7 @@ def two_repos(tmp_path: Path) -> dict[str, Path]:
     _write_spec_file(
         assoc_dir / "spec",
         "prd.md",
-        req_id="REQ-p00001",
+        req_id="ASSOC-p00001",
         title="Product Requirement",
         level="PRD",
     )
@@ -117,15 +128,15 @@ def two_repos(tmp_path: Path) -> dict[str, Path]:
     # --- root repo (declares associate) ---
     _write_config(
         root_dir,
-        extra={"associates": {"assoc": {"path": "../assoc", "namespace": "REQ"}}},
+        extra={"associates": {"assoc": {"path": "../assoc", "namespace": "ASSOC"}}},
     )
     _write_spec_file(
         root_dir / "spec",
         "dev.md",
-        req_id="REQ-d00001",
+        req_id="ROOT-d00001",
         title="Dev Requirement",
         level="DEV",
-        implements="REQ-p00001",
+        implements="ASSOC-p00001",
     )
 
     return {"root": root_dir, "assoc": assoc_dir}
@@ -146,12 +157,12 @@ def missing_assoc_repo(tmp_path: Path) -> Path:
     root_dir = tmp_path / "root"
     _write_config(
         root_dir,
-        extra={"associates": {"ghost": {"path": "../ghost", "namespace": "REQ"}}},
+        extra={"associates": {"ghost": {"path": "../ghost", "namespace": "GHOST"}}},
     )
     _write_spec_file(
         root_dir / "spec",
         "dev.md",
-        req_id="REQ-d00001",
+        req_id="ROOT-d00001",
         title="Dev Requirement",
         level="DEV",
     )
@@ -184,7 +195,7 @@ def transitive_repos(tmp_path: Path) -> dict[str, Path]:
     _write_spec_file(
         leaf_dir / "spec",
         "prd.md",
-        req_id="REQ-p00001",
+        req_id="LEAF-p00001",
         title="Leaf PRD",
         level="PRD",
     )
@@ -192,12 +203,12 @@ def transitive_repos(tmp_path: Path) -> dict[str, Path]:
     # middle (declares its own associate)
     _write_config(
         middle_dir,
-        extra={"associates": {"leaf": {"path": "../leaf", "namespace": "REQ"}}},
+        extra={"associates": {"leaf": {"path": "../leaf", "namespace": "LEAF"}}},
     )
     _write_spec_file(
         middle_dir / "spec",
         "ops.md",
-        req_id="REQ-o00001",
+        req_id="MIDDLE-o00001",
         title="Middle OPS",
         level="OPS",
     )
@@ -205,12 +216,12 @@ def transitive_repos(tmp_path: Path) -> dict[str, Path]:
     # root
     _write_config(
         root_dir,
-        extra={"associates": {"middle": {"path": "../middle", "namespace": "REQ"}}},
+        extra={"associates": {"middle": {"path": "../middle", "namespace": "MIDDLE"}}},
     )
     _write_spec_file(
         root_dir / "spec",
         "dev.md",
-        req_id="REQ-d00001",
+        req_id="ROOT-d00001",
         title="Root DEV",
         level="DEV",
     )
@@ -334,7 +345,7 @@ class TestFederationBuild:
             transitive_repos["leaf"],
         }
         # The leaf's requirement resolves from the root's entry point.
-        assert fed.find_by_id("REQ-p00001") is not None
+        assert fed.find_by_id("LEAF-p00001") is not None
 
 
 # ---------------------------------------------------------------------------
@@ -358,15 +369,15 @@ class TestCrossGraphWiring:
             scan_tests=False,
         )
 
-        # REQ-d00001 should have REQ-p00001 as parent via IMPLEMENTS
-        dev_node = fed.find_by_id("REQ-d00001")
+        # ROOT-d00001 should have ASSOC-p00001 as parent via IMPLEMENTS
+        dev_node = fed.find_by_id("ROOT-d00001")
         assert dev_node is not None, "DEV requirement not found"
 
         from elspais.graph.relations import EdgeKind
 
         parent_ids = {p.id for p in dev_node.iter_parents(edge_kinds={EdgeKind.IMPLEMENTS})}
-        assert "REQ-p00001" in parent_ids, (
-            f"Expected REQ-d00001 to implement REQ-p00001, " f"but parents are: {parent_ids}"
+        assert "ASSOC-p00001" in parent_ids, (
+            f"Expected ROOT-d00001 to implement ASSOC-p00001, " f"but parents are: {parent_ids}"
         )
 
     def test_cross_graph_broken_ref_resolved(self, two_repos: dict[str, Path]) -> None:
@@ -379,20 +390,28 @@ class TestCrossGraphWiring:
             scan_tests=False,
         )
 
-        # The reference REQ-d00001 -> REQ-p00001 should not be broken
+        # The reference ROOT-d00001 -> ASSOC-p00001 should not be broken
         broken = fed.broken_references()
         broken_targets = {br.target_id for br in broken}
-        assert "REQ-p00001" not in broken_targets, (
-            f"REQ-p00001 should not be a broken reference, " f"but found: {broken}"
+        assert "ASSOC-p00001" not in broken_targets, (
+            f"ASSOC-p00001 should not be a broken reference, " f"but found: {broken}"
         )
 
     def test_id_conflict_raises(self, tmp_path: Path) -> None:
-        """Two repos defining the same ID raises FederationError."""
+        """Two repos defining the same ID raises FederationError.
+
+        Both repos spell a fixed literal into their canonical pattern
+        rather than their namespace, which is what leaves two distinctly
+        namespaced repositories able to claim one identifier at all.
+        """
         root_dir = tmp_path / "root"
         assoc_dir = tmp_path / "assoc"
 
+        fixed_prefix = {"id-patterns": dict(_BASE_CONFIG["id-patterns"])}
+        fixed_prefix["id-patterns"]["canonical"] = "REQ-{level.letter}{component}"
+
         # Both repos define REQ-p00001
-        _write_config(assoc_dir)
+        _write_config(assoc_dir, extra=dict(fixed_prefix))
         _write_spec_file(
             assoc_dir / "spec",
             "prd.md",
@@ -403,7 +422,10 @@ class TestCrossGraphWiring:
 
         _write_config(
             root_dir,
-            extra={"associates": {"assoc": {"path": "../assoc", "namespace": "REQ"}}},
+            extra={
+                **fixed_prefix,
+                "associates": {"assoc": {"path": "../assoc", "namespace": "ASSOC"}},
+            },
         )
         _write_spec_file(
             root_dir / "spec",
@@ -429,23 +451,23 @@ class TestCrossGraphWiring:
         _write_spec_file(
             assoc_dir / "spec",
             "prd.md",
-            req_id="REQ-p00001",
+            req_id="ASSOC-p00001",
             title="Assoc PRD",
             level="PRD",
         )
 
         _write_config(
             root_dir,
-            extra={"associates": {"assoc": {"path": "../assoc", "namespace": "REQ"}}},
+            extra={"associates": {"assoc": {"path": "../assoc", "namespace": "ASSOC"}}},
         )
-        # Root's DEV implements REQ-p99999 which doesn't exist anywhere
+        # Root's DEV implements ROOT-p99999 which doesn't exist anywhere
         _write_spec_file(
             root_dir / "spec",
             "dev.md",
-            req_id="REQ-d00001",
+            req_id="ROOT-d00001",
             title="Root DEV",
             level="DEV",
-            implements="REQ-p99999",
+            implements="ROOT-p99999",
         )
 
         fed = build_graph(
@@ -456,7 +478,7 @@ class TestCrossGraphWiring:
 
         broken = fed.broken_references()
         broken_targets = {br.target_id for br in broken}
-        assert "REQ-p99999" in broken_targets
+        assert "ROOT-p99999" in broken_targets
 
     def test_shared_path_remainder_does_not_conflict(self, tmp_path: Path) -> None:
         """Regression: REMAINDER nodes use `rem:` prefix, not `remainder:`.
@@ -477,7 +499,7 @@ class TestCrossGraphWiring:
         _write_spec_file(
             assoc_dir / "spec",
             "prd.md",
-            req_id="REQ-p00001",
+            req_id="ASSOC-p00001",
             title="Assoc PRD",
             level="PRD",
         )
@@ -490,12 +512,12 @@ class TestCrossGraphWiring:
         # Root: unique REQ + same-path prose file
         _write_config(
             root_dir,
-            extra={"associates": {"assoc": {"path": "../assoc", "namespace": "REQ"}}},
+            extra={"associates": {"assoc": {"path": "../assoc", "namespace": "ASSOC"}}},
         )
         _write_spec_file(
             root_dir / "spec",
             "dev.md",
-            req_id="REQ-d00001",
+            req_id="ROOT-d00001",
             title="Root DEV",
             level="DEV",
         )
@@ -515,10 +537,10 @@ class TestCrossGraphWiring:
 
         # Both sub-graphs merged: requirements from each repo are findable.
         assert (
-            fed.find_by_id("REQ-d00001") is not None
+            fed.find_by_id("ROOT-d00001") is not None
         ), "Root DEV requirement not found after federated build"
         assert (
-            fed.find_by_id("REQ-p00001") is not None
+            fed.find_by_id("ASSOC-p00001") is not None
         ), "Associate PRD requirement not found after federated build"
 
         # Confirm the shared-path REMAINDER actually existed in at least

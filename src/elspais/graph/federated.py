@@ -2037,26 +2037,6 @@ class FederatedGraph:
                     )
                     return  # one cycle per build to keep output sane
 
-    def _namespace_claimed_by_other_repo(self, source_entry: RepoEntry, namespace: str) -> bool:
-        """Return True if some other *live* repo's own namespace equals ``namespace``.
-
-        Associate namespaces are validated for shape (see ``validate_namespace``)
-        but NOT for uniqueness against each other or the primary repo's
-        namespace (``config/schema.py`` has no cross-repo check) -- two repos
-        MAY legitimately share a namespace. When they do, we can't
-        conclusively say a same-namespace-looking broken ref is a malformed
-        LOCAL reference rather than one intended for that other repo, so the
-        namespace-collision guard in ``_annotate_presumed_foreign_refs`` must
-        stand down and fall back to the prior blanket determination.
-        """
-        for entry in self._repos.values():
-            if entry is source_entry or entry.graph is None:
-                continue
-            resolver = self._resolver_for(entry)
-            if resolver is not None and resolver.config.namespace == namespace:
-                return True
-        return False
-
     # Implements: REQ-d00252-G
     def _annotate_presumed_foreign_refs(self) -> None:
         """Mark remaining broken references whose target doesn't match the source repo's ID pattern.
@@ -2089,9 +2069,8 @@ class FederatedGraph:
         2. Even with associates configured, a target whose leading token
            matches the *source* repo's own namespace is a malformed LOCAL
            reference (e.g. a mis-styled assertion suffix), not a cross-repo
-           one -- unless another configured repo shares that same namespace
-           (see ``_namespace_claimed_by_other_repo``), in which case we can't
-           rule out the other repo and fall back to the prior behavior. The
+           one: one namespace names one repository in a federation, so no
+           other member can be the reference's intended owner. The
            malformed-local case is left a hard broken reference with a
            diagnostic pointing at the likely cause.
         """
@@ -2119,21 +2098,16 @@ class FederatedGraph:
                 if br.presumed_foreign or resolver.is_local_id(br.target_id):
                     continue
                 target_id = br.target_id
-                # Prefix match here vs. exact equality in
-                # _namespace_claimed_by_other_repo: this asymmetry means a
-                # nested-namespace pair (host "REQ" vs associate "REQ-EXTRA")
-                # would prefix-match the host and not be exact-claimed by the
-                # associate, mis-classifying a malformed "REQ-EXTRA-..." ref
-                # as local-to-host. Accepted as out of scope: namespaces are
-                # shape-validated identifiers (validate_namespace) and the
-                # `elspais associate` workflow makes one namespace being a
-                # dash-prefix of another improbable in practice.
+                # A prefix match reads a nested-namespace pair (host "REQ"
+                # beside associate "REQ-EXTRA") as local to the host, so a
+                # malformed "REQ-EXTRA-..." reference is mis-attributed.
+                # Namespaces are distinct across a federation but nothing
+                # yet forbids one being another's prefix, which is what
+                # would close this.
                 matches_own_namespace = target_id == own_namespace or target_id.startswith(
                     f"{own_namespace}-"
                 )
-                if matches_own_namespace and not self._namespace_claimed_by_other_repo(
-                    source_entry, own_namespace
-                ):
+                if matches_own_namespace:
                     refs[i] = BrokenReference(
                         source_id=br.source_id,
                         target_id=br.target_id,

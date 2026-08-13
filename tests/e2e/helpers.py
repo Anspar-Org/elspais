@@ -420,7 +420,7 @@ def associate_config(
     name: str,
     prefix: str,
     core_path: str = "..",
-    namespace: str = "REQ",
+    namespace: str | None = None,
     spec_dir: str = "spec",
     *,
     types: dict | None = None,
@@ -429,7 +429,13 @@ def associate_config(
     label_style: str = "uppercase",
     allowed_implements: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Build config dict for an associated repo (v3 schema)."""
+    """Build config dict for an associated repo (v3 schema).
+
+    The namespace defaults to `prefix`, so an associate declares a namespace
+    of its own: no two repositories in one federation may declare the same
+    one, and the core these helpers build alongside holds "REQ".
+    """
+    namespace = namespace or prefix
     if types is None:
         levels = {
             "prd": {"rank": 1, "letter": "p", "implements": ["prd"]},

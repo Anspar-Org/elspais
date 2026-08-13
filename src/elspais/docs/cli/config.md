@@ -296,7 +296,10 @@ Each entry has a name, path, and namespace.
 ```toml
 [associates.callisto]
 path = "../callisto"     # Relative to canonical repo root
-namespace = "CAL"        # Namespace prefix for this repo
+namespace = "CAL"        # Namespace this repo declares for itself
+# git = "git@github.com:acme/callisto.git"
+                         # Optional: where to obtain the repo when it is
+                         #   absent from this machine
 # color = "#7c3aed"      # Optional badge color (hex "#RRGGBB"); omit for
                           #   a deterministic hash-derived color.
 
@@ -308,6 +311,14 @@ namespace = "PHX"
 Relative paths resolve from the **canonical** repository root,
 so they work correctly from git worktrees. Each path must contain
 a `.elspais.toml` with its own configuration.
+
+Both keys are required, and the namespace must be the one the repository
+at that path declares for itself — a declaration naming a different one
+points somewhere its author did not intend, and the build says so. No two
+repositories in a federation may declare the same namespace, including
+repositories reached through an associate's own declarations rather than
+named here: a namespace answers whose identifiers these are, so two
+claimants leave it unanswerable and the build fails naming both.
 
 The viewer renders one toggle per namespace (local repo first, then each
 associate in declared order). Namespace badge colors are taken from

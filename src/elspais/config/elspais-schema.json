@@ -47,6 +47,18 @@
           "title": "Namespace",
           "type": "string"
         },
+        "git": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Git"
+        },
         "color": {
           "anyOf": [
             {

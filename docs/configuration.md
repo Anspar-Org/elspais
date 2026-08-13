@@ -13,8 +13,8 @@ elspais looks for configuration in this order:
 
 For **git worktrees**, elspais detects the canonical (main) repository
 root and uses it when resolving relative associate paths. This means
-paths like `"../sibling-repo"` in `[associates].paths` resolve from the
-main repo, not the worktree location.
+paths like `"../sibling-repo"` in an `[associates.<name>]` declaration
+resolve from the main repo, not the worktree location.
 
 ## Complete Configuration Reference
 
@@ -328,9 +328,18 @@ dir = ""
 # during federation. See `elspais docs graph-model`.
 #──────────────────────────────────────────────────────────────────────────────
 
+# A declaration states the path and the namespace it expects to find
+# there; both are required. The namespace must match the one the
+# repository at that path declares for itself, and no two repositories in
+# one federation may declare the same namespace — a namespace is what
+# says whose identifiers these are.
+
 [associates.callisto]
 path = "../callisto"
 namespace = "CAL"
+# git = "git@github.com:acme/callisto.git"   # Optional: where to obtain the
+                                    #   repository when it is not on this
+                                    #   machine; never how it is located
 # color = "#7c3aed"                  # Optional: badge color for this namespace
 
 [associates.phoenix]

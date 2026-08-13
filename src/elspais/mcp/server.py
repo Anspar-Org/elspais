@@ -100,10 +100,6 @@ _SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.item
 def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
     """Validate a config dict into ElspaisConfig, stripping non-schema keys."""
     filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
-    # Strip legacy-format associates (contains 'paths' list instead of named entries)
-    assoc = filtered.get("associates")
-    if isinstance(assoc, dict) and "paths" in assoc:
-        filtered.pop("associates", None)
     return ElspaisConfig.model_validate(filtered)
 
 
