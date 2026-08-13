@@ -109,7 +109,7 @@ the following function, but a _Traceability_ keyword inside one is never read.
 - `pytest -m ""` — runs everything (unit + e2e + browser + stress, ~190s). **Run before `git push`.**
 
 **Marking tests**: Use `@pytest.mark.e2e` on tests that spawn external processes (elspais CLI, claude CLI, act, MCP subprocess). Use `@pytest.mark.browser` on Playwright tests.
-**Browser tier setup**: the browser tests need `pip install -e ".[browser]"` plus `playwright install chromium` once. Without the package pytest **deselects** the whole tier and still reports green — a fresh venv will look like it passed when 13 tests never ran. If `pytest -m browser` reports `0 selected` or `skipped`, the tier did not run; check the install before trusting it.
+**Browser tier setup**: the browser tests need `pip install -e ".[browser]"` plus `playwright install chromium` once. Without the package pytest **deselects** the whole tier and still reports green — a fresh venv will look like it passed when none of the tier ran. If `pytest -m browser` reports `0 selected` or `skipped`, the tier did not run; check the install before trusting it.
 **Claude Code caveat**: The `test_e2e_install_and_uninstall` test (claude MCP install) is auto-skipped inside Claude Code sessions (`CLAUDECODE=1`) because the claude CLI hijacks pytest's file descriptors.
 
 ### Test-Writing Conventions

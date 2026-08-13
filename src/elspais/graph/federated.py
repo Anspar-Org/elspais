@@ -578,12 +578,32 @@ class FederatedGraph:
 
         # Strategy: by_id
 
+        A structural id (FILE, REMAINDER, definition) is keyed by source
+        location, which repeats across repositories, so this answers for
+        only one of the members holding it. A caller with the node itself
+        MUST use ``repo_for_node`` instead: writing to the repository this
+        answers with would write to a repository the caller never named.
+
         Raises:
             KeyError: If node_id is not found in any repo.
         """
         repo_name = self._ownership.get(node_id)
         if repo_name is None:
             raise KeyError(f"Node '{node_id}' not found in any repo")
+        return self._repos[repo_name]
+
+    def repo_for_node(self, node) -> RepoEntry:
+        """Return the RepoEntry holding this node OBJECT.
+
+        Unambiguous where ``repo_for`` is not: identity settles which
+        member holds a node whose id repeats across them.
+
+        Raises:
+            KeyError: If no repo holds the node.
+        """
+        repo_name = self._owner_of_node(node)
+        if repo_name is None or repo_name not in self._repos:
+            raise KeyError(f"Node '{node.id}' not found in any repo")
         return self._repos[repo_name]
 
     # Implements: REQ-d00230-D
@@ -2178,26 +2198,31 @@ class FederatedGraph:
                     self._ownership[node_id] = entry.name
 
 
-def is_associate_owned(graph: Any, node_id: str) -> bool:
-    """Whether *node_id* is owned by an associate repo rather than the primary.
+def is_associate_owned(graph: Any, node: Any) -> bool:
+    """Whether *node* is owned by an associate repo rather than the primary.
 
     Single home for the write-scope ownership resolution used by
     ``render_save`` and ``elspais fix`` reporting (REQ-d00253-B, REQ-d00253-F).
-    The federation ownership map is authoritative: anything ``repo_for``
-    attributes to a non-root repo is associate-owned. Nodes not registered in
-    the map (or plain TraceGraphs with no federation API) fall back to the
-    node's ``repo`` field — build-time associate FILE nodes are created by a
-    recursive build where the associate is its own root, so their ``repo``
-    field is None and only the ownership map can classify them; the field is
-    a fallback, not the authority.
+
+    Takes the node OBJECT, never its id. A structural id repeats across
+    repositories, so asking by id can answer with a member that merely
+    holds the same path — and answering "primary" for an associate's file
+    is what lets a write past this guard. Identity cannot be mistaken.
+
+    Nodes no repository claims (or plain TraceGraphs with no federation
+    API) fall back to the node's ``repo`` field — build-time associate FILE
+    nodes are created by a recursive build where the associate is its own
+    root, so their ``repo`` field is None and only ownership can classify
+    them; the field is a fallback, not the authority.
 
     The MCP write guard (``_guard_associate_write``) intentionally does NOT
     share this fallback: there an unknown/new node must stay writable.
     """
+    if node is None:
+        return False
     root_repo = getattr(graph, "root_repo_name", None)
     try:
-        owner = graph.repo_for(node_id).name
+        owner = graph.repo_for_node(node).name
         return root_repo is not None and owner != root_repo
     except (KeyError, AttributeError):
-        node = graph.find_by_id(node_id)
-        return node is not None and node.get_field("repo") is not None
+        return node.get_field("repo") is not None

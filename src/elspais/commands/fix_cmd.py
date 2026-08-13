@@ -157,8 +157,7 @@ def _is_associate_owned(graph, node) -> bool:  # noqa: ANN001
     """
     from elspais.graph.federated import is_associate_owned
 
-    fnode = node.file_node()
-    return is_associate_owned(graph, fnode.id if fnode is not None else node.id)
+    return is_associate_owned(graph, node.file_node() or node)
 
 
 def _scan_and_report_unfixable(graph) -> int:  # noqa: ANN001
