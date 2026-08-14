@@ -26,6 +26,17 @@ _NO_COLON_MESSAGE = (
 )
 
 
+# The statuses a project starts with, and what each one means. Read from here
+# by both the schema default and the roles reader, which held their own copies
+# of it and would have agreed until one of them was edited.
+_DEFAULT_STATUS_ROLES: dict[str, list[str]] = {
+    "active": ["Active"],
+    "provisional": ["Draft", "Proposed"],
+    "aspirational": ["Roadmap", "Future", "Idea"],
+    "retired": ["Deprecated", "Superseded", "Rejected"],
+}
+
+
 class _StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
 
@@ -334,14 +345,7 @@ class FormatConfig(_StrictModel):
     # admitted here and silently discarded by the reader, so a project
     # writing `retired = "Deprecated"` was told nothing and kept treating
     # the status as active -- counted in coverage, reported as a gap.
-    status_roles: dict[str, list[str]] = Field(
-        default_factory=lambda: {
-            "active": ["Active"],
-            "provisional": ["Draft", "Proposed"],
-            "aspirational": ["Roadmap", "Future", "Idea"],
-            "retired": ["Deprecated", "Superseded", "Rejected"],
-        }
-    )
+    status_roles: dict[str, list[str]] = Field(default_factory=lambda: dict(_DEFAULT_STATUS_ROLES))
     no_assertions_severity: str = "warning"
     no_traceability_severity: str = "warning"
 

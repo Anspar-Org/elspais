@@ -2064,27 +2064,6 @@ class KeywordsConfig:
     stopwords: frozenset[str]
     min_length: int = 3
 
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> KeywordsConfig:
-        """Create config from dictionary.
-
-        Args:
-            data: Dict with optional 'stopwords' list and 'min_length' int.
-
-        Returns:
-            KeywordsConfig instance.
-        """
-        stopwords_list = data.get("stopwords")
-        if stopwords_list is not None:
-            stopwords = frozenset(stopwords_list)
-        else:
-            stopwords = DEFAULT_STOPWORDS
-
-        return cls(
-            stopwords=stopwords,
-            min_length=data.get("min_length", 3),
-        )
-
 
 def extract_keywords(
     text: str,

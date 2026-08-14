@@ -109,25 +109,28 @@ C. The drift check SHALL pass when all schema sections are documented and no sta
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-The viewer UI SHALL derive dropdown values and filter labels from `ElspaisConfig` rather than hardcoding them. The Flask template context SHALL include config-derived requirement types, allowed statuses, and user-selectable relationship kinds.
+The values the viewer offers a reader — the levels it groups by, the statuses it filters on, the relationships a reader may create — SHALL come from the project's configuration rather than from the viewer, so that a project sees its own vocabulary and not this one's.
 
 ### Assertions
 
-A. The Flask template context SHALL include a `config_types` variable containing requirement type definitions derived from `ElspaisConfig.id_patterns.types`.
+A. The viewer SHALL offer the requirement levels the project declares, each with the letter and rank that project gives it.
 
-B. The Flask template context SHALL include a `config_relationship_kinds` variable listing user-selectable relationship kinds (implements, refines, satisfies).
+B. The viewer SHALL offer only those relationships a reader may author. The graph holds kinds the tool derives rather than accepts, and offering one would invite a reader to declare something the tool will overwrite.
 
-C. The Flask template context SHALL include a `config_statuses` variable containing allowed statuses from `ElspaisConfig.rules.format.allowed_statuses` when configured.
+C. The viewer SHALL offer the statuses the project declares, which are the statuses its requirements may carry.
 
-D. `StatusRolesConfig` SHALL provide a `sort_by_role()` method that orders a list of status strings by role priority (active first, then provisional, aspirational, and retired last), preserving original order within each role group; unknown statuses SHALL be treated as active.
+D. Statuses presented in order SHALL run active first, then provisional, then aspirational, then retired, keeping the order they were given in within each of those groups. A status belonging to no declared role SHALL be ordered as an active one.
 
 ### Changelog
 
+- 2026-08-14 | 254fcba9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-14 | 3feb798c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-14 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: state what the viewer offers a reader rather than which variables carry it; two assertions named configuration fields that do not exist
 - 2026-07-31 | 58192a4f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | a9cc41d2 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | a9cc41d2 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Config-Driven Viewer UI Values* | **Hash**: 58192a4f
+*End* *Config-Driven Viewer UI Values* | **Hash**: 254fcba9
 ---
 
 ## REQ-d00212: Config Schema v3 Models

@@ -20,6 +20,8 @@ All notable changes to elspais will be documented in this file.
 
 ### Fixed
 
+- **`[keywords].min_length` takes effect** — the shortest word worth indexing was a documented setting the extractor honoured and nothing ever passed to it, so every project indexed words of three letters and up whatever it configured. It is passed now. Projects leaving it alone see no change.
+
 - **`rules.format.allowed_statuses` is refused rather than dropped** — the statuses a requirement may declare are the ones named in `[rules.format.status_roles]`, whose lists say what each status means as well as that it exists. Naming the set a second time could only agree or disagree with them, so the setting was superseded — and then dropped in silence, which left a project believing it had said something. It is now reported, naming the section that answers instead.
 
 - **A configuration is validated in one place, and a section it does not know is refused** — twelve copies of the same validation helper existed, each filtering the dictionary to the schema's own field names before validating it. They needed to, because the loader withheld three sections from validation and then put them back into what it returned. Nothing has ever read `[requirements]`, `[paths]` or `[references]`, so all they did was let an obsolete or mistyped section pass in silence. The loader no longer withholds them, the schema refuses them by name, and the twelve copies are one.

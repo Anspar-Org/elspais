@@ -941,12 +941,22 @@ def build_graph(
     # Annotate keywords on all nodes so keyword search tools work
     # Annotate coverage metrics so all consumers (MCP, HTML, Flask) get coverage data
     from elspais.graph.annotators import (
+        DEFAULT_STOPWORDS,
+        KeywordsConfig,
         annotate_coverage,
         annotate_journey_verification,
         annotate_keywords,
     )
 
-    annotate_keywords(graph)
+    # The shortest word worth indexing is the project's to set. The
+    # extractor has always honoured it; nothing had ever passed it in.
+    annotate_keywords(
+        graph,
+        KeywordsConfig(
+            stopwords=DEFAULT_STOPWORDS,
+            min_length=typed_config.keywords.min_length,
+        ),
+    )
     # Derive this repository's coverage-credit config from
     # [[scanning.test.targets]]. Per-target settings are collapsed into one
     # config for the repository (acceptable for Phase 1 homogeneous targets).

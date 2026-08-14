@@ -121,7 +121,7 @@
 | REQ-d00208 | JSON Schema Export for IDE Autocomplete                       | dev-graph-config.md     | 27ca773c |
 | REQ-d00209 | Schema-Driven Init Template Generation                        | dev-graph-config.md     | b25e4468 |
 | REQ-d00210 | Documentation Drift Detection                                 | dev-graph-config.md     | 59023724 |
-| REQ-d00211 | Config-Driven Viewer UI Values                                | dev-graph-config.md     | 58192a4f |
+| REQ-d00211 | Config-Driven Viewer UI Values                                | dev-graph-config.md     | 254fcba9 |
 | REQ-d00212 | Config Schema v3 Models                                       | dev-graph-config.md     | da474c2a |
 | REQ-d00213 | Version Check and Update Notification                         | dev-cli.md              | cedd398b |
 | REQ-d00214 | MCP Server Install/Uninstall CLI Commands                     | dev-mcp-tools.md        | 5f372b62 |

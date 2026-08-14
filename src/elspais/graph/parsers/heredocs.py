@@ -51,10 +51,9 @@ def _build_contains_req(config: dict):
     ``IdResolver``, so FDA-style ``PRD-/OPS-/DEV-`` and Jira-style IDs
     are detected as well as the default ``REQ-``.
     """
-    from elspais.utilities.patterns import IdPatternConfig, IdResolver
+    from elspais.utilities.patterns import build_resolver
 
-    resolver = IdResolver(IdPatternConfig.from_dict(config))
-    return resolver.contains_id_reference
+    return build_resolver(config).contains_id_reference
 
 
 # Implements: REQ-d00054-A

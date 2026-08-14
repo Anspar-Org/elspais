@@ -23,13 +23,7 @@ class StatusRole(Enum):
     RETIRED = "retired"
 
 
-# Default classification matching historical hardcoded behavior
-_DEFAULT_ROLES: dict[str, list[str]] = {
-    "active": ["Active"],
-    "provisional": ["Draft", "Proposed"],
-    "aspirational": ["Roadmap", "Future", "Idea"],
-    "retired": ["Deprecated", "Superseded", "Rejected"],
-}
+
 
 
 class StatusRolesConfig:
@@ -49,7 +43,9 @@ class StatusRolesConfig:
 
     @classmethod
     def default(cls) -> StatusRolesConfig:
-        return cls.from_dict(_DEFAULT_ROLES)
+        from elspais.config.schema import _DEFAULT_STATUS_ROLES
+
+        return cls.from_dict(_DEFAULT_STATUS_ROLES)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> StatusRolesConfig:
