@@ -683,9 +683,16 @@ def get_config(
             # A config file that exists but can't be parsed is always an error.
             # Silently falling back to defaults would hide the problem and cause
             # hard-to-diagnose issues (e.g. skip_dirs not working).
+            # The advice names the file, not a cause: a config file is
+            # refused for a malformed line, for a setting that no longer
+            # exists, and for a value the schema will not admit, and telling
+            # a reader to look for a syntax error sends them hunting for
+            # something that is usually not there. The exception above says
+            # which setting and why.
             raise ValueError(
-                f"Failed to parse config file {resolved_path}: {e}\n"
-                "Fix the syntax error in your .elspais.toml file."
+                f"Failed to read config file {resolved_path}: {e}\n"
+                f"Correct the reported setting in {resolved_path.name}, or see "
+                f"`elspais docs config` for what it accepts."
             ) from e
     else:
         # Return defaults (no config file found)

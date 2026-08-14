@@ -63,6 +63,69 @@ All notable changes to elspais will be documented in this file.
 
 ### Changed
 
+#### Upgrading: configuration and identifiers
+
+Every change below refuses something a configuration or a stored identifier
+could previously express. Each says what to write instead. A configuration the
+tool will not read is reported naming the setting and why, and nothing is
+silently reinterpreted.
+
+**A repository declares a namespace, and no two in one federation may declare
+the same one.** Two repositories both left on the default `REQ` fail to build,
+where before they federated as long as no requirement id happened to collide.
+The error names both repository paths and the declaration chain that reached
+each. Give one of them a namespace of its own in `[project].namespace`, and name
+that namespace in the `[associates.<name>]` declaration that reaches it — a
+declaration's namespace must match what the repository at that path declares.
+
+**An associate declaration states a path and a namespace.** The pre-v3 form
+
+```toml
+[associates]
+paths = ["../callisto"]
+```
+
+is removed: it names no namespace for anything it lists, so it cannot say which
+repository it means. Write
+
+```toml
+[associates.callisto]
+path = "../callisto"
+namespace = "CAL"
+```
+
+**A federated repository is configured by its own `.elspais.toml`.** A directory
+holding only spec files used to join a federation configured by whatever sat
+above it in the filesystem. Its absence is now reported by name. Give the
+repository its own configuration file.
+
+**Structural node identifiers carry the namespace of the repository holding
+them.** `file:spec/design.md` is now `file:REQ:spec/design.md`, and likewise for
+the `rem:` and `def:` forms, which additionally end in a line number. Anything
+holding one of these as a string — a script reading viewer or MCP output, a
+saved link, a comment anchor — stops resolving and must be re-read from the
+tool. Identifiers of requirements, assertions, code and tests are unchanged.
+
+**`:` is refused in every setting that could put one into an identifier.** The
+assertion separators, the canonical template, an alias template, a level's
+letter, and a component pattern that merely admits a colon. It separates the
+parts of a node identifier, so an identifier able to contain one is ambiguous
+with the graph's own syntax. Use one of `/ . # | ~`.
+
+**A separator is exactly one character**, and neither separator may be a
+character the part before it can contain. `separators` (a list of accepted
+alternates) and `prefix_optional` are removed: one spelling of an identifier is
+admitted, the one the repository configures. Delete both keys.
+
+**A keyword's references are read from where the keyword's content starts.**
+Two forms that used to resolve no longer do, and are reported as unresolved
+references rather than becoming silent wrong edges: a citation with prose before
+the identifier (`# Verifies: the happy path (REQ-d00001-A)`), and an identifier
+that merely contains a configured namespace (`XREQ-d00001` no longer reads as
+`REQ-d00001`). A project upgrading may therefore see findings where it saw none.
+Those references were not doing what they appeared to do.
+
+
 - **BREAKING: a node identified by a source location now names the repository holding it (REQ-d00128-A, REQ-p00050-E)** — FILE, remainder and definition nodes are identified by where their content sits rather than by anything semantic, and a repo-relative path is unique only inside one repository. Two federated repositories with a spec file at the same path therefore produced one identity for two different files, and every answer about either was an answer about whichever the ownership map happened to record. Those ids now carry the owning repository's namespace: `file:REQ:spec/design.md`, `rem:REQ:spec/design.md:11`, `def:REQ:spec/glossary.md:3`. The namespace is the one the repository declares for itself, so the id a lone build produces is the id it keeps inside a federation — joining one changes no node's identity.
 
   **What breaks.** Anything holding these ids as strings: scripts parsing viewer or MCP output, stored `file:`-prefixed ids, and comment anchors, which persist node ids on disk and will not match after the change. Ids are built only through `make_file_id` / `make_remainder_id` / `make_definition_id` (the namespace is a required first argument, and an empty one is refused rather than producing an id naming no repository) and taken apart only through the new `parse_structural_id()`. The viewer routes and the MCP tools accept either a full id or a bare repo-relative path, which they read in the namespace of the repository they are serving, so a caller naming a file by path is unaffected.
