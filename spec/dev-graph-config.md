@@ -230,7 +230,7 @@ E. `AssertionConfig` SHALL include a `separator` field (str, default `"-"`) used
 
 F. The *Assertion* separator SHALL NOT be a character that can legally appear in a component or in an *Assertion* label. A configuration that violates this SHALL be rejected at validation time, naming the offending character, the style that makes it legal, and a non-overlapping character to use instead.
 
-G. [Removed - superseded by REQ-d00270, which extends single-authority derivation from the component sub-pattern to the whole identifier grammar]
+G. [Removed - stated where the component sub-pattern is derived rather than an obligation the tool meets. What a configuration admits is REQ-d00212-G; that one repository's grammar governs only its own identifiers is L below.]
 
 H. An *Assertion* label series SHALL be one of the alphabets a repository may configure, each having a first label, a successor for every label but its last, and a last label beyond which the series does not extend.
 
@@ -256,6 +256,8 @@ The alphabets themselves are configuration rather than obligation: which ones a 
 
 ### Changelog
 
+- 2026-08-13 | d83f4fd6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-13 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: repoint G's placeholder, which named a requirement that has since been retired itself
 - 2026-08-12 | d6d44bc9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-12 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: H states what any label alphabet must be, not which ones exist; retire I
 - 2026-08-12 | c7541313 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -271,7 +273,7 @@ The alphabets themselves are configuration rather than obligation: which ones a 
 - 2026-05-11 | e04a4e37 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize term forms, update hash
 - 2026-05-11 | - | - | Developer (<dev@example.com>) | Initial authoring: introduce explicit case-style vocabulary and configurable assertion separator.
 
-*End* *A Repository's Identifier Grammar* | **Hash**: d6d44bc9
+*End* *A Repository's Identifier Grammar* | **Hash**: d83f4fd6
 ---
 
 ## REQ-d00270: Single-Authority Identifier Grammar Derivation
@@ -282,36 +284,27 @@ This requirement stated an implementation structure rather than a property of th
 
 ### Assertions
 
-A. One derivation authority SHALL produce, from a repository's identifier configuration, every regex fragment of that repository's identifier grammar: the canonical identifier pattern, the component sub-pattern, the *Assertion* label pattern, the boundary between the component and the *Assertion* suffix, and the pattern that expands a multi-*Assertion* reference.
+A. [Removed - stated where a derivation lives rather than an obligation the tool meets. Single-authority derivation is an engineering rule and is recorded with the others; what a configuration admits is REQ-d00212-G.]
 
-B. The derivation authority SHALL expose every fragment it produces through its public interface, and a consumer SHALL obtain a fragment only through that interface.
+B. [Removed - an interface rule about the implementation, measurable only by reading it. The observable consequence is REQ-d00212-G.]
 
-C. A surface that recognises, parses, or expands an identifier SHALL derive its patterns from the derivation authority rather than compose them.
+C. [Removed - prescribed how a surface obtains its patterns. What it must then answer is REQ-d00212-G, and what an inadmissible spelling may do is REQ-d00212-R.]
 
-D. For a given identifier configuration, every surface whose answer decides whether a string is an identifier SHALL recognise the same set of strings, including the surface that decides which repository of a federation claims an identifier.
+D. [Removed - one configuration admitting one spelling is REQ-d00212-G, which every deciding surface answers under alike.]
 
-E. The derivation authority SHALL derive a repository's identifier grammar from that repository's own identifier configuration, so that a process holding several repositories at once applies each repository's grammar only to that repository.
+E. [Removed - carried by REQ-d00251-L.]
 
-F. A surface that narrows candidates before a deciding surface is consulted SHALL NOT reject a string that the deciding surface accepts.
+F. [Removed - a rule about an optimisation, not about an answer. A string an admitting configuration spells is resolvable under REQ-d00212-G however a surface narrows candidates first.]
 
-G. Where a component style treats case as part of a component's spelling, a component differing only in case SHALL name no requirement rather than the same one.
-
-### Rationale
-
-Federation puts several repositories, each with its own identifier configuration, in one process at once. A surface that treats an identifier as recognised while another treats it as foreign produces a broken reference whose reported severity depends on which surface was asked, and the opportunities for that disagreement grow with every repository a dependency chain pulls in. D is therefore the load-bearing assertion: A, B and C are the structure that makes it hold, and E is what keeps single-authority derivation from collapsing into single configuration — federated repositories occupy disjoint identifier spaces and keep their own configurations.
-
-The governed surfaces are the identifier resolver, the lark grammar builder that recognises identifiers in spec and code, the reference matcher that expands multi-*Assertion* targets, and the federation claim probe that splits a hard broken reference from a presumed-foreign one. B exists because a fragment reachable only as a private internal is an interface by accident: consumers that reach for one are as coupled as consumers that copy it, and neither survives a change to the derivation. The single-authority rule for the component sub-pattern alone is folded into A rather than kept alongside it, so one rule covers the whole grammar.
-
-D is stated over surfaces whose answer decides, because not every surface that inspects a string is claiming to settle the question. A cheap filter that discards obvious non-candidates before the real test runs is legitimate and useful, and holding it to the full grammar would mean deriving that grammar twice. F is what keeps the licence one-directional: such a filter may pass strings the deciding surface will refuse, since the decision still follows, but it may never refuse one the deciding surface would accept — that discards an identifier before anything can report it, and no later surface can recover what was never offered.
-
-G says which differences are differences. Under a case-bearing style, a component's case is part of its spelling rather than a presentation of it, so a component differing only in case is a component nobody declared. The parts whose case the grammar does not treat as significant may be canonicalised on the way in, which is what turns a mis-cased level code or *Assertion* label into the typo it is instead of a reference to something foreign.
+G. [Removed - carried by REQ-d00212-R, which admits one spelling and lets any other resolve to nothing.]
 
 ### Changelog
 
+- 2026-08-13 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: reduce the retired assertions to placeholders naming what carries each obligation now, and delete a Rationale arguing in the present tense for assertions that no longer oblige anything
 - 2026-08-10 | d3233556 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: D scoped to deciding surfaces; add F (pre-filter contract) and G (component case is spelling)
 - 2026-08-08 | 2e02bcf7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-08-09 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: single-authority derivation for the whole identifier grammar
 
-*End* *Single-Authority Identifier Grammar Derivation* | **Hash**: d3233556
+*End* *Single-Authority Identifier Grammar Derivation* | **Hash**: c8cb35b9
 ---

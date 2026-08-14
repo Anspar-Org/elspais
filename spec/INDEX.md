@@ -161,7 +161,7 @@
 | REQ-d00248 | Fix Command Idempotency                                       | prd-core.md             | 2b421222 |
 | REQ-d00249 | Configured test runner execution                              | dev-cli.md              | 784f8350 |
 | REQ-d00250 | Section Header Depth Canonicalization                         | dev-graph-core.md       | 48fc2f11 |
-| REQ-d00251 | A Repository's Identifier Grammar                             | dev-graph-config.md     | d6d44bc9 |
+| REQ-d00251 | A Repository's Identifier Grammar                             | dev-graph-config.md     | d83f4fd6 |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 8e07589c |
 | REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | f454041e |
 | REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | 22faeb40 |
@@ -179,7 +179,7 @@
 | REQ-d00267 | Viewer Pending-Work Indicator Truth                           | prd-features.md         | c1be85e3 |
 | REQ-d00268 | Report Malformed Assertion Labels                             | dev-graph-core.md       | cb7e96dd |
 | REQ-d00269 | Cross-Repository Coverage Credit                              | dev-graph-federation.md | 8cac4dcd |
-| REQ-d00270 | Single-Authority Identifier Grammar Derivation                | dev-graph-config.md     | d3233556 |
+| REQ-d00270 | Single-Authority Identifier Grammar Derivation                | dev-graph-config.md     | c8cb35b9 |
 
 ## User Journeys
 
