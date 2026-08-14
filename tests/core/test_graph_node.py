@@ -4,6 +4,7 @@ from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import GraphBuilder
 from elspais.graph.relations import EdgeKind
 from tests.core.graph_test_helpers import (
+    grammar_for,
     make_requirement,
 )
 
@@ -67,7 +68,7 @@ class TestGraphNode:
     # Verifies: REQ-d00127-A
     def test_create_with_content(self):
         """Content is typed data based on node kind - use builder."""
-        builder = GraphBuilder(namespace="REQ")
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         builder.add_parsed_content(
             make_requirement(
                 "REQ-p00001",

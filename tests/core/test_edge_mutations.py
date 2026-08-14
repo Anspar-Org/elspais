@@ -7,6 +7,7 @@ import pytest
 from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.relations import EdgeKind
+from tests.core.graph_test_helpers import grammar_for
 
 
 def make_req(
@@ -37,7 +38,7 @@ def make_req(
 
 def build_disconnected_graph() -> TraceGraph:
     """Build a graph with two unconnected requirements."""
-    builder = GraphBuilder(namespace="REQ")
+    builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
     builder.add_parsed_content(make_req("REQ-p00001", "Parent"))
     builder.add_parsed_content(make_req("REQ-p00002", "Child"))
     return builder.build()
@@ -45,7 +46,7 @@ def build_disconnected_graph() -> TraceGraph:
 
 def build_hierarchy_graph() -> TraceGraph:
     """Build a graph with parent-child hierarchy."""
-    builder = GraphBuilder(namespace="REQ")
+    builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
     builder.add_parsed_content(make_req("REQ-p00001", "Parent"))
     builder.add_parsed_content(make_req("REQ-p00002", "Child", implements=["REQ-p00001"]))
     return builder.build()
@@ -53,7 +54,7 @@ def build_hierarchy_graph() -> TraceGraph:
 
 def build_graph_with_assertions() -> TraceGraph:
     """Build a graph with assertions on the parent."""
-    builder = GraphBuilder(namespace="REQ")
+    builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
     builder.add_parsed_content(
         make_req(
             "REQ-p00001",
@@ -70,7 +71,7 @@ def build_graph_with_assertions() -> TraceGraph:
 
 def build_graph_with_broken_reference() -> TraceGraph:
     """Build a graph with a broken reference."""
-    builder = GraphBuilder(namespace="REQ")
+    builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
     builder.add_parsed_content(make_req("REQ-p00001", "Parent"))
     # Child implements non-existent requirement
     builder.add_parsed_content(make_req("REQ-p00002", "Child", implements=["REQ-nonexistent"]))
@@ -549,7 +550,7 @@ class TestDeleteEdge:
     def test_delete_edge_root_not_orphaned(self):
         """Deleting edge from root node doesn't mark as orphan."""
         # Create a graph where a root has an edge to another root
-        builder = GraphBuilder(namespace="REQ")
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         builder.add_parsed_content(make_req("REQ-p00001", "Parent"))
         builder.add_parsed_content(make_req("REQ-p00002", "Child", implements=["REQ-p00001"]))
         graph = builder.build()

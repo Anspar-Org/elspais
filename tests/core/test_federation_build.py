@@ -675,9 +675,9 @@ def _implemented(fed, req_id: str):
     assert node is not None, f"{req_id} is not in the graph"
     metrics = node.get_metric("rollup_metrics")
     assert metrics is not None, f"{req_id} carries no rollup_metrics at all"
-    assert metrics.total_assertions == 2, (
-        f"{req_id} should hold two assertions, got {metrics.total_assertions}"
-    )
+    assert (
+        metrics.total_assertions == 2
+    ), f"{req_id} should hold two assertions, got {metrics.total_assertions}"
     return metrics.implemented
 
 
@@ -731,9 +731,9 @@ class TestCoverageAnnotatedInEveryBuildShape:
         fed = build_graph(repo_root=coverage_repos["orphan"])
 
         entries = list(fed.iter_repos())
-        assert [e.name for e in entries if e.graph is None] == ["ghost"], (
-            "fixture must produce exactly one associate that failed to load"
-        )
+        assert [e.name for e in entries if e.graph is None] == [
+            "ghost"
+        ], "fixture must produce exactly one associate that failed to load"
         _assert_a_implemented(fed, "ORPHAN-d00001")
 
     # Verifies: REQ-d00269-A
@@ -787,9 +787,9 @@ class TestRootRepoReportsItsOrigin:
 
         # The planner may normalize the URL it detects, so what is asserted
         # is that an origin was detected at all and that it names this repo.
-        assert entries["app"].git_origin is not None, (
-            "the host repository reported no origin, so no surface can report one for it"
-        )
+        assert (
+            entries["app"].git_origin is not None
+        ), "the host repository reported no origin, so no surface can report one for it"
         assert "example.com/app" in entries["app"].git_origin
         assert entries["lib"].git_origin is not None
         assert "example.com/lib" in entries["lib"].git_origin
@@ -803,9 +803,9 @@ class TestRootRepoReportsItsOrigin:
         entries = list(fed.iter_repos())
 
         assert [e.name for e in entries] == ["solo"]
-        assert entries[0].git_origin is not None, (
-            "a project with no associates reported no origin for its own repository"
-        )
+        assert (
+            entries[0].git_origin is not None
+        ), "a project with no associates reported no origin for its own repository"
         assert "example.com/solo" in entries[0].git_origin
 
     # Verifies: REQ-d00206-A

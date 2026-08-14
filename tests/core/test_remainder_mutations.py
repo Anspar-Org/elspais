@@ -8,6 +8,7 @@ from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.GraphNode import NodeKind
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.relations import EdgeKind
+from tests.core.graph_test_helpers import grammar_for
 
 
 def make_req(
@@ -40,7 +41,7 @@ def make_req(
 
 def build_graph_with_sections() -> TraceGraph:
     """Build a graph with a requirement that has sections."""
-    builder = GraphBuilder(namespace="REQ")
+    builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
     builder.add_parsed_content(
         make_req(
             "REQ-p00001",
@@ -56,7 +57,7 @@ def build_graph_with_sections() -> TraceGraph:
 
 def build_graph_with_definition_block() -> TraceGraph:
     """Build a graph with a requirement that has a definition block."""
-    builder = GraphBuilder(namespace="REQ")
+    builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
     content = ParsedContent(
         content_type="requirement",
         parsed_data={

@@ -39,9 +39,9 @@ def builder():
     """
     from elspais.graph.builder import GraphBuilder
 
-    from .graph_test_helpers import HELPER_NAMESPACE
+    from .graph_test_helpers import HELPER_NAMESPACE, grammar_for
 
-    return GraphBuilder(namespace=HELPER_NAMESPACE)
+    return GraphBuilder(namespace=HELPER_NAMESPACE, resolver=grammar_for(HELPER_NAMESPACE))
 
 
 @pytest.fixture

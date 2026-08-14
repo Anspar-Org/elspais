@@ -43,6 +43,7 @@ class TestFullPipeline:
         builder = GraphBuilder(
             repo_root=integration_spec_dir,
             namespace=resolver.config.namespace,
+            resolver=resolver,
         )
         for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
@@ -71,6 +72,7 @@ class TestFullPipeline:
         builder = GraphBuilder(
             repo_root=integration_spec_dir,
             namespace=resolver.config.namespace,
+            resolver=resolver,
         )
         for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
@@ -102,6 +104,7 @@ class TestFullPipeline:
         builder = GraphBuilder(
             repo_root=integration_spec_dir,
             namespace=resolver.config.namespace,
+            resolver=resolver,
         )
         for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
@@ -138,6 +141,7 @@ class TestFullPipeline:
         builder = GraphBuilder(
             repo_root=integration_spec_dir,
             namespace=resolver.config.namespace,
+            resolver=resolver,
         )
         for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
@@ -167,6 +171,7 @@ class TestFullPipeline:
         builder = GraphBuilder(
             repo_root=integration_spec_dir,
             namespace=resolver.config.namespace,
+            resolver=resolver,
         )
         for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
@@ -208,6 +213,9 @@ class TestMultiAssertionPipelineExpansion:
         """
         config_path = find_config_file(root_dir)
         config = load_config(config_path)
+        # The separator is grammar, not a builder knob: say it in the config
+        # the grammar is derived from so parser and builder agree on it.
+        config["id-patterns"]["assertions"]["multi_separator"] = multi_assertion_separator
         resolver = _make_resolver(config)
 
         # Lark dispatcher for spec files
@@ -219,8 +227,8 @@ class TestMultiAssertionPipelineExpansion:
 
         builder = GraphBuilder(
             repo_root=root_dir,
-            multi_assertion_separator=multi_assertion_separator,
             namespace=resolver.config.namespace,
+            resolver=resolver,
         )
         for content in spec_deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
@@ -459,7 +467,6 @@ The system SHALL store event records.
 
         builder = GraphBuilder(
             repo_root=root,
-            multi_assertion_separator=multi_sep,
             resolver=resolver,
             namespace="EVS",
         )

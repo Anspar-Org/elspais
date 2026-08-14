@@ -41,6 +41,7 @@ import pytest
 
 from elspais.graph import render
 from elspais.graph.GraphNode import make_file_id
+from tests.core.graph_test_helpers import grammar_for
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 HHT_LIKE = FIXTURES_DIR / "hht-like"
@@ -351,7 +352,9 @@ class TestEdgeChainThreadsTheSourcesVersion:
         )
 
         assert result["success"] is True, result.get("error")
-        assert "REQ-p00001-A" in render.render_node(chain.find_by_id(self.SOURCE))
+        assert "REQ-p00001-A" in render.render_node(
+            chain.find_by_id(self.SOURCE), resolver=grammar_for(NAMESPACE)
+        )
         TestEdgeChainThreadsTheSourcesVersion.threaded = result["version"]
 
     def test_REQ_o00062_K_threaded_token_admits_the_delete(self, chain, tools):
@@ -692,7 +695,9 @@ class TestAddRequirementIntoChosenFileParity:
         assert created is not None
         assert created.file_node() is not None
         assert created.file_node().id == self.FILE
-        assert "REQ-d00910" in render.render_file(rollback.find_by_id(self.FILE))
+        assert "REQ-d00910" in render.render_file(
+            rollback.find_by_id(self.FILE), resolver=grammar_for(NAMESPACE)
+        )
 
     def test_REQ_o00062_M_stale_file_token_rejects_the_placement(self, rollback, tools):
         """REQ-o00062-M: File placement is guarded on the destination FILE --

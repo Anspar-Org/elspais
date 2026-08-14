@@ -406,6 +406,22 @@ def make_remainder(
 # === Graph Builder Convenience ===
 
 
+def grammar_for(namespace: str = HELPER_NAMESPACE):
+    """The default configuration's identifier grammar, in *namespace*.
+
+    A builder will not compose an identifier without one, and there is no
+    default it will supply for itself: the separators are configuration. A
+    test that does not care which grammar it gets still has to name one,
+    and this is that declaration — the shipped defaults, said out loud.
+    """
+    from elspais.config import config_defaults
+    from elspais.utilities.patterns import build_resolver
+
+    config = config_defaults()
+    config["project"] = {**config.get("project", {}), "namespace": namespace}
+    return build_resolver(config)
+
+
 def build_graph(
     *contents: ParsedContent,
     repo_root: Path | None = None,
@@ -426,7 +442,9 @@ def build_graph(
     Returns:
         Constructed TraceGraph
     """
-    builder = GraphBuilder(repo_root=repo_root, namespace=namespace)
+    builder = GraphBuilder(
+        repo_root=repo_root, namespace=namespace, resolver=grammar_for(namespace)
+    )
 
     # Create FILE nodes from source contexts (like factory.py does)
     file_nodes: dict[str, GraphNode] = {}

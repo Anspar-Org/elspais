@@ -7,6 +7,7 @@ from elspais.graph.builder import GraphBuilder
 from elspais.graph.GraphNode import GraphNode, NodeKind, make_file_id
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.terms import TermDictionary, TermEntry, TermRef
+from tests.core.graph_test_helpers import grammar_for
 
 
 class TestTermEntryReferenceType:
@@ -151,7 +152,11 @@ class TestBuilderReferenceTerms:
     """GraphBuilder populates reference-type fields on TermEntry."""
 
     def test_reference_definition_in_graph(self):
-        builder = GraphBuilder(repo_root=Path("/test/repo"), namespace="REQ")
+        builder = GraphBuilder(
+            repo_root=Path("/test/repo"),
+            namespace="REQ",
+            resolver=grammar_for("REQ"),
+        )
         content = _make_definition_block(
             "ISO/IEC 24760-1",
             "",
@@ -173,7 +178,11 @@ class TestBuilderReferenceTerms:
         assert entry.reference_fields["url"] == "https://www.iso.org"
 
     def test_synonym_linked_in_graph(self):
-        builder = GraphBuilder(repo_root=Path("/test/repo"), namespace="REQ")
+        builder = GraphBuilder(
+            repo_root=Path("/test/repo"),
+            namespace="REQ",
+            resolver=grammar_for("REQ"),
+        )
         content = _make_definition_block(
             "Email Address",
             "A unique identifier for authentication.",
@@ -262,7 +271,11 @@ class TestBuilderReferenceTerms:
 
     def test_non_reference_defaults_preserved(self):
         """Existing term entries keep default phase-4 fields."""
-        builder = GraphBuilder(repo_root=Path("/test/repo"), namespace="REQ")
+        builder = GraphBuilder(
+            repo_root=Path("/test/repo"),
+            namespace="REQ",
+            resolver=grammar_for("REQ"),
+        )
         content = _make_definition_block("Audit Trail", "A record of events.")
         builder.add_parsed_content(content)
         graph = builder.build()
@@ -553,7 +566,11 @@ class TestDefinitionChangeTracking:
         assert compute_definition_hash("foo bar") != compute_definition_hash("foo  bar")
 
     def test_builder_populates_definition_hash(self):
-        builder = GraphBuilder(repo_root=Path("/test/repo"), namespace="REQ")
+        builder = GraphBuilder(
+            repo_root=Path("/test/repo"),
+            namespace="REQ",
+            resolver=grammar_for("REQ"),
+        )
         content = _make_definition_block("Audit Trail", "A chronological record.")
         builder.add_parsed_content(content)
         graph = builder.build()
@@ -564,7 +581,11 @@ class TestDefinitionChangeTracking:
         assert len(entry.definition_hash) == 8
 
     def test_builder_reference_hash_includes_fields(self):
-        builder = GraphBuilder(repo_root=Path("/test/repo"), namespace="REQ")
+        builder = GraphBuilder(
+            repo_root=Path("/test/repo"),
+            namespace="REQ",
+            resolver=grammar_for("REQ"),
+        )
         content = _make_definition_block(
             "ISO 27001",
             "",

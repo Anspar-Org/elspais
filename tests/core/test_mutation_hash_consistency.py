@@ -14,6 +14,7 @@ from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.render import reconstruct_body_text
 from elspais.utilities.hasher import calculate_hash
+from tests.core.graph_test_helpers import grammar_for
 
 
 def make_req(
@@ -43,7 +44,7 @@ def make_req(
 
 def build_graph_for_hash() -> TraceGraph:
     """Build a graph with a requirement containing assertions for hash testing."""
-    builder = GraphBuilder(hash_mode="full-text", namespace="REQ")
+    builder = GraphBuilder(hash_mode="full-text", namespace="REQ", resolver=grammar_for("REQ"))
     builder.add_parsed_content(
         make_req(
             "REQ-p00001",

@@ -63,9 +63,7 @@ class TestColonRejectedFromEveryPatternElement:
         # Verifies: REQ-p00014-S
         with pytest.raises(ValidationError) as excinfo:
             ElspaisConfig.model_validate(
-                _payload(
-                    **{"id-patterns": {"canonical": "{namespace}:{level.letter}{component}"}}
-                )
+                _payload(**{"id-patterns": {"canonical": "{namespace}:{level.letter}{component}"}})
             )
         assert "canonical" in str(excinfo.value)
 
@@ -147,9 +145,9 @@ class TestReservationReachesTheExportedSchema:
         schema = ElspaisConfig.model_json_schema()
         constraint = schema["$defs"][definition]["properties"][field].get("pattern")
         assert constraint, f"{definition}.{field} exports no pattern constraint"
-        assert not re.match(constraint, "a:b"), (
-            f"{definition}.{field} exports pattern {constraint!r}, which admits a colon"
-        )
+        assert not re.match(
+            constraint, "a:b"
+        ), f"{definition}.{field} exports pattern {constraint!r}, which admits a colon"
 
     @pytest.mark.parametrize(
         "definition,field",

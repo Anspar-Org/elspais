@@ -25,6 +25,7 @@ from elspais.graph.relations import EdgeKind
 from elspais.graph.render import compute_hash_for_node
 from tests.core.graph_test_helpers import (
     build_graph,
+    grammar_for,
     make_code_ref,
     make_requirement,
     make_test_ref,
@@ -507,12 +508,12 @@ class TestUndoRestoresRenderedText:
     def test_REQ_d00131_L_delete_contains_edge_then_undo_restores_file(self, private_graph):
         """A CONTAINS edge carries the position its target renders at."""
         spec_file = private_graph.find_by_id(SPEC_FILE)
-        before_text = render.render_file(spec_file)
+        before_text = render.render_file(spec_file, resolver=grammar_for("REQ"))
         before_version = node_version(spec_file)
 
         private_graph.delete_edge(source_id="REQ-d00001", target_id=SPEC_FILE)
         private_graph.undo_last()
 
         restored = private_graph.find_by_id(SPEC_FILE)
-        assert render.render_file(restored) == before_text
+        assert render.render_file(restored, resolver=grammar_for("REQ")) == before_text
         assert node_version(restored) == before_version

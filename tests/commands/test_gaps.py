@@ -71,9 +71,9 @@ def test_uncovered_assertions_carry_fractions() -> None:
     ]
 
     uncov = _uncovered_assertions(metrics, assertion_nodes, "implemented")
-    by_id = dict(uncov)
+    by_id = {aid: frac for aid, _label, frac in uncov}
 
-    partial = [(aid, f) for aid, f in uncov if 0 < f < 1]
+    partial = [(aid, f) for aid, _label, f in uncov if 0 < f < 1]
     assert partial, "expected a partially-conducted assertion in fixture"
     assert by_id["REQ-100-A"] == 0.5
     assert "REQ-100-B" not in by_id  # fully covered (1.0) -- not a gap
@@ -360,7 +360,7 @@ class TestTestingGapDenominator:
         )
         data = collect_gaps(_make_graph(req), exclude_status=set())
         entry = next(e for e in data.untested if e.req_id == "REQ-p00001")
-        gap_labels = {aid.rsplit("-", 1)[-1] for aid, _ in entry.assertions}
+        gap_labels = {label for _aid, label, _frac in entry.assertions}
         assert gap_labels == {"B"}
 
     # Verifies: REQ-d00258, REQ-d00069-J
@@ -471,7 +471,7 @@ class TestRenderGapText:
                 GapEntry(
                     "REQ-p00001",
                     "Login",
-                    [("REQ-p00001-C", 0.0), ("REQ-p00001-D", 0.0)],
+                    [("REQ-p00001-C", "C", 0.0), ("REQ-p00001-D", "D", 0.0)],
                 ),
             ]
         )
@@ -489,7 +489,7 @@ class TestRenderGapText:
                 GapEntry(
                     "REQ-p00001",
                     "Login",
-                    [("REQ-p00001-C", 0.4), ("REQ-p00001-D", 0.0)],
+                    [("REQ-p00001-C", "C", 0.4), ("REQ-p00001-D", "D", 0.0)],
                 ),
             ]
         )
@@ -534,7 +534,7 @@ class TestRenderGapMarkdown:
         and 'via refines-conduction' in the markdown table cell."""
         data = GapData(
             uncovered=[
-                GapEntry("REQ-p00001", "Login", [("REQ-p00001-C", 0.4)]),
+                GapEntry("REQ-p00001", "Login", [("REQ-p00001-C", "C", 0.4)]),
             ]
         )
         output = render_gap_markdown("uncovered", data)
@@ -549,14 +549,16 @@ class TestGapEntrySerialization:
     def test_gap_entry_to_list_serializes_fraction(self) -> None:
         from elspais.commands.gaps import _gap_entry_to_list
 
-        entry = GapEntry("REQ-p00001", "Login", [("REQ-p00001-C", 0.4), ("REQ-p00001-D", 0.0)])
+        entry = GapEntry(
+            "REQ-p00001", "Login", [("REQ-p00001-C", "C", 0.4), ("REQ-p00001-D", "D", 0.0)]
+        )
         result = _gap_entry_to_list(entry)
         assert result == [
             "REQ-p00001",
             "Login",
             [
-                {"id": "REQ-p00001-C", "fraction": 0.4},
-                {"id": "REQ-p00001-D", "fraction": 0.0},
+                {"id": "REQ-p00001-C", "label": "C", "fraction": 0.4},
+                {"id": "REQ-p00001-D", "label": "D", "fraction": 0.0},
             ],
         ]
 
@@ -565,9 +567,9 @@ class TestGapEntrySerialization:
         (REQ-d00258-C) instead of serializing raw floats."""
         from elspais.commands.gaps import _gap_entry_to_list
 
-        entry = GapEntry("REQ-p00001", "Login", [("REQ-p00001-C", 1 / 3)])
+        entry = GapEntry("REQ-p00001", "Login", [("REQ-p00001-C", "C", 1 / 3)])
         result = _gap_entry_to_list(entry)
-        assert result[2] == [{"id": "REQ-p00001-C", "fraction": 0.3333}]
+        assert result[2] == [{"id": "REQ-p00001-C", "label": "C", "fraction": 0.3333}]
 
     def test_gap_data_from_dict_round_trips_fraction(self) -> None:
         from elspais.commands.gaps import _gap_data_from_dict
@@ -577,7 +579,7 @@ class TestGapEntrySerialization:
                 [
                     "REQ-p00001",
                     "Login",
-                    [{"id": "REQ-p00001-C", "fraction": 0.4}],
+                    [{"id": "REQ-p00001-C", "label": "C", "fraction": 0.4}],
                 ]
             ],
             "untested": [],
@@ -586,7 +588,7 @@ class TestGapEntrySerialization:
             "no_assertions": [],
         }
         gd = _gap_data_from_dict(d)
-        assert gd.uncovered[0].assertions == [("REQ-p00001-C", 0.4)]
+        assert gd.uncovered[0].assertions == [("REQ-p00001-C", "C", 0.4)]
 
 
 class TestRenderSection:
@@ -805,8 +807,8 @@ class TestStrictFootingGaps:
         for entry in getattr(data, section):
             if entry.req_id != req_id:
                 continue
-            for aid, _frac in entry.assertions:
-                labels.add(aid.rsplit("-", 1)[-1])
+            for _aid, label, _frac in entry.assertions:
+                labels.add(label)
         return labels
 
     # Verifies: REQ-d00258-M

@@ -21,9 +21,7 @@ from elspais.utilities.patterns import validate_namespace as _validate_namespace
 # validator, so the exported JSON schema carries the same refusal an editor
 # reads.
 _NO_COLON = r"^[^:]*$"
-_NO_COLON_MESSAGE = (
-    "must not contain ':', which separates the parts of a node identifier"
-)
+_NO_COLON_MESSAGE = "must not contain ':', which separates the parts of a node identifier"
 
 
 # The statuses a project starts with, and what each one means. Read from here
@@ -249,9 +247,7 @@ class IdPatternsConfig(_StrictModel):
         # own parse tree, the same way the separator suggestions are.
         for name, template in (self.aliases or {}).items():
             if ":" in template:
-                raise ValueError(
-                    f'id-patterns.aliases.{name} {_NO_COLON_MESSAGE}: "{template}"'
-                )
+                raise ValueError(f'id-patterns.aliases.{name} {_NO_COLON_MESSAGE}: "{template}"')
         if self.component.style == "regex" and self.component.pattern:
             if ":" in _legal_chars(self.component.pattern):
                 raise ValueError(

@@ -37,7 +37,7 @@ from elspais.graph.parsers import ParsedContent
 from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.graph.render import format_definition_block, render_end_marker
 from elspais.graph.terms import TermDictionary, TermEntry, compute_definition_hash
-from elspais.utilities.patterns import INSTANCE_SEPARATOR
+from elspais.utilities.patterns import INSTANCE_SEPARATOR, GrammarUnavailable
 from elspais.utilities.test_identity import build_test_id
 
 
@@ -83,9 +83,10 @@ class TraceGraph:
     hash_mode: str = field(default="normalized-text")
     satellite_kinds: frozenset = field(default_factory=lambda: _DEFAULT_SATELLITE_KINDS)
 
-    # IdResolver for assertion-ID construction (configured separator).
-    # When None, falls back to the default "-" separator for tests/legacy
-    # code paths that don't have a resolver wired up.
+    # The identifier grammar of the repository this graph holds, carried
+    # down from the builder that produced it. Read through the ``resolver``
+    # property, never directly: spelling an identifier without it means
+    # spelling it under some other repository's grammar.
     _resolver: Any | None = field(default=None, repr=False)
 
     # The namespace of the repository this graph holds, carried down from
@@ -118,6 +119,25 @@ class TraceGraph:
                 "it holds; a node identified by source location needs one."
             )
         return namespace
+
+    @property
+    def resolver(self) -> Any:
+        """The identifier grammar this repository's identifiers are written in.
+
+        Raises:
+            GrammarUnavailable: The graph was assembled without one. A caller
+                asking for it is about to spell an identifier, and there is no
+                neutral spelling: the boundary characters are configuration,
+                so guessing them writes a reference that reads back as a
+                different requirement, or as none.
+        """
+        if self._resolver is None:
+            raise GrammarUnavailable(
+                "This graph carries no identifier grammar, so it cannot spell "
+                "an identifier: the characters bounding a component from its "
+                "assertion labels are configuration, not constants."
+            )
+        return self._resolver
 
     # Internal storage (prefixed) - excluded from constructor
     _roots: list[GraphNode] = field(default_factory=list, init=False)
@@ -186,13 +206,11 @@ class TraceGraph:
     def make_assertion_id(self, req_id: str, label: str) -> str:
         """Compose an assertion node ID using the configured separator.
 
-        Falls back to the default ``-`` separator when no resolver is wired.
-        Centralizes the convention so internal IDs match user-facing
-        canonical form (e.g. ``EVS-PRD-foo/A`` when ``separator="/"``).
+        Internal IDs are spelled in the same canonical form a reader would
+        write (e.g. ``EVS-PRD-foo/A`` when ``separator="/"``), so a node's
+        id and a citation of it are the same string.
         """
-        if self._resolver is not None:
-            return self._resolver.make_assertion_id(req_id, label)
-        return f"{req_id}-{label}"
+        return self.resolver.make_assertion_id(req_id, label)
 
     def all_nodes(self) -> Iterator[GraphNode]:
         """Iterate ALL nodes in graph, including orphans.
@@ -1183,8 +1201,12 @@ class TraceGraph:
                 if child.kind == NodeKind.ASSERTION:
                     assertion_label = child.get_field("label", "")
                     if assertion_label:
-                        old_assertion_id = f"{old_id}-{assertion_label}"
-                        new_assertion_id = f"{new_id}-{assertion_label}"
+                        # The old id is the child's own, not a recomposition of
+                        # it: composing under the wrong separator would miss the
+                        # index entry and leave the assertion named for the
+                        # requirement's former id.
+                        old_assertion_id = child.id
+                        new_assertion_id = self.make_assertion_id(new_id, assertion_label)
                         if old_assertion_id in self._index:
                             self._index.pop(old_assertion_id)
                             child.set_id(new_assertion_id)
@@ -1753,21 +1775,7 @@ class TraceGraph:
         a requirement that has run out of labels is one to split, not one
         to label outside its own alphabet (REQ-o00062-S).
         """
-        resolver = self._resolver
-        if resolver is None:
-            # Without a configured series the default A-Z applies.
-            highest = -1
-            for child in parent.iter_children(edge_kinds={EdgeKind.STRUCTURES}):
-                if child.kind == NodeKind.ASSERTION:
-                    label = child.get_field("label", "")
-                    if len(label) == 1 and label.isupper():
-                        highest = max(highest, ord(label) - ord("A"))
-            if highest + 1 > 25:
-                raise ValueError(
-                    f"Requirement '{parent.id}' has no assertion label left "
-                    "(A-Z exhausted); split the requirement"
-                )
-            return chr(ord("A") + highest + 1)
+        resolver = self.resolver
 
         highest = -1
         for child in parent.iter_children(edge_kinds={EdgeKind.STRUCTURES}):
@@ -2683,7 +2691,11 @@ class TraceGraph:
             if whole or not labels:
                 validates_refs.append(src)
             if labels:
-                validates_refs.append(f"{src}-{'+'.join(sorted(labels))}")
+                # Implements: REQ-p00014-U
+                # The separators are the owning repository's, not constants:
+                # a journey citing an assertion writes the same boundary
+                # characters a spec file's metadata line writes.
+                validates_refs.append(self.resolver.make_assertion_ref(src, sorted(labels)))
         if validates_refs:
             lines.append(f"Validates: {', '.join(validates_refs)}")
         preamble = node.get_field("body_lines", [])
@@ -3435,8 +3447,7 @@ class GraphBuilder:
         repo_root: Path | None = None,
         hash_mode: str = "normalized-text",
         satellite_kinds: list[str] | None = None,
-        multi_assertion_separator: str = "+",
-        resolver: Any | None = None,
+        resolver: Any,
         project_name: str = "",
         link_results_to_tests: bool = True,
     ) -> None:
@@ -3448,12 +3459,12 @@ class GraphBuilder:
             satellite_kinds: NodeKind values (e.g. ["assertion", "result"])
                 that don't count as meaningful children for root/orphan
                 classification. Defaults to ASSERTION and RESULT.
-            multi_assertion_separator: Character joining multiple assertion
-                labels in compact references (e.g. "+" for REQ-x-A+B+C).
-                Empty string disables expansion.
-            resolver: IdResolver instance for multi-assertion expansion.
-                When provided, uses resolver.parse()/expand()/render_canonical()
-                instead of string splitting.
+            resolver: The identifier grammar of the repository being built.
+                Required: every identifier this builder composes — assertion
+                ids, expanded multi-assertion references — is spelled with
+                the boundary characters this grammar declares, and there is
+                no neutral spelling to fall back on. Its namespace must be
+                the one passed here; the two describe the same repository.
             namespace: The namespace of the repository whose content this
                 graph holds. Required and non-empty: nodes identified by
                 source location name their repository, so a graph that
@@ -3481,9 +3492,21 @@ class GraphBuilder:
                 "content it holds: its nodes name that repository in their ids."
             )
         self._namespace = namespace
+        if resolver is None:
+            raise GrammarUnavailable(
+                "GraphBuilder requires the identifier grammar of the repository "
+                "whose content it holds: it composes identifiers, and the "
+                "characters that bound their parts are configuration."
+            )
+        resolver_namespace = getattr(getattr(resolver, "config", None), "namespace", "")
+        if resolver_namespace != namespace:
+            raise ValueError(
+                f"GraphBuilder was given the grammar of {resolver_namespace!r} to "
+                f"build {namespace!r}. A grammar governs its own repository's "
+                f"identifiers alone, so the two name one repository or neither."
+            )
         self._project_name = project_name
         self._link_results_to_tests = link_results_to_tests
-        self._multi_assertion_separator = multi_assertion_separator
         self._resolver = resolver
         if satellite_kinds is not None:
             self.satellite_kinds = frozenset(NodeKind(s) for s in satellite_kinds)
@@ -3661,7 +3684,7 @@ class GraphBuilder:
             # later human-authored ID could collide with the synthetic and
             # disguise itself as a duplicate. Refuse to build with a clear
             # message rather than silently producing wrong duplicate reports.
-            if self._resolver is not None and self._resolver.is_valid(synthetic_id):
+            if self._resolver.is_valid(synthetic_id):
                 raise ValueError(
                     f"Cannot disambiguate duplicate REQ ID {canonical_id!r}: "
                     f"the configured ID resolver accepts the synthetic form "
@@ -3730,10 +3753,7 @@ class GraphBuilder:
 
         # Create assertion nodes
         for assertion in data.get("assertions", []):
-            if self._resolver is not None:
-                assertion_id = self._resolver.make_assertion_id(req_id, assertion["label"])
-            else:
-                assertion_id = f"{req_id}-{assertion['label']}"
+            assertion_id = self._resolver.make_assertion_id(req_id, assertion["label"])
             assertion_line = assertion.get("line", content.start_line)
             assertion_node = GraphNode(
                 id=assertion_id,
@@ -4237,47 +4257,19 @@ class GraphBuilder:
 
     # Implements: REQ-d00081-D+E+G
     def _expand_multi_assertion(self, target_id: str) -> list[str]:
-        """Expand multi-assertion reference using IdResolver or configured separator.
+        """Expand a multi-assertion reference into its individual references.
 
         REQ-p00001-A+B+C -> [REQ-p00001-A, REQ-p00001-B, REQ-p00001-C]
 
-        When a resolver is available, delegates to resolver.parse()/expand()/
-        render_canonical(). Falls back to string splitting when no resolver
-        is set.
+        Which characters divide a component from its first label, and one
+        label from the next, is the repository's grammar to say — reading
+        them off the string instead would find whichever of them the
+        component happens to contain.
         """
-        # Use IdResolver when available
-        if self._resolver is not None:
-            parsed = self._resolver.parse(target_id)
-            if parsed is None or len(parsed.assertions) <= 1:
-                return [target_id]
-            expanded = self._resolver.expand(parsed)
-            return [self._resolver.render_canonical(e) for e in expanded]
-
-        # Fallback: string-based splitting
-        sep = self._multi_assertion_separator
-        if not sep or sep not in target_id:
+        parsed = self._resolver.parse(target_id)
+        if parsed is None or len(parsed.assertions) <= 1:
             return [target_id]
-
-        parts = target_id.split(sep)
-        base = parts[0]
-        if not parts[1:]:
-            return [target_id]
-
-        # Find the last ID separator (- or _) to split off the first label
-        last_sep_idx = max(base.rfind("-"), base.rfind("_"))
-        if last_sep_idx < 0:
-            return [target_id]
-
-        base_req = base[:last_sep_idx]
-        id_sep = base[last_sep_idx]
-        first_label = base[last_sep_idx + 1 :]
-
-        result = [f"{base_req}{id_sep}{first_label}"]
-        for label in parts[1:]:
-            if label:
-                result.append(f"{base_req}{id_sep}{label}")
-
-        return result
+        return [self._resolver.render_canonical(e) for e in self._resolver.expand(parsed)]
 
     # Implements: REQ-p00014-B, REQ-p00014-C, REQ-d00069-H
     def _instantiate_satisfies_templates(self) -> None:
@@ -4411,11 +4403,7 @@ class GraphBuilder:
             clone_map: dict[str, GraphNode] = {}
 
             for orig in template_nodes:
-                clone_id = (
-                    self._resolver.build_instance_id(declaring_id, orig.id)
-                    if self._resolver
-                    else f"{declaring_id}{INSTANCE_SEPARATOR}{orig.id}"
-                )
+                clone_id = self._resolver.build_instance_id(declaring_id, orig.id)
                 clone = GraphNode(
                     id=clone_id,
                     kind=orig.kind,

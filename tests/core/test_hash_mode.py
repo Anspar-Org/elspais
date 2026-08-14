@@ -12,6 +12,7 @@ from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.render import reconstruct_body_text
 from elspais.utilities.hasher import calculate_hash, compute_normalized_hash
+from tests.core.graph_test_helpers import grammar_for
 
 
 def make_req(
@@ -55,7 +56,7 @@ def build_graph(hash_mode: str = "full-text") -> TraceGraph:
     Returns:
         A TraceGraph with one requirement (REQ-p00001) and two assertions (A, B).
     """
-    builder = GraphBuilder(hash_mode=hash_mode, namespace="REQ")
+    builder = GraphBuilder(hash_mode=hash_mode, namespace="REQ", resolver=grammar_for("REQ"))
     builder.add_parsed_content(
         make_req(
             "REQ-p00001",
@@ -72,7 +73,7 @@ class TestFullTextMode:
     # Verifies: REQ-d00131-J
     def test_hash_mode_normalized_text_is_default(self):
         """GraphBuilder defaults to normalized-text hash mode."""
-        builder = GraphBuilder(namespace="REQ")
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         assert builder.hash_mode == "normalized-text"
 
     # Verifies: REQ-p00004-A
@@ -222,7 +223,11 @@ class TestNormalizedTextMode:
             {"label": "B", "text": "The system SHALL log errors.  "},
         ]
 
-        builder_clean = GraphBuilder(hash_mode="normalized-text", namespace="REQ")
+        builder_clean = GraphBuilder(
+            hash_mode="normalized-text",
+            namespace="REQ",
+            resolver=grammar_for("REQ"),
+        )
         builder_clean.add_parsed_content(
             make_req(
                 "REQ-p00001",
@@ -231,7 +236,11 @@ class TestNormalizedTextMode:
         )
         graph_clean = builder_clean.build()
 
-        builder_trailing = GraphBuilder(hash_mode="normalized-text", namespace="REQ")
+        builder_trailing = GraphBuilder(
+            hash_mode="normalized-text",
+            namespace="REQ",
+            resolver=grammar_for("REQ"),
+        )
         builder_trailing.add_parsed_content(
             make_req(
                 "REQ-p00001",
@@ -353,7 +362,11 @@ B. The system SHALL log errors."""
         ]
 
         def _build_with_sections(hash_mode: str) -> TraceGraph:
-            builder = GraphBuilder(hash_mode=hash_mode, namespace="REQ")
+            builder = GraphBuilder(
+                hash_mode=hash_mode,
+                namespace="REQ",
+                resolver=grammar_for("REQ"),
+            )
             builder.add_parsed_content(
                 ParsedContent(
                     content_type="requirement",
@@ -402,11 +415,19 @@ B. The system SHALL log errors."""
         Two requirements with identical assertions should have the same hash
         in normalized-text mode, regardless of other content differences.
         """
-        builder1 = GraphBuilder(hash_mode="normalized-text", namespace="REQ")
+        builder1 = GraphBuilder(
+            hash_mode="normalized-text",
+            namespace="REQ",
+            resolver=grammar_for("REQ"),
+        )
         builder1.add_parsed_content(make_req("REQ-p00001", assertions=ASSERTIONS))
         graph1 = builder1.build()
 
-        builder2 = GraphBuilder(hash_mode="normalized-text", namespace="REQ")
+        builder2 = GraphBuilder(
+            hash_mode="normalized-text",
+            namespace="REQ",
+            resolver=grammar_for("REQ"),
+        )
         builder2.add_parsed_content(make_req("REQ-p00001", assertions=ASSERTIONS))
         graph2 = builder2.build()
 
@@ -438,7 +459,7 @@ B. The system SHALL log errors."""
             {"heading": "preamble", "content": "Introduction version 2 (different).", "line": 2}
         ]
 
-        builder1 = GraphBuilder(hash_mode="full-text", namespace="REQ")
+        builder1 = GraphBuilder(hash_mode="full-text", namespace="REQ", resolver=grammar_for("REQ"))
         builder1.add_parsed_content(
             ParsedContent(
                 content_type="requirement",
@@ -460,7 +481,7 @@ B. The system SHALL log errors."""
         )
         graph1 = builder1.build()
 
-        builder2 = GraphBuilder(hash_mode="full-text", namespace="REQ")
+        builder2 = GraphBuilder(hash_mode="full-text", namespace="REQ", resolver=grammar_for("REQ"))
         builder2.add_parsed_content(
             ParsedContent(
                 content_type="requirement",

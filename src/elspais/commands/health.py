@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from elspais.graph.GraphNode import GraphNode
     from elspais.utilities.patterns import IdResolver
 
+
 def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
     """Validate a config dict into ElspaisConfig (see config.validate_config)."""
     from elspais.config import validate_config
@@ -247,11 +248,10 @@ def check_spec_implements_resolve(
             target = graph.find_by_id(ref)
             if target is None:
                 # Check if it's an assertion reference (e.g., REQ-xxx-A)
+                # Splitting a reference needs the grammar that admits it;
+                # guessing the boundary character finds whichever one the
+                # component itself contains and names a different parent.
                 split = resolver.split_assertion_ref(ref) if resolver else None
-                if split is None and "-" in ref:
-                    parts = ref.rsplit("-", 1)
-                    if len(parts) == 2:
-                        split = (parts[0], parts[1])
                 if split is not None:
                     parent = graph.find_by_id(split[0])
                     if parent is not None:
@@ -299,11 +299,10 @@ def check_spec_refines_resolve(
             target = graph.find_by_id(ref)
             if target is None:
                 # Check assertion reference
+                # Splitting a reference needs the grammar that admits it;
+                # guessing the boundary character finds whichever one the
+                # component itself contains and names a different parent.
                 split = resolver.split_assertion_ref(ref) if resolver else None
-                if split is None and "-" in ref:
-                    parts = ref.rsplit("-", 1)
-                    if len(parts) == 2:
-                        split = (parts[0], parts[1])
                 if split is not None:
                     parent = graph.find_by_id(split[0])
                     if parent is not None:
@@ -352,11 +351,10 @@ def check_spec_satisfies_resolve(
             target = graph.find_by_id(ref)
             if target is None:
                 # Check assertion reference
+                # Splitting a reference needs the grammar that admits it;
+                # guessing the boundary character finds whichever one the
+                # component itself contains and names a different parent.
                 split = resolver.split_assertion_ref(ref) if resolver else None
-                if split is None and "-" in ref:
-                    parts = ref.rsplit("-", 1)
-                    if len(parts) == 2:
-                        split = (parts[0], parts[1])
                 if split is not None:
                     parent = graph.find_by_id(split[0])
                     if parent is not None:

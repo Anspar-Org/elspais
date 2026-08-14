@@ -25,6 +25,7 @@ from elspais.graph.builder import TraceGraph
 from elspais.graph.GraphNode import make_file_id
 from elspais.graph.mutations import BrokenReference
 from elspais.graph.relations import EdgeKind
+from tests.core.graph_test_helpers import grammar_for
 
 # The namespace these hand-built graphs use -- a structural id carries the
 # namespace of the repository holding the node.
@@ -44,7 +45,7 @@ def file_id(relative_path: str) -> str:
 @pytest.fixture
 def mutation_graph():
     """Create a TraceGraph with mutation support for testing."""
-    graph = TraceGraph(repo_root=Path("/test/repo"))
+    graph = TraceGraph(repo_root=Path("/test/repo"), _resolver=grammar_for(NAMESPACE))
 
     # Create PRD requirement with assertions
     prd_node = GraphNode(
@@ -438,7 +439,7 @@ def _build_remainder_graph() -> TraceGraph:
     from elspais.graph.builder import GraphBuilder
     from elspais.graph.parsers import ParsedContent
 
-    builder = GraphBuilder(namespace="REQ")
+    builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
     builder.add_parsed_content(
         ParsedContent(
             content_type="requirement",

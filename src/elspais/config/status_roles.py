@@ -23,9 +23,6 @@ class StatusRole(Enum):
     RETIRED = "retired"
 
 
-
-
-
 class StatusRolesConfig:
     """Maps status names to roles.
 

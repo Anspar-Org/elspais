@@ -7,15 +7,18 @@ from pathlib import Path
 
 import pytest
 
+from elspais.config import config_defaults
 from elspais.graph import NodeKind
 from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.GraphNode import make_definition_id, make_file_id, make_remainder_id
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.relations import EdgeKind
+from elspais.utilities.patterns import build_resolver
 from tests.core.graph_test_helpers import (
     MockSourceContext,
     build_graph,
     children_string,
+    grammar_for,
     incoming_edges_string,
     make_code_ref,
     make_journey,
@@ -70,7 +73,7 @@ class TestGraphBuilder:
 
     # Verifies: REQ-o00050-A
     def test_build_creates_nodes(self, sample_requirements):
-        builder = GraphBuilder(namespace="REQ")
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
 
         for req in sample_requirements:
             builder.add_parsed_content(req)
@@ -82,7 +85,7 @@ class TestGraphBuilder:
 
     # Verifies: REQ-o00050-D
     def test_build_creates_assertion_nodes(self, sample_requirements):
-        builder = GraphBuilder(namespace="REQ")
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
 
         for req in sample_requirements:
             builder.add_parsed_content(req)
@@ -94,7 +97,7 @@ class TestGraphBuilder:
 
     # Verifies: REQ-o00050-D
     def test_build_links_assertions_to_parent(self, sample_requirements):
-        builder = GraphBuilder(namespace="REQ")
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
 
         for req in sample_requirements:
             builder.add_parsed_content(req)
@@ -109,7 +112,7 @@ class TestGraphBuilder:
 
     # Verifies: REQ-o00050-C
     def test_build_creates_implements_edges(self, sample_requirements):
-        builder = GraphBuilder(namespace="REQ")
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
 
         for req in sample_requirements:
             builder.add_parsed_content(req)
@@ -133,7 +136,7 @@ class TestGraphBuilder:
 
     # Verifies: REQ-p00050-A
     def test_roots_are_top_level_requirements(self, sample_requirements):
-        builder = GraphBuilder(namespace="REQ")
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
 
         for req in sample_requirements:
             builder.add_parsed_content(req)
@@ -150,7 +153,7 @@ class TestBodyTextNotStored:
     # Verifies: REQ-d00131-B
     def test_body_text_not_stored_after_build(self, sample_requirements):
         """After cleanup, body_text must not be stored in node content."""
-        builder = GraphBuilder(namespace="REQ")
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         for req in sample_requirements:
             builder.add_parsed_content(req)
         graph = builder.build()
@@ -165,7 +168,7 @@ class TestTraceGraph:
 
     # Verifies: REQ-p00050-A
     def test_find_by_id(self, sample_requirements):
-        builder = GraphBuilder(namespace="REQ")
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         for req in sample_requirements:
             builder.add_parsed_content(req)
         graph = builder.build()
@@ -177,7 +180,7 @@ class TestTraceGraph:
 
     # Verifies: REQ-p00050-A
     def test_find_by_id_not_found(self, sample_requirements):
-        builder = GraphBuilder(namespace="REQ")
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         for req in sample_requirements:
             builder.add_parsed_content(req)
         graph = builder.build()
@@ -188,7 +191,7 @@ class TestTraceGraph:
 
     # Verifies: REQ-d00051-F
     def test_all_nodes_iterator(self, sample_requirements):
-        builder = GraphBuilder(namespace="REQ")
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         for req in sample_requirements:
             builder.add_parsed_content(req)
         graph = builder.build()
@@ -200,7 +203,7 @@ class TestTraceGraph:
 
     # Verifies: REQ-d00130-E
     def test_nodes_by_kind(self, sample_requirements):
-        builder = GraphBuilder(namespace="REQ")
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         for req in sample_requirements:
             builder.add_parsed_content(req)
         graph = builder.build()
@@ -861,7 +864,11 @@ class TestGeneralizedOrphanDetection:
         But parentless REQUIREMENT nodes are always roots regardless of
         satellite configuration.
         """
-        builder = GraphBuilder(satellite_kinds=["assertion", "result", "code"], namespace="REQ")
+        builder = GraphBuilder(
+            satellite_kinds=["assertion", "result", "code"],
+            namespace="REQ",
+            resolver=grammar_for("REQ"),
+        )
         builder.add_parsed_content(
             make_requirement("REQ-p00001", level="PRD"),
         )
@@ -893,7 +900,7 @@ class TestGeneralizedOrphanDetection:
         to ASSERTION and TEST_RESULT as satellite kinds. Assertions are still
         satellite children, but parentless REQUIREMENT nodes are always roots.
         """
-        builder = GraphBuilder(namespace="REQ")
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         builder.add_parsed_content(
             make_requirement(
                 "REQ-p00001",
@@ -926,7 +933,7 @@ class TestGeneralizedOrphanDetection:
         a ValueError when NodeKind tries to parse it.
         """
         with pytest.raises(ValueError):
-            GraphBuilder(satellite_kinds=["bogus"], namespace="REQ")
+            GraphBuilder(satellite_kinds=["bogus"], namespace="REQ", resolver=grammar_for("REQ"))
 
 
 class TestCanonicalTestIds:
@@ -1171,7 +1178,7 @@ class TestMultiAssertionExpansion:
 
     def test_REQ_d00081_D_code_ref_multi_assertion_expands(self):
         """REQ-d00081-D: Code ref with REQ-p00001-A+B+C expands and links to all assertions."""
-        builder = GraphBuilder(namespace="REQ")
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         builder.add_parsed_content(
             make_requirement(
                 "REQ-p00001",
@@ -1210,7 +1217,7 @@ class TestMultiAssertionExpansion:
 
     def test_REQ_d00081_G_single_assertion_passes_through(self):
         """REQ-d00081-G: Single assertion ref REQ-p00001-A passes through unchanged."""
-        builder = GraphBuilder(namespace="REQ")
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         builder.add_parsed_content(
             make_requirement(
                 "REQ-p00001",
@@ -1243,7 +1250,10 @@ class TestMultiAssertionExpansion:
 
     def test_REQ_d00081_E_custom_separator_works(self):
         """REQ-d00081-D: Custom separator '&' expands REQ-p00001-A&B&C correctly."""
-        builder = GraphBuilder(multi_assertion_separator="&", namespace="REQ")
+        config = config_defaults()
+        config["project"] = {**config.get("project", {}), "namespace": "REQ"}
+        config["id-patterns"]["assertions"]["multi_separator"] = "&"
+        builder = GraphBuilder(namespace="REQ", resolver=build_resolver(config))
         builder.add_parsed_content(
             make_requirement(
                 "REQ-p00001",
@@ -1277,7 +1287,7 @@ class TestMultiAssertionExpansion:
 
     def test_REQ_d00081_D_test_ref_multi_assertion_expands(self):
         """REQ-d00081-D: Test ref with multi-assertion also expands, uniform across parser types."""
-        builder = GraphBuilder(namespace="REQ")
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         builder.add_parsed_content(
             make_requirement(
                 "REQ-d00001",
@@ -1336,7 +1346,7 @@ class TestParseDirtyFlag:
                 "has_redundant_refs": True,
             },
         )
-        builder = GraphBuilder(namespace="REQ")
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         builder.add_parsed_content(content)
         graph = builder.build()
 
@@ -1363,7 +1373,7 @@ class TestParseDirtyFlag:
                 "assertions": [],
             },
         )
-        builder = GraphBuilder(namespace="REQ")
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         builder.add_parsed_content(content)
         graph = builder.build()
 
@@ -1541,7 +1551,7 @@ class TestStructuresEdgeRenderOrder:
 # Verifies: REQ-d00131-B
 def test_add_assertion_sets_render_order():
     """add_assertion() must set render_order on the new STRUCTURES edge."""
-    builder = GraphBuilder(namespace="REQ")
+    builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
     builder.add_parsed_content(
         ParsedContent(
             content_type="requirement",
@@ -1604,7 +1614,7 @@ class TestSynthesizedIdsRelative:
         """An auto-synthesized remainder ID embeds the repo-relative path, not absolute."""
         absolute_source = tmp_path / "spec" / "notes.md"
 
-        builder = GraphBuilder(repo_root=tmp_path, namespace="REQ")
+        builder = GraphBuilder(repo_root=tmp_path, namespace="REQ", resolver=grammar_for("REQ"))
         content = ParsedContent(
             content_type="remainder",
             start_line=7,
@@ -1626,7 +1636,7 @@ class TestSynthesizedIdsRelative:
         """An auto-synthesized definition_block ID embeds the repo-relative path, not absolute."""
         absolute_source = tmp_path / "spec" / "glossary.md"
 
-        builder = GraphBuilder(repo_root=tmp_path, namespace="REQ")
+        builder = GraphBuilder(repo_root=tmp_path, namespace="REQ", resolver=grammar_for("REQ"))
         content = ParsedContent(
             content_type="definition_block",
             start_line=12,
@@ -1674,7 +1684,7 @@ class TestNamespaceRequiredToConstruct:
     # Verifies: REQ-d00222-D
     def test_REQ_d00222_D_builder_with_empty_namespace_is_refused(self, tmp_path):
         with pytest.raises(ValueError, match="namespace"):
-            GraphBuilder(namespace="", repo_root=tmp_path)
+            GraphBuilder(namespace="", repo_root=tmp_path, resolver=grammar_for("REQ"))
 
     # Verifies: REQ-d00222-D
     def test_REQ_d00222_D_graph_without_resolver_refuses_to_answer_namespace(self, tmp_path):
@@ -1723,9 +1733,7 @@ class TestNamespaceRequiredToConstruct:
             file_id_for_reference("spec/x.md", {"project": {}})
 
     # Verifies: REQ-d00222-D
-    def test_REQ_d00222_D_federated_entry_carrying_a_graph_must_declare_a_project(
-        self, tmp_path
-    ):
+    def test_REQ_d00222_D_federated_entry_carrying_a_graph_must_declare_a_project(self, tmp_path):
         from elspais.graph.federated import FederatedGraph, FederationError, RepoEntry
 
         entry = RepoEntry(

@@ -338,7 +338,7 @@ class TestCrossRepoIdentifierCollision:
             return (
                 f'version = 3\n\n[project]\nname = "{name}"\n'
                 f'namespace = "{namespace}"\n\n'
-                '[levels.prd]\nrank = 1\nimplements = []\n\n'
+                "[levels.prd]\nrank = 1\nimplements = []\n\n"
                 '[levels.dev]\nrank = 2\nimplements = ["prd", "dev"]\n\n'
                 '[id-patterns]\ncanonical = "REQ-{level.letter}{component}"\n' + associates
             )

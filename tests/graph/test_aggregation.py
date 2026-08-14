@@ -17,6 +17,7 @@ from elspais.graph.aggregation import (
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.metrics import CoverageDimension, RollupMetrics
+from tests.core.graph_test_helpers import grammar_for
 
 
 def _make_req(req_id: str, level: str = "dev", status: str = "Active") -> GraphNode:
@@ -38,7 +39,7 @@ def _make_graph(*nodes: GraphNode) -> FederatedGraph:
     from elspais.graph.builder import GraphBuilder
     from elspais.graph.parsers import ParsedContent
 
-    builder = GraphBuilder(namespace="REQ")
+    builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
     for n in nodes:
         builder.add_parsed_content(
             ParsedContent(

@@ -32,6 +32,7 @@ from elspais.graph.factory import build_graph
 from elspais.graph.GraphNode import make_file_id
 from elspais.graph.relations import EdgeKind
 from elspais.graph.render import node_version, render_file, render_node
+from tests.core.graph_test_helpers import grammar_for
 
 # One spec file covering every scenario. IDs use the default REQ-p/o
 # patterns; REQ-?77777 / REQ-?88888 style targets match the ID pattern but
@@ -313,7 +314,7 @@ class TestBrokenRefRenderPreservation:
         whole-file rewrite, so each broken ID must appear exactly twice.
         """
         file_node = _node(fidelity_graph, make_file_id("REQ", "spec/reqs.md"))
-        content = render_file(file_node)
+        content = render_file(file_node, resolver=grammar_for("REQ"))
         assert content.count("REQ-p77777") == 2, (
             "the mixed requirement's broken Implements entry was dropped " "from the file rewrite"
         )
@@ -324,7 +325,7 @@ class TestBrokenRefRenderPreservation:
     def test_REQ_d00132_G_partial_multi_assertion_keeps_broken_expansion(self, fidelity_graph):
         """`Implements: REQ-p00001-A+Z` keeps derived A and broken Z."""
         child = _node(fidelity_graph, "REQ-o00007")
-        rendered = render_node(child)
+        rendered = render_node(child, resolver=grammar_for("REQ"))
         assert "REQ-p00001-A" in rendered
         assert "REQ-p00001-Z" in rendered, (
             "the resolved A expansion evicted the broken Z expansion from " "the render"
@@ -604,7 +605,7 @@ class TestRenameRetargetsAssertionSuffixedBrokenRefs:
         """The rendered leftover expansion follows the parent rename too."""
         fidelity_graph.rename_node("REQ-p00001", "REQ-p00009")
 
-        rendered = render_node(_node(fidelity_graph, "REQ-o00007"))
+        rendered = render_node(_node(fidelity_graph, "REQ-o00007"), resolver=grammar_for("REQ"))
         assert "REQ-p00009-A" in rendered, "the edge-derived expansion must follow the rename"
         assert (
             "REQ-p00009-Z" in rendered

@@ -41,6 +41,7 @@ from elspais.utilities.patterns import IdResolver, build_resolver
 
 _log = logging.getLogger(__name__)
 
+
 # Known schema fields (by alias and Python name) for filtering non-schema keys
 def _resolve_coverage_file_node(graph, source_file, lcov_path, repo_root):
     """Resolve an lcov SF path to a repo-relative FILE node.
@@ -615,9 +616,6 @@ def build_graph(
     # 4. Build graph from all spec directories
     hash_mode = typed_config.validation.hash_mode
     satellite_kinds = ["assertion", "result"]
-    mas = default_resolver.config.assertions.multi_separator
-    if mas is False or mas is None:
-        mas = ""
     # YIELDS (RESULT->TEST) links are always enabled: flutter-machine emits
     # test_id=None (never queues YIELDS), while junit/pytest emit real test_ids
     # (YIELDS desired).  So the per-test link is unconditionally safe.
@@ -625,7 +623,6 @@ def build_graph(
         repo_root=repo_root,
         hash_mode=hash_mode,
         satellite_kinds=satellite_kinds,
-        multi_assertion_separator=str(mas),
         resolver=default_resolver,
         namespace=typed_config.project.namespace,
         project_name=typed_config.project.name,

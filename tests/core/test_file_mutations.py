@@ -13,6 +13,7 @@ from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind, make_file_id
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.relations import EdgeKind
+from tests.core.graph_test_helpers import grammar_for
 
 # The namespace these graphs are built with; structural node ids carry it.
 NAMESPACE = "REQ"
@@ -62,7 +63,7 @@ def build_two_file_graph() -> TraceGraph:
         FILE: file:REQ:spec/other.md
           (empty)
     """
-    builder = GraphBuilder(namespace=NAMESPACE)
+    builder = GraphBuilder(namespace=NAMESPACE, resolver=grammar_for(NAMESPACE))
     builder.add_parsed_content(make_req("REQ-p00001", "Test Req"))
     graph = builder.build()
 
@@ -135,7 +136,7 @@ class TestMoveNodeToFile:
     # Verifies: REQ-o00063-A
     def test_move_orphan_raises(self):
         """ValueError if node has no current FILE parent."""
-        builder = GraphBuilder(namespace=NAMESPACE)
+        builder = GraphBuilder(namespace=NAMESPACE, resolver=grammar_for(NAMESPACE))
         builder.add_parsed_content(make_req("REQ-p00001", "Orphan Req"))
         graph = builder.build()
 
@@ -167,7 +168,7 @@ class TestMoveNodeToFile:
         graph = build_two_file_graph()
 
         # Add a second requirement to the target file
-        builder2 = GraphBuilder(namespace=NAMESPACE)
+        builder2 = GraphBuilder(namespace=NAMESPACE, resolver=grammar_for(NAMESPACE))
         builder2.add_parsed_content(make_req("REQ-p00002", "Existing Req"))
         graph2 = builder2.build()
         req2 = graph2.find_by_id("REQ-p00002")

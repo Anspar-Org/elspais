@@ -18,6 +18,7 @@ from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import FileType
 from elspais.graph.relations import EdgeKind
+from tests.core.graph_test_helpers import grammar_for
 
 
 def _build_graph_with_spec(tmp_path: Path) -> tuple[FederatedGraph, Path, GraphNode]:
@@ -30,7 +31,7 @@ def _build_graph_with_spec(tmp_path: Path) -> tuple[FederatedGraph, Path, GraphN
     spec_file = tmp_path / "test_spec.md"
     spec_file.write_text("placeholder", encoding="utf-8")
 
-    graph = TraceGraph(repo_root=tmp_path)
+    graph = TraceGraph(repo_root=tmp_path, _resolver=grammar_for("REQ"))
     rel_path = str(spec_file.relative_to(tmp_path))
 
     file_node = GraphNode(id=f"file:{rel_path}", kind=NodeKind.FILE, label="test_spec.md")
@@ -317,7 +318,7 @@ class TestConsistencyCheck:
         graph.change_status("REQ-t00001", "Draft")
 
         # Create a mismatched graph for rebuild
-        bad_graph = TraceGraph(repo_root=tmp_path)
+        bad_graph = TraceGraph(repo_root=tmp_path, _resolver=grammar_for("REQ"))
         req = GraphNode(id="REQ-t00001", kind=NodeKind.REQUIREMENT, label="WRONG Title")
         req._content = {"level": "DEV", "status": "Draft", "hash": "00000000"}
         bad_graph._index = {"REQ-t00001": req}

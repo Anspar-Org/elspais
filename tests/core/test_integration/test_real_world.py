@@ -63,7 +63,11 @@ class TestRealWorldSpecs:
 
         deserializer = DomainFile(SPEC_DIR, patterns=["*.md"])
 
-        builder = GraphBuilder(repo_root=REPO_ROOT, namespace=real_resolver.config.namespace)
+        builder = GraphBuilder(
+            repo_root=REPO_ROOT,
+            namespace=real_resolver.config.namespace,
+            resolver=real_resolver,
+        )
         for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
@@ -85,7 +89,11 @@ class TestRealWorldSpecs:
 
         deserializer = DomainFile(SPEC_DIR, patterns=["*.md"])
 
-        builder = GraphBuilder(repo_root=REPO_ROOT, namespace=real_resolver.config.namespace)
+        builder = GraphBuilder(
+            repo_root=REPO_ROOT,
+            namespace=real_resolver.config.namespace,
+            resolver=real_resolver,
+        )
         for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
@@ -102,7 +110,11 @@ class TestRealWorldSpecs:
 
         deserializer = DomainFile(SPEC_DIR, patterns=["*.md"])
 
-        builder = GraphBuilder(repo_root=REPO_ROOT, namespace=real_resolver.config.namespace)
+        builder = GraphBuilder(
+            repo_root=REPO_ROOT,
+            namespace=real_resolver.config.namespace,
+            resolver=real_resolver,
+        )
         for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
@@ -121,7 +133,11 @@ class TestRealWorldSpecs:
 
         deserializer = DomainFile(SPEC_DIR, patterns=["*.md"])
 
-        builder = GraphBuilder(repo_root=REPO_ROOT, namespace=real_resolver.config.namespace)
+        builder = GraphBuilder(
+            repo_root=REPO_ROOT,
+            namespace=real_resolver.config.namespace,
+            resolver=real_resolver,
+        )
         for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 

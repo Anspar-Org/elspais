@@ -495,8 +495,7 @@ class TestFileContentCrossRepo:
 
         # With node_id: same content, resolved explicitly via repo_root_for.
         ok_req = urllib.request.Request(
-            f"http://127.0.0.1:{port}/api/file-content"
-            f"?path=spec/prd-assoc.md&node_id=XX-p00099"
+            f"http://127.0.0.1:{port}/api/file-content" f"?path=spec/prd-assoc.md&node_id=XX-p00099"
         )
         resp = urllib.request.urlopen(ok_req, timeout=5)
         assert resp.status == 200

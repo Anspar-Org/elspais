@@ -13,7 +13,7 @@ from elspais.graph.serialize import (
     to_csv,
     to_markdown,
 )
-from tests.core.graph_test_helpers import make_requirement
+from tests.core.graph_test_helpers import grammar_for, make_requirement
 
 
 @pytest.fixture
@@ -21,7 +21,11 @@ def sample_graph():
     """Create a sample graph for testing."""
     from elspais.graph.GraphNode import FileType
 
-    builder = GraphBuilder(repo_root=Path("/test/repo"), namespace="REQ")
+    builder = GraphBuilder(
+        repo_root=Path("/test/repo"),
+        namespace="REQ",
+        resolver=grammar_for("REQ"),
+    )
 
     # Create FILE nodes
     file_nodes = {}
@@ -238,7 +242,7 @@ class TestToCsv:
     # Verifies: REQ-d00052-C
     def test_csv_handles_commas(self):
         """Escapes commas in values."""
-        builder = GraphBuilder(namespace="REQ")
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         builder.add_parsed_content(
             make_requirement(
                 "REQ-test",
@@ -257,7 +261,7 @@ class TestToCsv:
     # Verifies: REQ-d00052-C
     def test_csv_handles_quotes(self):
         """Escapes quotes in values."""
-        builder = GraphBuilder(namespace="REQ")
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         builder.add_parsed_content(
             make_requirement(
                 "REQ-test",
@@ -303,7 +307,7 @@ class TestSerializeAdditionalCoverage:
     # Verifies: REQ-d00064-D
     def test_serialize_empty_graph(self):
         """Serializes empty graph correctly."""
-        builder = GraphBuilder(namespace="REQ")
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         graph = builder.build()
 
         result = serialize_graph(graph)

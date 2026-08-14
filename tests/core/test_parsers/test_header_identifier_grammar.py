@@ -81,11 +81,9 @@ def _make_project(
     single requirement authored under that config's identifier grammar."""
     project = tmp_path / "project"
     (project / "spec").mkdir(parents=True)
-    (project / "spec" / "prd.md").write_text(
-        _SPEC_TEMPLATE.format(req_id=req_id), encoding="utf-8"
-    )
+    (project / "spec" / "prd.md").write_text(_SPEC_TEMPLATE.format(req_id=req_id), encoding="utf-8")
 
-    component_extra = 'digits = 5\nleading_zeros = true\n' if style == "numeric" else ""
+    component_extra = "digits = 5\nleading_zeros = true\n" if style == "numeric" else ""
     (project / ".elspais.toml").write_text(
         _CONFIG_TEMPLATE.format(
             namespace=namespace,
@@ -141,9 +139,9 @@ class TestHeaderRecognisedUnderRepositoryGrammar:
             f"reads it must be the one that configuration produces. Graph "
             f"holds: {sorted(n.id for n in graph.iter_by_kind(NodeKind.REQUIREMENT))}"
         )
-        assert node.kind == NodeKind.REQUIREMENT, (
-            f"{req_id!r} is in the graph as {node.kind}, not a REQUIREMENT"
-        )
+        assert (
+            node.kind == NodeKind.REQUIREMENT
+        ), f"{req_id!r} is in the graph as {node.kind}, not a REQUIREMENT"
 
     # Verifies: REQ-d00251-L
     @pytest.mark.parametrize("namespace,style,sep,req_id", _GRAMMARS)
@@ -205,6 +203,4 @@ class TestHeaderRecognisedUnderRepositoryGrammar:
             for child in node.iter_children()
             if child.kind == NodeKind.ASSERTION
         )
-        assert labels == ["A", "B"], (
-            f"Expected assertions A and B under {req_id!r}, got {labels}"
-        )
+        assert labels == ["A", "B"], f"Expected assertions A and B under {req_id!r}, got {labels}"

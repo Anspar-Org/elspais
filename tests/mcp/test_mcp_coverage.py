@@ -500,8 +500,8 @@ class TestUncoveredTestingGapDenominator:
         for entry in data.untested:
             if entry.req_id != "REQ-500":
                 continue
-            for aid, _frac in entry.assertions:
-                cli_labels.add(aid.rsplit("-", 1)[-1])
+            for _aid, label, _frac in entry.assertions:
+                cli_labels.add(label)
 
         assert mcp_labels == cli_labels == {"A"}
 
@@ -689,9 +689,9 @@ class TestStrictFootingMcpGaps:
         mcp = _get_uncovered_assertions(blanket_evidence_graph, req_id="REQ-700", source="test")
         data = collect_gaps(blanket_evidence_graph, exclude_status=set(), config={})
         cli = {
-            aid.rsplit("-", 1)[-1]
+            label
             for entry in data.untested
             if entry.req_id == "REQ-700"
-            for aid, _frac in entry.assertions
+            for _aid, label, _frac in entry.assertions
         }
         assert set(mcp["uncovered_labels"]) == cli == {"B"}

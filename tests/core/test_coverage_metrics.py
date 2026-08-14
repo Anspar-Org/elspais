@@ -1244,14 +1244,14 @@ class TestRefinesCoverageConduction:
 
         data = collect_gaps(graph, set())
         untested = next(e for e in data.untested if e.req_id == "PARENT")
-        # REQ-d00069-J: assertions carry (id, fraction) pairs so a partially
+        # REQ-d00069-J: assertions carry (id, label, fraction) triples so a partially
         # conducted assertion (fraction 0.5 here) is distinguishable from one
         # with no coverage at all.
-        assert {aid for aid, _frac in untested.assertions} == parent_assertion_ids
+        assert {aid for aid, _label, _frac in untested.assertions} == parent_assertion_ids
         # REQ-d00258-M: the gap surface answers on the strict footing. REQ-BLANK
         # refines PARENT as a WHOLE (no assertion named), so its 0.5 conducts
         # only to the generous footing -- nothing names PARENT-A or PARENT-B, and
         # the gap list says so with 0.0. (An assertion-targeted `Refines: P/A`
         # does carry its partial fraction strictly; see
         # test_uncovered_assertions_carry_fractions.)
-        assert all(frac == pytest.approx(0.0) for _aid, frac in untested.assertions)
+        assert all(frac == pytest.approx(0.0) for _aid, _label, frac in untested.assertions)

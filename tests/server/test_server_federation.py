@@ -212,9 +212,9 @@ class TestApiReposStaleness:
 
         repo_info = response.json()["repos"][0]
         assert repo_info["name"] == "host"
-        assert "git_origin" in repo_info, (
-            "the host repository reported no origin, so it is exempt from staleness"
-        )
+        assert (
+            "git_origin" in repo_info
+        ), "the host repository reported no origin, so it is exempt from staleness"
         assert repo_info["staleness"] == {
             "branch": "main",
             "remote_diverged": True,

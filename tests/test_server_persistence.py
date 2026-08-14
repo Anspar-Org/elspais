@@ -25,6 +25,7 @@ from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.relations import EdgeKind
 from elspais.graph.render import render_save
+from tests.core.graph_test_helpers import grammar_for
 
 # ---------------------------------------------------------------------------
 # Shared graph builder helpers
@@ -67,7 +68,7 @@ def _build_graph_with_spec(
     spec_file.write_text(spec_content, encoding="utf-8")
 
     # Build graph with nodes that reference the spec file
-    graph = TraceGraph(repo_root=tmp_path)
+    graph = TraceGraph(repo_root=tmp_path, _resolver=grammar_for("REQ"))
 
     # Use relative path for source location (relative to repo_root)
     rel_path = str(spec_file.relative_to(tmp_path))
@@ -152,7 +153,7 @@ def _build_two_req_graph(tmp_path: Path) -> tuple[FederatedGraph, Path]:
     spec_file = tmp_path / "two_reqs.md"
     spec_file.write_text("placeholder", encoding="utf-8")
 
-    graph = TraceGraph(repo_root=tmp_path)
+    graph = TraceGraph(repo_root=tmp_path, _resolver=grammar_for("REQ"))
     rel_path = str(spec_file.relative_to(tmp_path))
 
     # Create FILE node
@@ -485,7 +486,7 @@ class TestNoSourceFile:
 
     def test_REQ_o00063_A_skips_node_without_source(self, tmp_path: Path):
         """Mutations on nodes without FILE ancestry have no dirty files."""
-        graph = TraceGraph(repo_root=tmp_path)
+        graph = TraceGraph(repo_root=tmp_path, _resolver=grammar_for("REQ"))
 
         node = GraphNode(
             id="REQ-nosource",
@@ -695,7 +696,7 @@ def _build_refines_graph(
     spec_file = tmp_path / "test_spec.md"
     spec_file.write_text("placeholder", encoding="utf-8")
 
-    graph = TraceGraph(repo_root=tmp_path)
+    graph = TraceGraph(repo_root=tmp_path, _resolver=grammar_for("REQ"))
     rel_path = str(spec_file.relative_to(tmp_path))
 
     # Create FILE node

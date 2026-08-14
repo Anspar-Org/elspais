@@ -16,6 +16,7 @@ from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.GraphNode import FileType, GraphNode, NodeKind
 from elspais.graph.relations import EdgeKind
 from tests.core.graph_test_helpers import (
+    grammar_for,
     make_test_result,
 )
 
@@ -34,6 +35,7 @@ def _build_with_flag(link_results: bool) -> TraceGraph:
         repo_root=Path("."),
         link_results_to_tests=link_results,
         namespace="REQ",
+        resolver=grammar_for("REQ"),
     )
 
     result_content = make_test_result(
@@ -120,8 +122,9 @@ class TestDefaultMode:
         builder = GraphBuilder(
             repo_root=Path("."),
             link_results_to_tests=True,
-        namespace="REQ",
-    )
+            namespace="REQ",
+            resolver=grammar_for("REQ"),
+        )
         result_content = make_test_result(
             "result-precise-1",
             status="passed",
@@ -167,7 +170,12 @@ class TestMatchBasedSuppression:
 
     def test_aggregate_match_suppresses_yields_even_with_link_flag(self):
         """match='aggregate' + link_results_to_tests=True: YIELDS must NOT be created."""
-        builder = GraphBuilder(repo_root=Path("."), link_results_to_tests=True, namespace="REQ")
+        builder = GraphBuilder(
+            repo_root=Path("."),
+            link_results_to_tests=True,
+            namespace="REQ",
+            resolver=grammar_for("REQ"),
+        )
         result_content = make_test_result(
             "result-agg-link",
             status="passed",
@@ -208,7 +216,12 @@ class TestMatchBasedSuppression:
         exist the pending link resolves to a broken reference -- the key
         invariant is that a broken reference IS produced (not silently dropped).
         """
-        builder = GraphBuilder(repo_root=Path("."), link_results_to_tests=True, namespace="REQ")
+        builder = GraphBuilder(
+            repo_root=Path("."),
+            link_results_to_tests=True,
+            namespace="REQ",
+            resolver=grammar_for("REQ"),
+        )
         result_content = make_test_result(
             "result-prec-link",
             status="passed",

@@ -27,6 +27,7 @@ import pytest
 from elspais.graph.factory import build_graph as build_repo_graph
 from elspais.graph.GraphNode import make_file_id
 from elspais.graph.render import render_file
+from tests.core.graph_test_helpers import grammar_for
 
 TARGET_ID = "REQ-d00001"
 ASSERTION_LABELS = ("A", "B", "C", "D")
@@ -129,13 +130,16 @@ class TestUndoDeleteRequirementRestoresAttachment:
         graph = requirement_graph_from_disk
         node = graph.find_by_id(TARGET_ID)
         file_node = node.file_node()
-        before_text = render_file(file_node)
+        before_text = render_file(file_node, resolver=grammar_for("REQ"))
         assert f"{TARGET_ID}: Authentication Module" in before_text
 
         graph.delete_requirement(TARGET_ID)
-        assert f"{TARGET_ID}: Authentication Module" not in render_file(file_node)
+        assert f"{TARGET_ID}: Authentication Module" not in render_file(
+            file_node,
+            resolver=grammar_for("REQ"),
+        )
 
         graph.undo_last()
-        after_text = render_file(file_node)
+        after_text = render_file(file_node, resolver=grammar_for("REQ"))
         assert f"{TARGET_ID}: Authentication Module" in after_text
         assert after_text == before_text

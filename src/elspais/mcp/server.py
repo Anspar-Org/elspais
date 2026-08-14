@@ -1846,8 +1846,8 @@ def _build_assertion_format(config: dict[str, Any]) -> dict[str, Any]:
     # "-A" in a repo configured for "/A" writes references this repo does not
     # accept, and an off-separator reference is a broken reference, not an
     # alternate spelling.
-    sep = assertions.separator or "-"
-    ma_sep = assertions.multi_separator or "+"
+    sep = assertions.separator
+    ma_sep = assertions.multi_separator
     example_req = f"{namespace}-{first_type_letter}{example_num}"
 
     return {

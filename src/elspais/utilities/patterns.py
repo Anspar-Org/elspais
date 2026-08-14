@@ -16,6 +16,18 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+# --- Errors ---
+
+
+class GrammarUnavailable(RuntimeError):
+    """A caller must spell an identifier but holds no repository grammar.
+
+    Deliberately not a ``ValueError``: the render layer catches that to mean
+    "this node is not independently renderable", and a missing grammar
+    swallowed by that catch would degrade output rather than stop it.
+    """
+
+
 # --- Constants ---
 
 INSTANCE_SEPARATOR = "::"
@@ -93,6 +105,18 @@ def _schema_default_canonical() -> str:
     from elspais.config.schema import IdPatternsConfig
 
     return IdPatternsConfig.model_fields["canonical"].default
+
+
+def _schema_default_assertion(field_name: str) -> Any:
+    """A default the assertion grammar takes when a raw dict omits the field.
+
+    Read off the schema rather than spelled again here. The schema is where
+    a configuration acquires its defaults, and a second copy of one is a
+    second grammar the moment the two disagree.
+    """
+    from elspais.config.schema import AssertionConfig
+
+    return AssertionConfig.model_fields[field_name].default
 
 
 @dataclass(frozen=True)
@@ -229,14 +253,13 @@ class IdPatternConfig:
         # Parse assertion format
         raw_assert = patterns.get("assertions", {})
         assertions = AssertionFormat(
-            label_style=raw_assert.get("label_style", "uppercase"),
-            max_count=raw_assert.get("max_count", 26),
-            zero_pad=raw_assert.get("zero_pad", False),
-            separator=raw_assert.get("separator", "-"),
-            # An empty or absent multi-separator falls back to "+": every
-            # surface derives its grammar from this value, and an empty one
-            # dissolves the boundary between two assertion labels.
-            multi_separator=raw_assert.get("multi_separator") or "+",
+            label_style=raw_assert.get("label_style", _schema_default_assertion("label_style")),
+            max_count=raw_assert.get("max_count", _schema_default_assertion("max_count")),
+            zero_pad=raw_assert.get("zero_pad", _schema_default_assertion("zero_pad")),
+            separator=raw_assert.get("separator", _schema_default_assertion("separator")),
+            multi_separator=raw_assert.get(
+                "multi_separator", _schema_default_assertion("multi_separator")
+            ),
         )
 
         # Parse output forms
@@ -792,9 +815,7 @@ class IdResolver:
         parsed = self.parse(raw_id)
         if parsed is None or not parsed.assertions:
             return None
-        af = self.config.assertions
-        sep = af.multi_separator if af.multi_separator else "+"
-        return (parsed.fqn, sep.join(parsed.assertions))
+        return (parsed.fqn, self.config.assertions.multi_separator.join(parsed.assertions))
 
     def make_assertion_id(self, req_id: str, label: str) -> str:
         """Compose an assertion node ID from a requirement ID and label.

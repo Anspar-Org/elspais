@@ -26,6 +26,7 @@ from elspais.graph.GraphNode import FileType, GraphNode, make_file_id
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.term_scanner import scan_graph
 from elspais.graph.terms import TermDictionary, TermEntry, TermRef
+from tests.core.graph_test_helpers import grammar_for
 
 
 def _make_definition_block(
@@ -106,7 +107,11 @@ class TestTermsIntegration:
     def test_REQ_d00222_A_builder_creates_remainder_for_definition(self):
         """GraphBuilder.add_parsed_content with content_type='definition_block'
         creates a REMAINDER node with content_type='definition_block' field."""
-        builder = GraphBuilder(repo_root=Path("/test/repo"), namespace="REQ")
+        builder = GraphBuilder(
+            repo_root=Path("/test/repo"),
+            namespace="REQ",
+            resolver=grammar_for("REQ"),
+        )
         content = _make_definition_block("Electronic Record", "Any combination of text")
 
         builder.add_parsed_content(content)
@@ -129,7 +134,11 @@ class TestTermsIntegration:
 
     def test_REQ_d00222_A_builder_populates_terms(self):
         """After building, the graph's _terms contains the defined term."""
-        builder = GraphBuilder(repo_root=Path("/test/repo"), namespace="REQ")
+        builder = GraphBuilder(
+            repo_root=Path("/test/repo"),
+            namespace="REQ",
+            resolver=grammar_for("REQ"),
+        )
         content = _make_definition_block("Electronic Record", "Any combination of text")
 
         builder.add_parsed_content(content)
@@ -142,7 +151,11 @@ class TestTermsIntegration:
 
     def test_REQ_d00222_A_collection_flag_preserved(self):
         """A definition_block with collection=True has that flag in _terms."""
-        builder = GraphBuilder(repo_root=Path("/test/repo"), namespace="REQ")
+        builder = GraphBuilder(
+            repo_root=Path("/test/repo"),
+            namespace="REQ",
+            resolver=grammar_for("REQ"),
+        )
         content = _make_definition_block(
             "Validation Activity",
             "An activity that validates something",
@@ -160,7 +173,11 @@ class TestTermsIntegration:
 
     def test_REQ_d00222_B_defined_in_points_to_file(self):
         """For file-level definitions, defined_in is the FILE node ID."""
-        builder = GraphBuilder(repo_root=Path("/test/repo"), namespace="REQ")
+        builder = GraphBuilder(
+            repo_root=Path("/test/repo"),
+            namespace="REQ",
+            resolver=grammar_for("REQ"),
+        )
         file_node = _make_file_node("spec/glossary.md")
         builder.register_file_node(file_node)
 
@@ -177,7 +194,11 @@ class TestTermsIntegration:
 
     def test_REQ_d00222_B_defined_in_points_to_requirement(self):
         """For requirement-level definitions, defined_in is the requirement ID."""
-        builder = GraphBuilder(repo_root=Path("/test/repo"), namespace="REQ")
+        builder = GraphBuilder(
+            repo_root=Path("/test/repo"),
+            namespace="REQ",
+            resolver=grammar_for("REQ"),
+        )
         file_node = _make_file_node("spec/reqs.md")
         builder.register_file_node(file_node)
 
@@ -257,7 +278,11 @@ class TestBuilderNamespaceOnTermEntry:
 
     def test_REQ_d00222_D_builder_accepts_namespace_param(self) -> None:
         """GraphBuilder.__init__ accepts a namespace keyword argument."""
-        builder = GraphBuilder(repo_root=Path("/test/repo"), namespace="MYREPO")
+        builder = GraphBuilder(
+            repo_root=Path("/test/repo"),
+            namespace="MYREPO",
+            resolver=grammar_for("MYREPO"),
+        )
         # If we get here without TypeError, the parameter is accepted.
         assert builder is not None
 
@@ -270,11 +295,15 @@ class TestBuilderNamespaceOnTermEntry:
         one later.
         """
         with pytest.raises(ValueError, match="namespace"):
-            GraphBuilder(repo_root=Path("/test/repo"), namespace="")
+            GraphBuilder(repo_root=Path("/test/repo"), namespace="", resolver=grammar_for("MYREPO"))
 
     def test_REQ_d00222_D_namespace_set_on_file_level_definition(self) -> None:
         """File-level definition_block gets namespace from GraphBuilder."""
-        builder = GraphBuilder(repo_root=Path("/test/repo"), namespace="MYREPO")
+        builder = GraphBuilder(
+            repo_root=Path("/test/repo"),
+            namespace="MYREPO",
+            resolver=grammar_for("MYREPO"),
+        )
         file_node = _make_file_node("spec/glossary.md")
         builder.register_file_node(file_node)
 
@@ -290,7 +319,11 @@ class TestBuilderNamespaceOnTermEntry:
 
     def test_REQ_d00222_D_namespace_set_on_requirement_level_definition(self) -> None:
         """Requirement-level definitions also get namespace from GraphBuilder."""
-        builder = GraphBuilder(repo_root=Path("/test/repo"), namespace="PARTNER")
+        builder = GraphBuilder(
+            repo_root=Path("/test/repo"),
+            namespace="PARTNER",
+            resolver=grammar_for("PARTNER"),
+        )
         file_node = _make_file_node("spec/reqs.md")
         builder.register_file_node(file_node)
 

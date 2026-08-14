@@ -27,6 +27,7 @@ from elspais.utilities.hasher import (
     compute_normalized_hash,
     compute_version_hash,
 )
+from elspais.utilities.patterns import GrammarUnavailable
 
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
@@ -220,6 +221,29 @@ def _file_version_text(node: GraphNode) -> str:
     return f"{node.get_field('relative_path') or ''}\x1d{ordered}"
 
 
+_DIGEST_GRAMMAR: Any | None = None
+
+
+def _digest_grammar() -> Any:
+    """The fixed grammar a version digest is computed under.
+
+    A version is content-addressed and never shown to anyone as a reference,
+    so REQ-p00014-U — which binds what the tool *emits* — does not reach it.
+    What does bind it is agreement: a token is minted on a read and checked
+    on a write, and if those two computed the same node under different
+    grammars every write would be rejected as a conflict. One fixed
+    convention, taken from the default configuration rather than spelled
+    here, makes that disagreement impossible.
+    """
+    global _DIGEST_GRAMMAR
+    if _DIGEST_GRAMMAR is None:
+        from elspais.config import config_defaults
+        from elspais.utilities.patterns import build_resolver
+
+        _DIGEST_GRAMMAR = build_resolver(config_defaults())
+    return _DIGEST_GRAMMAR
+
+
 # Implements: REQ-d00131-L
 def node_version(node: GraphNode) -> str:
     """Compute a node's concurrency version.
@@ -247,7 +271,7 @@ def node_version(node: GraphNode) -> str:
         text = node.get_field("raw_text") or ""
     else:
         try:
-            text = render_node(node)
+            text = render_node(node, resolver=_digest_grammar())
         except ValueError:
             # Not independently renderable and has no owning authoring unit.
             text = node.get_label() or ""
@@ -675,11 +699,14 @@ def _derive_refs_for_edge_kind(
         if whole or not labels:
             refs.add(src)
         if labels:
-            sorted_labels = sorted(labels)
-            if resolver is not None:
-                refs.add(resolver.make_assertion_ref(src, sorted_labels))
-            else:
-                refs.add(f"{src}-{'+'.join(sorted_labels)}")
+            # Implements: REQ-p00014-U
+            if resolver is None:
+                raise GrammarUnavailable(
+                    f"Cannot render {node.id!r}: citing assertions of {src!r} means "
+                    f"spelling the characters that bound a component from its "
+                    f"labels, and those are the owning repository's configuration."
+                )
+            refs.add(resolver.make_assertion_ref(src, sorted(labels)))
 
     # Union in the unresolved leftovers (REQ-d00132-G)
     stored = node.get_field(stored_field)
@@ -704,7 +731,7 @@ def _derive_refines_refs(node: GraphNode, resolver: Any | None = None) -> list[s
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def _find_dirty_files(graph: FederatedGraph, resolver: Any | None = None) -> list[Any]:
+def _find_dirty_files(graph: FederatedGraph) -> list[Any]:
     """Identify the FILE nodes whose subtree has pending mutations.
 
     Walks the mutation log and for each mutated node, finds its FILE
@@ -739,6 +766,27 @@ def _find_dirty_files(graph: FederatedGraph, resolver: Any | None = None) -> lis
             _mark(node)
         else:
             _mark(node.file_node())
+
+    def _mark_owning_file_of_assertion(assertion_id: str) -> None:
+        """Mark the file holding a deleted assertion's requirement.
+
+        The assertion is gone from the index, so its parent has to be
+        recovered from the id itself. Which characters divide the parent
+        from the label is the grammar of the member that CLAIMS the id, not
+        of whichever member happens to be serving — so each member is asked
+        under its own grammar and the first to recognise the string answers
+        (REQ-d00251-L). A string no member claims names nothing here, and
+        marking a file on a guess would rewrite the wrong one.
+        """
+        for member in graph.iter_repos():
+            member_graph = getattr(member, "graph", None)
+            member_resolver = getattr(member_graph, "_resolver", None)
+            if member_resolver is None:
+                continue
+            split = member_resolver.split_assertion_ref(assertion_id)
+            if split is not None:
+                _mark_node_file(split[0])
+                return
 
     for entry in graph.mutation_log.iter_entries():
         target_id = entry.target_id
@@ -775,14 +823,7 @@ def _find_dirty_files(graph: FederatedGraph, resolver: Any | None = None) -> lis
             if parent_id:
                 _mark_node_file(parent_id)
             else:
-                # Derive parent from assertion ID (REQ-xxx-A -> REQ-xxx)
-                split = resolver.split_assertion_ref(target_id) if resolver else None
-                if split is None and "-" in target_id:
-                    parts = target_id.rsplit("-", 1)
-                    if len(parts) == 2:
-                        split = (parts[0], parts[1])
-                if split:
-                    _mark_node_file(split[0])
+                _mark_owning_file_of_assertion(target_id)
 
         # For add_requirement, the target file is the parent's file
         if entry.operation == "add_requirement":
@@ -906,7 +947,7 @@ def render_save(
     _wire_new_requirements_to_files(graph)
 
     # Find dirty FILE nodes
-    dirty_files = _find_dirty_files(graph, resolver=resolver)
+    dirty_files = _find_dirty_files(graph)
 
     # Federation: by default, fix/save writes only primary-repo files.
     # Ownership resolution lives in ONE place: is_associate_owned() in
@@ -1011,11 +1052,15 @@ def render_save(
             abs_path = file_root / rel_path
 
         try:
-            # Prefer caller-supplied resolver; otherwise pull from the TraceGraph
-            # that owns this file so citations use the configured separator.
-            file_resolver = resolver
-            if file_resolver is None and owning_entry is not None:
-                file_resolver = getattr(owning_entry.graph, "_resolver", None)
+            # Implements: REQ-d00251-L
+            # The grammar of the member that owns this file, not the caller's:
+            # with write_associates a single save writes several members, and
+            # one caller-supplied grammar would spell every one of them in the
+            # root repository's separators. The caller's is a fallback only for
+            # a file no member claims.
+            file_resolver = getattr(getattr(owning_entry, "graph", None), "_resolver", None)
+            if file_resolver is None:
+                file_resolver = resolver
             content = render_file(file_node, resolver=file_resolver)
             # Ensure file ends with newline
             if content and not content.endswith("\n"):

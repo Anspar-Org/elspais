@@ -24,6 +24,7 @@ from elspais.graph.GraphNode import FileType, make_file_id
 from elspais.graph.relations import EdgeKind
 from elspais.server.app import create_app
 from elspais.server.state import AppState
+from tests.core.graph_test_helpers import grammar_for
 
 # The namespace these tests build their graphs with -- a structural id carries
 # the namespace of the repository holding the node.
@@ -108,7 +109,7 @@ def _save(client: TestClient) -> dict:
 @pytest.fixture
 def sample_graph():
     """Create a sample single-repo FederatedGraph for testing."""
-    graph = TraceGraph(repo_root=Path("/test/repo"))
+    graph = TraceGraph(repo_root=Path("/test/repo"), _resolver=grammar_for("REQ"))
 
     # Create PRD requirement with assertions
     prd_node = GraphNode(
@@ -187,7 +188,7 @@ def client(app):
 @pytest.fixture
 def coverage_graph():
     """Create a graph with test coverage for API testing."""
-    graph = TraceGraph(repo_root=Path("/test/repo"))
+    graph = TraceGraph(repo_root=Path("/test/repo"), _resolver=grammar_for("REQ"))
 
     req_node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT, label="Platform Security")
     req_node._content = {"level": "PRD", "status": "Active", "hash": "abc12345"}
@@ -396,7 +397,7 @@ class TestGetSearch:
     def test_REQ_d00061_E_search_default_limit(self):
         """Default limit is 50 when not specified — truncates beyond 50."""
         # Build a graph with 60 matching nodes to verify the limit
-        big_graph = TraceGraph(repo_root=Path("/test/repo"))
+        big_graph = TraceGraph(repo_root=Path("/test/repo"), _resolver=grammar_for("REQ"))
         for i in range(60):
             node = GraphNode(
                 id=f"REQ-d{i:05d}",
@@ -1045,7 +1046,7 @@ class TestGetFileContent:
 
     def test_REQ_p00006_A_file_content_returns_highlighted_lines(self, tmp_path):
         """API returns highlighted_lines and language for a Python file."""
-        graph = TraceGraph(repo_root=tmp_path)
+        graph = TraceGraph(repo_root=tmp_path, _resolver=grammar_for("REQ"))
         state = AppState(
             graph=_wrap(graph, tmp_path),
             repo_root=tmp_path,
@@ -1071,7 +1072,7 @@ class TestGetFileContent:
 
     def test_REQ_p00006_A_file_content_mutation_tracking(self, tmp_path):
         """API still returns mutation tracking alongside highlighting."""
-        graph = TraceGraph(repo_root=tmp_path)
+        graph = TraceGraph(repo_root=tmp_path, _resolver=grammar_for("REQ"))
         state = AppState(
             graph=_wrap(graph, tmp_path),
             repo_root=tmp_path,
@@ -1130,7 +1131,7 @@ class TestGetFileContent:
 
         # Build graph with a node whose source path is the absolute path
         # (this is what happens when associated repos are outside the main repo)
-        graph = TraceGraph(repo_root=main_repo)
+        graph = TraceGraph(repo_root=main_repo, _resolver=grammar_for("REQ"))
         node = GraphNode(
             id="REQ-A-p00001",
             kind=NodeKind.REQUIREMENT,
@@ -1183,7 +1184,7 @@ class TestGetFileContent:
             outside_path = f.name
 
         try:
-            graph = TraceGraph(repo_root=main_repo)
+            graph = TraceGraph(repo_root=main_repo, _resolver=grammar_for("REQ"))
             state = AppState(
                 graph=_wrap(graph, main_repo),
                 repo_root=main_repo,
@@ -1303,7 +1304,7 @@ def incoming_graph():
     with NO incoming traceability edges."""
     from elspais.graph.annotators import JourneyVerification
 
-    graph = TraceGraph(repo_root=Path("/test/repo"))
+    graph = TraceGraph(repo_root=Path("/test/repo"), _resolver=grammar_for("REQ"))
 
     req = GraphNode(id="REQ-p00006", kind=NodeKind.REQUIREMENT, label="Traceability Viewer")
     req._content = {"level": "PRD", "status": "Active", "hash": "aaa11111"}
@@ -1933,7 +1934,7 @@ def _make_disk_app(tmp_path, spec_content=DISK_SPEC, two_reqs=False):
 
     from elspais.graph.GraphNode import FileType
 
-    graph = TraceGraph(repo_root=tmp_path)
+    graph = TraceGraph(repo_root=tmp_path, _resolver=grammar_for("REQ"))
     rel_path = str(spec_file.relative_to(tmp_path))
 
     # Create FILE node
@@ -2752,7 +2753,7 @@ def _make_freshness_app(tmp_path, spec_subdir="spec"):
         encoding="utf-8",
     )
 
-    graph = TraceGraph(repo_root=tmp_path)
+    graph = TraceGraph(repo_root=tmp_path, _resolver=grammar_for("REQ"))
     rel_path = str(spec_file.relative_to(tmp_path))
 
     # Create FILE node
@@ -3168,7 +3169,7 @@ class TestSpecFiles:
     @pytest.fixture
     def spec_files_graph(self):
         """Graph with FILE nodes of various types."""
-        graph = TraceGraph(repo_root=Path("/test/repo"))
+        graph = TraceGraph(repo_root=Path("/test/repo"), _resolver=grammar_for("REQ"))
 
         spec_file1 = GraphNode(
             id=file_id("spec/requirements.md"),
@@ -3277,7 +3278,7 @@ class TestSpecFiles:
     def test_spec_files_empty_when_no_spec_files(self):
         # Verifies: REQ-d00010
         """Returns empty list when no SPEC files exist."""
-        graph = TraceGraph(repo_root=Path("/test/repo"))
+        graph = TraceGraph(repo_root=Path("/test/repo"), _resolver=grammar_for("REQ"))
         code_file = GraphNode(
             id=file_id("src/main.py"),
             kind=NodeKind.FILE,

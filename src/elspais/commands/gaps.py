@@ -19,7 +19,10 @@ from elspais.graph.relations import EdgeKind
 class GapEntry:
     """A single gap: a REQ with optionally listed uncovered assertions.
 
-    ``assertions`` holds ``(assertion_id, fraction)`` pairs, where ``fraction``
+    ``assertions`` holds ``(assertion_id, label, fraction)`` triples. The label
+    is carried rather than re-derived from the id: recovering it would mean
+    splitting the id on a boundary character only the owning repository's
+    grammar knows. ``fraction``
     is the assertion's conducted coverage fraction in ``[0.0, 1.0)`` (REQ-d00069-J).
     A fraction of ``0.0`` means no coverage at all; ``0 < fraction < 1`` means
     the assertion is partially covered via REFINES conduction.
@@ -27,7 +30,8 @@ class GapEntry:
 
     req_id: str
     title: str
-    assertions: list[tuple[str, float]] = field(default_factory=list)  # empty = whole REQ uncovered
+    # empty = whole REQ uncovered
+    assertions: list[tuple[str, str, float]] = field(default_factory=list)
 
 
 @dataclass
@@ -248,14 +252,14 @@ def _uncovered_assertions(
         restrict_labels = {lbl for lbl, frac in rfractions.items() if frac > 0}
 
     covered = 1.0 - 1e-9
-    result: list[tuple[str, float]] = []
+    result: list[tuple[str, str, float]] = []
     for a in assertion_nodes:
         label = a.get_field("label", "")
         if restrict_labels is not None and label not in restrict_labels:
             continue
         frac = fractions.get(label, 0.0)
         if frac < covered:
-            result.append((a.id, frac))
+            result.append((a.id, label, frac))
     return result
 
 
@@ -290,8 +294,7 @@ def render_gap_text(gap_type: str, data: GapData) -> str:
                 # annotated with its percentage so it reads differently from
                 # an assertion with no coverage at all (fraction 0.0).
                 parts = []
-                for aid, frac in entry.assertions:
-                    label = aid.rsplit("-", 1)[-1] if "-" in aid else aid
+                for _aid, label, frac in entry.assertions:
                     if frac > 0:
                         parts.append(f"{label} — {round(frac * 100)}% via refines-conduction")
                     else:
@@ -350,7 +353,7 @@ def render_gap_markdown(gap_type: str, data: GapData) -> str:
             if entry.assertions:
                 parts = [
                     f"{aid} ({round(frac * 100)}% via refines-conduction)" if frac > 0 else aid
-                    for aid, frac in entry.assertions
+                    for aid, _label, frac in entry.assertions
                 ]
                 assertions = ", ".join(parts)
             else:
@@ -443,7 +446,12 @@ def _gap_entry_to_list(entry: GapEntry) -> list:
     """
     result: list = [entry.req_id, entry.title]
     if entry.assertions:
-        result.append([{"id": aid, "fraction": round(frac, 4)} for aid, frac in entry.assertions])
+        result.append(
+            [
+                {"id": aid, "label": label, "fraction": round(frac, 4)}
+                for aid, label, frac in entry.assertions
+            ]
+        )
     return result
 
 
@@ -453,7 +461,12 @@ def _gap_data_from_dict(data: dict[str, Any]) -> GapData:
     for gt in ("uncovered", "untested", "unvalidated", "no_assertions"):
         for item in data.get(gt, []):
             raw_assertions = item[2] if len(item) > 2 else []
-            assertions = [(a["id"], a.get("fraction", 0.0)) for a in raw_assertions]
+            # A payload that carries no label falls back to the full id
+            # rather than to an empty bracket: the id is longer than the
+            # label but it still says which assertion is uncovered.
+            assertions = [
+                (a["id"], a.get("label") or a["id"], a.get("fraction", 0.0)) for a in raw_assertions
+            ]
             getattr(gd, gt).append(GapEntry(item[0], item[1], assertions))
     for item in data.get("failing", []):
         gd.failing.append(tuple(item))  # type: ignore[arg-type]
