@@ -17,7 +17,7 @@
 | REQ-p00005 | Multi-Repository Requirements                    | prd-features.md | de05471c |
 | REQ-p00006 | Interactive Traceability Viewer                  | prd-features.md | 185217a3 |
 | REQ-p00013 | Automated Testing                                | prd-core.md     | 4318202c |
-| REQ-p00014 | Satisfies Relationship                           | prd-features.md | ee2b9541 |
+| REQ-p00014 | Satisfies Relationship                           | prd-features.md | 11ee2801 |
 | REQ-p00015 | Complete and Current Reporting                   | prd-core.md     | 9aa9a8aa |
 | REQ-p00016 | NOT APPLICABLE Status                            | prd-features.md | 2211802a |
 | REQ-p00017 | Reference Integrity Under Mutation               | prd-core.md     | 8ddf7122 |

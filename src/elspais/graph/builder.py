@@ -1237,11 +1237,43 @@ class TraceGraph:
         # Implements: REQ-d00230-C
         update_anchors_on_rename(self._comment_index, old_id, new_id, self.repo_root)
 
-        # A journey's cached body embeds its ID in the header line
-        self._reconcile_journey_bodies(node)
+        # Implements: REQ-p00017-B
+        # A journey's cached body embeds its own ID in the header line, and
+        # the identifiers it validates in its metadata. Both are references
+        # held in the graph to the former identifier, and a journey renders
+        # from that cache -- so reconciling only the renamed node would leave
+        # every journey citing it naming a requirement that no longer exists.
+        cited_by = self._journeys_validating(node)
+        self._reconcile_journey_bodies(node, *cited_by)
+        # The reconciled journeys are named on the entry because the save
+        # path derives which files to rewrite from the mutation log. A
+        # journey corrected only in memory is a journey whose file still
+        # holds the old identifier, which is the state B forbids.
+        if cited_by:
+            entry.after_state["journeys_reconciled"] = [j.id for j in cited_by]
 
         self._mutation_log.append(entry)
         return entry
+
+    @staticmethod
+    def _journeys_validating(node: GraphNode) -> list[GraphNode]:
+        """The journeys whose metadata cites *node* or one of its assertions.
+
+        A VALIDATES edge runs from the requirement to the journey, so the
+        journeys are reached by walking out of the cited node -- and out of
+        its assertions too, since a journey may name an assertion rather
+        than the whole requirement.
+        """
+        cited: list[GraphNode] = []
+        seen: set[int] = set()
+        sources = [node, *node.iter_children(edge_kinds={EdgeKind.STRUCTURES})]
+        for source in sources:
+            for edge in source.iter_edges_by_kind(EdgeKind.VALIDATES):
+                journey = edge.target
+                if journey.kind == NodeKind.USER_JOURNEY and id(journey) not in seen:
+                    seen.add(id(journey))
+                    cited.append(journey)
+        return cited
 
     def update_title(self, node_id: str, new_title: str) -> MutationEntry:
         """Update requirement title. Does not affect hash.
@@ -1708,6 +1740,16 @@ class TraceGraph:
         old_anchor = f"{parent.id}#{old_label}"
         new_anchor = f"{parent.id}#{new_label}"
         update_anchors_on_rename(self._comment_index, old_anchor, new_anchor, self.repo_root)
+
+        # Implements: REQ-p00017-B
+        # A journey naming this assertion holds the old label in its cached
+        # body, which is what it renders from. B covers an *Assertion*'s
+        # identifier as squarely as a requirement's, so the citing journeys
+        # are reconciled and named on the entry for the save path to find.
+        cited_by = self._journeys_validating(parent)
+        if cited_by:
+            self._reconcile_journey_bodies(*cited_by)
+            entry.after_state["journeys_reconciled"] = [j.id for j in cited_by]
 
         self._mutation_log.append(entry)
         return entry
@@ -3988,6 +4030,26 @@ class GraphBuilder:
         # Queue validates links for later resolution
         for addr_ref in data.get("validates", []):
             self._pending_links.append((journey_id, addr_ref, EdgeKind.VALIDATES))
+
+        # Implements: REQ-p00014-V, REQ-p00014-R
+        # A declaration outside the metadata produced no relationship. Saying
+        # so is the whole point of refusing to read it: a journey that
+        # validates less than its author wrote must not look like a journey
+        # that validated everything.
+        for section_name, declared in data.get("misplaced_validates", []):
+            where = f'section "{section_name}"' if section_name else "a section"
+            self._broken_references.append(
+                BrokenReference(
+                    source_id=journey_id,
+                    target_id=declared,
+                    edge_kind="validates",
+                    diagnostic=(
+                        f"declared in {where} rather than in the journey's "
+                        f"metadata, so it validates nothing. Move the "
+                        f"declaration up to the metadata, beside Actor and Goal."
+                    ),
+                )
+            )
 
     def _add_code_ref(self, content: ParsedContent) -> None:
         """Add code reference nodes.

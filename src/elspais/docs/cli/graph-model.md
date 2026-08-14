@@ -317,13 +317,23 @@ def run_performance_benchmark():
 User journey validates a requirement or assertion.
 **Contributes to coverage (UAT).**
 
-Written in journey files using the `Validates:` field:
+Written in journey files using the `Validates:` field, in the journey's
+metadata -- beside `Actor` and `Goal`, before the first section:
 
 ```markdown
 ## JNY-CHECKOUT-01: Complete Purchase
 
 Validates: REQ-p00005, REQ-p00006-A
 ```
+
+The metadata is the only place a journey may declare this, and the
+declaration applies to the journey as a whole. A `Validates:` line inside a
+section is not read, and is reported as a declared reference that produced
+no relationship -- a journey is regenerated from the graph when saved, so a
+second copy of the declaration would come back naming whatever it named
+when it was typed. Scoping a declaration to particular steps is a
+refinement the tool does not compute, so the syntax for it is not accepted
+rather than accepted and discarded.
 
 #### SATISFIES
 

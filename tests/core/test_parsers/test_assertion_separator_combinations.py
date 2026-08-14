@@ -641,15 +641,12 @@ _ROUNDTRIP_JOURNEY = """\
 
 **Actor**: User
 **Goal**: Use widgets
+Validates: {ref}
 
 ## Steps
 
 1. Open the widget.
 2. Frob it.
-
-## Validates
-
-Validates: {ref}
 
 *End* *Widget Journey*
 """
@@ -714,11 +711,10 @@ def test_journey_validates_line_is_written_back_in_the_configured_spelling(sep, 
     """The `Validates:` line the tool writes is composed from the live edges
     under this repository's separators.
 
-    The journey block reconstructed after a mutation carries a metadata
-    header the source file never had -- the source states its references in a
-    ``## Validates`` section -- so the header's `Validates:` line is derived
-    output, not the input echoed back. It must spell the reference the way
-    this repository spells one.
+    The journey block reconstructed after a mutation is rebuilt from the
+    live VALIDATES edges, not copied from the source text, so the
+    `Validates:` line it carries is derived output. It must spell the
+    reference the way this repository spells one.
     """
     from elspais.graph.factory import build_graph
 

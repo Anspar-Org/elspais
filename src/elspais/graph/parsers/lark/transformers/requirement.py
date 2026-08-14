@@ -653,6 +653,7 @@ class RequirementTransformer:
             "goal": None,
             "context": None,
             "validates": [],
+            "misplaced_validates": [],
             "body_lines": [],
             "sections": [],
         }
@@ -726,10 +727,19 @@ class RequirementTransformer:
             goal_match = _GOAL_RE.search(raw_text)
             if goal_match:
                 parsed_data["goal"] = goal_match.group("goal").strip()
-        if not parsed_data["validates"]:
-            validates_match = _VALIDATES_RE.search(raw_text)
-            if validates_match:
-                parsed_data["validates"] = self._parse_ref_list(validates_match.group("validates"))
+        # Implements: REQ-p00014-V
+        # A journey declares what it validates in its metadata and nowhere
+        # else. A declaration inside a section is NOT read: reading it would
+        # give the journey two states to reconcile, and the saved journey is
+        # regenerated from the graph, so the second copy comes back naming
+        # whatever it named when it was typed. It is recorded instead, so a
+        # journey validating less than its author wrote says so.
+        for section in parsed_data["sections"]:
+            match = _VALIDATES_RE.search(section.get("content") or "")
+            if match:
+                parsed_data["misplaced_validates"].append(
+                    (section.get("name") or "", match.group("validates").strip())
+                )
 
         # Implements: REQ-d00256-A
         # Extract numbered steps from the ## Steps section into addressable entries.

@@ -152,9 +152,6 @@ APP_JNY = """# User Journeys
 
 **Actor**: End User
 **Goal**: Exercise the library
-
-## Validates
-
 Validates: LIB-d00001-D
 
 *End* *JNY-OQ-App-01*

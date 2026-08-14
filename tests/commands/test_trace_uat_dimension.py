@@ -80,15 +80,12 @@ A. The system SHALL write audit entries.
 
 **Actor**: End User
 **Goal**: Authenticate
+Validates: REQ-d00001-A
 
 ## Steps
 
 1. User opens login page
 2. User enters credentials
-
-## Validates
-
-Validates: REQ-d00001-A
 
 *End* *JNY-OQ-01*
 ---

@@ -184,6 +184,8 @@ Two conformance details keep the model usable with named ID schemes. Named-compo
 
 Three uniformity guarantees complete the reference contract. Reserving `:` out of every configurable pattern element (assertion S) leaves `::` unambiguous as the composite instance-ID joiner in any federation of valid configurations. Assertions T and U extend Q from parsing to the full round trip: one set of acceptance rules and one rendered form per entity — determined by the owning repository — in every file type, so a repository configured with separator `/` cites `REQ-p00001/F` everywhere, never `-F` on one surface and `/F` on another. Journey and journey-step references ride the same contract, steps standing in for *Assertions* (REQ-p00002-G).
 
+Assertion V fixes where a journey may make that declaration, for the same reason U fixes how it is spelled. A journey that could declare its targets in either its metadata or a section has two states to reconcile whenever either changes, and reconciling them is not merely redundant work: the declaration is regenerated from the graph on save, so a journey holding a second copy is rewritten with both, one current and one as originally typed, naming different requirements after any rename. One place removes the second state rather than keeping it consistent. Metadata is that place because the declaration is about the journey as a whole, which is also the only granularity the tool computes UAT coverage at. Scoping a declaration more narrowly — some steps validating one *Assertion* while others validate another — is a coherent refinement and is deliberately absent: nothing computes step-scoped UAT credit, so admitting the syntax would accept a distinction the tool then discards. Until that refinement is built, a declaration outside the metadata is reported rather than read, because a journey silently validating less than its author wrote is the failure this requirement exists to prevent.
+
 ### Assertions
 
 A. The system SHALL support a `Satisfies:` metadata field on requirements. The target MAY be a requirement or a specific *Assertion*.
@@ -226,8 +228,12 @@ T. The system SHALL apply the owning repository's reference-acceptance rules ide
 
 U. When the system renders a reference to a requirement, *Assertion*, journey, or journey step on any surface, it SHALL emit the form determined by the owning repository's canonical ID pattern.
 
+V. A user journey SHALL declare what it validates in one place: its metadata, where the declaration applies to the journey as a whole. A validation declaration appearing anywhere else within a journey SHALL produce no validation relationship, and SHALL be reported under R as a declared reference that produced none.
+
 ### Changelog
 
+- 2026-08-14 | 11ee2801 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-14 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: a journey declares what it validates in one place, its metadata (V)
 - 2026-08-02 | ee2b9541 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-01 | 50f072e0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 064c817a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -250,7 +256,7 @@ U. When the system renders a reference to a requirement, *Assertion*, journey, o
 - 2026-05-04 | bae1b85d | - | Developer (<dev@example.com>) | Auto-fix: canonicalize term forms, update hash
 - 2026-03-30 | 9115ce0d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Satisfies Relationship* | **Hash**: ee2b9541
+*End* *Satisfies Relationship* | **Hash**: 11ee2801
 ---
 
 ## REQ-p00016: NOT APPLICABLE Status

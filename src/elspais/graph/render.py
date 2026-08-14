@@ -800,6 +800,14 @@ def _find_dirty_files(graph: FederatedGraph) -> list[Any]:
             if ref_id:
                 _mark_node_file(ref_id)
 
+        # Implements: REQ-p00017-B
+        # A rename corrects the cached body of every journey citing the
+        # renamed node. Those journeys are not themselves the target of the
+        # mutation, so their files would otherwise never be rewritten and
+        # the correction would stay in memory.
+        for journey_id in entry.after_state.get("journeys_reconciled", ()) or ():
+            _mark_node_file(journey_id)
+
         # For remainder mutations, find the parent requirement's file
         if entry.operation in (
             "update_remainder",
