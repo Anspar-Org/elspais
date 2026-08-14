@@ -20,6 +20,8 @@ All notable changes to elspais will be documented in this file.
 
 ### Fixed
 
+- **`rules.format.allowed_statuses` is refused rather than dropped** — the statuses a requirement may declare are the ones named in `[rules.format.status_roles]`, whose lists say what each status means as well as that it exists. Naming the set a second time could only agree or disagree with them, so the setting was superseded — and then dropped in silence, which left a project believing it had said something. It is now reported, naming the section that answers instead.
+
 - **A configuration is validated in one place, and a section it does not know is refused** — twelve copies of the same validation helper existed, each filtering the dictionary to the schema's own field names before validating it. They needed to, because the loader withheld three sections from validation and then put them back into what it returned. Nothing has ever read `[requirements]`, `[paths]` or `[references]`, so all they did was let an obsolete or mistyped section pass in silence. The loader no longer withholds them, the schema refuses them by name, and the twelve copies are one.
 - **`scanning.journey.results_file` is a setting again** — the health check read it and the documentation described it, and the schema had no such field, so a project configuring another path for its UAT results was refused and the path stayed fixed at its default.
 - **A relative UAT results path resolved against the working directory** — the repository root was passed through a configuration key no configuration file can carry, which only a test ever wrote, so in use the branch never ran. It is taken from the graph being checked, which knows it.

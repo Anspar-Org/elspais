@@ -223,10 +223,17 @@ def load_config(config_path: Path) -> dict[str, Any]:
             f"form in [id-patterns]; see `elspais docs config`."
         )
 
-    # Strip removed field: allowed_statuses (now derived from status_roles)
+    # The set of statuses a requirement may declare is the union of the
+    # lists in [rules.format.status_roles], so naming it again here could
+    # only agree or disagree with them. It was dropped silently, which left
+    # a project believing it had said something.
     fmt = merged.get("rules", {}).get("format", {})
     if "allowed_statuses" in fmt:
-        fmt.pop("allowed_statuses")
+        raise ValueError(
+            f"{config_path}: rules.format.allowed_statuses is no longer read. The "
+            f"statuses a requirement may declare are the ones named in "
+            f"[rules.format.status_roles], which also says what each one means."
+        )
 
     # Validate via Pydantic schema
     from elspais.config.schema import ElspaisConfig

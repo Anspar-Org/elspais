@@ -42,7 +42,6 @@ allow_structural_orphans = true
 require_hash = true
 require_assertions = true
 require_status = true
-allowed_statuses = ["Active", "Draft", "Proposed", "Deprecated"]
 
 [rules.format.status_roles]
 active = ["Active"]

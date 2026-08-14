@@ -45,7 +45,6 @@ allow_structural_orphans = false
 require_hash = true
 require_assertions = true
 require_status = true
-allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
 
 [changelog]
 hash_current = false

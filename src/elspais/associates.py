@@ -126,8 +126,8 @@ def discover_associate_from_path(
 
     from elspais.config import load_config
 
-    # Route through the single canonical loader so migrations and field
-    # strips (e.g. legacy rules.format.allowed_statuses) apply consistently.
+    # Route through the single canonical loader so migrations apply
+    # consistently.
     # Implements: REQ-d00202-I
     # Tolerated failure, scoped to config parse/validation errors: a sibling
     # with a stale or incompatible .elspais.toml is reported as unloadable
