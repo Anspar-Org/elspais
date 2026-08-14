@@ -93,9 +93,6 @@ directories = ["spec"]
 enabled = true
 directories = ["tests"]
 file_patterns = ["test_*.py"]
-
-[references]
-enabled = true
 """
         )
 
@@ -205,9 +202,6 @@ directories = ["spec"]
 
 [scanning.test]
 enabled = false
-
-[references]
-enabled = true
 """
         )
 
@@ -319,9 +313,6 @@ directories = ["spec"]
 enabled = true
 directories = ["tests"]
 file_patterns = ["test_*.py"]
-
-[references]
-enabled = true
 """
         )
 
@@ -456,9 +447,6 @@ directories = ["spec"]
 enabled = true
 directories = ["tests"]
 file_patterns = ["test_*.py"]
-
-[references]
-enabled = true
 """
         )
 
@@ -578,9 +566,6 @@ directories = ["spec"]
 enabled = true
 directories = ["tests"]
 file_patterns = ["test_*.py"]
-
-[references]
-enabled = true
 """
         )
 
@@ -713,9 +698,6 @@ directories = ["spec"]
 enabled = true
 directories = ["tests"]
 file_patterns = ["test_*.py"]
-
-[references]
-enabled = true
 """
         )
 

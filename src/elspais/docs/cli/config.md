@@ -117,7 +117,6 @@ style = "numeric"          # numeric | camelCase | PascalCase | snake_case | keb
 digits = 5                 # Number of digits (0 = variable length, numeric style only)
 leading_zeros = true       # Pad with zeros (00001 vs 1, numeric style only)
 # pattern = "[A-Z]{2}[0-9]{3}"   # Required when style = "regex"; ignored otherwise
-# max_length = 0                 # Reserved (not currently enforced)
 
 [id-patterns.assertions]
 label_style = "uppercase"  # "uppercase" | "numeric" | "alphanumeric" | "numeric_1based"

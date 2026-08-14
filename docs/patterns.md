@@ -252,7 +252,6 @@ the configuration above, `dev` may implement `dev`, `ops`, and `prd`, while
 | `digits` | `numeric` | Maximum number of digits (0 = variable) |
 | `leading_zeros` | `numeric` | Pad with zeros: `00001` vs `1` |
 | `pattern` | `regex` | Regex the component must match (required for `regex`) |
-| `max_length` | all | Accepted but not currently enforced |
 
 ### Numeric (`style = "numeric"`)
 

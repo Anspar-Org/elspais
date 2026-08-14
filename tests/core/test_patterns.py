@@ -181,7 +181,9 @@ class TestIdPatternConfig:
     def test_REQ_p00002_A_from_dict_defaults(self):
         config = IdPatternConfig.from_dict({})
         assert config.namespace == "REQ"
-        assert config.canonical_template == "{namespace}-{type}{component}"
+        # The default is the schema's own, so an unconfigured caller gets the
+        # same grammar a configuration file would produce.
+        assert config.canonical_template == "{namespace}-{level.letter}{component}"
         assert config.component.style == "numeric"
 
     def test_REQ_p00002_A_from_dict_output_forms(self):

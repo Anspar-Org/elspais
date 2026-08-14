@@ -271,7 +271,6 @@ class TestGeneratedComments:
         config = ElspaisConfig.model_validate(dict(parsed))
         # Fields that were previously None-default are now explicit
         assert config.id_patterns.component.pattern == ""
-        assert config.id_patterns.component.max_length == 0
         assert config.id_patterns.assertions.zero_pad is False
         assert config.validation.hash_algorithm == "sha256"
         assert config.validation.hash_length == 8

@@ -88,6 +88,13 @@ class AssertionFormat:
 
 
 # Implements: REQ-d00251-L
+def _schema_default_canonical() -> str:
+    """The canonical identifier template a configuration defaults to."""
+    from elspais.config.schema import IdPatternsConfig
+
+    return IdPatternsConfig.model_fields["canonical"].default
+
+
 @dataclass(frozen=True)
 class IdGrammar:
     """The regex fragments of one repository's identifier grammar.
@@ -181,7 +188,11 @@ class IdPatternConfig:
         namespace = project.get("namespace", "REQ")
 
         patterns = data.get("id-patterns", {})
-        canonical = patterns.get("canonical", "{namespace}-{type}{component}")
+        # The schema's default, not a second copy of it. This one had drifted
+        # to a token the schema stopped using, so a caller reaching here
+        # without a canonical template got a different grammar than any
+        # configuration file produces.
+        canonical = patterns.get("canonical") or _schema_default_canonical()
         aliases = dict(patterns.get("aliases", {}))
 
         # Levels are declared in the top-level [levels] section. An

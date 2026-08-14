@@ -42,11 +42,6 @@ from elspais.utilities.patterns import IdResolver, build_resolver
 _log = logging.getLogger(__name__)
 
 # Known schema fields (by alias and Python name) for filtering non-schema keys
-_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
-    ElspaisConfig.model_fields.keys()
-)
-
-
 def _resolve_coverage_file_node(graph, source_file, lcov_path, repo_root):
     """Resolve an lcov SF path to a repo-relative FILE node.
 
@@ -181,15 +176,10 @@ def _ingest_target_results(
 
 
 def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
-    """Validate a config dict into ElspaisConfig, stripping non-schema keys.
+    """Validate a config dict into ElspaisConfig (see config.validate_config)."""
+    from elspais.config import validate_config
 
-    The config dict from get_config() may contain legacy keys (e.g. 'patterns')
-    that were consumed by migration but not removed. We filter those out before
-    validation since ElspaisConfig uses extra='forbid'.
-
-    """
-    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
-    return ElspaisConfig.model_validate(filtered)
+    return validate_config(config)
 
 
 # Implements: REQ-d00128-C

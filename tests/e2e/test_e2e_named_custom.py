@@ -282,7 +282,6 @@ class TestEmptyAssertions:
         cfg["id-patterns"]["component"] = {
             "style": "regex",
             "pattern": "[A-Z][a-zA-Z0-9]+",
-            "max_length": 32,
         }
 
         # Write spec file manually (no assertions section)

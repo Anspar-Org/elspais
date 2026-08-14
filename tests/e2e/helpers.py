@@ -302,8 +302,6 @@ def base_config(
     testing_enabled: bool = False,
     test_dirs: list[str] | None = None,
     test_patterns: list[str] | None = None,
-    # References
-    comment_styles: list[str] | None = None,
     # Associated
     associated_enabled: bool = False,
     associated_position: str = "after_prefix",
@@ -400,9 +398,6 @@ def base_config(
             "directories": test_dirs or ["tests"],
             "file_patterns": test_patterns or ["test_*.py", "*_test.py"],
         }
-
-    if comment_styles:
-        cfg.setdefault("references", {})["comment_styles"] = comment_styles
 
     if associated_enabled:
         cfg["id-patterns"]["associated"] = {

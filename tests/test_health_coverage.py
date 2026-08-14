@@ -33,15 +33,21 @@ def _make_req(req_id: str, level: str = "dev", status: str = "Active") -> GraphN
     return node
 
 
-def _make_graph(*nodes: GraphNode) -> FederatedGraph:
-    """Wrap requirement nodes in a FederatedGraph for testing."""
+def _make_graph(*nodes: GraphNode, repo_root: Path | None = None) -> FederatedGraph:
+    """Wrap requirement nodes in a FederatedGraph for testing.
+
+    `repo_root` is the directory a relative configured path resolves against;
+    checks read it from the graph they are given.
+    """
     tg = TraceGraph()
     for node in nodes:
         tg._index[node.id] = node
         if node.kind == NodeKind.REQUIREMENT:
             tg._roots.append(node)
     return FederatedGraph.from_single(
-        tg, config={"project": {"name": "test", "namespace": "REQ"}}, repo_root=Path(".")
+        tg,
+        config={"project": {"name": "test", "namespace": "REQ"}},
+        repo_root=repo_root or Path("."),
     )
 
 
@@ -417,9 +423,8 @@ class TestCheckUatResults:
         """Missing CSV file produces info-severity passed check."""
         config = {
             "scanning": {"journey": {"results_file": "nonexistent.csv"}},
-            "_git_root": str(tmp_path),
         }
-        graph = _make_graph()
+        graph = _make_graph(repo_root=tmp_path)
         result = check_uat_results(graph, config=config)
 
         assert result.passed is True
@@ -554,7 +559,7 @@ class TestCheckUatResults:
 
     # Verifies: REQ-d00219-B
     def test_git_root_path_resolution(self, tmp_path):
-        """Relative results_file path resolves via _git_root config."""
+        """Relative results_file path resolves against the graph's repo root."""
         subdir = tmp_path / "subdir"
         subdir.mkdir()
         csv_file = tmp_path / "my-results.csv"
@@ -562,9 +567,8 @@ class TestCheckUatResults:
 
         config = {
             "scanning": {"journey": {"results_file": "my-results.csv"}},
-            "_git_root": str(tmp_path),
         }
-        graph = _make_graph()
+        graph = _make_graph(repo_root=tmp_path)
         result = check_uat_results(graph, config=config)
 
         assert result.passed is True

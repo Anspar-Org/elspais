@@ -17,22 +17,15 @@ def collect_broken(
     config: dict[str, Any] | None,
 ) -> list[BrokenReference]:
     """Collect broken references, respecting allow_unresolved_cross_repo."""
-    from elspais.config.schema import ElspaisConfig
 
     broken = graph.broken_references()
 
     allow_unresolved = False
     if config is not None:
-        _SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
-            ElspaisConfig.model_fields.keys()
-        )
-        filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
-        assoc = filtered.get("associates")
-        if isinstance(assoc, dict) and "paths" in assoc:
-            filtered.pop("associates", None)
+        from elspais.config import validate_config
+
         try:
-            tc = ElspaisConfig.model_validate(filtered)
-            allow_unresolved = tc.validation.allow_unresolved_cross_repo
+            allow_unresolved = validate_config(config).validation.allow_unresolved_cross_repo
         except Exception:
             pass
 

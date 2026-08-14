@@ -223,14 +223,6 @@ def load_config(config_path: Path) -> dict[str, Any]:
             f"form in [id-patterns]; see `elspais docs config`."
         )
 
-    # Strip legacy/unknown keys before Pydantic validation, but keep them
-    # for backward-compatible config.get() access afterwards.
-    _LEGACY_TOP_LEVEL_KEYS = {"requirements", "paths", "references"}
-    stripped: dict[str, Any] = {}
-    for key in _LEGACY_TOP_LEVEL_KEYS:
-        if key in merged:
-            stripped[key] = merged.pop(key)
-
     # Strip removed field: allowed_statuses (now derived from status_roles)
     fmt = merged.get("rules", {}).get("format", {})
     if "allowed_statuses" in fmt:
@@ -260,10 +252,6 @@ def load_config(config_path: Path) -> dict[str, Any]:
 
     # Produce hyphenated dict for backward-compatible access
     result = validated.model_dump(by_alias=True)
-
-    # Restore stripped legacy keys so existing config access still works
-    for key, value in stripped.items():
-        result[key] = value
 
     return result
 
@@ -905,6 +893,7 @@ __all__ = [
     "load_config",
     "find_config_file",
     "find_git_root",
+    "validate_config",
     "get_config",
     "get_spec_directories",
     "get_code_directories",
@@ -921,6 +910,22 @@ __all__ = [
 
 
 # Implements: REQ-d00202-A+B+C
+def validate_config(config: dict[str, Any]) -> Any:
+    """Validate a configuration dictionary into the typed schema.
+
+    The one place a loaded configuration is turned into `ElspaisConfig`.
+    Eleven copies of this existed, each filtering the dictionary to the
+    schema's own field names first, because `load_config` used to hand back
+    keys it had itself withheld from validation. It no longer does, so the
+    filter is gone with them: a key the schema does not know is a key the
+    configuration should not have carried, and it is reported here rather
+    than dropped by every consumer separately.
+    """
+    from elspais.config.schema import ElspaisConfig
+
+    return ElspaisConfig.model_validate(config)
+
+
 def get_associates_config(
     config: dict[str, Any],
     repo_root: Path | None = None,

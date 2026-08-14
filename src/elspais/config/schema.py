@@ -88,7 +88,6 @@ class ComponentConfig(_StrictModel):
     digits: int = 5
     leading_zeros: bool = True
     pattern: str = ""
-    max_length: int = 0
 
     @field_validator("style", mode="before")
     @classmethod
@@ -543,6 +542,11 @@ class TestScanningConfig(ScanningKindConfig):
 class JourneyScanningConfig(ScanningKindConfig):
     directories: list[str] = Field(default_factory=lambda: ["spec"])
     file_patterns: list[str] = Field(default_factory=lambda: ["*.md"])
+    # Where UAT results are read from. The health check has always read this
+    # setting and the shipped docs have always described it; only the field
+    # was missing, so the path was fixed at its default and a project that
+    # configured another one was refused.
+    results_file: str = "uat-results.csv"
 
 
 class DocsScanningConfig(ScanningKindConfig):

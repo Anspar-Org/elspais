@@ -159,7 +159,7 @@ class TestIgnorePatterns:
 
 @pytest.mark.e2e
 class TestReferencesOverrides:
-    """Config: comment_styles=['#', '//'] — JS // Implements comments work."""
+    """JS `//` Implements comments are read as references."""
 
     def test_js_comment_style(self, project):
         # src/feature.js contains "// Implements: PROJ-3" — should parse without error

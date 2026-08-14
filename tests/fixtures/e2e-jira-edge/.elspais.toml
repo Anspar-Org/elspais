@@ -51,6 +51,3 @@ retired = ["Deprecated"]
 
 [changelog]
 hash_current = false
-
-[references]
-comment_styles = ["#", "//"]

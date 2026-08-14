@@ -262,11 +262,6 @@
           "default": "",
           "title": "Pattern",
           "type": "string"
-        },
-        "max_length": {
-          "default": 0,
-          "title": "Max Length",
-          "type": "integer"
         }
       },
       "title": "ComponentConfig",
@@ -536,6 +531,11 @@
           },
           "title": "Skip Dirs",
           "type": "array"
+        },
+        "results_file": {
+          "default": "uat-results.csv",
+          "title": "Results File",
+          "type": "string"
         }
       },
       "title": "JourneyScanningConfig",

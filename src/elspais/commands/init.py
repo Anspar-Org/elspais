@@ -175,7 +175,6 @@ _FIELD_COMMENTS: dict[str, str] = {
     "id-patterns.component.pattern": (
         'Custom regex (required for `style = "regex"`; ignored otherwise)'
     ),
-    "id-patterns.component.max_length": "Max length (case-style components only)",
     "id-patterns.assertions": "Assertion label format",
     "id-patterns.assertions.label_style": (
         '"uppercase" (A,B,C) | "numeric" (0,1,2) | "numeric_1based" | "alphanumeric"'

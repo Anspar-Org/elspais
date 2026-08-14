@@ -29,18 +29,11 @@ if TYPE_CHECKING:
     from elspais.graph.GraphNode import GraphNode
     from elspais.utilities.patterns import IdResolver
 
-_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
-    ElspaisConfig.model_fields.keys()
-)
-
-
 def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
-    """Validate a config dict into ElspaisConfig, stripping non-schema keys."""
-    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
-    assoc = filtered.get("associates")
-    if isinstance(assoc, dict) and "paths" in assoc:
-        filtered.pop("associates", None)
-    return ElspaisConfig.model_validate(filtered)
+    """Validate a config dict into ElspaisConfig (see config.validate_config)."""
+    from elspais.config import validate_config
+
+    return validate_config(config)
 
 
 # Implements: REQ-d00085-I, REQ-d00204-D
@@ -2996,11 +2989,15 @@ def check_uat_results(graph: FederatedGraph, config: dict[str, Any] | None = Non
 
     results_path = Path(results_file)
     if not results_path.is_absolute():
-        git_root = cfg.get("_git_root")
-        if git_root:
-            results_path = Path(git_root) / results_path
+        # Relative to the repository being checked, which the graph knows.
+        # This used to read a `_git_root` key out of the configuration --
+        # a key no configuration file can carry and only a test ever wrote,
+        # so in use the branch never ran and the path resolved against the
+        # working directory instead of the repository.
+        repo_root = getattr(graph, "repo_root", None)
+        if repo_root:
+            results_path = Path(repo_root) / results_path
         elif not results_path.exists():
-            # Try cwd
             results_path = Path.cwd() / results_file
 
     if not results_path.exists():
