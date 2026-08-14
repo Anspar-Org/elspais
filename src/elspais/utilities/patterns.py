@@ -1142,21 +1142,37 @@ class FederatedIdReader:
             self._extra_item_regexes[key] = compiled
         return compiled
 
-    # Implements: REQ-d00269-G
-    def parse_ref_list(self, text: str, *, extra_items: Sequence[str] = ()) -> list[str] | None:
+    # Implements: REQ-d00269-G, REQ-p00014-T
+    def parse_ref_list(
+        self,
+        text: str,
+        *,
+        extra_items: Sequence[str] = (),
+        on_unmatched: str = "reject",
+    ) -> list[str] | None:
         """The references *text* spells as a separated list, or None.
 
-        A *Traceability* keyword introduces a list of references and nothing
-        else, so each item is matched whole against a member's grammar rather
-        than searched for inside the item.  Searching would read
-        ``XREQ-d00001`` as ``REQ-d00001`` -- an edge to a requirement the
-        author never named, and one nothing reports, since a reference that
-        resolved is a reference that looked fine.
+        The one place a list of references is divided into its items.  A
+        *Traceability* keyword introduces a list and nothing else, so each
+        item is matched whole against a member's grammar rather than searched
+        for inside the item.  Searching would read ``XREQ-d00001`` as
+        ``REQ-d00001`` -- an edge to a requirement the author never named, and
+        one nothing reports, since a reference that resolved is a reference
+        that looked fine.
 
-        None means *text* is not such a list.  It is one answer for the whole
-        text, not per item: a target the grammar can only partly account for
-        is a target read wrongly, so the caller reports the line rather than
-        keeping whichever items happened to parse.
+        What becomes of an item no grammar accounts for is the caller's
+        policy, and the only thing that varies between surfaces:
+
+        ``reject``
+            None for the whole text.  A scanned annotation is found in the
+            wild rather than authored as data, so a target the grammar can
+            only partly account for is a target read wrongly, and the caller
+            reports the line rather than keeping whichever items parsed.
+        ``keep``
+            The item is carried through as written.  A reference authored in
+            a spec file is data, and a wrong one has to survive being read in
+            order to be reported as a broken reference; dropping the line
+            would retire the diagnostic along with the typo.
 
         Args:
             text: The content a keyword introduced, with the keyword and its
@@ -1164,7 +1180,10 @@ class FederatedIdReader:
             extra_items: Patterns for items belonging to a grammar this
                 reader does not own -- a journey step, say -- which are
                 accepted verbatim rather than normalized.
+            on_unmatched: ``"reject"`` or ``"keep"``, as above.
         """
+        if on_unmatched not in ("reject", "keep"):
+            raise ValueError(f"on_unmatched must be 'reject' or 'keep', got {on_unmatched!r}")
         stripped = text.strip()
         if not stripped:
             return None
@@ -1174,11 +1193,18 @@ class FederatedIdReader:
         for part in stripped.split(REF_LIST_SEPARATOR):
             candidate = part.strip()
             if not candidate:
-                return None
+                if on_unmatched == "reject":
+                    return None
+                continue
             if item.fullmatch(candidate):
                 ref = self.normalize(candidate)
             elif any(extra.fullmatch(candidate) for extra in extras):
                 ref = candidate
+            elif on_unmatched == "keep":
+                # normalize() keeps a reference no member claims visible
+                # rather than discarding it, which is what carries a typo
+                # through to the broken-reference report.
+                ref = self.normalize(candidate)
             else:
                 return None
             if ref not in refs:

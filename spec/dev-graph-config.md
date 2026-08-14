@@ -245,6 +245,8 @@ K. The *Assertion* separator and the multi-*Assertion* separator SHALL each be e
 
 L. A repository's identifier grammar SHALL be derived from that repository's own identifier configuration, so that a process holding several repositories at once applies each repository's grammar only to that repository.
 
+M. Neither the *Assertion* separator nor the multi-*Assertion* separator SHALL be the character that divides one reference from the next within a list of references. A configuration that declares either as that character SHALL be rejected at validation time, naming the character, the role it already holds, and a character available instead.
+
 ### Rationale
 
 An identifier is read left to right, so every boundary inside it has to be findable without knowing what follows. A separator drawn from the characters a component may itself contain destroys that boundary: the component absorbs the separator and the label after it, and the reference resolves to a different requirement rather than failing. The result is a wrong answer, not an error, which is why this is rejected at validation time rather than warned about later.
@@ -257,8 +259,12 @@ K is what makes F and J decidable. Both are stated over *a character*, which lea
 
 The alphabets themselves are configuration rather than obligation: which ones a repository may choose belongs to the configuration surface, while H fixes what any of them must be — ordered, with a definite beginning and end, so that a label can be placed in it and the label after it named. That is what lets a label missing from the middle of a series be evidence of loss rather than of removal, and it is what ends a series without a separate count: a requirement runs out of labels when its alphabet does.
 
+M extends F and J outward. Those two protect a boundary inside one reference; M protects the boundary between two of them. A list is divided before its items are read, so a separator that also divides references is spent on the outer boundary first: what reaches the identifier reader is a fragment ending where the list was cut, and a bare label with no requirement in front of it. Both halves fail quietly — the fragment resolves to the requirement it names without the labels the author attached, and the orphaned label resolves to nothing and is carried as an unresolved reference. As with F, the outcome is a wrong answer rather than an error, so the configuration is refused rather than tolerated. Stating the rule over the dividing character rather than over a particular punctuation mark keeps it true of whatever character holds that role.
+
 ### Changelog
 
+- 2026-08-14 | 09f5a257 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-14 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: an assertion separator may not also be the character dividing two references (M)
 - 2026-08-13 | d83f4fd6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-13 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: repoint G's placeholder, which named a requirement that has since been retired itself
 - 2026-08-12 | d6d44bc9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -276,7 +282,7 @@ The alphabets themselves are configuration rather than obligation: which ones a 
 - 2026-05-11 | e04a4e37 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize term forms, update hash
 - 2026-05-11 | - | - | Developer (<dev@example.com>) | Initial authoring: introduce explicit case-style vocabulary and configurable assertion separator.
 
-*End* *A Repository's Identifier Grammar* | **Hash**: d83f4fd6
+*End* *A Repository's Identifier Grammar* | **Hash**: 09f5a257
 ---
 
 ## REQ-d00270: Single-Authority Identifier Grammar Derivation

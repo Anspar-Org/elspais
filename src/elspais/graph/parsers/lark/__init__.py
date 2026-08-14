@@ -253,7 +253,7 @@ class FileDispatcher:
         neutralized = self._neutralize_fenced_blocks(content)
         parser = self._get_req_parser()
         tree = parser.parse(neutralized)
-        transformer = RequirementTransformer(self._resolver)
+        transformer = RequirementTransformer(self._resolver, self._reader)
         return transformer.transform(tree, source=original_content)
 
     def dispatch_code(

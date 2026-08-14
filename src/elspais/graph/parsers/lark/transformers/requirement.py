@@ -108,8 +108,17 @@ class RequirementTransformer:
     tokens.  Produces output identical to the old parser pipeline.
     """
 
-    def __init__(self, resolver: IdResolver) -> None:
+    def __init__(self, resolver: IdResolver, reader: Any = None) -> None:
         self.resolver = resolver
+        # The one authority for dividing a reference list into its items.
+        # A transformer given no federation still gets a reader: over a
+        # single repository it emits that repository's own fragments, so
+        # the reading is unchanged and there is still only one of it.
+        if reader is None:
+            from elspais.utilities.patterns import FederatedIdReader
+
+            reader = FederatedIdReader(resolver)
+        self.reader = reader
 
     def transform(self, tree: Tree, source: str = "") -> list[ParsedContent]:
         """Transform the full parse tree into a list of ParsedContent.
@@ -371,15 +380,15 @@ class RequirementTransformer:
                 elif child.type == "STATUS_FIELD":
                     result["status"] = val
                 elif child.type == "IMPLEMENTS_FIELD":
-                    result["implements"] = self._parse_refs(val)
+                    result["implements"] = self._parse_ref_list(val)
                 elif child.type == "REFINES_FIELD":
-                    result["refines"] = self._parse_refs(val)
+                    result["refines"] = self._parse_ref_list(val)
                 # Implements: REQ-p00014-A
                 elif child.type == "SATISFIES_FIELD":
-                    result["satisfies"] = self._parse_refs(val)
+                    result["satisfies"] = self._parse_ref_list(val)
                 # Implements: REQ-d00252
                 elif child.type == "INTEGRATES_FIELD":
-                    result["integrates"] = self._parse_refs(val)
+                    result["integrates"] = self._parse_ref_list(val)
                 # Implements: REQ-p00014-E
                 elif child.type == "TEMPLATE_FIELD":
                     result["template"] = True
@@ -678,7 +687,7 @@ class RequirementTransformer:
                 token = child.children[0]
                 text = str(token)
                 val = re.sub(r"^[Vv]alidates[:=\s]\s*", "", text).strip()
-                parsed_data["validates"] = [ref.strip() for ref in val.split(",") if ref.strip()]
+                parsed_data["validates"] = self._parse_ref_list(val)
 
             elif child.data == "jny_body_line":
                 # Preamble body text (after metadata, before sections)
@@ -720,10 +729,7 @@ class RequirementTransformer:
         if not parsed_data["validates"]:
             validates_match = _VALIDATES_RE.search(raw_text)
             if validates_match:
-                refs_str = validates_match.group("validates")
-                parsed_data["validates"] = [
-                    ref.strip() for ref in refs_str.split(",") if ref.strip()
-                ]
+                parsed_data["validates"] = self._parse_ref_list(validates_match.group("validates"))
 
         # Implements: REQ-d00256-A
         # Extract numbered steps from the ## Steps section into addressable entries.
@@ -953,21 +959,20 @@ class RequirementTransformer:
     # Reference parsing
     # ------------------------------------------------------------------
 
-    def _parse_refs(self, refs_str: str) -> list[str]:
-        """Parse comma-separated reference list, normalizing to canonical form."""
+    def _parse_ref_list(self, refs_str: str) -> list[str]:
+        """The references a spec-file list names, each kept whether or not it resolves.
+
+        Dividing the list is the reader's job and only the reader's; what a
+        spec file adds is that a reference it cannot account for is retained
+        rather than discarded, because a wrong reference has to survive being
+        read in order to be reported as a broken one.
+        """
         if not refs_str:
             return []
-        stripped = refs_str.strip()
-        if stripped in _NO_REF_VALUES:
+        if refs_str.strip() in _NO_REF_VALUES:
             return []
-        parts = [p.strip() for p in refs_str.split(",")]
-        result = []
-        for p in parts:
-            if not p or p in _NO_REF_VALUES:
-                continue
-            canonical = self.resolver.to_canonical(p)
-            result.append(canonical if canonical else p)
-        return result
+        refs = self.reader.parse_ref_list(refs_str, on_unmatched="keep") or []
+        return [ref for ref in refs if ref not in _NO_REF_VALUES]
 
     # ------------------------------------------------------------------
     # Helpers

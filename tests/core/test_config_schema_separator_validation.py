@@ -201,3 +201,40 @@ class TestSeparatorLength:
         cfg = ElspaisConfig.model_validate(_payload())
         assert cfg.id_patterns.assertions.separator == "-"
         assert cfg.id_patterns.assertions.multi_separator == "+"
+
+
+class TestSeparatorMustNotDivideReferences:
+    """A character a reference list already spends cannot also join an
+    identifier to its label.
+
+    A *Traceability* keyword introduces a list, and the list is divided into
+    its items before any item is read. A "," inside an identifier is
+    therefore consumed by the outer boundary first: what reaches the reader
+    is a truncated reference and a bare label with no requirement in front of
+    it -- no edge, no diagnostic. The configuration is refused instead.
+    """
+
+    @pytest.mark.parametrize("field", ["separator", "multi_separator"])
+    def test_reference_list_separator_rejected(self, field):
+        # Verifies: REQ-d00251-M
+        with pytest.raises(ValidationError) as excinfo:
+            ElspaisConfig.model_validate(
+                _payload(assertions={"label_style": "uppercase", field: ","})
+            )
+        msg = str(excinfo.value)
+        assert field in msg, f"the refusal must name the offending field; got {msg!r}"
+        assert '","' in msg, f"the refusal must name the offending character; got {msg!r}"
+        assert "divides" in msg, (
+            "the refusal must say the character is already spent dividing one "
+            f"reference from the next; got {msg!r}"
+        )
+
+    @pytest.mark.parametrize("field", ["separator", "multi_separator"])
+    def test_an_unspent_character_is_still_accepted(self, field):
+        """The refusal is about this one character's other role, not about
+        departing from the shipped defaults."""
+        # Verifies: REQ-d00251-M
+        cfg = ElspaisConfig.model_validate(
+            _payload(assertions={"label_style": "uppercase", field: "&"})
+        )
+        assert getattr(cfg.id_patterns.assertions, field) == "&"

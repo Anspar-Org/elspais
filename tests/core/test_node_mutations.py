@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from elspais.graph.builder import GraphBuilder, TraceGraph
+from elspais.graph.GraphNode import NodeKind
 from elspais.graph.parsers import ParsedContent
 from tests.core.graph_test_helpers import grammar_for
 
@@ -51,9 +52,27 @@ def build_hierarchy_graph() -> TraceGraph:
     return builder.build()
 
 
-def build_graph_with_assertions() -> TraceGraph:
+def slash_grammar():
+    """An identifier grammar separating a label from its requirement with "/".
+
+    A repository chooses that boundary character; "-" is only the shipped
+    default. Composing an assertion id needs whichever one this repository
+    declares.
+    """
+    from elspais.config import config_defaults
+    from elspais.utilities.patterns import build_resolver
+
+    config = config_defaults()
+    config["project"] = {**config.get("project", {}), "namespace": "REQ"}
+    id_patterns = {**config.get("id-patterns", {})}
+    id_patterns["assertions"] = {**id_patterns.get("assertions", {}), "separator": "/"}
+    config["id-patterns"] = id_patterns
+    return build_resolver(config)
+
+
+def build_graph_with_assertions(resolver=None) -> TraceGraph:
     """Build a graph with a requirement that has assertions."""
-    builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
+    builder = GraphBuilder(namespace="REQ", resolver=resolver or grammar_for("REQ"))
     builder.add_parsed_content(
         make_req(
             "REQ-p00001",
@@ -120,6 +139,44 @@ class TestRenameNode:
         # New assertion IDs exist
         assert graph.find_by_id("REQ-p00099-A") is not None
         assert graph.find_by_id("REQ-p00099-B") is not None
+
+    # Verifies: REQ-o00062-A, REQ-p00014-U
+    def test_rename_updates_assertions_under_a_custom_separator(self):
+        """The renamed assertions are spelled with the repository's own
+        assertion separator.
+
+        The separator between a requirement and its assertion label is
+        configuration, so a rename that composes the old assertion id with a
+        "-" of its own looks up an id this repository never issued, finds
+        nothing, and leaves every assertion named for the requirement's
+        former id.
+        """
+        graph = build_graph_with_assertions(resolver=slash_grammar())
+
+        assert graph.find_by_id("REQ-p00001/A") is not None
+        assert graph.find_by_id("REQ-p00001/B") is not None
+
+        graph.rename_node("REQ-p00001", "REQ-p00042")
+
+        assert graph.find_by_id("REQ-p00042/A") is not None, (
+            "The rename must cascade to the assertions under the configured "
+            "separator; they are still named for the requirement's old id."
+        )
+        assert graph.find_by_id("REQ-p00042/B") is not None
+        assert graph.find_by_id("REQ-p00001/A") is None
+        assert graph.find_by_id("REQ-p00001/B") is None
+        # No assertion is spelled under a separator this repository does not
+        # configure, whichever id it is attached to.
+        assert graph.find_by_id("REQ-p00042-A") is None
+        assert graph.find_by_id("REQ-p00001-A") is None
+
+        renamed = graph.find_by_id("REQ-p00042")
+        assert sorted(
+            child.id for child in renamed.iter_children() if child.kind is NodeKind.ASSERTION
+        ) == [
+            "REQ-p00042/A",
+            "REQ-p00042/B",
+        ]
 
     # Verifies: REQ-o00062-A
     def test_rename_preserves_title(self):

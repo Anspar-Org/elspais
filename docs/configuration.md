@@ -163,6 +163,9 @@ max_count = 26             # Maximum assertions per requirement
 # component nor an assertion label, and `multi_separator` must be a character
 # that cannot appear in a label. A kebab-case component therefore rules out
 # separator = "-", and numeric labels rule out a digit as multi_separator.
+# Neither may be "," — that character already divides one reference from the
+# next in a list, and a list is split before its items are read, so a comma
+# inside an identifier never survives to reach the identifier reader.
 # Use "/" where the default collides. ":" is refused outright, in every
 # setting an identifier could carry one through: it separates the parts of a
 # node identifier and "::" joins a declaring requirement to a template's, so

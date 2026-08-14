@@ -149,6 +149,11 @@ wrong requirement instead of failing.
 - `assertions.multi_separator` must be a character that cannot appear in a
   label. So `numeric` labels rule out digits, and `numeric_1based` rules out
   `"0"` as well, since `10` is a legal label.
+- Neither separator may be `","`, which already divides one reference from
+  the next in a list. A list is split before its items are read, so that
+  character never reaches the identifier reader as part of an identifier:
+  `Implements: REQ-p00001,A,B` would be read as three references, one of
+  them a bare label naming no requirement.
 
 The fix is a different `assertions.separator` — commonly `"/"`.
 

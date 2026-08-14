@@ -37,7 +37,7 @@ from elspais.graph.parsers import ParserRegistry
 from elspais.graph.parsers.journey import JourneyParser
 from elspais.graph.parsers.lark import FileDispatcher
 from elspais.graph.parsers.remainder import RemainderParser
-from elspais.utilities.patterns import IdResolver, build_resolver
+from elspais.utilities.patterns import FederatedIdReader, IdResolver, build_resolver
 
 _log = logging.getLogger(__name__)
 
@@ -499,7 +499,7 @@ def _resolve_spec_dir_config(
     # Legacy registry kept for backwards compatibility during transition
     registry = ParserRegistry()
     # RequirementParser removed — Lark dispatcher handles spec files
-    registry.register(JourneyParser())
+    registry.register(JourneyParser(FederatedIdReader(resolver)))
     # Implements: REQ-d00128-G
     registry.register(RemainderParser())
 

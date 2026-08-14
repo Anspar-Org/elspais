@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 # Hex-color and namespace patterns live in the utilities lib so all consumers
 # share a single regex. See `utilities/color.py` and `utilities/patterns.py`.
 from elspais.utilities.color import validate_hex_color as _validate_hex_color
+from elspais.utilities.patterns import REF_LIST_SEPARATOR
 from elspais.utilities.patterns import validate_namespace as _validate_namespace
 
 # Implements: REQ-p00014-S
@@ -106,7 +107,7 @@ class ComponentConfig(_StrictModel):
         return value
 
 
-# Implements: REQ-d00251-E, REQ-d00251-K
+# Implements: REQ-d00251-E, REQ-d00251-K, REQ-d00251-M
 class AssertionConfig(_StrictModel):
     label_style: str = "uppercase"
     max_count: int = 26
@@ -116,6 +117,23 @@ class AssertionConfig(_StrictModel):
     # carries it too, and an editor rejects what the runtime would reject.
     separator: str = Field(default="-", min_length=1, max_length=1, pattern=_NO_COLON)
     multi_separator: str = Field(default="+", min_length=1, max_length=1, pattern=_NO_COLON)
+
+    @model_validator(mode="after")
+    def _separators_do_not_divide_references(self):
+        # Implements: REQ-d00251-M
+        # A list is divided before its items are read, so this character is
+        # spent on the outer boundary first: what reaches the identifier
+        # reader is a fragment cut short and a bare label with no
+        # requirement in front of it, neither of which fails loudly.
+        for field_name in ("separator", "multi_separator"):
+            if getattr(self, field_name) == REF_LIST_SEPARATOR:
+                raise ValueError(
+                    f"id-patterns.assertions.{field_name} is "
+                    f'"{REF_LIST_SEPARATOR}", which already divides one '
+                    f"reference from the next in a list of references. Choose "
+                    f'a character that holds no other role, such as "&".'
+                )
+        return self
 
 
 class AssociatedPatternConfig(_StrictModel):

@@ -6,6 +6,17 @@ linking including validates.
 
 from elspais.graph.parsers import ParseContext
 from elspais.graph.parsers.journey import JourneyParser
+from elspais.utilities.patterns import FederatedIdReader
+from tests.core.graph_test_helpers import grammar_for
+
+
+def _parser() -> JourneyParser:
+    """A parser reading the shipped default identifier grammar.
+
+    Dividing a ``Validates:`` line into its references is the identifier
+    reader's job, so the parser cannot be built without one.
+    """
+    return JourneyParser(FederatedIdReader(grammar_for()))
 
 
 class TestJourneyParserPriority:
@@ -13,7 +24,7 @@ class TestJourneyParserPriority:
 
     # Verifies: REQ-d00128-G
     def test_priority_is_60(self):
-        parser = JourneyParser()
+        parser = _parser()
         assert parser.priority == 60
 
 
@@ -22,7 +33,7 @@ class TestJourneyParserBasic:
 
     # Verifies: REQ-o00050-C
     def test_claims_simple_journey(self):
-        parser = JourneyParser()
+        parser = _parser()
         lines = [
             (1, "## JNY-Spec-Author-01: Creating Requirements"),
             (2, ""),
@@ -47,7 +58,7 @@ class TestJourneyParserBasic:
 
     # Verifies: REQ-o00050-C
     def test_no_journeys_returns_empty(self):
-        parser = JourneyParser()
+        parser = _parser()
         lines = [
             (1, "# Regular Header"),
             (2, "Regular text."),
@@ -68,7 +79,7 @@ class TestJourneyParserValidates:
 
     def test_REQ_o00050_C_validates_multiple_refs(self):
         """Journey with Validates: REQ-p00012, REQ-d00042 parses both refs."""
-        parser = JourneyParser()
+        parser = _parser()
         lines = [
             (1, "## JNY-Dev-01: Development Workflow"),
             (2, ""),
@@ -94,7 +105,7 @@ class TestJourneyParserValidates:
 
     def test_REQ_o00050_C_no_validates_line_empty_list(self):
         """Journey without Validates: line has empty validates list."""
-        parser = JourneyParser()
+        parser = _parser()
         lines = [
             (1, "## JNY-Dev-02: Simple Journey"),
             (2, ""),
@@ -116,7 +127,7 @@ class TestJourneyParserValidates:
 
     def test_REQ_o00050_C_single_validates(self):
         """Journey with single Validates: REQ-p00012 parses one ref."""
-        parser = JourneyParser()
+        parser = _parser()
         lines = [
             (1, "## JNY-Dev-03: Single Validates Journey"),
             (2, ""),
@@ -140,7 +151,7 @@ class TestJourneyParserValidates:
 
     def test_REQ_o00050_C_validates_whitespace_padded(self):
         """Journey with whitespace-padded refs in Validates: line."""
-        parser = JourneyParser()
+        parser = _parser()
         lines = [
             (1, "## JNY-Dev-04: Whitespace Journey"),
             (2, ""),
@@ -174,9 +185,7 @@ def test_journey_parser_REQ_validates_field():
 
     Validates REQ-d00069-A: journey parser supports validates field.
     """
-    from elspais.graph.parsers.journey import JourneyParser
-
-    parser = JourneyParser()
+    parser = _parser()
     lines_text = """\
 ## JNY-TST-001: Test Journey
 **Actor**: Tester

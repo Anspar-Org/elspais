@@ -313,8 +313,8 @@ _FDA = _config(
         (_FDA, "PRD-001-A+B", True),
         (_FDA, "REQ-d00001-A+B", False),
         # Alternate multi-separator.
-        (_config(assertions={"multi_separator": ","}), "REQ-d00001-A,B", True),
-        (_config(assertions={"multi_separator": ","}), "REQ-d00001-A+B", False),
+        (_config(assertions={"multi_separator": "&"}), "REQ-d00001-A&B", True),
+        (_config(assertions={"multi_separator": "&"}), "REQ-d00001-A+B", False),
     ],
 )
 def test_multi_assertion_regex_matches_per_config(

@@ -35,7 +35,7 @@ style = "PascalCase"
 [id-patterns.assertions]
 label_style = "numeric"
 max_count = 99
-multi_separator = ","
+multi_separator = "&"
 
 [rules.hierarchy]
 allow_structural_orphans = true
