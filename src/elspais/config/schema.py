@@ -12,6 +12,21 @@ from elspais.utilities.color import validate_hex_color as _validate_hex_color
 from elspais.utilities.patterns import validate_namespace as _validate_namespace
 
 
+# Implements: REQ-p00014-S
+# A node's identifier is written with `:` between its parts -- the prefix of a
+# structural id, the namespace it names, the composite form joining a declaring
+# requirement to a template's. A requirement identifier able to contain one is
+# therefore ambiguous with the graph's own syntax, and the ambiguity surfaces
+# far from the configuration that caused it. Every field that can put a `:`
+# into a produced identifier excludes it, on the field rather than in a
+# validator, so the exported JSON schema carries the same refusal an editor
+# reads.
+_NO_COLON = r"^[^:]*$"
+_NO_COLON_MESSAGE = (
+    "must not contain ':', which separates the parts of a node identifier"
+)
+
+
 class _StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
 
@@ -92,8 +107,8 @@ class AssertionConfig(_StrictModel):
     # A boundary is a character (REQ-d00251-K). The length is constrained on
     # the field rather than in the model validator so the exported JSON schema
     # carries it too, and an editor rejects what the runtime would reject.
-    separator: str = Field(default="-", min_length=1, max_length=1)
-    multi_separator: str = Field(default="+", min_length=1, max_length=1)
+    separator: str = Field(default="-", min_length=1, max_length=1, pattern=_NO_COLON)
+    multi_separator: str = Field(default="+", min_length=1, max_length=1, pattern=_NO_COLON)
 
 
 class AssociatedPatternConfig(_StrictModel):
@@ -209,7 +224,7 @@ _LABEL_STYLE_PATTERNS = {
 
 # Implements: REQ-d00212-G, REQ-d00251-C, REQ-d00251-F, REQ-d00251-J, REQ-d00251-K
 class IdPatternsConfig(_StrictModel):
-    canonical: str = "{namespace}-{level.letter}{component}"
+    canonical: str = Field(default="{namespace}-{level.letter}{component}", pattern=_NO_COLON)
     aliases: dict[str, str] = Field(default_factory=lambda: {"short": "{level.letter}{component}"})
     component: ComponentConfig = Field(default_factory=ComponentConfig)
     assertions: AssertionConfig = Field(default_factory=AssertionConfig)
@@ -217,6 +232,24 @@ class IdPatternsConfig(_StrictModel):
 
     @model_validator(mode="after")
     def _validate_style_pattern_and_separator(self):
+        # Implements: REQ-p00014-S
+        # The two places a `:` can enter an identifier without any single
+        # field spelling one: an alias template, whose values are a mapping
+        # rather than a field, and a component pattern that ADMITS a colon
+        # without containing one. The component's alphabet is read off its
+        # own parse tree, the same way the separator suggestions are.
+        for name, template in (self.aliases or {}).items():
+            if ":" in template:
+                raise ValueError(
+                    f'id-patterns.aliases.{name} {_NO_COLON_MESSAGE}: "{template}"'
+                )
+        if self.component.style == "regex" and self.component.pattern:
+            if ":" in _legal_chars(self.component.pattern):
+                raise ValueError(
+                    f"id-patterns.component.pattern admits ':', which separates the "
+                    f'parts of a node identifier: "{self.component.pattern}"'
+                )
+
         # REQ-d00251-C: regex style requires non-empty pattern
         if self.component.style == "regex" and not self.component.pattern:
             raise ValueError(
@@ -396,7 +429,7 @@ class ValidationConfig(_StrictModel):
 # Implements: REQ-d00212-A
 class LevelConfig(_StrictModel):
     rank: int
-    letter: str
+    letter: str = Field(pattern=_NO_COLON)
     display_name: str = ""
     implements: list[str]
     color: str | None = None

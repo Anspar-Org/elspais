@@ -482,11 +482,11 @@ The system SHALL store event records.
                 id="slash-separator",
             ),
             pytest.param(
-                ":",
+                ".",
                 "+",
-                "EVS-PRD-event-log:A+B",
-                ("EVS-PRD-event-log:A", "EVS-PRD-event-log:B"),
-                id="colon-plus-separator",
+                "EVS-PRD-event-log.A+B",
+                ("EVS-PRD-event-log.A", "EVS-PRD-event-log.B"),
+                id="dot-plus-separator",
             ),
         ],
     )
@@ -542,7 +542,7 @@ The system SHALL store event records.
         "assert_sep, multi_sep, refines_ref",
         [
             pytest.param("/", "/", "EVS-PRD-event-log/A/B", id="slash-separator"),
-            pytest.param(":", "+", "EVS-PRD-event-log:A+B", id="colon-plus-separator"),
+            pytest.param(".", "+", "EVS-PRD-event-log.A+B", id="dot-plus-separator"),
         ],
     )
     def test_multi_assertion_round_trips_through_render(self, assert_sep, multi_sep, refines_ref):

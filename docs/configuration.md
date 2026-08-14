@@ -163,8 +163,10 @@ max_count = 26             # Maximum assertions per requirement
 # component nor an assertion label, and `multi_separator` must be a character
 # that cannot appear in a label. A kebab-case component therefore rules out
 # separator = "-", and numeric labels rule out a digit as multi_separator.
-# Use "/" where the default collides; ":" is reserved so that "::" stays
-# unambiguous as the composite instance-ID joiner.
+# Use "/" where the default collides. ":" is refused outright, in every
+# setting an identifier could carry one through: it separates the parts of a
+# node identifier and "::" joins a declaring requirement to a template's, so
+# an identifier able to contain one is ambiguous with the graph's own syntax.
 ```
 
 These two characters are the only accepted way to cite an assertion, and they

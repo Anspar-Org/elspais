@@ -139,9 +139,9 @@ def _make_project(
 _SEPARATOR_COMBINATIONS = [
     ("/", "+", "REQ-p-widget/A+C", ["A", "C"]),
     ("/", "/", "REQ-p-widget/A/C", ["A", "C"]),
-    (":", "+", "REQ-p-widget:A+C", ["A", "C"]),
+    ("|", "+", "REQ-p-widget|A+C", ["A", "C"]),
     (".", "+", "REQ-p-widget.A+C", ["A", "C"]),
-    (":", ",", "REQ-p-widget:A,C", ["A", "C"]),
+    ("~", ",", "REQ-p-widget~A,C", ["A", "C"]),
 ]
 
 

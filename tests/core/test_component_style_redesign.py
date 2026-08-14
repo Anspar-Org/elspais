@@ -355,26 +355,26 @@ class TestConfigurableAssertionSeparator:
         # default should be "-"
         assert getattr(ac, "separator", None) == "-"
 
-    def test_colon_separator_single_assertion(self):
+    def test_non_component_separator_single_assertion(self):
         # Verifies: REQ-d00251-E
-        r = _build_resolver(style="kebab-case", separator=":", label_style="uppercase")
-        pid = r.parse("EVS-PRD-action-dispatch:A")
+        r = _build_resolver(style="kebab-case", separator="|", label_style="uppercase")
+        pid = r.parse("EVS-PRD-action-dispatch|A")
         assert pid is not None
         assert pid.component == "action-dispatch"
         assert pid.assertions == ["A"]
 
-    def test_colon_separator_multi_assertion(self):
+    def test_non_component_separator_multi_assertion(self):
         # Verifies: REQ-d00251-E
-        r = _build_resolver(style="kebab-case", separator=":", label_style="uppercase")
-        pid = r.parse("EVS-PRD-action-dispatch:A+B+C")
+        r = _build_resolver(style="kebab-case", separator="|", label_style="uppercase")
+        pid = r.parse("EVS-PRD-action-dispatch|A+B+C")
         assert pid is not None
         assert pid.component == "action-dispatch"
         assert pid.assertions == ["A", "B", "C"]
 
-    def test_colon_separator_unlocks_numeric_labels_under_kebab(self):
+    def test_non_component_separator_unlocks_numeric_labels_under_kebab(self):
         # Verifies: REQ-d00251-E
-        r = _build_resolver(style="kebab-case", separator=":", label_style="numeric")
-        pid = r.parse("EVS-PRD-action-dispatch:1+2+3")
+        r = _build_resolver(style="kebab-case", separator="~", label_style="numeric")
+        pid = r.parse("EVS-PRD-action-dispatch~1+2+3")
         assert pid is not None
         assert pid.component == "action-dispatch"
         assert pid.assertions == ["1", "2", "3"]
@@ -431,8 +431,8 @@ UNAMBIGUOUS_COMBOS = [
     ("snake_case", "-", "uppercase", None),
     ("camelCase", "-", "uppercase", None),
     ("kebab-case", "/", "uppercase", None),
-    ("snake_case", ":", "numeric", None),
-    ("kebab-case", ":", "numeric", None),
+    ("snake_case", ".", "numeric", None),
+    ("kebab-case", "~", "numeric", None),
     ("regex", "/", "uppercase", "[A-Z.]+"),
 ]
 

@@ -22,6 +22,7 @@
           "default": "-",
           "maxLength": 1,
           "minLength": 1,
+          "pattern": "^[^:]*$",
           "title": "Separator",
           "type": "string"
         },
@@ -29,6 +30,7 @@
           "default": "+",
           "maxLength": 1,
           "minLength": 1,
+          "pattern": "^[^:]*$",
           "title": "Multi Separator",
           "type": "string"
         }
@@ -472,6 +474,7 @@
       "properties": {
         "canonical": {
           "default": "{namespace}-{level.letter}{component}",
+          "pattern": "^[^:]*$",
           "title": "Canonical",
           "type": "string"
         },
@@ -550,6 +553,7 @@
           "type": "integer"
         },
         "letter": {
+          "pattern": "^[^:]*$",
           "title": "Letter",
           "type": "string"
         },

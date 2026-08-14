@@ -151,9 +151,16 @@ wrong requirement instead of failing.
   label. So `numeric` labels rule out digits, and `numeric_1based` rules out
   `"0"` as well, since `10` is a legal label.
 
-The fix is a different `assertions.separator` — commonly `"/"`. Avoid `:`,
-which is reserved so that `::` stays unambiguous as the composite instance-ID
-joiner.
+The fix is a different `assertions.separator` — commonly `"/"`.
+
+`:` is refused everywhere an identifier could carry one: the separators, the
+canonical template, an alias template, a level's letter, and a component
+pattern that merely *admits* a colon. It separates the parts of a node
+identifier — `file:<namespace>:<path>` — and `::` joins a declaring
+requirement to a template's, so an identifier able to contain one would be
+ambiguous with the graph's own syntax. The refusal happens when the
+configuration loads, and the constraint is exported in the JSON schema, so an
+editor rejects it before the tool is run.
 
 **Template Tokens:**
   `{namespace}`      ID prefix (e.g., "REQ")
