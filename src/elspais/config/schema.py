@@ -11,7 +11,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from elspais.utilities.color import validate_hex_color as _validate_hex_color
 from elspais.utilities.patterns import validate_namespace as _validate_namespace
 
-
 # Implements: REQ-p00014-S
 # A node's identifier is written with `:` between its parts -- the prefix of a
 # structural id, the namespace it names, the composite form joining a declaring
@@ -325,7 +324,18 @@ class FormatConfig(_StrictModel):
     require_assertions: bool = False
     require_status: bool = False
     require_rationale: bool = False
-    status_roles: dict[str, list[str] | str] = Field(
+    # Each of these three is a check that exists and works
+    # (`validation/format.py`). Without the field a project cannot ask for
+    # it, so the first two never ran and the third could not be turned off
+    # -- and the health report described all three as configured.
+    require_shall: bool = False
+    labels_sequential: bool = False
+    labels_unique: bool = True
+    # A role maps to the LIST of status names in it. A bare string was
+    # admitted here and silently discarded by the reader, so a project
+    # writing `retired = "Deprecated"` was told nothing and kept treating
+    # the status as active -- counted in coverage, reported as a gap.
+    status_roles: dict[str, list[str]] = Field(
         default_factory=lambda: {
             "active": ["Active"],
             "provisional": ["Draft", "Proposed"],
@@ -342,12 +352,20 @@ class FormatConfig(_StrictModel):
         # Each status name listed here ends up as a key in `.status-badge.{name}`
         # CSS selectors, JS string literals, and `data-key` attributes — same
         # identifier shape as namespaces / level keys.
-        for _role, names in (v or {}).items():
-            if isinstance(names, list):
-                for name in names:
-                    _validate_namespace(name)
-            elif isinstance(names, str):
-                _validate_namespace(names)
+        from elspais.config.status_roles import StatusRole
+
+        known = {r.value for r in StatusRole}
+        for role, names in (v or {}).items():
+            if role not in known:
+                # Swallowed before, so a mistyped role name quietly assigned
+                # nothing and the statuses under it kept whatever role they
+                # had by default.
+                raise ValueError(
+                    f"rules.format.status_roles.{role} is not a role. "
+                    f"The roles are: {', '.join(sorted(known))}."
+                )
+            for name in names:
+                _validate_namespace(name)
         return v
 
 

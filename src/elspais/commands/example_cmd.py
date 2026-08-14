@@ -123,7 +123,7 @@ Tests can reference specific assertions:
 ## Configuration
 
 ```toml
-[patterns.assertions]
+[id-patterns.assertions]
 label_style = "uppercase"  # "uppercase", "numeric", "alphanumeric"
 max_count = 26
 

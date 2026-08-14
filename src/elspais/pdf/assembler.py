@@ -170,7 +170,11 @@ class MarkdownAssembler:
         else:
             self._title = "Requirements Specification"
         if resolver is None:
-            resolver = build_resolver({})
+            # An empty dict is not the default configuration: it declares no
+            # levels, so the grammar it yields matches no identifier.
+            from elspais.config import config_defaults
+
+            resolver = build_resolver(config_defaults())
         self._resolver = resolver
         order, headings, prefix_re = _build_level_metadata(config)
         self._level_order = order

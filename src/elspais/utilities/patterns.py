@@ -184,17 +184,18 @@ class IdPatternConfig:
         canonical = patterns.get("canonical", "{namespace}-{type}{component}")
         aliases = dict(patterns.get("aliases", {}))
 
-        # Parse types from v2 id-patterns.types OR v3 top-level levels
-        raw_types = patterns.get("types", {})
-        if not raw_types:
-            # v3: read from top-level [levels] section
-            raw_levels = data.get("levels", {})
-            for code, ldef in raw_levels.items():
-                if isinstance(ldef, dict):
-                    raw_types[code] = {
-                        "level": ldef.get("rank", 1),
-                        "aliases": {"letter": ldef.get("letter", code[0])},
-                    }
+        # Levels are declared in the top-level [levels] section. An
+        # `id-patterns.types` table is not part of the configuration the
+        # schema admits, so reading one here would build a grammar from a
+        # shape no config file can hold -- and would go on answering for
+        # callers that hand-build one instead of loading a config.
+        raw_types: dict[str, Any] = {}
+        for code, ldef in data.get("levels", {}).items():
+            if isinstance(ldef, dict):
+                raw_types[code] = {
+                    "level": ldef.get("rank", 1),
+                    "aliases": {"letter": ldef.get("letter", code[0])},
+                }
         types: dict[str, TypeDef] = {}
         for code, tdef in raw_types.items():
             if isinstance(tdef, dict):

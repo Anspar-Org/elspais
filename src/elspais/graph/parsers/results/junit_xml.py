@@ -110,22 +110,13 @@ class JUnitXMLParser:
         if self._resolver is not None:
             return self._resolver
 
+        # The shipped defaults, not a configuration written out here: a
+        # hand-built one describes a repository that may not exist, and
+        # this one described a shape the schema does not admit at all.
+        from elspais.config import config_defaults
         from elspais.utilities.patterns import build_resolver
 
-        return build_resolver(
-            {
-                "project": {"namespace": "REQ"},
-                "id-patterns": {
-                    "canonical": "{namespace}-{type.letter}{component}",
-                    "types": {
-                        "prd": {"level": 1, "aliases": {"letter": "p"}},
-                        "ops": {"level": 2, "aliases": {"letter": "o"}},
-                        "dev": {"level": 3, "aliases": {"letter": "d"}},
-                    },
-                    "component": {"style": "numeric", "digits": 5},
-                },
-            }
-        )
+        return build_resolver(config_defaults())
 
     def parse(self, content: str, source_path: str) -> list[dict[str, Any]]:
         """Parse JUnit XML content and return test result dicts.

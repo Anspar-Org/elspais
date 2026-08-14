@@ -3,8 +3,11 @@
 Validates REQ-p00002-A: configurable patterns and rules.
 """
 
+from dataclasses import replace
+
 import pytest
 
+from elspais.config.schema import ElspaisConfig
 from elspais.utilities.patterns import (
     AssertionFormat,
     ComponentFormat,
@@ -13,6 +16,67 @@ from elspais.utilities.patterns import (
     ParsedId,
     TypeDef,
 )
+
+
+def _validated(config: dict) -> dict:
+    """Return ``config`` after checking a config file could actually hold it.
+
+    ``IdPatternConfig.from_dict`` takes a raw dictionary and never consults
+    the config schema, so a fixture built here could describe a repository no
+    ``.elspais.toml`` can produce -- and pin grammar behaviour no user can
+    reach. Every fixture is therefore validated the way a file on disk is,
+    before any config or resolver is built from it.
+    """
+    ElspaisConfig.model_validate(config)
+    return config
+
+
+_HHT_LEVELS = {
+    "prd": {"rank": 1, "letter": "p", "implements": ["prd"]},
+    "ops": {"rank": 2, "letter": "o", "implements": ["ops", "prd"]},
+    "dev": {"rank": 3, "letter": "d", "implements": ["dev", "ops", "prd"]},
+}
+
+_FDA_CONFIG = {
+    "project": {"namespace": "FDA"},
+    "levels": {
+        "PRD": {"rank": 1, "letter": "P", "implements": ["PRD"]},
+        "OPS": {"rank": 2, "letter": "O", "implements": ["OPS", "PRD"]},
+        "DEV": {"rank": 3, "letter": "D", "implements": ["DEV", "OPS", "PRD"]},
+    },
+    "id-patterns": {
+        "canonical": "{namespace}-{type}-{component}",
+        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+    },
+}
+
+_JIRA_CONFIG = {
+    "project": {"namespace": "PROJ"},
+    "levels": {"req": {"rank": 1, "letter": "r", "implements": ["req"]}},
+    "id-patterns": {
+        "canonical": "{namespace}-{component}",
+        "component": {"style": "numeric", "digits": 0, "leading_zeros": False},
+    },
+}
+
+_OUTPUT_FORM_CONFIG = {
+    "project": {"namespace": "REQ"},
+    "levels": {"prd": {"rank": 1, "letter": "p", "implements": ["prd"]}},
+    "id-patterns": {
+        "canonical": "{namespace}-{type}{component}",
+        "aliases": {"short": "{level.letter}{component}"},
+        "component": {"style": "numeric", "digits": 5},
+    },
+}
+
+_NAMED_CONFIG = {
+    "project": {"namespace": "REQ"},
+    "levels": {"req": {"rank": 1, "letter": "r", "implements": ["req"]}},
+    "id-patterns": {
+        "canonical": "{namespace}-{component}",
+        "component": {"style": "regex", "pattern": "[A-Z][a-zA-Z0-9]+"},
+    },
+}
 
 # --- Task 1: Data model dataclasses ---
 
@@ -70,23 +134,21 @@ class TestIdPatternConfig:
 
     def test_REQ_p00002_A_from_dict_hht(self):
         config = IdPatternConfig.from_dict(
-            {
-                "project": {"namespace": "REQ"},
-                "id-patterns": {
-                    "canonical": "{namespace}-{type}{component}",
-                    "aliases": {"short": "{type.letter}{component}"},
-                    "types": {
-                        "prd": {"level": 1, "aliases": {"letter": "p"}},
-                        "ops": {"level": 2, "aliases": {"letter": "o"}},
-                        "dev": {"level": 3, "aliases": {"letter": "d"}},
+            _validated(
+                {
+                    "project": {"namespace": "REQ"},
+                    "levels": _HHT_LEVELS,
+                    "id-patterns": {
+                        "canonical": "{namespace}-{type}{component}",
+                        "aliases": {"short": "{level.letter}{component}"},
+                        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                        "assertions": {
+                            "label_style": "uppercase",
+                            "max_count": 26,
+                        },
                     },
-                    "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
-                    "assertions": {
-                        "label_style": "uppercase",
-                        "max_count": 26,
-                    },
-                },
-            }
+                }
+            )
         )
         assert config.namespace == "REQ"
         assert config.canonical_template == "{namespace}-{type}{component}"
@@ -99,51 +161,20 @@ class TestIdPatternConfig:
         assert config.assertions.label_style == "uppercase"
 
     def test_REQ_p00002_A_from_dict_fda(self):
-        config = IdPatternConfig.from_dict(
-            {
-                "project": {"namespace": "FDA"},
-                "id-patterns": {
-                    "canonical": "{namespace}-{type}-{component}",
-                    "types": {
-                        "PRD": {"level": 1},
-                        "OPS": {"level": 2},
-                        "DEV": {"level": 3},
-                    },
-                    "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
-                },
-            }
-        )
+        config = IdPatternConfig.from_dict(_validated(_FDA_CONFIG))
         assert config.namespace == "FDA"
         assert config.canonical_template == "{namespace}-{type}-{component}"
         assert config.types["PRD"].level == 1
-        assert config.types["PRD"].aliases == {}
+        assert config.types["PRD"].aliases["letter"] == "P"
 
     def test_REQ_p00002_A_from_dict_jira(self):
-        config = IdPatternConfig.from_dict(
-            {
-                "project": {"namespace": "PROJ"},
-                "id-patterns": {
-                    "canonical": "{namespace}-{component}",
-                    "types": {"req": {"level": 1}},
-                    "component": {"style": "numeric", "digits": 0, "leading_zeros": False},
-                },
-            }
-        )
+        config = IdPatternConfig.from_dict(_validated(_JIRA_CONFIG))
         assert config.namespace == "PROJ"
         assert config.component.digits == 0
         assert config.component.leading_zeros is False
 
     def test_REQ_p00002_A_from_dict_regex(self):
-        config = IdPatternConfig.from_dict(
-            {
-                "project": {"namespace": "REQ"},
-                "id-patterns": {
-                    "canonical": "{namespace}-{component}",
-                    "types": {"req": {"level": 1}},
-                    "component": {"style": "regex", "pattern": "[A-Z][a-zA-Z0-9]+"},
-                },
-            }
-        )
+        config = IdPatternConfig.from_dict(_validated(_NAMED_CONFIG))
         assert config.component.style == "regex"
         assert config.component.pattern == "[A-Z][a-zA-Z0-9]+"
 
@@ -154,12 +185,17 @@ class TestIdPatternConfig:
         assert config.component.style == "numeric"
 
     def test_REQ_p00002_A_from_dict_output_forms(self):
+        # Deliberately not passed through `_validated`: `from_dict` reads output
+        # forms from an `[output.id-patterns]` table the v3 schema forbids, so
+        # no configuration file can reach this branch. The branch is live source
+        # behaviour, so it stays covered; the unreachability is a defect in the
+        # source, not in this fixture.
         config = IdPatternConfig.from_dict(
             {
                 "project": {"namespace": "REQ"},
+                "levels": {"prd": {"rank": 1, "letter": "p", "implements": ["prd"]}},
                 "id-patterns": {
                     "canonical": "{namespace}-{type}{component}",
-                    "types": {"prd": {"level": 1}},
                     "component": {"style": "numeric", "digits": 5},
                 },
                 "output": {"id-patterns": {"writer-requirement-edge": "short"}},
@@ -220,90 +256,52 @@ class TestParsedId:
 def resolver():
     """Default IdResolver matching the HHT-style config."""
     config = IdPatternConfig.from_dict(
-        {
-            "project": {"namespace": "REQ"},
-            "id-patterns": {
-                "canonical": "{namespace}-{type.letter}{component}",
-                "types": {
-                    "prd": {"level": 1, "aliases": {"letter": "p"}},
-                    "ops": {"level": 2, "aliases": {"letter": "o"}},
-                    "dev": {"level": 3, "aliases": {"letter": "d"}},
+        _validated(
+            {
+                "project": {"namespace": "REQ"},
+                "levels": _HHT_LEVELS,
+                "id-patterns": {
+                    "canonical": "{namespace}-{level.letter}{component}",
+                    "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                    "assertions": {"label_style": "uppercase"},
                 },
-                "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
-                "assertions": {"label_style": "uppercase"},
-            },
-        }
+            }
+        )
     )
     return IdResolver(config)
 
 
 def _make_hht_resolver():
     config = IdPatternConfig.from_dict(
-        {
-            "project": {"namespace": "REQ"},
-            "id-patterns": {
-                "canonical": "{namespace}-{type}{component}",
-                "aliases": {"short": "{type.letter}{component}"},
-                "types": {
-                    "prd": {"level": 1, "aliases": {"letter": "p"}},
-                    "ops": {"level": 2, "aliases": {"letter": "o"}},
-                    "dev": {"level": 3, "aliases": {"letter": "d"}},
+        _validated(
+            {
+                "project": {"namespace": "REQ"},
+                "levels": _HHT_LEVELS,
+                "id-patterns": {
+                    "canonical": "{namespace}-{type}{component}",
+                    "aliases": {"short": "{level.letter}{component}"},
+                    "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                    "assertions": {
+                        "label_style": "uppercase",
+                        "max_count": 26,
+                    },
                 },
-                "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
-                "assertions": {
-                    "label_style": "uppercase",
-                    "max_count": 26,
-                },
-            },
-        }
+            }
+        )
     )
     return IdResolver(config)
 
 
 def _make_fda_resolver():
-    config = IdPatternConfig.from_dict(
-        {
-            "project": {"namespace": "FDA"},
-            "id-patterns": {
-                "canonical": "{namespace}-{type}-{component}",
-                "types": {
-                    "PRD": {"level": 1},
-                    "OPS": {"level": 2},
-                    "DEV": {"level": 3},
-                },
-                "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
-            },
-        }
-    )
-    return IdResolver(config)
+    return IdResolver(IdPatternConfig.from_dict(_validated(_FDA_CONFIG)))
 
 
 def _make_jira_resolver():
-    config = IdPatternConfig.from_dict(
-        {
-            "project": {"namespace": "PROJ"},
-            "id-patterns": {
-                "canonical": "{namespace}-{component}",
-                "types": {"req": {"level": 1}},
-                "component": {"style": "numeric", "digits": 0, "leading_zeros": False},
-            },
-        }
-    )
-    return IdResolver(config)
+    return IdResolver(IdPatternConfig.from_dict(_validated(_JIRA_CONFIG)))
 
 
 def _make_named_resolver():
-    config = IdPatternConfig.from_dict(
-        {
-            "project": {"namespace": "REQ"},
-            "id-patterns": {
-                "canonical": "{namespace}-{component}",
-                "types": {"req": {"level": 1}},
-                "component": {"style": "regex", "pattern": "[A-Z][a-zA-Z0-9]+"},
-            },
-        }
-    )
-    return IdResolver(config)
+    return IdResolver(IdPatternConfig.from_dict(_validated(_NAMED_CONFIG)))
 
 
 # --- Task 3: IdResolver parsing ---
@@ -558,34 +556,24 @@ class TestIdResolverOutputForm:
         assert r.output_form("anything") == "canonical"
 
     def test_REQ_p00002_A_output_form_configured(self):
-        config = IdPatternConfig.from_dict(
-            {
-                "project": {"namespace": "REQ"},
-                "id-patterns": {
-                    "canonical": "{namespace}-{type}{component}",
-                    "aliases": {"short": "{type.letter}{component}"},
-                    "types": {"prd": {"level": 1, "aliases": {"letter": "p"}}},
-                    "component": {"style": "numeric", "digits": 5},
-                },
-                "output": {"id-patterns": {"writer-requirement-edge": "short"}},
-            }
+        # Output forms are set on the parsed structure rather than read from a
+        # configuration dictionary: `[output.id-patterns]` is a table the v3
+        # schema forbids, so a validated fixture cannot carry one.
+        config = replace(
+            IdPatternConfig.from_dict(_validated(_OUTPUT_FORM_CONFIG)),
+            output_forms={"writer-requirement-edge": "short"},
         )
         r = IdResolver(config)
         assert r.output_form("writer-requirement-edge") == "short"
         assert r.output_form("unlisted-context") == "canonical"
 
     def test_REQ_p00002_A_render_for(self):
-        config = IdPatternConfig.from_dict(
-            {
-                "project": {"namespace": "REQ"},
-                "id-patterns": {
-                    "canonical": "{namespace}-{type}{component}",
-                    "aliases": {"short": "{type.letter}{component}"},
-                    "types": {"prd": {"level": 1, "aliases": {"letter": "p"}}},
-                    "component": {"style": "numeric", "digits": 5},
-                },
-                "output": {"id-patterns": {"writer-requirement-edge": "short"}},
-            }
+        # Output forms are set on the parsed structure rather than read from a
+        # configuration dictionary: `[output.id-patterns]` is a table the v3
+        # schema forbids, so a validated fixture cannot carry one.
+        config = replace(
+            IdPatternConfig.from_dict(_validated(_OUTPUT_FORM_CONFIG)),
+            output_forms={"writer-requirement-edge": "short"},
         )
         r = IdResolver(config)
         pid = r.parse("REQ-prd00044")
@@ -643,15 +631,22 @@ class TestAllTypeAliasValues:
 
     # Verifies: REQ-p00002-A
     def test_types_without_aliases_return_code(self):
-        config = IdPatternConfig.from_dict(
-            {
-                "project": {"namespace": "PROJ"},
-                "id-patterns": {
-                    "canonical": "{namespace}-{component}",
-                    "types": {"req": {"level": 1}},
-                    "component": {"style": "numeric", "digits": 3},
-                },
-            }
+        """A type carrying no alias falls back to its own code.
+
+        Built directly rather than from a configuration dictionary: a level
+        declared in ``[levels]`` always carries a letter, so the alias-less
+        type this fallback exists for is reachable only by constructing the
+        parsed structure itself.
+        """
+        config = IdPatternConfig(
+            namespace="PROJ",
+            canonical_template="{namespace}-{component}",
+            aliases={},
+            types={"req": TypeDef(code="req", level=1, aliases={})},
+            component=ComponentFormat(style="numeric", digits=3, leading_zeros=True, pattern=None),
+            assertions=AssertionFormat(
+                label_style="uppercase", max_count=26, zero_pad=False, multi_separator="+"
+            ),
         )
         resolver = IdResolver(config)
         values = resolver.all_type_alias_values()
@@ -737,14 +732,16 @@ class TestBuildResolver:
     def test_build_resolver_from_config(self):
         from elspais.utilities.patterns import build_resolver
 
-        config = {
-            "project": {"namespace": "REQ"},
-            "id-patterns": {
-                "canonical": "{namespace}-{type}{component}",
-                "types": {"p": {"level": 1}},
-                "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
-            },
-        }
+        config = _validated(
+            {
+                "project": {"namespace": "REQ"},
+                "levels": {"p": {"rank": 1, "letter": "p", "implements": ["p"]}},
+                "id-patterns": {
+                    "canonical": "{namespace}-{type}{component}",
+                    "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                },
+            }
+        )
         resolver = build_resolver(config)
         assert resolver.is_valid("REQ-p00001")
 

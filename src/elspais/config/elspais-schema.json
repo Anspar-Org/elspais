@@ -411,19 +411,27 @@
           "title": "Require Rationale",
           "type": "boolean"
         },
+        "require_shall": {
+          "default": false,
+          "title": "Require Shall",
+          "type": "boolean"
+        },
+        "labels_sequential": {
+          "default": false,
+          "title": "Labels Sequential",
+          "type": "boolean"
+        },
+        "labels_unique": {
+          "default": true,
+          "title": "Labels Unique",
+          "type": "boolean"
+        },
         "status_roles": {
           "additionalProperties": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "string"
-              }
-            ]
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "title": "Status Roles",
           "type": "object"

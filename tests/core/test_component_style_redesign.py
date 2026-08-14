@@ -47,18 +47,20 @@ def _build_resolver(
     raw_comp: dict = {"style": style}
     if pattern is not None:
         raw_comp["pattern"] = pattern
-    config = IdPatternConfig.from_dict(
-        {
-            "project": {"namespace": namespace},
-            "id-patterns": {
-                "canonical": "{namespace}-{type}-{component}",
-                "types": {"PRD": {"level": 1}},
-                "component": raw_comp,
-                "assertions": raw_assert,
-            },
-        }
-    )
-    return IdResolver(config)
+    config = {
+        "project": {"namespace": namespace},
+        "levels": {"PRD": {"rank": 1, "letter": "P", "implements": ["PRD"]}},
+        "id-patterns": {
+            "canonical": "{namespace}-{type}-{component}",
+            "component": raw_comp,
+            "assertions": raw_assert,
+        },
+    }
+    # Validated the way a file on disk is: `IdPatternConfig.from_dict` never
+    # consults the schema, so an unchecked fixture here could describe a
+    # repository no `.elspais.toml` can produce and pin unreachable grammar.
+    ElspaisConfig.model_validate(config)
+    return IdResolver(IdPatternConfig.from_dict(config))
 
 
 def _elspais_config_payload(
@@ -239,7 +241,7 @@ class TestKebabCaseRegex:
     )
     def test_kebab_case_accepts(self, raw_id, expected_component):
         # Verifies: REQ-d00251-B
-        r = _build_resolver(style="kebab-case", separator="-", label_style="uppercase")
+        r = _build_resolver(style="kebab-case", separator="/", label_style="uppercase")
         pid = r.parse(raw_id)
         assert pid is not None, f"kebab-case should accept {raw_id}"
         assert pid.component == expected_component
@@ -254,7 +256,7 @@ class TestKebabCaseRegex:
     )
     def test_kebab_case_rejects(self, raw_id):
         # Verifies: REQ-d00251-B
-        r = _build_resolver(style="kebab-case", separator="-", label_style="uppercase")
+        r = _build_resolver(style="kebab-case", separator="/", label_style="uppercase")
         assert r.parse(raw_id) is None, f"kebab-case should reject {raw_id}"
 
     def test_pattern_field_ignored_for_case_styles(self):
@@ -263,7 +265,7 @@ class TestKebabCaseRegex:
         r = _build_resolver(
             style="kebab-case",
             pattern="GARBAGE_PATTERN",
-            separator="-",
+            separator="/",
             label_style="uppercase",
         )
         pid = r.parse("EVS-PRD-hash-chain-integrity")

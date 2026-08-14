@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from elspais.config.schema import ElspaisConfig
 from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.graph.GraphNode import make_file_id
@@ -671,20 +672,23 @@ class TestMutateAddEdge:
         dev_node._content = {"level": "DEV", "status": "Draft"}
         mutation_graph._index["REQ-d00003"] = dev_node
 
-        # Config matching the default REQ-{type}{component} pattern
+        # Config matching the default REQ-{type}{component} pattern. Validated
+        # the way a file on disk is, so this fixture cannot describe a
+        # repository the tool would refuse to load.
         config = {
             "project": {"namespace": "REQ"},
+            "levels": {
+                "p": {"rank": 1, "letter": "p", "implements": ["p"]},
+                "o": {"rank": 2, "letter": "o", "implements": ["o", "p"]},
+                "d": {"rank": 3, "letter": "d", "implements": ["d", "o", "p"]},
+            },
             "id-patterns": {
                 "canonical": "{namespace}-{type}{component}",
-                "types": {
-                    "p": {"level": 1},
-                    "o": {"level": 2},
-                    "d": {"level": 3},
-                },
                 "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
                 "assertions": {"label_style": "uppercase"},
             },
         }
+        ElspaisConfig.model_validate(config)
 
         result = _mutate_add_edge(
             mutation_graph,

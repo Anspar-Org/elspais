@@ -113,109 +113,9 @@ def status_expects_implementation(config: dict[str, Any], status: str | None) ->
     return get_status_roles(config or {}).role_of(status) == StatusRole.ACTIVE
 
 
-def _migrate_legacy_patterns(config: dict[str, Any]) -> dict[str, Any]:
-    """Migrate legacy [patterns] config to [id-patterns] + [levels] format.
-
-    Configs without an explicit ``version`` field (pre-v2) may define ID
-    patterns in the old ``[patterns]`` section.  This function synthesizes
-    the equivalent ``[id-patterns]`` and ``[levels]`` so that ``IdResolver``
-    works correctly.
-
-    Once all repos have migrated to v3 format, this migration path can be
-    removed.
-    """
-    # v2+ configs must use [id-patterns] directly — skip migration
-    config_version = config.get("version")
-    if config_version is not None and isinstance(config_version, int) and config_version >= 2:
-        return config
-
-    patterns = config.get("patterns", {})
-    if not patterns or not patterns.get("types"):
-        return config
-
-    # Only migrate if [id-patterns] is still at defaults (user didn't define it)
-    id_patterns = config.get("id-patterns", {})
-    canonical = id_patterns.get("canonical")
-    default_canonical = config_defaults()["id-patterns"]["canonical"]
-    if canonical is not None and canonical != default_canonical:
-        return config  # user has explicit [id-patterns], don't override
-
-    # Build level definitions from old types: old types.*.id -> levels.*.letter
-    old_types = patterns.get("types", {})
-    new_levels: dict[str, Any] = {}
-    for code, tdef in old_types.items():
-        if isinstance(tdef, dict):
-            new_levels[code] = {
-                "rank": tdef.get("level", 1),
-                "letter": tdef.get("id", code[0]),
-                "implements": [code],  # self-reference as minimal default
-            }
-
-    # Build component format from old id_format
-    old_id_format = patterns.get("id_format", {})
-    new_component = {
-        "style": old_id_format.get("style", "numeric"),
-        "digits": old_id_format.get("digits", 5),
-        "leading_zeros": old_id_format.get("leading_zeros", True),
-    }
-    if old_id_format.get("pattern"):
-        new_component["pattern"] = old_id_format["pattern"]
-
-    # Build canonical template by translating tokens
-    old_template = patterns.get("id_template", "{prefix}-{type}{id}")
-    canonical = old_template
-    canonical = canonical.replace("{prefix}", "{namespace}")
-    canonical = canonical.replace("{id}", "{component}")
-    canonical = canonical.replace("{type}", "{level.letter}")
-
-    # Handle {associated} token: replace with literal prefix if configured
-    associated_config = patterns.get("associated", {})
-    if associated_config.get("enabled") and "{associated}" in canonical:
-        assoc_prefix = config.get("associated", {}).get("prefix", "")
-        sep = associated_config.get("separator", "-")
-        if assoc_prefix:
-            canonical = canonical.replace("{associated}", f"{assoc_prefix}{sep}")
-        else:
-            # Associated enabled but no prefix — drop the token
-            canonical = canonical.replace("{associated}", "")
-    else:
-        canonical = canonical.replace("{associated}", "")
-
-    # Build assertions config
-    old_assertions = patterns.get("assertions", {})
-    new_assertions: dict[str, Any] = {}
-    if old_assertions:
-        new_assertions["label_style"] = old_assertions.get("label_style", "uppercase")
-        new_assertions["max_count"] = old_assertions.get("max_count", 26)
-        if "zero_pad" in old_assertions:
-            new_assertions["zero_pad"] = old_assertions["zero_pad"]
-        if "multi_separator" in old_assertions:
-            new_assertions["multi_separator"] = old_assertions["multi_separator"]
-
-    # Also set namespace from patterns.prefix if not already in [project]
-    namespace = patterns.get("prefix", "REQ")
-    if config.get("project", {}).get("namespace") == config_defaults()["project"]["namespace"]:
-        config.setdefault("project", {})["namespace"] = namespace
-
-    # Write synthesized [id-patterns]
-    config["id-patterns"] = {
-        "canonical": canonical,
-        "aliases": {"short": canonical.split("-", 1)[1] if "-" in canonical else canonical},
-        "component": new_component,
-        "assertions": new_assertions or id_patterns.get("assertions", {}),
-    }
-
-    # Write synthesized [levels]
-    if new_levels:
-        config["levels"] = new_levels
-
-    return config
-
-
 CURRENT_CONFIG_VERSION = 4
 
 
-# Implements: REQ-d00212-N
 def _migrate_v3_to_v4(config: dict) -> dict:
     """Move flat terms severity fields into nested [terms.severity].
 
@@ -249,7 +149,6 @@ def _migrate_v3_to_v4(config: dict) -> dict:
 
 
 MIGRATIONS: dict[int, Callable[[dict], dict]] = {
-    1: _migrate_legacy_patterns,  # [patterns] -> [id-patterns]
     3: _migrate_v3_to_v4,  # flat terms severity -> nested [terms.severity]
 }
 
@@ -312,9 +211,21 @@ def load_config(config_path: Path) -> dict[str, Any]:
         if v in MIGRATIONS:
             merged = MIGRATIONS[v](merged)
 
+    # A pre-v2 configuration declared its identifiers in a `[patterns]`
+    # section. Nothing reads that section now, so accepting one would mean
+    # loading a configuration whose identifier settings are silently
+    # ignored -- the reader would get whatever the defaults are, and the
+    # spelling they configured would simply not happen.
+    if "patterns" in merged:
+        raise ValueError(
+            f"{config_path}: [patterns] is the pre-v2 way of declaring identifiers "
+            f"and is no longer read. Declare levels in [levels] and the identifier "
+            f"form in [id-patterns]; see `elspais docs config`."
+        )
+
     # Strip legacy/unknown keys before Pydantic validation, but keep them
     # for backward-compatible config.get() access afterwards.
-    _LEGACY_TOP_LEVEL_KEYS = {"patterns", "requirements", "paths", "references"}
+    _LEGACY_TOP_LEVEL_KEYS = {"requirements", "paths", "references"}
     stripped: dict[str, Any] = {}
     for key in _LEGACY_TOP_LEVEL_KEYS:
         if key in merged:
