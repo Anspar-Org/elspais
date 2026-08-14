@@ -153,7 +153,10 @@ _FIELD_COMMENTS: dict[str, str] = {
     "stats": "File path for MCP tool-usage statistics (optional)",
     # --- [project] ---
     "project": "Project identity",
-    "project.namespace": "Prefix for requirement IDs (e.g. REQ -> REQ-p00001)",
+    "project.namespace": (
+        "The namespace this repository's identifiers carry, and its alone: no two "
+        "repositories in one federation may declare the same one (e.g. REQ -> REQ-p00001)"
+    ),
     "project.name": "Project display name",
     "project.color": (
         'Optional badge color for this project\'s namespace (hex "#RRGGBB"); '

@@ -27,9 +27,15 @@ B. The system SHALL NOT do something prohibited.
 
 ## ID Format
 
-  `REQ-<type><number>`
+  Each repository configures the shape of its own identifiers -- the
+  namespace, the levels and their letters, whether the component is a
+  number or a name, and how an assertion label is marked off. The form
+  below is the default, and the one every example here is written in.
+  `elspais docs config` covers what may be configured.
 
-  Types:
+  `REQ-<level><number>`
+
+  Levels (as this configuration declares them):
     `p` = PRD (Product)     e.g., REQ-p00001
     `o` = OPS (Operations)  e.g., REQ-o00001
     `d` = DEV (Development) e.g., REQ-d00001

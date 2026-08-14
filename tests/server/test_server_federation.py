@@ -191,7 +191,6 @@ class TestApiReposStaleness:
         only way the host's own entry is put under test.
         """
         from elspais.graph.factory import build_graph
-
         from tests.federation_repos import make_repo
 
         repo = make_repo(tmp_path, "host", origin="https://example.com/host.git")
