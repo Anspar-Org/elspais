@@ -447,8 +447,15 @@ E and F are a pair, and F is what makes E safe. Looking inside an item is exactl
 
 G separates recognition from form. What a keyword is cannot depend on its case without making a report's absence depend on it too, so a differently-cased keyword is read; that its form is non-canonical is a fact about the file worth reporting, but withholding the relationships it introduced would punish the reference for the keyword's spelling.
 
+This requirement declares `Satisfies:` against the REQ-p00019 anti-pattern template and concretizes its classes for reference reading. Misattribution and double-counting are the classes this subsystem exists to answer, and assertions A, B and C pin them: one class per item and never a later one, no describing an item holding a space as though it named a repository, and attribution decided by what a repository declares rather than by what the text resembles. Silent omission and unreported non-performance are pinned by the obligation to report every recognised reference that produces no relationship (REQ-d00269-F, REQ-d00269-G), and phantom success by the rule that reading within an item informs a report and never contributes an edge (assertion F, REQ-d00269-J). Undisclosed substitution is pinned twice over: a list of which some items bound and others did not is a partial result, disclosed by reporting each item that failed, and a defect the tool could not determine is carried as the generic code rather than passed off as no defect at all (REQ-d00271-C).
+
+The template's remaining classes bind to this subsystem through the instance without a tool-specific strengthening. That a failure report names the operation, the cause, and a remedy or the absence of one is one of them, and it does not compete with the rule that a code names a defect rather than a repair: the code says what is wrong, the report may also say what would answer it, and the two are different layers of the same finding.
+
+One class has no purchase here and is left visibly uncovered rather than answered. A classification is computed from file content at every build and no verdict is cached, so this subsystem serves no value that can diverge from the sources it came from. Divergence between a served answer and changed sources is real elsewhere in the tool and is covered where it lives (REQ-p00015-E, REQ-p00015-G).
+
 ### Changelog
 
+- 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: record how each REQ-p00019 class is answered for this subsystem — concretized, bound through the instance, or left visibly uncovered with its reason
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: the rule assigning reference failure classes — the space and namespace tests, minimal relaxation, and reading within an item without binding from it
 
 *End* *Reference Fault Classification* | **Hash**: b84fe00f

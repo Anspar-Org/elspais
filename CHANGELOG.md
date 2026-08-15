@@ -127,6 +127,12 @@ from — syntax errors reported as references into repositories nobody had
 configured, and files carrying an `Implements:` line reported as carrying no
 traceability marker at all (REQ-p00019-J, REQ-p00019-K, REQ-d00241-E).
 
+Reference classification declares satisfaction against that catalog, and records
+for each of its classes whether the class is concretized here, binds through the
+instance unchanged, or has no purchase on this subsystem and why — so a class
+that goes unanswered is visible as a decision rather than as an omission
+(REQ-d00272).
+
 #### Upgrading: configuration and identifiers
 
 Every change below refuses something a configuration or a stored identifier
