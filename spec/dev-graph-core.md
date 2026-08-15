@@ -412,6 +412,47 @@ A label is a permanent name: references point at it, coverage accrues to it, and
 
 *End* *Report Malformed Assertion Labels* | **Hash**: cb7e96dd
 
+## REQ-d00272: Reference Fault Classification
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00014-R
+**Satisfies**: REQ-p00019
+
+A reference that fails is described by how far reading it got, and the classes are only as useful as the rule that assigns them. This states that rule: what decides that an item was written as an identifier at all, which repository's grammar it should be read against, and how much of a defect may be named without guessing.
+
+### Assertions
+
+A. An item SHALL be assigned the class of the furthest stage of reading it completed, and no later stage SHALL be reported for it.
+
+B. An item containing a space SHALL NOT be read as an identifier. A report SHALL NOT describe such an item as naming a repository, an unconfigured repository included.
+
+C. An item no grammar of the federation accepts SHALL be attributed to a repository where the namespace it opens with is one that repository declares, and to no repository otherwise. What separates an identifier of this estate written wrongly from a name belonging outside it SHALL be that declaration, not the item's resemblance to any pattern.
+
+D. Where re-reading an item under relaxations of the grammar that accepts its namespace makes it acceptable, the report SHALL name the smallest set of relaxations that does so.
+
+E. An item that opens with an acceptable reference and continues into content no grammar accounts for SHALL be reported naming both the reference found and the content unaccounted for.
+
+F. Reading within an item SHALL inform what is reported about it and SHALL NOT contribute a relationship, so that no relationship exists that its author did not spell.
+
+G. A *Traceability* keyword SHALL have one canonical spelling. A keyword recognised in any other SHALL be reported at a severity the project configures, and SHALL produce the relationships it introduced regardless.
+
+H. A keyword introducing no content SHALL be reported as having introduced none.
+
+### Rationale
+
+B and C are the whole of the decidability claim, and they are stated as tests on the item rather than as descriptions of what an identifier looks like because a shape can always be argued with. A space is what no identifier of any configuration contains, and a declared namespace is a fact the federation holds rather than an inference about the text; between them they separate three populations that a project acts on differently — text that was never a reference, an estate identifier spelled wrongly, and a name belonging to a repository nobody configured. Collapsing any two of those sends an author to work that will not fix anything.
+
+D bounds diagnosis by minimality rather than by a list of defects worth naming. The smallest set is the one the input determines; a larger set that also succeeds contains a relaxation the input never asked for, and naming it describes a defect the author does not have.
+
+E and F are a pair, and F is what makes E safe. Looking inside an item is exactly the move that, allowed to produce a relationship, credits a requirement its author never named — and credits it silently, since a reference that resolved is a reference that looked fine. The distinction that keeps E is not how far the tool may look but what it may do with what it finds: describing costs nothing, because a description cannot be mistaken downstream for a declaration.
+
+G separates recognition from form. What a keyword is cannot depend on its case without making a report's absence depend on it too, so a differently-cased keyword is read; that its form is non-canonical is a fact about the file worth reporting, but withholding the relationships it introduced would punish the reference for the keyword's spelling.
+
+### Changelog
+
+- 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: the rule assigning reference failure classes — the space and namespace tests, minimal relaxation, and reading within an item without binding from it
+
+*End* *Reference Fault Classification* | **Hash**: b84fe00f
+
 ## REQ-d00254: Test Evidence: Attribution, Ingestion, and Coverage Crediting
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00051

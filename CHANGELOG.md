@@ -20,6 +20,12 @@ All notable changes to elspais will be documented in this file.
 
 ### Fixed
 
+- **An identifier is spelled only under its repository's grammar** — a requirement's own identifier survives a render because it is normalized when it is read, but everything composed at render time carried its own copy of the separator characters. Five sites spelled `-` and `+` directly. Two were live defects rather than unreachable fallbacks: a journey's `Validates:` line never consulted the grammar it held, so a repository configured otherwise had its journey references rewritten into a form it does not accept; and renaming a requirement recomposed the old assertion identifier to look it up, so under any other separator the lookup missed and the assertion kept its former name. Composition now happens in one place, and a caller without a grammar refuses rather than assuming one. The multi-assertion expander loses a second grammar that split on `-` or `_`, and the next-label allocator loses its assumed A-Z alphabet.
+
+- **A rename left every journey citing the renamed requirement holding the old identifier (REQ-p00017-B)** — the obligation to update every reference held in the graph already existed; a journey renders from a cached copy of its own text, which is such a reference, and only the renamed node was reconciled. Correcting the cache was not enough either: the save path derives which files to rewrite from the mutation log, so a journey the mutation never named kept the old identifier on disk. Renaming an assertion had the same gap. Both are fixed, and the reconciled journeys are named on the mutation so the save reaches them.
+
+- **A journey closed with its title accumulated an end marker on every save** — a journey may be closed by its title or by its identifier, and only the identifier form was recognised as the journey's footer. The title form fell through to unclaimed content and was re-emitted beside the generated marker. Both forms are read now, and the title is written, as a requirement's is. Two authored details the same re-render discarded are kept as well: a journey's heading depth and its sections'. A journey nested under a chapter heading was rewritten at a fixed depth and quietly promoted out of it.
+
 - **`[keywords].min_length` takes effect** — the shortest word worth indexing was a documented setting the extractor honoured and nothing ever passed to it, so every project indexed words of three letters and up whatever it configured. It is passed now. Projects leaving it alone see no change.
 
 - **`rules.format.allowed_statuses` is refused rather than dropped** — the statuses a requirement may declare are the ones named in `[rules.format.status_roles]`, whose lists say what each status means as well as that it exists. Naming the set a second time could only agree or disagree with them, so the setting was superseded — and then dropped in silence, which left a project believing it had said something. It is now reported, naming the section that answers instead.
@@ -77,6 +83,50 @@ All notable changes to elspais will be documented in this file.
 
 ### Changed
 
+#### Specification only: how a failed reference is described
+
+Requirements authored ahead of the implementation that will satisfy them. No
+behaviour changes in this release; the obligations below describe what a later
+one must do, and the breaking parts of it — a stricter block header, the
+retirement of `validation.allow_unresolved_cross_repo` — arrive with that
+implementation and are noted again when they do.
+
+A reference that fails is now described by how far reading it got, rather than
+by whether some configured repository claims the string it names. The classes
+are: it never read as a reference; it read as one whose identifier no repository
+of the federation claims; it named a requirement nothing holds; it named a
+requirement that exists but an *Assertion* of it that does not; or it named an
+existing target the keyword may not take. Severity is chosen per class, because
+the classes differ in what would resolve them — configuring a missing repository
+answers one and answers nothing about a line that was never an identifier. A
+diagnostic may not name a class further along than the reference reached
+(REQ-p00014-R, REQ-d00269-F, REQ-d00272).
+
+Each item of a reference list is judged on its own: a well-formed item produces
+its relationship whatever its neighbours do, and a defective one is reported
+without costing them. An item is still matched whole, so a reference is never
+resolved by an identifier found inside a larger one, and a defect that can be
+named still yields no relationship — describing what an author appears to have
+meant is not licence to act on it (REQ-d00269-G, REQ-d00269-J).
+
+A list whose content ends with the separator continues onto the next line that
+may hold reference content, which is what a multi-line list has meant to authors
+writing them all along. What a keyword is no longer depends on its case, though
+one canonical spelling remains and departing from it is reported without costing
+the reference its relationship (REQ-d00269-E, REQ-d00269-H).
+
+A requirement's metadata is a bounded run of lines rather than a single line,
+with one rendered form derived from its content and a configured width; a
+declaration written after the run has ended is reported rather than silently
+absorbed (REQ-d00273).
+
+Two behavioural anti-pattern classes join the truthful-reporting catalog: a
+description under which findings are grouped must be true of every finding it
+covers, and a finding is counted once. The first is the defect this work began
+from — syntax errors reported as references into repositories nobody had
+configured, and files carrying an `Implements:` line reported as carrying no
+traceability marker at all (REQ-p00019-J, REQ-p00019-K, REQ-d00241-E).
+
 #### Upgrading: configuration and identifiers
 
 Every change below refuses something a configuration or a stored identifier
@@ -131,6 +181,15 @@ character the part before it can contain. `separators` (a list of accepted
 alternates) and `prefix_optional` are removed: one spelling of an identifier is
 admitted, the one the repository configures. Delete both keys.
 
+**Neither assertion separator may be `,` (REQ-d00251-M).** That character
+already divides one reference from the next in a list, and a list is divided
+before its items are read, so a comma inside an identifier never reaches the
+identifier reader: `Implements: REQ-p00001,A,B` reads as three references, one
+of them a bare label naming no requirement. Every multi-assertion reference
+under such a configuration was shredded in silence. The configuration is now
+refused, naming the character and the role it already holds. Use a character
+that holds no other, such as `&`.
+
 **A keyword's references are read from where the keyword's content starts.**
 Two forms that used to resolve no longer do, and are reported as unresolved
 references rather than becoming silent wrong edges: a citation with prose before
@@ -139,6 +198,17 @@ that merely contains a configured namespace (`XREQ-d00001` no longer reads as
 `REQ-d00001`). A project upgrading may therefore see findings where it saw none.
 Those references were not doing what they appeared to do.
 
+**A journey declares what it validates in its metadata, and nowhere else
+(REQ-p00014-V).** The declaration belongs beside `Actor` and `Goal`, before the
+first section, and applies to the journey as a whole. A `Validates:` line
+inside a journey section is no longer read; it is reported as a declared
+reference that produced no relationship. A journey is regenerated from the
+graph when it is saved, so a second copy of the declaration was written back
+alongside the first — one current, one as originally typed, naming different
+requirements after any rename. **Migration**: move the line up into the
+metadata and delete the section. Scoping a declaration to particular steps is
+a refinement the tool does not compute, so its syntax is refused rather than
+accepted and discarded.
 
 - **BREAKING: a node identified by a source location now names the repository holding it (REQ-d00128-A, REQ-p00050-E)** — FILE, remainder and definition nodes are identified by where their content sits rather than by anything semantic, and a repo-relative path is unique only inside one repository. Two federated repositories with a spec file at the same path therefore produced one identity for two different files, and every answer about either was an answer about whichever the ownership map happened to record. Those ids now carry the owning repository's namespace: `file:REQ:spec/design.md`, `rem:REQ:spec/design.md:11`, `def:REQ:spec/glossary.md:3`. The namespace is the one the repository declares for itself, so the id a lone build produces is the id it keeps inside a federation — joining one changes no node's identity.
 

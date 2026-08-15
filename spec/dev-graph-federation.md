@@ -390,11 +390,15 @@ C. An identifier owned by any repository in a federation SHALL be recognised in 
 
 D. A *Traceability* reference whose target identifier cannot be resolved SHALL be recorded as a broken reference, whatever kind of file it appears in.
 
-E. A *Traceability* keyword SHALL introduce a reference only where it is the first content of a comment or of a metadata line. The same keyword occurring elsewhere in a line, or within inline-quoted or fenced text, SHALL NOT introduce a reference.
+E. A *Traceability* keyword SHALL introduce a reference only where it is the first content of a comment or of a metadata line, with the separator that ends the keyword abutting it. The same keyword occurring elsewhere in a line, or within inline-quoted or fenced text, SHALL NOT introduce a reference. What a keyword is SHALL NOT depend on its case.
 
-F. Every reference recognised under E whose target resolves to no node SHALL be reported by a dedicated check, at a severity the project configures among informational, warning and failing.
+F. Every reference recognised under E that produces no relationship SHALL be reported, at a severity the project configures among informational, warning and failing independently for each class R distinguishes.
 
-G. The content a *Traceability* keyword introduces SHALL be a separated list of references. Where that content holds anything other than references, the line SHALL be reported as an unresolved reference rather than resolved by an identifier found within it.
+G. The content a *Traceability* keyword introduces SHALL be a separated list of references, and each item of that list SHALL be judged on its own: an item the grammar accounts for produces its relationship, and an item it does not is reported under the class it reached. An item SHALL be matched whole, so that a reference is never resolved by an identifier found within a larger item.
+
+H. A list whose content ends with the separator SHALL continue onto the next line that may hold reference content — the next line of the same comment block, or the next line of the same metadata block. A list ending with the separator and having no such line SHALL bind the references it holds and report the separator that introduced nothing.
+
+J. Where a reference is spelled in a way the grammar does not accept, the report SHALL name the defect it can determine and SHALL NOT produce the relationship the reference would have produced had it been spelled acceptably.
 
 ### Rationale
 
@@ -404,9 +408,15 @@ D is the diagnostic floor beneath C. A reference the tool cannot resolve is a fa
 
 E is what makes D decidable. A target no repository claims is by definition outside every configured grammar, so nothing about its *shape* can be trusted to say whether it was meant as a reference — guessing from the target invents findings out of prose, and an unrestricted net over this estate produced thirty-five of them from sentences that merely contain a keyword. Position is the property that can be relied on instead: a reference is written where a reference belongs, and prose that discusses one is quoted. That also gives documentation a way to name a keyword without invoking it, which a shape-based rule cannot offer at any strictness.
 
-F exists because the honest report of an unresolvable reference is not always an error. A repository may reference a requirement that a sibling has not authored yet, and the same finding is informational to one project and a build failure to another. Severity is therefore the project's decision, while noticing is not.
+F exists because the honest report of an unresolvable reference is not always an error. A repository may reference a requirement that a sibling has not authored yet, and the same finding is informational to one project and a build failure to another. Severity is therefore the project's decision, while noticing is not. The decision is per class rather than for unresolvability as a whole, because the classes differ in what would resolve them: a repository nobody configured is answered by configuring it, and a name that never read as a reference is answered only by rewriting it. A project silencing the first while still hearing the second is expressing a real position, and one severity for both denies it.
 
-E settles where a keyword may introduce a reference; G settles what it may introduce. Searching the introduced content for anything identifier-shaped reads a reference out of text that names one only incidentally — a description mentioning a requirement becomes a citation of it, and an identifier that merely contains another repository's namespace resolves to a requirement its author did not write. Both are silent: the reference resolves, so nothing reports it. Requiring the content to be references and nothing else makes the unresolvable case visible on the channel D already provides.
+E settles where a keyword may introduce a reference; G settles what it may introduce. Searching the introduced content for anything identifier-shaped reads a reference out of text that names one only incidentally — a description mentioning a requirement becomes a citation of it, and an identifier that merely contains another repository's namespace resolves to a requirement its author did not write. Both are silent: the reference resolves, so nothing reports it. Matching each item whole makes the unresolvable case visible on the channel D already provides.
+
+Judging items one at a time does not weaken that. A defect in one item is evidence about that item, not about the list, and refusing the whole list makes a single typo cost every reference beside it — silently, since the refusal reads in every report exactly like a line nobody annotated. What must not vary with the number of items is how a reference is recognised, and matching whole is what holds that fixed.
+
+The prohibition on shape in E is about recognition, and does not extend to describing an item on a line already recognised. Nothing about a target's shape can say whether it was *meant* as a reference, which is why position decides that; but once position has decided it, the author has said the item is a reference, and shape is the only evidence left about which kind of defect it carries. A repository declaring the namespace an item opens with is what separates an identifier of this estate written wrongly from a name belonging to a repository nobody configured, and the two send an author to different work. J keeps that separation honest in the direction that matters: describing a defect is not licence to act on the description, because a relationship built from a guess about what an author meant is indistinguishable, everywhere downstream, from one they declared.
+
+H exists because a list long enough to need a second line is ordinary, and a form the tool neither accepts nor rejects is the worst of the three answers available. The separator already means the list has not ended, so continuation asks nothing of an author that spelling the list correctly did not already ask; and a separator with nothing after it says the same thing about a list that has, in fact, ended.
 
 The complementary negative rule — that federation membership alone credits nothing — belongs to the federation role model and is not restated here. Together the two bound the behaviour from both sides: coverage crosses a boundary exactly where a *Traceability* edge crosses it, and nowhere else.
 
@@ -416,6 +426,8 @@ A concurrency version is derived from a node's content and its outgoing *Traceab
 
 ### Changelog
 
+- 2026-08-15 | c861d2bc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: judge list items one at a time (G); keyword recognition is case-independent with an abutting separator (E); severity per failure class (F); list continuation onto a following line (H); a named defect never yields the relationship (J)
 - 2026-08-11 | 8cac4dcd | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-11 | f5855c6e | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: a keyword introduces a list of references and nothing else (G)
 - 2026-08-09 | f5855c6e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -424,5 +436,5 @@ A concurrency version is derived from a node's content and its outgoing *Traceab
 - 2026-08-08 | bd05142f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-08-09 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: cross-repository coverage credit
 
-*End* *Cross-Repository Coverage Credit* | **Hash**: 8cac4dcd
+*End* *Cross-Repository Coverage Credit* | **Hash**: c861d2bc
 ---

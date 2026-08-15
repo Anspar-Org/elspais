@@ -180,7 +180,7 @@ Cross-cutting concerns — regulatory compliance frameworks, security policies, 
 
 A template is a *subtree*, not a single REQ: template-marked REQs refine other template-marked REQs to decompose one cross-cutting obligation into levels of detail (a policy root refined by its specific provisions). `Satisfies:` may target any member of a template subtree — the clone is the subtree rooted at the target, so declaring against an interior member is simply a narrower declaration. An earlier revision restricted templates to single-REQ scope (root plus directly-attached assertions, inbound `Refines:` prohibited); that made real policy hierarchies unrepresentable and is retired. The validation matrix's complements are deliberate permissions: template-to-template `Refines:` is the subtree-forming edge, and `Implements:` from CODE / `Verifies:` from TEST against template targets is the cross-cutting evidence path — assertion D produces the direct edge, assertion P makes that evidence count on every instance. Instances need no special analysis: evidence recorded against a template *Assertion* counts on each of its instances (assertion P), and from there every surface treats instances as ordinary directly-declared nodes (assertion K) — the standard rollup aggregates a cloned subtree like any other. The INSTANCE edge is the wiring by which implementations realize assertion P; whether that is computed as query-time inheritance or by materializing evidence edges onto clones is an implementation choice the spec does not fix. Which members of a subtree apply to a given repository is that repository's authoring decision, expressed by what it targets — the granularity question is no different from deciding what belongs in one REQ.
 
-Two conformance details keep the model usable with named ID schemes. Named-component styles (kebab-case, snake_case) put the assertion-separator character inside requirement names, so a string like `HHT-OPS-production-readiness-A` is lexically ambiguous between a longer requirement name and an assertion-targeted reference; the configuration guard that rejects overlapping separator/label styles (REQ-d00251-F) makes the split well-defined, and assertion Q obliges every accepting field — the metadata line included — to apply the same split, so a reference never resolves differently in a `Satisfies:`/`Refines:` header than the identical string would in a code marker. And because template targets are where authors first collide with the validation matrix, assertion R separates the two ways a reference can fail — the ID resolves to nothing, or it resolves to a node the matrix forbids — so a diagnostic never sends an author hunting a "missing" requirement that in fact exists, or relaxing a rule when the real problem is a typo.
+Two conformance details keep the model usable with named ID schemes. Named-component styles (kebab-case, snake_case) put the assertion-separator character inside requirement names, so a string like `HHT-OPS-production-readiness-A` is lexically ambiguous between a longer requirement name and an assertion-targeted reference; the configuration guard that rejects overlapping separator/label styles (REQ-d00251-F) makes the split well-defined, and assertion Q obliges every accepting field — the metadata line included — to apply the same split, so a reference never resolves differently in a `Satisfies:`/`Refines:` header than the identical string would in a code marker. And because template targets are where authors first collide with the validation matrix, assertion R separates the ways a reference can fail by how far it got, so a diagnostic never sends an author hunting a "missing" requirement that in fact exists, relaxing a rule when the real problem is a typo, or configuring an absent repository when the text was never an identifier. Naming a class further along than the reference reached is the same error in each case: it describes a defect the author does not have.
 
 Three uniformity guarantees complete the reference contract. Reserving `:` out of every configurable pattern element (assertion S) leaves `::` unambiguous as the composite instance-ID joiner in any federation of valid configurations. Assertions T and U extend Q from parsing to the full round trip: one set of acceptance rules and one rendered form per entity — determined by the owning repository — in every file type, so a repository configured with separator `/` cites `REQ-p00001/F` everywhere, never `-F` on one surface and `/F` on another. Journey and journey-step references ride the same contract, steps standing in for *Assertions* (REQ-p00002-G).
 
@@ -220,7 +220,7 @@ P. Evidence declared against a template *Assertion* SHALL count as evidence on e
 
 Q. The system SHALL parse each requirement or *Assertion* reference according to the ID-pattern rules of the repository that owns the referenced identifier.
 
-R. When a declared reference fails to produce a valid relationship, the resulting diagnostic SHALL state which failure class occurred: resolution failure (the referenced ID matches no requirement or *Assertion*) or rule violation (the target exists but the relationship is forbidden by the validation matrix).
+R. When a declared reference fails to produce a valid relationship, the resulting diagnostic SHALL state which failure class occurred. The classes are distinguished by how far the reference got before it failed: it did not read as a reference at all; it read as one whose identifier no repository of the federation claims; it named a requirement no repository holds; it named a requirement that exists but an *Assertion* of it that does not; or it named an existing target the validation matrix forbids for that keyword. A diagnostic SHALL NOT report a class further along than the one the reference reached.
 
 S. The system SHALL reject at configuration-validation time an identifier-pattern configuration able to produce an identifier or reference containing the character `:`.
 
@@ -232,9 +232,11 @@ V. A user journey SHALL declare what it validates in one place: its metadata, wh
 
 ### Changelog
 
+- 2026-08-15 | 1bae4f82 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-14 | 11ee2801 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-14 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: a journey declares what it validates in one place, its metadata (V)
 - 2026-08-02 | ee2b9541 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: R distinguishes failure classes by how far the reference got, and forbids naming a class further along than it reached
 - 2026-08-01 | 50f072e0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 064c817a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: reserve `:` out of configurable pattern elements so `::` is unambiguously the composite joiner (S); uniform reference acceptance across file types (T); canonical rendered form per owning repo (U)
@@ -256,7 +258,7 @@ V. A user journey SHALL declare what it validates in one place: its metadata, wh
 - 2026-05-04 | bae1b85d | - | Developer (<dev@example.com>) | Auto-fix: canonicalize term forms, update hash
 - 2026-03-30 | 9115ce0d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Satisfies Relationship* | **Hash**: 11ee2801
+*End* *Satisfies Relationship* | **Hash**: 1bae4f82
 ---
 
 ## REQ-p00016: NOT APPLICABLE Status

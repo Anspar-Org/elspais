@@ -207,6 +207,37 @@ A failing check's findings are what the reader came for; a passing check's are n
 *End* *Unified Report Composition* | **Hash**: 587285b0
 ---
 
+## REQ-d00271: Diagnostic Code Vocabulary
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00015
+
+A report groups findings so they can be counted and a severity chosen for them, and names each finding's defect so it can be acted on. Those are separate vocabularies with separate obligations: the first is closed so a project can configure against it, the second is open so a diagnosis can become more specific without anything having to be reconfigured.
+
+### Assertions
+
+A. Every finding SHALL carry a code naming its defect, and the codes SHALL be documented with an example of input that produces each.
+
+B. A finding MAY carry more than one code, so that a defect determined in several independent respects is reported in all of them rather than in whichever was tested first.
+
+C. There SHALL be a code meaning that the defect could not be determined beyond the category, and a finding whose defect is undetermined SHALL carry it. A finding carrying only that code is the report that nothing more specific is known, and SHALL NOT be read as the absence of a diagnosis.
+
+D. A code SHALL be issued only where the input determines the defect it names. Where the input admits two accounts of equal extent, neither SHALL be issued.
+
+E. Introducing a code SHALL NOT change which category a finding falls in, the severity configured for that category, or the meaning of a code already in use.
+
+### Rationale
+
+The two vocabularies fail in opposite directions, which is why they are separated. A category that grows breaks configuration that referred to the old set and reopens a decision the project already made. A diagnosis that cannot grow leaves the tool unable to say more than it once could, so every improvement in what it can determine has to be paid for in churn somewhere. Fixing the categories and leaving the codes open lets diagnosis improve indefinitely at no cost to the project's settings.
+
+D is what keeps B from becoming guesswork. Reporting several respects in which an input is defective is a statement of fact only where each respect is determined by the input; where two accounts explain it equally, naming either asserts something the input does not support, and an author acting on the wrong one is worse off than an author told only the category. C is what makes that refusal reportable rather than silent: without a code for "no further account", declining to guess is indistinguishable from not having looked.
+
+### Changelog
+
+- 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: closed categories over open codes, multiple codes per finding, a generic code, and issuance only where determined
+
+*End* *Diagnostic Code Vocabulary* | **Hash**: 6f4019d1
+---
+
 ## REQ-d00086: Coverage Report Section
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00003

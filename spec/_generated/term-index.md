@@ -33,6 +33,7 @@
 - REQ-d00209-F
 - REQ-d00212-F
 - REQ-d00212-M
+- REQ-d00272-G
 - REQ-d00255-D
 - REQ-d00204-G
 - REQ-d00252-B
@@ -55,6 +56,7 @@
 - REQ-d00241-A
 - REQ-d00241-C
 - REQ-d00241-D
+- REQ-d00241-E
 - REQ-p00005-B
 - rem:REQ:spec/AI-AGENT.md:20
 - REQ-d00084:section:0

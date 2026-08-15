@@ -187,7 +187,7 @@ Each domain NodeKind SHALL have a render function that produces its text represe
 
 A. Each `NodeKind` SHALL have a `render()` function that returns its text representation as a string, dispatched by kind.
 
-B. `REQUIREMENT` render SHALL produce the full requirement block: header line (`## REQ-xxx: Title`), metadata line, body text, `## Assertions` heading with *Assertion* lines from STRUCTURES children, non-normative sections from STRUCTURES children, and `*End*` marker with hash.
+B. `REQUIREMENT` render SHALL produce the full requirement block: header line (`## REQ-xxx: Title`), metadata block, body text, `## Assertions` heading with *Assertion* lines from STRUCTURES children, non-normative sections from STRUCTURES children, and `*End*` marker with hash.
 
 C. `ASSERTION` nodes SHALL be rendered by their parent REQUIREMENT's render function, not independently. Calling render on an *Assertion* directly SHALL raise `ValueError`.
 
@@ -231,6 +231,7 @@ Deriving the version from rendered output rather than from a counter means a reb
 
 ### Changelog
 
+- 2026-08-15 | 4bd2b48b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-08 | e701b585 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-09 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-59: author assertion P (reserved value marks unhashable content in the End marker)
 - 2026-08-02 | fd882e78 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -246,7 +247,39 @@ Deriving the version from rendered output rather than from a counter means a reb
 - 2026-05-11 | c004c62e | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | c004c62e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Render Protocol for Graph Nodes* | **Hash**: e701b585
+*End* *Render Protocol for Graph Nodes* | **Hash**: 4bd2b48b
+
+## REQ-d00273: Requirement Metadata Block
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00002
+
+A requirement's metadata is a run of lines rather than one line, because the declarations it carries have no bounded length and a requirement citing many others cannot be read when they are all spelled on one. Bounding where the run ends is also what lets a declaration be recognised as misplaced rather than silently absorbed.
+
+### Assertions
+
+A. A requirement's metadata SHALL occupy a contiguous run of lines beginning at its header and ending at the first line that carries no metadata field, and a field of the same requirement MAY be written on any line of that run.
+
+B. A field naming a list SHALL be permitted more than once within the run, and the declarations SHALL combine as one list in the order written.
+
+C. A metadata field written after the run has ended SHALL produce no declaration and SHALL be reported as a declaration the tool did not read.
+
+D. A requirement's metadata SHALL have one rendered form, determined by its content and a configured width and by nothing else, so that two requirements carrying the same declarations render identically however they were written.
+
+E. Where the rendered form does not fit the width, the fields SHALL be divided one to a line; where a single field still does not fit, its list SHALL be divided one reference to a line. A list divided across lines SHALL be spelled in the form that a list continuing across lines is read in.
+
+### Rationale
+
+C is the obligation the block boundary exists to make statable. Without a bounded run, a declaration written among the body text is indistinguishable from one written where declarations belong, and the tool has no ground on which to report it; with one, a declaration in the wrong place is a fact that can be reported instead of a difference nobody notices. The failure prevented is the same one a journey's misplaced validation declaration prevents: a requirement declaring less, or more, than its author believes.
+
+D forbids the rendered form from depending on how a requirement was previously written. A form that remembers its input has as many spellings as it has histories, which costs the comparison that a canonical form exists to give — two requirements that declare the same thing must read the same. It also costs the fixed point, since a form derived from prior state cannot be derived from the graph alone.
+
+E divides at the outermost structure first and only then within a field, so that the smaller a change is the less of the form it disturbs; a reference added to a divided list adds a line and moves none. Spelling a divided list the way a continued list is read is what keeps one convention where two would otherwise grow — the form written and the form accepted are the same form.
+
+### Changelog
+
+- 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: metadata as a bounded run of lines, repeated list fields, misplaced declarations reported, and one rendered form derived from content and width
+
+*End* *Requirement Metadata Block* | **Hash**: 2d7e25e8
 ---
 
 ## REQ-d00132: Render-Based Save Operation

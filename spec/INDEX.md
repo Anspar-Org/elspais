@@ -17,12 +17,12 @@
 | REQ-p00005 | Multi-Repository Requirements                    | prd-features.md | de05471c |
 | REQ-p00006 | Interactive Traceability Viewer                  | prd-features.md | 185217a3 |
 | REQ-p00013 | Automated Testing                                | prd-core.md     | 4318202c |
-| REQ-p00014 | Satisfies Relationship                           | prd-features.md | 11ee2801 |
+| REQ-p00014 | Satisfies Relationship                           | prd-features.md | 1bae4f82 |
 | REQ-p00015 | Complete and Current Reporting                   | prd-core.md     | 9aa9a8aa |
 | REQ-p00016 | NOT APPLICABLE Status                            | prd-features.md | 2211802a |
 | REQ-p00017 | Reference Integrity Under Mutation               | prd-core.md     | 8ddf7122 |
 | REQ-p00018 | Compiled Risk Register                           | prd-core.md     | 0f0438e9 |
-| REQ-p00019 | Truthful Reporting and Error Discipline          | prd-core.md     | b2a947fb |
+| REQ-p00019 | Truthful Reporting and Error Discipline          | prd-core.md     | 946a0e4c |
 | REQ-p00050 | Unified Graph Architecture                       | prd-features.md | 3a0fb899 |
 | REQ-p00060 | MCP Server for AI-Driven Requirements Management | prd-features.md | a729a853 |
 | REQ-p00061 | Requirement Decomposition Rules                  | prd-core.md     | 462c146e |
@@ -35,10 +35,11 @@
 
 | ID                     | Title                                   | File | Hash     |
 | ---------------------- | --------------------------------------- | ---- | -------- |
-| REQ-p00015::REQ-p00019 | Truthful Reporting and Error Discipline |      | b2a947fb |
-| REQ-p00080::REQ-p00019 | Truthful Reporting and Error Discipline |      | b2a947fb |
-| REQ-p00081::REQ-p00019 | Truthful Reporting and Error Discipline |      | b2a947fb |
-| REQ-p00083::REQ-p00019 | Truthful Reporting and Error Discipline |      | b2a947fb |
+| REQ-d00272::REQ-p00019 | Truthful Reporting and Error Discipline |      | 946a0e4c |
+| REQ-p00015::REQ-p00019 | Truthful Reporting and Error Discipline |      | 946a0e4c |
+| REQ-p00080::REQ-p00019 | Truthful Reporting and Error Discipline |      | 946a0e4c |
+| REQ-p00081::REQ-p00019 | Truthful Reporting and Error Discipline |      | 946a0e4c |
+| REQ-p00083::REQ-p00019 | Truthful Reporting and Error Discipline |      | 946a0e4c |
 
 ## OPERATIONS
 
@@ -106,7 +107,7 @@
 | REQ-d00128 | FILE Node Creation in Build Pipeline                          | dev-graph-file-nodes.md | 926ddd2b |
 | REQ-d00129 | SourceLocation Removal and Consumer Migration                 | dev-graph-file-nodes.md | 6d11df36 |
 | REQ-d00130 | Parameterized Root Iteration and Kind-Based Index Query       | dev-graph-file-nodes.md | 5733741e |
-| REQ-d00131 | Render Protocol for Graph Nodes                               | dev-graph-file-nodes.md | e701b585 |
+| REQ-d00131 | Render Protocol for Graph Nodes                               | dev-graph-file-nodes.md | 4bd2b48b |
 | REQ-d00132 | Render-Based Save Operation                                   | dev-graph-file-nodes.md | 91068610 |
 | REQ-d00133 | MCP FILE Node Integration                                     | dev-mcp-tools.md        | 08e2973f |
 | REQ-d00134 | Comprehensive Mutation Round-Trip Scenario Test               | dev-graph-file-nodes.md | 6c865949 |
@@ -151,14 +152,14 @@
 | REQ-d00238 | Graph-Wide Term Scan                                          | prd-core.md             | b14edde9 |
 | REQ-d00239 | Federated Graph Term Scanner Pass                             | prd-core.md             | e27abfeb |
 | REQ-d00240 | New Term Health Checks                                        | prd-core.md             | b4e70076 |
-| REQ-d00241 | Code No-Traceability Health Check                             | prd-core.md             | de72736f |
+| REQ-d00241 | Code No-Traceability Health Check                             | prd-core.md             | f4149861 |
 | REQ-d00242 | Terms API Endpoints                                           | prd-features.md         | a4522e0f |
 | REQ-d00243 | Terms Tab in Viewer Nav Tree                                  | prd-features.md         | 2873ed03 |
 | REQ-d00244 | Term Cards in Viewer Card Stack                               | prd-features.md         | 0a48035f |
 | REQ-d00245 | Inline Term Highlighting in Viewer Cards                      | prd-features.md         | 697c60cc |
 | REQ-d00246 | Markdown Emphasis Normalization Utility                       | prd-core.md             | 6db4d559 |
 | REQ-d00247 | Fenced Code Block Preservation                                | prd-core.md             | 499a4ce4 |
-| REQ-d00248 | Fix Command Idempotency                                       | prd-core.md             | 2b421222 |
+| REQ-d00248 | Fix Command Idempotency                                       | prd-core.md             | 99bb6d77 |
 | REQ-d00249 | Configured test runner execution                              | dev-cli.md              | 784f8350 |
 | REQ-d00250 | Section Header Depth Canonicalization                         | dev-graph-core.md       | 48fc2f11 |
 | REQ-d00251 | A Repository's Identifier Grammar                             | dev-graph-config.md     | 09f5a257 |
@@ -178,8 +179,11 @@
 | REQ-d00266 | Mechanical Style Checks                                       | dev-cli.md              | 084c17a0 |
 | REQ-d00267 | Viewer Pending-Work Indicator Truth                           | prd-features.md         | c1be85e3 |
 | REQ-d00268 | Report Malformed Assertion Labels                             | dev-graph-core.md       | cb7e96dd |
-| REQ-d00269 | Cross-Repository Coverage Credit                              | dev-graph-federation.md | 8cac4dcd |
+| REQ-d00269 | Cross-Repository Coverage Credit                              | dev-graph-federation.md | c861d2bc |
 | REQ-d00270 | Single-Authority Identifier Grammar Derivation                | dev-graph-config.md     | c8cb35b9 |
+| REQ-d00271 | Diagnostic Code Vocabulary                                    | dev-cli.md              | 6f4019d1 |
+| REQ-d00272 | Reference Fault Classification                                | dev-graph-core.md       | b84fe00f |
+| REQ-d00273 | Requirement Metadata Block                                    | dev-graph-file-nodes.md | 2d7e25e8 |
 
 ## User Journeys
 

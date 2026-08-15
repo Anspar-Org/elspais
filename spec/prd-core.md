@@ -429,7 +429,7 @@ C. If a mitigation citation within residual-risk documentation does not resolve 
 
 ## Rationale
 
-A catalog of behavioral anti-pattern classes, stated once and consumed by subsystem requirements via `Satisfies:`; in each assertion, "the system" reads as the satisfying subsystem. Each class names a point where several behaviors are individually defensible — serving a cached value, substituting a default, taking no action on an error — and prohibits choosing one silently or stranding the receiver of a failure without a path to action. Declaring satisfaction obliges the author to consider every class for that subsystem: concretize it with the satisfier's own assertions, exclude it per-instance (REQ-p00016), or leave it visibly uncovered.
+A catalog of behavioral anti-pattern classes, stated once and consumed by subsystem requirements via `Satisfies:`; in each assertion, "the system" reads as the satisfying subsystem. Each class names a point where several behaviors are individually defensible — serving a cached value, substituting a default, taking no action on an error — and prohibits choosing one silently, stranding the receiver of a failure without a path to action, or describing what is reported as something other than what it is. Declaring satisfaction obliges the author to consider every class for that subsystem: concretize it with the satisfier's own assertions, exclude it per-instance (REQ-p00016), or leave it visibly uncovered.
 
 ## Assertions
 
@@ -449,13 +449,19 @@ G. When the system reports a failure, the report SHALL identify the operation th
 
 H. The system SHALL act on or report every error signal it receives, except signals whose point of suppression carries a recorded justification that no action is required.
 
+J. When the system reports findings under a description of their cause, that description SHALL be true of every finding it covers. Where a description would be true of only some, the system SHALL report those under a description true of each, rather than under the one that covers the most.
+
+K. The system SHALL report a finding under one description only, so that a count of findings is a count of distinct facts.
+
 ## Changelog
 
+- 2026-08-15 | 946a0e4c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: add misattribution and double-reporting classes — a description must be true of every finding it covers, and a finding is counted once
 - 2026-08-01 | b2a947fb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: condense rationale to a short orientation preamble per review
 - 2026-08-01 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: author behavioral anti-pattern template — silent omission, staleness, substitution, phantom success, unreported non-performance, verdict integrity, unactionable failures, suppressed error signals
 
-*End* *Truthful Reporting and Error Discipline* | **Hash**: b2a947fb
+*End* *Truthful Reporting and Error Discipline* | **Hash**: 946a0e4c
 ---
 
 ## REQ-d00220: TermDictionary Data Model
@@ -805,8 +811,12 @@ C. Severity SHALL be read from `[rules.format] no_traceability_severity` (defaul
 
 D. The `tests.unlinked` check (`check_unlinked_tests()`) SHALL flag a test file when it contains no TEST nodes, or when it contains TEST nodes none of which link to any requirement. A test file with at least one linked test SHALL NOT be flagged. The second condition is required because the parser emits a TEST node for every discovered test function whether or not it carries a *Traceability* marker, so a fully marker-less test file still has TEST children; without it such files would escape both `tests.unlinked` and the code-only `code.no_traceability`.
 
+E. A file carrying a *Traceability* marker that produced no relationship SHALL NOT be reported as carrying no marker. Carrying none and carrying only markers that bound nothing are distinct findings, and each SHALL be reported under a description true of it.
+
 ### Changelog
 
+- 2026-08-15 | f4149861 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: separate carrying no marker from carrying markers that bound nothing
 - 2026-07-31 | de72736f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-03 | 583588f9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-03 | c1be56e5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -814,7 +824,7 @@ D. The `tests.unlinked` check (`check_unlinked_tests()`) SHALL flag a test file 
 - 2026-03-30 | e1272219 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-03-29 | 6e481d63 | - | Michael Lewis (<michael@anspar.org>) | Initial creation
 
-*End* *Code No-Traceability Health Check* | **Hash**: de72736f
+*End* *Code No-Traceability Health Check* | **Hash**: f4149861
 
 ## REQ-d00246: Markdown Emphasis Normalization Utility
 
@@ -856,15 +866,19 @@ A. Fenced code block content (lines between ``` markers) SHALL be preserved verb
 
 ### Assertions
 
-A. `elspais fix` SHALL be idempotent: running the command twice in succession on the same project SHALL produce identical files. The second invocation SHALL detect no pending changes and SHALL not modify any spec, journey, code, test, or generated artifact file. This invariant SHALL be exercised by a fixture that includes fenced code blocks with markdown emphasis, a glossary term with emphasis-wrapped name, a user journey with emphasized actor field, and a REMAINDER section containing emphasized text.
+A. `elspais fix` SHALL be idempotent: running the command twice in succession on the same project SHALL produce identical files. The second invocation SHALL detect no pending changes and SHALL not modify any spec, journey, code, test, or generated artifact file.
+
+B. The fixture exercising A SHALL cover every construct the renderer canonicalizes, so that a construct whose canonical form is newly defined cannot enter the renderer without its fixed point being tested.
 
 ### Changelog
 
+- 2026-08-15 | 99bb6d77 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: oblige the idempotence fixture to cover every canonicalized construct rather than an enumeration that goes stale
 - 2026-07-31 | 2b421222 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 8a92207b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-05-04 | 8a92207b | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Fix Command Idempotency* | **Hash**: 2b421222
+*End* *Fix Command Idempotency* | **Hash**: 99bb6d77
 
 # REQ-p00083: Durability of Uncommitted Work
 
