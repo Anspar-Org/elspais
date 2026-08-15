@@ -2703,7 +2703,11 @@ class TraceGraph:
     def _reconstruct_journey_body(self, node: GraphNode) -> str:
         """Rebuild body text from structured fields + live graph edges."""
         lines: list[str] = []
-        lines.append(f"## {node.id}: {node.get_label()}")
+        # The depth the author wrote, not a fixed one: a journey carries its
+        # heading level like a requirement does, and re-rendering it at some
+        # other depth alters a file in a way nothing asked for.
+        depth = "#" * (node.get_field("heading_level") or 2)
+        lines.append(f"{depth} {node.id}: {node.get_label()}")
         actor = node.get_field("actor")
         if actor:
             lines.append(f"**Actor**: {actor}")
@@ -2746,10 +2750,15 @@ class TraceGraph:
             lines.extend(preamble)
         for section in node.get_field("sections", []):
             lines.append("")
-            lines.append(f"## {section['name']}")
+            section_depth = "#" * (section.get("heading_level") or 2)
+            lines.append(f"{section_depth} {section['name']}")
             lines.extend(section["content"].splitlines())
         lines.append("")
-        lines.append(render_end_marker(node.id, None))
+        # A journey closes on its title, as a requirement does. The
+        # identifier form is still read -- it is what the tool used to emit,
+        # so it is in files already -- but one form is written, or a file
+        # saved twice would alternate between them.
+        lines.append(render_end_marker(node.get_label(), None))
         return "\n".join(lines)
 
     def _journey_bodies_snapshot(self, *nodes: GraphNode | None) -> dict[str, str]:
@@ -3997,6 +4006,10 @@ class GraphBuilder:
             "body": content.raw_text,
             "body_lines": data.get("body_lines", []),
             "sections": data.get("sections", []),
+            # The depth the journey was authored at. The parser reads it; a
+            # node that did not carry it is re-rendered at a fixed depth, so
+            # saving a journey moved its heading.
+            "heading_level": data.get("heading_level"),
             "parse_line": content.start_line,
             "parse_end_line": content.end_line,
         }

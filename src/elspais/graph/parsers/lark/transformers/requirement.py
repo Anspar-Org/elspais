@@ -649,6 +649,9 @@ class RequirementTransformer:
         parsed_data: dict[str, Any] = {
             "id": journey_id,
             "title": title,
+            # The authored heading depth, carried like a requirement's, so a
+            # journey re-rendered after a mutation keeps the depth it had.
+            "heading_level": _count_hashes(header_text),
             "actor": None,
             "goal": None,
             "context": None,

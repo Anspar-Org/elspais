@@ -108,7 +108,16 @@ jny_content_line: definition_block
                 | TEXT _NL
                 | _NL
 
+// A journey may be closed by its title or by its identifier. Both are its
+// own end marker; the title form is what an author writes and what the
+// tool emits, and only the identifier form carries the JNY- prefix that
+// tells the two terminals apart. Admitting both here is what keeps the
+// title form from falling through to a remainder and being re-emitted
+// alongside the generated marker. A journey lacking a footer still ends at
+// the next requirement header, which outranks a section header, so
+// accepting the requirement-shaped terminal cannot swallow one.
 jny_footer: JNY_END_MARKER _NL?
+          | END_MARKER _NL?
 
 // ===================================================================
 // Definition blocks (Markdown definition list syntax)

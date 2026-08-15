@@ -204,7 +204,7 @@ class TestBodyReconstruction:
         assert "1. Navigate to login" in body
         assert "## Expected Outcome" in body
         assert "Dashboard loads" in body
-        assert "*End* *JNY-LOGIN-01*" in body
+        assert "*End* *User Login Flow*" in body
 
     def test_body_includes_validates_refs(self):
         graph = build_journey_graph()

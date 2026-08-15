@@ -365,7 +365,7 @@ Field guidance:
 - **Validates**: Optional; lists REQ IDs or assertion references this journey validates (e.g., `Validates: REQ-p00001-A, REQ-p00002-A+B`). Multi-assertion syntax is supported. Contributes to UAT coverage metrics.
 - **Steps**: Numbered sequence of user actions and system responses
 - **Expected Outcome**: Brief statement of success from the user's perspective
-- **End marker**: Required for parsing; uses format `*End* *{Title}*` (no hash since JNYs are non-normative)
+- **End marker**: Required for parsing; uses format `*End* *{Title}*` (no hash since JNYs are non-normative). The identifier form `*End* *{ID}*` is also read, so a journey written that way still parses, but the title form is what the tool writes
 
 ### Referencing User Journeys in Requirements
 
@@ -404,7 +404,7 @@ Validates: REQ-p00001-A, REQ-p00002-A+B
 ## Steps
 ...
 
-*End* *JNY-Admin-Portal-01*
+*End* *Manage Admin Users*
 ```
 
 The `Validates:` line:
