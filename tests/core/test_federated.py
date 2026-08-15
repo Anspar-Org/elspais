@@ -16,7 +16,8 @@ from elspais.config import config_defaults
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph, RepoEntry
 from elspais.graph.GraphNode import NodeKind
-from elspais.graph.mutations import BrokenReference, MutationEntry
+from elspais.graph.mutations import MutationEntry
+from elspais.graph.reference_faults import ReferenceFault
 from elspais.graph.relations import EdgeKind
 from tests.core.graph_test_helpers import (
     build_graph,
@@ -401,7 +402,7 @@ class TestPresumedForeignGuards:
             repo_root=Path("/repo/host"),
         )
         graph._broken_references = [
-            BrokenReference(
+            ReferenceFault(
                 source_id="REQ-p00001",
                 target_id="DIARY-p00023-A+B+C",
                 edge_kind="implements",
@@ -431,7 +432,7 @@ class TestPresumedForeignGuards:
             repo_root=Path("/repo/host"),
         )
         host_graph._broken_references = [
-            BrokenReference(
+            ReferenceFault(
                 source_id="REQ-p00001",
                 target_id="LIB-p00099-A+B+C",
                 edge_kind="implements",
@@ -478,7 +479,7 @@ class TestPresumedForeignGuards:
             repo_root=Path("/repo/host"),
         )
         host_graph._broken_references = [
-            BrokenReference(
+            ReferenceFault(
                 source_id="REQ-p00001",
                 target_id="DIARY-p00023-A+B+C",
                 edge_kind="implements",
@@ -527,12 +528,12 @@ class TestPresumedForeignGuards:
             repo_root=Path("/repo/host"),
         )
         host_graph._broken_references = [
-            BrokenReference(
+            ReferenceFault(
                 source_id="REQ-p00001",
                 target_id="LIB-p00099-A+B+C",
                 edge_kind="implements",
             ),
-            BrokenReference(
+            ReferenceFault(
                 source_id="REQ-p00001",
                 target_id="DIARY-p00023-A+B+C",
                 edge_kind="implements",

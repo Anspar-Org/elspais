@@ -460,7 +460,7 @@ class TestRenameRetargetsBrokenLeftovers:
     """Validates REQ-d00132-G: renaming a broken-ref target retargets the
     RENDERED leftover, not just the broken-references report.
 
-    ``rename_node`` rewrites ``BrokenReference.target_id`` entries, but the
+    ``rename_node`` rewrites ``ReferenceFault.target_id`` entries, but the
     text that actually renders (and saves) comes from the source node's
     stored leftover field -- the two must move together or the report and
     the file disagree about which ID the author cites.
@@ -500,7 +500,7 @@ class TestRenameRetargetsBrokenLeftovers:
     ):
         """Renaming either endpoint must not strip the diagnostic.
 
-        The retargeting loop rebuilds BrokenReference from scratch; the
+        The retargeting loop rebuilds ReferenceFault from scratch; the
         template-rule diagnostic (and presumed_foreign) must survive.
         """
         diagnostic_before = _broken_refs_from(template_graph, "REQ-p00091")[0].diagnostic
@@ -511,7 +511,7 @@ class TestRenameRetargetsBrokenLeftovers:
         assert len(brs) == 1
         assert brs[0].target_id == expect_target
         assert brs[0].diagnostic == diagnostic_before, (
-            "rename_node rebuilt the BrokenReference without its diagnostic "
+            "rename_node rebuilt the ReferenceFault without its diagnostic "
             "-- the author's actionable guidance was silently dropped"
         )
 

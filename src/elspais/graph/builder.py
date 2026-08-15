@@ -32,8 +32,9 @@ from elspais.graph.GraphNode import (
     make_test_id,
     parse_structural_id,
 )
-from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
+from elspais.graph.mutations import MutationEntry, MutationLog
 from elspais.graph.parsers import ParsedContent
+from elspais.graph.reference_faults import ReferenceFault
 from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.graph.render import format_definition_block, render_end_marker
 from elspais.graph.terms import TermDictionary, TermEntry, compute_definition_hash
@@ -145,7 +146,7 @@ class TraceGraph:
 
     # Detection: orphans and broken references (populated at build time)
     _orphaned_ids: set[str] = field(default_factory=set, init=False)
-    _broken_references: list[BrokenReference] = field(default_factory=list, init=False)
+    _broken_references: list[ReferenceFault] = field(default_factory=list, init=False)
     # Detection: duplicate REQ IDs across files (populated at build time).
     # Maps canonical REQ ID -> ordered list of source paths defining it.
     _duplicate_req_ids: dict[str, list[str]] = field(default_factory=dict, init=False, repr=False)
@@ -306,14 +307,14 @@ class TraceGraph:
         """Return the number of orphaned nodes."""
         return len(self._orphaned_ids)
 
-    def broken_references(self) -> list[BrokenReference]:
+    def broken_references(self) -> list[ReferenceFault]:
         """Get all broken references detected during build.
 
         Broken references occur when a node references a target ID
         that doesn't exist in the graph.
 
         Returns:
-            List of BrokenReference instances.
+            List of ReferenceFault instances.
         """
         return list(self._broken_references)
 
@@ -533,7 +534,7 @@ class TraceGraph:
 
         Handles the renamed node as broken-ref source, as exact target, and
         as the base of assertion-suffixed targets (``old_id-<label>``, the
-        form partial multi-assertion leftovers take). All BrokenReference
+        form partial multi-assertion leftovers take). All ReferenceFault
         fields (diagnostic, presumed_foreign) are preserved. When a target
         changes, the source node's stored leftover field is kept in sync so
         the render agrees with the broken-reference report (REQ-d00132-G).
@@ -676,7 +677,7 @@ class TraceGraph:
 
         # Restore broken references retired with the node (REQ-d00132-G)
         for br_dict in entry.before_state.get("purged_broken_refs", []):
-            self._broken_references.append(BrokenReference(**br_dict))
+            self._broken_references.append(ReferenceFault(**br_dict))
 
     # Stored ref fields hold UNRESOLVED leftovers only (REQ-d00132-F/G):
     # build() strips refs that became edges, and the mutation paths below
@@ -879,7 +880,7 @@ class TraceGraph:
 
             # Restore the original broken reference and its leftover (REQ-d00132-G)
             self._broken_references.append(
-                BrokenReference(
+                ReferenceFault(
                     source_id=source_id,
                     target_id=old_target_id,
                     edge_kind=edge_kind_str,
@@ -2163,7 +2164,7 @@ class TraceGraph:
         else:
             # Target doesn't exist - record as broken reference
             self._broken_references.append(
-                BrokenReference(
+                ReferenceFault(
                     source_id=source_id,
                     target_id=target_id,
                     edge_kind=edge_kind.value,
@@ -2684,7 +2685,7 @@ class TraceGraph:
         else:
             # New target also doesn't exist - remains broken
             self._broken_references.append(
-                BrokenReference(
+                ReferenceFault(
                     source_id=source_id,
                     target_id=new_target_id,
                     edge_kind=broken_ref.edge_kind,
@@ -3581,7 +3582,7 @@ class GraphBuilder:
         # Implements: REQ-p00014-B
         self._satisfies_links: list[tuple[str, str]] = []  # (declaring_id, template_id)
         # Detection: broken references
-        self._broken_references: list[BrokenReference] = []
+        self._broken_references: list[ReferenceFault] = []
         # Detection: duplicate REQ IDs across files. Maps the canonical (real)
         # requirement ID -> ordered list of source paths that defined it. First
         # occurrence keeps the real ID; subsequent occurrences get a synthetic
@@ -4052,7 +4053,7 @@ class GraphBuilder:
         for section_name, declared in data.get("misplaced_validates", []):
             where = f'section "{section_name}"' if section_name else "a section"
             self._broken_references.append(
-                BrokenReference(
+                ReferenceFault(
                     source_id=journey_id,
                     target_id=declared,
                     edge_kind="validates",
@@ -4383,7 +4384,7 @@ class GraphBuilder:
                 # Genuinely missing — record a plain broken-ref and skip clone.
                 for declaring_id in template_roots[template_id]:
                     self._broken_references.append(
-                        BrokenReference(
+                        ReferenceFault(
                             source_id=declaring_id,
                             target_id=template_id,
                             edge_kind=EdgeKind.SATISFIES.value,
@@ -4399,7 +4400,7 @@ class GraphBuilder:
                 # node.
                 for declaring_id in template_roots[template_id]:
                     self._broken_references.append(
-                        BrokenReference(
+                        ReferenceFault(
                             source_id=declaring_id,
                             target_id=template_id,
                             edge_kind=EdgeKind.SATISFIES.value,
@@ -4423,7 +4424,7 @@ class GraphBuilder:
                 # genuinely broken.
                 if not template_node and INSTANCE_SEPARATOR in template_id:
                     self._broken_references.append(
-                        BrokenReference(
+                        ReferenceFault(
                             source_id=declaring_id,
                             target_id=template_id,
                             edge_kind=EdgeKind.SATISFIES.value,
@@ -4435,7 +4436,7 @@ class GraphBuilder:
             # very loop by a sibling satisfier). Refuse to clone again.
             if template_node.get_field("stereotype") == Stereotype.INSTANCE:
                 self._broken_references.append(
-                    BrokenReference(
+                    ReferenceFault(
                         source_id=declaring_id,
                         target_id=template_id,
                         edge_kind=EdgeKind.SATISFIES.value,
@@ -4452,7 +4453,7 @@ class GraphBuilder:
             # emit rule-1 diagnostic.
             if template_node.get_field("stereotype") != Stereotype.TEMPLATE:
                 self._broken_references.append(
-                    BrokenReference(
+                    ReferenceFault(
                         source_id=declaring_id,
                         target_id=template_id,
                         edge_kind=EdgeKind.SATISFIES.value,
@@ -4547,7 +4548,7 @@ class GraphBuilder:
         """Validate template-marker rules that need full graph context.
 
         Phase 2 of CUR-1353: walk the graph after link resolution and emit
-        typed ``BrokenReference`` diagnostics for templates that violate
+        typed ``ReferenceFault`` diagnostics for templates that violate
         the static validation matrix.
 
         Rule 7: A REQ marked ``**Template**`` may not declare behavioural
@@ -4585,7 +4586,7 @@ class GraphBuilder:
         # Expand multi-assertion refs (e.g. REQ-X-A+B+C) to base targets.
         for expanded in self._expand_multi_assertion(ref_id):
             self._broken_references.append(
-                BrokenReference(
+                ReferenceFault(
                     source_id=template_id,
                     target_id=expanded,
                     edge_kind=edge_kind.value,
@@ -4669,7 +4670,7 @@ class GraphBuilder:
                     # (Satisfies:) plainly, since the bare "(refines)" line plus a
                     # passing refines_resolve check is what misleads authors.
                     self._broken_references.append(
-                        BrokenReference(
+                        ReferenceFault(
                             source_id=source_id,
                             target_id=target_id,
                             edge_kind=edge_kind.value,
@@ -4685,7 +4686,7 @@ class GraphBuilder:
                 if edge_kind == EdgeKind.REFINES and target_stereotype == Stereotype.INSTANCE:
                     # Rule 4: refining instance content is not supported.
                     self._broken_references.append(
-                        BrokenReference(
+                        ReferenceFault(
                             source_id=source_id,
                             target_id=target_id,
                             edge_kind=edge_kind.value,
@@ -4702,7 +4703,7 @@ class GraphBuilder:
                 if edge_kind == EdgeKind.IMPLEMENTS and target_stereotype == Stereotype.INSTANCE:
                     # Rule 5: composite IDs are not authoring syntax.
                     self._broken_references.append(
-                        BrokenReference(
+                        ReferenceFault(
                             source_id=source_id,
                             target_id=target_id,
                             edge_kind=edge_kind.value,
@@ -4718,7 +4719,7 @@ class GraphBuilder:
                 if edge_kind == EdgeKind.VERIFIES and target_stereotype == Stereotype.INSTANCE:
                     # Rule 6: same reasoning as rule 5, TEST source.
                     self._broken_references.append(
-                        BrokenReference(
+                        ReferenceFault(
                             source_id=source_id,
                             target_id=target_id,
                             edge_kind=edge_kind.value,
@@ -4738,7 +4739,7 @@ class GraphBuilder:
                     # Journeys and steps are verification targets only; rejecting
                     # Implements/Refines here prevents invalid traceability edges.
                     self._broken_references.append(
-                        BrokenReference(
+                        ReferenceFault(
                             source_id=source_id,
                             target_id=target_id,
                             edge_kind=edge_kind.value,
@@ -4790,7 +4791,7 @@ class GraphBuilder:
             elif source and not target:
                 # Broken reference: target doesn't exist
                 self._broken_references.append(
-                    BrokenReference(
+                    ReferenceFault(
                         source_id=source_id,
                         target_id=target_id,
                         edge_kind=edge_kind.value,

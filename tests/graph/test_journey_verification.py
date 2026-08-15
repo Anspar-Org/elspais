@@ -454,7 +454,7 @@ def test_whole_journey_owns_outgoing_verifies_edge(journey_with_whole_test_graph
 
 # Verifies: REQ-d00256
 def test_unknown_step_is_broken_reference(journey_with_bad_step_graph, capture_broken_refs):
-    """A ``Verifies:`` targeting a non-existent step produces a BrokenReference."""
+    """A ``Verifies:`` targeting a non-existent step produces a ReferenceFault."""
     refs = capture_broken_refs(journey_with_bad_step_graph)
     assert any(r.target_id == "JNY-OQ-Login-01/9" for r in refs)
 
@@ -463,7 +463,7 @@ def test_unknown_step_is_broken_reference(journey_with_bad_step_graph, capture_b
 def test_implements_journey_is_broken_reference(
     journey_with_implements_ref_graph, capture_broken_refs
 ):
-    """``Implements: JNY-OQ-Login-01`` targeting a journey produces a BrokenReference,
+    """``Implements: JNY-OQ-Login-01`` targeting a journey produces a ReferenceFault,
     not a wired edge.  Journeys and steps are ``Verifies:`` targets only."""
     from elspais.graph.relations import EdgeKind
 
@@ -472,7 +472,7 @@ def test_implements_journey_is_broken_reference(
     assert any(
         r.target_id == "JNY-OQ-Login-01" and r.edge_kind == EdgeKind.IMPLEMENTS.value
         for r in broken
-    ), "Expected BrokenReference(target='JNY-OQ-Login-01', edge_kind=IMPLEMENTS), got: " + repr(
+    ), "Expected ReferenceFault(target='JNY-OQ-Login-01', edge_kind=IMPLEMENTS), got: " + repr(
         broken
     )
     # The journey must NOT have been wired via an IMPLEMENTS edge

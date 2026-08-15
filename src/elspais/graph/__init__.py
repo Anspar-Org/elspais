@@ -7,7 +7,7 @@ Exports:
 - Edge: Typed edge between nodes
 - EdgeKind: Enum of edge types
 - Stereotype: Node classification for template-instance pattern
-- BrokenReference: Reference to non-existent target (detection)
+- ReferenceFault: A declared reference that produced no relationship (detection)
 - CoverageSource: Enum for coverage origin type
 - CoverageContribution: Single coverage claim on an assertion
 - RollupMetrics: Aggregated coverage metrics for a requirement
@@ -36,7 +36,8 @@ from elspais.graph.GraphNode import (
     parse_structural_id,
 )
 from elspais.graph.metrics import CoverageContribution, CoverageSource, RollupMetrics
-from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
+from elspais.graph.mutations import MutationEntry, MutationLog
+from elspais.graph.reference_faults import ReferenceFault
 from elspais.graph.relations import Edge, EdgeKind, Stereotype
 
 __all__ = [
@@ -58,7 +59,7 @@ __all__ = [
     "Edge",
     "EdgeKind",
     "Stereotype",
-    "BrokenReference",
+    "ReferenceFault",
     "MutationEntry",
     "MutationLog",
     "CoverageSource",

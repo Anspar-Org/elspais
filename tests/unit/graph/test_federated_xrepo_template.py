@@ -648,7 +648,7 @@ class TestFederatedDiagnostics:
 
     2. Satisfies cycle: two repos' templates satisfy each other (or any
        transitive cycle over SATISFIES + INSTANCE edges). Federated build
-       must surface a typed cycle diagnostic via a ``BrokenReference``.
+       must surface a typed cycle diagnostic via a ``ReferenceFault``.
     """
 
     def test_missing_associate_diagnostic(self, tmp_path: Path) -> None:
@@ -791,7 +791,7 @@ class TestFederatedDiagnostics:
         """Two repos whose templates satisfy each other form a cycle.
 
         Federated build walks SATISFIES then INSTANCE edges; when DFS
-        re-enters a node already on the path, a typed BrokenReference with
+        re-enters a node already on the path, a typed ReferenceFault with
         ``cycle`` in its diagnostic is emitted (one per build).
 
         We assemble the federation by hand from per-repo

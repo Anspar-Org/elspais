@@ -681,7 +681,7 @@ def _serialize_mutation_entry(entry: MutationEntry) -> dict[str, Any]:
 
 
 def _serialize_broken_reference(ref: Any) -> dict[str, Any]:
-    """Serialize a BrokenReference to dict format."""
+    """Serialize a ReferenceFault to dict format."""
     return {
         "source_id": ref.source_id,
         "target_id": ref.target_id,

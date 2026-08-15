@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
-    from elspais.graph.mutations import BrokenReference
+    from elspais.graph.reference_faults import ReferenceFault
 
 
 def collect_broken(
     graph: FederatedGraph,
     config: dict[str, Any] | None,
-) -> list[BrokenReference]:
+) -> list[ReferenceFault]:
     """Collect broken references, respecting allow_unresolved_cross_repo."""
 
     broken = graph.broken_references()
@@ -47,7 +47,7 @@ def collect_broken(
 _LABEL = "UNRESOLVED REFERENCES"
 
 
-def render_broken_text(refs: list[BrokenReference]) -> str:
+def render_broken_text(refs: list[ReferenceFault]) -> str:
     """Render broken references as plain text."""
     if not refs:
         return f"\n{_LABEL}: none"
@@ -60,7 +60,7 @@ def render_broken_text(refs: list[BrokenReference]) -> str:
     return "\n".join(lines)
 
 
-def render_broken_markdown(refs: list[BrokenReference]) -> str:
+def render_broken_markdown(refs: list[ReferenceFault]) -> str:
     """Render broken references as markdown."""
     if not refs:
         return f"## {_LABEL}\n\nNo unresolved references found."

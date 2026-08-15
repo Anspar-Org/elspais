@@ -19,7 +19,8 @@ from elspais.graph.GraphNode import (
     GraphNode,
     NodeKind,
 )
-from elspais.graph.mutations import BrokenReference, MutationEntry
+from elspais.graph.mutations import MutationEntry
+from elspais.graph.reference_faults import ReferenceFault
 from elspais.graph.relations import EdgeKind
 
 if TYPE_CHECKING:
@@ -759,12 +760,12 @@ class FederatedGraph:
         return sum(graph.orphan_count() for _name, graph in self._live_graphs())
 
     # Implements: REQ-d00200-E
-    def broken_references(self) -> list[BrokenReference]:
+    def broken_references(self) -> list[ReferenceFault]:
         """Get all broken references across all repos.
 
         # Strategy: aggregate
         """
-        result: list[BrokenReference] = []
+        result: list[ReferenceFault] = []
         for _name, graph in self._live_graphs():
             result.extend(graph.broken_references())
         return result
@@ -1470,7 +1471,7 @@ class FederatedGraph:
             resolved: list[int] = []  # indices to remove
             # Broken references that survive wiring in a different shape than
             # they were written: index -> the references that replace it.
-            replacements: dict[int, list[BrokenReference]] = {}
+            replacements: dict[int, list[ReferenceFault]] = {}
             for i, br in enumerate(source_entry.graph._broken_references):
                 # SATISFIES is handled by _instantiate_cross_repo_satisfies,
                 # which clones the template subtree instead of wiring a
@@ -1497,7 +1498,7 @@ class FederatedGraph:
                         if wired and EdgeKind(br.edge_kind) in self._CONTENT_EDGE_KINDS:
                             wired_sources.setdefault(source_entry.name, set()).add(br.source_id)
                         replacements[i] = [
-                            BrokenReference(
+                            ReferenceFault(
                                 source_id=br.source_id,
                                 target_id=missing_id,
                                 edge_kind=br.edge_kind,
@@ -1533,7 +1534,7 @@ class FederatedGraph:
             # replacements, in one rebuild so no index shifts underfoot.
             if resolved or replacements:
                 dropped = set(resolved)
-                rebuilt: list[BrokenReference] = []
+                rebuilt: list[ReferenceFault] = []
                 for idx, ref in enumerate(source_entry.graph._broken_references):
                     if idx in replacements:
                         rebuilt.extend(replacements[idx])
@@ -1587,7 +1588,7 @@ class FederatedGraph:
     def _wire_expanded_labels(
         self,
         source_entry: RepoEntry,
-        br: BrokenReference,
+        br: ReferenceFault,
         owner: str,
         target_ids: list[str],
     ) -> bool:
@@ -1704,7 +1705,7 @@ class FederatedGraph:
                         if available
                         else "No associates declared. "
                     )
-                    new_br = BrokenReference(
+                    new_br = ReferenceFault(
                         source_id=br.source_id,
                         target_id=br.target_id,
                         edge_kind=br.edge_kind,
@@ -1940,7 +1941,7 @@ class FederatedGraph:
         # Same-repo target: external-only violation (REQ-d00252-C).
         if owner == source_entry.name:
             source_entry.graph._broken_references.append(
-                BrokenReference(
+                ReferenceFault(
                     source_id=source_id,
                     target_id=target_id,
                     edge_kind=EdgeKind.INTEGRATES.value,
@@ -1963,7 +1964,7 @@ class FederatedGraph:
                 claimed = True
                 break
         source_entry.graph._broken_references.append(
-            BrokenReference(
+            ReferenceFault(
                 source_id=source_id,
                 target_id=target_id,
                 edge_kind=EdgeKind.INTEGRATES.value,
@@ -1986,7 +1987,7 @@ class FederatedGraph:
         INSTANCE (clone -> template) then any outbound SATISFIES from
         that template eventually returns to a node already on the path.
 
-        Emits one typed ``BrokenReference`` per build (with ``cycle`` in
+        Emits one typed ``ReferenceFault`` per build (with ``cycle`` in
         its diagnostic) on the owning repo of the first node in the
         detected cycle, then returns. Reporting one cycle per build keeps
         the output legible; once the author breaks the first cycle,
@@ -2043,7 +2044,7 @@ class FederatedGraph:
                 if cycle:
                     # Emit a typed broken-ref on the originating repo.
                     entry.graph._broken_references.append(
-                        BrokenReference(
+                        ReferenceFault(
                             source_id=cycle[0],
                             target_id=cycle[-1],
                             edge_kind=EdgeKind.SATISFIES.value,
@@ -2059,7 +2060,7 @@ class FederatedGraph:
         Called after _wire_cross_graph_edges(). Any broken ref whose target_id
         cannot be parsed by the source repo's IdResolver is presumed to belong
         to a foreign repo (different namespace/format) and is replaced with a
-        BrokenReference with presumed_foreign=True.
+        ReferenceFault with presumed_foreign=True.
 
         Skipped for repos with no config (annotation requires pattern knowledge).
 
@@ -2123,7 +2124,7 @@ class FederatedGraph:
                     f"{own_namespace}-"
                 )
                 if matches_own_namespace:
-                    refs[i] = BrokenReference(
+                    refs[i] = ReferenceFault(
                         source_id=br.source_id,
                         target_id=br.target_id,
                         edge_kind=br.edge_kind,
@@ -2139,7 +2140,7 @@ class FederatedGraph:
                     # belongs to. Leave it a plain (non-diagnostic,
                     # non-foreign) hard broken reference.
                     continue
-                refs[i] = BrokenReference(
+                refs[i] = ReferenceFault(
                     source_id=br.source_id,
                     target_id=br.target_id,
                     edge_kind=br.edge_kind,

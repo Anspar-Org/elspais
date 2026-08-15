@@ -2,7 +2,7 @@
 """Tests for TraceGraph detection capabilities (orphans, broken references)."""
 from __future__ import annotations
 
-from elspais.graph import BrokenReference
+from elspais.graph import ReferenceFault
 from elspais.graph.builder import GraphBuilder
 from elspais.graph.parsers import ParsedContent
 from tests.core.graph_test_helpers import grammar_for
@@ -158,8 +158,8 @@ class TestBrokenReferenceDetection:
 
     # Verifies: REQ-p00002-B
     def test_broken_ref_str(self):
-        """BrokenReference has readable string representation."""
-        ref = BrokenReference(
+        """ReferenceFault has readable string representation."""
+        ref = ReferenceFault(
             source_id="REQ-o00001",
             target_id="REQ-MISSING",
             edge_kind="implements",
@@ -168,7 +168,7 @@ class TestBrokenReferenceDetection:
         assert "REQ-o00001" in s
         assert "REQ-MISSING" in s
         assert "implements" in s
-        assert "missing" in s
+        assert "unknown_requirement" in s
 
 
 class TestCodeAndTestOrphans:
@@ -275,4 +275,4 @@ class TestIntegration:
         assert isinstance(orphan_count, int)
         assert isinstance(broken_refs, list)
         for ref in broken_refs:
-            assert isinstance(ref, BrokenReference)
+            assert isinstance(ref, ReferenceFault)

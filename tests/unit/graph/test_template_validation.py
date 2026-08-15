@@ -3,7 +3,7 @@
 
 Phase 2 of CUR-1353 enforces the static validation matrix from the
 cross-repo-template spec. Each invalid combination produces a typed
-``BrokenReference`` with a ``diagnostic`` field that explains the rule
+``ReferenceFault`` with a ``diagnostic`` field that explains the rule
 and how the author can fix it.
 
 The matrix covered here:

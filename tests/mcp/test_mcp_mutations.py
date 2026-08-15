@@ -23,7 +23,7 @@ from elspais.config.schema import ElspaisConfig
 from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.graph.GraphNode import make_file_id
-from elspais.graph.mutations import BrokenReference
+from elspais.graph.reference_faults import ReferenceFault
 from elspais.graph.relations import EdgeKind
 from tests.core.graph_test_helpers import grammar_for
 
@@ -833,7 +833,7 @@ class TestMutateFixBrokenReference:
 
         # Create a broken reference scenario first
         mutation_graph._broken_references.append(
-            BrokenReference(
+            ReferenceFault(
                 source_id="REQ-o00001",
                 target_id="REQ-MISSING",
                 edge_kind=EdgeKind.IMPLEMENTS,
@@ -853,7 +853,7 @@ class TestMutateFixBrokenReference:
         from elspais.mcp.server import _mutate_fix_broken_reference
 
         mutation_graph._broken_references.append(
-            BrokenReference(
+            ReferenceFault(
                 source_id="REQ-o00001",
                 target_id="REQ-BAD",
                 edge_kind=EdgeKind.IMPLEMENTS,
@@ -1175,7 +1175,7 @@ class TestGetBrokenReferences:
         from elspais.mcp.server import _get_broken_references
 
         mutation_graph._broken_references.append(
-            BrokenReference(
+            ReferenceFault(
                 source_id="REQ-o00001",
                 target_id="REQ-MISSING",
                 edge_kind=EdgeKind.IMPLEMENTS,

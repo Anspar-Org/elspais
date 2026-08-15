@@ -134,7 +134,7 @@ re-implementation.
 ## Validation matrix
 
 The builder enforces this matrix at build time, raising typed
-`BrokenReference` diagnostics for each invalid combination:
+`ReferenceFault` diagnostics for each invalid combination:
 
 | Reference                  | Target    | Outcome                                  |
 | -------------------------- | --------- | ---------------------------------------- |

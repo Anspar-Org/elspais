@@ -8,7 +8,7 @@ from elspais.commands.broken import collect_broken, render_broken_markdown, rend
 from elspais.config import config_defaults
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph
-from elspais.graph.mutations import BrokenReference
+from elspais.graph.reference_faults import ReferenceFault
 
 
 def _test_config() -> dict:
@@ -24,9 +24,9 @@ def _make_ref(
     kind: str = "implements",
     foreign: bool = False,
     diagnostic: str = "",
-) -> BrokenReference:
-    """Create a BrokenReference for testing."""
-    return BrokenReference(
+) -> ReferenceFault:
+    """Create a ReferenceFault for testing."""
+    return ReferenceFault(
         source_id=source,
         target_id=target,
         edge_kind=kind,
@@ -35,7 +35,7 @@ def _make_ref(
     )
 
 
-def _make_graph(*refs: BrokenReference) -> FederatedGraph:
+def _make_graph(*refs: ReferenceFault) -> FederatedGraph:
     """Wrap broken references in a FederatedGraph for testing."""
     tg = TraceGraph()
     for ref in refs:

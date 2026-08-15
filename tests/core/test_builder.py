@@ -827,7 +827,7 @@ class TestGeneralizedOrphanDetection:
 
         A USER_JOURNEY that has a TEST verifying it is classified as a root
         because the TEST child is a non-satellite/meaningful node.
-        Note: ``Implements:`` targeting a journey is now a BrokenReference
+        Note: ``Implements:`` targeting a journey is now a ReferenceFault
         (journeys are ``Verifies:`` targets only), so this scenario uses the
         correct VERIFIES edge kind.
         """

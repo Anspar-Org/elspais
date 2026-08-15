@@ -434,19 +434,19 @@ class TestCheckBrokenReferences:
 
     def test_REQ_d00085_broken_refs_warning_severity(self) -> None:
         """Broken references produce a warning-severity failure."""
-        from elspais.graph.mutations import BrokenReference
+        from elspais.graph.reference_faults import ReferenceFault
 
         graph = build_graph(
             make_requirement("REQ-p00001", title="Parent", level="PRD"),
         )
         # Manually inject broken references
         graph._broken_references = [
-            BrokenReference(
+            ReferenceFault(
                 source_id="REQ-d00001",
                 target_id="REQ-p99999",
                 edge_kind="implements",
             ),
-            BrokenReference(
+            ReferenceFault(
                 source_id="REQ-d00002",
                 target_id="REQ-p88888",
                 edge_kind="refines",
@@ -466,11 +466,11 @@ class TestCheckBrokenReferences:
 
     def test_REQ_d00085_broken_ref_findings_have_source_id(self) -> None:
         """Each broken reference finding includes the source node_id."""
-        from elspais.graph.mutations import BrokenReference
+        from elspais.graph.reference_faults import ReferenceFault
 
         graph = TraceGraph()
         graph._broken_references = [
-            BrokenReference(
+            ReferenceFault(
                 source_id="REQ-d00001",
                 target_id="REQ-p99999",
                 edge_kind="verifies",
@@ -501,11 +501,11 @@ class TestCheckBrokenReferences:
         than by ``spec.broken_references``; what this guard forbids --
         silent suppression -- is unchanged by which check speaks.
         """
-        from elspais.graph.mutations import BrokenReference
+        from elspais.graph.reference_faults import ReferenceFault
 
         graph = TraceGraph()
         graph._broken_references = [
-            BrokenReference(source_id="REQ-d00001", target_id="HHT-p00001", edge_kind="implements"),
+            ReferenceFault(source_id="REQ-d00001", target_id="HHT-p00001", edge_kind="implements"),
         ]
         override = {"validation": {"allow_unresolved_cross_repo": True}}
         config = _merge_configs(config_defaults(), override)
@@ -526,11 +526,11 @@ class TestCheckBrokenReferences:
         configured -- only the associate-less blanket case (guard 1) is
         gated.
         """
-        from elspais.graph.mutations import BrokenReference
+        from elspais.graph.reference_faults import ReferenceFault
 
         host_graph = TraceGraph()
         host_graph._broken_references = [
-            BrokenReference(source_id="REQ-d00001", target_id="HHT-p00001", edge_kind="implements"),
+            ReferenceFault(source_id="REQ-d00001", target_id="HHT-p00001", edge_kind="implements"),
         ]
         lib_graph = TraceGraph()
         override = {"validation": {"allow_unresolved_cross_repo": True}}
@@ -556,11 +556,11 @@ class TestCheckBrokenReferences:
 
     def test_REQ_d00085_allow_unresolved_cross_repo_keeps_local_refs(self) -> None:
         """Same-namespace broken refs are still flagged with allow_unresolved_cross_repo=True."""
-        from elspais.graph.mutations import BrokenReference
+        from elspais.graph.reference_faults import ReferenceFault
 
         graph = TraceGraph()
         graph._broken_references = [
-            BrokenReference(source_id="REQ-d00001", target_id="REQ-p99999", edge_kind="implements"),
+            ReferenceFault(source_id="REQ-d00001", target_id="REQ-p99999", edge_kind="implements"),
         ]
         override = {"validation": {"allow_unresolved_cross_repo": True}}
         config = _merge_configs(config_defaults(), override)
@@ -575,11 +575,11 @@ class TestCheckBrokenReferences:
         ``spec.unclaimed_references`` (REQ-d00269-F); the point held here
         is that the default configuration reports it at all.
         """
-        from elspais.graph.mutations import BrokenReference
+        from elspais.graph.reference_faults import ReferenceFault
 
         graph = TraceGraph()
         graph._broken_references = [
-            BrokenReference(source_id="REQ-d00001", target_id="HHT-p00001", edge_kind="implements"),
+            ReferenceFault(source_id="REQ-d00001", target_id="HHT-p00001", edge_kind="implements"),
         ]
         config = config_defaults()
 
@@ -642,11 +642,11 @@ class TestCheckUnclaimedReferences:
 
     def test_REQ_d00269_F_claimed_target_stays_with_broken_references(self) -> None:
         """A misspelt local identifier is a broken reference, not an unclaimed one."""
-        from elspais.graph.mutations import BrokenReference
+        from elspais.graph.reference_faults import ReferenceFault
 
         graph = TraceGraph()
         graph._broken_references = [
-            BrokenReference(source_id="REQ-d00001", target_id="REQ-p99999", edge_kind="implements"),
+            ReferenceFault(source_id="REQ-d00001", target_id="REQ-p99999", edge_kind="implements"),
         ]
         config = _claimed_config()
         fed = _wrap(graph, config)
@@ -662,11 +662,11 @@ class TestCheckUnclaimedReferences:
     @pytest.mark.parametrize("configured", ["info", "warning", "error"])
     def test_REQ_d00269_F_severity_follows_configuration(self, configured: str) -> None:
         """Noticing is not the project's decision; how loudly is."""
-        from elspais.graph.mutations import BrokenReference
+        from elspais.graph.reference_faults import ReferenceFault
 
         graph = TraceGraph()
         graph._broken_references = [
-            BrokenReference(source_id="REQ-d00001", target_id="widget-42", edge_kind="implements"),
+            ReferenceFault(source_id="REQ-d00001", target_id="widget-42", edge_kind="implements"),
         ]
         config = _claimed_config(rules={"references": {"unclaimed": configured}})
 
@@ -689,12 +689,12 @@ class TestCheckUnclaimedReferences:
         report reader cannot tell the difference between "this project
         treats unclaimed references as errors" and "this check forgot".
         """
-        from elspais.graph.mutations import BrokenReference
+        from elspais.graph.reference_faults import ReferenceFault
 
         graph = TraceGraph()
         if has_finding:
             graph._broken_references = [
-                BrokenReference(
+                ReferenceFault(
                     source_id="REQ-d00001", target_id="widget-42", edge_kind="implements"
                 ),
             ]
@@ -722,12 +722,12 @@ class TestCheckUnclaimedReferences:
         a clean run and skipped on a dirty one — the same check under two
         headings from one run to the next.
         """
-        from elspais.graph.mutations import BrokenReference
+        from elspais.graph.reference_faults import ReferenceFault
 
         graph = TraceGraph()
         if has_finding:
             graph._broken_references = [
-                BrokenReference(
+                ReferenceFault(
                     source_id="REQ-d00001", target_id="widget-42", edge_kind="implements"
                 ),
             ]
@@ -756,12 +756,12 @@ class TestCheckUnclaimedReferences:
         """A check the project asked to hear about loudly is counted as
         passed when clean and against its own severity when not — and is
         never counted as skipped, which is reserved for informational."""
-        from elspais.graph.mutations import BrokenReference
+        from elspais.graph.reference_faults import ReferenceFault
 
         graph = TraceGraph()
         if has_finding:
             graph._broken_references = [
-                BrokenReference(
+                ReferenceFault(
                     source_id="REQ-d00001", target_id="widget-42", edge_kind="implements"
                 ),
             ]
@@ -786,11 +786,11 @@ class TestCheckUnclaimedReferences:
         real configured associate (REQ-d00252-G: a lone repository never marks
         anything foreign), so the federation below is a genuine two-repo one.
         """
-        from elspais.graph.mutations import BrokenReference
+        from elspais.graph.reference_faults import ReferenceFault
 
         host_graph = TraceGraph()
         host_graph._broken_references = [
-            BrokenReference(source_id="REQ-d00001", target_id="widget-42", edge_kind="implements"),
+            ReferenceFault(source_id="REQ-d00001", target_id="widget-42", edge_kind="implements"),
         ]
         host_config = _merge_configs(
             config_defaults(),
