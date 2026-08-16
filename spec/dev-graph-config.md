@@ -153,7 +153,7 @@ E. A `ChangelogRequireConfig` sub-model SHALL group changelog requirement boolea
 
 F. `ElspaisConfig` SHALL have `levels` (dict[str, LevelConfig]), `scanning` (ScanningConfig), and `output` (OutputConfig) fields. The `directories`, `spec`, `testing`, `ignore`, `graph`, `traceability`, `core`, and `associated` fields SHALL be removed. Version SHALL default to 3.
 
-G. A repository's identifier configuration SHALL admit exactly one spelling of any given identifier.
+G. A repository's identifier configuration SHALL admit exactly one spelling of any given identifier, up to case. Two elements of an identifier configuration that differ only in case SHALL be rejected at configuration-validation time, naming both and the element they collide in.
 
 H. `HierarchyConfig` SHALL contain only boolean flags (`allow_circular`, `allow_structural_orphans`, `allow_orphans`, `cross_repo_implements`). Per-level implement rules SHALL be defined in `LevelConfig.implements` instead. The model SHALL be strict (`extra="forbid"`).
 
@@ -175,7 +175,9 @@ P. The configuration schema SHALL make the severity of every health check config
 
 Q. The configuration schema SHALL express file selection for scanning through a single mechanism, such that exactly one configuration surface determines whether any given file is scanned.
 
-R. An identifier SHALL resolve to a requirement only where it is spelled as the configuration of the repository owning that requirement admits.
+R. An identifier SHALL resolve to a requirement only where it is spelled as the configuration of the repository owning that requirement admits, and case SHALL NOT decide whether it resolves. An identifier SHALL be rendered in the one casing that configuration names, on every surface.
+
+S. Reading an identifier without regard to case SHALL NOT extend to any other difference. A spelling that differs from what the configuration admits in anything but case SHALL resolve to nothing, and SHALL NOT be repaired into one that resolves.
 
 ### Rationale
 
@@ -183,7 +185,11 @@ Most lettered entries inventory the v3/v4 model shapes; G and O–R state the or
 
 K carries the remote because a federation member is a git repository, and a member declared but absent from this machine is an ordinary situation rather than an error to be merely reported: the declaration is the one place that knows where the repository can be obtained. The remote never identifies a member — the path and the namespace do that, which is why it stays optional and why a declaration without one is complete. What a declaration may contain and what it must contain are one question, so the field list and the strictness that enforces it belong together rather than in separate assertions that could drift.
 
-G and R hold within a single repository, not only where several meet. G fixes what the configuration admits; R fixes what an inadmissible spelling may do. The failure R forbids is not silence but a wrong answer: a spelling nobody wrote being repaired into one that resolves, so a reference lands on a requirement its author did not name. That is invisible in every report, because the reference looks satisfied.
+G, R and S hold within a single repository, not only where several meet. G fixes what the configuration admits; R fixes what an inadmissible spelling may do; S bounds how far R's tolerance reaches. The failure R forbids is not silence but a wrong answer: a spelling nobody wrote being repaired into one that resolves, so a reference lands on a requirement its author did not name. That is invisible in every report, because the reference looks satisfied.
+
+Case is exempt from that, and the exemption is safe for a reason that has to be built rather than assumed. Reading without regard to case can only mislead where two admissible spellings differ in case alone — and G now forbids a configuration from holding such a pair at all, so the ambiguity has no way to arise. What remains is one identifier reachable by more than one casing, and a single casing in which it is written back. An author who types a label in the wrong case is naming a requirement that exists, unambiguously, and refusing them costs an edge to buy nothing; an author who mistypes a digit is naming a requirement that may not exist at all, which is why S keeps every other difference resolving to nothing.
+
+The two obligations are therefore a pair rather than a compromise: matching relaxes exactly as far as the configuration guard makes safe, and no further. Rendering is what keeps the estate uniform regardless — an identifier read in any casing is stored and re-emitted in the one the configuration names, so a file rewritten by the tool converges on that casing rather than preserving whatever was typed.
 
 Reporting is deliberately absent from R. Once an inadmissible spelling resolves to nothing, it is an unresolved reference like any other, and the existing obligations to record it and to report it at a project-chosen severity carry it the rest of the way. Stating the reporting again here would duplicate them and invite the two statements to drift apart.
 
@@ -191,6 +197,8 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 
 ### Changelog
 
+- 2026-08-15 | a11d15f9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: case no longer decides whether an identifier resolves (R), a configuration holding two elements differing only in case is rejected (G), and S bounds the tolerance to case alone
 - 2026-08-12 | da474c2a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-08-12 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: amend K to state the fields an associate declaration is written in, including the optional git remote, reconciling it with REQ-d00202-A/B
 - 2026-08-12 | da474c2a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -210,7 +218,7 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 - 2026-03-30 | db4ad28c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-03-29 | c75b87f8 | - | Michael Lewis (<michael@anspar.org>) | Add assertion N for config migration v3 to v4
 
-*End* *Config Schema v3 Models* | **Hash**: da474c2a
+*End* *Config Schema v3 Models* | **Hash**: a11d15f9
 ---
 
 ## REQ-d00251: A Repository's Identifier Grammar

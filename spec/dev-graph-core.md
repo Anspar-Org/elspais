@@ -437,6 +437,14 @@ G. A *Traceability* keyword SHALL have one canonical spelling. A keyword recogni
 
 H. A keyword introducing no content SHALL be reported as having introduced none.
 
+J. A *Traceability* keyword a file's kind does not admit SHALL be read, and the relationship it declares SHALL be refused as one the keyword may not take. It SHALL NOT be passed over as though it were prose.
+
+K. Where a reference list names the same target more than once, every instance SHALL be reported and none SHALL produce a relationship.
+
+L. Where an item both opens with an acceptable reference and can be read as differing from one by a relaxation, the relaxation SHALL be reported. Trailing content SHALL be reported only where no relaxation accounts for the item.
+
+M. An item holding any character the writing system counts as a space SHALL be treated under B, whichever character it is.
+
 ### Rationale
 
 B and C are the whole of the decidability claim, and they are stated as tests on the item rather than as descriptions of what an identifier looks like because a shape can always be argued with. A space is what no identifier of any configuration contains, and a declared namespace is a fact the federation holds rather than an inference about the text; between them they separate three populations that a project acts on differently — text that was never a reference, an estate identifier spelled wrongly, and a name belonging to a repository nobody configured. Collapsing any two of those sends an author to work that will not fix anything.
@@ -447,6 +455,14 @@ E and F are a pair, and F is what makes E safe. Looking inside an item is exactl
 
 G separates recognition from form. What a keyword is cannot depend on its case without making a report's absence depend on it too, so a differently-cased keyword is read; that its form is non-canonical is a fact about the file worth reporting, but withholding the relationships it introduced would punish the reference for the keyword's spelling.
 
+J settles what a keyword does where the file's kind does not admit it. Passing it over reads as prose a line that is unmistakably a declaration, and the author of an annotation that did nothing is never told why — the failure a journey's misplaced validation declaration is already reported to prevent. Reading it and refusing the relationship says both true things at once: this is a declaration, and it is not one this file may make.
+
+K makes a repeated target an error rather than a convenience. Silently keeping the first instance leaves the others producing neither a relationship nor a report, which is the silence this requirement exists to remove; and the silence is not even uniform, since two spellings of one identifier that differ in case are not recognised as repeats and so do report. Refusing all instances rather than keeping one is what makes the report actionable: a list that names a target twice is a list its author has lost track of, and resolving it for them would hide that.
+
+L ranks trailing content beneath every named relaxation. An item that opens with a valid reference can always be read as that reference plus whatever follows, so an unranked trailing-content reading accounts for every malformed item and would either win every time or tie every time — leaving the named relaxations unreachable and every diagnosis generic. Ranking it last makes it what it should be: the account that applies when nothing more specific does.
+
+M keeps the space test from turning on which space was typed. A character that reads as a space to an author but not to the test would take an item that is plainly not an identifier and report it as a name from a repository nobody configured — the precise misattribution B exists to prevent, reintroduced by an invisible character.
+
 This requirement declares `Satisfies:` against the REQ-p00019 anti-pattern template and concretizes its classes for reference reading. Misattribution and double-counting are the classes this subsystem exists to answer, and assertions A, B and C pin them: one class per item and never a later one, no describing an item holding a space as though it named a repository, and attribution decided by what a repository declares rather than by what the text resembles. Silent omission and unreported non-performance are pinned by the obligation to report every recognised reference that produces no relationship (REQ-d00269-F, REQ-d00269-G), and phantom success by the rule that reading within an item informs a report and never contributes an edge (assertion F, REQ-d00269-J). Undisclosed substitution is pinned twice over: a list of which some items bound and others did not is a partial result, disclosed by reporting each item that failed, and a defect the tool could not determine is carried as the generic code rather than passed off as no defect at all (REQ-d00271-C).
 
 The template's remaining classes bind to this subsystem through the instance without a tool-specific strengthening. That a failure report names the operation, the cause, and a remedy or the absence of one is one of them, and it does not compete with the rule that a code names a defect rather than a repair: the code says what is wrong, the report may also say what would answer it, and the two are different layers of the same finding.
@@ -455,10 +471,11 @@ One class has no purchase here and is left visibly uncovered rather than answere
 
 ### Changelog
 
+- 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: a keyword its file may not use is read and refused rather than passed over (J); every instance of a repeated target is reported and none resolves (K); trailing content ranks beneath every named relaxation (L); any space character reaches the space test (M)
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: record how each REQ-p00019 class is answered for this subsystem — concretized, bound through the instance, or left visibly uncovered with its reason
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: the rule assigning reference failure classes — the space and namespace tests, minimal relaxation, and reading within an item without binding from it
 
-*End* *Reference Fault Classification* | **Hash**: b84fe00f
+*End* *Reference Fault Classification* | **Hash**: e030bbf8
 
 ## REQ-d00254: Test Evidence: Attribution, Ingestion, and Coverage Crediting
 

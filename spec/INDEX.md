@@ -123,7 +123,7 @@
 | REQ-d00209 | Schema-Driven Init Template Generation                        | dev-graph-config.md     | b25e4468 |
 | REQ-d00210 | Documentation Drift Detection                                 | dev-graph-config.md     | 59023724 |
 | REQ-d00211 | Config-Driven Viewer UI Values                                | dev-graph-config.md     | 254fcba9 |
-| REQ-d00212 | Config Schema v3 Models                                       | dev-graph-config.md     | da474c2a |
+| REQ-d00212 | Config Schema v3 Models                                       | dev-graph-config.md     | a11d15f9 |
 | REQ-d00213 | Version Check and Update Notification                         | dev-cli.md              | cedd398b |
 | REQ-d00214 | MCP Server Install/Uninstall CLI Commands                     | dev-mcp-tools.md        | 5f372b62 |
 | REQ-d00215 | Keyword Extraction Annotator                                  | dev-graph-core.md       | db477d99 |
@@ -182,7 +182,7 @@
 | REQ-d00269 | Cross-Repository Coverage Credit                              | dev-graph-federation.md | c861d2bc |
 | REQ-d00270 | Single-Authority Identifier Grammar Derivation                | dev-graph-config.md     | c8cb35b9 |
 | REQ-d00271 | Diagnostic Code Vocabulary                                    | dev-cli.md              | 6f4019d1 |
-| REQ-d00272 | Reference Fault Classification                                | dev-graph-core.md       | b84fe00f |
+| REQ-d00272 | Reference Fault Classification                                | dev-graph-core.md       | e030bbf8 |
 | REQ-d00273 | Requirement Metadata Block                                    | dev-graph-file-nodes.md | 2d7e25e8 |
 
 ## User Journeys
