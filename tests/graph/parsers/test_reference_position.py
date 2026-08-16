@@ -176,16 +176,39 @@ class TestAStringLiteralIsNotAComment:
     ) -> None:
         """``test_name_ref`` reads the function name, not a comment.
 
-        ``ast_string_literal_lines`` marks a line quoted whenever any
-        string constant appears on it, not only when the line is interior
-        to a literal. A `def test_REQ_...` line carrying a default string
-        argument shares its line with such a constant -- the quoted-line
-        exclusion must not reach this rule, or a same-type, in-position
+        A line that merely opens a literal -- the opening quote reached
+        after real code, as in a default argument -- is not interior to
+        it. A `def test_REQ_...` line carrying a default string argument
+        must not be excluded on that account, or a same-type, in-position
         reference (the underscored test name itself) is silently dropped.
         """
         source = 'def test_REQ_p00001_widget(label="x"):\n    assert widget(label)\n'
 
         assert _verifies(dispatcher, source) == ["REQ-p00001"]
+
+    # Verifies: REQ-d00269-E
+    def test_a_test_name_line_interior_to_a_docstring_binds_nothing(
+        self, dispatcher: FileDispatcher
+    ) -> None:
+        """The mirror of the case above: genuinely interior still excludes.
+
+        A `def test_REQ_...` line written as an example inside a docstring
+        is interior to that literal, not merely sharing a line with one --
+        it must not bind, the same as any other keyword-shaped line
+        written as documentation rather than code.
+        """
+        source = "\n".join(
+            [
+                "def helper():",
+                '    """Example naming convention:',
+                "    def test_REQ_p00001_widget():",
+                "        pass",
+                '    """',
+                "    return 1",
+            ]
+        )
+
+        assert _verifies(dispatcher, source) == []
 
     # Verifies: REQ-d00269-E
     def test_a_string_literal_on_an_earlier_line_does_not_silence_a_later_comment(

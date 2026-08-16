@@ -254,11 +254,19 @@ def build_line_context(
 
 # Implements: REQ-d00269-E
 def ast_string_literal_lines(source: str) -> set[int]:
-    """Every line held inside a Python string literal.
+    """Every line genuinely interior to a Python string literal.
 
     A keyword written inside a literal names a keyword rather than invoking
     one, and a line-based scanner cannot tell such a line from a comment.
     Only the parser knows, so the parser is asked.
+
+    A literal spans lines ``lineno..end_lineno``. The opening line
+    (``lineno``) is excluded: it may hold real code before the quote
+    starts (``def test_REQ_p00001_widget(label="x"):``), so a line merely
+    *containing* a string constant is not, by itself, evidence the line
+    is quoted text. Only the lines strictly after the opening line --
+    ``lineno + 1 .. end_lineno`` -- are interior to the literal's content
+    and therefore excluded from binding.
 
     Returns an empty set when the source does not parse: a file the tool
     cannot read is not a file it may make claims about.
@@ -271,7 +279,7 @@ def ast_string_literal_lines(source: str) -> set[int]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             end = node.end_lineno or node.lineno
-            lines.update(range(node.lineno, end + 1))
+            lines.update(range(node.lineno + 1, end + 1))
     return lines
 
 
