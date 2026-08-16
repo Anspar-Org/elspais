@@ -147,7 +147,18 @@ class ReferenceTransformer:
 
             # A keyword inside quoted text names a keyword rather than
             # invoking one, so the line stays ordinary text (REQ-d00269-E).
-            if self._token_line(child) in self.quoted_lines:
+            # This applies only to the comment-shaped rules: single_ref,
+            # block_header/block_ref, and unresolved_ref all require the
+            # comment marker as the line's first non-whitespace token
+            # (reference.lark), so a line of real code carrying an
+            # unrelated string literal can never match them -- marking such
+            # a line quoted is harmless there. test_name_ref reads the
+            # `def test_REQ_...` identifier out of the function name
+            # itself, not out of a comment, so a default-argument string
+            # literal sharing that line (e.g. `def test_REQ_p00001(x="a")`)
+            # must not silence it -- doing so would drop a same-type,
+            # in-position reference instead of a quoted one.
+            if child.data != "test_name_ref" and self._token_line(child) in self.quoted_lines:
                 other_lines.append((self._token_line(child), self._token_text(child)))
                 i += 1
                 continue

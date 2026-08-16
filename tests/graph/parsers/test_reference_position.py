@@ -170,6 +170,44 @@ class TestAStringLiteralIsNotAComment:
 
         assert _verifies(dispatcher, source) == []
 
+    # Verifies: REQ-d00269-E
+    def test_a_default_argument_string_literal_does_not_silence_a_test_name_reference(
+        self, dispatcher: FileDispatcher
+    ) -> None:
+        """``test_name_ref`` reads the function name, not a comment.
+
+        ``ast_string_literal_lines`` marks a line quoted whenever any
+        string constant appears on it, not only when the line is interior
+        to a literal. A `def test_REQ_...` line carrying a default string
+        argument shares its line with such a constant -- the quoted-line
+        exclusion must not reach this rule, or a same-type, in-position
+        reference (the underscored test name itself) is silently dropped.
+        """
+        source = 'def test_REQ_p00001_widget(label="x"):\n    assert widget(label)\n'
+
+        assert _verifies(dispatcher, source) == ["REQ-p00001"]
+
+    # Verifies: REQ-d00269-E
+    def test_a_string_literal_on_an_earlier_line_does_not_silence_a_later_comment(
+        self, dispatcher: FileDispatcher
+    ) -> None:
+        """The comment-shaped exclusion is scoped to the line it actually quotes.
+
+        A code line carrying a string literal is marked quoted; the
+        following line is an ordinary ``# Implements:`` comment and must
+        still bind, pinning the boundary from the other direction.
+        """
+        source = "\n".join(
+            [
+                'x = "value"',
+                "# Implements: REQ-p00001",
+                "def foo():",
+                "    pass",
+            ]
+        )
+
+        assert _implements(dispatcher, source) == ["REQ-p00001"]
+
 
 class TestTheFenceExemptionHoldsOnBothDispatchPaths:
     """Test files quote syntax as readily as code files do."""
