@@ -504,3 +504,35 @@ def test_a_duplicated_journey_validates_reference_binds_nothing_and_reports_twic
     faults = [f for f in graph.broken_references() if f.target_id == "REQ-d00001"]
     assert len(faults) == 2
     assert all(FaultCode.DUPLICATE_ITEM in f.codes for f in faults)
+
+
+# Verifies: REQ-d00272-K
+def test_a_duplicated_multi_assertion_reference_binds_nothing_and_reports_each_instance(
+    tmp_path, repo_root
+):
+    """A multi-assertion item that repeats another whole item verbatim must
+    not escape REQ-d00272-K by parsing as valid multi-assertion syntax: the
+    duplicate's raw text is by definition a valid spelling (that's what
+    makes it a duplicate rather than a typo), so ``_resolver.parse()``
+    succeeds on it. If the builder expanded a verdicted item before
+    checking its verdict, the per-label expansion ``REQ-d00001-A``/
+    ``REQ-d00001-B`` would no longer match the raw-text verdict key
+    ``"REQ-d00001-A+B"``, and both labels would fall through to ordinary
+    node lookup and bind -- silently reopening exactly the bug the
+    single-target version of this test (above) already closed."""
+    from elspais.graph.relations import EdgeKind
+
+    graph = _project(
+        tmp_path,
+        repo_root,
+        "# Implements: REQ-d00001-A+B, REQ-d00001-A+B\ndef f():\n    return 1\n",
+    )
+    node = graph.find_by_id("REQ-d00001")
+    assert node is not None
+    assert not any(node.iter_edges_by_kind(EdgeKind.IMPLEMENTS)), (
+        "a duplicated multi-assertion target must produce no relationship, " "for either label"
+    )
+    faults = [f for f in graph.broken_references() if "REQ-d00001" in f.target_id]
+    assert len(faults) == 2, f"expected one fault per instance, got {faults}"
+    assert all(f.fault_class is FaultClass.FORBIDDEN for f in faults)
+    assert all(FaultCode.DUPLICATE_ITEM in f.codes for f in faults)

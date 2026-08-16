@@ -228,7 +228,7 @@ def test_journey_validates_across_separator_combinations(
     assert rollup.uat_coverage.direct_labels == set(expected_labels)
 
 
-# Verifies: REQ-d00082-E, REQ-p00014-R, REQ-d00272-A
+# Verifies: REQ-d00082-E, REQ-p00014-R, REQ-d00272-A, REQ-d00252-G
 def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
     """A journey `Validates:` ref that still uses "-" when the project is
     configured with a "/" separator must remain a hard broken reference
@@ -239,7 +239,13 @@ def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
     parsing under this repository's own grammar is a grammar-level verdict
     -- MALFORMED, carrying SYNTAX_ERROR -- rather than a later-stage
     UNKNOWN_REQUIREMENT (REQ-d00272-A forbids reporting a later stage than
-    the one reading actually reached)."""
+    the one reading actually reached). The class alone doesn't say *why* it
+    is malformed, and REQ-d00252-G obliges a diagnostic naming the likely
+    cause (a same-repo item, so probably a separator/multi_separator
+    mismatch rather than an unrelated typo) -- that obligation holds
+    whether or not a grammar-level verdict happened to exist for the
+    surface that read the item, so it must survive threading the verdict
+    through, not just the no-verdict fallback path."""
     from elspais.graph.factory import build_graph
 
     sep, multi = "/", "+"
@@ -270,6 +276,9 @@ def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
     )
     assert br.fault_class is FaultClass.MALFORMED
     assert FaultCode.SYNTAX_ERROR in br.codes
+    assert (
+        "[id-patterns.assertions] separator/multi_separator" in br.diagnostic
+    ), f"Expected a separator-config diagnostic (REQ-d00252-G), got {br.diagnostic!r}"
 
 
 # --------------------------------------------------------------------------- #

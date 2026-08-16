@@ -34,7 +34,7 @@ from elspais.graph.GraphNode import (
 )
 from elspais.graph.mutations import MutationEntry, MutationLog
 from elspais.graph.parsers import ParsedContent
-from elspais.graph.reference_faults import FaultClass, ReferenceFault
+from elspais.graph.reference_faults import FaultClass, FaultCode, ReferenceFault
 from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.graph.render import format_definition_block, render_end_marker
 from elspais.graph.terms import TermDictionary, TermEntry, compute_definition_hash
@@ -4455,16 +4455,15 @@ class GraphBuilder:
         """A diagnostic naming the likely cause when *target_id* opens with
         this repository's own namespace but never resolved.
 
-        Reached only when no grammar-level verdict already exists for the
-        item: a surface whose reader threads one (code and test
-        annotations) already carries this information in a structured
-        ``MALFORMED`` class, and prose beside it would duplicate rather
-        than restore an obligation. A journey's ``Validates:`` and a spec
-        file's ``Implements:``/``Refines:``/``Satisfies:``/``Integrates:``
-        carry no verdict yet (REQ-d00269-G's reader is threaded for
-        code/test annotations only), so this is where the obligation is
-        met for them: a mis-styled same-repo reference is told apart from
-        one that may simply belong to a sibling not yet authored.
+        Every surface that reads a reference list now threads a verdict
+        (code/test annotations, spec ``Implements:``/``Refines:``, and a
+        journey's ``Validates:`` -- ``Satisfies:``/``Integrates:`` do not
+        yet). REQ-d00252-G's cause-naming obligation still has to be met for
+        a grammar-level ``MALFORMED`` verdict on an own-namespace item --
+        that class alone does not say *why* (e.g. a separator/multi_separator
+        mismatch versus some other malformed spelling) -- so ``_fault_verdict``
+        calls this for a plain ``MALFORMED`` verdict too, not only on its
+        no-verdict fallback path.
         """
         if not self._resolver.declares_namespace(target_id):
             return ""
@@ -4488,10 +4487,25 @@ class GraphBuilder:
         (REQ-d00269-G reads a multi-assertion item's expanded labels
         individually, and only the whole item's raw text is ever a verdict
         key).
+
+        A plain ``MALFORMED`` verdict (no more specific code than
+        ``SYNTAX_ERROR``) still gets the own-namespace diagnostic
+        (REQ-d00252-G): the verdict says reading failed at the grammar
+        stage, not *why*, and an own-repo item deserves the same
+        separator-mismatch hint whether or not a grammar-level verdict
+        happened to exist for the surface that read it. A ``DUPLICATE_ITEM``
+        verdict (or any other non-``MALFORMED`` class) gets none -- the verdict
+        there already names the real cause, and the separator prose would
+        misdescribe an item that parsed just fine.
         """
         if target_id in verdicts:
             fault_class, codes = verdicts[target_id]
-            return fault_class, codes, ""
+            diagnostic = (
+                self._own_namespace_diagnostic(target_id)
+                if fault_class is FaultClass.MALFORMED and FaultCode.DUPLICATE_ITEM not in codes
+                else ""
+            )
+            return fault_class, codes, diagnostic
         return (
             self._resolution_class(target_id),
             (),
@@ -4802,13 +4816,25 @@ class GraphBuilder:
         # Expand multi-assertion references before resolving. Salvage
         # reaches inside a multi-assertion item the same as anywhere else
         # (REQ-d00269-G): each label is resolved on its own, so A+Z binds A
-        # and reports only Z. The whole item's verdict (present only when
-        # nothing about it matched at all) travels with every label it
-        # expands to, since a per-label verdict was never computed for it.
+        # and reports only Z. But a verdict keyed on the item's whole raw
+        # text (REQ-d00269-G: only the raw item is ever a verdict key) is
+        # not only present when nothing about it matched at all --
+        # DUPLICATE_ITEM is a verdict on an item that matched perfectly
+        # (REQ-d00272-K), and ``_resolver.parse()`` succeeds on it, same as
+        # any other duplicate. Expanding a verdicted item would scatter that
+        # verdict across labels the reader never computed one for and lose
+        # it entirely -- the expanded labels don't match the raw-text
+        # verdict key, so they would fall through to ordinary node lookup
+        # and bind. A verdicted item is therefore kept whole, unexpanded, so
+        # its one verdict resolves to one link that reports (or refuses to
+        # bind) the item exactly as the reader classified it.
         expanded_links: list[
             tuple[str, str, EdgeKind, dict[str, tuple[FaultClass, tuple[str, ...]]]]
         ] = []
         for source_id, target_id, edge_kind, verdicts in self._pending_links:
+            if target_id in verdicts:
+                expanded_links.append((source_id, target_id, edge_kind, verdicts))
+                continue
             for resolved_target in self._expand_multi_assertion(target_id):
                 expanded_links.append((source_id, resolved_target, edge_kind, verdicts))
 
