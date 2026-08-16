@@ -425,13 +425,16 @@ def test_a_separator_with_nothing_to_continue_onto_binds_what_precedes_it(parse_
 
 # Verifies: REQ-d00269-H
 def test_a_continuation_without_a_separator_is_an_orphan(parse_code):
-    """No separator means line 1 is a complete list and line 2 stands alone."""
+    """No separator means line 1 is a complete list and line 2 stands alone
+    -- and is reported as an orphan, not merely absent from the refs.
+    """
     result = parse_code(
         "# Implements: REQ-d00001\n" "#             REQ-d00002\n" "def f():\n    return 1\n"
     )
     refs = _all_refs(result)
     assert "REQ-d00001" in refs
     assert "REQ-d00002" not in refs
+    assert _diagnostics(result), "line 2 must be reported as an orphan, not merely dropped"
 
 
 # Verifies: REQ-d00269-H, REQ-p00019-A
@@ -444,8 +447,32 @@ def test_an_orphan_reference_line_is_never_silent(parse_code):
     REQ-d00269-H (the continuation rule that defines the orphan category)
     and REQ-p00019-A (the never-silent obligation), not to REQ-d00272-H.
     """
-    result = parse_code("def f():\n    #   REQ-d00001\n    return 1\n")
-    assert _diagnostics(result), "an orphan reference must be reported"
+    results, tx = parse_code("def f():\n    #   REQ-d00001\n    return 1\n")
+    assert _diagnostics((results, tx)), "an orphan reference must be reported"
+    # Round-trip fidelity is absolute: the orphan line is reported AND still
+    # renders back verbatim through the remainder gatherer, never dropped.
+    remainder = [r for r in results if r.content_type == "remainder"]
+    assert any(
+        "#   REQ-d00001" in r.raw_text for r in remainder
+    ), f"the orphan line must survive verbatim in a remainder; got {remainder}"
+
+
+# Verifies: REQ-d00269-H
+def test_a_folded_continuation_preserves_the_original_lines_for_rendering(parse_code):
+    """The fold's extraction text (used to read the list) and its raw_text
+    (used to render the file back) are different strings on purpose: the
+    whole round-trip claim rests on raw_text staying the two original
+    physical lines, newline-joined, rather than the flattened single-line
+    form used only to parse the keyword's target.
+    """
+    results, _tx = parse_code(
+        "# Implements: REQ-d00001,\n" "#             REQ-d00002\n" "def f():\n    return 1\n"
+    )
+    refs = [r for r in results if r.content_type == "code_ref"]
+    assert len(refs) == 1
+    assert refs[0].raw_text == "# Implements: REQ-d00001,\n#             REQ-d00002"
+    assert refs[0].start_line == 1
+    assert refs[0].end_line == 2
 
 
 # Verifies: REQ-d00269-H

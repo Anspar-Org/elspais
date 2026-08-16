@@ -392,7 +392,12 @@ class FileDispatcher:
                 # A single_ref is always an opener, never a continuation
                 # candidate (only block_ref/other_line can be folded), so
                 # this line is read for its own sake -- possibly extended
-                # by a joined continuation below it.
+                # by a joined continuation below it.  This loop only ever
+                # branches on "single_ref", so a node _fold_tx consumed
+                # (always block_ref/other_line) is never separately visited
+                # here and needs no explicit skip -- unlike the real
+                # transformer's dispatch loop, which walks every node kind
+                # and does check `_consumed`.
                 token = child.children[0]
                 ln = token.line  # type: ignore[attr-defined]
                 if first_def_line and ln >= first_def_line:

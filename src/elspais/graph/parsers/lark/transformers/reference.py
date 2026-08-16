@@ -210,6 +210,20 @@ class ReferenceTransformer:
                     if pc.parsed_data.get("function_line"):
                         emitted_func_lines.add(pc.parsed_data["function_line"])
                     results.append(pc)
+                else:
+                    # Unreachable today (a keyword line's own content is
+                    # never empty enough to reach here), but symmetric with
+                    # the unresolved_ref branch below: without this, a
+                    # future path that does reach it would silently drop
+                    # not just the opener but any continuation line folded
+                    # into it (REQ-d00269-H) -- the round-trip failure this
+                    # whole feature exists to remove, reintroduced by a gap
+                    # in this one branch.
+                    key = id(child)
+                    token = child.children[0]
+                    other_lines.append(
+                        (self._token_line(child), self._joined_raw.get(key, str(token)))  # type: ignore[attr-defined]
+                    )
 
             elif child.data == "block_header":
                 # Collect subsequent block_ref lines
