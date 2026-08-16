@@ -112,6 +112,65 @@ class TestAKeywordElsewhereDoesNotRefer:
         assert _implements(dispatcher, source) == []
 
 
+class TestAStringLiteralIsNotAComment:
+    """REQ-d00269-E's "inline-quoted" text covers Python string literals too.
+
+    The fence exemption only catches markdown fences; a line-initial
+    keyword inside a Python triple-quoted string is otherwise
+    indistinguishable from a real comment to a line-based scanner.
+    """
+
+    def test_REQ_d00269_E_a_same_type_keyword_in_a_docstring_creates_no_edge(
+        self, dispatcher: FileDispatcher
+    ) -> None:
+        """The silent case: a real annotation-shaped line inside a string literal."""
+        source = "\n".join(
+            [
+                "def helper():",
+                '    """Example of how to annotate:',
+                "",
+                "# Implements: REQ-p00001",
+                '    """',
+                "    return 1",
+            ]
+        )
+
+        assert _implements(dispatcher, source) == []
+
+    def test_REQ_d00269_E_a_real_comment_still_binds(self, dispatcher: FileDispatcher) -> None:
+        """The guard against over-correction: ordinary annotations keep working."""
+        source = "\n".join(
+            [
+                "# Implements: REQ-p00001",
+                "def helper():",
+                "    return 1",
+            ]
+        )
+
+        assert _implements(dispatcher, source) == ["REQ-p00001"]
+
+    def test_REQ_d00269_E_a_same_type_keyword_in_a_module_docstring_sets_no_file_default(
+        self, dispatcher: FileDispatcher
+    ) -> None:
+        """The file-level default-verifies pass reads the parse tree before
+
+        the transformer runs, and must exclude quoted lines itself rather
+        than relying on the transformer's own exclusion downstream.
+        """
+        source = "\n".join(
+            [
+                '"""Example of how to annotate a test module:',
+                "",
+                "# Verifies: REQ-p00001",
+                '"""',
+                "def test_thing():",
+                "    assert True",
+            ]
+        )
+
+        assert _verifies(dispatcher, source) == []
+
+
 class TestTheFenceExemptionHoldsOnBothDispatchPaths:
     """Test files quote syntax as readily as code files do."""
 

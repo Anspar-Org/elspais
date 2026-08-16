@@ -235,6 +235,23 @@ class FileDispatcher:
                 fenced.add(number)
         return fenced
 
+    @staticmethod
+    def _quoted_line_numbers(content: str, file_path: str) -> set[int]:
+        """Line numbers a *Traceability* keyword must not bind on (REQ-d00269-E).
+
+        Markdown fences are recognised in every source; a Python string
+        literal is recognised only for ``.py`` files, because only Python
+        has a parser here to ask. Other languages keep fence-only
+        behaviour -- guessing at string literals with a regex would be
+        exactly the shape-based reasoning this design refuses elsewhere.
+        """
+        quoted = FileDispatcher._fenced_line_numbers(content)
+        if file_path.endswith(".py"):
+            from elspais.graph.parsers.prescan import ast_string_literal_lines
+
+            quoted |= ast_string_literal_lines(content)
+        return quoted
+
     def dispatch_spec(
         self,
         content: str,
@@ -284,7 +301,7 @@ class FileDispatcher:
             line_context,
             source_id=file_path,
             reader=self._reader,
-            quoted_lines=self._fenced_line_numbers(content),
+            quoted_lines=self._quoted_line_numbers(content, file_path),
         )
         return transformer.transform(tree)
 
@@ -338,6 +355,14 @@ class FileDispatcher:
 
         from elspais.graph.parsers.patterns import KEYWORD_PATTERN
 
+        # Implements: REQ-d00269-E
+        # A file-level default is read from the same lines the transformer
+        # will later exclude -- a keyword written inside a quoted/fenced
+        # region must not become a default verifies any more than it may
+        # bind directly, or the exclusion below would be undone by this
+        # earlier pass reading the same line first.
+        quoted_lines = self._quoted_line_numbers(content, file_path)
+
         file_default_verifies: list[str] = []
 
         for child in tree.children:
@@ -348,6 +373,8 @@ class FileDispatcher:
                 ln = token.line  # type: ignore[attr-defined]
                 if first_def_line and ln >= first_def_line:
                     continue
+                if ln in quoted_lines:
+                    continue
                 text = str(token)
                 # File-level reference comments become default verifies for
                 # all test functions in the file.  Only 'Verifies' is valid
@@ -356,8 +383,11 @@ class FileDispatcher:
                 if kw_match:
                     kw = kw_match.group(0).lower()
                     if kw != "verifies":
-                        # Silently skip — test fixtures contain cross-type
-                        # keywords in string literals
+                        # Only Verifies is a valid file-level default; a
+                        # genuine cross-type keyword above the first def
+                        # (Implements/Refines, not valid in a test file) is
+                        # silently skipped rather than reported here -- the
+                        # grammar-level FORBIDDEN check owns that finding.
                         continue
                     # A file-level default is an annotation like any other:
                     # each item is judged on its own, so one item the
@@ -376,7 +406,7 @@ class FileDispatcher:
             all_test_funcs=all_test_funcs,
             source_id=file_path,
             reader=self._reader,
-            quoted_lines=self._fenced_line_numbers(content),
+            quoted_lines=quoted_lines,
         )
         return transformer.transform(tree)
 

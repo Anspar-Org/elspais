@@ -252,6 +252,29 @@ def build_line_context(
     return line_context
 
 
+# Implements: REQ-d00269-E
+def ast_string_literal_lines(source: str) -> set[int]:
+    """Every line held inside a Python string literal.
+
+    A keyword written inside a literal names a keyword rather than invoking
+    one, and a line-based scanner cannot tell such a line from a comment.
+    Only the parser knows, so the parser is asked.
+
+    Returns an empty set when the source does not parse: a file the tool
+    cannot read is not a file it may make claims about.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return set()
+    lines: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            end = node.end_lineno or node.lineno
+            lines.update(range(node.lineno, end + 1))
+    return lines
+
+
 def ast_prescan(
     source: str,
     lines: list[tuple[int, str]],

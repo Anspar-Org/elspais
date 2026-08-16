@@ -103,23 +103,12 @@ class TestCodeRefParsing:
         assert refs[0].parsed_data["implements"] == ["REQ-p00001", "REQ-p00002"]
 
     def test_block_header_and_refs(self, resolver, code_parser):
-        # Built from parts rather than a literal triple-quoted block: this
-        # fixture simulates a code file whose own comment lines start with
-        # "#" at true column 0, and a scan of THIS test file's own source
-        # cannot tell that string content from a real annotation (the
-        # scanner is not Python-literal-aware) -- a literal block would
-        # make this file itself trip REQ-d00272-J.
-        content = (
-            "\n".join(
-                [
-                    "# IMPLEMENTS REQUIREMENTS:",
-                    "#   REQ-d00050: First",
-                    "#   REQ-d00051: Second",
-                    "def foo(): pass",
-                ]
-            )
-            + "\n"
-        )
+        content = """\
+# IMPLEMENTS REQUIREMENTS:
+#   REQ-d00050: First
+#   REQ-d00051: Second
+def foo(): pass
+"""
         results = _parse_code(content, resolver, code_parser)
         refs = [r for r in results if r.content_type == "code_ref"]
         assert len(refs) == 1
